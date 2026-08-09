@@ -1,5 +1,693 @@
 # @cat-factory/conformance
 
+## 0.37.0
+
+### Minor Changes
+
+- 8c1d8a6: Narrow the built-in pipeline catalog, and make a step conditional on what the change touches.
+
+  A pipeline step can now carry a RUN CONDITION beside its estimate gate (`stepOptions[i].condition`),
+  declaring the service scope it applies to. Every build rung carries BOTH testers: the browser pass
+  runs where the change touches a frontend service, the API pass where it touches anything else. Run
+  admission drops the condition-excluded steps before its gates, so a preset carrying `tester-ui` is
+  not refused on a backend service.
+
+  A condition is a SKIP AXIS, so it is held to the two structural rules an estimate gate is held to
+  (`assertValidRunConditions`, mirrored in the SPA's health advisory and in what the builder offers):
+  the step's kind must be one that may be absent from a run, and it may not also carry a human
+  approval gate. Without that, a condition on `merger` dropped the merge on every run outside its
+  scope while the pipeline still finished reporting success.
+
+  A skipped step now records WHY as a machine-readable `skipReason` (`gated` / `condition` /
+  `producer_skipped` / `run_complete`) that the SPA renders as translated copy, and its `output` stays
+  empty. The
+  reason used to be an English sentence written into `output`, which three separate aggregations
+  select on to build a model's view of the prior steps — so a condition-skipped tester's note was
+  handed to `merger` and `ci-fixer` as if it were the tester's report.
+
+  Five presets are withdrawn (`pl_frontend`, `pl_tech_debt`, `pl_blueprint`, `pl_spec`,
+  `pl_environment_analysis`) and one is added: `pl_complex` ("Complex build"), which settles the
+  requirements and researches the problem before the standard loop. `pl_code_comments` stays as an
+  INTERNAL pipeline: the documentation-refresh preset spawns onto it, so it resolves for a run while
+  being withheld from every listing. Withheld from `pipelineCatalogVersions` too, which the health
+  advisory reads as "the built-ins that exist" — an internal entry there is reported as newly
+  available on every board forever, with no reseed able to clear it. `pipelineCatalogNames` still
+  spans the whole catalog, so a task PINNED to an internal pipeline is named (and started) rather
+  than silently falling through to a full build.
+
+  Running ONE agent against a block is now a first-class action (`POST
+/workspaces/:ws/blocks/:id/agent-kind-executions`, `ExecutionService.startAgentKind`) rather than
+  something that needed a single-step preset. It backs the post-bootstrap service mapping, a new
+  "Map service" action on the service frame, and the environment wizard's deep analysis.
+
+  BREAKING (internal): a workspace seeded before this change holds rows for the five withdrawn
+  presets; the pipeline-health advisory offers their removal, naming a replacement where one exists.
+  Anything naming `BLUEPRINT_PIPELINE_ID` / `TECH_DEBT_PIPELINE_ID` should use `BLUEPRINT_AGENT_KIND`
+  with `startAgentKind`, or name a build rung directly.
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/contracts@0.286.0
+  - @cat-factory/kernel@0.281.0
+  - @cat-factory/orchestration@0.250.0
+  - @cat-factory/agents@0.123.0
+  - @cat-factory/server@0.262.0
+  - @cat-factory/gates@0.10.14
+  - @cat-factory/integrations@0.153.5
+  - @cat-factory/prompt-fragments@1.0.38
+
+## 0.36.14
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+  - @cat-factory/kernel@0.280.0
+  - @cat-factory/agents@0.122.0
+  - @cat-factory/orchestration@0.249.0
+  - @cat-factory/server@0.261.0
+  - @cat-factory/gates@0.10.13
+  - @cat-factory/integrations@0.153.4
+  - @cat-factory/prompt-fragments@1.0.37
+
+## 0.36.13
+
+### Patch Changes
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+  - @cat-factory/integrations@0.153.3
+  - @cat-factory/server@0.260.3
+  - @cat-factory/agents@0.121.4
+  - @cat-factory/gates@0.10.12
+  - @cat-factory/kernel@0.279.3
+  - @cat-factory/orchestration@0.248.5
+  - @cat-factory/prompt-fragments@1.0.36
+
+## 0.36.12
+
+### Patch Changes
+
+- Updated dependencies [3036af7]
+  - @cat-factory/agents@0.121.3
+  - @cat-factory/integrations@0.153.2
+  - @cat-factory/kernel@0.279.2
+  - @cat-factory/orchestration@0.248.4
+  - @cat-factory/server@0.260.2
+  - @cat-factory/gates@0.10.11
+  - @cat-factory/prompt-fragments@1.0.35
+
+## 0.36.11
+
+### Patch Changes
+
+- Updated dependencies [de7caaf]
+  - @cat-factory/contracts@0.283.1
+  - @cat-factory/agents@0.121.2
+  - @cat-factory/gates@0.10.10
+  - @cat-factory/integrations@0.153.1
+  - @cat-factory/kernel@0.279.1
+  - @cat-factory/orchestration@0.248.3
+  - @cat-factory/prompt-fragments@1.0.34
+  - @cat-factory/server@0.260.1
+
+## 0.36.10
+
+### Patch Changes
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+  - @cat-factory/integrations@0.153.0
+  - @cat-factory/server@0.260.0
+  - @cat-factory/orchestration@0.248.2
+  - @cat-factory/agents@0.121.1
+  - @cat-factory/gates@0.10.9
+  - @cat-factory/prompt-fragments@1.0.33
+
+## 0.36.9
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+  - @cat-factory/agents@0.121.0
+  - @cat-factory/gates@0.10.8
+  - @cat-factory/integrations@0.152.8
+  - @cat-factory/orchestration@0.248.1
+  - @cat-factory/prompt-fragments@1.0.32
+  - @cat-factory/server@0.259.2
+
+## 0.36.8
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/orchestration@0.248.0
+  - @cat-factory/kernel@0.277.0
+  - @cat-factory/integrations@0.152.7
+  - @cat-factory/agents@0.120.2
+  - @cat-factory/gates@0.10.7
+  - @cat-factory/prompt-fragments@1.0.31
+  - @cat-factory/server@0.259.1
+
+## 0.36.7
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+  - @cat-factory/orchestration@0.247.0
+  - @cat-factory/server@0.259.0
+  - @cat-factory/agents@0.120.1
+  - @cat-factory/gates@0.10.6
+  - @cat-factory/integrations@0.152.6
+  - @cat-factory/prompt-fragments@1.0.30
+
+## 0.36.6
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/agents@0.120.0
+  - @cat-factory/orchestration@0.246.0
+  - @cat-factory/server@0.258.0
+  - @cat-factory/gates@0.10.5
+  - @cat-factory/integrations@0.152.5
+  - @cat-factory/kernel@0.275.4
+  - @cat-factory/prompt-fragments@1.0.29
+
+## 0.36.5
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/server@0.257.0
+  - @cat-factory/orchestration@0.245.0
+  - @cat-factory/agents@0.119.3
+  - @cat-factory/gates@0.10.4
+  - @cat-factory/integrations@0.152.4
+  - @cat-factory/kernel@0.275.3
+  - @cat-factory/prompt-fragments@1.0.28
+
+## 0.36.4
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/orchestration@0.244.0
+  - @cat-factory/server@0.256.0
+  - @cat-factory/agents@0.119.2
+  - @cat-factory/gates@0.10.3
+  - @cat-factory/integrations@0.152.3
+  - @cat-factory/kernel@0.275.2
+  - @cat-factory/prompt-fragments@1.0.27
+
+## 0.36.3
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/agents@0.119.1
+  - @cat-factory/gates@0.10.2
+  - @cat-factory/integrations@0.152.2
+  - @cat-factory/kernel@0.275.1
+  - @cat-factory/orchestration@0.243.1
+  - @cat-factory/prompt-fragments@1.0.26
+  - @cat-factory/server@0.255.1
+
+## 0.36.2
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/orchestration@0.243.0
+  - @cat-factory/kernel@0.275.0
+  - @cat-factory/agents@0.119.0
+  - @cat-factory/server@0.255.0
+  - @cat-factory/gates@0.10.1
+  - @cat-factory/integrations@0.152.1
+  - @cat-factory/prompt-fragments@1.0.25
+
+## 0.36.1
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+  - @cat-factory/kernel@0.274.0
+  - @cat-factory/gates@0.10.0
+  - @cat-factory/orchestration@0.242.0
+  - @cat-factory/integrations@0.152.0
+  - @cat-factory/server@0.254.0
+  - @cat-factory/agents@0.118.1
+  - @cat-factory/prompt-fragments@1.0.24
+
+## 0.36.0
+
+### Minor Changes
+
+- a62bcf8: Deliver notifications by email, and add the notification manager that decides which events go to
+  which channel.
+
+  The `EmailSender` port, its SendGrid/Resend adapters and the per-account connection have been live
+  for a while and were used only for invitations. A new `EmailNotificationChannel` puts them behind
+  the same `NotificationChannel` port the in-app and Slack transports implement, so the engine call
+  sites that raise notifications are untouched. It resolves recipients from the SAME rules
+  `resolveWorkspaceAccess` applies (account membership is the prerequisite, an account admin always
+  qualifies, a `workspace_members` row counts only for a still-current account member), reads them in
+  three batched queries rather than a point-read per person, and isolates each send so one bad address
+  cannot cost every other recipient their notification. An account with no sender connected produces
+  zero attempts and zero warnings.
+
+  The manager (`notification_settings`, one row per workspace, D1 ⇄ Drizzle with a conformance suite)
+  stores per-type, per-channel OVERRIDES over the shipped defaults, and one service answers both the
+  settings API and the delivery gate so the toggle a human sees cannot say something the engine does
+  not do. **By default email carries only the high-impact events**: the ones where something is
+  stopped until a human acts (`merge_review`, `decision_required`, `ci_failed`, `test_failed`,
+  `release_regression`) or the deployment itself is degraded (`platform_health`, `infra_unreachable`,
+  `budget_paused`, `key_drift`). The per-step review parks are deliberately off by default — several
+  arrive on nearly every task, and mailing them is the firehose that gets a sender's domain filtered.
+
+  Only the channels whose delivery is a plain yes/no are routed here: the in-app push and email.
+  Slack and the outbound webhooks answer "which types" where their DESTINATION is declared (a Slack
+  route's channel, a webhook endpoint's own `types` filter), so a second switch would be a place to
+  look that does not decide. The settings panel says so and links to the Slack routing.
+
+  Delivery now carries WHICH lifecycle edge it reports (`NotificationDeliveryReason`: `raised` /
+  `refreshed` / `settled`), because the service re-delivers a card on every transition it makes and
+  the transports split hard on what that means. A STATE transport (the in-app push, the outbound
+  webhook) takes every edge, so a board holding an open card sees it settle instead of rendering an
+  already-made decision as still actionable. An ALERT transport (email, Slack) takes the `raised` edge
+  alone: a mailbox and a chat channel cannot render a correction, so a second "Decision needed" after
+  the decision was made is simply false. This also corrects Slack, which re-posted on every resolve
+  and dismissal before the edge existed, and it is why the escalation sweep's loop over a workspace's
+  overdue cards now performs no routing or audience reads at all. **The edge is a required parameter
+  and rides the mothership delegation wire**, where it is refused rather than defaulted: the persisted
+  row cannot supply it (a raise and an escalation are both `open`), so a node one build behind fails
+  loudly instead of mailing the org about decisions already made.
+
+  Two more behaviours to watch for when reviewing. The in-app push is gated too, but only on the raise:
+  muting a type stops the live toast, while the card is still persisted, still in the inbox on the next
+  snapshot, and still pushed when it settles. And a settings read that FAILS falls back to the shipped
+  default and logs, rather than defaulting to deliver-everything (a mailshot) or deliver-nothing (the
+  parked run nobody hears about). In the settings panel the same distinction is explicit: a deployment
+  with no routing store and a read that broke are separate states, and only the first renders the
+  shipped defaults, because saving is a full replace and a grid built from defaults would otherwise
+  overwrite overrides nobody had seen.
+
+### Patch Changes
+
+- Updated dependencies [2544fb3]
+- Updated dependencies [a62bcf8]
+- Updated dependencies [2544fb3]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+- Updated dependencies [2544fb3]
+- Updated dependencies [2544fb3]
+  - @cat-factory/server@0.253.0
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/contracts@0.275.0
+  - @cat-factory/integrations@0.151.0
+  - @cat-factory/orchestration@0.241.0
+  - @cat-factory/agents@0.118.0
+  - @cat-factory/gates@0.9.39
+  - @cat-factory/prompt-fragments@1.0.23
+
+## 0.35.0
+
+### Minor Changes
+
+- 882b94f: Feed the visual-confirmation gate from the designs a task links. The frames an import retained for
+  a linked Figma/Zeplin document now populate the gate's actual-vs-reference gallery on their own, so
+  a designer who linked a frame gets screenshot-vs-design comparison with no manual upload at all.
+
+  A reference that was explicitly chosen for a view still wins: an upload is a deliberate act against
+  that one task and survives every re-import, while a design render is a projection the next
+  body-changing import replaces wholesale. So an upload assigns over the fold, and a view whose
+  reference the capture itself named is left alone. Each pair now says which of the two it is showing,
+  and says nothing when the capture named its own, because a reference the gate did not source is one
+  whose provenance it can only guess at.
+
+  A view name two designs both claim is qualified with its design on BOTH sides rather than just the
+  second, the same rule the Figma import applies to a frame name repeated across pages: leaving the
+  first bare would hand the plain name to whichever design is listed first, and re-ordering the links
+  would then silently re-point a reviewed view at a different screen.
+
+  The gate also states what the linked designs contributed whenever a design is attached, including
+  when everything worked, so "no design is linked" stays distinguishable from "one is and it gave
+  nothing". The latter carries a per-design reason, since retaining part of a design, failing to
+  download it, having no frames at all, and having had nowhere to store them each ask for a different
+  fix. That verdict is derived from what the artifact store actually holds rather than from the
+  recorded render status alone, so any status claiming retention over an empty shelf reports the
+  absence rather than describing a gallery that is not there. The gallery's ceiling on design views is
+  shared round-robin across the linked designs instead of being spent in read order, and each design
+  that loses frames to it is named, so a design the ceiling shut out cannot read as one with no
+  frames.
+
+  Gathering the pairs no longer confuses a gallery ROW with a captured screenshot. A reference-only row
+  (a design frame, an uploaded mock) makes a pair too, so a run that captured nothing had been losing
+  the warning that gates the gate's approve button behind an acknowledgement, reporting a verified
+  gallery of blanks in its run outcome, and summoning reviewers to screenshots that were not there. The
+  rule now lives once in `@cat-factory/contracts` and all three ask it.
+
+  `BinaryArtifactStore` grows a batched `listByDocuments`, mirrored D1 ⇄ Drizzle with a conformance
+  assertion and allow-listed for mothership mode, so a task linking several designs still costs the
+  driver path one read.
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+  - @cat-factory/integrations@0.150.0
+  - @cat-factory/contracts@0.274.0
+  - @cat-factory/orchestration@0.240.0
+  - @cat-factory/server@0.252.0
+  - @cat-factory/agents@0.117.12
+  - @cat-factory/gates@0.9.38
+  - @cat-factory/prompt-fragments@1.0.22
+
+## 0.34.0
+
+### Minor Changes
+
+- 6e07961: Retain a design document's rendered frames when it is imported. A Figma import now downloads the
+  PNGs (the linked frame, or the first six top-level frames of a whole file) and stores them as
+  `reference` binary artifacts keyed to the document, on the same shelf the visual-confirmation gate
+  already reads from; a re-import that changes the body replaces the previous set wholesale. The
+  download is host-pinned to Figma's signed-asset hosts and carries no credential.
+
+  Renders ride a new `DocumentSourceProvider.fetchRenders` port rather than `fetchDocument`, and only
+  run on an import that actually writes a body: a design file's version moves on any edit anywhere in
+  it, so the dispatch-time freshness ladder re-fetches the text far more often than the pictures
+  change.
+
+  A new `documents.render_status` records what became of them (`stored` / `partial` / `none` /
+  `failed` / `storage_unavailable`, or null where the question does not apply), because every way of
+  ending up with no images is otherwise the same absence. It is derived from what was RETAINED, and
+  counts the frames a provider's own cap excluded as unillustrated, so a six-picture pass over a
+  twenty-frame file reads as `partial` rather than as a complete design with six screens. A
+  deployment with no image storage configured imports the design textually and says so rather than
+  downloading bytes it cannot keep; a settings read that FAILS is `failed`, not
+  `storage_unavailable`, since telling an operator to configure storage they already have sends them
+  to fix the wrong thing.
+
+  A document's renders are exempt from the age-based artifact retention sweep. Age is the right
+  lifetime for run debris and the wrong one for a projection of a live row: renders are replaced by
+  the next import that changes the body and by nothing else, and an unedited design is never
+  re-imported, so a clock-based sweep would leave the row claiming `stored` over an empty set with
+  nothing to re-download them.
+
+  Internal break: `binary_artifacts` rows and `documents` rows written before this change carry no
+  document keying and no render status. Both self-heal on the next import; nothing needs a backfill.
+  `BinaryArtifactMetadataStore.deleteByDocument` is replaced by `deleteByIds`: every id-scoped
+  reclaim now names the rows whose bytes it has already removed, so a concurrent import's fresh row
+  cannot be deleted out from under its blob.
+
+### Patch Changes
+
+- 9f9c240: Bound a wedged pipeline step on Node, and stop an idle container reclaim from reading as a
+  crash. The last two findings of the stuck-run audit.
+
+  **One hang bound, both facades.** `ExecutionConfig.advanceTimeout` (`ADVANCE_TIMEOUT`, default
+  `30 minutes`) is now the ceiling on a single `advanceInstance` AND on a single status read: the
+  Worker hands it to the durable driver's `step.do` (where it had been a hard-coded constant), and
+  Node races it in `driveExecution` through a new injected `DriveOptions.withStepCeiling` seam.
+  Node previously had no ceiling at all, and nothing else supplies one: pg-boss heartbeats an
+  active job regardless of handler progress, so a hung call left the run `running` with a frozen
+  `updated_at`, invisible to the stale-run sweeper, until the queue's expire cap (up to 24h). A
+  timed-out advance fails the run rather than retrying in-process, because a second concurrent
+  advance would double-drive it; a timed-out poll counts as one unreadable poll against
+  `jobPollFailureTolerance`, which is the disposition the Worker has always had for the same
+  event.
+
+  **One knob now means one parser.** Every duration knob in `ExecutionConfig` resolves through the
+  shared `resolveDurationEnv`, which canonicalises the value both runtimes go on to use. Node's
+  own parser knew four of the units Workflows accepts and silently substituted its built-in
+  default for the rest, so `ADVANCE_TIMEOUT="1 week"` was a week on Cloudflare and five minutes on
+  Node. Values past what a timer can hold, and the calendar units whose length the two runtimes
+  would each have to invent, are refused with one warning rather than honoured differently on each
+  side.
+
+  **A container that reclaims itself says so.** A per-run Cloudflare Container is kept warm only
+  by the driver's job polls, so a poll gap longer than its idle window reclaimed it mid-job; the
+  resulting 404 poll was indistinguishable from an OOM and spent the single crash-eviction budget,
+  so two hiccups in one step failed a healthy run. The container now records the reclaim cause it
+  observed (`idle` alongside the existing `rollout`) and the transport reads it back over one RPC,
+  classifying an idle reclaim as `transient` churn with its own operator-facing wording. A record
+  is claimed by the polling job rather than deleted, so a retried durable poll reads the same
+  answer, and it is dropped when a new job is accepted, so a marker left by a routine idle reclaim
+  cannot excuse a later step's genuine crash. The two per-run container classes collapsed onto a
+  shared `RunContainer` base carrying this bookkeeping.
+
+  Internal break: the old `rolledOutAt` Durable-Object storage key is gone. A rollout in flight
+  across the deploy that ships this loses its attribution and is recovered as a crash instead,
+  which costs one eviction on the smaller budget during a single release.
+
+  `DriveConfig` gained a required `advanceTimeoutMs` (`0` disables the ceiling, which is what the
+  conformance harness and the unit fakes use), so every construction site declares it.
+  `ADVANCE_TIMEOUT` is reserved against capability-credential lookup by exact name, not as an
+  `ADVANCE_` family, so a credential key that merely starts with it stays valid.
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/kernel@0.271.0
+  - @cat-factory/contracts@0.273.0
+  - @cat-factory/integrations@0.149.0
+  - @cat-factory/orchestration@0.239.0
+  - @cat-factory/server@0.251.0
+  - @cat-factory/agents@0.117.11
+  - @cat-factory/gates@0.9.37
+  - @cat-factory/prompt-fragments@1.0.21
+
+## 0.33.1
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+  - @cat-factory/contracts@0.272.0
+  - @cat-factory/orchestration@0.238.0
+  - @cat-factory/integrations@0.148.0
+  - @cat-factory/server@0.250.0
+  - @cat-factory/agents@0.117.10
+  - @cat-factory/gates@0.9.36
+  - @cat-factory/prompt-fragments@1.0.20
+
+## 0.33.0
+
+### Minor Changes
+
+- 55310f6: Make a linked design something a designer can actually start work from.
+
+  Figma has been a document source for a while, and none of it was reachable by the person it exists
+  for. Connecting meant minting a personal access token by hand. Attaching a design meant finding the
+  Integrations hub, importing the page there, going back to the board, adding a task, and attaching
+  it. Nothing on the board or the task form said "start from a design" at all, and every string on
+  the way through said requirements, RFC or PRD. Expanding a design into board structure was worse
+  than absent: the planner asks what architecture a document describes, which for a design is a
+  service per Figma page.
+
+  Four things close that.
+
+  **OAuth connect.** A source can now declare an `authorization_code` half, and one shared flow runs
+  it. The provider contributes four constants (two endpoints, a refresh endpoint or null, the scopes)
+  and nothing else: no fetch, no token parsing, no credential mapping, so the second source to gain
+  OAuth adds a declaration rather than a second copy of the flow. The credential bag is
+  platform-owned, which is what keeps the token lifecycle out of every provider — a provider's whole
+  share of it is noticing an access token in the bag it was handed. Declaring an OAuth half is
+  deliberately NOT the same as offering one: running it needs an app the deployment registered, so
+  the source listing answers "what this source supports" and "what this deployment can run" as two
+  separate fields. Folded into one, a board with no registered Figma app would render a "Connect with
+  Figma" button that can only 503.
+
+  **A start-from-design entry on the board.** A frame-header button, and an offer on any Add-task
+  description that links a page. Both ask only host-pinned sources, which is the safety property
+  rather than an optimisation: a host-blind parser claims a shape, so asking Notion about a Figma
+  link whose file key carries a UUID-shaped run gets a confident yes and stages the design into
+  Notion's key space. The paste is resolved before anything is created, and a reference the parser
+  had to WIDEN (Figma's own Copy link emits an unreadable id for any component instance, so the
+  parser falls back to the whole file) says so on its own line, apart from the ordinary trim: "I
+  attached this frame" and "I attached the entire design" otherwise render identically, and for a
+  designer that widening is the defect.
+
+  **Target-aware planning.** `plan` now asks one of two questions, with two different answer shapes:
+  what architecture a document describes, or what work it implies inside a service that already
+  exists. A targeted response that proposes frames is refused rather than re-read as modules, because
+  a model proposing services where one exists has made a mistake and re-reading it would launder that
+  onto the board. This is also what makes the `frameId` spawn safe to offer: flattening a board-wide
+  plan into a frame discarded the frame titles and types the preview rendered, so the spawn produced
+  something other than what was approved, while a plan authored for the target carries one frame that
+  IS the target. Design documents require a target for the reason above.
+
+  **Copy and a tour.** Connect copy that names designs, and a `start-from-design` tour in the launch
+  arc rather than the catalogue-only half, gated on a design source being connected rather than on
+  permission to connect one — that is the admin's job, and gating on it would withhold the tour from
+  exactly the persona it is written for.
+
+  Two compatibility notes. `DocumentBoardPlan` gains a required `targetFrameId`, and the OAuth
+  install URL is admin-tier even though it only reads: what it hands back is the first half of a
+  credential write, completed through a public callback where no tier can be checked.
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/contracts@0.271.0
+  - @cat-factory/kernel@0.269.0
+  - @cat-factory/integrations@0.147.0
+  - @cat-factory/server@0.249.0
+  - @cat-factory/orchestration@0.237.0
+  - @cat-factory/agents@0.117.9
+  - @cat-factory/gates@0.9.35
+  - @cat-factory/prompt-fragments@1.0.19
+
+## 0.32.1
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+  - @cat-factory/kernel@0.268.0
+  - @cat-factory/integrations@0.146.0
+  - @cat-factory/orchestration@0.236.0
+  - @cat-factory/server@0.248.0
+  - @cat-factory/agents@0.117.8
+  - @cat-factory/gates@0.9.34
+  - @cat-factory/prompt-fragments@1.0.18
+
+## 0.32.0
+
+### Minor Changes
+
+- 2b74bd0: Let a mothership open the org credentials a mothership-mode node holds no key for
+
+  Mothership mode splits the encryption keys on purpose: a laptop seals its own agent and model
+  credentials under a local key, and the mothership's `ENCRYPTION_KEY` never travels. That split is
+  what made every sealed-blob repository safe to serve over the persistence RPC, and it is also what
+  left those blobs unreadable on the node. A row a hosted teammate wrote is sealed under the
+  mothership's key, so a mothership-mode node could save an infrastructure connection and never
+  provision with it, save a Datadog connection and never probe with it, and four earlier slices parked
+  a surface rather than ship it broken.
+
+  `POST /internal/secrets/unseal` and `POST /internal/secrets/seal` close that. The node names the
+  ROW, never the ciphertext: it posts a source from a closed table plus the row's identifiers, and the
+  mothership re-reads the authoritative row from its own store, binds the workspace to an account
+  exactly as the persistence RPC does, and decrypts under its own key. A compromised node token can
+  therefore only ask for a value it could already have read had it held the key, in an account it can
+  already reach, which is what keeps this from being a decryption oracle. The seal direction matters
+  just as much: a mothership-mode node provisions environments, and a row it sealed locally would be
+  unopenable by the mothership's own teardown with nothing saying so until a reclaim failed.
+
+  Consumers reach it through one kernel seam, `createOrgSecretCipher`. With no delegate wired (every
+  hosted deployment, and local mode over its own Postgres) it is a pass-through to the facade's own
+  cipher, so nothing changes there.
+
+  With provisioning writes now safe to persist, `environmentRegistryRepository.insert`/`update` join
+  the persistence allow-list, and so does `softDelete`, the tombstone half every re-provision and
+  every reclaim runs. A mothership-mode node therefore provisions, polls and tears down environments
+  for real, and the ephemeral-environment self-test runs end to end. Provisioning and teardown take
+  the delegate together rather than separately: teardown opens the very provision fields provisioning
+  sealed, so a node holding one and not the other could stand infrastructure up and never reclaim it.
+
+  A mothership-mode node may not itself answer the delegation endpoints. They are wired only where a
+  facade holds its own main database, because a node's `ENCRYPTION_KEY` is the local key that seals
+  its own agent credentials, and sealing an org row under it is the split this change removes.
+
+  Behaviour change worth knowing about on an existing mothership-mode node: rows it previously sealed
+  under its LOCAL key are no longer opened locally. Pre-1.0 internals break rather than grow a
+  compatibility path, so re-save an affected environment or observability connection; the key-drift
+  sweep reports them.
+
+  Deliberately still off, and stated in the tracker: the document/task source connections (their
+  repositories decrypt inside, so there is no sealed field for a row-addressed unseal to name), the
+  mothership-side Slack residual, and the sealed-blob consumers a mothership-mode node does not
+  currently drive. Each is a table entry plus service threading on the same pattern, not a new
+  mechanism.
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+  - @cat-factory/orchestration@0.235.0
+  - @cat-factory/server@0.247.0
+  - @cat-factory/integrations@0.145.0
+  - @cat-factory/agents@0.117.7
+  - @cat-factory/gates@0.9.33
+  - @cat-factory/prompt-fragments@1.0.17
+
+## 0.31.28
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+  - @cat-factory/kernel@0.266.0
+  - @cat-factory/integrations@0.144.0
+  - @cat-factory/server@0.246.0
+  - @cat-factory/agents@0.117.6
+  - @cat-factory/gates@0.9.32
+  - @cat-factory/orchestration@0.234.1
+  - @cat-factory/prompt-fragments@1.0.16
+
+## 0.31.27
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+  - @cat-factory/kernel@0.265.0
+  - @cat-factory/orchestration@0.234.0
+  - @cat-factory/server@0.245.0
+  - @cat-factory/agents@0.117.5
+  - @cat-factory/gates@0.9.31
+  - @cat-factory/integrations@0.143.1
+  - @cat-factory/prompt-fragments@1.0.15
+
+## 0.31.26
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/contracts@0.266.0
+  - @cat-factory/kernel@0.264.0
+  - @cat-factory/orchestration@0.233.0
+  - @cat-factory/integrations@0.143.0
+  - @cat-factory/server@0.244.0
+  - @cat-factory/agents@0.117.4
+  - @cat-factory/gates@0.9.30
+  - @cat-factory/prompt-fragments@1.0.14
+
+## 0.31.25
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+  - @cat-factory/kernel@0.263.0
+  - @cat-factory/integrations@0.142.0
+  - @cat-factory/server@0.243.0
+  - @cat-factory/agents@0.117.3
+  - @cat-factory/gates@0.9.29
+  - @cat-factory/orchestration@0.232.1
+  - @cat-factory/prompt-fragments@1.0.13
+
 ## 0.31.24
 
 ### Patch Changes

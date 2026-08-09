@@ -55,6 +55,16 @@ export interface ExecutionConfig {
   ciPollInterval: string
   /** Safety bound on the number of CI polls before the gate is given up. */
   ciMaxPolls: number
+  /**
+   * Ceiling on ONE `advanceInstance` call or status read, the engine's hang bound. Cloudflare
+   * applies it as the `step.do` timeout its durable driver already wrapped both in; Node races
+   * the same ceiling in `driveExecution` (pg-boss heartbeats an active job independently of
+   * handler progress, so without it a hung HTTP call wedges the run until the queue's expire
+   * cap, up to 24h; stuck-run audit F9). ONE knob so the two facades cannot drift apart on the
+   * hang bound, which is also why the value arrives here CANONICALISED by the shared
+   * `resolveDurationEnv` rather than as whatever the operator typed.
+   */
+  advanceTimeout: string
   /** Age ceiling for the instance-level container reaper (epoch-ms). */
   containerMaxAgeMs: number
 }
@@ -562,16 +572,31 @@ export interface InfraReachabilityConfig {
 }
 
 /**
- * Opt-in GitLab VCS provider config (the neutral-VCS abstraction's second backend).
- * `enabled` is false unless a `GITLAB_TOKEN` is configured. Single-token model (mirrors
- * local-mode's PAT): one connection per deployment, registered via `registerGitLab` and
- * resolved through the process-wide VCS registry. The raw token is NOT carried here (the
- * facade reads it straight from env at wiring time); this holds only the non-secret address
- * + the webhook secret the neutral ingest route verifies against.
+ * GitLab VCS provider config (the neutral-VCS abstraction's second backend), shaped exactly like
+ * {@link GitHubConfig}: ALWAYS present, with `enabled` the separate opt-in gate.
+ *
+ * The split matters because the two facts have different lifetimes. `apiBase` is the ADDRESS of
+ * the instance this deployment talks to, which a deployment has whether or not it wired the
+ * single-token engine connection: local mode reaches GitLab with a `GITLAB_PAT` and no
+ * `GITLAB_TOKEN`, so `enabled` is false there while the workspace very much has a GitLab
+ * connection whose repos, merge requests and issues need linking. Gating the whole object on the
+ * token (as this once did) made the address unreadable on exactly that deployment, and every
+ * derived web link was silently withheld.
+ *
+ * `enabled` covers only the single-token model (mirrors local-mode's PAT): one connection per
+ * deployment, registered via `registerGitLab` and resolved through the process-wide VCS registry.
+ * The raw token is NOT carried here (the facade reads it straight from env at wiring time); this
+ * holds only the non-secret address + the webhook secret the neutral ingest route verifies
+ * against. Every field beside `apiBase` is inert while `enabled` is false, exactly as
+ * {@link GitHubConfig}'s `appId` is when no App is configured.
  */
 export interface GitLabConfig {
   enabled: boolean
-  /** REST v4 API base, e.g. `https://gitlab.com/api/v4` (per-instance for self-managed). */
+  /**
+   * REST v4 API base, e.g. `https://gitlab.com/api/v4` (per-instance for self-managed).
+   * Populated on every deployment, defaulting to the public instance, because it is also the
+   * source the browser-facing web host is derived from (`resolveVcsWebUrls`).
+   */
   apiBase: string
   /** The single connection's id — the `VcsConnectionRef.connectionId` callers resolve on. */
   connectionId: string
@@ -595,11 +620,8 @@ export interface AppConfig {
   spend: SpendPricing
   /** GitHub integration config; `enabled` is false unless a GitHub App is set up. */
   github: GitHubConfig
-  /**
-   * GitLab VCS provider config; `enabled` is false unless `GITLAB_TOKEN` is set. Optional so
-   * existing config builders/tests need no change when GitLab is unconfigured.
-   */
-  gitlab?: GitLabConfig
+  /** GitLab VCS provider config; `enabled` is false unless `GITLAB_TOKEN` is set. */
+  gitlab: GitLabConfig
   /** "Login with GitHub" config; `enabled` is false unless an OAuth app is set up. */
   auth: AuthConfig
   /** Document-source integration config; always on where the runtime serves documents. */

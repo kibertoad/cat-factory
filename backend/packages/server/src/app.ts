@@ -10,7 +10,10 @@ import { harnessArtifactController } from './modules/artifacts/HarnessArtifactCo
 import { authController } from './modules/auth/AuthController.js'
 import { boardController } from './modules/board/BoardController.js'
 import { bootstrapController } from './modules/bootstrap/BootstrapController.js'
-import { documentSourceController } from './modules/documents/DocumentSourceController.js'
+import {
+  documentOAuthController,
+  documentSourceController,
+} from './modules/documents/DocumentSourceController.js'
 import { environmentController } from './modules/environments/EnvironmentController.js'
 import { environmentUserHandlerController } from './modules/environments/EnvironmentUserHandlerController.js'
 import { eventsController } from './modules/events/EventsController.js'
@@ -50,6 +53,7 @@ import { modelPresetController } from './modules/modelPresets/ModelPresetControl
 import { serviceFragmentDefaultsController } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsController.js'
 import { modelController } from './modules/models/ModelController.js'
 import { notificationController } from './modules/notifications/NotificationController.js'
+import { notificationSettingsController } from './modules/notifications/NotificationSettingsController.js'
 import { notificationRelayController } from './modules/notifications/NotificationRelayController.js'
 import { telemetryIngestController } from './modules/telemetry/TelemetryIngestController.js'
 import { telemetryReadController } from './modules/telemetry/TelemetryReadController.js'
@@ -60,6 +64,7 @@ import { trackerSettingsController } from './modules/recurring/TrackerSettingsCo
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
 import { docInterviewController } from './modules/docInterview/DocInterviewController.js'
 import { followUpController } from './modules/followUp/FollowUpController.js'
+import { binaryCandidatesController } from './modules/binaryCandidates/BinaryCandidatesController.js'
 import { forkDecisionController } from './modules/forkDecision/ForkDecisionController.js'
 import { inputGateController } from './modules/inputGate/InputGateController.js'
 import { judgeController } from './modules/judge/JudgeController.js'
@@ -99,15 +104,20 @@ import { workspaceController } from './modules/workspaces/WorkspaceController.js
 import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberController.js'
 import { persistenceController } from './modules/persistence/PersistenceController.js'
 import { githubDelegationController } from './modules/persistence/GitHubDelegationController.js'
+import { secretDelegationController } from './modules/persistence/SecretDelegationController.js'
 import { foundationalBuiltinsController } from './modules/foundationalServices/FoundationalBuiltinsController.js'
 import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGeneratorsController.js'
 import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
+import { publicBoardController } from './modules/publicApi/PublicBoardController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
 import { publicEvidenceController } from './modules/publicApi/PublicEvidenceController.js'
+import { publicSpecController } from './modules/publicApi/PublicSpecController.js'
+import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
+import { publicSpendController } from './modules/publicApi/PublicSpendController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
 import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
 import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
@@ -136,8 +146,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // OpenAI-compatible LLM proxy for implementation containers (authenticated by a
   // signed, model-locked container token; upstream/in-process via the llmUpstream gateway).
   app.route('/', llmProxyController())
-  // In-container screenshot ingest for the UI tester (same container session token as the
-  // LLM proxy; reachable at `${proxyBaseUrl}/artifacts/ingest`). 503 when no blob storage.
+  // In-container screenshot ingest for the UI tester plus the reference-design download its
+  // job body's manifest names (same container session token as the LLM proxy; reachable at
+  // `${proxyBaseUrl}/artifacts/ingest` and `${proxyBaseUrl}/artifacts/reference/:id`). 503
+  // when no blob storage.
   app.route('/', harnessArtifactController())
   // SearXNG-compatible web-search proxy for implementation containers (same
   // model-locked container token; the search runs server-side under the deployment's
@@ -158,6 +170,17 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // mothership. Machine-token gated like the persistence RPC; 503 unless the facade wired
   // `githubTokenDelegation`. Mounted on both facades so either can be a mothership.
   app.route('/', githubDelegationController())
+  // Mothership-mode SECRET DELEGATION (`/internal/secrets/{unseal,seal}`): the key split that
+  // keeps the mothership's `ENCRYPTION_KEY` off a laptop also leaves the laptop unable to open the
+  // org credentials it must USE (a provisioned environment's access handle, an infra handler's
+  // secret bundle, a release-health connection. The node names the ROW (never the ciphertext) and
+  // the mothership re-reads it, scope-checks it and opens it under its own key; the seal half
+  // keeps a secret the NODE produces readable by the org. Machine-token gated like the persistence
+  // RPC; 503 unless the facade wired `secretCipherFor`, which it does only when it holds its own
+  // main database and so is AUTHORITATIVE for the rows (a mothership-mode node holds only a local
+  // key). Mounted on both facades so either can be a mothership. See
+  // docs/initiatives/mothership-mode.md.
+  app.route('/', secretDelegationController())
   // Mothership-mode foundational-services `builtin` tier (`GET /internal/foundational-services`
   // + the batched `POST .../contracts`):
   // the catalog tier a deployment registers in CODE is org state, and a mothership-mode node has
@@ -211,9 +234,14 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
   // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
   app.route('/', publicApiController())
+  // Board PROVISIONING (`/api/v1/repos`, `/api/v1/services`) plus the two task relationships that
+  // outlive a create call (dependency edges, attached requirements documents). The same
+  // in-controller key auth; service creation is `admin` (board structure), the task-level writes
+  // `write`. See backend/docs/public-api.md.
+  app.route('/', publicBoardController())
   // The public PARKED-DECISION surface (`/api/v1/runs/:runId/decisions/*`): the answerer that lets
   // a headless run include the clarification loop at all. Same in-controller key auth, gated on
-  // the `decide` rung of the scope ladder. See docs/initiatives/headless-clarification-loop.md.
+  // the `decide` rung of the scope ladder. See backend/docs/adr/0047-headless-clarification-loop.md.
   app.route('/', publicDecisionController())
   // The public REMOTE DEBUGGING surface (`/api/v1/debug/*`): read-scoped, keyset-paginated reads
   // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context
@@ -224,6 +252,21 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // and the artifacts a run captured, for a consumer whose job is to JUDGE the run rather than
   // debug it. See backend/docs/public-api.md.
   app.route('/', publicEvidenceController())
+  // The public MERGE-EVIDENCE surface (`/api/v1/runs/:runId/merge-record`,
+  // `/api/v1/merge-records/*`): the change class and merger scores behind a merge decision, the
+  // workspace's per-class rollups, and the reviewer-effort tag. Reads are `read`; the tag is
+  // `write`, since recording how much review a landed PR took merges nothing. See
+  // backend/docs/adr/0046-merge-track-record.md.
+  app.route('/', publicMergeEvidenceController())
+  // The public SPEND-ANALYTICS read (`/api/v1/usage/spend`): the workspace's money over a window
+  // sliced by repository, ticket, run or step kind: the TCO question the period breakdown on
+  // `/api/v1/usage` carries no axis for. `read` scope. See backend/docs/public-api.md.
+  app.route('/', publicSpendController())
+  // The public SPEC read (`/api/v1/services/:serviceId/spec`): the service's in-repo requirement
+  // tree and the Gherkin rendered from it, read-scoped, so an integrator judging a run's outcome
+  // can fetch the criteria it was scored against without a repository clone. Read-only by design:
+  // the spec's write path is a reviewed commit. See backend/docs/public-api.md.
+  app.route('/', publicSpecController())
   // HEADLESS key provisioning (`/api/v1/keys`): the external counterpart of the session-authed
   // key panel, `admin` scope, bounded so a minted key can never mint another and revoking a key
   // revokes what it minted.
@@ -342,6 +385,11 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'docInterview', mount: WORKSPACE_MOUNT, build: () => docInterviewController() },
   { name: 'followUp', mount: WORKSPACE_MOUNT, build: () => followUpController() },
   { name: 'forkDecision', mount: WORKSPACE_MOUNT, build: () => forkDecisionController() },
+  {
+    name: 'binaryCandidates',
+    mount: WORKSPACE_MOUNT,
+    build: () => binaryCandidatesController(),
+  },
   { name: 'inputGate', mount: WORKSPACE_MOUNT, build: () => inputGateController() },
   { name: 'judge', mount: WORKSPACE_MOUNT, build: () => judgeController() },
   { name: 'prReview', mount: WORKSPACE_MOUNT, build: () => prReviewController() },
@@ -360,6 +408,11 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'initiative', mount: WORKSPACE_MOUNT, build: () => initiativeController() },
   { name: 'notification', mount: WORKSPACE_MOUNT, build: () => notificationController() },
   // ---- the workspace CONFIGURATION surfaces (policies, secrets, presets, integrations) ----
+  {
+    name: 'notificationSettings',
+    mount: WORKSPACE_MOUNT,
+    build: () => notificationSettingsController(),
+  },
   { name: 'riskPolicy', mount: WORKSPACE_MOUNT, build: () => riskPolicyController() },
   { name: 'mergeTrackRecord', mount: WORKSPACE_MOUNT, build: () => mergeTrackRecordController() },
   { name: 'sharedStack', mount: WORKSPACE_MOUNT, build: () => sharedStackController() },
@@ -443,27 +496,56 @@ function registerControllers<E extends AppEnv>(
   for (const entry of entries) app.route(entry.mount, entry.build())
 }
 
+/** One provider-facing receiver and the ROOT prefix it mounts under. */
+interface PublicControllerEntry {
+  /** Short name, so a guard test can say WHICH receiver broke an invariant. */
+  name: string
+  /**
+   * The root-level mount. Every value here MUST also appear in `authGate`'s `PUBLIC_PREFIXES`:
+   * these receivers authenticate themselves (an HMAC signature over the raw body, a signed
+   * `state`) and their callers carry no session, so one missing from that list is unreachable
+   * rather than merely gated.
+   */
+  mount: string
+  build: () => Hono<AppEnv>
+}
+
 /**
- * The provider-facing webhook receivers + OAuth redirect callbacks (GitHub / VCS / Slack / Linear);
- * not workspace-scoped. Mounted last, after the workspace API.
+ * The provider-facing webhook receivers + OAuth redirect callbacks, in registration order; not
+ * workspace-scoped, and mounted last, after the workspace API.
+ *
+ * A list rather than a run of `app.route` calls for the same reason {@link WORKSPACE_CONTROLLERS}
+ * is one: it lets a guard test judge exactly what the app mounts. Here the invariant is the
+ * session gate's public allowlist, and the failure it catches is a silent one — a receiver added
+ * by hand beside a loop looks correct at its own mount and only ever fails against the live
+ * vendor, as a 401 on a redirect nobody can retry. `http/publicPrefixes.test.ts` drives this list.
+ *
+ * The MCP tool-server OAuth flow deliberately has NO entry here: a vendor redirects the operator's
+ * browser to the SPA, which re-presents the `code` and `state` over the authenticated API
+ * (`mcpOAuthCompletionController`, mounted with the session-gated controllers above). A public
+ * receiver could not tell WHO was completing the grant, since a third-party navigation carries no
+ * bearer token.
  */
+export const PROVIDER_CALLBACK_CONTROLLERS: readonly PublicControllerEntry[] = [
+  // GitHub-facing (webhooks + setup callback).
+  { name: 'githubWebhook', mount: '/github', build: () => githubWebhookController() },
+  // Provider-neutral VCS webhook receiver (GitLab first). GitHub keeps its own route above; this
+  // serves any other provider registered in the VCS registry.
+  { name: 'vcsWebhook', mount: '/vcs', build: () => vcsWebhookController() },
+  // Tracker-facing webhook receiver (Jira / Linear / GitHub Issues). Unlike the two VCS receivers
+  // this carries the WORKSPACE in its path, because a tracker delivery has no installation id to
+  // resolve one from — see `TaskWebhookController`.
+  { name: 'taskWebhook', mount: '/webhooks', build: () => taskWebhookController() },
+  // Slack-facing OAuth callback (browser redirect).
+  { name: 'slackOAuth', mount: '/slack', build: () => slackOAuthController() },
+  // Linear-facing OAuth callback (browser redirect).
+  { name: 'linearOAuth', mount: '/tasks', build: () => linearOAuthController() },
+  // Document-source OAuth callback (browser redirect). ONE receiver for every OAuth-capable
+  // source — the source rides the signed `state`, because a deployment registers one redirect URL
+  // per vendor app and the path cannot vary per source.
+  { name: 'documentOAuth', mount: '/documents', build: () => documentOAuthController() },
+]
+
 function registerWebhookControllers<E extends AppEnv>(app: Hono<E>): void {
-  // GitHub-facing (webhooks + setup callback); not workspace-scoped.
-  app.route('/github', githubWebhookController())
-  // Provider-neutral VCS webhook receiver (GitLab first); not workspace-scoped. GitHub keeps
-  // its own route above; this serves any other provider registered in the VCS registry.
-  app.route('/vcs', vcsWebhookController())
-  // Tracker-facing webhook receiver (Jira / Linear / GitHub Issues); not session-scoped. Unlike
-  // the two VCS receivers this carries the WORKSPACE in its path, because a tracker delivery has
-  // no installation id to resolve one from — see `TaskWebhookController`.
-  app.route('/webhooks', taskWebhookController())
-  // Slack-facing OAuth callback (browser redirect); not workspace-scoped.
-  app.route('/slack', slackOAuthController())
-  // Linear-facing OAuth callback (browser redirect); not workspace-scoped.
-  app.route('/tasks', linearOAuthController())
-  // The MCP tool-server OAuth flow deliberately has NO receiver here: a vendor redirects the
-  // operator's browser to the SPA, which re-presents the `code` and `state` over the authenticated
-  // API (`mcpOAuthCompletionController`, mounted with the session-gated controllers above). A
-  // public receiver could not tell WHO was completing the grant, since a third-party navigation
-  // carries no bearer token.
+  for (const entry of PROVIDER_CALLBACK_CONTROLLERS) app.route(entry.mount, entry.build())
 }

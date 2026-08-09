@@ -50,7 +50,7 @@ function subject(options: { store?: Map<string, Pipeline>; registry?: PipelineRe
 
 function orgRegistry(pipeline: Partial<Pipeline> & { id: string }): PipelineRegistry {
   const registry = new PipelineRegistry()
-  registry.register({ name: 'Org flow', agentKinds: ['coder'], ...pipeline })
+  registry.register({ name: 'Org flow', purpose: 'build', agentKinds: ['coder'], ...pipeline })
   return registry
 }
 
@@ -66,6 +66,7 @@ describe('pipelineAdoption', () => {
           {
             id: REVIEW_PIPELINE_ID,
             name: 'Mine',
+            purpose: 'review' as const,
             agentKinds: ['coder'],
             builtin: true,
             version: 1,
@@ -153,7 +154,12 @@ describe('pipelineAdoption', () => {
     // It must agree with `resolveDefinition` on membership, or auto-start and a manual start would
     // disagree about which pins are launchable.
     const registry = orgRegistry({ id: 'pl_org_op', builtin: true, version: 2 })
-    registry.register({ id: 'pl_org_editable', name: 'Editable', agentKinds: ['coder'] })
+    registry.register({
+      id: 'pl_org_editable',
+      name: 'Editable',
+      purpose: 'build',
+      agentKinds: ['coder'],
+    })
     const { adoption, store } = subject({ registry })
     const catalog = adoption.adoptableCatalog()
     expect(catalog.get('pl_org_op')?.version).toBe(2)

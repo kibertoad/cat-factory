@@ -7,6 +7,11 @@ can drive. Product/design notes: [`README.md`](./README.md) and
 [`mcp/README.md`](./mcp/README.md); the API itself:
 [`backend/docs/public-api.md`](../backend/docs/public-api.md).
 
+One member is not a projection at all: `gatekeeper-worker/` (`@cat-factory/gatekeeper-worker`) is
+the hand-written Cloudflare OS Gatekeeper machinery a deployment installs, built on the generated
+`gatekeeper/` table and the TypeScript client. Nothing in `scripts/sdk/` emits it, and the rule
+below does not apply to it; `deploy/gatekeeper` is the template that installs it.
+
 **The rule that governs everything here: models and operations are GENERATED, transports are
 HAND-WRITTEN.** The chain is `contracts → docs/openapi.json → sdk/*`, with no hand-editing at any
 link. Never edit a file whose header says GENERATED: change the contracts (or the emitter) and
@@ -14,19 +19,23 @@ run `pnpm gen:sdk`. `pnpm check:sdk` fails CI on drift and on version skew.
 
 **Where things live**
 
-| Path                                                       | What                                                                                                   |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `typescript/src/*.generated.ts`                            | generated models + resource clients                                                                    |
-| `typescript/src/{http,errors,sse,client,index}.ts`         | hand-written transport, error hierarchy, SSE reader, entry point                                       |
-| `python/cat_factory/{models,operations}.py`                | generated                                                                                              |
-| `python/cat_factory/{_http,_sse,errors,client}.py`         | hand-written                                                                                           |
-| `go/{models,operations}_gen.go`                            | generated                                                                                              |
-| `go/{client,errors,sse}.go`                                | hand-written                                                                                           |
-| `java/src/main/java/.../model/`, `.../resources/`          | generated (whole packages, wiped on regeneration)                                                      |
-| `java/src/main/java/ai/catfactory/sdk/*.java`              | hand-written (`Transport`, `CatFactoryClient`, the exception hierarchy, `EventStream`, `PageIterator`) |
-| `mcp/src/tools.generated.ts`                               | generated tool table (input + output schemas, hints, one thunk per operation)                          |
-| `mcp/src/{server,config,result,instructions,stdio,bin}.ts` | hand-written: the filters, the result rendering, the model-facing prose, the executable                |
-| `*/smoketest/`                                             | the per-SDK smoketest programs the cross-SDK harness drives                                            |
+| Path                                                       | What                                                                                                       |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `typescript/src/*.generated.ts`                            | generated models + resource clients                                                                        |
+| `typescript/src/{http,errors,sse,client,index}.ts`         | hand-written transport, error hierarchy, SSE reader, entry point                                           |
+| `python/cat_factory/{models,operations}.py`                | generated                                                                                                  |
+| `python/cat_factory/{_http,_sse,errors,client}.py`         | hand-written                                                                                               |
+| `go/{models,operations}_gen.go`                            | generated                                                                                                  |
+| `go/{client,errors,sse}.go`                                | hand-written                                                                                               |
+| `java/src/main/java/.../model/`, `.../resources/`          | generated (whole packages, wiped on regeneration)                                                          |
+| `java/src/main/java/ai/catfactory/sdk/*.java`              | hand-written (`Transport`, `CatFactoryClient`, the exception hierarchy, `EventStream`, `PageIterator`)     |
+| `mcp/src/tools.generated.ts`                               | generated tool table (input + output schemas, hints, one thunk per operation)                              |
+| `mcp/src/{server,config,result,instructions,stdio,bin}.ts` | hand-written: the filters, the result rendering, the model-facing prose, the executable                    |
+| `gatekeeper/src/bindings.generated.ts`                     | generated policy table; `index.ts` beside it is the hand-written scope-ladder half                         |
+| `gatekeeper-worker/src/**`                                 | hand-written throughout: the Worker factory, capability, key broker, webhook receiver, approval inbox      |
+| `gatekeeper-worker/src/policy/`                            | the `./policy` entry point: the policy vocabulary, with no Worker runtime, so a policy file loads anywhere |
+| `gatekeeper-worker/test/live/`                             | the same Worker against a REAL deployment, run by `@cat-factory/sdk-smoketest` (`--only=gatekeeper`)       |
+| `*/smoketest/`                                             | the per-SDK smoketest programs the cross-SDK harness drives                                                |
 
 **The generator** is `scripts/sdk/` (`ir.mjs` → spec-to-IR, `surface.mjs` → the chosen public
 shape, `emit-*.mjs` → one per language plus `emit-mcp.mjs`) driven by `scripts/generate-sdks.mjs`.

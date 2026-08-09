@@ -26,6 +26,7 @@ import type {
   ModelPresetRepository,
   PipelineStep,
   RequirementReviewRepository,
+  ResolveBinaryArtifactStore,
   ResolvedSkill,
   SkillVersionPin,
   TaskRepository,
@@ -73,10 +74,13 @@ import { resolveRunSkills } from './run-skills.js'
 import {
   linkedContextWithDesignFlag,
   mergeInjectedContextFiles,
+  priorOutputsFor,
   priorPrReviewContextFor,
 } from './builder-context-files.js'
 import { type FoundationalServiceResolver } from './run-foundational-services.js'
 import { CatalogRunContext } from './run-catalog-context.js'
+import { resolveReferenceScreenshots } from './run-reference-screenshots.js'
+import { buildBlockPayload } from './builder-block-payload.js'
 import { getFragment, withDesignContextFragment } from '@cat-factory/prompt-fragments'
 import {
   type DocumentUrlResolver,
@@ -348,6 +352,13 @@ export interface AgentContextBuilderDeps {
    */
   binaryGeneratorSource?: BinaryGeneratorSource
   /**
+   * Optional: the per-account binary-artifact store, resolved for a dispatch of a CAPTURING kind
+   * so the task's reference design images can be handed to the container as files. Absent (the
+   * deployment stores no binary artifacts) ⇒ no reference manifest, and the tester names its own
+   * views: the documented fallback, not a degradation.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
    * Optional: the run logger, used to report a capability that was declared but skipped (an
    * unregistered bundled-skill id, an optional catalog skill that could not resolve). Absent ⇒
    * those degradations are silent, which is why every facade wires it.
@@ -437,7 +448,7 @@ export class AgentContextBuilder {
     // One promise, two consumers: the wave's first entry below, and the fragment fold, which needs to
     // know whether this run carries a DESIGN document without re-resolving the corpus to find out.
     const linked = linkedContextWithDesignFlag(!reworked, (opts) =>
-      this.resolveLinkedContext(workspaceId, block.id, description, opts),
+      this.resolveLinkedContext(workspaceId, block.id, description, opts, observations),
     )
     // The remaining context resolutions are mutually independent — the frame resolvers all read
     // from the shared `serviceFrame`, and the rest read disjoint sources — so fan them out in one
@@ -493,6 +504,10 @@ export class AgentContextBuilder {
       // failure policy and (on a mothership-mode node) a transport, so the collaborator owns
       // the fan-out and the shared reads inside it; see `CatalogRunContext.sliceFor`.
       catalogSlice,
+      // The reference design images this task already holds, named as the files a CAPTURING kind
+      // reads under `.cat-context/reference-screenshots/`. A spread-ready partial, empty for every
+      // kind that captures nothing, which is what keeps the two reads off their dispatch path.
+      referenceScreenshots,
     ] = await Promise.all([
       linked.linkedContext,
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -522,19 +537,12 @@ export class AgentContextBuilder {
       // step costs one extra batched query and nothing else.
       this.resolveConsensusConfig(workspaceId, step, block),
       this.catalogContext().sliceFor(workspaceId, agentKind, step, instance),
+      resolveReferenceScreenshots(this.deps, agentKind, workspaceId, block.id),
     ])
     const agentConfig = block.agentConfig
     const customTaskType = this.customTaskTypeFor(block)
     const reproduction = reproductionFor(agentKind, agentConfig, instance, validationChecks)
-    const priorOutputs = [
-      ...(architectureDirection
-        ? [{ agentKind: 'architecture-brainstorm', output: architectureDirection }]
-        : []),
-      ...instance.steps
-        .slice(0, instance.currentStep)
-        .filter((s) => s.output)
-        .map((s) => ({ agentKind: s.agentKind, output: s.output! })),
-    ]
+    const priorOutputs = priorOutputsFor(instance, architectureDirection)
     return {
       agentKind,
       pipelineName: instance.pipelineName,
@@ -590,7 +598,7 @@ export class AgentContextBuilder {
       // harness-aware by the container executor. Catalog versions are pinned onto the step
       // (skillVersions) inside the resolver. Absent when the run applies no skills.
       ...(runSkills.skills.length ? { skills: runSkills.skills } : {}),
-      block: this.buildBlockPayload({
+      block: buildBlockPayload({
         block,
         description,
         resolved,
@@ -639,6 +647,9 @@ export class AgentContextBuilder {
       ...(catalogSlice.binaryGenerators.length
         ? { binaryGenerators: catalogSlice.binaryGenerators }
         : {}),
+      // The task's reference designs, as the files the container downloads them into (empty when
+      // this dispatch asked and the task holds none; absent when it never asked).
+      ...referenceScreenshots,
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -675,65 +686,6 @@ export class AgentContextBuilder {
       this.deps.taskTypeRegistry?.get(block.taskType),
     )
     return customTaskType ? { customTaskType } : {}
-  }
-
-  /**
-   * Assemble the `block` sub-payload of the agent context — the block identity plus its many
-   * OPTIONAL fields (resolved fragments, technical label, model preset, PR + peer PRs, linked
-   * context docs/tasks, estimate, per-type creation fields, doc-authoring template/exemplars/
-   * brief). Extracted verbatim from {@link buildContext} so that hot builder stays within the
-   * cyclomatic-complexity budget; behaviour is byte-identical.
-   */
-  private buildBlockPayload(args: {
-    block: Block
-    description: string
-    resolved: Awaited<ReturnType<AgentContextBuilder['resolveFragments']>>
-    agentConfig: Block['agentConfig']
-    contextDocs: Awaited<ReturnType<AgentContextBuilder['resolveLinkedContext']>>['docs']
-    contextTasks: Awaited<ReturnType<AgentContextBuilder['resolveLinkedContext']>>['tasks']
-    docAuthoring: Awaited<ReturnType<AgentContextBuilder['resolveDocAuthoringContext']>>
-  }): AgentRunContext['block'] {
-    const { block, description, resolved, agentConfig, contextDocs, contextTasks, docAuthoring } =
-      args
-    return {
-      id: block.id,
-      title: block.title,
-      type: block.type,
-      description,
-      fragmentIds: block.fragmentIds,
-      ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
-      // The resolved technical label, threaded whenever a concrete determination exists
-      // (true ⇒ task definition is primary + spec-writer may skip specs; false ⇒ explicit
-      // business, spec-writer must produce specs). Omitted only when unset, so an
-      // undetermined task keeps the unchanged spec-led behaviour.
-      ...(typeof block.technical === 'boolean' ? { technical: block.technical } : {}),
-      modelId: block.modelId,
-      ...(block.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
-      ...(agentConfig ? { agentConfig } : {}),
-      ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
-      // Peer PRs from a multi-repo run (own-service PR stays on `pullRequest`) — the merger
-      // reads these to clone each peer's PR branch and score the combined cross-repo diff.
-      ...(block.peerPullRequests?.length ? { peerPullRequests: block.peerPullRequests } : {}),
-      ...(contextDocs.length ? { contextDocs } : {}),
-      ...(contextTasks.length ? { contextTasks } : {}),
-      // The task-estimator's triage, when produced earlier in this run — the
-      // consensus executor's gating input.
-      ...(block.estimate ? { estimate: block.estimate } : {}),
-      // Per-type creation fields (a `document` task's docKind/audience/targetPath/…),
-      // so a kind's user-prompt builder can specialise on them — the document-authoring
-      // agents read these. Sparse; omitted when none were collected.
-      ...(block.taskTypeFields ? { taskTypeFields: block.taskTypeFields } : {}),
-      // Workspace-linked template / exemplar documents for a doc-authoring kind (WS1). Omitted
-      // when nothing is linked (the prompts then fall back to the built-in skeleton / built-in
-      // exemplars) or the kind isn't doc-aware.
-      ...(docAuthoring.docTemplateBody ? { docTemplateBody: docAuthoring.docTemplateBody } : {}),
-      ...(docAuthoring.docExemplars?.length ? { docExemplars: docAuthoring.docExemplars } : {}),
-      // The converged interactive-interview authoring brief (WS5), when the interview ran and
-      // synthesized one — the doc-writer folds it in as the refined spec to write from.
-      ...(docAuthoring.docInterviewBrief
-        ? { docInterviewBrief: docAuthoring.docInterviewBrief }
-        : {}),
-    }
   }
 
   /**
@@ -1398,14 +1350,21 @@ export class AgentContextBuilder {
    * through the shared {@link resolveLinkedContextFor} — the same resolver the initiative-planning
    * interviewer uses, so an inline planning step and a container one can never disagree about what
    * a human attached.
+   *
+   * The per-dispatch RECORD of what came back is written here rather than by the shared resolver,
+   * because that resolver's other caller (the inline initiative interviewer) owns no step to write
+   * it onto. It is what makes "which revision of the design did this run build against" answerable
+   * once the run is over: the verdict is otherwise rendered into the agent's context and lost with
+   * the container, and re-probing afterwards answers about the revision the source is at NOW.
    */
-  private resolveLinkedContext(
+  private async resolveLinkedContext(
     workspaceId: string,
     blockId: string,
     description: string,
     opts: LinkedContextOptions,
+    observations: StepObservations,
   ): Promise<LinkedContext> {
-    return resolveLinkedContextFor(
+    const context = await resolveLinkedContextFor(
       {
         ...(this.deps.documents ? { documents: this.deps.documents } : {}),
         ...(this.deps.tasks ? { tasks: this.deps.tasks } : {}),
@@ -1420,6 +1379,8 @@ export class AgentContextBuilder {
       description,
       opts,
     )
+    observations.contextDocuments(context.docs)
+    return context
   }
 
   /**

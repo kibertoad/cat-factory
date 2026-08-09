@@ -1,12 +1,12 @@
 # CLAUDE.md: architecture & flow notes
 
-Orientation for working in this repo. Product docs: [`README.md`](./README.md),
-[`backend/README.md`](./backend/README.md), `backend/docs/`. Vocabulary traps (block vs task vs card,
-runner/executor/transport, `runtimes/cloudflare` = `@cat-factory/worker`) are resolved in
-[`docs/glossary.md`](./docs/glossary.md). Every `backend/packages/*` and `backend/runtimes/*` carries an
-`AGENTS.md` with its entry point and a "where things live" map; the repository layout is the root
-README's table (CI-guarded). Design records: [`backend/docs/adr/`](./backend/docs/adr/); in-flight
-initiatives: `docs/initiatives/`.
+Orientation for working in this repo. Product docs are the WEBSITE (catfactory.ai); this tree documents
+how it is built: [`README.md`](./README.md), [`backend/README.md`](./backend/README.md), `backend/docs/`.
+Vocabulary traps (block vs task vs card, runner/executor/transport, `runtimes/cloudflare` =
+`@cat-factory/worker`) are resolved in [`docs/glossary.md`](./docs/glossary.md). Every
+`backend/packages/*` and `backend/runtimes/*` carries an `AGENTS.md` with its entry point and a "where
+things live" map; the repository layout is the root README's table (CI-guarded). Design records:
+[`backend/docs/adr/`](./backend/docs/adr/); in-flight initiatives: `docs/initiatives/`.
 
 **This file holds the cross-cutting RULES plus an index of the runtime flows.** Keep it to what applies
 across features: a rule already enforced by a typecheck, a CI guard, or a linked doc does not need
@@ -107,28 +107,32 @@ after the PR forked: merge `origin/main` into the PR branch, fix there, and push
 
 ### Documentation-staleness sweep before every PR
 
-Docs are part of the change and CI cannot catch staleness. Match the sweep to the blast radius (a
-one-line internal fix needs none; a new export / env var / capability / flow does):
+Docs are part of the change and CI catches only broken LINKS, never staleness. Match the sweep to the blast
+radius (a one-line internal fix needs none; a new export / env var / capability / flow does):
 
-- The package's own `README.md` + `AGENTS.md`.
-- The root `README.md`: the repository-layout row, plus a "What it supports" row for a new user-facing
-  capability. A CONTRIBUTOR-only doc goes under `docs/internal/`, framed from the README's last section.
-- This file, only for a new CROSS-CUTTING convention or a change to a flow it indexes. Detail about one
-  flow goes in that flow's doc.
-- A higher-level doc must POINT AT a new deeper doc rather than restate or omit it, or it is lost.
+- The package's own `README.md` + `AGENTS.md`; the root `README.md`'s layout and feature-guide rows.
+- This file, only for a new CROSS-CUTTING convention or a change to a flow it indexes; detail about one flow
+  goes in that flow's doc, and a higher-level doc POINTS AT a new deeper one or the deeper one is lost.
+- **Does this change behaviour a catfactory.ai page describes? Then it ships with a WEBSITE PR, opened and
+  merged FIRST, and NAMED in this PR's description.** OWNERSHIP FOLLOWS THE READER: the website owns what
+  anyone can act on with NO checkout, a doc here keeps internal design plus a LINK, split by DEPTH, never
+  mirrored; a new env var, endpoint, capability, failure mode or operator step meets that test. **LOAD the
+  page before you link it**: neither repo's CI can see the other (the crossing guard is weekly BY DESIGN),
+  so a reduction that ASSERTED its page existed left 600 lines reachable from nowhere. Before reducing a
+  doc, check what deep-links its HEADINGS from code (`check-doc-anchors.mjs`). Model: [ADR 0051](./backend/docs/adr/0051-documentation-repo-website-split.md).
 
 ### Bigger initiatives get a tracker document
 
-Multi-PR work (cross-cutting refactor, registry-by-registry migration, strangler conversion) gets a
-tracker under `docs/initiatives/` with the first PR: goal and rationale, target pattern (link the pilot),
-a per-item checklist with PR links updated each slice, and the gotchas the pilot surfaced. It also earns
-its keep when an initiative is REDIRECTED, so the next iteration can't re-propose a withdrawn approach.
+Multi-PR work (cross-cutting refactor, registry-by-registry migration, strangler conversion) gets a tracker
+under `docs/initiatives/` with the first PR: goal and rationale, target pattern (link the pilot), a per-item
+checklist with PR links updated each slice, and the gotchas the pilot surfaced. It also earns its keep when
+an initiative is REDIRECTED, so the next iteration can't re-propose a withdrawn approach.
 
 **When the committed scope completes, convert the tracker into a numbered ADR under `backend/docs/adr/`
 (`NNNN-slug.md`, next free number) and `git rm` the tracker in the same PR.** Keep Context / Decision /
-Rationale / Consequences; drop the checklists. Header shape: `# ADR NNNN: <title>` plus a `Status` /
+Rationale / Consequences and drop the checklists; header shape `# ADR NNNN: <title>` plus a `Status` /
 `Date` / `Context layer` bullet block. Check the number against ALL existing files first: parallel
-branches have collided on one number three times.
+branches have collided on one three times.
 
 ## Writing style: no em-dashes, no LLM-tell prose
 
@@ -149,21 +153,19 @@ messages, code comments, UI copy.
 
 ## Environment quirks
 
-- **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`; assume the login is
-  correct.
+- **Do not validate Cloudflare auth before deployments**: skip `wrangler whoami`, assume the login is correct.
 - **Multi-line git messages: bash heredoc in the Bash tool, NOT a PowerShell here-string.** The Bash tool
   is POSIX sh, so `@'…'@` leaks literal `@` characters into the commit subject. Use
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
 - **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
   Verify pure-logic changes with `--filter=@cat-factory/orchestration`.
-- **The Postgres-backed suites need a reachable server AND `--env-mode=loose`** (Turbo declares no env
-  for `test:run`, so strict mode DROPS `DATABASE_URL`); a bare `[ELIFECYCLE] Command failed` with no
-  vitest summary is a task a sibling CANCELLED. Recipe: [`running-tests.md`](./docs/internal/running-tests.md).
+- **The Postgres-backed suites need a reachable server AND `--env-mode=loose`**; a bare `[ELIFECYCLE]
+Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including how to start a cluster where no Docker daemon runs: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
-  `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On
-  Windows the whole-tree run rewrites line endings across hundreds of files: expected, and git's
-  normalization absorbs it at commit time. Run it ONCE at the end and trust the result: do not diff,
-  stash, or investigate why an untouched file was reformatted (it sweeps up pre-existing drift).
+  `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On Windows
+  the whole-tree run rewrites line endings across hundreds of files: expected, and git's normalization
+  absorbs it at commit time. Run it ONCE at the end and trust the result: do not diff, stash, or
+  investigate why an untouched file was reformatted (it sweeps up pre-existing drift).
 
 ## Keep the runtimes symmetric
 
@@ -432,8 +434,6 @@ native-child env allow-list) updates that doc in the same PR.
 - **The model JUDGES; the platform COMPUTES.** A ranking, a score ratio, a regression count is derived in
   code from the model's stated judgements, never read off the reply, or a list is ordered by something its
   own rationale doesn't explain.
-- **A best-effort side channel LOGS its failures** through `runBestEffort`, or a swallowed classification
-  failure surfaces only as a permanently broken feature.
 - **A pass-through is the correct disposition for an unwired capability**, and it must be invisible to the
   domain: a gate with no provider, a judge with no assessor, an unset validation config are all
   byte-for-byte the prior behaviour.
@@ -462,13 +462,13 @@ GitLab deployments.
   returning GitLab projects via the adapter; do not add a second store.
 - **Per-workspace PAT connect reuses `github_installations`**, writing a `provider: 'gitlab'` row with the
   PAT sealed by the deployment `SecretCipher`. When a facade has BOTH a GitHub App and GitLab connect, the
-  `github` module reads through **`ProviderRoutingGitHubClient`**, which dispatches per installation by
+  `github` module reads through **`providerRoutingGitHubClient`**, which dispatches per installation by
   stored provider (memoised, so no N+1). Don't hand-roll a second per-provider client or fork the module;
   keep facades symmetric (`selectVcsConnectDeps` ⇄ `selectWorkerVcsConnectDeps`).
-- **What the SPA may connect comes from `GET /workspaces/:ws/vcs/connect-options`**, never inferred from a
-  connection read. Presentation switches in ONE place: `app/utils/vcs.ts` `Record<VcsProvider, …>`
-  constants plus provider-parameterised `vcs.*` i18n keys. Adding a provider extends those Records (the
-  typecheck fails until you do), never a component fork.
+- **What the SPA may connect comes from `GET /workspaces/:ws/vcs/connect-options`**; WHERE it links, from
+  that option's / the connection's `webUrl` (derived from the API base; null ⇒ WITHHOLD the affordance,
+  never fall back to the public instance). Both switch in ONE place: `app/utils/vcs.ts`
+  `Record<VcsProvider, …>` constants + `vcs.*` i18n keys, extended per provider (typecheck fails), never forked.
 - The migration is incremental: kernel ports are neutralized, but entity types (`GitHubRepo`, the
   `github_repos`/`github_installations` tables) are still GitHub-named and reused as-is. Copy the NEUTRAL
   shape for new surfaces; an un-migrated neighbour is not license to name a field `githubId`.
@@ -476,20 +476,20 @@ GitLab deployments.
 ## Public-API SDK clients: generated from the spec, never hand-edited
 
 Four official clients for `/api/v1` live under `sdk/` (TypeScript, Python, Go, and Java, which also
-serves Kotlin), plus two projections over the TypeScript client: `sdk/mcp` (the operations as MCP
-tools) and `sdk/gatekeeper` (a policy table of per-operation scope floors, from the contracts' `minScope`). The chain is **contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at
-any link: `pnpm gen:sdk` renders the committed spec, and `pnpm check:sdk` fails CI on drift and version
-skew. Design, the shared client invariants, and the Java/Kotlin trade: [`sdk/README.md`](./sdk/README.md).
-Two rules bite from outside that tree:
+serves Kotlin), plus two projections: `sdk/mcp` (the operations as MCP tools) and `sdk/gatekeeper`
+(per-operation scope floors, from the contracts' `minScope`). THOSE SIX are the chain
+**contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at any link: `pnpm gen:sdk` renders
+the spec and `pnpm check:sdk` fails CI on drift and version skew. `sdk/gatekeeper-worker` is the ONE
+member outside it, hand-written: a published library CONSUMING that table. Generation, the smoketest
+and that exception: [`sdk/README.md`](./sdk/README.md). Two rules bite from outside:
 
 - **Never edit a file whose header says GENERATED**; change the contracts or the emitter. Only models
   and operations are generated; each transport is hand-written beside them.
 - **Adding a `/api/v1` endpoint means adding an entry to `scripts/sdk/surface.mjs`** naming its resource
-  group and method. Generation FAILS without one, so a new endpoint cannot ship as an un-callable hole
-  in four clients. The same entry becomes an MCP tool with no second decision, except a STREAMING
-  endpoint, which must be named in `MCP_OMITTED_OPERATIONS` with the reason (generation fails on an
-  unclassified one). `backend/internal/sdk-smoketest` is the only check that can see the four clients
-  DISAGREE; a scenario step added to one must be added to all four.
+  group and method. Generation FAILS without one, so a new endpoint cannot ship as an un-callable hole in
+  four clients, and the same entry becomes an MCP tool with no second decision, except a STREAMING one,
+  named in `MCP_OMITTED_OPERATIONS` with its reason. A scenario step added to one `sdk-smoketest` client
+  must be added to all four.
 
 ## Migrations
 
@@ -535,10 +535,9 @@ adapters) live in its own `AGENTS.md`.
   post-mortem, `localDind`): [`backend/runtimes/local/AGENTS.md`](./backend/runtimes/local/AGENTS.md).
 - **Model provisioning** is composed per facade from `CompositeModelProvider`; unconfigured providers
   aren't registered, so `resolve` throws a clear error instead of failing deep in the SDK. Locally-run
-  models are per-user endpoints with NO API key, forwarded server-side, so the base URL is constrained to
+  models are per-user endpoints with NO API key forwarded SERVER-side, so the base URL is constrained to
   a loopback-only allow-list (`localRunnerUrlError`) at the write boundary, the test probe and every
-  run-time redirect hop; `LOCAL_MODELS_ALLOW_LAN=true` is the operator opt-in, an internal-network SSRF
-  surface on a shared deployment. Doc: [`backend/docs/model-support.md`](./backend/docs/model-support.md).
+  redirect hop; `LOCAL_MODELS_ALLOW_LAN=true` is the operator opt-in. Doc: [`backend/docs/model-support.md`](./backend/docs/model-support.md).
 - **`deploy/preview`** carries the per-PR TEST environments for THIS repo. Board wiring AND the three
   editing constraints (no `include:`/bind mounts/`env_file`, the empty `apiBase`, the per-PR name
   templates): [`docs/internal/dogfooding.md`](./docs/internal/dogfooding.md).
@@ -573,18 +572,18 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
 
 ### Run the CI guard scripts locally before committing
 
-> **Do NOT run locally: the whole-tree `pnpm test:run` (CI's test lanes own it), `pnpm lint:knip`,
-> `node scripts/check-package-catalog.mjs`** (slow; CI's `Build & typecheck` is authoritative) **or
-> `turbo run test:mutation`** (nightly only: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
+> **Do NOT run locally: the whole-tree `pnpm test:run` NOR a `--filter`ed package lane** (CI's test
+> lanes own both; see Conventions), **`pnpm lint:knip`, `node scripts/check-package-catalog.mjs`**
+> (slow; CI's `Build & typecheck` is authoritative) **or `turbo run test:mutation`** (nightly: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
 - `node scripts/check-component-imports.mjs`: every layer component used in a Vue template is
   imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
-- `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is
-  RESERVED, so it can never be named as a capability credential.
+- `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
-- `node scripts/check-shipped-doc-links.mjs`: a published tarball's docs never link out of the package.
+- `node scripts/check-doc-links.mjs`, `check-doc-anchors.mjs`, `check-shipped-doc-links.mjs`: an ordinary
+  markdown link, a doc URL built in CODE, and a shipped tarball's links each resolve to a file AND a heading.
 - `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
 - `node scripts/check-deploy-placeholders.mjs`: the `deploy/*` templates hold placeholders, never real ids.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
@@ -706,11 +705,11 @@ harness rules).
 
 **Built-in catalog lifecycle**: built-ins are COPIED into each workspace at creation and reconciled
 against the CATALOG, never the stored row; a run ADOPTS an entry the board was never seeded with, so a
-PINNED pipeline is never stuck behind an advisory. Traps: retiring a built-in is TWO edits (delete the
-definition AND name it in `buildRetiredPipelines()`), doing only the first being a silent no-op; and a
-bare `pipelineRepository.get` on a run-adjacent path is the smell, since every gate in front of a start
-resolves the pipeline and then CONCLUDES from it. Doc:
-[`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
+PINNED pipeline is never stuck behind an advisory. Traps: retiring one is TWO edits (definition AND
+`buildRetiredPipelines()`), the first alone a silent no-op; a bare `pipelineRepository.get` on a
+run-adjacent path is the smell, since every start gate resolves the pipeline and CONCLUDES from it; and
+an AUTHORING rule (`validatePipelineAuthoring`) binds create/update, the run door refusing only the
+subset that dead-ends ANY run, or every stored pipeline predating it stops running. Doc: [`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo to the block and
@@ -767,13 +766,13 @@ declaration", "empty declaration" and "unknown id" are three states needing diff
 `operationsAreIndexable` the one place the fourth (an unparseable format) lives. Doc:
 [ADR 0031](./backend/docs/adr/0031-foundational-services.md).
 
-**Binary-output steps**: a `binary-output`-trait kind generates binary artifacts and stores them through
-a foundational service its step SELECTS, never the platform's artifact store; what MAKES them is the
-separate `BinaryGeneratorRegistry`, read only through `BinaryGeneratorSource` (mothership rule). Traps:
-content type is a CLOSED vocabulary and a modality stops deciding at the SECOND producer of it (the
-platform states overlaps, ranks nothing); an unreachable source is a 503 refusal, never an empty set;
-the credential VALUE never reaches a prompt. Doc:
-[`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+**Binary-output steps**: a `binary-output`-trait kind generates binary artifacts and stores them through a
+foundational service its step SELECTS; what MAKES them is the separate `BinaryGeneratorRegistry`, read only
+through `BinaryGeneratorSource` (mothership rule), whose declared `capabilities` gate the per-step generation
+options and, past two producers, a human CANDIDATE park. Traps: content type is CLOSED and a modality stops
+deciding at the SECOND producer (the platform states overlaps, ranks nothing, and a capability gates an
+OPTION, never which producer to call); an UNDECLARED capability/format is unverifiable, never uncovered; an
+unreachable source is a 503 refusal; the credential VALUE never reaches a prompt. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
 (in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the
@@ -820,7 +819,7 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   [ADR 0039](./backend/docs/adr/0039-role-scoped-submission-allowlists.md).
 - **Merge track record** persists each decision best-effort. Trap: an unreadable diff yields `unknown`,
   which never matches a rule, so a VCS outage cannot change policy.
-  [`merge-track-record.md`](./docs/initiatives/merge-track-record.md).
+  [ADR 0046](./backend/docs/adr/0046-merge-track-record.md).
 - **Notifications** (`NotificationChannel`) and run-lifecycle events (`RunLifecycleSink`) are built together
   by `buildNotificationWebhookSupport` onto ONE registered endpoint and the ONE `signedDelivery.ts`
   retry/SSRF/signature core. Traps: the started edge is exactly-once via `handOffLiveRun` (announced LAST,
@@ -835,9 +834,9 @@ sections, so the write-avoidance cache keys per TARGET; a rule BOTH reductions s
 regressions, coverage) lives in contracts' `run-evidence.ts`. Doc: [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
 **Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
-it, and every teardown path re-probes afterwards. Trap: a teardown call returning is not the environment
-being gone (a manifest with no `teardown:` request destroys nothing and reports `torn_down`), so only a
-`confirmed` probe is a reclaim and a missing verify row is never a pass.
+it, every teardown path re-probes afterwards, and a SAVE refuses a chain that neither reclaims nor says
+the environment outlives it. Traps: a no-op `teardown:` reports `torn_down`, so only a `confirmed` probe
+is a reclaim, a missing verify row is never a pass, and a DECLARED-retained environment is not `pending`.
 Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
@@ -925,7 +924,7 @@ recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). Th
 
 The deployment-level projections (`gate_outcomes`, `platform_run_days`, plus `spend_days`, the ONE with
 no retention: a TCO table that expires is a slower ledger) live in the MAIN store; their rewrite,
-watermark and derived-id rules: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md)
+watermark and derived-id rules: [ADR 0048](./backend/docs/adr/0048-platform-operator-observability.md)
 and [`storage-and-retention.md`](./backend/docs/storage-and-retention.md). Remote debugging reads
 (`/api/v1/debug/*`) obey one rule: size is computable BEFORE the request: [`debug-api.md`](./backend/docs/debug-api.md).
 
@@ -1073,12 +1072,13 @@ AND that a gated controller leaves no route of its own uncovered.
   `useAppOverlays().open`). The placement rule for step-attached state (declared result view vs
   `ResultWindowShell` section, decided by the RECORD's scope) and the `useResultViewRunMeta` rule live in
   [`frontend-extension-mechanism.md`](./docs/initiatives/frontend-extension-mechanism.md); adoption:
-  [`modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
+  [ADR 0049](./backend/docs/adr/0049-modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
-  (`DATABASE_URL`); only the LLM is faked. **Running the WHOLE tree locally is BANNED: that is CI's lane.** Run
-  the narrowest scope that covers the change (`pnpm test:changed`, `pnpm test:quick` for what needs neither
-  Postgres nor `workerd`, or one `--filter`ed package or vitest file) and let CI prove the rest. A green run
-  printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
+  (`DATABASE_URL`); only the LLM is faked. **Run the FILES your change touched, NAMED on the command line**
+  (`pnpm exec vitest run <file>`). A `--filter`ed package, `test:changed`, `test:quick` and the tree are LANES:
+  CI's to run, and reaching for one is the banned habit, not thoroughness. An edit with no runnable file of
+  its OWN (a conformance suite, a catalog change) is NOT the exception: [`conformance/README`](./backend/internal/conformance/README.md) names the spec.
+  A green run printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
 - **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
   the test made that population, so the count is a local fact. A total over a population it does NOT
   control (a generated table, a registry, a catalog, the spec) is the opposite: `toBe(42)` fails on

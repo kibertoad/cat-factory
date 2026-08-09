@@ -1,5 +1,265 @@
 # @cat-factory/workspaces
 
+## 0.27.0
+
+### Minor Changes
+
+- 8c1d8a6: Narrow the built-in pipeline catalog, and make a step conditional on what the change touches.
+
+  A pipeline step can now carry a RUN CONDITION beside its estimate gate (`stepOptions[i].condition`),
+  declaring the service scope it applies to. Every build rung carries BOTH testers: the browser pass
+  runs where the change touches a frontend service, the API pass where it touches anything else. Run
+  admission drops the condition-excluded steps before its gates, so a preset carrying `tester-ui` is
+  not refused on a backend service.
+
+  A condition is a SKIP AXIS, so it is held to the two structural rules an estimate gate is held to
+  (`assertValidRunConditions`, mirrored in the SPA's health advisory and in what the builder offers):
+  the step's kind must be one that may be absent from a run, and it may not also carry a human
+  approval gate. Without that, a condition on `merger` dropped the merge on every run outside its
+  scope while the pipeline still finished reporting success.
+
+  A skipped step now records WHY as a machine-readable `skipReason` (`gated` / `condition` /
+  `producer_skipped` / `run_complete`) that the SPA renders as translated copy, and its `output` stays
+  empty. The
+  reason used to be an English sentence written into `output`, which three separate aggregations
+  select on to build a model's view of the prior steps — so a condition-skipped tester's note was
+  handed to `merger` and `ci-fixer` as if it were the tester's report.
+
+  Five presets are withdrawn (`pl_frontend`, `pl_tech_debt`, `pl_blueprint`, `pl_spec`,
+  `pl_environment_analysis`) and one is added: `pl_complex` ("Complex build"), which settles the
+  requirements and researches the problem before the standard loop. `pl_code_comments` stays as an
+  INTERNAL pipeline: the documentation-refresh preset spawns onto it, so it resolves for a run while
+  being withheld from every listing. Withheld from `pipelineCatalogVersions` too, which the health
+  advisory reads as "the built-ins that exist" — an internal entry there is reported as newly
+  available on every board forever, with no reseed able to clear it. `pipelineCatalogNames` still
+  spans the whole catalog, so a task PINNED to an internal pipeline is named (and started) rather
+  than silently falling through to a full build.
+
+  Running ONE agent against a block is now a first-class action (`POST
+/workspaces/:ws/blocks/:id/agent-kind-executions`, `ExecutionService.startAgentKind`) rather than
+  something that needed a single-step preset. It backs the post-bootstrap service mapping, a new
+  "Map service" action on the service frame, and the environment wizard's deep analysis.
+
+  BREAKING (internal): a workspace seeded before this change holds rows for the five withdrawn
+  presets; the pipeline-health advisory offers their removal, naming a replacement where one exists.
+  Anything naming `BLUEPRINT_PIPELINE_ID` / `TECH_DEBT_PIPELINE_ID` should use `BLUEPRINT_AGENT_KIND`
+  with `startAgentKind`, or name a build rung directly.
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/contracts@0.286.0
+  - @cat-factory/kernel@0.281.0
+
+## 0.26.27
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+  - @cat-factory/kernel@0.280.0
+
+## 0.26.26
+
+### Patch Changes
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+  - @cat-factory/kernel@0.279.3
+
+## 0.26.25
+
+### Patch Changes
+
+- Updated dependencies [3036af7]
+  - @cat-factory/kernel@0.279.2
+
+## 0.26.24
+
+### Patch Changes
+
+- Updated dependencies [de7caaf]
+  - @cat-factory/contracts@0.283.1
+  - @cat-factory/kernel@0.279.1
+
+## 0.26.23
+
+### Patch Changes
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+
+## 0.26.22
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+
+## 0.26.21
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/kernel@0.277.0
+
+## 0.26.20
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+
+## 0.26.19
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/kernel@0.275.4
+
+## 0.26.18
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/kernel@0.275.3
+
+## 0.26.17
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/kernel@0.275.2
+
+## 0.26.16
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/kernel@0.275.1
+
+## 0.26.15
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/kernel@0.275.0
+
+## 0.26.14
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+  - @cat-factory/kernel@0.274.0
+
+## 0.26.13
+
+### Patch Changes
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/contracts@0.275.0
+
+## 0.26.12
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+  - @cat-factory/contracts@0.274.0
+
+## 0.26.11
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/kernel@0.271.0
+  - @cat-factory/contracts@0.273.0
+
+## 0.26.10
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+  - @cat-factory/contracts@0.272.0
+
+## 0.26.9
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/contracts@0.271.0
+  - @cat-factory/kernel@0.269.0
+
+## 0.26.8
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+  - @cat-factory/kernel@0.268.0
+
+## 0.26.7
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+
+## 0.26.6
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+  - @cat-factory/kernel@0.266.0
+
+## 0.26.5
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+  - @cat-factory/kernel@0.265.0
+
+## 0.26.4
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/contracts@0.266.0
+  - @cat-factory/kernel@0.264.0
+
+## 0.26.3
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+  - @cat-factory/kernel@0.263.0
+
 ## 0.26.2
 
 ### Patch Changes

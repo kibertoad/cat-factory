@@ -427,6 +427,13 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
           // delegating channel alongside the local in-app push (which already relays upstream),
           // so a notification a local run raises still reaches the team's Slack.
           notificationChannels: [mothership.notificationChannel],
+          // The mirror image of the credential overrides above. Those keep the LAPTOP's secrets
+          // off the mothership; this makes the ORG's secrets usable here (a provisioned
+          // environment's access handle, an infra handler's secret bundle, a release-health
+          // connection) without the mothership's ENCRYPTION_KEY ever moving. The node names the
+          // ROW and the mothership opens it; a write goes back up to be sealed under the org key,
+          // so a row this laptop provisions is one the mothership's own teardown can still reclaim.
+          secretDelegate: mothership.secretDelegate,
           // The catalog's `builtin` tier comes from the MOTHERSHIP, not from this node's own
           // registry: the estate is org state, so a node's copy could only ever be a second one
           // drifting behind (see `HttpFoundationalBuiltinSource`). `startLocal` warns at boot if

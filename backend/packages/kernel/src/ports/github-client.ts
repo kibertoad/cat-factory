@@ -367,6 +367,55 @@ export interface GitHubIssueSearchHit {
   assignee?: string | null
 }
 
+/**
+ * The predicates a project-scoped issue search may push into the vendor request (see
+ * {@link GitHubClient.searchProjectIssues}). Every field is a filter the vendor evaluates;
+ * nothing here is post-filtered by the caller, so a predicate a vendor cannot express is a
+ * predicate the adapter must refuse rather than silently ignore.
+ */
+export interface ProjectIssueQuery {
+  /** Free text matched against the issue title/body; absent ⇒ every issue in scope. */
+  text?: string
+  /**
+   * Narrow what {@link text} is matched against. `'title'` restricts it to the title, which is
+   * what an intake predicate asking for a title fragment means; absent ⇒ the vendor's default
+   * (title AND description on GitLab), which is the right reading for a picker's free-text box.
+   *
+   * Its own field rather than a convention on {@link text}, because the two readings differ in
+   * what they RETURN, not in how they are spelled: an issue whose body happens to mention the
+   * fragment is a legitimate picker hit and is not the issue an intake schedule was configured
+   * to pick up and start a pipeline on.
+   */
+  textIn?: 'title'
+  /** Labels that must ALL be present. */
+  labels?: string[]
+  /** Restrict to open issues. Absent ⇒ any state. */
+  openOnly?: boolean
+  /** Restrict to issues with no assignee. */
+  unassignedOnly?: boolean
+  /** `created-asc` sorts oldest-first (the issue-intake pickup order); absent ⇒ vendor default. */
+  order?: 'created-asc'
+  /** Max hits to return. */
+  limit: number
+  /** 1-based result page, for a caller walking past a run of ineligible hits. */
+  page?: number
+}
+
+/**
+ * One page of a project-scoped issue search, plus whether the vendor said there is another.
+ *
+ * `hasMore` is on the response rather than inferred by the caller because the obvious inference
+ * is wrong: "fewer hits came back than I asked for, so that was the last page" assumes the vendor
+ * honoured `limit`, and GitLab's `max_page_size` is an INSTANCE setting an administrator can lower
+ * below it. On such an instance every page is short, so a caller reading a short page as the end
+ * stops after the first one and reports a board it never finished walking as exhausted. The
+ * adapter already has the honest answer (`Link: rel="next"`) and would otherwise discard it.
+ */
+export interface ProjectIssuePage {
+  hits: GitHubIssueSearchHit[]
+  hasMore: boolean
+}
+
 /** A single hit from code-searching an installation's repos for a file. */
 export interface GitHubCodeSearchHit {
   owner: string
@@ -579,6 +628,23 @@ export interface GitHubClient {
     order?: 'created-asc',
     page?: number,
   ): Promise<GitHubIssueSearchHit[]>
+  /**
+   * Predicate-search the issues of ONE repository/project, with every predicate pushed into
+   * the vendor request. Optional: a provider whose issue search takes free text with an
+   * in-query scope qualifier (GitHub) omits it and uses {@link GitHubClient.searchIssues}.
+   *
+   * It exists because a vendor can express the scope only OUT of the query text: GitLab's
+   * global `/search?scope=issues` has no repository qualifier at all, so folding a repo
+   * scope into the search string would match it as prose and return whatever the credential
+   * can reach. The repository is therefore an ARGUMENT here, not a qualifier a caller could
+   * forget to build, for the same reason the task-source port makes its repo scope a required
+   * parameter rather than an optional narrowing.
+   */
+  searchProjectIssues?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    query: ProjectIssueQuery,
+  ): Promise<ProjectIssuePage>
   /**
    * Code-search files visible to the installation. `query` is the raw GitHub
    * code-search text and MUST already carry an `org:`/`user:`/`repo:` scope
@@ -861,6 +927,28 @@ export interface GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     issueOrPrNumber: number,
+    body: string,
+  ): Promise<void>
+  /**
+   * Add a comment to an ISSUE specifically, by its issue number.
+   *
+   * It exists because {@link GitHubClient.comment} is the same call as this one ONLY on GitHub,
+   * where issues and pull requests share one number space and one comment API. They are NOT the
+   * same anywhere else: a GitLab issue and a merge request have separate `iid` spaces and separate
+   * notes endpoints, so the neutral `comment(number)` has to pick one, and it picks the merge
+   * request (that is what the gates use it for). An issue writeback routed through it would
+   * therefore land on whatever MR happens to carry the same number: a comment on a stranger's
+   * work that still reads as delivered.
+   *
+   * Optional, and a caller does NOT probe for it: whether a vendor separates the two is a fact
+   * about the vendor, so the SOURCE declares which method carries its issue comments (see the
+   * repo-backed writeback adapter in `@cat-factory/integrations`) and a client that declares
+   * `dedicated` and lacks this method is refused rather than silently falling back.
+   */
+  commentOnIssue?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    issueNumber: number,
     body: string,
   ): Promise<void>
   /**

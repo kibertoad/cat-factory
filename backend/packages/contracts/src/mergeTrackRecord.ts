@@ -19,7 +19,7 @@ import { vcsProviderSchema } from './routes/auth.js'
 // why merge presets carry per-class rules ({@link MergeClassRules} in `merge.ts`).
 //
 // Full design — the class precedence rules, the external-merge detection, and the
-// preset reshape — is in `docs/initiatives/merge-track-record.md`.
+// preset reshape — is in `backend/docs/adr/0046-merge-track-record.md`.
 // ---------------------------------------------------------------------------
 
 /**
@@ -275,3 +275,20 @@ export const tagReviewEffortSchema = v.object({
   reviewEffort: v.nullable(reviewEffortSchema),
 })
 export type TagReviewEffortInput = v.InferOutput<typeof tagReviewEffortSchema>
+
+// ---- Refusal vocabulary ---------------------------------------------------
+
+/**
+ * `error.details.reason` for "no merge record under that id in this workspace": the 404 BOTH
+ * record-addressed routes answer, the read and the tag alike.
+ *
+ * It is a constant rather than a literal per site because the two producers live in different
+ * packages: the read resolves the row in `@cat-factory/server` and refuses there, while the tag
+ * write refuses inside `MergeTrackRecordService` (a lost race between reading and patching is the
+ * service's to detect, not a controller's to pre-check). A machine-readable code that two packages
+ * spell independently is one rename away from a caller branching on a value only one route emits.
+ *
+ * Distinct from `no_merge_record`, which the RUN-scoped read answers for a readable run that
+ * simply made no merge decision: that is a fact about the run, not a missing id.
+ */
+export const MERGE_RECORD_NOT_FOUND_REASON = 'merge_record_not_found'

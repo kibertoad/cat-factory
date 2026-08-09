@@ -7,6 +7,8 @@ import { inspectorPanels } from '~/modular/panels/inspector.logic'
 import IconButton from '~/components/common/IconButton.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
+import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
+import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -163,19 +165,23 @@ const serviceRepo = computed(() =>
 const serviceRepoUrl = computed(() =>
   serviceRepo.value ? github.repoUrl(serviceRepo.value.githubId) : null,
 )
+// The repo link wears its own provider's mark, off the projection row rather than the
+// workspace connection, so a row is never labelled with a brand it does not belong to.
+const serviceRepoIcon = computed(() => VCS_PROVIDER_ICONS[serviceRepo.value?.provider ?? 'github'])
 
-// A task's work branch on GitHub, once the agent has pushed one (a PR branch is
-// recorded on the block). Repo linkage lives on the owning service frame, not the
-// task, so resolve the repo by walking up to the frame; fall back to deriving the
-// repo base from the PR url when the projection hasn't loaded. Null until a branch
-// exists, so the link only appears after one is created.
+// A task's work branch on the connected host, once the agent has pushed one (a PR branch is
+// recorded on the block). Repo linkage lives on the owning service frame, not the task, so
+// resolve the repo by walking up to the frame, and let the store build the branch path for the
+// repo's own provider (GitLab addresses a tree under `/-/`). Null until a branch exists, so the
+// link only appears after one is created, and null while the projection has not loaded: the
+// former fallback sliced `/pull/<n>` off the PR url, which silently yields nothing on a GitLab
+// merge-request url and would need a second provider guess to fix.
 const taskBranchUrl = computed(() => {
   const pr = isTask.value ? block.value?.pullRequest : undefined
   if (!pr?.branch || !block.value) return null
   const frame = board.serviceOf(block.value)
   const repo = frame ? github.repoForBlock(frame.id) : undefined
-  const base = repo ? github.repoUrl(repo.githubId) : pr.url.replace(/\/pull\/\d+$/, '')
-  return base ? `${base}/tree/${pr.branch}` : null
+  return repo ? github.branchUrl(repo.githubId, pr.branch) : null
 })
 
 // The run MODE, shared with the focus view's Run picker so the two surfaces offer (and force)
@@ -238,6 +244,22 @@ const runMenu = computed(() => {
     runnable,
   ]
 })
+
+// Mapping a service: one run of the mapping agent against this frame, started by KIND (no
+// pipeline). The button owns only its in-flight state — a refusal is already surfaced as a toast
+// by the command, and the run itself then reports through the ordinary board/run projection, so
+// there is nothing for this component to remember about it afterwards.
+const mappingService = ref(false)
+async function mapService() {
+  const id = block.value?.id
+  if (!id) return
+  mappingService.value = true
+  try {
+    await execution.startAgentKind(id, BLUEPRINT_AGENT_KIND)
+  } finally {
+    mappingService.value = false
+  }
+}
 
 // Delegate to the shared confirm-gated deletion so the button and the keyboard shortcut
 // (Delete/Backspace) follow the exact same prompt + optimistic-delete + rollback path.
@@ -336,7 +358,7 @@ const showOriginalDescription = ref(false)
           <div>
             <div class="text-sm font-semibold text-white">{{ block.title }}</div>
             <div class="mt-0.5 flex items-center gap-1.5">
-              <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm">
+              <UBadge :color="statusMeta.chip" variant="subtle" size="sm">
                 {{ statusLabel }}
               </UBadge>
               <span class="text-[10px] uppercase tracking-wide text-slate-500">{{ level }}</span>
@@ -483,7 +505,7 @@ const showOriginalDescription = ref(false)
           color="neutral"
           variant="soft"
           size="xs"
-          icon="i-lucide-github"
+          :icon="serviceRepoIcon"
           trailing-icon="i-lucide-external-link"
         >
           {{ serviceRepo!.owner }}/{{ serviceRepo!.name }}
@@ -522,6 +544,28 @@ const showOriginalDescription = ref(false)
         {{ t('panels.inspector.viewRequirements') }}
       </UButton>
 
+      <!-- service (frame): (re)map the repository into the service → modules blueprint and
+           populate the board. A SINGLE-KIND run of the mapping agent, not a pipeline — the
+           preset that used to wrap this one step is retired. Needs a linked repo to read, so it
+           is disabled (with the reason) until the frame has one. -->
+      <UButton
+        v-if="isFrame"
+        block
+        color="neutral"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-map"
+        :loading="mappingService"
+        :disabled="!serviceRepo || mappingService"
+        :title="serviceRepo ? undefined : t('panels.inspector.mapServiceNoRepo')"
+        @click="mapService"
+      >
+        {{ t('panels.inspector.mapService') }}
+      </UButton>
+      <p v-if="isFrame && !serviceRepo" class="text-[11px] text-slate-500">
+        {{ t('panels.inspector.mapServiceNoRepo') }}
+      </p>
+
       <!-- The level/type-keyed inspector body: the `inspectorPanels` panel group
            (slice 4 of the modular-vue adoption). `<PanelsOutlet>` renders every
            panel whose `when(block)` matches, ordered, with the selected block
@@ -529,18 +573,13 @@ const showOriginalDescription = ref(false)
            wrapper). Replaces the pre-slice-4 `v-if` fan; `subject-key` is the block
            id, so switching selections remounts panel content (matching the old
            per-panel `:key`). A consumer contributes its own panels to the SAME
-           group via `registerAppModule`.
-
-           The `subject` cast is an upstream typing quirk, not a modelling escape
-           hatch: `<PanelsOutlet>` declares `subject` as `PropType<unknown>` with
-           `default: null`, which Volar narrows to `null`, so passing a typed
-           `Block | null` is rejected at compile time. `unknown` is the real
-           runtime contract; `as any` is the minimal unblock until the binding
-           types the prop explicitly (filed upstream — see the slice-4 residuals
-           in docs/initiatives/modular-vue-slice4-upstream-zones.md). -->
+           group via `registerAppModule`. `subject` used to need an `as any`: the
+           outlet's `default: null` narrowed the declared `PropType<unknown>` to
+           `null`, rejecting a typed `Block | null`. The published prop type now
+           resolves to `unknown`, so the binding passes through unasserted. -->
       <PanelsOutlet
         :group="inspectorPanels"
-        :subject="(block ?? null) as any"
+        :subject="block ?? null"
         :subject-key="block?.id ?? ''"
       />
 

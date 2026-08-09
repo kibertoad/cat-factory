@@ -1,5 +1,10 @@
 # Reports: design
 
+> Reading the reports is on the website
+> ([Observability](https://www.catfactory.ai/operate/observability.html)). This page is the
+> design record: what the windows read, why long windows read a rollup, and the decisions that
+> shaped the wire shape.
+
 **Status:** Implemented (see the "Landed code" map at the end).
 **Scope:** account-scoped, admin-gated, read-only. One table: the durable cost-attribution
 rollup the long windows read (added after the first cut; see "Durable cost attribution").
@@ -121,6 +126,13 @@ assertion pins that.
 Per-workspace members keep the existing **Usage** tab, which is their own board's current
 billing period. Reports is deliberately the operator's cross-cutting view, not a
 per-member one.
+
+The public API serves ONE dimension of the same read, scoped to a key's own board:
+`GET /api/v1/usage/spend?dimension=repo|ticket|run|…` goes through `ReportsService.breakdown`,
+which routes by window exactly as `summarize` does, so an external cost dashboard and the panel
+cannot disagree about what a repository cost. It publishes no `workspace` dimension and no
+account-wide scope: that is the cross-workspace half this gate exists for. Wire shape and the
+reading traps: [`public-api.md`](./public-api.md#spend-by-repository-ticket-or-run).
 
 ### Metered and subscription cost are two columns, never one
 
@@ -313,7 +325,8 @@ activity cards.
   everywhere else, and capping it honestly means a contract that reports what it dropped.
   Add that when someone hits the size, not before.
 - **No CSV/JSON export.** The endpoint already returns the whole projection as JSON; an
-  export button is a thin SPA addition once someone asks for one.
+  export button is a thin SPA addition once someone asks for one. The public per-dimension read
+  above covers the machine consumer that would otherwise have been the reason to add one.
 - **No backfill of ledger history older than 90 days.** The first rollup pass reaches back the
   length of the longest report window and no further, so a deployment upgrading into this keeps
   its older history only for as long as the ledger's own retention holds it. Widening that is a

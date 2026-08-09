@@ -92,6 +92,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',
   },
+  webhook_limit_reached: {
+    titleKey: 'errors.conflict.title.webhook_limit_reached',
+    descriptionKey: 'errors.conflict.description.webhook_limit_reached',
+  },
   tester_infra_unsupported: {
     titleKey: 'errors.conflict.title.tester_infra_unsupported',
     descriptionKey: 'errors.conflict.description.tester_infra_unsupported',
@@ -329,6 +333,9 @@ const UNAVAILABLE_DESCRIPTION_KEYS: Record<UnavailableReason, string> = {
   binary_generators_unreachable: 'errors.unavailable.description.binary_generators_unreachable',
   foundational_builtins_unreachable:
     'errors.unavailable.description.foundational_builtins_unreachable',
+  connection_credentials_unreadable:
+    'errors.unavailable.description.connection_credentials_unreadable',
+  vcs_capability_unsupported: 'errors.unavailable.description.vcs_capability_unsupported',
 }
 
 /**

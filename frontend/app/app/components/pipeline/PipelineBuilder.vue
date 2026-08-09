@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { purposeAllowsAgentCategory } from '@cat-factory/contracts'
-import type { AgentKind, Pipeline, PipelinePurpose } from '~/types/domain'
+import { DEPLOYER_AGENT_KIND } from '@cat-factory/contracts'
+import type { AgentKind, Pipeline } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import AgentPromptEditor from '~/components/pipeline/AgentPromptEditor.vue'
@@ -11,11 +11,21 @@ import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
 import BinaryOutputStepPicker from '~/components/pipeline/BinaryOutputStepPicker.vue'
 import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
 import { showOverrideField } from '~/utils/uiMode'
+import { narrowPipelineLibrary } from '~/utils/pipelineLibrary'
+import { CONDITION_MARKERS, stepConditionsAt } from '~/utils/pipeline'
+
+/** The cycle button's icon per state — the two condition markers, plus the unconditional one. */
+const CONDITION_ICONS = {
+  always: 'i-lucide-infinity',
+  frontend: CONDITION_MARKERS.frontend.icon,
+  backend: CONDITION_MARKERS.backend.icon,
+} as const
 import {
   agentKindMeta,
   companionForProducer,
   isConsensusEligibleKind,
   isTesterKind,
+  mayCarrySkipAxis,
 } from '~/utils/catalog'
 import type { ConsensusStrategy } from '~/types/consensus'
 
@@ -28,18 +38,6 @@ const CONSENSUS_STRATEGIES = computed<{ value: ConsensusStrategy; label: string 
   { value: 'specialist-panel', label: t('pipeline.builder.strategyOption.specialist-panel') },
   { value: 'debate', label: t('pipeline.builder.strategyOption.debate') },
   { value: 'ranked-voting', label: t('pipeline.builder.strategyOption.ranked-voting') },
-])
-
-// The use-case classifier options for the pipeline (its `purpose`). Static literal `t()` keys, one
-// per `PIPELINE_PURPOSES` member, so the typed-message-keys check sees them (a runtime-built key
-// wouldn't be checkable). A non-`build` purpose hides the Implementation/Testing agent kinds in
-// the palette below (see `AgentPalette`), and drives which task pickers offer the saved pipeline.
-const PURPOSE_OPTIONS = computed<{ value: PipelinePurpose; label: string }[]>(() => [
-  { value: 'build', label: t('pipeline.builder.purposeOption.build') },
-  { value: 'document', label: t('pipeline.builder.purposeOption.document') },
-  { value: 'review', label: t('pipeline.builder.purposeOption.review') },
-  { value: 'research', label: t('pipeline.builder.purposeOption.research') },
-  { value: 'planning', label: t('pipeline.builder.purposeOption.planning') },
 ])
 
 /** Add a blank participant to the draft step's consensus config. */
@@ -200,27 +198,6 @@ const skills = useSkillsStore()
 // skill picker. A `skill` step is parametrized by the picked skill (`stepOptions.skillId`).
 const skillSelectItems = computed(() => skills.catalog.map((s) => ({ label: s.name, value: s.id })))
 
-// An enabled `skill` step with no picked skill — mirrors the backend save/start rejection
-// (`assertValidSkillSteps`), surfaced as an inline hint so the user fixes it before saving.
-const skillStepNeedsPick = computed(() =>
-  pipelines.draft.some(
-    (k, i) => k === 'skill' && pipelines.draftEnabled[i] !== false && !pipelines.draftSkillId(i),
-  ),
-)
-
-// Steps whose agent category the chosen purpose forbids (a non-`build` purpose writes no code and
-// runs no tests, so the Implementation/Testing categories are disallowed — see
-// `purposeAllowsAgentCategory`). The palette hides those kinds, so this is only reachable by
-// switching an existing draft to a non-`build` purpose AFTER such steps were added. The backend has
-// no kind→category map to gate on, so the builder is the enforcement point: save is blocked until
-// the offending steps are removed (or the purpose set back to Build).
-const stepsDisallowedByPurpose = computed(() =>
-  pipelines.draft.filter((kind) => {
-    const category = agentKindMeta(kind).category
-    return !!category && !purposeAllowsAgentCategory(pipelines.draftPurpose, category)
-  }),
-)
-
 // The workspace's foundational-services catalog, for the binary-output storage/context picker.
 const foundational = useFoundationalServicesStore()
 
@@ -238,18 +215,22 @@ function showBinaryOutputPicker(kind: AgentKind): boolean {
   return agentKindMeta(kind).binaryOutput === true
 }
 
-// An enabled generator step with no storage selection — mirrors the backend save/start
-// rejection (`assertValidBinaryOutputSteps`), surfaced as an inline hint so the user fixes it
-// before the round trip. Same disposition as `skillStepNeedsPick`, for the same reason: both
-// are a step parametrized by a selection it cannot run without.
-const binaryOutputStepNeedsPick = computed(() =>
-  pipelines.draft.some(
-    (kind, i) =>
-      showBinaryOutputPicker(kind) &&
-      pipelines.draftEnabled[i] !== false &&
-      !pipelines.draftBinaryOutput(i)?.storageServiceId,
-  ),
-)
+/**
+ * Whether to offer the Deployer's "keep this environment past the run" declaration on the step at
+ * `index`. An OVERRIDE in the `showOverrideField` sense — reclaiming what a run stood up is the
+ * default and the everyday shape, and a deliberately retained preview environment is not the
+ * everyday delivery loop — so it is `advanced`-tier, and a step that already CARRIES the
+ * declaration keeps showing it in either mode (never hide the way back).
+ *
+ * Hiding it strands nobody: the fault it answers (`deployer_without_disposer`) always has the
+ * tier-neutral fix of adding the Disposer back, which both the inline hint and the save refusal
+ * name FIRST. That is what makes this different from the binary-output picker above, where the
+ * selection is required and hiding it would leave a step with no savable form at all.
+ */
+function showRetainEnvironmentToggle(kind: AgentKind, index: number): boolean {
+  if (kind !== DEPLOYER_AGENT_KIND) return false
+  return showOverrideField(uiMode.isAdvanced, pipelines.draftRetainEnvironment(index) || null)
+}
 
 // A step's picked skill id is no longer in the account catalog (the source dir was renamed or
 // unlinked). The step will fail cleanly at dispatch; flag it so the user re-picks.
@@ -377,22 +358,12 @@ function companionLabel(kind: string): string | null {
   return companion ? agentKindMeta(companion).label : null
 }
 
-// Surfaced as an inline hint: a gated step needs a task-estimator before it (mirrors the
-// backend validation, which also rejects the save/start). Both the companion estimate gate
-// (`draftGating`) and the Tester QC companion's estimate gate (`draftTesterQuality[i].gating`)
-// count — either without a preceding estimator is rejected on save.
-const gatingNeedsEstimator = computed(() => {
-  const kinds = pipelines.draft
-  const hasEstimatorBefore = (i: number) =>
-    kinds.slice(0, i).some((k, j) => k === 'task-estimator' && pipelines.draftEnabled[j] !== false)
-  for (let i = 0; i < kinds.length; i++) {
-    if (pipelines.draftEnabled[i] === false) continue
-    const gated =
-      pipelines.draftGating[i]?.enabled || pipelines.draftTesterQuality[i]?.gating?.enabled
-    if (gated && !hasEstimatorBefore(i)) return true
-  }
-  return false
-})
+// Everything that is WRONG with the draft, as an ordered list of hints the template renders once,
+// plus the purpose conflict that also disables Save. Lives in its own composable because each of
+// these is one predicate beside one identically-styled line, and five of them had crowded out the
+// component (`usePipelineDraftWarnings`).
+const { hints: draftWarnings, stepsDisallowedByPurpose } =
+  usePipelineDraftWarnings(showBinaryOutputPicker)
 
 // ---- draft labels ----------------------------------------------------------
 const newLabel = ref('')
@@ -411,14 +382,26 @@ const showArchived = ref(false)
 const allLabels = computed(() =>
   [...new Set(pipelines.pipelines.flatMap((p) => p.labels ?? []))].sort(),
 )
-const archivedCount = computed(() => pipelines.pipelines.filter((p) => p.archived).length)
-const visiblePipelines = computed(() =>
-  pipelines.pipelines.filter((p) => {
-    if (!showArchived.value && p.archived) return false
-    if (labelFilter.value && !(p.labels ?? []).includes(labelFilter.value)) return false
-    return true
+// The library is narrowed by the same purpose the palette is: browsing at `review` lists the
+// pipelines built for reviewing, not the whole workspace catalog. `narrowPipelineLibrary` owns the
+// reduction so the rule is unit-testable and each hint counts the population its own control can
+// actually reveal, rather than the rows another dial is hiding either way.
+//
+// It is a BROWSING dial of its own, not a read of `draftPurpose`. The draft's purpose is an
+// authoring field with no "unclassified" setting, so keying the library straight off it would
+// leave the only ways back through the hidden rows a re-classification of the pipeline being
+// edited (which persists) or discarding the draft. This ref is what "relax THIS dial alone" means
+// for the purpose: it defaults to following the draft and the hint below toggles it, changing what
+// is listed and nothing that gets saved.
+const browseEveryPurpose = ref(false)
+const library = computed(() =>
+  narrowPipelineLibrary(pipelines.pipelines, {
+    purpose: browseEveryPurpose.value ? null : pipelines.draftPurpose,
+    label: labelFilter.value,
+    showArchived: showArchived.value,
   }),
 )
+const visiblePipelines = computed(() => library.value.offered)
 async function toggleArchive(p: Pipeline) {
   try {
     if (p.archived) await pipelines.unarchive(p.id)
@@ -492,7 +475,7 @@ async function clone(p: Pipeline) {
             </UButton>
           </div>
           <div class="flex-1 pe-1 lg:min-h-0 lg:overflow-y-auto">
-            <AgentPalette :purpose="pipelines.draftPurpose" @add="add" />
+            <AgentPalette v-model:purpose="pipelines.draftPurpose" @add="add" />
           </div>
         </div>
 
@@ -523,24 +506,6 @@ async function clone(p: Pipeline) {
             class="mb-2"
             data-testid="pipeline-builder-name"
           />
-
-          <!-- Purpose: the pipeline's use-case classifier. Drives which task pickers offer it (a
-               document task offers only `document` pipelines) and narrows the palette below (a
-               non-build purpose hides the Implementation/Testing kinds). -->
-          <div class="mb-2 flex items-center gap-2">
-            <label class="shrink-0 text-[11px] font-medium text-slate-400">
-              {{ t('pipeline.builder.purposeLabel') }}
-            </label>
-            <USelect
-              :model-value="pipelines.draftPurpose ?? undefined"
-              :items="PURPOSE_OPTIONS"
-              value-key="value"
-              size="sm"
-              class="min-w-40"
-              :placeholder="t('pipeline.builder.purposePlaceholder')"
-              @update:model-value="pipelines.draftPurpose = $event"
-            />
-          </div>
 
           <!-- Description: the prose summary shown next to the step list in the pipeline pickers. -->
           <UTextarea
@@ -576,37 +541,16 @@ async function clone(p: Pipeline) {
             />
           </div>
 
+          <!-- Every draft fault the builder can name, each mirroring a refusal the save boundary
+             makes, so the user fixes it before the round trip (`usePipelineDraftWarnings`). -->
           <p
-            v-if="gatingNeedsEstimator"
+            v-for="warning in draftWarnings"
+            :key="warning.key"
             class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
+            :data-testid="warning.testId"
           >
             <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
-            {{ t('pipeline.builder.gatingNeedsEstimator') }}
-          </p>
-
-          <p
-            v-if="skillStepNeedsPick"
-            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
-          >
-            <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
-            {{ t('pipeline.builder.skillNeedsPick') }}
-          </p>
-
-          <p
-            v-if="binaryOutputStepNeedsPick"
-            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
-            data-testid="binary-output-needs-pick"
-          >
-            <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
-            {{ t('pipeline.builder.binaryOutputNeedsPick') }}
-          </p>
-
-          <p
-            v-if="stepsDisallowedByPurpose.length"
-            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
-          >
-            <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
-            {{ t('pipeline.builder.purposeStepsConflict') }}
+            {{ t(warning.key) }}
           </p>
 
           <div
@@ -675,6 +619,31 @@ async function clone(p: Pipeline) {
                         : t('pipeline.builder.disableTooltip')
                     "
                     @click="toggleEnabled(unit)"
+                  />
+                  <!-- Run condition: restrict this step to tasks that change a frontend
+                     service, or to tasks that change anything else. Cycles through the three
+                     states (see `cycleDraftStepCondition`). Shown in BOTH interface tiers, and
+                     not behind `showOverrideField`: cloning a built-in carries the tester pair's
+                     conditions in, so a control that hid them by default would leave a basic-mode
+                     editor saving a step whose "when does this run" they were never shown.
+
+                     Offered only where the step MAY be skipped at all. A condition is a skip axis,
+                     so the engine holds it to the same gatability rule as an estimate gate
+                     (`assertValidRunConditions`) — without this the builder invited a condition on
+                     `merger` and answered the save with a 422. -->
+                  <UButton
+                    v-if="mayCarrySkipAxis(unit.kind)"
+                    :icon="CONDITION_ICONS[pipelines.draftStepCondition(unit.index) ?? 'always']"
+                    :color="pipelines.draftStepCondition(unit.index) ? 'info' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      t(
+                        `pipeline.builder.condition.${pipelines.draftStepCondition(unit.index) ?? 'always'}`,
+                      )
+                    "
+                    data-testid="pipeline-step-condition"
+                    @click="pipelines.cycleDraftStepCondition(unit.index)"
                   />
                   <!-- Approval gate: pause after this step so a human reviews (and
                      can edit) its proposal before the next step runs. -->
@@ -778,6 +747,27 @@ async function clone(p: Pipeline) {
                         : t('pipeline.builder.autoRecommendEnableTooltip')
                     "
                     @click="pipelines.toggleDraftAutoRecommend(unit.index)"
+                  />
+                  <!-- Keep the environment this Deployer stands up past the end of the run: the
+                     preview a reviewer pokes at after the PR is open. Off by default, and the
+                     save boundary refuses a Deployer that neither reclaims nor declares this,
+                     so the tick is how an unreclaimed environment says it is deliberate. -->
+                  <UButton
+                    v-if="showRetainEnvironmentToggle(unit.kind, unit.index)"
+                    :icon="
+                      pipelines.draftRetainEnvironment(unit.index)
+                        ? 'i-lucide-lock'
+                        : 'i-lucide-cloud-off'
+                    "
+                    :color="pipelines.draftRetainEnvironment(unit.index) ? 'warning' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      pipelines.draftRetainEnvironment(unit.index)
+                        ? t('pipeline.builder.retainEnvironmentClearTooltip')
+                        : t('pipeline.builder.retainEnvironmentSetTooltip')
+                    "
+                    @click="pipelines.toggleDraftRetainEnvironment(unit.index)"
                   />
                   <!-- System prompt: replace what this agent kind ships with, for every run in
                      this workspace, with the full revision history to switch back through. -->
@@ -1157,7 +1147,7 @@ async function clone(p: Pipeline) {
               {{ t('pipeline.builder.savedPipelines') }}
             </h3>
             <UButton
-              v-if="archivedCount"
+              v-if="library.archivedInScope"
               :icon="showArchived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
               :color="showArchived ? 'primary' : 'neutral'"
               variant="ghost"
@@ -1171,7 +1161,7 @@ async function clone(p: Pipeline) {
               {{
                 showArchived
                   ? t('pipeline.builder.hideArchived')
-                  : t('pipeline.builder.archivedCount', { count: archivedCount })
+                  : t('pipeline.builder.archivedCount', { count: library.archivedInScope })
               }}
             </UButton>
           </div>
@@ -1198,6 +1188,40 @@ async function clone(p: Pipeline) {
             >
               {{ l }}
             </UBadge>
+          </div>
+
+          <!-- What the purpose is holding back, and the way past it. Stated here rather than
+               beside the palette's purpose control because this is where the absence is noticed:
+               a narrowed library must never read as the whole one, and a hint that only NAMES an
+               absence sends the reader to the authoring dial one column left, whose every setting
+               narrows and whose every change is saved. -->
+          <div
+            v-if="browseEveryPurpose || library.hiddenByPurpose"
+            class="mb-2 flex shrink-0 flex-wrap items-center gap-x-2 px-1 text-[10px] text-slate-500"
+          >
+            <span>
+              {{
+                browseEveryPurpose
+                  ? t('pipeline.builder.everyPurposeListed')
+                  : t(
+                      'pipeline.builder.purposeHiddenPipelines',
+                      { count: library.hiddenByPurpose },
+                      library.hiddenByPurpose,
+                    )
+              }}
+            </span>
+            <button
+              type="button"
+              class="underline underline-offset-2 hover:text-slate-300"
+              data-testid="pipeline-library-purpose-toggle"
+              @click="browseEveryPurpose = !browseEveryPurpose"
+            >
+              {{
+                browseEveryPurpose
+                  ? t('pipeline.builder.narrowToDraftPurpose')
+                  : t('pipeline.builder.listEveryPurpose')
+              }}
+            </button>
           </div>
 
           <ul class="flex-1 space-y-1.5 pe-1 lg:min-h-0 lg:overflow-y-auto">
@@ -1318,6 +1342,16 @@ async function clone(p: Pipeline) {
                     i + 1
                   }}</span>
                   <AgentKindIcon :kind="k" show-label />
+                  <!-- A step that does not run on every task says so HERE, in the library, because
+                       this list is what a reader compares two pipelines by: a preset whose testers
+                       are conditional and one whose testers always run look identical otherwise. -->
+                  <UIcon
+                    v-for="c in stepConditionsAt(p, i)"
+                    :key="c"
+                    :name="CONDITION_MARKERS[c].icon"
+                    class="h-3 w-3 shrink-0 text-sky-400"
+                    :title="t(CONDITION_MARKERS[c].key)"
+                  />
                 </li>
               </ol>
             </li>

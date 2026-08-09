@@ -340,6 +340,10 @@ function registerRbacMemberManagementTests(
       { perm: 'settings.manage', method: 'PATCH', path: w(''), body: { name: `no-${uniq()}` } }, // board rename (per-handler)
       { perm: 'settings.manage', method: 'PUT', path: w('/settings') },
       { perm: 'settings.manage', method: 'PUT', path: w('/tracker-settings') },
+      // The notification manager: re-routing which types the whole board is told about, and on
+      // which channel, is workspace configuration — a member acts on their inbox, they do not
+      // decide what everyone else hears about.
+      { perm: 'settings.manage', method: 'PUT', path: w('/notification-settings') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/model-presets/none') },
       // The consensus-GROUP library. Same permission as the model-preset library above and for
       // the same reason: a group decides which models review a task and how many of them run,
@@ -487,6 +491,16 @@ function registerRbacMemberManagementTests(
     expect(
       (await app.call('DELETE', w('/document-sources/notion/connection'), undefined, hc)).status,
     ).toBe(403)
+    // The OAuth install URL is on the credential side of the split even though it only READS: what
+    // it hands back is the first half of a credential write, and a member holding one would
+    // complete the grant through the PUBLIC callback, where no tier can be checked. It is the one
+    // gated GET on this controller, so the member floor (which passes every read) cannot cover it.
+    expect(
+      (await app.call('GET', w('/document-sources/figma/oauth/install-url'), undefined, hc)).status,
+    ).toBe(403)
+    expect(
+      (await app.call('GET', w('/document-sources/figma/oauth/install-url'), undefined, ha)).status,
+    ).not.toBe(403)
     // And the admin still clears both (never a 403), so the refusals above are the gate rejecting
     // the member rather than routes that always reject.
     expect((await app.call('POST', connect, { credentials: { token: 't' } }, ha)).status).not.toBe(

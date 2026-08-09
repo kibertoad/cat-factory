@@ -1,12 +1,19 @@
 import {
   ASSET_STORAGE_CAPABILITY,
+  binaryCapabilityCoverage,
   binaryFormatCoverage,
   binaryModalityOverlaps,
+  conflictingOutputSizeOptions,
+  isBinaryModality,
+  modalityCarriesPixelDimensions,
   normalizeMediaType,
+  requiredBinaryCapabilities,
 } from '@cat-factory/contracts'
 import type {
+  BinaryGeneratorCapability,
   BinaryModality,
   BinaryModalityOverlap,
+  ConflictingOutputSizeOption,
   RegisteredBinaryGenerator,
 } from '@cat-factory/contracts'
 import type {
@@ -82,6 +89,35 @@ export interface BinaryOutputRow extends BinaryOutputArtifact {
    * state (a model with native image output generates without a registered integration).
    */
   generatorUnknown: boolean
+  /**
+   * The artifact reports pixel dimensions that are not the exact size the step asked for.
+   *
+   * FALSE when the step asked for no size, false when the size does not cover this artifact (see
+   * {@link sizeRequirementCovers}), and false when the artifact reports no dimensions: the last
+   * is "not stated", which is why {@link BinaryOutputView.sizeUnreported} counts it separately
+   * instead of letting an absent measurement read as a passing one.
+   */
+  missized: boolean
+}
+
+/**
+ * Whether the step's exact size is a statement about THIS artifact.
+ *
+ * A size covers what is measured in pixels, which is the contracts rule
+ * {@link modalityCarriesPixelDimensions} and not a judgement made here: a step selecting an image
+ * generator beside an audio one states one size, means it about the images, and counting the audio
+ * against it would warn permanently about a step that delivered exactly what was asked.
+ *
+ * An artifact whose content type the platform could not classify is COVERED, because absent is not
+ * "not an image": the row may well be one, and excluding it would turn an unclassifiable artifact
+ * into a silent pass on the one axis this requirement exists to check. A RETIRED modality reads the
+ * same way for the same reason, which is why the membership guard runs before the lookup rather
+ * than a bare index that would throw on it.
+ */
+function sizeRequirementCovers(artifact: BinaryOutputArtifact): boolean {
+  const modality = artifact.modality
+  if (modality === undefined || !isBinaryModality(modality)) return true
+  return modalityCarriesPixelDimensions(modality)
 }
 
 /** The whole surface's read model: one state, the join, and every loss the report counted. */
@@ -150,6 +186,31 @@ export interface BinaryOutputView {
    */
   undeliveredMediaTypes: readonly string[]
   /**
+   * The exact pixel size the step asked its pixel-measured generations to be delivered at
+   * (`stepOptions.binaryOutput.generation.outputSize`), or null when it asked for none, which
+   * stays the ordinary case. Which artifacts it covers is {@link sizeRequirementCovers}.
+   */
+  requiredSize: { width: number; height: number } | null
+  /**
+   * How many of {@link rows} reported dimensions OTHER than {@link requiredSize}.
+   *
+   * The delivery-side half of the size requirement, and the reason the requirement is worth
+   * declaring at all. Admission checks what the selected integrations can be ASKED for; only
+   * this checks what came back, exactly as {@link undeliveredMediaTypes} does one axis over and
+   * from the same kind of self-report. Derived in code from the step's own two records, never
+   * read off the agent's prose.
+   */
+  missized: number
+  /**
+   * How many of the COVERED {@link rows} reported no dimensions on a step that required a size.
+   *
+   * Its own number rather than folded into {@link missized}, for the rule this whole feature
+   * runs on: an unmeasured artifact and a wrong-sized one are the same value and opposite facts.
+   * Counting them together would let a run that reported nothing read as a run that delivered
+   * everything wrong, and hiding them would let it read as a clean one.
+   */
+  sizeUnreported: number
+  /**
    * Integration ids the AGENT named that the deployment does not register. The generative twin of
    * {@link unknownDeclaredServices}, and it needs no exclusion to stay disjoint from anything —
    * there is no single "target" integration a step selects, so the report's own list is already
@@ -200,6 +261,7 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
   const generators = config?.generatorIds ?? []
   const modalities = config?.modalities ?? []
   const mediaTypes = config?.mediaTypes ?? []
+  const requiredSize = config?.generation?.outputSize ?? null
   if (!report) {
     return {
       // A step still queued has not had the chance to record anything, which is a different
@@ -214,6 +276,9 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
       modalities,
       mediaTypes,
       undeliveredMediaTypes: [],
+      requiredSize,
+      missized: 0,
+      sizeUnreported: 0,
       unknownDeclaredGenerators: [],
       generatorsUnverified: false,
       invalidEntries: 0,
@@ -231,6 +296,14 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     unknown: unknown.has(artifact.service),
     // An UNATTRIBUTED row (no `generator` claimed) is not unknown — see the field's own note.
     generatorUnknown: artifact.generator !== undefined && unknownGenerators.has(artifact.generator),
+    // An UNMEASURED row is not missized either: absent dimensions are counted by
+    // `sizeUnreported`, never folded in here.
+    missized:
+      requiredSize !== null &&
+      sizeRequirementCovers(artifact) &&
+      artifact.dimensions !== undefined &&
+      (artifact.dimensions.width !== requiredSize.width ||
+        artifact.dimensions.height !== requiredSize.height),
   }))
 
   return {
@@ -244,6 +317,12 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     modalities,
     mediaTypes,
     undeliveredMediaTypes: undeliveredMediaTypes(mediaTypes, rows),
+    requiredSize,
+    missized: rows.filter((row) => row.missized).length,
+    sizeUnreported:
+      requiredSize === null
+        ? 0
+        : rows.filter((row) => row.dimensions === undefined && sizeRequirementCovers(row)).length,
     unknownDeclaredGenerators: report.unknownGenerators,
     generatorsUnverified: report.generatorsUnverified === true,
     invalidEntries: report.invalidEntries,
@@ -359,6 +438,8 @@ export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
     view.unknownDeclaredGenerators.length > 0 ||
     view.generatorsUnverified ||
     view.undeliveredMediaTypes.length > 0 ||
+    view.missized > 0 ||
+    view.sizeUnreported > 0 ||
     view.invalidEntries > 0 ||
     view.omitted > 0 ||
     view.misdirected > 0
@@ -437,6 +518,31 @@ export type BinaryOutputPickIssue =
    * think to write it; this catches the author.
    */
   | 'generator_overlap'
+  /**
+   * A per-step GENERATION OPTION whose capability no selected integration declares: a reference
+   * image handed to an endpoint that takes no image input, a seed asked of one that has none
+   * (kernel's `capability_unsupported` spelling verbatim, like the members above it). A refusal.
+   */
+  | 'capability_unsupported'
+  /**
+   * A required capability nothing selected declares, where a selected integration declares NO
+   * capabilities at all, so it might be supported and nothing may say otherwise. ADVISORY, like
+   * `media_type_unverifiable` and for the same reason: the step starts. It is the state EVERY
+   * integration registered before capabilities existed is in, so styling it as a refusal would
+   * flag most working selections in the product.
+   */
+  | 'capability_unverifiable'
+  /**
+   * The step states an exact output size AND another option that restates the delivered
+   * dimensions (`aspectRatio`, `upscale`). A refusal, mirroring `assertUnambiguousOutputSize` at
+   * pipeline save.
+   *
+   * Unlike every member above it this needs no catalog and no registry: it is a fact about the
+   * step's own fields, which is exactly why it belongs here. The builder offers all three controls
+   * at once, so without this line the only report of the conflict is a failed round trip carrying
+   * backend prose, on a surface where the fix is deleting one of two visible fields.
+   */
+  | 'output_size_ambiguous'
 
 /** What the builder found wrong with one step's selection, and which ids to name. */
 export interface BinaryOutputPickState {
@@ -457,6 +563,14 @@ export interface BinaryOutputPickState {
    * picker and the brief cannot describe one selection two ways.
    */
   generatorOverlaps: readonly BinaryModalityOverlap[]
+  /** The capabilities the step's generation options need that nothing selected supports. */
+  unsupportedCapabilities: readonly BinaryGeneratorCapability[]
+  /** The ones that could not be judged, kept apart from the refusal above. */
+  unverifiableCapabilities: readonly BinaryGeneratorCapability[]
+  /** The options restating the delivered dimensions beside an exact size, for the line that names
+   *  which field to delete. Computed through contracts' own rule, so this cannot come to a
+   *  different answer from the save that refuses it. */
+  conflictingSizeOptions: readonly ConflictingOutputSizeOption[]
 }
 
 /**
@@ -482,7 +596,10 @@ export interface BinaryOutputPickState {
  */
 function generatorPickIssues(
   config: BinaryOutputConfig | undefined,
-  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities' | 'mediaTypes'>[],
+  generators: readonly Pick<
+    RegisteredBinaryGenerator,
+    'id' | 'modalities' | 'mediaTypes' | 'capabilities'
+  >[],
   unavailable: boolean,
 ): {
   issues: BinaryOutputPickIssue[]
@@ -491,6 +608,8 @@ function generatorPickIssues(
   uncoveredMediaTypes: string[]
   unverifiableMediaTypes: string[]
   overlaps: BinaryModalityOverlap[]
+  unsupportedCapabilities: BinaryGeneratorCapability[]
+  unverifiableCapabilities: BinaryGeneratorCapability[]
 } {
   const none = {
     unknownGeneratorIds: [],
@@ -498,6 +617,8 @@ function generatorPickIssues(
     uncoveredMediaTypes: [],
     unverifiableMediaTypes: [],
     overlaps: [],
+    unsupportedCapabilities: [],
+    unverifiableCapabilities: [],
   }
   if (unavailable) return { issues: ['generators_unavailable'], ...none }
   const byId = new Map(generators.map((g) => [g.id, g]))
@@ -518,12 +639,21 @@ function generatorPickIssues(
   // one step is the one where neither is the deliverable (an image generated to feed a mesh API),
   // and gating on `modalities` would go silent on exactly that step.
   const overlaps = binaryModalityOverlaps(selected)
+  // The GENERATION OPTIONS, judged against the same resolved selection and through the same
+  // imported rule the brief renders from. The requirement is DERIVED from what the step actually
+  // asks for, so a single reference image is never flagged for lacking `multi-reference`.
+  const capability = binaryCapabilityCoverage(
+    requiredBinaryCapabilities(config?.generation),
+    selected,
+  )
   const issues: BinaryOutputPickIssue[] = []
   if (unknownGeneratorIds.length) issues.push('unknown_generator')
   if (uncovered.length) issues.push('modality_uncovered')
   if (format.uncovered.length) issues.push('media_type_uncovered')
   if (format.unverifiable.length) issues.push('media_type_unverifiable')
   if (overlaps.length) issues.push('generator_overlap')
+  if (capability.uncovered.length) issues.push('capability_unsupported')
+  if (capability.unverifiable.length) issues.push('capability_unverifiable')
   return {
     issues,
     unknownGeneratorIds,
@@ -531,6 +661,8 @@ function generatorPickIssues(
     uncoveredMediaTypes: format.uncovered,
     unverifiableMediaTypes: format.unverifiable,
     overlaps,
+    unsupportedCapabilities: capability.uncovered,
+    unverifiableCapabilities: capability.unverifiable,
   }
 }
 
@@ -565,7 +697,10 @@ export function binaryOutputPickIssues(
   // that registers no integrations cannot satisfy a step that selects one. So a call site that
   // omits this FLAGS a selection rather than passing it — the loud direction — and the default
   // stays a legitimate value rather than a hole.
-  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities' | 'mediaTypes'>[] = [],
+  generators: readonly Pick<
+    RegisteredBinaryGenerator,
+    'id' | 'modalities' | 'mediaTypes' | 'capabilities'
+  >[] = [],
   // Whether the deployment's integrations could not be READ. Defaulted to `false` — the honest
   // default, since every deployment but a mothership-mode node reads them in-process and cannot
   // fail — so an omitting call site judges the list it was given rather than claiming an outage.
@@ -578,6 +713,12 @@ export function binaryOutputPickIssues(
   // generative fault too. Reporting them one round at a time is exactly the fix-and-retry cycle
   // this function returns every issue to avoid.
   const generative = generatorPickIssues(config, generators, generatorsUnavailable)
+  // Judged beside the generative half and before the storage early return, because it depends on
+  // neither registry: a step holding two statements of its own dimensions is mis-configured whether
+  // or not its storage pick resolved, and reporting it only on the second pass would cost the
+  // fix-and-retry cycle every other issue here is returned together to avoid.
+  const conflictingSizeOptions = conflictingOutputSizeOptions(config?.generation)
+  if (conflictingSizeOptions.length) issues.push('output_size_ambiguous')
   const noStorageService =
     resolved && !catalog.some((s) => s.capabilities.includes(ASSET_STORAGE_CAPABILITY))
   if (available === false) issues.push('catalog_unavailable')
@@ -594,6 +735,9 @@ export function binaryOutputPickIssues(
       uncoveredMediaTypes: generative.uncoveredMediaTypes,
       unverifiableMediaTypes: generative.unverifiableMediaTypes,
       generatorOverlaps: generative.overlaps,
+      unsupportedCapabilities: generative.unsupportedCapabilities,
+      unverifiableCapabilities: generative.unverifiableCapabilities,
+      conflictingSizeOptions,
     }
   }
 
@@ -618,5 +762,8 @@ export function binaryOutputPickIssues(
     uncoveredMediaTypes: generative.uncoveredMediaTypes,
     unverifiableMediaTypes: generative.unverifiableMediaTypes,
     generatorOverlaps: generative.overlaps,
+    unsupportedCapabilities: generative.unsupportedCapabilities,
+    unverifiableCapabilities: generative.unverifiableCapabilities,
+    conflictingSizeOptions,
   }
 }

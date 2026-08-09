@@ -145,6 +145,7 @@ export type {
   DocumentSourceKind,
   DocumentOrigin,
   DocumentLinkRole,
+  DocumentRenderStatus,
   DocumentSourceDescriptor,
   CredentialField,
   DocumentConnection,
@@ -165,6 +166,7 @@ export type {
   TaskDependencyLink,
   SourceTask,
   TaskSearchResult,
+  IssueIntakePredicate,
   // Bug hunt: the interactive dual of the recurring `bug-intake` step.
   TrackerBoard,
   BugCandidate,
@@ -191,6 +193,10 @@ export type {
   EnvironmentBackendConfig,
   EnvironmentBackendKind,
   KubernetesEnvironmentConfig,
+  // What it takes to REACH a cluster, as opposed to what it takes to stand an environment up
+  // in one: the reclaim path validates only this, so drift in the provisioning half of a
+  // stored config can never strand a live namespace.
+  KubernetesConnectionConfig,
   KubernetesManifestSource,
   KubernetesUrlSource,
   KubernetesRenderer,
@@ -202,6 +208,7 @@ export type {
   KubernetesProvisionConfig,
   // Cloudflare Workers preview (per-PR Worker, driven over the VCS deployments API).
   CloudflareEnvironmentConfig,
+  CloudflareConnectionConfig,
   // Per-service provision type + per-type infra handlers (the what/where ÷ how split).
   ProvisionType,
   EnvironmentFailureReason,
@@ -327,6 +334,22 @@ export type {
   ForkChatRequestInput,
   ChooseForkInput,
   ForkProposal,
+  // Generated-candidate comparison shapes on a binary-output step: the candidates a first pass
+  // stages, the live step state the engine parks on, and the human's keep/discard decision.
+  BinaryCandidate,
+  BinaryCandidateComparison,
+  BinaryCandidateChoice,
+  BinaryCandidateKeep,
+  BinaryCandidateNoChoiceReason,
+  BinaryCandidateStatus,
+  BinaryCandidateStepState,
+  KeepBinaryCandidatesInput,
+  // Generative-integration capability shapes: what an integration can be ASKED FOR while
+  // generating, and the per-step generation options each capability unlocks.
+  BinaryGeneratorCapability,
+  BinaryGenerationOptions,
+  BinaryAssetRef,
+  BinaryReferenceImage,
   // Judge shapes (the fourth step-taxonomy bucket): the rubric verdict an assessment
   // returns + the live step state the engine parks/bounces on + the human's resolution.
   JudgeFindingSeverity,
@@ -425,6 +448,10 @@ export type {
   // Visual-confirmation gate shapes (screenshot review + fix loop).
   VisualConfirmStepState,
   VisualConfirmPair,
+  VisualConfirmReferenceOrigin,
+  VisualConfirmDesignGap,
+  VisualConfirmDesignGapReason,
+  VisualConfirmDesignReferences,
   VisualConfirmRound,
   MergeAssessment,
   MergeAxis,
@@ -462,6 +489,9 @@ export type {
   PrReportTestOutcome,
   PrReportTestConcern,
   PrReportTests,
+  // What the run built FROM: the linked documents its dispatches read, at which revision.
+  PrReportContext,
+  PrReportContextDocument,
   // Captured command output: the platform's own pre-PR check run, and the bugfix
   // reproduction proof across the pre-fix and final trees.
   PrReportValidation,
@@ -565,6 +595,12 @@ export type {
   NotificationSeverity,
   NotificationPayload,
   ResolveNotificationAction,
+  // The notification manager: which types a workspace delivers on which channel.
+  NotificationDeliveryChannel,
+  NotificationChannelOverrides,
+  NotificationRoutingMatrix,
+  NotificationSettings,
+  UpdateNotificationSettingsInput,
   // Per-workspace runtime settings (human-wait escalation threshold + task limits).
   WorkspaceSettings,
   UpdateWorkspaceSettingsInput,
@@ -646,6 +682,7 @@ export type {
   UpdateInitiativePolicyInput,
   AccountSettingsConfig,
   ContentStorageConfig,
+  FigmaOAuthSecret,
   LinearOAuthSecret,
   S3CredentialsSecret,
   SlackOAuthSecret,
@@ -664,4 +701,45 @@ export type {
 export interface InjectedContextFile {
   path: string
   content: string
+}
+
+/**
+ * One reference design image the platform holds for a run's task, named for delivery INTO the
+ * container: the UI tester reads these off disk under `.cat-context/reference-screenshots/` and
+ * captures the matching views, so the gate it feeds pairs actual-vs-reference by name.
+ *
+ * The bytes do NOT ride this shape, and that is the point: a design frame is a full-page PNG and
+ * a run's set of them is megabytes, while a job body is JSON that crosses every transport and is
+ * persisted with the dispatch. Only the artifact's IDENTITY travels, and the harness fetches the
+ * bytes back through the same container-session-authed seam the tester already uploads through.
+ *
+ * `view` is the pairing key (the gate's own view name, qualified when two designs claim one
+ * name); `fileName` is the single safe path segment that view is written under, resolved by the
+ * engine rather than the container so the name the agent sees is the name the gate recorded.
+ */
+export interface ReferenceScreenshot {
+  view: string
+  artifactId: string
+  fileName: string
+}
+
+/**
+ * A capturing dispatch's whole reference answer: the files it is handed, and the views it is NOT.
+ *
+ * The second half exists because the set is CAPPED. A task can hold far more references than one
+ * run should spend its pre-run budget downloading (a block may carry a hundred uploads beside a
+ * design's frames), so the engine sends a bounded prefix of them. A cap that simply shortened the
+ * list would be the silent kind: on disk a view nobody mentioned and a screen the design does not
+ * have are the same absence, so the agent would never learn those views exist and the gate would
+ * later pair against captures nobody was asked for.
+ *
+ * So the dropped views are NAMED here and stated to the agent, which still captures them under
+ * their own names with no image to compare against — exactly the disposition a reference that
+ * failed to transfer already gets.
+ */
+export interface ReferenceScreenshotSet {
+  /** The references this run is handed, in the gallery order the set was resolved in. */
+  files: ReferenceScreenshot[]
+  /** The view names the cap dropped, in that same order. Empty when nothing was dropped. */
+  omitted: string[]
 }

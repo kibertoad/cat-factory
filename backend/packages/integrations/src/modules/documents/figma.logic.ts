@@ -1,4 +1,8 @@
-import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
+import type {
+  DocumentRenderPlan,
+  DocumentSourceDescriptor,
+  DocumentSourceOAuthSpec,
+} from '@cat-factory/kernel'
 import {
   capped,
   dimensionMeta,
@@ -17,8 +21,52 @@ import { assertHostPinned } from './http.js'
 // lightweight Markdown the generic planner + `.cat-context/` materialisation consume.
 // The `fetch` itself (the `X-Figma-Token` REST client) lives in `FigmaProvider`.
 
-/** Figma's REST API host. The PAT is sent to this host only — see {@link assertSafeFigmaUrl}. */
+/** Figma's REST API host. The credential is sent to this host only — see {@link assertSafeFigmaUrl}. */
 export const FIGMA_API_HOST = 'api.figma.com'
+
+/**
+ * The hosts Figma serves a RENDERED image from, as short-lived signed URLs the `/v1/images`
+ * endpoint hands back. Two of them because the vendor has moved between these buckets and both
+ * are still returned in the wild.
+ *
+ * Pinned to this fixed set for the same reason the API host is pinned: the URL comes back inside a
+ * response body, so following it unchecked would let a compromised or spoofed API response point
+ * the downloader at an internal address. Fail-CLOSED is the right trade here — a Figma that starts
+ * serving from a third bucket costs the deployment its renders, which the import states, where the
+ * alternative costs it an SSRF. The download itself carries NO credential (the URL is already
+ * signed), so a host outside the set leaks nothing even before the guard refuses it.
+ */
+export const FIGMA_RENDER_HOSTS = [
+  's3-alpha-sig.figma.com',
+  'figma-alpha-api.s3.us-west-2.amazonaws.com',
+] as const
+
+/**
+ * The scopes the OAuth consent screen asks for, and the reason each is on the list.
+ *
+ * `file_content:read` is what every import needs (the node tree, the published styles, the
+ * component sets). `file_variables:read` is the Enterprise-gated variables read, requested
+ * because asking for it costs nothing on a plan that does not grant it: the provider already
+ * treats a 403 there as a PLAN GATE rather than an error and falls back to published styles, so
+ * an over-broad ask degrades exactly as the PAT path does rather than failing the connect.
+ */
+const FIGMA_OAUTH_SCOPES = ['file_content:read', 'file_variables:read'] as const
+
+/**
+ * Figma's `authorization_code` endpoints.
+ *
+ * The authorize host is `www.figma.com` (the consent screen a person sees) while both token
+ * endpoints are on the API host this provider is already pinned to, so a refresh crosses no host
+ * the credential does not already reach.
+ */
+export const FIGMA_OAUTH: DocumentSourceOAuthSpec = {
+  authorizeUrl: 'https://www.figma.com/oauth',
+  tokenUrl: `https://${FIGMA_API_HOST}/v1/oauth/token`,
+  refreshUrl: `https://${FIGMA_API_HOST}/v1/oauth/refresh`,
+  scopes: FIGMA_OAUTH_SCOPES,
+  // Figma joins scopes with commas, not the RFC's space.
+  scopeSeparator: ',',
+}
 
 /** What the connect UI renders, and which credentials the provider needs. */
 export const FIGMA_DESCRIPTOR: DocumentSourceDescriptor = {
@@ -36,8 +84,11 @@ export const FIGMA_DESCRIPTOR: DocumentSourceDescriptor = {
   ],
   refLabel: 'Figma file or frame URL',
   refPlaceholder: 'https://www.figma.com/design/<key>/Title?node-id=1-2',
-  // No catalogue search API for a PAT — import a specific file/frame by URL.
+  // No catalogue search API for either credential — import a specific file/frame by URL.
   searchable: false,
+  // The wire half of {@link FIGMA_OAUTH}: it says the SOURCE can be connected this way, and the
+  // source listing says separately whether this deployment has a Figma app registered to do it.
+  oauth: { scopes: [...FIGMA_OAUTH_SCOPES] },
 }
 
 /**
@@ -249,6 +300,16 @@ const MAX_FRAME_TEXT = 200
 const MAX_IMPORT_TEXT = 600
 /** Top-level frames a whole-file import fetches as subtrees. */
 export const MAX_FILE_FRAMES = 12
+/**
+ * Top-level frames a whole-file import RASTERISES, well below {@link MAX_FILE_FRAMES}.
+ *
+ * The two caps count the same frames and are deliberately different numbers, because they bound
+ * different budgets: a frame's text costs the ~256 KB context corpus a few KB, while its PNG costs
+ * the account's blob storage a megabyte or two and buys a reader nothing the next frame's picture
+ * does not. Six covers the screens a design-led task is actually about; the text still covers
+ * twelve, and the import says which frames it rendered.
+ */
+export const MAX_RENDERS = 6
 /** Distinct variants listed on one component's note before the rest are summarised away. */
 const MAX_VARIANTS_PER_COMPONENT = 6
 /** Components listed, ranked by how often the design instantiates them. */
@@ -592,6 +653,50 @@ export function figmaTopLevelFrames(document: FigmaNode | undefined): FigmaNode[
     }
   }
   return frames
+}
+
+/**
+ * The frames a render pass covers, capped at {@link MAX_RENDERS} in document order, with the
+ * frames the cap left out COUNTED rather than dropped.
+ *
+ * The count is what keeps a bounded pass from reading as a complete one: six pictures of a
+ * twenty-frame file and six pictures of a six-frame file are the same list, and only one of them
+ * means "this is the whole design".
+ *
+ * A `view` must identify ONE screen, because it is the key a captured screenshot pairs with, so
+ * two frames may never resolve to the same one. Two ways they otherwise would:
+ *
+ * - A frame with no name. It still renders (its picture is worth having) under its id, which is
+ *   the only honest label left; `(unnamed)` would collide every nameless frame onto one view.
+ * - A name repeated across pages, which real files do constantly ("Header", "Empty state"). EVERY
+ *   occurrence is then qualified by its id, including the first: letting the first keep the bare
+ *   name would hand it to whichever frame the file happens to list first, so re-ordering a page
+ *   would silently move a stored view from one screen to another.
+ */
+export function figmaRenderTargets(frames: readonly FigmaNode[]): DocumentRenderPlan {
+  const selected: { id: string; name: string }[] = []
+  let dropped = 0
+  for (const frame of frames) {
+    if (!frame.id) continue
+    if (selected.length >= MAX_RENDERS) {
+      dropped += 1
+      continue
+    }
+    selected.push({ id: frame.id, name: frame.name?.trim() || frame.id })
+  }
+  // Counted over the SELECTED frames, not the whole file: a duplicate the cap already excluded
+  // would otherwise qualify a name that is unique among the frames actually rendered.
+  const occurrences = new Map<string, number>()
+  for (const frame of selected) {
+    occurrences.set(frame.name, (occurrences.get(frame.name) ?? 0) + 1)
+  }
+  return {
+    targets: selected.map((frame) => ({
+      id: frame.id,
+      view: (occurrences.get(frame.name) ?? 0) > 1 ? `${frame.name} (${frame.id})` : frame.name,
+    })),
+    capped: dropped,
+  }
 }
 
 /**

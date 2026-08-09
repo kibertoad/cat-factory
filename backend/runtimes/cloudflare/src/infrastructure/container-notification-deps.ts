@@ -1,18 +1,30 @@
-import type { Clock, NotificationChannel } from '@cat-factory/kernel'
+import type { Clock, ExecutionEventPublisher, NotificationChannel } from '@cat-factory/kernel'
 import { CompositeNotificationChannel } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
+  EMAIL_CIPHER_INFO,
+  EmailConnectionService,
   NOTIFICATION_WEBHOOK_CIPHER_INFO,
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
   buildNotificationWebhookSupport,
 } from '@cat-factory/integrations'
-import { logger, resolveUrlSafetyPolicy } from '@cat-factory/server'
+import {
+  InAppNotificationChannel,
+  buildNotificationDelivery,
+  logger,
+  resolveUrlSafetyPolicy,
+} from '@cat-factory/server'
 import type { AppConfig } from '@cat-factory/server'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
+import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
+import { D1MembershipRepository } from './repositories/D1MembershipRepository'
+import { D1NotificationSettingsRepository } from './repositories/D1NotificationSettingsRepository'
 import { D1NotificationWebhookRepository } from './repositories/D1NotificationWebhookRepository'
+import { D1UserRepository } from './repositories/D1UserRepository'
+import { D1WorkspaceMemberRepository } from './repositories/D1WorkspaceMemberRepository'
 import {
   D1SlackConnectionRepository,
   D1SlackMemberMappingRepository,
@@ -125,6 +137,46 @@ export function buildNotificationWebhookSupportForWorker(
 }
 
 /**
+ * Build the notification MANAGER (per-workspace, per-channel routing), the gate each routed
+ * channel is wrapped in, and the email transport.
+ *
+ * The email channel is built only when the per-account email module is configured
+ * (`EMAIL_ENABLED` + a sealing key) — unconfigured means no channel at all, not a channel that
+ * fails on every send. Symmetric with the Node facade's `selectNodeNotificationDelivery`: a
+ * channel routed on one runtime and unrouted on the other would honour a workspace's mutes on
+ * one deployment shape only.
+ */
+export function buildWorkerNotificationDelivery(config: AppConfig, db: D1Database, clock: Clock) {
+  const emailConnections =
+    config.email.enabled && config.email.encryptionKey
+      ? new EmailConnectionService({
+          emailConnectionRepository: new D1EmailConnectionRepository({ db }),
+          secretCipher: new WebCryptoSecretCipher({
+            masterKeyBase64: config.email.encryptionKey,
+            info: EMAIL_CIPHER_INFO,
+          }),
+          clock,
+        })
+      : null
+  const notificationSettingsRepository = new D1NotificationSettingsRepository({ db })
+  return {
+    notificationSettingsRepository,
+    ...buildNotificationDelivery({
+      notificationSettingsRepository,
+      clock,
+      workspaceRepository: new D1WorkspaceRepository({ db }),
+      membershipRepository: new D1MembershipRepository({ db }),
+      workspaceMemberRepository: new D1WorkspaceMemberRepository({ db }),
+      userRepository: new D1UserRepository({ db }),
+      ...(emailConnections
+        ? { resolveEmailSender: (accountId: string) => emailConnections.resolveSender(accountId) }
+        : {}),
+      ...(config.email.appBaseUrl ? { appBaseUrl: config.email.appBaseUrl } : {}),
+    }),
+  }
+}
+
+/**
  * This deployment's EXTERNAL notification channels — everything that is NOT the in-app push
  * (Slack, plus a workspace's outbound notification webhook). Two consumers:
  * {@link selectMergeLifecycleDeps} composes it into the engine's own fan-out, and the
@@ -146,11 +198,16 @@ export function buildExternalNotificationChannel(
   config: AppConfig,
   db: D1Database,
   webhookChannel?: NotificationChannel,
+  emailChannel?: NotificationChannel | null,
 ): NotificationChannel | null {
   const channels: NotificationChannel[] = []
   const slackChannel = buildSlackChannel(config, db)
   if (slackChannel) channels.push(slackChannel)
   if (webhookChannel) channels.push(webhookChannel)
+  // Email is EXTERNAL by this set's definition: it sends through the ACCOUNT's sealed provider
+  // key, so under mothership mode only this side can decrypt and deliver it. It arrives already
+  // wrapped in the manager's routing gate, which by default admits the high-impact types alone.
+  if (emailChannel) channels.push(emailChannel)
   if (channels.length === 0) return null
   return channels.length === 1 ? channels[0]! : new CompositeNotificationChannel(channels)
 }
@@ -169,5 +226,54 @@ export function selectSlackDeps(config: AppConfig, db: D1Database): Partial<Core
     slackSettingsRepository: infra.settingsRepository,
     slackMemberMappingRepository: infra.memberMappingRepository,
     slackSecretCipher: infra.cipher,
+  }
+}
+
+/**
+ * Everything this deployment needs to TELL A HUMAN, as `CoreDependencies` fragments: the composed
+ * fan-out and the notification manager's store.
+ *
+ * Composed here rather than in the container root so the whole "how a notification reaches a
+ * person" decision reads in one place: the in-app push (when the events binding is present), the
+ * external transports (Slack, the outbound webhook, email), and the routing gate that decides
+ * which of them a workspace admits. Every channel implements the same `NotificationChannel` port
+ * and fans out via `CompositeNotificationChannel`, so the engine call sites that raise
+ * notifications are untouched. The webhook is what a HEADLESS caller relies on: it has no in-app
+ * inbox and no browser WebSocket, so a parked run would otherwise reach it only by polling (see
+ * backend/docs/adr/0047-headless-clarification-loop.md).
+ *
+ * Only the channels the MANAGER owns are routed — the in-app push and email. Slack and the
+ * webhook filter by type where their destination is configured, so routing them again here would
+ * be a second switch for a decided question.
+ */
+export function selectNotificationDeliveryDeps(input: {
+  config: AppConfig
+  db: D1Database
+  clock: Clock
+  /** The real-time publisher backing the in-app push; absent ⇒ no in-app channel. */
+  publisher?: ExecutionEventPublisher
+  /** The outbound notification-webhook channel, when the deployment configured one. */
+  webhookChannel?: NotificationChannel
+}): Partial<CoreDependencies> {
+  const { config, db, clock, publisher, webhookChannel } = input
+  const delivery = buildWorkerNotificationDelivery(config, db, clock)
+  const channels: NotificationChannel[] = []
+  if (publisher) {
+    channels.push(delivery.route('in_app', new InAppNotificationChannel(publisher)))
+  }
+  const externalChannel = buildExternalNotificationChannel(
+    config,
+    db,
+    webhookChannel,
+    delivery.emailChannel,
+  )
+  if (externalChannel) channels.push(externalChannel)
+  return {
+    notificationSettingsRepository: delivery.notificationSettingsRepository,
+    ...(channels.length === 1
+      ? { notificationChannel: channels[0] }
+      : channels.length > 1
+        ? { notificationChannel: new CompositeNotificationChannel(channels) }
+        : {}),
   }
 }

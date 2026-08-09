@@ -115,6 +115,31 @@ Bootstrap differs at the ends: it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
 PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 
+### Reference designs
+
+A job body for a kind that CAPTURES views (the UI tester, or a deployment's own browser-driven kind)
+may carry `referenceScreenshots`: the reference images the platform holds for the task, as
+`{ url, token, files: [{ artifactId, fileName, view }], omitted: [view] }`. The harness downloads
+each into `.cat-context/reference-screenshots/` before the agent's first turn and lists them, by view
+name, at the end of the agent's context.
+
+Only identities travel in the body (a design frame is a full-page PNG), and the bytes come back
+from the backend over the SAME container session token the run already holds for the LLM proxy, so
+this needs no extra credential. The FILE NAMES are the backend's, never derived here: the name is
+how the agent learns the view name, and the platform pairs its capture against that name later.
+
+`omitted` carries the views the backend's cap dropped. They are stated to the agent beside the
+transfers that failed, since from where it stands both are a view to capture with nothing to compare
+against. This parser keeps a higher backstop of its own against a body claiming more files than any
+real set has, and an entry past it joins `omitted` rather than vanishing: a cap that shortened the
+list and said nothing would be indistinguishable, on disk and in the prompt, from a design that has
+no such screen.
+
+The pass is IDEMPOTENT over the checkout, which matters because a coding flow re-enters its
+workspace once per repair round: a non-empty file already on disk is counted and never re-fetched,
+and only a view that MISSED is retried. The per-image ceiling is enforced against the declared
+length and against the stream as it arrives, so an oversized body is refused rather than buffered.
+
 ### Skills and tool servers
 
 A job body may carry `skills[]` (procedural playbooks) and `mcpServers[]` (MCP tool servers): the
@@ -210,9 +235,13 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | File               | Responsibility                                                                                          |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
 | `src/server.ts`    | HTTP entry point; routes `/health`, `/run`, `/bootstrap`, `/blueprint`, `/jobs/{id}`.                   |
-| `src/runner.ts`    | `JobRegistry`: async job lifecycle, idempotent on `jobId`, progress tracking.                          |
+| `src/runner.ts`    | `JobRegistry`: async job lifecycle, idempotent on `jobId`, progress tracking, and the three per-job watchdogs (max-duration, inactivity, tool-silence).                          |
+| `src/jsonl-stream.ts` | The BOUNDS on a child CLI's streams, shared by both runners: `JsonlLineReader` frames its JSONL stdout while refusing to buffer a runaway record, `BoundedTail` keeps a capped tail of raw output for failure quoting. Both watchdog timers and the poll endpoints share one event loop with this parsing, so an unbounded buffer here is how a container stops answering polls with no watchdog having fired. |
 | `src/job.ts`       | Request types + validators for the job specs.                                                           |
+| `src/context-manifests.ts` | The two manifests of FILES the backend stages into the checkout: the linked-context documents and the reference design images. Their shapes plus the defensive parse of each, sharing the basename rule that keeps a body-supplied name from escaping the directory or clobbering a repo file. Both stay job body fields, so `job.ts` remains the import site. |
 | `src/pi.ts`        | Pi provider config, non-interactive run, JSON-line event + todo-progress parsing, global `AGENTS.md` guidance. |
+| `src/pi-reduction.ts` | Reducing a Pi event stream to what the run PRODUCED (summary, stats, diagnostics, terminal failure), FOLDED as records stream rather than over a retained array — memory is O(largest record), not O(records). The array-taking entry points offline tooling uses are defined in terms of the same reducer. |
+| `src/tool-silence.ts` | The tool-silence watchdog (F13) and the `ToolProgressWindow` an agent stream opens, beats and closes. Separate from the phase marker on purpose: a window is only meaningful while something able to reset it is running. |
 | `src/git.ts`       | clone / branch / commit / push + GitHub PR creation; bootstrap history reset + force-push.              |
 | `src/bootstrap.ts` | The `/bootstrap` handler (clone-or-empty → adapt → reinit + force-push).                                |
 | `src/blueprint.ts` | The `/blueprint` handler (decompose → render `blueprints/` → commit on branch).                         |
@@ -226,6 +255,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/validation-checks.ts` | Pre-PR validation: runs the job's check commands in the checkout (bounded, secret-scrubbed capture, per-command watchdog) and drives the retry-until-green loop that gates the PR. Generic: keyed off the job body, never the agent kind. |
 | `src/reproduction-proof.ts` | Bugfix reproduction proof: runs the job's declared reproduction command against two symmetric fresh worktrees (the pre-fix tree and the final tree) and computes red-then-green from the exit codes, with a repair loop that never fails the run. Generic: keyed off the job body, never the agent kind. |
 | `src/agent-capabilities.ts` | The agent CAPABILITIES a job body carries: the run's `skills` (a `SKILL.md` payload + resources) and its `mcpServers` (tool servers): with their defensive parsing and the per-CLI config writers (`--mcp-config` JSON for claude-code, `[mcp_servers.*]` TOML for Codex). Backend-authored data the harness only MATERIALISES: adding a skill or a tool server is a backend registration, never a harness change. |
+| `src/reference-screenshots.ts` | The task's REFERENCE DESIGN images: downloads the manifest a capturing job body carries into `.cat-context/reference-screenshots/` (on the run's own container session token) and composes the prompt block naming each file's view. Best-effort, time-bounded and IDEMPOTENT over the checkout, so a repair round re-costs a stat rather than a transfer. A reference that is not on disk is NAMED to the agent, whether a transfer failed or the backend's cap dropped the view, because on disk an absent file and a screen the design does not have are the same thing. Backend-authored throughout, including the file names. |
 | `src/bootstrap-mode.ts` | The repo-bootstrap MODE: clone-a-reference-or-scaffold → run the agent → refuse to push an empty tree → reinit + force-push to the pre-created target repo. |
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
@@ -240,6 +270,7 @@ runner):
 | `PORT`                | `8080`          | HTTP port the harness listens on.                           |
 | `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
 | `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
+| `JOB_TOOL_SILENCE_MS` | half `JOB_MAX_DURATION_MS` (30m at its default) | Kills an agent that keeps producing output but completes no tool call for this long: the "chatty hang" neither watchdog above can see, since streamed output resets the inactivity timer on every chunk while nothing gets done (stuck-run audit F13). Armed ONLY while an agent CLI that reports completed tool calls is running (each runner opens its own window and closes it on exit), so clone / dependency install / push / a validation loop's check commands sit outside it — they are activity-silent by nature and bounded by their own per-command timeouts — and each repair pass opens a fresh window. Derived from the job ceiling rather than fixed. It fires only when output arrived during the window that elapsed, which is what leaves a genuinely quiet run to `JOB_INACTIVITY_MS` and its clearer diagnostic. `0` disables it. |
 | `JOB_MAX_CONSECUTIVE_MCP_CALLS` | `40` | Consecutive tool-server (`mcp__*`) calls with no other tool call between before the run counts as a lookup loop. The counter-bound the no-edit exemption above owes; a per-kind `tuning.guardLimits` entry can only RAISE it. |
 | `JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS` | `200` | Consecutive calls of ANY no-edit-exempt family (reads, searches, web, tool servers, subagent dispatches) with no action call between them. The backstop above the per-family caps, since each of those resets on a call outside its own family; sized as a backstop rather than a research judgement, and reset by any `bash`/edit. |
 | `JOB_COLD_START_MS`   | `120000` (2m)   | First-output window (ADR 0026 D4). A job that has produced nothing this long records a cold-start diagnostic (a likely onboarding/auth wedge) WITHOUT being killed: logged, exposed on `GET /jobs/{id}`, and folded into the failure `detail` if the job goes on to fail. `0` disables it. |

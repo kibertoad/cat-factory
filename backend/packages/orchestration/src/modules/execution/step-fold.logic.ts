@@ -11,6 +11,42 @@ import { shouldPersistActivity } from './job.logic.js'
 // it and it is the exact counterpart the poll site reads back.
 
 /**
+ * Rebuild the job handle a settled/running POLL addresses, from the step alone.
+ *
+ * The exact counterpart of {@link recordDispatchAttribution}, and here for the same reason it is:
+ * the poll site has no dispatch in scope, so everything the executor needs off the handle has to
+ * be read back from what the dispatch persisted. Each field is load-bearing on the container
+ * executor:
+ *
+ *  - `agentKind` — `toRunResult` maps a migrated `merger`/`on-call`'s structured result into
+ *    `mergeAssessment`/`onCallAssessment` KIND-AWARE, so without it the coercion no-ops and the
+ *    merge gate / post-release-health gate see no assessment at all;
+ *  - `runId` — the executor addresses the same per-run container; the step stored only a job id;
+ *  - `model` — absent, `recordStepResult` records 'unknown', which `SpendService.parseModel`
+ *    splits into provider "unknown" / model "", corrupting the `token_usage` row of EVERY
+ *    subscription-harness step;
+ *  - `subscriptionTokenId` — gates the pooled-token usage feedback that drives usage-aware
+ *    rotation; absent, it is skipped outright;
+ *  - `initiatedByUserId` — the quota-cycle counters' fallback target for a PERSONAL
+ *    (individual-usage) run, which leases no pooled token; absent, the target is null.
+ */
+export function pollHandleFor(
+  step: PipelineStep,
+  workspaceId: string,
+  executionId: string,
+): AgentJobHandle {
+  return {
+    jobId: step.jobId!,
+    runId: executionId,
+    workspaceId,
+    agentKind: step.agentKind,
+    model: step.model,
+    subscriptionTokenId: step.subscriptionTokenId,
+    initiatedByUserId: step.initiatedByUserId,
+  }
+}
+
+/**
  * Persist the attribution a DISPATCH knows and the poll site cannot re-derive: the resolved
  * model, plus (for a subscription-harness job) the leased pool row and the run's initiator,
  * plus the agent kind the job actually ran AS.
@@ -58,6 +94,40 @@ export function recordDispatchAttribution(
   step.dispatches = existing
     ? dispatches.map((d) => (d === existing ? { ...d, count: d.count + 1 } : d))
     : [...dispatches, { agentKind: dispatchedKind, count: 1 }]
+}
+
+/**
+ * Record an ACCEPTED container dispatch on the step: the job handle to poll, the attribution
+ * only the dispatch site can resolve ({@link recordDispatchAttribution}), and the container
+ * projection the board reads.
+ *
+ * One helper rather than three lines at each of the six dispatch sites, because the middle line
+ * is the one that goes missing. `recordDispatchAttribution` persists the resolved model, the
+ * leased `subscriptionTokenId` and the run's `initiatedByUserId`, and the job settles on the
+ * durable poll path, which rebuilds its handle from the STEP alone: an omission is invisible in
+ * testing and surfaces in production as attribution landing on "unknown"/nobody, never as an
+ * error. Two sites carried duplicated comments warning about exactly that. Going through one
+ * function makes the warning structural.
+ *
+ * `dispatchedKind` stays a required parameter for the reason its callee documents: `step.agentKind`
+ * is routinely not what ran (a gate escalates to its helper, a Tester hands off to its fixer).
+ *
+ * The container is marked `up` because the dispatch RETURNED, which is the only thing known here;
+ * the live phase and the container id/url arrive on the first poll. A finished cold boot must not
+ * linger as a stale "spinning up".
+ *
+ * Returns the stamped job id, so a caller that must report `awaiting_job` from OUTSIDE the branch
+ * that dispatched holds a `string` rather than re-reading the now-optional `step.jobId`.
+ */
+export function recordDispatchedJob(
+  step: PipelineStep,
+  handle: AgentJobHandle,
+  dispatchedKind: string,
+): string {
+  step.jobId = handle.jobId
+  recordDispatchAttribution(step, handle, dispatchedKind)
+  step.container = { status: 'up' }
+  return handle.jobId
 }
 
 export function applyContainerRunning(

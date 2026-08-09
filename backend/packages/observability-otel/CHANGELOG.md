@@ -1,5 +1,262 @@
 # @cat-factory/observability-otel
 
+## 0.18.21
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/contracts@0.286.0
+  - @cat-factory/kernel@0.281.0
+
+## 0.18.20
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+  - @cat-factory/kernel@0.280.0
+
+## 0.18.19
+
+### Patch Changes
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+  - @cat-factory/kernel@0.279.3
+
+## 0.18.18
+
+### Patch Changes
+
+- Updated dependencies [3036af7]
+  - @cat-factory/kernel@0.279.2
+
+## 0.18.17
+
+### Patch Changes
+
+- Updated dependencies [de7caaf]
+  - @cat-factory/contracts@0.283.1
+  - @cat-factory/kernel@0.279.1
+
+## 0.18.16
+
+### Patch Changes
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+
+## 0.18.15
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+
+## 0.18.14
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/kernel@0.277.0
+
+## 0.18.13
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+
+## 0.18.12
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/kernel@0.275.4
+
+## 0.18.11
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/kernel@0.275.3
+
+## 0.18.10
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/kernel@0.275.2
+
+## 0.18.9
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/kernel@0.275.1
+
+## 0.18.8
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/kernel@0.275.0
+
+## 0.18.7
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+  - @cat-factory/kernel@0.274.0
+
+## 0.18.6
+
+### Patch Changes
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/contracts@0.275.0
+
+## 0.18.5
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+  - @cat-factory/contracts@0.274.0
+
+## 0.18.4
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/kernel@0.271.0
+  - @cat-factory/contracts@0.273.0
+
+## 0.18.3
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+  - @cat-factory/contracts@0.272.0
+
+## 0.18.2
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/contracts@0.271.0
+  - @cat-factory/kernel@0.269.0
+
+## 0.18.1
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+  - @cat-factory/kernel@0.268.0
+
+## 0.18.0
+
+### Minor Changes
+
+- 01bb6d2: Keep the cause of a failed dispatch and a dead durable driver, instead of discarding it at the
+  moment it becomes the only thing anyone wants.
+
+  Three sites had the same shape: the record of a failure was written by the thing that only exists
+  once the failure did not happen.
+
+  A run's `diagnostics.lastDispatch` was stamped from the job HANDLE, which `startJob` returns only
+  after a container has accepted the job. So the two failure classes the block exists to explain, a
+  container that never started and a preflight rejection like "GitHub not connected", were exactly
+  the ones that recorded nothing. The block is now opened before the dispatch from what is already
+  known and refined afterwards by what only the accepted dispatch resolved, and it carries the
+  dispatch's own failure verdict, which the step also holds but loses to the next retry. Inline
+  steps stamp one too, naming their backend `inline`: dispatching nowhere is why they stamped
+  nothing, and the result was a mixed pipeline reporting whatever container step ran last as where
+  the run was when it died.
+
+  The Cloudflare stale-run sweeper answered "the instance was lost, re-create it" for both of its
+  swallowed error paths, so a Workflows API outage read as every stale run losing its instance at
+  once and re-drove the fleet with no log line to say why. The lookup now returns a probe over four
+  states, and the fourth is the point: an instance it could not classify produces no action at all.
+  Every action the sweep has is destructive against a run that is actually fine, so one unclassified
+  tick costs a run some recovery latency where a guess costs it its container. Two states were also
+  reaching the finalize branch by fall-through, Workflows' own `unknown` status and an instance
+  finishing its work before pausing, and a terminal instance's own error, destructured by nobody,
+  now reaches the stop reason that until now said only that some driver ended without finalizing
+  something. An unconfigured workflow binding says so once per isolate rather than reporting the
+  kind as healthy forever.
+
+  The local pooled container poll now passes `postMortem`, the same argument the per-run poll always
+  did, so a pool member that dies mid-run leaves its exit state and log tail behind rather than the
+  bare eviction sentinel.
+
+  Additive on the public API (`info.version` 1.29.0): `diagnostics.lastDispatch` grows an optional
+  `failure` object and `executionBackend` one further value. What does change for a consumer is the
+  population, since a pure-inline run used to answer no diagnostics at all and now answers a block.
+  A new `sweep.run_state_unknown` operational counter reports what the sweeper could not classify,
+  which is the one signal that separates a blind sweeper from a healthy one.
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+
+## 0.17.7
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+  - @cat-factory/kernel@0.266.0
+
+## 0.17.6
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+  - @cat-factory/kernel@0.265.0
+
+## 0.17.5
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/contracts@0.266.0
+  - @cat-factory/kernel@0.264.0
+
+## 0.17.4
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+  - @cat-factory/kernel@0.263.0
+
 ## 0.17.3
 
 ### Patch Changes

@@ -27,7 +27,19 @@ export { canCreateRepo } from './modules/github/provisioning.logic.js'
 export {
   DocumentConnectionService,
   type DocumentConnectionServiceDependencies,
+  type DocumentOAuthRenewer,
 } from './modules/documents/DocumentConnectionService.js'
+// The ONE place a document-source credential bag is sealed or opened — over the deployment's own
+// key, or over the mothership's when this node holds none.
+export {
+  createDocumentConnectionStore,
+  type DocumentConnectionStoreDependencies,
+} from './modules/documents/documentConnectionStore.js'
+export {
+  DocumentSourceOAuthService,
+  type DocumentOAuthClient,
+  type DocumentSourceOAuthServiceDependencies,
+} from './modules/documents/DocumentSourceOAuthService.js'
 export {
   DocumentContentResolverService,
   type DocumentContentResolverServiceDependencies,
@@ -60,6 +72,7 @@ export {
   DocumentPlannerService,
   type DocumentPlannerServiceDependencies,
 } from './modules/documents/DocumentPlannerService.js'
+export type { PlanTarget } from './modules/documents/documents.logic.js'
 export {
   DocumentLinkService,
   type DocumentLinkServiceDependencies,
@@ -76,7 +89,7 @@ export * as designLogic from './modules/documents/design.logic.js'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic.js'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic.js'
 export { GITHUB_DOCS_DESCRIPTOR } from './modules/documents/github-docs.logic.js'
-export { FIGMA_DESCRIPTOR } from './modules/documents/figma.logic.js'
+export { FIGMA_DESCRIPTOR, FIGMA_OAUTH } from './modules/documents/figma.logic.js'
 export { ZEPLIN_DESCRIPTOR } from './modules/documents/zeplin.logic.js'
 // Shared host-pinned HTTP helpers reused by the fixed-host document providers.
 export {
@@ -112,6 +125,11 @@ export {
   TaskConnectionService,
   type TaskConnectionServiceDependencies,
 } from './modules/tasks/TaskConnectionService.js'
+// The ONE place a tracker credential bag is sealed or opened; the document-source sibling above.
+export {
+  createTaskConnectionStore,
+  type TaskConnectionStoreDependencies,
+} from './modules/tasks/taskConnectionStore.js'
 export {
   TaskImportService,
   type TaskImportServiceDependencies,
@@ -146,9 +164,17 @@ export { judgeIssueEventForIntake } from './modules/tasks/intakeMatch.logic.js'
 export type { IntakeMatchVerdict, IntakePredicateName } from './modules/tasks/intakeMatch.logic.js'
 export {
   githubIssuesWebhookAdapter,
+  gitlabIssuesWebhookAdapter,
   jiraWebhookAdapter,
   linearWebhookAdapter,
 } from './modules/tasks/webhook/adapters.js'
+export {
+  DEFAULT_IN_PROGRESS_LABEL,
+  createRepoIssueWriteback,
+  type RepoIssueWritebackDependencies,
+} from './modules/tasks/writeback/repo-issue.writeback.js'
+export { jiraWriteback } from './modules/tasks/writeback/jira.writeback.js'
+export { linearWriteback } from './modules/tasks/writeback/linear.writeback.js'
 export {
   MapTaskSourceRegistry,
   type TaskContextView,
@@ -174,7 +200,6 @@ export * as linearCreateLogic from './modules/tracker/linear.create.logic.js'
 export * as linearWritebackLogic from './modules/tracker/linear.writeback.logic.js'
 export { extractReferences, type ExtractedReferences } from './modules/corpus/references.logic.js'
 export {
-  DEFAULT_IN_PROGRESS_LABEL,
   IssueWritebackService,
   type IssueWritebackServiceDependencies,
 } from './modules/writeback/IssueWritebackService.js'
@@ -198,6 +223,15 @@ export {
   GitHubIssuesProvider,
   type GitHubIssuesProviderDependencies,
 } from './modules/tasks/GitHubIssuesProvider.js'
+export * as gitlabIssuesLogic from './modules/tasks/gitlab-issues.logic.js'
+export {
+  GITLAB_ISSUES_DESCRIPTOR,
+  gitlabWebBaseFromApiBase,
+} from './modules/tasks/gitlab-issues.logic.js'
+export {
+  GitLabIssuesProvider,
+  type GitLabIssuesProviderDependencies,
+} from './modules/tasks/GitLabIssuesProvider.js'
 // The Jira task-source provider (a thin `fetch` shell around the pure Jira logic):
 // runtime-neutral, so both facades compose the SAME class instead of a per-runtime copy.
 export { JiraProvider, JiraApiError } from './modules/tasks/JiraProvider.js'
@@ -446,12 +480,14 @@ export {
 } from './modules/slack/slack.logic.js'
 export {
   ProviderSubscriptionService,
+  PROVIDER_SUBSCRIPTIONS_CIPHER_INFO,
   type ProviderSubscriptionServiceDependencies,
   type VendorCredentialSummary,
   type LeasedSubscriptionToken,
 } from './modules/providers/ProviderSubscriptionService.js'
 export {
   ApiKeyService,
+  PROVIDER_API_KEYS_CIPHER_INFO,
   type ApiKeyServiceDependencies,
   type ApiKeySummary,
   type LeasedApiKey,
@@ -466,6 +502,7 @@ export {
 } from './modules/publicApi/PublicApiKeyService.js'
 export {
   PersonalSubscriptionService,
+  PERSONAL_SUBSCRIPTIONS_CIPHER_INFO,
   type PersonalSubscriptionServiceDependencies,
   type LeasedPersonalToken,
   DEFAULT_ACTIVATION_TTL_MS,
@@ -473,6 +510,7 @@ export {
 } from './modules/providers/PersonalSubscriptionService.js'
 export {
   LocalModelEndpointService,
+  LOCAL_MODEL_ENDPOINTS_CIPHER_INFO,
   type LocalModelEndpointServiceDependencies,
   type ResolvedLocalEndpoint,
 } from './modules/providers/LocalModelEndpointService.js'
@@ -485,6 +523,7 @@ export {
 } from './modules/providers/localModelUrl.js'
 export {
   UserSecretService,
+  USER_SECRET_CIPHER_INFO,
   type UserSecretServiceDependencies,
 } from './modules/providers/UserSecretService.js'
 export {
@@ -620,4 +659,15 @@ export {
   type EmailConnectionServiceDependencies,
   type EmailConnection,
 } from './modules/email/EmailConnectionService.js'
+export {
+  EmailNotificationChannel,
+  type EmailNotificationChannelDependencies,
+} from './modules/email/EmailNotificationChannel.js'
+export {
+  notificationDeepLink,
+  notificationTypeLabel,
+  renderNotificationEmail,
+  resolveRecipientAddresses,
+  type RenderedNotificationEmail,
+} from './modules/email/emailNotification.logic.js'
 export { AuditService, type AuditServiceDependencies } from './modules/audit/AuditService.js'

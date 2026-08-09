@@ -96,7 +96,7 @@ export interface PipelinesContext {
   draftTesterQuality: Ref<(TesterQualityConfig | null)[]>
   draftStepOptions: Ref<(StepOptions | null)[]>
   draftLabels: Ref<string[]>
-  draftPurpose: Ref<PipelinePurpose | null>
+  draftPurpose: Ref<PipelinePurpose>
   draftName: Ref<string>
   draftDescription: Ref<string>
   editingId: Ref<string | null>

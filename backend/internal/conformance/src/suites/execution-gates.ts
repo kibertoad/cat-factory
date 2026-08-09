@@ -46,6 +46,7 @@ function registerEstimateGatingTests(harness: ConformanceHarness): void {
     const { workspace } = await low.createWorkspace()
     const lowPipe = await low.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
       name: 'Estimator-gated reviewer (low)',
+      purpose: 'build',
       agentKinds: ['task-estimator', 'coder', 'reviewer'],
       gating,
     })
@@ -70,6 +71,7 @@ function registerEstimateGatingTests(harness: ConformanceHarness): void {
     const { workspace: ws2 } = await high.createWorkspace()
     const hiPipe = await high.call<Pipeline>('POST', `/workspaces/${ws2.id}/pipelines`, {
       name: 'Estimator-gated reviewer (high)',
+      purpose: 'build',
       agentKinds: ['task-estimator', 'coder', 'reviewer'],
       gating,
     })
@@ -103,6 +105,7 @@ function registerEstimateGatingTests(harness: ConformanceHarness): void {
     const { workspace } = await app.createWorkspace()
     const pipe = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
       name: 'Estimate-gated architect',
+      purpose: 'build',
       agentKinds: ['task-estimator', 'architect', 'architect-companion', 'coder'],
       gating: [null, { enabled: true, minComplexity: 0.6 }, null, null],
     })
@@ -136,6 +139,7 @@ function registerEstimateGatingTests(harness: ConformanceHarness): void {
     const { workspace } = await app.createWorkspace()
     const res = await app.call('POST', `/workspaces/${workspace.id}/pipelines`, {
       name: 'Gated merger',
+      purpose: 'build',
       agentKinds: ['task-estimator', 'coder', 'merger'],
       gating: [null, null, { enabled: true, minRisk: 0.6 }],
     })
@@ -150,6 +154,7 @@ function registerEstimateGatingTests(harness: ConformanceHarness): void {
     const { workspace } = await app.createWorkspace()
     const res = await app.call('POST', `/workspaces/${workspace.id}/pipelines`, {
       name: 'Gated human gate',
+      purpose: 'build',
       agentKinds: ['task-estimator', 'architect', 'coder'],
       gates: [false, true, false],
       gating: [null, { enabled: true, minRisk: 0.6 }, null],
@@ -165,6 +170,7 @@ function registerEstimateGatingTests(harness: ConformanceHarness): void {
     const { workspace } = await app.createWorkspace()
     const res = await app.call('POST', `/workspaces/${workspace.id}/pipelines`, {
       name: 'Gated without estimator',
+      purpose: 'build',
       agentKinds: ['coder', 'reviewer'],
       gating: [null, { enabled: true, minRisk: 0.6 }],
     })
@@ -179,6 +185,7 @@ function registerEstimateGatingTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Labelled',
+      purpose: 'build',
       agentKinds: ['coder'],
       labels: ['experiment', 'wip'],
     })
@@ -224,6 +231,7 @@ function registerEstimateGatingTests(harness: ConformanceHarness): void {
 
     const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Recurring only',
+      purpose: 'build',
       agentKinds: ['coder'],
       availability: 'recurring',
     })
@@ -247,6 +255,7 @@ function registerEstimateGatingTests(harness: ConformanceHarness): void {
     // A clone preserves the source's availability.
     const source = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'One-off only',
+      purpose: 'build',
       agentKinds: ['coder'],
       availability: 'one-off',
     })
@@ -315,6 +324,7 @@ function registerAsyncJobAndPrTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Spec + reviewer',
+      purpose: 'build',
       agentKinds: ['spec-writer', 'spec-companion'],
     })
     expect(pipeline.status).toBe(201)
@@ -539,6 +549,7 @@ function registerApprovalGateTests(harness: ConformanceHarness): void {
 
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       gates: [true, false],
     })
@@ -616,6 +627,7 @@ function registerApprovalGateTests(harness: ConformanceHarness): void {
 
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated artifact producer',
+      purpose: 'build',
       agentKinds: ['spec-writer', 'coder'],
       gates: [true, false],
     })
@@ -672,6 +684,7 @@ function registerApprovalGateTests(harness: ConformanceHarness): void {
       // The pipeline itself declares NO gates; the per-run override enables the first one.
       const ungated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Override on',
+        purpose: 'build',
         agentKinds: ['architect', 'coder'],
         gates: [false, false],
       })
@@ -700,6 +713,7 @@ function registerApprovalGateTests(harness: ConformanceHarness): void {
       // straight through (no human approval) — the docs-refresh "human review off" default.
       const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Override off',
+        purpose: 'build',
         agentKinds: ['architect', 'coder'],
         gates: [true, false],
       })
@@ -720,6 +734,7 @@ function registerApprovalGateTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Mismatch',
+        purpose: 'build',
         agentKinds: ['architect', 'coder'],
         gates: [false, false],
       })
@@ -738,6 +753,7 @@ function registerApprovalGateTests(harness: ConformanceHarness): void {
 
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       gates: [true, false],
     })
@@ -777,6 +793,7 @@ function registerApprovalGateTests(harness: ConformanceHarness): void {
 
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       gates: [true, false],
     })
@@ -814,6 +831,7 @@ function registerApprovalGateTests(harness: ConformanceHarness): void {
 
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       gates: [true, false],
     })
@@ -887,6 +905,7 @@ function registerRalphLoopTests(harness: ConformanceHarness): void {
       expect(task.status).toBe(201)
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Ralph only',
+        purpose: 'build',
         agentKinds: ['ralph'],
       })
       const start = await app.call<ExecutionInstance>(
@@ -928,6 +947,7 @@ function registerRalphLoopTests(harness: ConformanceHarness): void {
       })
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Ralph only',
+        purpose: 'build',
         agentKinds: ['ralph'],
       })
       const start = await app.call<ExecutionInstance>(
@@ -960,6 +980,7 @@ function registerRalphLoopTests(harness: ConformanceHarness): void {
       })
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Ralph only',
+        purpose: 'build',
         agentKinds: ['ralph'],
       })
       const start = await app.call(
@@ -996,6 +1017,7 @@ function registerRalphLoopTests(harness: ConformanceHarness): void {
       })
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Ralph only',
+        purpose: 'build',
         agentKinds: ['ralph'],
       })
       const start = await app.call<ExecutionInstance>(
@@ -1041,6 +1063,7 @@ function registerRalphLoopTests(harness: ConformanceHarness): void {
       })
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Ralph only',
+        purpose: 'build',
         agentKinds: ['ralph'],
       })
       await app.call<ExecutionInstance>(

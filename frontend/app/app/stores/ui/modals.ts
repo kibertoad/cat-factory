@@ -192,6 +192,11 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   // opened standalone, and the modal offers every container on the board.
   const bugHunt = ref<{ source: TaskSourceKind | null; containerId: string | null } | null>(null)
 
+  // Start-from-design: paste a design link, and the resolved reference is staged onto a new task
+  // in `frameId`. `frameId` is always present — the affordance lives on a frame header, and the
+  // flow ends in the add-task form, which needs a container to create in.
+  const startFromDesign = ref<{ frameId: string } | null>(null)
+
   // Add-task modal: the container (service frame or module) a new task is being
   // added to, or null when closed. The user types the title + description; nothing
   // is launched until they explicitly start the created task.
@@ -266,6 +271,13 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   function closeBugHunt() {
     bugHunt.value = null
   }
+  function openStartFromDesign(frameId: string) {
+    resetHubReturn()
+    startFromDesign.value = { frameId }
+  }
+  function closeStartFromDesign() {
+    startFromDesign.value = null
+  }
   function openAddTask(containerId: string, prefill: AddTaskPrefill | null = null) {
     addTaskPrefill.value = prefill
     addTaskContainerId.value = containerId
@@ -301,6 +313,7 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     taskConnect,
     taskImport,
     bugHunt,
+    startFromDesign,
     addTaskContainerId,
     addTaskPrefill,
     reviewFrictionContext,
@@ -320,6 +333,8 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     closeTaskImport,
     openBugHunt,
     closeBugHunt,
+    openStartFromDesign,
+    closeStartFromDesign,
     openAddTask,
     closeAddTask,
     openReviewFriction,
@@ -457,6 +472,10 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   const githubOpen = ref(false)
   // Slack integration panel (connect the account's Slack + per-workspace routing).
   const slackOpen = ref(false)
+  // The notification manager: which notification types this board delivers on which channel
+  // (the in-app push and email). Distinct from `slackOpen`, which configures Slack's
+  // DESTINATION per type — this one decides the channels whose delivery is a plain yes/no.
+  const notificationSettingsOpen = ref(false)
   // Observability integration: the post-release-health connection panel (Datadog
   // today, pluggable). NB: distinct from `observabilityInstanceId`, which is the
   // LLM per-call observability panel (see the result-views slice).
@@ -500,6 +519,13 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   }
   function closeSlack() {
     slackOpen.value = false
+  }
+  function openNotificationSettings() {
+    resetHubReturn()
+    notificationSettingsOpen.value = true
+  }
+  function closeNotificationSettings() {
+    notificationSettingsOpen.value = false
   }
   function openObservabilityConnection() {
     resetHubReturn()
@@ -571,6 +597,7 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   return {
     githubOpen,
     slackOpen,
+    notificationSettingsOpen,
     observabilityConnectionOpen,
     operatorDashboardOpen,
     reportsOpen,
@@ -585,6 +612,8 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     closeGitHub,
     openSlack,
     closeSlack,
+    openNotificationSettings,
+    closeNotificationSettings,
     openObservabilityConnection,
     closeObservabilityConnection,
     openOperatorDashboard,

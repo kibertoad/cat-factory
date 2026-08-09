@@ -263,6 +263,46 @@ describe('composeEnvironments', () => {
     expect(failed.gaps.join(' ')).toContain('needs reclaiming by hand')
   })
 
+  it('separates an environment kept ON PURPOSE from one nobody reclaimed', () => {
+    // Same evidence on both runs: something came up and nothing took it down. What differs is
+    // whether the run ever undertook to. `pending` tells a reviewer to wait for a teardown and an
+    // operator to go find the failure; on a preview environment there is neither, and the section
+    // said so in exactly the words that send both of them looking.
+    const retaining = step({
+      agentKind: 'deployer',
+      stepOptions: { retainEnvironment: true },
+      deployEnvs: { frm_api: { status: 'ready', url: 'https://env.test' } },
+    })
+    const section = compose([retaining, uiTester()], { provisioning: read(provisioned(1_000)) })
+
+    expect(section.teardown).toBe('retained')
+    // Nothing is MISSING from the proof: the run did everything it undertook to do.
+    expect(section.proof).toBe('complete')
+    expect(section.gaps).toEqual([])
+    // And the environment being still live is stated rather than left to be inferred.
+    expect(renderEnvironments(section).join('\n')).toContain('retained past the run by design')
+  })
+
+  it('never lets a retain declaration soften a teardown that was attempted', () => {
+    // The declaration says "no reclaim is coming from this run". It says nothing about one that
+    // ran and failed, or one that ran and could not be verified, and must not launder either.
+    const retaining = step({
+      agentKind: 'deployer',
+      stepOptions: { retainEnvironment: true },
+      deployEnvs: { frm_api: { status: 'ready', url: 'https://env.test' } },
+    })
+    expect(
+      compose([retaining, uiTester()], {
+        provisioning: read(provisioned(1_000), teardownFailed(4_000)),
+      }).teardown,
+    ).toBe('failed')
+    expect(
+      compose([retaining, uiTester()], {
+        provisioning: read(provisioned(1_000), tornDown(9_000)),
+      }).teardown,
+    ).toBe('unconfirmed')
+  })
+
   it('refuses to call an UNVERIFIED teardown a reclaim', () => {
     // The regression this exists for: a provider whose teardown is a declared no-op (a manifest
     // with no `teardown:` request) returns success having destroyed nothing. Reading the teardown

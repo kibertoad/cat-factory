@@ -1,24 +1,15 @@
 # Design-context sources (Figma, Zeplin), and the Claude Design workflow
 
-> How **design context** (component structure, layout, design tokens, visual intent) is fed
-> into the UI/frontend coding agents.
+> **Connecting a design source and using it is on the website**:
+> [Feed Design Context to Agents](https://www.catfactory.ai/guide/design-context.html) owns connecting Figma or
+> Zeplin, what the agent receives, what each import cap asks the reader to do, the freshness
+> verdicts and the Claude Design workflow. This page is how the integration is BUILT: the
+> source-neutral model, why each cap is shaped the way it is, and the freshness ladder's cost model.
 >
-> **Supported backend sources:** **Figma** (`FigmaProvider`, per-workspace PAT) and **Zeplin**
-> (`ZeplinProvider`, per-workspace PAT). Both are real, server-fetchable REST integrations that
-> ride the shared, **source-neutral** `DesignContext` model + `renderDesignContext` renderer, so
-> the abstraction is not Figma-shaped.
->
-> **Claude Design is NOT a backend source**: see "Claude Design: via Claude Code, not a backend
-> connector" below.
-
-## The problem
-
-The UI agents (`coder`, `spec-writer`, `architect`, `playwright`) get task context today only from
-**prose**: Notion / Confluence / GitHub docs and tracker issues (see
-[`document-sources.md`](./document-sources.md)). They have no view of the **design**: the actual
-frames/screens, the component tree, the spacing/colour tokens, or which design-system component a
-screen is built from. So an agent implementing a frontend task guesses at layout, reinvents
-components that already exist, and ignores the team's tokens.
+> **Supported backend sources:** **Figma** (`FigmaProvider`, a per-workspace OAuth grant or PAT)
+> and **Zeplin** (`ZeplinProvider`, per-workspace PAT). Both are real, server-fetchable REST
+> integrations that ride the shared, **source-neutral** `DesignContext` model +
+> `renderDesignContext` renderer, so the abstraction is not Figma-shaped.
 
 ## The hard constraint: agents are headless
 
@@ -64,16 +55,10 @@ model** before rendering:
 ### One cap, one note: the caps are not interchangeable
 
 A single "was truncated" flag was the original bug here, in both directions. Each cap gets its OWN
-note because each asks the reader for something different, and one of them must not stop the walk:
-
-| Cap                | Blast radius                      | The walk         | What the reader does      |
-| ------------------ | --------------------------------- | ---------------- | ------------------------- |
-| Tree depth         | one BRANCH                        | carries on       | link that sub-frame's URL |
-| Per-frame nodes    | the rest of that frame            | stops that frame | the frame is too big      |
-| Import-wide nodes  | that frame and every one after    | stops everything | import fewer frames       |
-| Per-frame text     | the rest of that frame's text     | stops that frame | the frame is too wordy    |
-| Import-wide text   | that frame's text and all after   | stops everything | import fewer frames       |
-| Components, tokens | the design SYSTEM, not the frames | n/a              | open the library file     |
+note because each asks the reader for something different, and one of them must not stop the walk.
+The six caps and what each one asks a reader to do are the site's
+[Caps, and what each one asks you to do](https://www.catfactory.ai/guide/design-context.html#caps-and-what-each-one-asks-you-to-do);
+what shapes them is the pair below.
 
 Two traps this shape exists to prevent:
 
@@ -199,7 +184,13 @@ review's and the first dispatch's) free to disagree.
 
 ## Figma
 
-- **Auth:** a per-workspace Figma PAT (`X-Figma-Token`), sealed like Notion/Confluence.
+- **Auth:** whichever credential the workspace connected, sealed like Notion/Confluence. An OAuth
+  grant (`Authorization: Bearer`, `file_content:read` + `file_variables:read`) or a personal access
+  token (`X-Figma-Token`). Which header is sent is decided by which key the bag carries, and a
+  grant WINS when both are present: it is the credential the platform can renew, and a PAT an
+  earlier connect left behind must not outlive the rotation it was replaced by. The grant flow, the
+  registered app it needs, and where renewal happens are in
+  [`document-sources.md`](./document-sources.md).
 - **Fetch (node link):** `GET /v1/files/:key/nodes` returns the referenced frame's subtree, bounded
   by the same `depth=` the whole-file path uses.
 - **Fetch (whole file):** `GET /v1/files/:key?depth=2` is an OUTLINE read (pages plus their
@@ -230,6 +221,7 @@ padding 16/24]`. Bounded by the same depth/node caps as the tree.
   leans on; dropping the most-used component is the one outcome that would make the section useless.
 - **Preview:** `GET /v1/images/:key` → a best-effort short-lived rendered-preview URL on a
   `### References` line (no download: a non-multimodal agent ignores it).
+- **Renders:** the same endpoint, downloaded. See [Renders](#renders) below.
 - **Ref/auto-match:** `parseFigmaRef` canonicalises a `figma.com` share URL (dash node-ids, title
   segments, `&t=` params) to the stable `<fileKey>[:<nodeId>]` external id, matched by the
   `documentUrlResolver` seam regardless of URL-string differences.
@@ -258,28 +250,28 @@ components` (→ grouped components), `/projects/:id/design_tokens` (→ colours
 The Zeplin endpoint paths are the documented REST shapes and are marked provisional/verify-at-build
 (the deterministic mapping is unit-tested independent of the network).
 
-## Claude Design: via Claude Code, not a backend connector
+## Claude Design: why there is no provider
 
-Anthropic's **Claude Design** (claude.ai/design) cannot be a backend document source. Its only
-programmatic read path is **login-bound**: Claude Code's built-in **`DesignSync`** tool (paired with
-the **`/design-sync`** skill) reads/writes design-system projects through the user's **claude.ai
-login** (or a `/design-login` design authorization); `list_projects` / `list_files` / `get_file`.
-There is **no per-workspace/per-user service token** a hosted, multi-tenant, headless backend could
-store and use in async agent containers (which have no claude.ai login). Community "Claude design
-studio" MCP servers are a different thing (local HTML/CSS generation), not a service-token read of
-existing projects.
+Anthropic's **Claude Design** (claude.ai/design) cannot be a backend document source, and the
+supported workflow (run `/design-sync` in Claude Code, commit the result, and the coding agents read
+it off the checkout) is on the site's
+[Claude Design: commit it, don't connect it](https://www.catfactory.ai/guide/design-context.html#claude-design-commit-it-don-t-connect-it).
 
-**The supported workflow** for getting Claude Design context to the agents is therefore:
-
-1. In **Claude Code**, run **`/design-sync`** to pull a design-system project into the repo
-   (component HTML + `_ds_manifest.json` + CSS), e.g. under `design/` or `docs/design/`.
-2. **Commit** it. cat-factory's coding agents read the checkout natively, so the design system is
-   already on disk for every run, no connector, no credential, no materialization step needed.
-
-This is why the earlier per-user-PAT Claude Design provider (and its `user_document_connections`
-store + `credentialScope` plumbing) was removed: it targeted a service-token API that does not exist.
+The reason it cannot be one is the record worth keeping, because a per-user-PAT Claude Design
+provider WAS built here and removed, along with its `user_document_connections` store and the
+`credentialScope` plumbing it needed. Its only programmatic read path is **login-bound**: Claude
+Code's built-in `DesignSync` tool reads design-system projects through the user's claude.ai login
+(or a `/design-login` authorization), and there is no per-workspace or per-user service token a
+hosted, multi-tenant, headless backend could store and use in async agent containers, which have no
+claude.ai login. It targeted an API that does not exist. Community "Claude design studio" MCP
+servers are a different thing (local HTML/CSS generation), not a service-token read of existing
+projects.
 
 ## Next drop-in: Penpot
+
+The Figma OAuth half is what makes connecting a designer-doable step rather than "go and mint a
+personal access token": the PAT path stays for deployments that prefer it, and for one that has
+registered no Figma app it remains the only way in.
 
 The next provider to add is **Penpot** (open-source, self-hostable, personal access tokens, W3C-DTCG
 design tokens). It's the natural stress-test of the remaining abstraction seam: being self-hosted, it
@@ -287,12 +279,51 @@ needs a **per-site `baseUrl` credential field**, exactly the model the existing 
 provider already uses. Mapping Penpot's boards/tokens into `DesignContext` is the only new code; the
 table, link plumbing, controller, and renderer are all reused.
 
+## Renders
+
+The text half describes a screen; the render is the screen. An import now DOWNLOADS the pixels and
+retains them, through the kernel `DocumentSourceProvider.fetchRenders` port, so the design's frames
+land on the same shelf the visual-confirmation gate already reads from (`kind: 'reference'` binary
+artifacts). Nothing consumes them yet: pairing them into the gate and handing them to image-capable
+models are the later slices of the same track.
+
+- **Separate from `fetchDocument`, on purpose.** The two are wanted at different moments and cost
+  different things. A design file's version moves on ANY edit anywhere in it, so the dispatch-time
+  freshness ladder re-fetches the text often and writes nothing but a token most of the time; the
+  images are only re-downloaded when the body a reader sees actually CHANGED. Folded into one call,
+  an unrelated edit on another page would put megabytes of PNGs on the critical path of a step
+  dispatch.
+- **What is rendered:** the linked frame for a node ref; the first `MAX_RENDERS` (6) top-level frames
+  in document order for a whole-file ref. Deliberately fewer than the twelve frames the TEXT import
+  covers, because the two bound different budgets: a frame's prose costs the ~256 KB context corpus
+  a few KB, its PNG costs the account's blob storage a megabyte or two.
+- **The `view` is the frame's NAME**, which is the pairing key a captured screenshot is matched
+  against. An unnamed frame falls back to its id rather than a shared placeholder, or two screens
+  would read as two captures of one.
+- **The download is credential-free and host-pinned to Figma's signed-asset hosts**
+  (`FIGMA_RENDER_HOSTS`). The URL arrives inside a response BODY, which is the shape an SSRF comes
+  in, and the signature means no token is needed. Fail-closed: a bucket host Figma has not used
+  before costs the deployment its renders, which the import states, rather than an open redirect.
+- **Keyed to the DOCUMENT, not the block** (`binary_artifacts.document_source` /
+  `document_external_id`): an import runs before the document is attached to anything, the
+  attachment can move later, and only document-sourced artifacts may be replaced wholesale.
+  A re-import that changes the body prunes the previous set BEFORE storing the new one, so a
+  design's pictures are never a mix of two revisions.
+- **`documents.render_status` says what became of them**, because every way of ending up with no
+  images renders as the same absence: `stored` / `partial` / `none` / `failed` /
+  `storage_unavailable`, and NULL for "the question does not apply" (a prose source, an `upload`, a
+  row predating the column). The status is derived from what was RETAINED rather than downloaded, so
+  a store that rejects half the bytes reads as `partial`. Three of the five name a different fix and
+  are the ones the SPA's document row states; `stored` and `none` say nothing.
+- **Best-effort throughout.** The text is the load-bearing half and an image is an enrichment, so a
+  render failure never fails an import. Where no image storage is configured the download is not even
+  attempted, and the row says `storage_unavailable`.
+
 ## Out of scope (deliberately)
 
-- **Pixels / visual confirmation.** Inlining design _images_ is the separate binary-artifact +
-  Visual Confirmation surface (#323; see [`visual-confirmation.md`](./visual-confirmation.md)): a
-  Figma frame's rendered PNG could land there as a `kind:'reference'` artifact. The textual context
-  this doc covers does not depend on the agent ever fetching pixels.
+- **Handing the pixels to an agent.** The renders are RETAINED, not yet delivered: context files are
+  `utf8` strings by type and no harness can take an image content part today. That is the last slice
+  of the pixel track, and it is an image-bumping change.
 - **Code → canvas (the reverse flow).** Turning generated code _into_ editable design layers is
   design-authoring driven from an interactive client, the opposite direction from
   design→agent-context, and not something a headless backend consumes.

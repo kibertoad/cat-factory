@@ -2,6 +2,8 @@ import type {
   Notification,
   NotificationPayload,
   NotificationRepository,
+  NotificationSettingsRecord,
+  NotificationSettingsRepository,
   NotificationType,
 } from '@cat-factory/kernel'
 import {
@@ -12,7 +14,7 @@ import {
 import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
 import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
-import { notifications } from '../db/schema.js'
+import { notificationSettings, notifications } from '../db/schema.js'
 
 // Drizzle/Postgres implementation of the notifications port (the Postgres mirror of
 // the Worker's `D1NotificationRepository`, migration 0024). Closes the Node parity
@@ -298,5 +300,38 @@ export class DrizzleNotificationRepository implements NotificationRepository {
       })
       .returning()
     return rows[0] ? rowToNotification(rows[0]) : notification
+  }
+}
+
+// Drizzle/Postgres mirror of `D1NotificationSettingsRepository` (migration 0088): the
+// notification manager's per-workspace routing overrides. Behaviourally identical to the D1
+// repo so the cross-runtime conformance suite asserts the same routing on both stores.
+export class DrizzleNotificationSettingsRepository implements NotificationSettingsRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByWorkspace(workspaceId: string): Promise<NotificationSettingsRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(notificationSettings)
+      .where(eq(notificationSettings.workspace_id, workspaceId))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return { workspaceId: row.workspace_id, matrixJson: row.matrix, updatedAt: row.updated_at }
+  }
+
+  async upsert(record: NotificationSettingsRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      matrix: record.matrixJson,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(notificationSettings)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [notificationSettings.workspace_id],
+        set: { matrix: values.matrix, updated_at: values.updated_at },
+      })
   }
 }

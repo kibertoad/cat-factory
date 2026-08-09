@@ -420,12 +420,19 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     suppress: { scope: { kind: 'workspace', arg: 0 } },
     restore: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // --- Agent-context run-path reads -----------------------------------------------
+  // --- Document / task integration (run-path reads + the management surface) ---------
   // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step
-  // (it builds the agent context on each dispatch), so these reads are on the run path, not just
-  // the opt-in document/task integrations' own surfaces. arg0 is the workspaceId → `workspace`
-  // rule. The document/task SOURCE-PROVIDER + connection surfaces (connect/list/disconnect) are
-  // NOT exposed here — they are a later integration slice; only the block-scoped context reads are.
+  // (it builds the agent context on each dispatch), so the block-scoped reads are on the run path,
+  // not just the opt-in document/task integrations' own surfaces. arg0 is the workspaceId →
+  // `workspace` rule.
+  //
+  // The rest of both integrations — import/link writes, the role-link surface, and the source
+  // CONNECTIONS themselves — is here now too. What unblocked it is the connection row: it used to
+  // be decrypted INSIDE the repository, so it could not cross this RPC at all (a plaintext tracker
+  // token on the wire) and no `/internal/secrets/unseal` entry could name it either, because a
+  // decrypt-inside repository exposes no sealed field to address. The row now carries its
+  // `credentialsCipher` and the node opens it by NAMING the row, exactly as it does for the
+  // environment / observability / Slack / runner-pool connections that crossed here before it.
   documentRepository: {
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -441,10 +448,34 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // Document-authoring run path (WS1): for a doc-aware kind, `AgentContextBuilder` resolves the
     // workspace's linked TEMPLATE (singular) + EXEMPLAR (list) for the block's `docKind` on each
     // dispatch, so both reads are on the run path exactly like `listByBlock`/`getByUrl`. arg0 is
-    // the workspaceId → the `workspace` rule. (The role-link WRITE surface + the whole-workspace
-    // list back the management UI, not the run path — they stay mothership-internal for now.)
+    // the workspaceId → the `workspace` rule.
     getRoleLink: { scope: { kind: 'workspace', arg: 0 } },
     listRoleLinks: { scope: { kind: 'workspace', arg: 0 } },
+    // The import + link WRITE surface, and the whole-workspace list behind the documents panel.
+    // `upsert(record)` binds on the record's `workspaceId` FIELD (`workspaceField`); everything
+    // else takes it positionally. The batched `linkBlockMany`/`detachBlocks` move WITH `linkBlock`
+    // rather than behind it: they are the same write (a task created with a list of documents, and
+    // the block-delete cascade), so opening one alone would leave the cascade unable to detach what
+    // the create attached.
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    linkBlock: { scope: { kind: 'workspace', arg: 0 } },
+    linkBlockMany: { scope: { kind: 'workspace', arg: 0 } },
+    detachBlocks: { scope: { kind: 'workspace', arg: 0 } },
+    // The role-link management surface, whose run-path READ halves are two lines up.
+    listRoleLinksByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    setRole: { scope: { kind: 'workspace', arg: 0 } },
+    clearRole: { scope: { kind: 'workspace', arg: 0 } },
+    clearRoleForKind: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The workspace's document-source connections. The row carries its credential bag SEALED, so
+  // only ciphertext crosses here and the node opens it over `/internal/secrets/unseal` — the same
+  // shape as `environmentConnectionRepository` and `slackConnectionRepository`.
+  documentConnectionRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
   },
   taskRepository: {
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
@@ -459,11 +490,60 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // — omit it and EVERY such build fails the run with `unknown_method`. arg0 is the
     // workspaceId → the `workspace` rule.
     listByRefs: { scope: { kind: 'workspace', arg: 0 } },
+    // The import + link write surface. `claimBlockLink` is `linkBlock`'s conditional form — the
+    // atomic claim that holds one-task-per-ticket when two filings of an issue race — and it moves
+    // WITH the import that takes it, because a claim whose `upsert` cannot land buys nothing.
+    // `unlinkAllFromBlock(s)` are the recurring intake's replace-link write and the block-delete
+    // cascade's batched detach: the same write keyed by one block or a set.
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    linkBlock: { scope: { kind: 'workspace', arg: 0 } },
+    claimBlockLink: { scope: { kind: 'workspace', arg: 0 } },
+    unlinkAllFromBlock: { scope: { kind: 'workspace', arg: 0 } },
+    unlinkAllFromBlocks: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // The agent context also resolves the block's provisioned environment per step
-  // (`resolveForBlock`/`get`, both workspace-keyed). Reads only — the connect/provision surface
-  // (and decrypting a remotely-sealed env cipher, which needs the mothership's key) is a later slice.
+  // The workspace's tracker connections; the document-source sibling above carries the argument.
+  taskConnectionRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The per-workspace on/off toggle for each task source (no row ⇒ enabled). No secrets, and it
+  // is read on the settings + import surfaces the connections above serve.
+  taskSourceSettingsRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+  },
+  // The agent context resolves the block's provisioned environment per step
+  // (`resolveForBlock`/`get`, both workspace-keyed), and, since the secrets-delegation slice,
+  // a mothership-mode node PROVISIONS for real: the access handle and the provider's
+  // status/teardown fields are sealed and opened by the mothership over
+  // `/internal/secrets/{unseal,seal}`, so the rows this repo stores carry no cipher the org
+  // cannot read. That is what makes the WRITE half (`insert`/`update`) safe to open here; before
+  // it, a laptop-sealed row would have been unopenable by the mothership's own teardown and by
+  // every hosted teammate, with nothing saying so until the reclaim failed.
+  //
+  // `insert(record)` binds on the record's `workspaceId` FIELD (`workspaceField`);
+  // `update(workspaceId, id, patch)` takes it positionally (`workspace`). The cross-workspace
+  // sweeper reads (`listExpired`, and the retention `delete*`) stay mothership-internal: its cron
+  // owns them, per the global-sweeper exclusion above.
   environmentRegistryRepository: {
+    // The provisioning WRITE path (`EnvironmentProvisioningService.provisionSync` /
+    // `refreshStatus` / the async deploy poll). With these off, a mothership-mode run reached the
+    // deployer step and failed there, and the ephemeral-environment self-test could start and
+    // never complete.
+    insert: { scope: { kind: 'workspaceField', arg: 0 } },
+    update: { scope: { kind: 'workspace', arg: 0 } },
+    // The TOMBSTONE half of that same write path, and inseparable from it. Two unguarded callers
+    // reach it: `supersedePriorEnvironment`, which every re-provision runs before inserting (so a
+    // deployer re-run fails outright without it), and `EnvironmentTeardownService.tombstone`, which
+    // is how EVERY reclaim ends. Opening the insert while leaving this closed would let a
+    // mothership-mode node stand infrastructure up and never record it as reclaimed, which is the
+    // one failure the seal direction was opened to prevent. `softDelete(workspaceId, id, at)` takes
+    // the workspaceId positionally → the `workspace` rule.
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     // The per-`(block, service frame)` discovery read. `AgentContextBuilder.resolveEnvironment`
     // (and `RunDispatcher.attachEnvironmentProjection`) resolve the OWN service frame's env by
@@ -495,12 +575,12 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // handler secrets as a SEALED blob (`secretsCipher`) — the repo returns it verbatim (it does NOT
   // decrypt); sealing/decryption live in `EnvironmentConnectionService` under the LOCAL key, so no
   // plaintext credential crosses the machine API and the mothership only ever stores ciphertext (the
-  // initiative's "the mothership ENCRYPTION_KEY never reaches the laptop" split holds). What this
-  // does NOT yet unlock: actually PROVISIONING an environment in mothership mode — the registry
-  // WRITE path (`environmentRegistryRepository.insert`/`update`) + decrypting a remotely-sealed
-  // access cipher stay off, the later secrets-delegation slice, exactly like the observability gate
-  // probe. The `workspaceField` rule binds only the record's top-level `workspaceId` (see its note
-  // above), so a connection row can only ever land in the caller's own in-scope workspace.
+  // initiative's "the mothership ENCRYPTION_KEY never reaches the laptop" split holds). Opening
+  // the SEALED BUNDLE on the node is the secrets-delegation slice's job, not this table's: the
+  // node names the row over `/internal/secrets/unseal` and the mothership decrypts it under its
+  // own key, which is also why the registry WRITE path above could finally open. The
+  // `workspaceField` rule binds only the record's top-level `workspaceId` (see its note above), so
+  // a connection row can only ever land in the caller's own in-scope workspace.
   environmentConnectionRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     getByWorkspaceAndType: { scope: { kind: 'workspace', arg: 0 } },
@@ -520,18 +600,21 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // The workspace's ONE outbound webhook endpoint: the management surface (get/put/delete behind
-  // `integrations.manage`) and the two delivery paths that read it — the notification channel and
-  // the run-lifecycle sink. The sink is why this is no longer optional: it reads on the run's
-  // TERMINAL emit, and an un-routed method there fails on a laptop as a webhook that silently
-  // never fires (both delivery paths are best-effort, so the refusal is swallowed by design).
-  // `get`/`delete` take the workspaceId as arg0; the record-based `put(record)` binds on the
-  // record's `workspaceId` FIELD, so a row can only ever land in the caller's own in-scope
-  // workspace. Safe to expose: the repo returns the signing secret SEALED and never decrypts it
-  // (sealing/decryption live in the service and the delivery paths under the LOCAL key), so no
-  // plaintext credential crosses the machine API.
+  // The workspace's outbound webhook endpoints: the management surface (get/list/put/delete behind
+  // `integrations.manage`) and the three delivery paths that read them — the notification channel,
+  // the run-lifecycle sink and the platform-alert sink. The sinks are why this is not optional:
+  // they read on the run's TERMINAL emit, and an un-routed method there fails on a laptop as a
+  // webhook that silently never fires (every delivery path is best-effort, so the refusal is
+  // swallowed by design). `list`/`get`/`delete` take the workspaceId as arg0; the record-based
+  // `put(record)` binds on the record's `workspaceId` FIELD, so a row can only ever land in the
+  // caller's own in-scope workspace. `list` is what the three delivery paths call now that a
+  // workspace can register several endpoints, so it is the hot one: leaving it un-routed is the
+  // same silent failure `get` was allow-listed to prevent. Safe to expose: the repo returns the
+  // signing secret SEALED and never decrypts it (sealing/decryption live in the service and the
+  // delivery paths under the LOCAL key), so no plaintext credential crosses the machine API.
   notificationWebhookRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
+    list: { scope: { kind: 'workspace', arg: 0 } },
     put: { scope: { kind: 'workspaceField', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
@@ -752,11 +835,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // (the `workspaceField` rule). The sweeper-only cross-workspace `listStale` stays
   // mothership-internal (its cron owns it), per the global-sweeper exclusion above. The GitHub
   // half of the self-test (branch create/delete via `resolveRunRepoContext`) rides mothership
-  // GitHub token delegation (`/internal/github/installation-token`), not this table. What
-  // still gates a FULL mothership-mode self-test: the provisioning WRITES
-  // (`environmentRegistryRepository.insert`/`update`) stay off until the secrets-delegation
-  // slice, so the run's provisioning stage fails cleanly there — the store itself is proxied
-  // so the runs surface, clean up, and complete the moment that slice lands.
+  // GitHub token delegation (`/internal/github/installation-token`), not this table, and the
+  // provisioning stage rides the registry WRITES above plus `/internal/secrets/{unseal,seal}`
+  // so the self-test now runs end to end in mothership mode.
   environmentTestRunRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspaceField', arg: 0 } },
@@ -830,9 +911,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // read back), not read-only, in mothership mode.
   //
   // Scope of what this unlocks: the settings PANELS work end-to-end (save + read back the
-  // redacted summary, which never decrypts). The saved connection cannot yet DRIVE a
-  // post-release-health gate probe in mothership mode — decrypting the sealed connection cipher
-  // at gate-probe time belongs to the later secrets-delegation slice. The connection `get` here
+  // redacted summary, which never decrypts), and, since the secrets-delegation slice, the
+  // saved connection DRIVES a post-release-health gate probe in mothership mode too: the probe
+  // names the row over `/internal/secrets/unseal` and the mothership opens it. The `get` here
   // returns the FULL record (the sealed `credentials` blob), not the redacted service view: the
   // RPC client is the trusted local node, the blob is sealed and account-scoped, so this matches
   // the existing `environmentRegistryRepository.get` precedent (sealed cipher over the machine
@@ -1016,6 +1097,19 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByExecution: { scope: { kind: 'workspace', arg: 0 } },
     countByExecution: { scope: { kind: 'workspace', arg: 0 } },
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    countByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The document reclaim's two halves: an import running on a node retains a design source's
+    // rendered frames and replaces the previous revision's, so both have to reach the mothership's
+    // store or a local import would silently retain nothing. Same `workspace` rule as the reads
+    // above — the document ref is a non-authoritative filter within the (authenticated)
+    // workspace, exactly like `executionId`/`blockId`, and `deleteByIds` names rows the caller
+    // has already read back under that same scope.
+    listByDocument: { scope: { kind: 'workspace', arg: 0 } },
+    // The gate's batched counterpart: the visual-confirmation gate reads the renders of every
+    // design a task links in one call, and it runs on the driver path of a run a mothership-mode
+    // node advances, so leaving it off would make the design references silently empty there.
+    listByDocuments: { scope: { kind: 'workspace', arg: 0 } },
+    deleteByIds: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
   // --- Prompt-fragment library management surface ---------------------------------
@@ -1235,6 +1329,14 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // secrets. `getByWorkspace` takes the workspaceId as arg0 (the `workspace` rule); the
   // record-based `upsert(record)` binds on the record's `workspaceId` FIELD (the `workspaceField` rule).
   slackSettingsRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+  },
+  // Per-workspace notification routing (which types this board delivers on which channel). No
+  // secrets, and the same shape as `slackSettingsRepository` above: `getByWorkspace` takes the
+  // workspaceId as arg0 (the `workspace` rule), the record-based `upsert(record)` binds on the
+  // record's `workspaceId` FIELD (the `workspaceField` rule).
+  notificationSettingsRepository: {
     getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
   },

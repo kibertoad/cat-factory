@@ -11,7 +11,12 @@
 import { computed } from 'vue'
 import type { Pipeline } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
-import { pipelineDisplaySteps, pipelineGateCount } from '~/utils/pipeline'
+import {
+  CONDITION_MARKERS,
+  pipelineConditionalCount,
+  pipelineDisplaySteps,
+  pipelineGateCount,
+} from '~/utils/pipeline'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 
 const props = defineProps<{ pipeline: Pipeline }>()
@@ -19,6 +24,7 @@ const { t } = useI18n()
 
 const steps = computed(() => pipelineDisplaySteps(props.pipeline))
 const gateCount = computed(() => pipelineGateCount(props.pipeline))
+const conditionalCount = computed(() => pipelineConditionalCount(props.pipeline))
 
 /** What the agent at this step does — the same catalog prose the palette and step tooltips use. */
 function stepDescription(kind: string): string {
@@ -50,6 +56,12 @@ function stepDescription(kind: string): string {
         <UIcon name="i-lucide-shield-check" class="h-3 w-3" />
         {{ t('pipeline.preview.gateCount', { count: gateCount }, gateCount) }}
       </span>
+      <!-- Conditional steps change what a run of this pipeline actually does from task to task,
+           which is exactly what a preview read BEFORE picking has to say out loud. -->
+      <span v-if="conditionalCount" class="inline-flex items-center gap-1 text-sky-500">
+        <UIcon name="i-lucide-git-branch" class="h-3 w-3" />
+        {{ t('pipeline.preview.conditionalCount', { count: conditionalCount }, conditionalCount) }}
+      </span>
     </div>
 
     <!-- The ordered steps. The number column doubles as the flow connector (a rule drawn between
@@ -78,6 +90,13 @@ function stepDescription(kind: string): string {
               name="i-lucide-shield-check"
               class="h-3 w-3 shrink-0 text-amber-400"
               :title="t('pipeline.preview.gated')"
+            />
+            <UIcon
+              v-for="c in s.conditions"
+              :key="c"
+              :name="CONDITION_MARKERS[c].icon"
+              class="h-3 w-3 shrink-0 text-sky-400"
+              :title="t(CONDITION_MARKERS[c].key)"
             />
           </div>
           <!-- Clamped: the catalog prose runs long for some kinds, and <AgentKindIcon> already

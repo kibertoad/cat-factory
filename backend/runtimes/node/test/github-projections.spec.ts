@@ -318,4 +318,34 @@ describe('GitHub projections (Postgres)', () => {
     expect(found.find((i) => i.installationId === 9002)?.deletedAt).toBe(2000)
     expect(await repo.listByInstallationIds([])).toEqual([])
   })
+
+  // The Node half of the connection-host parity assertion (the Worker asserts the same thing in
+  // `github-connect.spec.ts` against its own composition root). `webUrl` is derived by the facade
+  // from the API base it booted with and stamped onto every connection the SPA reads, which
+  // renders each repo / pull request / issue link from it — so a facade that forgot to wire the
+  // resolver would silently strip those links on that runtime alone.
+  it('stamps the connection with the host the facade resolved', async () => {
+    const { body: snapshot } = await call<WorkspaceSnapshot>('POST', '/workspaces', {})
+    const ws = snapshot.workspace.id
+    await new DrizzleGitHubInstallationRepository(db).upsert({
+      installationId: 9101,
+      workspaceId: ws,
+      accountId: null,
+      accountLogin: 'octo',
+      targetType: 'Organization',
+      appId: 'app-default',
+      provider: 'github',
+      cachedToken: null,
+      tokenExpiresAt: null,
+      accessToken: null,
+      createdAt: 1000,
+      deletedAt: null,
+    })
+
+    const { body } = await call<{ connection: { webUrl: string | null } | null }>(
+      'GET',
+      `/workspaces/${ws}/github/connection`,
+    )
+    expect(body.connection?.webUrl).toBe('https://github.com')
+  })
 })

@@ -151,7 +151,11 @@ const LEGACY_ALLOWANCES = new Map([
   // one is workspace-keyed, secret-free, `workspace`-scoped on the persistence allow-list, and
   // edited from a settings surface rather than written by the engine, so the next such library
   // lands there rather than among the run-path repositories.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1128],
+  // 1128 -> 1062 by extracting `tasks-deps.ts`: the task-source selector, which is the shape
+  // `github-deps.ts` already had (a per-integration selector reading `buildAppRegistry` back out
+  // of this root). It moved because a fourth built-in source pushed the file over budget, and the
+  // selector is where every future one lands too.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1062],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
@@ -267,13 +271,22 @@ const DOC_ALLOWANCES = new Map([
 ])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */
-// `sdk/**` is deliberately ABSENT. The ratchet is a split trigger for hand-written cohesion, and
-// the largest files there are GENERATED (`models_gen.go` alone is past the default), where the
-// remedy the guard exists to prompt — extract the concern your change touches — is not available:
-// what gets emitted is decided by the emitters in `scripts/sdk/`, and the size of one output file
-// says nothing about whether they are well factored. The SDK's hand-written halves are each well
-// under budget; `scripts/check-sdks.mjs` is what guards that tree.
-const SCAN_ROOTS = ['backend/packages', 'backend/runtimes', 'backend/internal', 'frontend/app']
+// `sdk/**` is deliberately ABSENT, with ONE named exception. The ratchet is a split trigger for
+// hand-written cohesion, and the largest files there are GENERATED (`models_gen.go` alone is past
+// the default), where the remedy the guard exists to prompt — extract the concern your change
+// touches — is not available: what gets emitted is decided by the emitters in `scripts/sdk/`, and
+// the size of one output file says nothing about whether they are well factored. The SDK's
+// hand-written halves are each well under budget; `scripts/check-sdks.mjs` is what guards that
+// tree. `sdk/gatekeeper-worker` is named because nothing about it is generated: it is an ordinary
+// hand-written library that happens to live beside the table it reads, so the argument for
+// exempting its neighbours does not reach it.
+const SCAN_ROOTS = [
+  'backend/packages',
+  'backend/runtimes',
+  'backend/internal',
+  'frontend/app',
+  'sdk/gatekeeper-worker',
+]
 
 // `.stryker-tmp` is a mutation-testing sandbox: a COPY of a package's source, so scanning it
 // reports every finding twice against a path nobody can fix. It is gitignored, so only a local

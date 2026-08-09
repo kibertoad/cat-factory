@@ -6,6 +6,14 @@ logic (agents), the executor (server), and each runtime facade's provisioning. T
 page is the single place that ties it together; it links back to the source so the
 details stay verifiable.
 
+> **Configuring and using models is documented on the website**:
+> [Model Providers & Subscriptions](https://www.catfactory.ai/guide/model-providers.html) owns
+> connecting a key, a subscription or a local runner, presets and route order, and the model access
+> policy; [Budgets](https://www.catfactory.ai/guide/budgets.html) owns what spend does to a run.
+> This page is the INTERNAL account: the resolution order, the seams, and the invariants a change
+> here has to keep. Do not restate usage here, and do not answer a usage question by editing this
+> file.
+
 > The domain only ever names a model by a provider-agnostic
 > [`ModelRef`](../packages/kernel/src/ports/model-provider.ts) (`{ provider, model,
 harness?, contextTokens? }`). Concrete SDKs and API keys live behind the
@@ -160,7 +168,7 @@ read-only at **`GET /models`**: labels and provider/model ids only, never keys.
 ## 3. Model resolution, which model runs a step
 
 Resolved by `resolveStepModelRef` /
-[`agent-routing.ts`](../packages/agents/src/agents/agent-routing.ts), in precedence
+[`runtime/routing.ts`](../packages/agents/src/agents/runtime/routing.ts), in precedence
 order:
 
 1. **The block's pinned model** (`Block.modelId`) → `resolveBlockModel(modelId)` →
@@ -280,57 +288,46 @@ reviewer/rework so the two paths can't drift.
 
 ## 6. Subscriptions (the vendor token pool)
 
-A workspace can connect one or more **subscription credentials per vendor** for the
-**poolable, organization-permitted coding-plan vendors** (`kimi`, `deepseek`) so agent
-steps run on the Claude Code harness instead of an API key. See
-[`SUBSCRIPTION_VENDORS`](../packages/kernel/src/domain/models.ts) for the
-vendor→harness map and base URLs. **Claude, GLM and ChatGPT/Codex are NOT in this
-pool**: each is licensed for individual use only and stored per-user (see below).
+What a user connects, which vendors are poolable and why, and how the personal-password unlock
+behaves are all on the website
+([Connecting a subscription](https://www.catfactory.ai/guide/model-providers.html#connecting-a-subscription)).
+What the engine needs from this layer:
 
-- **Storage**: a per-workspace pool (`provider_subscription_tokens`, D1 + Postgres),
-  **encrypted at rest** under an `ENCRYPTION_KEY`-derived key; tokens are write-only
-  (only metadata + rolling usage is returned). Managed by `ProviderSubscriptionService`
+- **The vendor→harness map and base URLs are one table**,
+  [`SUBSCRIPTION_VENDORS`](../packages/kernel/src/domain/models.ts). A vendor's `individualOnly`
+  flag is the single switch deciding pooled vs per-user; nothing else branches on the vendor name.
+- **The pool is per workspace** (`provider_subscription_tokens`, D1 + Postgres), sealed under an
+  `ENCRYPTION_KEY`-derived key and write-only (reads return metadata + rolling usage, never the
+  token). Owned by `ProviderSubscriptionService`
   ([integrations](../packages/integrations/src/modules/providers/ProviderSubscriptionService.ts)),
-  exposed at `GET|POST|PATCH|DELETE /workspaces/:ws/vendor-credentials` and the
-  **LLM Vendors** navbar UI.
-- **Rotation**: leasing is usage-aware (least-loaded token wins, round-robin by
-  `lastUsedAt`); the pool is capped per vendor.
-- **Enable/disable + default** (`PATCH …/vendor-credentials/:id`, `{ enabled?, isDefault? }`):
-  a token can be taken **out of rotation** without deleting it (`enabled: false`; still
-  listed and re-enablable, but never leased and not counted as "configured"), and one token
-  can be **pinned as the vendor's default** (`isDefault: true`) so it is leased in preference
-  to usage-aware rotation. At most one default per (workspace, vendor); a disabled default is
-  ignored (leasing falls back to rotation among the remaining enabled tokens).
-- **What each vendor is**: `kimi`/`deepseek`; a coding-plan API key driven by Claude
-  Code against the vendor's Anthropic-compatible endpoint (Moonshot / DeepSeek).
-- `addToken`/`leaseToken` throw a `ConflictError` (HTTP 409) for any `individualOnly`
-  vendor (Claude/GLM/Codex): those never enter the pool.
+  served at `GET|POST|PATCH|DELETE /workspaces/:ws/vendor-credentials`.
+- **Leasing is usage-aware** (least-loaded wins, round-robin by `lastUsedAt`) unless one token is
+  pinned `isDefault`. A `enabled: false` token stays listed and re-enablable but is never leased
+  and does not make its vendor count as configured, and a disabled default falls back to rotation
+  rather than to nothing.
+- `addToken`/`leaseToken` throw a `ConflictError` (HTTP 409) for any `individualOnly` vendor, so
+  the pool cannot acquire one by a caller taking a different route in.
 
 ### Individual-usage subscriptions: per-user, not pooled
 
-`claude`, `glm` (Z.ai Coding Plan) and `codex` (ChatGPT) are each licensed for
-**individual use only** by their own terms, so none is ever pooled or shared. Instead
-each user stores their **own** credential and only that user's runs may use it. The
-behaviour is gated by the `individualOnly` flag on the vendor config and implemented as a
-separate, per-user **individual-usage restricted mode**:
+`claude`, `glm` and `codex` are stored per user, double-encrypted (a personal-password layer
+inside the system layer), and unlocked at task start or retry; a short-lived per-run activation
+lets the asynchronous container steps run with nobody present. A recurring schedule therefore
+cannot resolve to one, which the start guard refuses rather than discovering mid-run.
 
-- Stored per-user, **double-encrypted** (a personal-password layer inside the system
-  layer) and unlocked with the user's password at task start/retry; a short-lived
-  per-run activation lets the async container steps run without the user present.
-- **Recurring schedules** can't use them (no unattended unlock).
-- Organizations that need shared, programmatic access use a **direct provider API key**
-  instead: that path is unaffected by `individualOnly`.
-
-The full model, the safeguards, and the request flow are documented in
+The full model, the safeguards, and the request flow are in
 **[individual-subscription-usage.md](./individual-subscription-usage.md)**.
 
 ---
 
 ## 7. Spend budget vs non-metered runs (subscription + local)
 
-The per-workspace **monetary** spend budget (Workspace settings → Budget) meters and gates
-runs that cost the deployment money. Two kinds of run incur **no** metered cost and so are
-**never** blocked by it:
+What a budget does to a user's run is on the website
+([Budgets](https://www.catfactory.ai/guide/budgets.html)). What matters here is which runs the
+gate must not touch, and where that judgement is made.
+
+The per-workspace **monetary** spend budget meters and gates runs that cost the deployment money.
+Two kinds of run incur **no** metered cost and so are **never** blocked by it:
 
 - **Subscription** runs are **flat-rate quota** (a fixed-price plan), not billed per token.
   The picker marks them `quotaBased: true` (kernel `models.ts`); `ContainerAgentExecutor.
@@ -353,12 +350,11 @@ How the gate behaves (`ExecutionService`):
 ### A `0` budget is intentional ("local-/subscription-only")
 
 `spendMonthlyLimit: 0` is a **valid, deliberate** setting, not a footgun: it means "no PAID
-spend". A workspace at `0` refuses metered runs (clear up-front error) but **keeps running
-local-runner models and connected subscriptions**, since those incur no metered cost. It is
-reversible from the UI and safer than an unbounded "unlimited" that can run up a real bill.
-(Web search costs money on metered providers, so a `0` budget also blocks paid searches:
-the local model itself still runs.) The budget lives on the `workspace_settings` row; there
-are no longer `SPEND_MONTHLY_LIMIT` / `SPEND_CURRENCY` env vars.
+spend", so a workspace at `0` refuses metered runs and keeps running local-runner models and
+connected subscriptions. Treat it as a value to preserve rather than a missing configuration: the
+temptation in any new gate is to read `0` as unset and fall back to a default limit, which would
+silently start billing a workspace that opted out. The budget lives on the `workspace_settings`
+row; there are no `SPEND_MONTHLY_LIMIT` / `SPEND_CURRENCY` env vars.
 
 ---
 
@@ -380,17 +376,21 @@ SDK. Base URLs are the single source of truth in
 
 ### Config / env reference
 
-| Knob                                                                                                       | Effect                                                                                                                                       |
-| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `QWEN_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`                                                     | Upgrade the dual-mode model to its **direct** (OpenAI-compatible) flavour.                                                                   |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`                                                                      | First-party providers (used by `AGENT_MODELS` routing overrides).                                                                            |
-| `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (Node)                                                    | Serve Cloudflare Workers AI models over REST (no binding off-Cloudflare).                                                                    |
-| `AGENT_DEFAULT_PROVIDER` / `AGENT_DEFAULT_MODEL` / `AGENT_DEFAULT_TEMPERATURE` / `AGENT_MAX_OUTPUT_TOKENS` | The unpinned routing default.                                                                                                                |
-| `AGENT_MODELS` (JSON)                                                                                      | Per-agent-kind routing overrides.                                                                                                            |
-| `BEDROCK_REGION`                                                                                           | Registers the opt-in Bedrock resolver (see below).                                                                                           |
-| `BEDROCK_MODELS` (comma-separated)                                                                         | The Bedrock **allow-list**.                                                                                                                  |
-| `ENCRYPTION_KEY` (base64, ≥32 bytes)                                                                       | Master key sealing the subscription token pool (and other integration credentials). Without it the vendor-credential endpoints return `503`. |
-| Workspace budget (UI → Workspace settings → Budget)                                                        | Monetary budget gate (per workspace; does not apply to quota runs).                                                                          |
+The variables themselves live in the canonical list,
+[`docs/environment-variables.md`](../../docs/environment-variables.md) → Model providers, which the
+website renders for operators. What is worth stating HERE is which of them changes a resolution
+outcome, because that is what a change to this layer can break:
+
+- **A provider key does not select a model; it makes a route USABLE.** `QWEN_API_KEY`,
+  `DEEPSEEK_API_KEY` and `MOONSHOT_API_KEY` upgrade a dual-mode entry to its `direct` flavour by
+  entering the capability set, not by being read at resolution time.
+- **`AGENT_DEFAULT_*` and `AGENT_MODELS` are the LAST step of §3**, reached only when neither a
+  block pin nor a workspace default answered.
+- **`BEDROCK_REGION` registers the resolver; `BEDROCK_MODELS` is both its allow-list and the
+  picker's enablement**, parsed once (below).
+- **`ENCRYPTION_KEY` gates the subscription pool existing at all**: without it the
+  vendor-credential endpoints answer `503`, so `hasSubscriptionToken` is structurally false and
+  §4's override never fires.
 
 ### AWS Bedrock (opt-in)
 
@@ -471,6 +471,8 @@ Block.modelId ──► resolveStepModelRef
 
 ## See also
 
+- Using and configuring models (the user-facing authority):
+  [catfactory.ai → Model Providers](https://www.catfactory.ai/guide/model-providers.html).
 - Runtime flows (execution, merge lifecycle, requirements review):
   [`CLAUDE.md`](../../CLAUDE.md).
 - Backend layering & the `GET /models` endpoint: [`backend/README.md`](../README.md).

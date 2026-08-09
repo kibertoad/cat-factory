@@ -1,0 +1,10 @@
+{
+  "extends": "../../backend/tsconfig.base.json",
+  "compilerOptions": {
+    // Only the Worker types now: the suite here is a plain Node run over the policy, so the
+    // vitest-pool-workers types went with the workerd suite, to the machinery package.
+    "types": ["@cloudflare/workers-types"],
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+}

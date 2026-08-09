@@ -155,6 +155,7 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
       const subWs = (await sub.createWorkspace()).workspace.id
       const subPipe = await sub.call<Pipeline>('POST', `/workspaces/${subWs}/pipelines`, {
         name: 'Code',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const subStart = await sub.call('POST', `/workspaces/${subWs}/blocks/task_login/executions`, {
@@ -181,6 +182,7 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
       const metWs = (await met.createWorkspace()).workspace.id
       const metPipe = await met.call<Pipeline>('POST', `/workspaces/${metWs}/pipelines`, {
         name: 'Code',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const metStart = await met.call('POST', `/workspaces/${metWs}/blocks/task_login/executions`, {
@@ -214,6 +216,7 @@ export function defineCoreWorkspaceFeaturesConformance(harness: ConformanceHarne
 
       const pipe = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Code',
+        purpose: 'build',
         agentKinds: ['coder', 'documenter'],
       })
       const started = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -689,6 +692,7 @@ function registerEpicDependencyTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Implement',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const start = await app.call<ExecutionInstance>(
@@ -747,6 +751,7 @@ function registerEpicDependencyTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Code only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const blocker = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {

@@ -82,7 +82,12 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
     // registry, so the job is to catch a WRONG SHAPE (a route answering something else, a
     // version skew) rather than to re-validate a definition the mothership already boot-checked.
     if (!body.generators.every(isGeneratorView)) throw unreadable('generators')
-    return body.generators
+    // Normalised, not returned raw: `capabilities` is REQUIRED on the view, and this is the one
+    // producer that can serve one without it (see `isGeneratorView`). Every reader downstream is
+    // entitled to the field its type promises, so the fill happens once here rather than as a
+    // `?? []` at each of them. A missed call site turns the degradation into a `TypeError` in a
+    // dispatch brief or a board snapshot rather than reporting it.
+    return body.generators.map((view) => ({ ...view, capabilities: view.capabilities ?? [] }))
   }
 
   async documentsFor(ids: string[]): Promise<Map<string, ApiContractDocument[]>> {
@@ -160,12 +165,28 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
  * rule as a crash rather than a verdict, which is an unreadable reply escaping as a 500 instead
  * of the one `UnavailableError` every route to "we do not know what is registered" ends at. A
  * registry that declares no formats serves `[]`, which every version of the projection emits.
+ *
+ * `capabilities` is DECIDED on too (by the same coverage rule and by the candidate brief), but
+ * it is the one field here whose ABSENCE is an expected version skew rather than a wrong shape,
+ * because a mothership predating the capability axis emits no such key. So absence is admitted
+ * and filled in by the caller, which lands it on the state the axis already defines for a
+ * declaration that pins nothing down: EMPTY, read as "only the coarse facts are known" and
+ * reported to the agent and the step's author as unverifiable. That is the honest reading of an
+ * older mothership, and the same one that lets every integration registered before the axis
+ * existed keep running. A capabilities key that is PRESENT and not an array is a wrong shape like
+ * any other, so it is refused here rather than quietly flattened into "declared none".
  */
-function isGeneratorView(value: unknown): value is BinaryGeneratorView {
+type ServedGeneratorView = Omit<BinaryGeneratorView, 'capabilities'> &
+  Partial<Pick<BinaryGeneratorView, 'capabilities'>>
+
+function isGeneratorView(value: unknown): value is ServedGeneratorView {
   if (!value || typeof value !== 'object') return false
   const view = value as Partial<BinaryGeneratorView>
   return (
-    typeof view.id === 'string' && Array.isArray(view.modalities) && Array.isArray(view.mediaTypes)
+    typeof view.id === 'string' &&
+    Array.isArray(view.modalities) &&
+    Array.isArray(view.mediaTypes) &&
+    (view.capabilities === undefined || Array.isArray(view.capabilities))
   )
 }
 

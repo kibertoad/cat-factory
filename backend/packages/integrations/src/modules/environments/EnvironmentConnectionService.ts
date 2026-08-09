@@ -6,7 +6,8 @@ import type {
   EnvironmentConnectionRecord,
   EnvironmentConnectionRepository,
 } from '@cat-factory/kernel'
-import type { SecretCipher } from '@cat-factory/kernel'
+import type { OrgSecretCipher, SecretCipher, SecretDelegate } from '@cat-factory/kernel'
+import { createOrgSecretCipher } from '@cat-factory/kernel'
 import type { SecretResolver, UrlSafetyPolicy } from '@cat-factory/kernel'
 import type {
   BootstrapEnvironmentRepoInput,
@@ -192,6 +193,12 @@ export interface EnvironmentConnectionServiceDependencies {
   environmentConnectionRepository: EnvironmentConnectionRepository
   workspaceRepository: WorkspaceRepository
   secretCipher: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node, where the handler bundle was sealed under the
+   * MOTHERSHIP's key. Without it the connection panel persists and reads back fine (the summary
+   * never decrypts) and every PROVISION against it fails on an unopenable bundle.
+   */
+  secretDelegate?: SecretDelegate
   clock: Clock
   /** URL/host safety policy applied to a registered manifest. Defaults to strict. */
   urlPolicy?: UrlSafetyPolicy
@@ -300,8 +307,14 @@ export interface ResolvedTypeProvider {
 export class EnvironmentConnectionService {
   /** The connection PROBES (candidate config / candidate handler / saved connection). */
   private readonly probes: ReturnType<typeof createEnvironmentConnectionProbes>
+  /** Seals/opens the handler bundle, through the mothership when this node holds no org key. */
+  private readonly orgSecrets: OrgSecretCipher
 
   constructor(private readonly deps: EnvironmentConnectionServiceDependencies) {
+    this.orgSecrets = createOrgSecretCipher({
+      cipher: deps.secretCipher,
+      ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
     this.probes = createEnvironmentConnectionProbes({
       workspaceRepository: deps.workspaceRepository,
       environmentBackendRegistry: deps.environmentBackendRegistry,
@@ -371,7 +384,7 @@ export class EnvironmentConnectionService {
     if (missing.length) {
       throw new ValidationError(`Missing secret values for: ${missing.join(', ')}`)
     }
-    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(secrets))
+    const secretsCipher = await this.sealSecrets(workspaceId, secrets)
     const updated: EnvironmentConnectionRecord = { ...record, secretsCipher }
     await this.deps.environmentConnectionRepository.upsert(updated)
     return this.toHandlerView(updated, Object.keys(secrets))
@@ -569,7 +582,7 @@ export class EnvironmentConnectionService {
     if (missing.length) {
       throw new ValidationError(`Missing secret values for: ${missing.join(', ')}`)
     }
-    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(secrets))
+    const secretsCipher = await this.sealSecrets(workspaceId, secrets)
     const updated: EnvironmentConnectionRecord = { ...record, secretsCipher }
     await this.deps.environmentConnectionRepository.upsert(updated)
     return this.toConnection(updated, Object.keys(secrets))
@@ -614,7 +627,7 @@ export class EnvironmentConnectionService {
         ? { bootstrapInputs: provider.describeBootstrapInputs() }
         : {}),
       missingRequired: missingRequiredConfigKeys(configFields, storedKeys),
-      ...(manifest ? { savedManifest: manifest as unknown as Record<string, unknown> } : {}),
+      ...(manifest ? { savedManifest: manifest } : {}),
       ...(provider.describeManifestTemplate
         ? { manifestTemplate: provider.describeManifestTemplate() as Record<string, unknown> }
         : {}),
@@ -1308,7 +1321,7 @@ export class EnvironmentConnectionService {
           : {}),
       },
     )
-    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(secrets))
+    const secretsCipher = await this.sealSecrets(workspaceId, secrets)
     const record: EnvironmentConnectionRecord = {
       workspaceId,
       ...fields,
@@ -1403,11 +1416,33 @@ export class EnvironmentConnectionService {
     return (key: string) => bundle[key]
   }
 
+  /**
+   * Seal a handler's secret bundle. Routed through {@link orgSecrets} rather than the raw cipher
+   * so a mothership-mode node's write lands under the ORG's key: a bundle a laptop sealed locally
+   * would be unopenable by the mothership and by every hosted teammate, and nothing would say so
+   * until the next provision.
+   */
+  private async sealSecrets(workspaceId: string, secrets: Record<string, string>): Promise<string> {
+    return this.orgSecrets.encryptFor(
+      { source: 'environment_connection', workspaceId },
+      JSON.stringify(secrets),
+    )
+  }
+
   private async decryptSecrets(
     record: EnvironmentConnectionRecord,
   ): Promise<Record<string, string>> {
     if (!record.secretsCipher) return {}
-    const parsed = JSON.parse(await this.deps.secretCipher.decrypt(record.secretsCipher))
+    const parsed = JSON.parse(
+      await this.orgSecrets.decryptFor(
+        {
+          source: 'environment_connection',
+          workspaceId: record.workspaceId,
+          key: [record.provisionType, record.manifestId],
+        },
+        record.secretsCipher,
+      ),
+    )
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
   }
 

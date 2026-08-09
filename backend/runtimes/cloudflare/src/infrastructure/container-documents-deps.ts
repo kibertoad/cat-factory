@@ -2,17 +2,19 @@ import type { Clock, DocumentSourceProvider, IdGenerator } from '@cat-factory/ke
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
   ConfluenceProvider,
+  createDocumentConnectionStore,
   FigmaProvider,
   GitHubDocsProvider,
   LinearDocumentProvider,
   NotionProvider,
-  ZeplinProvider,
   resolveDeploymentDocumentResolver,
+  ZeplinProvider,
 } from '@cat-factory/integrations'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { WebCryptoSecretCipher } from '@cat-factory/server'
 import type { AppConfig } from './config'
 import type { Env } from './env'
+import { envVars } from './env'
 import { D1DocumentConnectionRepository } from './repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from './repositories/D1DocumentRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
@@ -40,7 +42,7 @@ import { logger } from './observability/logger'
  * resolver holds no mutable state, so the configuration IS the whole answer.
  */
 export function deploymentDocumentDeps(env: Env): Partial<CoreDependencies> {
-  const { resolver } = resolveDeploymentDocumentResolver(deploymentEnvRecord(env))
+  const { resolver } = resolveDeploymentDocumentResolver(envVars(env))
   return resolver ? { deploymentDocumentResolver: resolver } : {}
 }
 
@@ -52,12 +54,7 @@ export function deploymentDocumentDeps(env: Env): Partial<CoreDependencies> {
  * the report is a boot-shaped event this runtime has to stage for itself.
  */
 export function deploymentDocumentProblems(env: Env): { source: string; problem: string }[] {
-  return resolveDeploymentDocumentResolver(deploymentEnvRecord(env)).problems
-}
-
-/** The Worker's bindings read as a plain variable bag, which is all the resolver wants. */
-function deploymentEnvRecord(env: Env): Record<string, string | undefined> {
-  return env as unknown as Record<string, string | undefined>
+  return resolveDeploymentDocumentResolver(envVars(env)).problems
 }
 
 /**
@@ -114,14 +111,17 @@ export function selectDocumentsDeps(
   // once-guarded first-request validation in `index.ts`, which reports it exactly once per isolate.
   const deploymentDocuments = deploymentDocumentDeps(env)
   if (providers.length === 0) return deploymentDocuments
+  const documentConnectionRepository = new D1DocumentConnectionRepository({ db })
   return {
     ...deploymentDocuments,
     documentSourceProviders: providers,
-    documentConnectionRepository: new D1DocumentConnectionRepository({
-      db,
-      // The config gate guarantees the key is present when enabled; source
-      // credentials are encrypted at rest under a documents-scoped HKDF info.
-      cipher: new WebCryptoSecretCipher({
+    documentConnectionRepository,
+    documentConnectionStore: createDocumentConnectionStore({
+      documentConnectionRepository,
+      // The config gate guarantees the key is present when enabled; source credentials are sealed
+      // at rest under a documents-scoped HKDF info. No delegate here: a Cloudflare deployment is
+      // always a mothership, so it holds its own key.
+      secretCipher: new WebCryptoSecretCipher({
         masterKeyBase64: config.documents.encryptionKey!,
         info: 'cat-factory:documents',
       }),

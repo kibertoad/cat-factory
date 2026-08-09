@@ -21,6 +21,7 @@ import {
   summarizeSpecStates,
   type RequirementStateFilter,
 } from './ServiceSpecWindow.logic'
+import type { BadgeColor } from '~/utils/badge'
 
 const { t } = useI18n()
 const board = useBoardStore()
@@ -115,7 +116,7 @@ function retry() {
 
 // Exhaustive priority → label/chip map. Literal `t()` keys keep the typed-key drift
 // guard live, vs a runtime-built `spec.priority.${value}`.
-const PRIORITY_META: Record<RequirementPriority, { label: string; chip: string }> = {
+const PRIORITY_META: Record<RequirementPriority, { label: string; chip: BadgeColor }> = {
   must: { label: t('spec.priority.must'), chip: 'error' },
   should: { label: t('spec.priority.should'), chip: 'warning' },
   could: { label: t('spec.priority.could'), chip: 'neutral' },
@@ -131,7 +132,7 @@ const KIND_LABELS: Record<RequirementKind, string> = {
 // Exhaustive implementation-state → presentation map. `established` is the only state that
 // means "the service is observed to do this"; everything else is a behaviour that has been
 // agreed and not yet seen to hold, which must never read as standing behaviour.
-const STATE_META: Record<RequirementState, { label: string; chip: string; icon: string }> = {
+const STATE_META: Record<RequirementState, { label: string; chip: BadgeColor; icon: string }> = {
   established: {
     label: t('spec.state.established'),
     chip: 'success',
@@ -448,7 +449,7 @@ function kindLabel(item: RequirementItem): string {
                     <!-- implementation state: agreed vs observed to hold. The distinction the
                          build prompt and the tester act on, so a reader must see it too. -->
                     <UBadge
-                      :color="stateMeta(req).chip as any"
+                      :color="stateMeta(req).chip"
                       variant="subtle"
                       size="sm"
                       :icon="stateMeta(req).icon"
@@ -456,7 +457,7 @@ function kindLabel(item: RequirementItem): string {
                     >
                       {{ stateMeta(req).label }}
                     </UBadge>
-                    <UBadge :color="priorityMeta(req).chip as any" variant="subtle" size="sm">
+                    <UBadge :color="priorityMeta(req).chip" variant="subtle" size="sm">
                       {{ priorityMeta(req).label }}
                     </UBadge>
                     <UBadge color="neutral" variant="subtle" size="sm">{{ kindLabel(req) }}</UBadge>

@@ -49,6 +49,7 @@ import type {
   Account,
   Clock,
   ExecutionInstance,
+  Pipeline,
   Service,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
@@ -506,6 +507,7 @@ export function makeMothershipConformanceApp(
   // SUT then reads them back over the RPC — exactly as the engine does in production. Grouped in a
   // sibling factory so this harness stays within the per-function line budget.
   const {
+    seedPipeline,
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
@@ -541,6 +543,7 @@ export function makeMothershipConformanceApp(
     driveEnvConfigRepair,
     executionEmits,
     boardEmits,
+    seedPipeline,
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
@@ -573,6 +576,9 @@ export function makeMothershipConformanceApp(
 function createMothershipSeedHelpers(db: DrizzleDb) {
   const mothershipRepos = () => createDrizzleRepositories(db, SEED_CLOCK)
 
+  function seedPipeline(workspaceId: string, pipeline: Pipeline) {
+    return mothershipRepos().pipelineRepository.insert(workspaceId, pipeline)
+  }
   function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
     return mothershipRepos().requirementReviewRepository.upsert(
       workspaceId,
@@ -605,6 +611,7 @@ function createMothershipSeedHelpers(db: DrizzleDb) {
   }
 
   return {
+    seedPipeline,
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,

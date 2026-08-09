@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { defaultBuildPipelineId } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import { STATUS_META, MODULE_META, taskTypeMeta } from '~/utils/catalog'
 import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
@@ -52,6 +53,8 @@ const { start: startConnect } = useDependencyConnect()
 const deps = computed(() =>
   (task.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
 )
+const uiMode = useUiModeStore()
+
 /** Deps that haven't merged yet — these block this task from running. */
 const unmet = computed(() => board.unmetDeps(props.taskId))
 const runnable = computed(() => board.isRunnable(props.taskId))
@@ -60,12 +63,37 @@ const runnable = computed(() => board.isRunnable(props.taskId))
 const { depLabel: labelDep } = useDepLabels()
 const depLabel = (dep: Block) => labelDep(dep, task.value?.parentId)
 
-/** The pipeline a plain "Start" will use: the task's pinned pipeline, else the first. */
-const defaultPipeline = computed(
-  () =>
-    (task.value?.pipelineId ? pipelines.getPipeline(task.value.pipelineId) : undefined) ??
-    pipelines.pipelines[0],
-)
+/**
+ * The pipeline a plain "Start" will use: the task's pinned pipeline, else the build rung this
+ * INTERFACE MODE defaults to (`defaultBuildPipelineId` — the fixed Standard build in basic mode,
+ * the Adaptive one in advanced). The workspace's positional first pipeline remains the last
+ * resort, for a board whose catalog does not carry the rung (an older seed, or a deployment that
+ * retired it).
+ *
+ * A PIN is honoured even when the library holds no row for it, and that branch is the whole reason
+ * this returns a descriptor rather than a `Pipeline`. An INTERNAL pipeline is withheld from the
+ * library on purpose (the platform starts it on its own behalf, so no picker may offer it), and a
+ * task can legitimately be pinned to one — the docs-refresh preset spawns its tasks onto
+ * `pl_code_comments`. Resolving that pin through the library alone answers undefined, and the
+ * fallback below then starts a FULL BUILD on a comment-only task while the button still reads as
+ * an ordinary Start. The fallback chain exists for a task with NO pin; a pin the library cannot
+ * show is still the task's answer, and the backend resolves the id for the run.
+ */
+const defaultPipeline = computed<{ id: string; name: string } | undefined>(() => {
+  const pinnedId = task.value?.pipelineId
+  if (pinnedId) {
+    return (
+      pipelines.getPipeline(pinnedId) ?? {
+        id: pinnedId,
+        // The catalog NAME map spans the whole catalog (unlike the versions map), so an internal
+        // pin still names itself here; the generic label covers a pin to something this build's
+        // catalog does not know at all.
+        name: pipelines.catalogNames[pinnedId] ?? t('board.task.pipelineFallback'),
+      }
+    )
+  }
+  return pipelines.getPipeline(defaultBuildPipelineId(uiMode.isAdvanced)) ?? pipelines.pipelines[0]
+})
 
 /** The PR the implementer agent opened for this task, if any. */
 const pr = computed(() => task.value?.pullRequest)
@@ -85,7 +113,6 @@ const prLabel = computed(() =>
  * every section says "nothing here" would teach people the surface is empty. A task marked done
  * by hand, with no pull request and no run, is that task.
  */
-const uiMode = useUiModeStore()
 const laneView = useLaneViewStore()
 const outcomeReadable = computed(() => {
   const block = task.value
@@ -471,7 +498,7 @@ function selectTask() {
           variant="soft"
           size="xs"
           icon="i-lucide-git-pull-request"
-          :title="t('board.task.openPrOnGithub', { pr: prLabel })"
+          :title="t('board.task.openPrLink', { pr: prLabel })"
           @click.stop
         >
           {{ prLabel }}
@@ -481,6 +508,7 @@ function selectTask() {
           variant="soft"
           size="xs"
           icon="i-lucide-scan-eye"
+          data-testid="task-review"
           @click.stop="review"
         >
           {{ t('board.task.review') }}

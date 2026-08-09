@@ -7,11 +7,14 @@ import { param } from '../../http/params.js'
 import {
   MAX_REQUEST_BYTES,
   MAX_UPLOAD_BYTES,
+  blobResponseBody,
   blobResponseHeaders,
   exceedsRequestSizeLimit,
   normalizeImageContentType,
 } from './imageArtifacts.js'
 import { requireCapability } from '../../http/guards.js'
+import { reclaimArtifactOverflow, reserveArtifactSlot } from './artifactSetCap.js'
+import { requestLogger } from '../../http/requestLogging.js'
 
 /**
  * Resolve the binary-artifact store for the request's workspace (its account's configured
@@ -27,6 +30,38 @@ async function requireStore<E extends AppEnv>(c: Context<E>): Promise<BinaryArti
 }
 
 const ALLOWED_KINDS: BinaryArtifactKind[] = ['screenshot', 'reference']
+
+/**
+ * Standing row-count bound on one board block's uploaded artifacts, the sibling of the harness
+ * ingest's `MAX_SCREENSHOTS_PER_RUN`.
+ *
+ * A task's reference designs are a handful of images a person attaches by hand, so this is far
+ * above any real set and exists to keep the block half of `GET /api/v1/runs/{runId}/artifacts`
+ * bounded by construction — that endpoint is unpaged precisely because both of its halves are.
+ * Refuses the newest upload rather than evicting an older design: the uploader is present and can
+ * be told, and nothing here can know which of their existing designs is the one to lose.
+ */
+const MAX_ARTIFACTS_PER_BLOCK = 100
+
+/** One block's artifact set, as {@link reserveArtifactSlot} / {@link reclaimArtifactOverflow} see it. */
+function blockCap(store: BinaryArtifactStore, workspaceId: string, blockId: string) {
+  return {
+    limit: MAX_ARTIFACTS_PER_BLOCK,
+    count: () => store.countByBlock(workspaceId, blockId),
+    list: () => store.listByBlock(workspaceId, blockId),
+    remove: (id: string) => store.delete(workspaceId, id),
+  }
+}
+
+/** The one refusal both cap checks answer with, so the pre-check and the reconcile cannot differ. */
+function refuseFullBlock<E extends AppEnv>(c: Context<E>, blockId: string | null, limit: number) {
+  requestLogger(c).warn('artifact upload: per-block artifact limit reached', {
+    scope: 'artifactUpload',
+    blockId,
+    limit,
+  })
+  return c.json({ error: { code: 'too_many', message: 'Per-task artifact limit reached' } }, 429)
+}
 
 /**
  * Workspace-scoped binary-artifact API backing the visual-confirmation gate: upload a
@@ -90,7 +125,8 @@ export function artifactController(): Hono<AppEnv> {
         return c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413)
       }
       const view = form.get('view')
-      const blockId = form.get('blockId')
+      const blockIdField = form.get('blockId')
+      const blockId = typeof blockIdField === 'string' && blockIdField ? blockIdField : null
       // This human-facing endpoint uploads BLOCK-scoped reference design images, which precede any
       // run, so `executionId` is always null here — a run-scoped capture goes through the
       // token-authed harness ingest route instead, where the execution is derived from the verified
@@ -98,17 +134,29 @@ export function artifactController(): Hono<AppEnv> {
       // `executionId` rather than trust it. `blockId` is non-authoritative but harmless: every read
       // filters by the path's (authenticated) `workspaceId`, so a row tagged with a foreign/bogus
       // block is simply never surfaced by the gate.
+      const workspaceId = param(c, 'workspaceId')
+      // Per-block ceiling, enforced only for a row that HAS a block: an untagged upload joins no
+      // set this endpoint can bound, and counting it against a null `blockId` would make every
+      // such upload contend with every other one in the workspace.
+      const cap = blockId ? blockCap(store, workspaceId, blockId) : null
+      const priorCount = cap ? await reserveArtifactSlot(cap) : 0
+      if (priorCount === null) return refuseFullBlock(c, blockId, MAX_ARTIFACTS_PER_BLOCK)
       const record = await store.store({
         meta: {
-          workspaceId: param(c, 'workspaceId'),
+          workspaceId,
           executionId: null,
-          blockId: typeof blockId === 'string' && blockId ? blockId : null,
+          blockId,
           kind,
           view: typeof view === 'string' && view ? view : null,
           contentType,
         },
         blob: bytes,
       })
+      // Check-then-act, so a burst of parallel uploads can each pass the pre-check before any row
+      // lands; the reconcile rolls THIS record back when it is the one that overflowed.
+      if (cap && (await reclaimArtifactOverflow(cap, priorCount, record.id))) {
+        return refuseFullBlock(c, blockId, MAX_ARTIFACTS_PER_BLOCK)
+      }
       return c.json({ artifact: record }, 201)
     },
   )
@@ -128,7 +176,7 @@ export function artifactController(): Hono<AppEnv> {
     // satisfies the narrower ambient BodyInit type this package compiles against. Headers
     // clamp the type to the image allow-list + send `nosniff` so the bytes can never be
     // sniffed/served as active content (defence-in-depth with the upload-time allow-list).
-    return new Response(got.bytes as unknown as BodyInit, {
+    return new Response(blobResponseBody(got.bytes), {
       status: 200,
       headers: blobResponseHeaders(got.record.contentType),
     })

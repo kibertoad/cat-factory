@@ -28,7 +28,6 @@ import {
   issueIntakeConfigSchema,
   notificationTypeSchema,
   parseStoredAgentFailure,
-  pipelinePurposeSchema,
   priorStepOutputSchema,
   resolvedFrontendBindingSchema,
   runDiagnosticsSchema,
@@ -346,15 +345,26 @@ function readOptScalar(prop: string, column = toSnake(prop)): RowReader {
 }
 
 /**
- * An optional enum column surfaced only when the stored value is a valid member of `schema`,
- * else left absent — a corrupt or pre-classifier legacy value reads as unset (e.g. an
- * unclassified `purpose`) rather than leaking an invalid enum onto the wire. Lenient by design:
- * an unrecognized value is a valid "absent" state here, so it is dropped, not thrown on.
+ * A REQUIRED classifier column whose stored value this build may not be able to name.
+ *
+ * The two states are read differently on purpose, because they are different facts:
+ *
+ *  - EMPTY (NULL / `''`) is a row written before the field was mandatory, and it resolves to
+ *    `fallback`. Not a guess: `fallback` is the classifier such a row has always BEHAVED as, so
+ *    the resolution is byte-for-byte the prior behaviour rather than a new opinion about it. It is
+ *    resolved HERE rather than by a back-fill migration because it has to be anyway — a node one
+ *    build behind still writes NULL after any sweep, and no query filters on the column — and one
+ *    rule in one place beats the same rule in three (a mapper, a D1 migration, a Drizzle one).
+ *  - A value the schema does not recognise PASSES THROUGH unchanged, because it is a member this
+ *    build cannot name rather than a value that was never set, and the two must not render the
+ *    same. Dropping it would erase a deployment's own classifier on the next write; folding it
+ *    onto `fallback` would state a classification nobody chose. The readers narrow it themselves
+ *    (`isPipelinePurpose` / `classifierFor`) and the SPA quotes it back to the user by name.
  */
-function readOptEnum(prop: string, schema: GenericSchema, column = toSnake(prop)): RowReader {
+function readClassifier(prop: string, fallback: string, column = toSnake(prop)): RowReader {
   return (row, out) => {
     const value = row[column]
-    if (value != null && value !== '' && is(schema, value)) out[prop] = value
+    out[prop] = value == null || value === '' ? fallback : value
   }
 }
 
@@ -741,7 +751,9 @@ export interface PipelineRow {
   availability?: string | null
   /**
    * The pipeline's use-case classifier: `'build'` / `'document'` / `'review'` / `'research'` /
-   * `'planning'` (migration 0056_pipeline_purpose). NULL/absent ⇒ unclassified.
+   * `'planning'` (migration 0056_pipeline_purpose). The COLUMN stays nullable while the domain
+   * field is mandatory: a row written before the classifier was required carries NULL, and
+   * {@link readClassifier} is where that is resolved.
    */
   purpose?: string | null
 }
@@ -768,7 +780,9 @@ const pipelineReader = makeRowReader<PipelineRow, Pipeline>([
   readOptScalar('version'),
   readFlag('public'),
   readOptScalar('availability'),
-  readOptEnum('purpose', pipelinePurposeSchema),
+  // `purpose` is mandatory on the entity, so this read must be TOTAL: see {@link readClassifier}
+  // for why an empty column resolves to `build` while an unnameable member passes through.
+  readClassifier('purpose', 'build'),
 ])
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -942,6 +956,11 @@ interface ExecutionDetail {
   intakeOrigin?: IntakeOrigin
   /** The role the initiator held at admission (see {@link ExecutionInstance.initiatedByRole}). */
   initiatedByRole?: WorkspaceRole
+  /**
+   * Who the run was started for on the caller's side (see
+   * {@link ExecutionInstance.initiatedByExternalIdentity}).
+   */
+  initiatedByExternalIdentity?: string
   /** Whether the run may land its work (see {@link ExecutionInstance.mode}). */
   mode?: RunMode
   /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
@@ -1080,6 +1099,15 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     ...(is(workspaceRoleSchema, detail.initiatedByRole)
       ? { initiatedByRole: detail.initiatedByRole }
       : {}),
+    // Who the run was started FOR, as the starting key's provisioner named them. Opaque, so the
+    // only decode rule is that it be a non-empty string; anything else is dropped onto the same
+    // reading as absent, which is honest here in a way it would not be for a policy field: the
+    // platform never resolves this value, so an unreadable one names nobody rather than hiding a
+    // decision that was made.
+    ...(typeof detail.initiatedByExternalIdentity === 'string' &&
+    detail.initiatedByExternalIdentity !== ''
+      ? { initiatedByExternalIdentity: detail.initiatedByExternalIdentity }
+      : {}),
     // Whether the run may land its work. This one FAILS CLOSED, and the asymmetry with every
     // other tolerant decode here is the point: absent means `live` because that is what every
     // run predating the mode actually was, but a value that is PRESENT and unreadable means a
@@ -1144,6 +1172,9 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // once at start and read back on the DURABLE path, which rebuilds the run from this JSON and
     // nothing else — so a field missing here is a merge policy that silently never applies.
     initiatedByRole: instance.initiatedByRole ?? undefined,
+    // Only a public-API start has one, so an ordinary board run stores nothing extra
+    // (JSON.stringify omits the undefined key).
+    initiatedByExternalIdentity: instance.initiatedByExternalIdentity ?? undefined,
     // Stored only when sandboxed: `live` is the read-time default and every run that predates the
     // mode is exactly that, so persisting it would put a redundant key on every ordinary run.
     mode: instance.mode === 'dry_run' ? 'dry_run' : undefined,

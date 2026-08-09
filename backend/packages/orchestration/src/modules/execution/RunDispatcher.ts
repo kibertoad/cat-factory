@@ -1,5 +1,7 @@
 import type {
   AgentExecutor,
+  BinaryCandidateStepState,
+  KeepBinaryCandidatesInput,
   AgentRunContext,
   AgentRunResult,
   Block,
@@ -38,7 +40,9 @@ import {
 } from '@cat-factory/kernel'
 import { buildStepApproval } from './stepApproval.js'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
-import { applyContainerRunning, applySubtaskProgress } from './step-fold.logic.js'
+import type { StepSkipReason } from '@cat-factory/contracts'
+import { applyContainerRunning, applySubtaskProgress, pollHandleFor } from './step-fold.logic.js'
+import { applyObservedToolServers } from './toolServers.logic.js'
 import { FORK_PROPOSER_KIND } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { isDeployStep } from '@cat-factory/integrations'
@@ -54,6 +58,7 @@ import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController } from './ReviewGateController.js'
+import type { BinaryCandidateController } from './BinaryCandidateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { JudgeStepController } from './JudgeStepController.js'
 import { GateHelperDispatcher } from './GateHelperDispatcher.js'
@@ -152,6 +157,7 @@ export class RunDispatcher {
   private readonly visualConfirmationController: VisualConfirmationController
   private readonly reviewGate: ReviewGateController
   private readonly forkDecisionController: ForkDecisionController
+  private readonly binaryCandidateController: BinaryCandidateController
   private readonly prReviewController: PrReviewController
   // The four review-gate SUBJECTS are pure pass-throughs into `registryDeps` — the dispatcher
   // never reads one itself — so they are forwarded from `deps` there rather than mirrored onto
@@ -265,6 +271,7 @@ export class RunDispatcher {
     this.visualConfirmationController = deps.visualConfirmationController
     this.reviewGate = deps.reviewGate
     this.forkDecisionController = deps.forkDecisionController
+    this.binaryCandidateController = deps.binaryCandidateController
     this.prReviewController = deps.prReviewController
     this.interviewControllers = new Map(
       (deps.interviewControllers ?? []).map((c) => [c.agentKind, c]),
@@ -441,6 +448,7 @@ export class RunDispatcher {
       visualConfirmationController: this.visualConfirmationController,
       reviewGate: this.reviewGate,
       forkDecisionController: this.forkDecisionController,
+      binaryCandidateController: this.binaryCandidateController,
       prReviewController: this.prReviewController,
       mergeResolver: this.mergeResolver,
       requirementsKind: deps.requirementsKind,
@@ -564,32 +572,10 @@ export class RunDispatcher {
     const executor = this.agentExecutor
     if (!isAsyncAgentExecutor(executor)) return { kind: 'noop' }
 
-    // Re-supply the run id alongside the per-step job id so the executor can address
-    // the same per-run container at the poll site (it only stored the per-step jobId).
-    // The agent kind is supplied too: the container executor maps a migrated
-    // `merger`/`on-call`'s structured result into `mergeAssessment`/`onCallAssessment`
-    // KIND-AWARE in `toRunResult`, so without it that coercion no-ops and the merge gate /
-    // post-release-health gate would see no assessment.
-    const update = await executor.pollJob({
-      jobId: step.jobId,
-      runId: executionId,
-      workspaceId,
-      agentKind: step.agentKind,
-      // Re-supply the whole attribution set captured at dispatch (`recordDispatchAttribution`).
-      // The poll site can resolve NONE of it — it rebuilds the handle from the step alone — and
-      // the container executor reads all three off the handle:
-      //  - `model`: without it `recordStepResult` records 'unknown', which
-      //    `SpendService.parseModel` splits into provider "unknown" / model "" — corrupting the
-      //    token_usage row for EVERY subscription-harness (container) step.
-      //  - `subscriptionTokenId`: gates the pooled-token usage feedback that drives usage-aware
-      //    rotation; absent, it is skipped outright.
-      //  - `initiatedByUserId`: the quota-cycle counters' fallback target for a PERSONAL
-      //    (individual-usage) run, which leases no pooled token; absent, the target is null.
-      // The sync `run()` path already carried the rich handle; this fixes the durable poll path.
-      model: step.model,
-      subscriptionTokenId: step.subscriptionTokenId,
-      initiatedByUserId: step.initiatedByUserId,
-    })
+    // The handle is rebuilt from the STEP — the poll site has no dispatch in scope — so every
+    // field the executor reads off it has to have been persisted at dispatch. What each one is
+    // for, and what silently breaks without it, lives with its counterpart in `step-fold.logic`.
+    const update = await executor.pollJob(pollHandleFor(step, workspaceId, executionId))
     if (update.state === 'running') {
       return this.pollRunning.handleRunningPoll(
         workspaceId,
@@ -599,6 +585,11 @@ export class RunDispatcher {
         step.jobId,
       )
     }
+
+    // The CLI's own tool-server startup report, for every SETTLED disposition — folded once ahead
+    // of the branch tree below rather than inside each of its five persisting arms (see
+    // `toolServers.logic.ts`). Mutation only; whichever arm runs owns the persist.
+    applyObservedToolServers(step, update.toolServers)
 
     // A gate whose helper INVESTIGATES instead of fixing (post-release-health → on-call)
     // declares a `resolveHelperCompletion` hook on its definition. When such a helper's job
@@ -726,18 +717,23 @@ export class RunDispatcher {
     if (step?.agentKind === HUMAN_TEST_AGENT_KIND) {
       return { kind: 'continue' }
     }
-    const gate = step ? this.gateFor(step.agentKind) : undefined
+    // Read off the REGISTRATION, not off the definition the factory builds: it is one
+    // declaration, and public-API admission has to read the same one at HTTP request time where
+    // there is no engine context to build a definition with. `undefined` here means the kind is
+    // not registered as a gate at all (a step whose gate was retired between the run starting and
+    // this poll landing), which falls through to the timeout below exactly as an unknown kind did.
+    const pollExhaustion = step ? this.gateRegistry.pollExhaustion(step.agentKind) : undefined
     const timeoutError = 'Gate precheck did not settle within its polling budget'
     // An unbounded human-wait gate (human-review, `pollExhaustion: 'rearm'`) has no deadline:
     // running out of polls is never a verdict. Always re-arm another poll cycle — the waiting
     // is surfaced via the gate's notification (escalated by the severity sweep), not by killing
     // the run.
-    if (step && gate && gate.pollExhaustion === 'rearm') {
+    if (step && pollExhaustion === 'rearm') {
       if (step.gate) step.gate.phase = 'checking'
       await this.runStateMachine.casPersist(workspaceId, instance)
       return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
     }
-    if (!step || !gate || gate.pollExhaustion !== 'pass') {
+    if (!step || pollExhaustion !== 'pass') {
       return { kind: 'job_failed', error: timeoutError, failureKind: 'timeout' }
     }
     // A time-windowed watch gate (post-release-health) may be configured to watch LONGER
@@ -759,44 +755,42 @@ export class RunDispatcher {
     // Window genuinely elapsed (or a non-windowed pass gate): finish as a healthy pass.
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-      output: `${gate.kind} gate passed: watch window elapsed with no regression observed.`,
+      output: `${step.agentKind} gate passed: watch window elapsed with no regression observed.`,
     })
   }
 
   /**
-   * Finish a gated step that was skipped (its estimate gate was not satisfied) and either
-   * complete the run or advance to the next step — the deterministic finish/advance tail
-   * of {@link recordStepResult}, minus all the agent-result handling (no LLM ran, so there
-   * is no usage / decision / PR / artifact / approval / resolver to process). The step is
-   * marked `skipped` with empty output so the UI renders "skipped (gated)".
+   * Finish a gated step that was skipped (its estimate gate or its run condition was not
+   * satisfied) and either complete the run or advance to the next step — the deterministic
+   * finish/advance tail of {@link recordStepResult}, minus all the agent-result handling (no LLM
+   * ran, so there is no usage / decision / PR / artifact / approval / resolver to process). The
+   * step is marked `skipped` so the UI renders "skipped (gated)".
+   *
+   * `reason` states WHICH AXIS skipped it, because the three are not equally recoverable from the
+   * pipeline by a reader: an estimate gate is visible on the step itself (the thresholds are right
+   * there beside it), while a run condition is a fact about the TASK and a producer cascade is a
+   * fact about ANOTHER step, so an unexplained skip reads as a tester that silently did nothing.
+   * The SPA turns the member into translated copy; nothing composes a sentence here.
+   *
+   * `output` stays EMPTY for every skip, and that is load-bearing rather than incidental: the step
+   * produced nothing, and three aggregations select prior steps on `output` being non-empty and
+   * hand the text to a model, so anything parked there is read downstream as this step's report.
    */
   async skipGatedStep(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
+    reason: StepSkipReason,
   ): Promise<AdvanceResult> {
     step.skipped = true
+    step.skipReason = reason
     step.output = ''
     step.progress = 1
     step.subtasks = undefined
     this.stepGraph.finishStep(step)
 
-    if (isFinalStep) {
-      instance.status = 'done'
-      await this.runStateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      await this.runStateMachine.stopRunContainer(workspaceId, instance)
-      return { kind: 'done' }
-    }
-    instance.currentStep += 1
-    const next = instance.steps[instance.currentStep]
-    if (next) this.stepGraph.startStep(next)
-    await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
+    return this.runStateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep)
   }
   /**
    * Record a completed agent step's result and report what the driver should do
@@ -973,37 +967,14 @@ export class RunDispatcher {
     // end — which is the point, since a run that fails or parks part-way never reaches an end.
     await this.prVerificationReport.publishForRun(workspaceId, instance)
 
-    if (isFinalStep) {
-      instance.status = 'done'
-      // Merge resolution (and confidence persistence) already happened above,
-      // POSITION-INDEPENDENTLY: confidence at the top of recordStepResult and the merger's
-      // real merge via the step-completion resolver registry (so a trailing
-      // post-release-health gate doesn't disable auto-merge). Nothing merge-specific here.
-      await this.runStateMachine.finalizeBlock(workspaceId, instance, result.confidence)
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      // The run is finished: reclaim its per-run container now instead of letting it
-      // idle out its sleepAfter window (~10 min of billed-but-useless compute). All
-      // pipeline steps share the one container keyed by the execution id, so this is
-      // only safe on the FINAL step — never between steps. Best-effort/idempotent.
-      await this.runStateMachine.stopRunContainer(workspaceId, instance)
-      return { kind: 'done' }
-    }
-    instance.currentStep += 1
-    const next = instance.steps[instance.currentStep]
-    if (next) this.stepGraph.startStep(next)
-    // A resolver that already set the block's TERMINAL status (the merger flips it to
-    // `done`/`pr_ready` mid-pipeline) must not be clobbered back to `in_progress` as we
-    // advance to a trailing step — refresh progress only, preserving that status. (The
-    // final step's `finalizeBlock` then leaves a `done` block alone.)
-    if (resolverOwnsTerminalStatus) {
-      await this.runStateMachine.refreshBlockProgress(workspaceId, instance)
-    } else {
-      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    }
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
+    // Merge resolution (and confidence persistence) already happened above,
+    // POSITION-INDEPENDENTLY: confidence at the top of recordStepResult and the merger's real
+    // merge via the step-completion resolver registry (so a trailing post-release-health gate
+    // doesn't disable auto-merge). Nothing merge-specific is left for the settle.
+    return this.runStateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep, {
+      ...(result.confidence !== undefined ? { confidence: result.confidence } : {}),
+      resolverOwnsTerminalStatus,
+    })
   }
 
   /**
@@ -1019,9 +990,7 @@ export class RunDispatcher {
   ): Promise<AdvanceResult> {
     this.stepGraph.pauseStepForInput(step)
     instance.status = 'blocked'
-    await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await this.runStateMachine.persistAndEmit(workspaceId, instance, { blockStatus: 'blocked' })
     return { kind: 'awaiting_decision', decisionId }
   }
 
@@ -1314,8 +1283,7 @@ export class RunDispatcher {
           chat: [],
           maxChatTurns: DEFAULT_FORK_MAX_CHAT_TURNS,
         }
-        await this.runStateMachine.casPersist(workspaceId, instance)
-        await this.runStateMachine.emitInstance(workspaceId, instance)
+        await this.runStateMachine.persistAndEmit(workspaceId, instance)
         return { kind: 'continue' }
       }
       step.forkDecision = {
@@ -1360,6 +1328,23 @@ export class RunDispatcher {
     input: ForkChatRequestInput,
   ): Promise<ForkDecisionStepState> {
     return this.forkDecisionController.chat(workspaceId, executionId, input)
+  }
+
+  /** Read a run's active generated-candidate comparison state, or null. */
+  getBinaryCandidates(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<BinaryCandidateStepState | null> {
+    return this.binaryCandidateController.getActive(workspaceId, executionId)
+  }
+
+  /** Keep the chosen candidates, re-running the step to deliver exactly those. */
+  keepBinaryCandidates(
+    workspaceId: string,
+    executionId: string,
+    input: KeepBinaryCandidatesInput,
+  ): Promise<BinaryCandidateStepState> {
+    return this.binaryCandidateController.keep(workspaceId, executionId, input)
   }
 
   /** Read a run's active PR deep-review state, or null. */

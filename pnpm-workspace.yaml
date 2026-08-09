@@ -12,15 +12,15 @@
 # 500 page that hangs the whole e2e suite. One version = one singleton. Keep these
 # in lockstep with the `vue` range in frontend/app/package.json.
 # The floor is 3.5.40: `@modular-vue/*` peer-requires `vue@^3.5.40`, so the whole
-# family moves up together to keep the single-singleton invariant while satisfying
-# the modular-vue adoption (docs/initiatives/modular-vue-adoption.md).
+# family moves up together (3.5.41 today) to keep the single-singleton invariant while
+# satisfying the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md).
 # vue-router is likewise pinned to one version. Nuxt 4.5.0 wants `vue-router@^5.2.0`
 # while `@nuxtjs/i18n` still resolves `^5.1.0`, so without this the SPA bundles two
 # copies of vue-router. The `@modular-vue/*` packages peer-require `vue-router@^5.0.0`,
 # so 5.2.0 satisfies every consumer — one version, one router singleton. Keep it in
 # lockstep with whatever `vue-router` Nuxt pulls on the next Nuxt bump.
 overrides:
-  vue: 3.5.40
+  vue: 3.5.41
   vue-router: 5.2.0
   # Single neutral engine: the @modular-vue/* bindings and @modular-frontend/journeys-engine
   # each depend on @modular-frontend/core across overlapping-but-not-identical ranges, so
@@ -31,15 +31,15 @@ overrides:
   # removed), so pinning one 0.6.0 keeps every core-owned type a single identity everywhere.
   # Prune once every consumer's core range is bumped to include ^0.6.0 upstream.
   '@modular-frontend/core': 0.6.0
-  '@vue/compiler-core': 3.5.40
-  '@vue/compiler-dom': 3.5.40
-  '@vue/compiler-sfc': 3.5.40
-  '@vue/compiler-ssr': 3.5.40
-  '@vue/reactivity': 3.5.40
-  '@vue/runtime-core': 3.5.40
-  '@vue/runtime-dom': 3.5.40
-  '@vue/server-renderer': 3.5.40
-  '@vue/shared': 3.5.40
+  '@vue/compiler-core': 3.5.41
+  '@vue/compiler-dom': 3.5.41
+  '@vue/compiler-sfc': 3.5.41
+  '@vue/compiler-ssr': 3.5.41
+  '@vue/reactivity': 3.5.41
+  '@vue/runtime-core': 3.5.41
+  '@vue/runtime-dom': 3.5.41
+  '@vue/server-renderer': 3.5.41
+  '@vue/shared': 3.5.41
 packages:
   - 'backend/packages/*'
   - 'backend/runtimes/*'
@@ -49,6 +49,7 @@ packages:
   - 'deploy/frontend'
   - 'deploy/node'
   - 'deploy/local'
+  - 'deploy/gatekeeper'
   # The four public-API SDK clients live together under `sdk/`; only the TypeScript one is an
   # npm package, so it is the only client member here. Python/Go/Java are built and published by
   # their own toolchains (see sdk/README.md). `sdk/mcp` is not a fifth client: it is the MCP
@@ -56,6 +57,9 @@ packages:
   - 'sdk/typescript'
   - 'sdk/mcp'
   - 'sdk/gatekeeper'
+  # Not a projection like its two neighbours: the hand-written Gatekeeper Worker machinery a
+  # deployment installs, beside the generated table it enforces policy with.
+  - 'sdk/gatekeeper-worker'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

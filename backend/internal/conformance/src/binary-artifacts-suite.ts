@@ -147,6 +147,89 @@ export function defineBinaryArtifactsSuite(
       // upload path the visual-confirmation gate reads).
       const byBlock = await store.listByBlock(ws, blk)
       expect(byBlock.map((r) => r.id)).toEqual([rec.id])
+      // countByBlock (the per-block upload-cap precheck) agrees with the list and scopes by block,
+      // the same pairing `countByExecution` owes the run half. A count that disagreed with the list
+      // would let the cap admit a row the reconcile then rolls back, or refuse one there is room
+      // for — and only a cross-runtime assertion catches a WHERE clause that drifted on one of them.
+      expect(await store.countByBlock(ws, blk)).toBe(byBlock.length)
+      expect(await store.countByBlock(ws, 'blk_other')).toBe(0)
+    })
+
+    it('keys a render to its DOCUMENT and reclaims the whole set on re-import', async () => {
+      // The design-render path: an import retains a source's frames keyed to the document itself
+      // (no run, no block — neither exists yet), and the next import that changes the body replaces
+      // them wholesale. Both halves have to agree across runtimes or a local import silently keeps
+      // last month's frames beside this month's.
+      const store = makeStore()
+      const { ws, blk } = ids()
+      const design = { source: 'figma' as const, externalId: 'file1:1-2' }
+      const other = { source: 'figma' as const, externalId: 'file1:9-9' }
+      const mk = (document: typeof design | null, view: string, n: number) =>
+        store.store({
+          meta: {
+            workspaceId: ws,
+            executionId: null,
+            blockId: null,
+            kind: 'reference',
+            view,
+            contentType: 'image/png',
+            ...(document ? { document } : {}),
+          },
+          blob: png(n),
+        })
+      const first = await mk(design, 'Checkout', 1)
+      const second = await mk(design, 'Confirm', 2)
+      const sibling = await mk(other, 'Settings', 3)
+      // A hand-uploaded reference against a block: same `kind`, no document, so the reclaim below
+      // must leave it alone.
+      const uploaded = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: null,
+          blockId: blk,
+          kind: 'reference',
+          view: 'Checkout',
+          contentType: 'image/png',
+        },
+        blob: png(4),
+      })
+
+      expect((await store.listByDocument(ws, design)).map((r) => r.id)).toEqual([
+        first.id,
+        second.id,
+      ])
+      expect((await store.getMetadata(ws, first.id))?.document).toEqual(design)
+      expect((await store.getMetadata(ws, uploaded.id))?.document).toBeNull()
+
+      // The batched read the visual-confirmation gate uses: the union of both documents' renders
+      // in ONE call, ordered like the single-document read across the whole result (which is what
+      // makes "the newest render for a view wins" hold however many designs a task links), with
+      // the hand-uploaded reference (which names no document) left out.
+      expect((await store.listByDocuments(ws, [design, other])).map((r) => r.id)).toEqual([
+        first.id,
+        second.id,
+        sibling.id,
+      ])
+      // A repeated ref must not double the rows it matches, and an unknown one must not fail the
+      // refs beside it.
+      expect(
+        (
+          await store.listByDocuments(ws, [
+            design,
+            design,
+            { source: 'figma' as const, externalId: 'nothing-imported' },
+          ])
+        ).map((r) => r.id),
+      ).toEqual([first.id, second.id])
+      expect(await store.listByDocuments(ws, [])).toEqual([])
+
+      expect(await store.pruneByDocument(ws, design)).toBe(2)
+      expect(await store.listByDocument(ws, design)).toEqual([])
+      // Bytes go with the rows — a reclaim that left the blobs would leak them permanently.
+      expect(await store.getBlob(ws, first.id)).toBeNull()
+      // The other document's renders and the hand-uploaded reference are untouched.
+      expect((await store.listByDocument(ws, other)).map((r) => r.id)).toEqual([sibling.id])
+      expect(await store.getMetadata(ws, uploaded.id)).not.toBeNull()
     })
 
     it('deletes a stored artifact (metadata + bytes)', async () => {
@@ -192,6 +275,49 @@ export function defineBinaryArtifactsSuite(
       expect(removed).toBe(1)
       expect(await store.getMetadata(ws, rec.id)).toBeNull()
       expect(await store.getBlob(ws, rec.id)).toBeNull()
+    })
+
+    it('pruneOlderThan EXEMPTS a document’s renders, however old they are', async () => {
+      // Age is the right lifetime for run debris and the wrong one for a document's renders. Those
+      // are a projection of a live row: they are replaced by the next import that changes the body
+      // and by nothing else, and an unedited design is never re-imported. Swept on a clock, the
+      // document row would go on saying `stored` over an empty set with nothing to re-download
+      // them — a silent loss, since no read fails and no status changes.
+      const store = makeStore()
+      const { ws, e1, blk } = ids()
+      const design = { source: 'figma' as const, externalId: 'file1:1-2' }
+      const debris = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: e1,
+          blockId: blk,
+          kind: 'screenshot',
+          view: 'v',
+          contentType: 'image/png',
+        },
+        blob: png(21),
+      })
+      const render = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: null,
+          blockId: null,
+          kind: 'reference',
+          view: 'Checkout',
+          contentType: 'image/png',
+          document: design,
+        },
+        blob: png(22),
+      })
+
+      // A cutoff past BOTH rows: only the run's screenshot is old enough to be anybody's debris.
+      expect(await store.pruneOlderThan(ws, Date.now() + 60_000)).toBe(1)
+      expect(await store.getMetadata(ws, debris.id)).toBeNull()
+      expect(await store.getMetadata(ws, render.id)).not.toBeNull()
+      expect(await store.getBlob(ws, render.id)).not.toBeNull()
+      // The document's own reclaim still takes it, which is the ONE thing that should.
+      expect(await store.pruneByDocument(ws, design)).toBe(1)
+      expect(await store.getBlob(ws, render.id)).toBeNull()
     })
 
     it('deleteByWorkspace reclaims every artifact (rows + bytes) and scopes by workspace', async () => {

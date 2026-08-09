@@ -26,12 +26,13 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // branch is resolved specially — see `RunDispatcher.builtInRepoOpBranch`), so these definitions
 // carry no `postOps`.
 //
-// They DO carry `presentation`, which is what puts them in the builder's palette. Neither is
-// seeded into a build preset any more (the catalog collapse left the spec increment to
-// `pl_bugfix` / `pl_spec` and the map refresh to `pl_blueprint`), and both collapse docs promise
-// them as opt-in builder steps, so the builder is the only place a delivery pipeline can pick
-// either back up. Without `presentation` the registry projection drops them and that promise is
-// unhonourable — which is also what left `spec-companion` with no producer to hang its toggle on.
+// They DO carry `presentation`, which is what puts them in the builder's palette, and that is now
+// the ONLY route a delivery pipeline has to either of them: the catalog collapse left the spec
+// increment to `pl_bugfix`, and the catalog narrowing retired the two single-step presets that
+// used to carry them on their own (`pl_spec`, `pl_blueprint` — the map refresh is a SINGLE-KIND
+// run now, the board's "Map service" action). Without `presentation` the registry projection drops
+// them and neither is reachable at all — which is also what left `spec-companion` with no producer
+// to hang its toggle on.
 // ---------------------------------------------------------------------------
 
 /** The agent kind of the container agent that maps a repository into the canonical
@@ -276,6 +277,8 @@ export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
       color: '#22d3ee',
       description: 'Maps the repository into the service → modules blueprint.',
       category: 'design',
+      // Decomposes a repository onto the board (mirrors the SPA's static archetype).
+      purposes: ['build', 'planning'],
       tier: 'intermediate',
     },
   },
@@ -302,6 +305,9 @@ export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
       category: 'design',
+      // Writes the in-repo spec an implementation is built against (mirrors the SPA's static
+      // archetype).
+      purposes: ['build', 'planning'],
       tier: 'intermediate',
     },
   },

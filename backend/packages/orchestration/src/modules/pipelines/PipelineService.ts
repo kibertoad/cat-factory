@@ -17,6 +17,7 @@ import {
   ConflictError,
   noopOperationalMetrics,
   retiredPipelines,
+  offeredPipelines,
   seedPipelines,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -39,6 +40,7 @@ import {
   pipelineHasEnabledBugIntake,
   validatePipelineShape,
 } from './pipelineShape.js'
+import { validatePipelineAuthoring } from './pipelineAuthoring.js'
 
 /**
  * The post-release-health gate watches a released PR's observability signals, so it is
@@ -182,9 +184,18 @@ export class PipelineService {
     return requireWorkspace(this.workspaceRepository, workspaceId)
   }
 
+  /**
+   * The workspace's pipeline LIBRARY — what the builder, the pickers and the health advisory work
+   * against. INTERNAL pipelines are withheld ({@link offeredPipelines}): the platform starts them
+   * by id for a flow of its own, and a row nobody may pick, clone or edit has no business in a
+   * library. They still resolve for a run through {@link resolveForRun}, which is the whole point.
+   */
   async list(workspaceId: string): Promise<Pipeline[]> {
     await this.requireWorkspace(workspaceId)
-    return this.pipelineRepository.listByWorkspace(workspaceId)
+    return offeredPipelines(
+      await this.pipelineRepository.listByWorkspace(workspaceId),
+      seedPipelines(this.pipelineRegistry),
+    )
   }
 
   /**
@@ -221,6 +232,14 @@ export class PipelineService {
       agentKindRegistry: this.agentKindRegistry,
       gateRegistry: this.gateRegistry,
     })
+    // Authoring-only correctness (see `validatePipelineAuthoring`): the environment lifecycle a
+    // composed chain has to spell out: provision, consume, reclaim. Not part of the shared shape
+    // validation, because a pipeline authored before this rule still RUNS.
+    validatePipelineAuthoring({
+      agentKinds: input.agentKinds,
+      enabled: input.enabled,
+      stepOptions: input.stepOptions,
+    })
     // Launch-constraint validation (no origin — a save, not a launch): a `bug-intake` step
     // requires a recurring pipeline. `availability` absent ⇒ `'both'` (unrestricted). Evaluated
     // over the enabled subset — a disabled bug-intake step imposes no requirement.
@@ -241,7 +260,7 @@ export class PipelineService {
       ...alignedStepOptions(input.agentKinds, input.stepOptions),
       ...normalizedLabels(input.labels),
       ...(input.availability ? { availability: input.availability } : {}),
-      ...(input.purpose ? { purpose: input.purpose } : {}),
+      purpose: input.purpose,
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
@@ -297,7 +316,7 @@ export class PipelineService {
       ...(source.availability ? { availability: source.availability } : {}),
       // The use-case classifier is a property of the pipeline's shape, so a clone inherits it
       // (a cloned document pipeline stays a document pipeline).
-      ...(source.purpose ? { purpose: source.purpose } : {}),
+      purpose: source.purpose,
       // A clone is a fresh, active, editable copy — never `builtin`, never `archived`.
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
@@ -359,6 +378,10 @@ export class PipelineService {
         agentKindRegistry: this.agentKindRegistry,
         gateRegistry: this.gateRegistry,
       })
+      // The authoring rules bind an edit exactly as they bind a create: removing the Deployer from
+      // a chain that still tests, or the Disposer from one that still deploys, is composing the
+      // dead end rather than inheriting it.
+      validatePipelineAuthoring({ agentKinds, enabled, stepOptions })
       await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
     }
     // Re-check the launch constraint when the chain, the enable mask, or the availability
@@ -415,7 +438,7 @@ export class PipelineService {
       ...alignedStepOptions(agentKinds, stepOptions),
       ...normalizedLabels(labels),
       ...(availability ? { availability } : {}),
-      ...(purpose ? { purpose } : {}),
+      purpose,
       // `archived` is organization-only state, mutated via `organize` — preserved here.
       ...(existing.archived ? { archived: true } : {}),
     }

@@ -21,6 +21,7 @@ import {
 } from './infrastructure/config/cors'
 import { buildContainer } from './infrastructure/container'
 import { registerToolSecretPolicy } from './infrastructure/toolSecretResolver'
+import { registerBinaryStoreRegistry } from './infrastructure/binaryStores'
 import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
 
@@ -130,6 +131,15 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
         ? {}
         : { environmentFallback: options.capabilityCredentialEnvironmentFallback }),
     })
+  }
+
+  // The deployment's own binary artifact stores, registered process-wide for the same reason and
+  // by the same mechanism. This one is carried on `overrides` (it IS a `CoreDependencies` field,
+  // unlike the credential chain), which is what hid the gap: an override reaches the container
+  // this app builds and nothing else, while the writes that need a store come from the durable
+  // driver and the reclaims from the cron. See `infrastructure/binaryStores.ts`.
+  if (options.overrides?.binaryStoreRegistry) {
+    registerBinaryStoreRegistry(options.overrides.binaryStoreRegistry)
   }
 
   // Correlation FIRST — before CORS and before the container build — so a CORS denial and the

@@ -139,6 +139,7 @@ export function defineTaskTypeConformance(harness: ConformanceHarness): void {
       //    select's CAPTION rather than its stored enum value.
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const start = await app.call(
@@ -239,6 +240,7 @@ export function defineTaskTypeConformance(harness: ConformanceHarness): void {
       })
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       await app.call('POST', `/workspaces/${wsId}/blocks/${created.body.id}/executions`, {
@@ -296,6 +298,7 @@ function registerOperationPipelineTests(harness: ConformanceHarness): void {
     v1.register({
       id: PIPELINE_ID,
       name: 'Introduce API',
+      purpose: 'build',
       builtin: true,
       version: 1,
       agentKinds: ['architect', 'coder'],
@@ -336,6 +339,7 @@ function registerOperationPipelineTests(harness: ConformanceHarness): void {
     v2.register({
       id: PIPELINE_ID,
       name: 'Introduce API',
+      purpose: 'build',
       builtin: true,
       version: 2,
       agentKinds: ['architect', 'coder', 'tester-api'],
@@ -381,6 +385,7 @@ function registerOperationPipelineTests(harness: ConformanceHarness): void {
     registry.register({
       id: PIPELINE_ID,
       name: 'Adopt on start',
+      purpose: 'build',
       builtin: true,
       version: 3,
       agentKinds: ['coder'],

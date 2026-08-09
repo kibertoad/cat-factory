@@ -1,5 +1,264 @@
 # @cat-factory/executor-harness
 
+## 1.106.0
+
+### Minor Changes
+
+- 3036af7: Rebuild both per-run container images: the shared `node:26-trixie-slim` base moves to the current
+  index digest, and the executor image's three bundled agent CLIs move to Pi 0.84.1, Claude Code
+  2.1.226 and Codex 0.147.0. The Pi todo/web-tools extensions are already on their newest release
+  (2.4.0), so they stay put.
+
+  Both image tags are bumped in this change (`cat-factory-executor:1.105.0`,
+  `cat-factory-deploy:0.2.12`): republishing over a live tag does not roll a deployment out.
+
+## 1.104.0
+
+### Minor Changes
+
+- dfa4a8e: Hand a run's reference designs to the container that captures against them.
+
+  `.cat-context/reference-screenshots/` has been in the UI-tester prompt since the visual-confirmation
+  gate landed, and nothing wrote it. So a designer whose task links a Figma frame got a gate gallery
+  built from that frame while the tester itself worked blind, naming views of its own that then had to
+  be matched to design frames named by somebody else.
+
+  A dispatch of a kind declaring the `ui` image now resolves the task's reference set (its designs'
+  retained frames plus the images a person uploaded against it) and the harness downloads them into the
+  checkout before the agent's first turn, with each file's view name stated in the prompt.
+
+  The bytes do not ride the job body. A design frame is a full-page PNG and a job body is JSON that
+  crosses every transport and is persisted with the dispatch, so only a manifest of ids and file names
+  travels; the harness fetches the images from a new `GET ${proxyBaseUrl}/artifacts/reference/:id` on
+  the same container session token the run already holds for the LLM proxy. That route is the mirror of
+  the screenshot ingest route beside it and is bounded the same way, plus one more: it serves
+  `kind:'reference'` only, so it cannot become a way for one container to read another run's captures.
+
+  Two things a reviewer should look at. The reference SET now has two readers (the gate and a dispatch)
+  and therefore one module: derived twice, the two would eventually disagree about a view name, which
+  is exactly the join the gate performs. And the FILE NAMES are chosen by the engine, not the harness,
+  because the name is how the agent learns the view name: a sanitiser change in an image a deployment
+  has not rolled out yet would otherwise rename every view a run reports.
+
+  The set is CAPPED by the engine, which is also what carries the dropped view names to the agent. A
+  task's references are unbounded (a block may hold a hundred uploads beside a design's frames) while
+  the download pass is budgeted well under the inactivity watchdog, so the ceiling is a decision the
+  platform states rather than an accident of transfer speed. It drops design frames before uploads,
+  mirroring the precedence that already lets an upload override a frame, and every dropped view is
+  named in the prompt: capped and simply absent look identical on disk otherwise. The delivery is
+  idempotent over the checkout, so the repair rounds of a coding flow re-cost a stat rather than a
+  transfer and cannot report a view an earlier round delivered as missing, and the per-image ceiling
+  now bounds the transfer (declared length, then a counted stream) instead of only the write.
+
+  Runner image bump: harness `src/**` changed, so deployments must move to the newly pinned tag. A
+  deployment on an older image simply receives no references, exactly as before this change.
+
+## 1.102.0
+
+### Minor Changes
+
+- 2544fb3: Give each repo in a multi-repo run a checkout directory that is actually its own.
+
+  The sibling checkout directory was `safeDirSegment(owner)__safeDirSegment(name)`, documented on
+  both sides as collision-free because GitHub owners contain no `_`. That argument does not survive
+  GitLab. `owner` there is a namespace PATH, so `grp/sub` folds onto the same segment as a top-level
+  group named `grp-sub`, and GitLab paths allow `_`, so `a__b` + `c` and `a` + `b__c` join to one
+  name. Either way two legs of a multi-repo run claim one directory, and the second leg's clone then
+  fails against a directory the first already filled, killing the run in the clone phase without
+  naming a repo.
+
+  The directory is now `owner__name__digest`, where the digest is FNV-1a over the UNSANITISED pair.
+  It stays a pure function of that pair, which is what lets the harness, `siblingCheckoutDir` and
+  the merger prompt each compute it independently with no shared ordering or state; a stateful
+  collision dance could not have been reproduced across three call sites that see different lists.
+  The harness's conformity suite now pins the two implementations against each other whole, rather
+  than against a join recomposed in the test, and asserts separation on the pairs that actually
+  collide.
+
+  Runner image bump: harness `src/**` changed, so deployments must move to the newly pinned tag.
+  Existing multi-repo checkout directories are named differently after this; nothing persists them.
+
+## 1.100.0
+
+### Minor Changes
+
+- f2ead2a: Rule MCP tool-server URLs on the host the request actually reaches, and give the gate, generator and service-frame seams their first tests
+
+  Taken from the nightly's per-file undetected counts rather than its headline score, which is what
+  separates the two dispositions: a file whose count is nearly all `NoCoverage` wants a test, a high
+  `Survived` count on a tested module wants assertions. Several kernel files were the first kind, and
+  writing the tests for one of them turned up a live hole.
+
+  **The hole.** `isAllowedMcpHttpUrl` decides whether a resolved credential may ride a CLEARTEXT
+  request header, and it read the host with a hand-written authority scan that stopped at `/`, `?`
+  and `#`. A backslash also terminates the authority of a special scheme, so
+  `http://evil.example\@127.0.0.1/mcp` parses to host `evil.example` for `fetch` and every agent CLI,
+  while the scan swallowed the delimiter, found a last `@` that was no userinfo separator, read
+  `127.0.0.1`, and granted the cleartext exemption. It is reachable from outside: `readEndpoints`
+  takes `token_endpoint` verbatim out of a third party's OAuth metadata document and
+  `assertAllowedOAuthUrl` is the only thing standing in front of the POST that carries the
+  `client_secret`.
+
+  The fix is not the missing delimiter. A hand-written parse cannot hold the property this predicate
+  exists for (the host ruled on is the host the credential travels to), and the ways it loses that
+  property are not enumerable: the backslash is one member of the class, and the same scan also read
+  `0177.0.0.1`, `127.1` and `2130706433` as non-loopback when they all dial `127.0.0.1`. That had
+  the operability probe pointing at the BACKEND's own loopback instead of refusing by name. So the
+  parse is now the WHATWG parser itself, the one the request is resolved with. Kernel compiles
+  against the ES2022 lib, so it is reached through `globalThis` behind a minimal local type, the same
+  trade `ports/binary-artifacts.ts` makes for Web Crypto; a runtime without it refuses rather than
+  falling back, since the fallback is the bug.
+
+  Narrower in one place, deliberately: a url carrying an ASCII control character or a space is now
+  refused outright rather than canonicalised. The parser trims and strips those, so such a url reads
+  as one thing and parses as another, and the admitted string is stored and written VERBATIM into the
+  agent CLI's MCP config.
+
+  The harness carries a byte-for-byte copy of the rule (the image builds from `src/` plus typescript
+  and can depend on no workspace package) and had drifted textually already. Its conformity suite
+  compares behaviour over a corpus, which cannot catch a spoof neither side thought of, so it now also
+  derives the expectation from the authority: whatever else the rule does, a cleartext url it admits
+  must resolve to a host that really is loopback.
+
+  **The tests.** `GateRegistry` itself was untested (only `recordGateAttempt` beside it was) and
+  `BinaryGeneratorRegistry` had no test file at all; the gap that mattered in both is
+  override-replaces-rather-than-accumulates, since overriding a built-in is the whole point of the
+  seam. With those two, every app-owned registry seam in `domain/` has a test sibling, which the
+  mutation doc had already claimed and is now true. `resolveServiceFrameBlock` is the ancestry walk
+  every prompt-assembling path resolves "which service is this?" through, and its contract is easy to
+  get subtly wrong: on a chain with no frame in it, it returns the TOPMOST block rather than null, and
+  `describeOwnService` re-checks the level to turn that into the stated refusal. A walk that returned
+  null instead would swap one refusal for another that reads identically. The UTF-8 width boundaries
+  in `toolServerDeclaredBytes` are pinned at each of the three comparisons rather than through one
+  CJK sample.
+
+  Spend's three real survivors are closed too: a window that has only just opened with nothing in it
+  is the confident zero again (the short-history rule is guarded on there being a first ROW, not on a
+  short span), a LATER tier raising the merged alert threshold, and the service carrying the window's
+  own cost and first-seen stamp into the forecast rather than the fallbacks beside them. Its
+  remaining survivors are equivalent mutants and are left alone: `Number.isFinite` already refuses
+  what the `!= null` beside it refuses in `budgetCapsOverlay`, and in `exhaustionAt` an infinite limit
+  divides to `Infinity` and a zero rate to the same, so both comparisons answer identically. A
+  `Stryker disable` for either would hide a survivor rather than explain one.
+
+## 1.98.0
+
+### Minor Changes
+
+- eac67c5: Close the three container-side holes in the "a job can never run forever" guarantee
+
+  The stuck-run audit found that every path out of a wedged run eventually hits some backstop, and
+  then found three places inside the container where the backstop that was supposed to catch it is
+  the one that cannot. All three are harness-side, so they land together as one image slice.
+
+  **The watchdogs run on the same event loop as the stream they watch.** Both abort timers and the
+  `/health` + `/jobs` poll endpoints share one Node event loop with the JSONL parsing hot path, and
+  both CLI readers had grown an unbounded framing buffer: a record that never terminates accumulates
+  without limit, and the close-of-run reductions then re-parsed the entire run's stdout two more
+  times. A container that stalls that loop stops answering polls while its own timers never fire,
+  which is precisely the wedge the timers exist to prevent, leaving only the engine's poll-failure
+  tolerance and the reaper underneath. Framing is now a shared `JsonlLineReader` that refuses to
+  buffer a runaway record, and the close path folds each record as it streams instead of re-parsing
+  anything.
+
+  Folding rather than retaining is what closes the memory half: an unbounded array of parsed records
+  is not a smaller copy of the run than its text, it is a larger one, and a container that exhausts
+  its heap stops answering polls the same way a blocked loop does. The reducer keeps only what the
+  close-of-run answers actually read, so a run costs the largest single record rather than all of
+  them. Framing likewise scans each incoming chunk rather than the accumulated buffer, because any
+  search over that buffer flattens it: scanning it per chunk cost about six seconds of solid
+  blocking on one 32 MB record, which would have bounded the memory and handed back the stall.
+
+  A dropped oversized record is dropped whole rather than truncated, and counted: half a JSON
+  document is not a record, and handing the parser one would report the bound firing as corrupt
+  model output. The cap is on the record, not on the leftover buffer, so it cannot depend on how the
+  OS happened to split the reads. It sits far above the largest legitimate record, and that record
+  is the terminal transcript, which is also the one deciding whether a clean exit actually failed —
+  so a run whose terminal record was dropped is now refused rather than certified. Reporting a
+  hard-failed run as a success is precisely what that check exists to prevent, and the subscription
+  stream, which counted its drops and said nothing, now reports them too.
+
+  **A chatty model trips no guard at all.** The inactivity watchdog resets on any output, and the
+  no-progress guard counts tool calls, so a model that streams text forever while completing nothing
+  satisfies both and burns the full wall-clock cap plus the engine's poll budget behind it. A third
+  watchdog now fails a run that keeps talking without completing a tool call, under its own
+  `no-tool-progress` failure cause rather than reusing `inactivity-timeout`: the two need different
+  fixes, and "the container went quiet" is the wrong thing to tell someone whose model was mid-
+  monologue.
+
+  The wrong-kill risk this creates is what shaped it. The window is opened by the agent stream that
+  can reset it, not by the job's coarse phase label: only the runner knows whether its CLI reports
+  completed tool calls, and the `agent` label is marked by several call sites for work that reports
+  none at all, so arming on it would have covered mostly things that could only let the window
+  expire. Work with no tool loop opens no window and says why. The window is derived from
+  `JOB_MAX_DURATION_MS` rather than fixed, so shortening a deployment's jobs shortens it too instead
+  of silently disabling it. And it fires only when output arrived during the window that elapsed,
+  which is what keeps a hang with the inactivity watchdog whose diagnostic an operator can act on:
+  the two anchor on different events, so no relation between their lengths can order them.
+  `JOB_TOOL_SILENCE_MS` overrides the window; `0` disables it.
+
+  **The bootstrap push phase could not be interrupted.** `reinitAndPush` was the one git helper that
+  never threaded the job's abort signal, so an abort raised during it kept working through six
+  commands bounded only by their own timeouts, well past the max-duration kill that had already
+  fired.
+
+  Two things reviewers should look at. The new failure cause is additive across a hand-kept boundary
+  (the image can carry no workspace dependency, so the harness union and the kernel one are copies);
+  a conformity test now pins that every cause this image stamps is one kernel classifies, which is
+  the direction that fails silently, degrading a watchdog kill into a generic agent error. And
+  `RunnerLimits` gained a required field rather than an optional one, so every construction site had
+  to declare its window, which is the existing convention there for exactly this reason.
+
+  Ships with runner image 1.97.0.
+
+## 1.96.0
+
+### Minor Changes
+
+- 1c8df4a: Record what the agent's CLI said about the tool servers it loaded, beside what the dispatch decided
+
+  A step's tool-server record has answered one question since it landed: what the platform wired for
+  the agent, and what it withheld and why. It cannot answer the other one. A server that passes every
+  check, resolves its credential, survives the budget and reaches the container can still fail to come
+  up there: a vendor endpoint that 500s, a pinned `npx` package that no longer resolves, a token the
+  vendor revoked between dispatch and launch. In every one of those the prompt promises the agent a
+  tool that never exists, and the only evidence was the agent mentioning it in prose, if it noticed.
+
+  The claude-code CLI announces its resolved session before its first model call, naming the MCP
+  servers it loaded with a status each, plus the flat list of tools it will expose. The harness reads
+  that one event and publishes it on the job view; the engine folds it onto the same
+  `step.toolServers` record the dispatch wrote, and the step detail renders it on the existing chips.
+  Both halves are kept, never merged into one status: the platform withholding a tool and the CLI
+  failing to start one are different faults for different people.
+
+  The distinctions this is built out of are the whole point, because each one reads as a healthy
+  server if it collapses:
+
+  - **Not observed is not "nothing was loaded."** Codex's CLI publishes no such report, nor does any
+    image older than this one, nor a runner pool whose manifest does not map the field. All of them
+    leave the record's observed half ABSENT, and the surface then says nothing at all rather than
+    accusing every wired server on every deployment one release behind.
+  - **Started-with-no-tools is not started.** A server that connects and exposes nothing reaches the
+    agent exactly like one that was never wired, and every other signal about it says healthy, so a
+    zero tool count gets its own sentence and an uncounted one stays absent.
+  - **A status this build cannot map is not a fault.** The CLI's status words are a third party's
+    vocabulary; an unrecognised one records as `unknown` and is rendered neutrally, because painting
+    it red would send an operator to debug a working integration each time a CLI adds a word.
+
+  Nothing branches on an observation: this is evidence for a person, not a control signal.
+  Correspondingly it rides all three poll dispositions rather than just the live one — a job short
+  enough to settle between two polls is never seen running, and a job that fails is the one whose
+  post-mortem needs this most.
+
+  Runner-pool operators who proxy the executor-harness verbatim gain
+  `response.toolServersPath` on the manifest; leaving it unset costs the diagnostic and never
+  produces a false one. Ships with runner image 1.95.0.
+
+  On the public surface this is one additive optional field, `observed` on a step's `toolServers` in
+  `GET /api/v1/debug/runs/:runId` (spec `1.24.0`), so a consumer written against the previous version
+  parses everything it already knew. The one rule it has to carry across is the first distinction
+  above: an absent `observed` is "no observation was made", never "the CLI loaded nothing".
+
 ## 1.94.0
 
 ### Minor Changes

@@ -25,7 +25,10 @@ export function forkDecisionController(): Hono<AppEnv> {
   buildHonoRoute(app, getForkDecisionContract, async (c) => {
     const state = await c
       .get('container')
-      .executionService.getForkDecision(param(c, 'workspaceId'), c.req.valid('param').executionId)
+      .executionService.decisions.getForkDecision(
+        param(c, 'workspaceId'),
+        c.req.valid('param').executionId,
+      )
     return c.json(state, 200)
   })
 
@@ -40,7 +43,9 @@ export function forkDecisionController(): Hono<AppEnv> {
     const state = await runWithInitiator(
       { workspaceId: param(c, 'workspaceId'), initiatedBy: userId },
       () =>
-        c.get('container').executionService.forkChat(param(c, 'workspaceId'), executionId, input),
+        c
+          .get('container')
+          .executionService.decisions.forkChat(param(c, 'workspaceId'), executionId, input),
     )
     return c.json(state, 200)
   })
@@ -55,7 +60,9 @@ export function forkDecisionController(): Hono<AppEnv> {
     const state = await runWithInitiator(
       { workspaceId: param(c, 'workspaceId'), initiatedBy: userId },
       () =>
-        c.get('container').executionService.chooseFork(param(c, 'workspaceId'), executionId, input),
+        c
+          .get('container')
+          .executionService.decisions.chooseFork(param(c, 'workspaceId'), executionId, input),
     )
     return c.json(state, 200)
   })

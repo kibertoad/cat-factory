@@ -27,7 +27,10 @@ export function prReviewController(): Hono<AppEnv> {
   buildHonoRoute(app, getPrReviewContract, async (c) => {
     const state = await c
       .get('container')
-      .executionService.getPrReview(param(c, 'workspaceId'), c.req.valid('param').executionId)
+      .executionService.decisions.getPrReview(
+        param(c, 'workspaceId'),
+        c.req.valid('param').executionId,
+      )
     return c.json(state, 200)
   })
 
@@ -43,7 +46,7 @@ export function prReviewController(): Hono<AppEnv> {
       () =>
         c
           .get('container')
-          .executionService.resolvePrReview(param(c, 'workspaceId'), executionId, input),
+          .executionService.decisions.resolvePrReview(param(c, 'workspaceId'), executionId, input),
     )
     return c.json(state, 200)
   })
@@ -57,7 +60,9 @@ export function prReviewController(): Hono<AppEnv> {
     const state = await runWithInitiator(
       { workspaceId: param(c, 'workspaceId'), initiatedBy: userId },
       () =>
-        c.get('container').executionService.resumePrReview(param(c, 'workspaceId'), executionId),
+        c
+          .get('container')
+          .executionService.decisions.resumePrReview(param(c, 'workspaceId'), executionId),
     )
     return c.json(state, 200)
   })
@@ -67,7 +72,11 @@ export function prReviewController(): Hono<AppEnv> {
     const { executionId, findingId } = c.req.valid('param')
     const state = await c
       .get('container')
-      .executionService.dismissPrReviewFinding(param(c, 'workspaceId'), executionId, findingId)
+      .executionService.decisions.dismissPrReviewFinding(
+        param(c, 'workspaceId'),
+        executionId,
+        findingId,
+      )
     return c.json(state, 200)
   })
 
@@ -82,7 +91,7 @@ export function prReviewController(): Hono<AppEnv> {
       () =>
         c
           .get('container')
-          .executionService.challengePrReviewFinding(
+          .executionService.decisions.challengePrReviewFinding(
             param(c, 'workspaceId'),
             executionId,
             findingId,

@@ -32,7 +32,11 @@ import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { ReviewTargetReason } from '@cat-factory/contracts'
-import { sanitizeDescriptorFields, validateDescriptorFields } from '@cat-factory/contracts'
+import {
+  defaultBuildPipelineId,
+  sanitizeDescriptorFields,
+  validateDescriptorFields,
+} from '@cat-factory/contracts'
 import { defaultDescriptorValues } from '~/utils/descriptorFields'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
@@ -405,18 +409,38 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   document: 'pl_document',
   review: 'pl_review',
 }
+/**
+ * The pipeline a task type opens with: a custom type's registered `defaultPipelineId`, else the
+ * built-in map — and for an ordinary IMPLEMENTATION task (feature / bug / chore, which the map
+ * deliberately does not name), the build rung this interface mode defaults to. Basic mode gets the
+ * fixed Standard build, advanced the Adaptive one; `defaultBuildPipelineId` owns that rule so the
+ * create form and the task card's plain "Start" cannot disagree about it. Empty when the resolved
+ * preset is not in this workspace's library (an older seed, or a retired rung).
+ *
+ * ONE definition, read by both the type watcher and the open-reset. They used to compute it
+ * separately, the reset consulting `DEFAULT_PIPELINE_FOR_TYPE` alone and falling to `''` for every
+ * implementation type — so which default a `feature` opened with depended on whether the previous
+ * session had left the modal on a DIFFERENT type: same type ⇒ the watcher never fired and the
+ * picker opened empty, different type ⇒ it fired (asynchronously, after the reset) and filled it in.
+ */
+function defaultPipelineIdFor(type: TaskTypeChoice): string {
+  const custom = customTaskTypes.value.find((tt) => tt.taskType === type)
+  const preset =
+    custom?.defaultPipelineId ??
+    DEFAULT_PIPELINE_FOR_TYPE[type] ??
+    defaultBuildPipelineId(uiMode.isAdvanced)
+  return pipelines.pipelines.some((p) => p.id === preset) ? preset : ''
+}
+
 watch(taskType, (next) => {
   const custom = customTaskTypes.value.find((tt) => tt.taskType === next)
   // A custom type owns a fresh field bag on every switch (its descriptors differ per type), seeded
   // to whatever defaults the new type declares.
   customFieldValues.value = defaultDescriptorValues(custom?.fields ?? [])
-  // Pre-select the type's default pipeline: a custom type's registered `defaultPipelineId`, else
-  // the built-in map. (For a custom type with no default, `BoardService` applies the registry
-  // default at creation, so leaving the picker unset is fine.)
-  const preset = custom?.defaultPipelineId ?? DEFAULT_PIPELINE_FOR_TYPE[next]
-  if (!preset) return
-  const match = pipelines.pipelines.find((p) => p.id === preset)
-  if (match) pipelineId.value = match.id
+  // An unresolvable preset leaves the current selection alone rather than blanking it: a type
+  // switch is an edit to a form the user is already filling in, not a reset.
+  const preset = defaultPipelineIdFor(next)
+  if (preset) pipelineId.value = preset
 })
 
 // Task-level agent config contributed by the selected pipeline's agents (e.g. the
@@ -537,10 +561,12 @@ watch(open, (isOpen) => {
     delete docKindFieldValues[key]
   riskPolicyId.value = ''
   modelPresetId.value = ''
-  // Seed the pipeline from the (possibly doc-repo-forced) task type's default, so a document
-  // repo opens with `pl_document` pre-selected rather than empty. This runs AFTER the `taskType`
-  // watcher fired during this reset, so it is the authoritative default (see DEFAULT_PIPELINE_FOR_TYPE).
-  pipelineId.value = DEFAULT_PIPELINE_FOR_TYPE[taskType.value] ?? ''
+  // Seed the pipeline from the (possibly doc-repo-forced) task type's default, so a document repo
+  // opens with `pl_document` pre-selected and an ordinary feature with its build rung. Computed
+  // through the shared helper rather than relying on the `taskType` watcher above having run: that
+  // watcher fires only when the type actually CHANGED (and asynchronously, after this block), so
+  // reopening the modal on the type it was last left on would otherwise open the picker empty.
+  pipelineId.value = defaultPipelineIdFor(taskType.value)
   agentConfigValues.value = {}
   pendingContext.value = []
   // Seed from a prefill when opened from another surface (e.g. "create task from
@@ -1230,6 +1256,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
             v-if="ui.addTaskContainerId"
             v-model="pendingContext"
             :scope-block-id="ui.addTaskContainerId"
+            :description="description"
             :docs-hint="t('board.addTask.noDocsHint')"
             :issues-hint="t('board.addTask.noIssuesHint')"
           />

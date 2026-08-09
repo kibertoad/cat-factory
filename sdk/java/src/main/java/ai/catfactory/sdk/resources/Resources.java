@@ -16,6 +16,8 @@ import ai.catfactory.sdk.Transport;
 public abstract class Resources {
     private final JobsClient jobs;
     private final ServicesClient services;
+    private final SpecClient spec;
+    private final ReposClient repos;
     private final TasksClient tasks;
     private final PipelinesClient pipelines;
     private final TaskTypesClient taskTypes;
@@ -26,11 +28,14 @@ public abstract class Resources {
     private final DecisionsClient decisions;
     private final DebugClient debug;
     private final EvidenceClient evidence;
+    private final MergeRecordsClient mergeRecords;
     private final KeysClient keys;
 
     protected Resources(Transport transport) {
         this.jobs = new JobsClient(transport);
         this.services = new ServicesClient(transport);
+        this.spec = new SpecClient(transport);
+        this.repos = new ReposClient(transport);
         this.tasks = new TasksClient(transport);
         this.pipelines = new PipelinesClient(transport);
         this.taskTypes = new TaskTypesClient(transport);
@@ -41,6 +46,7 @@ public abstract class Resources {
         this.decisions = new DecisionsClient(transport);
         this.debug = new DebugClient(transport);
         this.evidence = new EvidenceClient(transport);
+        this.mergeRecords = new MergeRecordsClient(transport);
         this.keys = new KeysClient(transport);
     }
 
@@ -49,12 +55,22 @@ public abstract class Resources {
         return jobs;
     }
 
-    /** The workspace's board services — the frames tasks are created under. */
+    /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
     public ServicesClient services() {
         return services;
     }
 
-    /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete. */
+    /** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
+    public SpecClient spec() {
+        return spec;
+    }
+
+    /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+    public ReposClient repos() {
+        return repos;
+    }
+
+    /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against. */
     public TasksClient tasks() {
         return tasks;
     }
@@ -74,12 +90,12 @@ public abstract class Resources {
         return notifications;
     }
 
-    /** The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to. */
+    /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */
     public WebhookClient webhook() {
         return webhook;
     }
 
-    /** The billing period's metered budget position and the per-model breakdown behind it. */
+    /** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
     public UsageClient usage() {
         return usage;
     }
@@ -94,7 +110,7 @@ public abstract class Resources {
         return decisions;
     }
 
-    /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
+    /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
     public DebugClient debug() {
         return debug;
     }
@@ -102,6 +118,11 @@ public abstract class Resources {
     /** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
     public EvidenceClient evidence() {
         return evidence;
+    }
+
+    /** The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything. */
+    public MergeRecordsClient mergeRecords() {
+        return mergeRecords;
     }
 
     /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */

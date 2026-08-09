@@ -6,6 +6,11 @@ import type {
 } from '@cat-factory/kernel'
 import {
   ApiKeyService,
+  LOCAL_MODEL_ENDPOINTS_CIPHER_INFO,
+  PERSONAL_SUBSCRIPTIONS_CIPHER_INFO,
+  PROVIDER_API_KEYS_CIPHER_INFO,
+  PROVIDER_SUBSCRIPTIONS_CIPHER_INFO,
+  USER_SECRET_CIPHER_INFO,
   LocalModelEndpointService,
   OpenRouterCatalogService,
   PersonalSubscriptionService,
@@ -68,7 +73,7 @@ export function buildSubscriptionService(
     workspaceRepository: new D1WorkspaceRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:provider-subscriptions',
+      info: PROVIDER_SUBSCRIPTIONS_CIPHER_INFO,
     }),
     idGenerator: new CryptoIdGenerator(),
     clock,
@@ -93,7 +98,7 @@ export function buildApiKeyService(
     workspaceRepository: new D1WorkspaceRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:provider-api-keys',
+      info: PROVIDER_API_KEYS_CIPHER_INFO,
     }),
     idGenerator: new CryptoIdGenerator(),
     clock,
@@ -140,7 +145,7 @@ export function buildPersonalSubscriptionService(
     subscriptionActivationRepository: new D1SubscriptionActivationRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:personal-subscriptions',
+      info: PERSONAL_SUBSCRIPTIONS_CIPHER_INFO,
     }),
     personalCipher: new WebCryptoPersonalSecretCipher(),
     idGenerator: new CryptoIdGenerator(),
@@ -165,7 +170,7 @@ export function buildLocalModelEndpointService(
     localModelEndpointRepository: new D1LocalModelEndpointRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:local-model-endpoints',
+      info: LOCAL_MODEL_ENDPOINTS_CIPHER_INFO,
     }),
     clock,
     // Loopback-only unless the operator opts into LAN reach (SEC-3). RFC1918 is
@@ -196,7 +201,7 @@ export function buildUserSecretService(
   if (!masterKeyBase64) return undefined
   return new UserSecretService({
     userSecretRepository: new D1UserSecretRepository({ db }),
-    secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
+    secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: USER_SECRET_CIPHER_INFO }),
     clock,
     ...(userSecretKindRegistry ? { userSecretKindRegistry } : {}),
     ...(viewerReposCache

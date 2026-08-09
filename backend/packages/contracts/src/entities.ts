@@ -13,6 +13,7 @@ import { serviceProvisioningSchema } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
 import { frontendConfigSchema } from './frontend.js'
 import { stepGateConfigSchema } from './gate-config.js'
+import { stepRunConditionSchema } from './step-conditions.js'
 import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
@@ -844,6 +845,24 @@ export const stepOptionsSchema = v.object({
    */
   binaryOutput: v.optional(binaryOutputConfigSchema),
   /**
+   * `deployer` steps only. Declares that the environments THIS step provisions are meant to
+   * OUTLIVE the run: nothing in the chain reclaims them, and the TTL sweep (or an operator) takes
+   * them down later. The shape a preview environment has, where the point is that a reviewer can
+   * poke at the live URL after the PR is open.
+   *
+   * It exists because the reclaim leg has two legitimate ends and only one of them is a step. A
+   * `deployer` with no `disposer` after it is refused at pipeline save
+   * ({@link pipelineEnvironmentProblems}) precisely because an environment nobody reclaims is
+   * usually an oversight; this is how an author says it is not one. Setting it AND keeping a
+   * `disposer` is refused in turn: the disposer reclaims by the ids this step recorded, so the
+   * two say opposite things and the chain is the half that runs.
+   *
+   * Read by the PR verification report as well as by the save boundary, which is what makes it a
+   * declaration rather than a validation bypass: the teardown leg renders `retained` instead of a
+   * `pending` reclaim nothing will ever close. Ignored on every other kind.
+   */
+  retainEnvironment: v.optional(v.boolean()),
+  /**
    * This step's GATE configuration: who may resolve its human approval gate and how many of
    * them must, plus the parameters of the registered gate its kind runs (see
    * {@link stepGateConfigSchema}). The `gates[i]` flag stays the "is there a human checkpoint
@@ -852,6 +871,16 @@ export const stepOptionsSchema = v.object({
    * defaults.
    */
   gateConfig: v.optional(stepGateConfigSchema),
+  /**
+   * This step's RUN CONDITION: what has to be true of the run for the step to apply at all (see
+   * {@link stepRunConditionSchema}). Distinct from the estimate `gating` array, which asks whether
+   * the task is BIG enough; this asks whether the step is RELEVANT — a UI test on a run that
+   * changes no frontend is not an expensive test, it is a test of nothing.
+   *
+   * Evaluated at the step's own turn against the run's service scope; an unsatisfied condition
+   * finishes the step as `skipped` exactly as an unmet estimate gate does. Absent ⇒ unconditional.
+   */
+  condition: v.optional(stepRunConditionSchema),
 })
 export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
 
@@ -981,11 +1010,37 @@ export const pipelineSchema = v.object({
   availability: v.optional(
     v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
   ),
-  // The use-case classifier ({@link PIPELINE_PURPOSES}) the task pickers + builder palette filter
-  // on. Absent ⇒ unclassified (pre-1.0, no back-fill): unrestricted, but hidden from a document task.
-  purpose: v.optional(pipelinePurposeSchema),
+  /**
+   * The use-case classifier ({@link PIPELINE_PURPOSES}) the task pickers, the builder palette and
+   * the builder's saved-pipeline library filter on. MANDATORY: every pipeline says what it exists
+   * to do, whether it comes from the built-in catalog, a `PipelineRegistry` registration or the
+   * builder. A field four surfaces narrow by cannot be optional without each of them owning a
+   * private policy for the rows that skipped it.
+   *
+   * DECLARED to be a member, not verified to be one: the value is persisted, so a stored row can
+   * name a member retired since it was written, and a browser can hold a bundle older than the
+   * member it reads. Narrow with `isPipelinePurpose` (or `classifierFor`, which states what an
+   * unnameable classifier means) before indexing anything by it.
+   */
+  purpose: pipelinePurposeSchema,
+  /**
+   * When true the pipeline is INTERNAL: the platform starts it by id for a flow of its own, and no
+   * user-facing surface offers it. It is filtered out of the workspace snapshot, the pipeline list,
+   * the task/recurring pickers and the builder library, so it can be neither picked, cloned nor
+   * edited — but it still resolves for a run, which is the whole point.
+   *
+   * The distinction it draws is between a pipeline that is a PRODUCT CHOICE (everything in the
+   * catalog) and one that is an IMPLEMENTATION DETAIL of a feature elsewhere in the app (the
+   * chain an initiative preset spawns its tasks onto). Retiring the second kind would break the
+   * feature that starts it; leaving it in the catalog offers the user a pipeline whose only
+   * sensible caller is the platform.
+   *
+   * Absent / false ⇒ an ordinary, offered pipeline.
+   */
+  internal: v.optional(v.boolean()),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
+
 export type PipelineAvailability = NonNullable<Pipeline['availability']>
 
 export const workspaceSchema = v.object({

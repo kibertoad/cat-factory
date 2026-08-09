@@ -281,6 +281,7 @@ export function defineCredentialsConformance(harness: ConformanceHarness): void 
       await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
       const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const start = await call<ExecutionInstance>(
@@ -322,6 +323,7 @@ export function defineCredentialsConformance(harness: ConformanceHarness): void 
       await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
       const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const start = await call<ExecutionInstance>(

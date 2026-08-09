@@ -5,13 +5,6 @@ import type {
   AgentFailureKind,
   Block,
   ExecutionInstance,
-  FollowUpsStepState,
-  ForkDecisionStepState,
-  ChooseForkInput,
-  ForkChatRequestInput,
-  PrReviewStepState,
-  ResolvePrReviewInput,
-  ChallengePrReviewFindingInput,
   PipelineStep,
   PullRequestMerger,
   GateActor,
@@ -26,10 +19,8 @@ import { allPullRequests } from '@cat-factory/contracts'
 import type { PrVerificationReport, RunOutcome, ServiceSpecView } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunStartOptions } from './runStartOptions.js'
-import {
-  resolveIndividualVendors,
-  type HasPersonalSubscription,
-} from './individualVendors.logic.js'
+import type { HasPersonalSubscription } from './runVendorGate.js'
+import { createRunVendorGate, type RunVendorGate } from './runVendorGate.js'
 import {
   assertFound,
   RunContendedError,
@@ -49,8 +40,9 @@ import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { PostMergeBoardController, type PostMergeBoardHost } from './PostMergeBoardController.js'
 import { orderPrsForMerge } from './mergeOrder.logic.js'
-import { type ReviewGateController, type ReviewKind } from './ReviewGateController.js'
+import { type ReviewKind } from './ReviewGateController.js'
 import { runStepPreamble, type StepPreambleDeps } from './stepPreamble.js'
+import { resolveScopeForRun } from './runServiceScope.js'
 import type { InputGateController } from './InputGateController.js'
 import {
   buildGateWindowControllers,
@@ -58,8 +50,7 @@ import {
   buildReviewSubjects,
 } from './gate-window-controllers.js'
 import { buildRunContextAndAdmission } from './run-context-admission.js'
-import { ForkDecisionController } from './ForkDecisionController.js'
-import { PrReviewController } from './PrReviewController.js'
+import { runDecisionSurfaces, type RunDecisionSurfaces } from './run-decision-surfaces.js'
 import {
   BrainstormActions,
   ClarityReviewActions,
@@ -67,10 +58,6 @@ import {
   RequirementReviewActions,
   type VisualConfirmActions,
 } from './gate-window-facades.js'
-import { TesterController } from './TesterController.js'
-import { RalphController } from './RalphController.js'
-import { HumanTestController } from './HumanTestController.js'
-import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import { DocInterviewController } from './DocInterviewController.js'
@@ -97,6 +84,7 @@ import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
 import { createPipelineAdoption, type PipelineAdoption } from '../pipelines/pipelineAdoption.js'
+import type { RunSpecRead } from './RunEvidenceLoader.js'
 import { RunEvidenceReads } from './RunEvidenceReads.js'
 import { PrVerificationReportController } from './PrVerificationReportController.js'
 
@@ -208,22 +196,21 @@ export class ExecutionService {
   private readonly mergeResolver: MergeResolver
   /** Drives a companion (reviewer/spec/architect) step: grade → pass / loop producer / park. */
   private readonly companionController: CompanionController
-  /** Drives the Tester gate's fix loop: report → greenlight / dispatch fixer / fail. */
-  private readonly testerController: TesterController
-  private readonly ralphController: RalphController
-  /** Drives the human-testing gate: provision env → park → confirm / fix / pull-main / recreate. */
-  private readonly humanTestController: HumanTestController
-  /** Drives the visual-confirmation gate: gather screenshots → park → approve / fix / recapture. */
-  private readonly visualConfirmationController: VisualConfirmationController
-  /** Drives both iterative review gates (requirements + clarity); kind-parameterised. */
-  private readonly reviewGate: ReviewGateController
+  /**
+   * The controllers behind the run's gates and dedicated park windows, as ONE bundle rather than
+   * one field each: the Tester fix loop, the Ralph loop, the human-testing and
+   * visual-confirmation gates, both iterative review gates, the implementation-fork decision, the
+   * PR deep-review and the generated-candidate comparison. The family grows with every park
+   * surface, and a field plus an assignment per member spends two lines of this class's budget on
+   * a value that is only ever forwarded. See {@link buildGateWindowControllers}.
+   */
+  private readonly gateWindows: ReturnType<typeof buildGateWindowControllers>
   /** The pre-dispatch input gate; see {@link InputGateController}. */
   private readonly inputGate: InputGateController
   /** Bound collaborators for the shared pre-dispatch preamble ({@link runStepPreamble}). */
   private stepPreambleDepsCache?: StepPreambleDeps
-  /** Drives the human-facing half of the implementation-fork decision phase on the Coder step. */
-  private readonly forkDecisionController: ForkDecisionController
-  private readonly prReviewController: PrReviewController
+  /** The three doors onto "what personal subscriptions would a run started here lease". */
+  private vendorGateCache?: RunVendorGate
   /** The requirements subject for {@link reviewGate}. */
   private readonly requirementsKind: ReviewKind<RequirementReview>
   /** The clarity (bug-report triage) subject for {@link reviewGate}. */
@@ -333,6 +320,7 @@ export class ExecutionService {
       notificationService,
       runLifecycleSink,
       resolveBinaryArtifactStore,
+      documentRepository,
       llmObservability,
       pullRequestMerger,
       riskPolicyRepository,
@@ -438,17 +426,12 @@ export class ExecutionService {
       environmentTeardown,
       branchUpdater,
       resolveBinaryArtifactStore,
+      documentRepository,
       forkChatService,
       issueWriteback,
       logger,
     })
-    this.testerController = gateWindows.testerController
-    this.ralphController = gateWindows.ralphController
-    this.humanTestController = gateWindows.humanTestController
-    this.visualConfirmationController = gateWindows.visualConfirmationController
-    this.reviewGate = gateWindows.reviewGate
-    this.forkDecisionController = gateWindows.forkDecisionController
-    this.prReviewController = gateWindows.prReviewController
+    this.gateWindows = gateWindows
     // The pre-dispatch input gate: not a gate WINDOW (it guards the run's first dispatch and has no
     // pipeline step of its own), so it has its own factory over the same dependency bag.
     this.inputGate = buildInputGateController(dependencies, {
@@ -564,9 +547,11 @@ export class ExecutionService {
   }
 
   /**
-   * The three run-EVIDENCE reads, resolved by run id: the verification report, the outcome
-   * summary, and the `spec/` they join against. Thin delegates onto {@link RunEvidenceReads},
-   * which owns the one thing they must never disagree about (what "this run" resolves to).
+   * The run-EVIDENCE reads, resolved by run id: the verification report, the outcome summary, and
+   * the `spec/` they join against, that last one both folded (for the SPA's card) and with the
+   * outcome of the read kept (for `GET /api/v1/runs/:runId/spec`). Thin delegates onto
+   * {@link RunEvidenceReads}, which owns the one thing they must never disagree about (what "this
+   * run" resolves to).
    */
   private readonly evidenceReads = new RunEvidenceReads({
     getInstance: (workspaceId, executionId) =>
@@ -577,6 +562,8 @@ export class ExecutionService {
       this.prVerificationReport.composeOutcomeForRun(workspaceId, instance),
     readSpec: (workspaceId, instance) =>
       this.prVerificationReport.readRunSpec(workspaceId, instance),
+    readSpecOutcome: (workspaceId, instance) =>
+      this.prVerificationReport.readRunSpecOutcome(workspaceId, instance),
   })
 
   /** The read behind `GET /api/v1/runs/:runId/report`. */
@@ -595,6 +582,14 @@ export class ExecutionService {
   /** The read behind `GET /workspaces/:ws/executions/:executionId/spec` (the outcome card). */
   async readRunSpec(workspaceId: string, executionId: string): Promise<ServiceSpecView | null> {
     return this.evidenceReads.spec(workspaceId, executionId)
+  }
+
+  /**
+   * The read behind `GET /api/v1/runs/:runId/spec`: the same tree as {@link readRunSpec}, with the
+   * outcome of the read kept rather than folded onto an empty view.
+   */
+  async readRunSpecOutcome(workspaceId: string, executionId: string): Promise<RunSpecRead | null> {
+    return this.evidenceReads.specRead(workspaceId, executionId)
   }
 
   /**
@@ -620,13 +615,14 @@ export class ExecutionService {
       contextBuilder: this.contextBuilder,
       mergeResolver: this.mergeResolver,
       companionController: this.companionController,
-      testerController: this.testerController,
-      ralphController: this.ralphController,
-      humanTestController: this.humanTestController,
-      visualConfirmationController: this.visualConfirmationController,
-      reviewGate: this.reviewGate,
-      forkDecisionController: this.forkDecisionController,
-      prReviewController: this.prReviewController,
+      testerController: this.gateWindows.testerController,
+      ralphController: this.gateWindows.ralphController,
+      humanTestController: this.gateWindows.humanTestController,
+      visualConfirmationController: this.gateWindows.visualConfirmationController,
+      reviewGate: this.gateWindows.reviewGate,
+      forkDecisionController: this.gateWindows.forkDecisionController,
+      binaryCandidateController: this.gateWindows.binaryCandidateController,
+      prReviewController: this.gateWindows.prReviewController,
       requirementsKind: this.requirementsKind,
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
@@ -659,7 +655,7 @@ export class ExecutionService {
       // A system-initiated auto-start has no human present to unlock a personal credential, so it
       // reports NO activation and any individual-usage dependent is skipped rather than started.
       resolveIndividualVendors: (ws, modelId, presetId, kinds) =>
-        this.resolveIndividualVendors(ws, modelId, presetId, kinds, () => false),
+        this.vendorGate.forSteps(ws, modelId, presetId, kinds, () => false),
       start: (ws, blockId, pipelineId, opts) => this.start(ws, blockId, pipelineId, opts),
     })
   }
@@ -672,7 +668,7 @@ export class ExecutionService {
   /** Requirements-review window actions (run / incorporate / re-review / proceed / …). */
   get requirementsReview(): RequirementReviewActions {
     this.requirementsReviewActions ??= new RequirementReviewActions(
-      this.reviewGate,
+      this.gateWindows.reviewGate,
       this.requirementsKind,
     )
     return this.requirementsReviewActions
@@ -680,13 +676,16 @@ export class ExecutionService {
 
   /** Clarity-review (bug-report triage) window actions. */
   get clarityReview(): ClarityReviewActions {
-    this.clarityReviewActions ??= new ClarityReviewActions(this.reviewGate, this.clarityKind)
+    this.clarityReviewActions ??= new ClarityReviewActions(
+      this.gateWindows.reviewGate,
+      this.clarityKind,
+    )
     return this.clarityReviewActions
   }
 
   /** Brainstorm (structured-dialogue) window actions, keyed by stage. */
   get brainstorm(): BrainstormActions {
-    this.brainstormActions ??= new BrainstormActions(this.reviewGate, (stage) =>
+    this.brainstormActions ??= new BrainstormActions(this.gateWindows.reviewGate, (stage) =>
       this.brainstormKindFor(stage),
     )
     return this.brainstormActions
@@ -694,12 +693,12 @@ export class ExecutionService {
 
   /** Human-testing gate window actions (confirm / request-fix / pull-main / recreate / destroy). */
   get humanTest(): HumanTestActions {
-    return this.humanTestController
+    return this.gateWindows.humanTestController
   }
 
   /** Visual-confirmation gate window actions (approve / request-fix / recapture). */
   get visualConfirm(): VisualConfirmActions {
-    return this.visualConfirmationController
+    return this.gateWindows.visualConfirmationController
   }
 
   /**
@@ -752,6 +751,28 @@ export class ExecutionService {
     return this.wiredInterviewGates.find((c) => c.agentKind === agentKind)
   }
 
+  /**
+   * The three doors onto "what personal subscriptions would a run started here lease". Built
+   * lazily and memoised for the reason {@link stepPreambleDeps} is: it closes over collaborators
+   * this class assigns during construction, so binding it in the constructor would depend on the
+   * field order rather than on the object being finished.
+   */
+  private get vendorGate(): RunVendorGate {
+    const cached = this.vendorGateCache
+    if (cached) return cached
+    const gate = createRunVendorGate({
+      requireBlock: (ws, id) => this.requireBlock(ws, id),
+      blockOf: (ws, id) => this.blockRepository.get(ws, id),
+      executionRepository: this.executionRepository,
+      resolveDefinition: (ws, id) => this.pipelineAdoption.resolveDefinition(ws, id),
+      ...(this.resolveWorkspaceModelDefault
+        ? { resolveWorkspaceModelDefault: this.resolveWorkspaceModelDefault }
+        : {}),
+    })
+    this.vendorGateCache = gate
+    return gate
+  }
+
   private requireWorkspace(workspaceId: string) {
     return requireWorkspace(this.workspaceRepository, workspaceId)
   }
@@ -761,76 +782,38 @@ export class ExecutionService {
   }
 
   /**
-   * The individual-usage subscription vendors a run STARTED against `blockId` with
-   * `pipelineId` will lease a personal credential for — so the controller can gate the
-   * run on the initiator's personal subscription(s) up-front. Mirrors the dispatch-time
-   * model precedence (block pin → workspace per-kind default) across every step, AND the
-   * per-user dispatch decision: `hasPersonalSubscription(vendor)` reports whether the
-   * initiator has their own subscription for a vendor, so a dual-mode model (GLM) only
-   * gates a subscriber (a non-subscriber runs it on the Cloudflare base, ungated).
-   * Defaults to "no personal subscription" for system/unauthenticated callers.
+   * The individual-usage subscription vendors a run STARTED against `blockId` with `pipelineId`
+   * will lease a personal credential for — so the controller can gate the run on the initiator's
+   * personal subscription(s) up-front. The three doors (a pipeline, one agent kind, a failed run's
+   * stored steps) live on {@link RunVendorGate}; these delegate so no start path can answer the
+   * question its own way.
    */
-  async individualVendorsForBlock(
+  individualVendorsForBlock(
     workspaceId: string,
     blockId: string,
     pipelineId: string,
-    hasPersonalSubscription: HasPersonalSubscription = () => false,
+    hasPersonalSubscription?: HasPersonalSubscription,
   ): Promise<SubscriptionVendor[]> {
-    const block = await this.requireBlock(workspaceId, blockId)
-    // Through adoption's READ-ONLY resolve, not the bare row: this runs on the start REQUEST, and a
-    // board that has not adopted the pipeline yet has no row, so a row-only read answered "no
-    // agent kinds" and the gate concluded the run needed no personal credential. It would then
-    // adopt and start ungated.
-    const pipeline = await this.pipelineAdoption.resolveDefinition(workspaceId, pipelineId)
-    return this.resolveIndividualVendors(
-      workspaceId,
-      block.modelId,
-      block.modelPresetId,
-      pipeline?.agentKinds ?? [],
-      hasPersonalSubscription,
-    )
+    return this.vendorGate.forBlock(workspaceId, blockId, pipelineId, hasPersonalSubscription)
+  }
+
+  /** The individual-usage vendors a SINGLE-KIND run would use (for its start gate). */
+  individualVendorsForAgentKind(
+    workspaceId: string,
+    blockId: string,
+    agentKind: string,
+    hasPersonalSubscription?: HasPersonalSubscription,
+  ): Promise<SubscriptionVendor[]> {
+    return this.vendorGate.forAgentKind(workspaceId, blockId, agentKind, hasPersonalSubscription)
   }
 
   /** The individual-usage vendors a failed run's resumed steps use (for the retry gate). */
-  async individualVendorsForRun(
+  individualVendorsForRun(
     workspaceId: string,
     executionId: string,
-    hasPersonalSubscription: HasPersonalSubscription = () => false,
+    hasPersonalSubscription?: HasPersonalSubscription,
   ): Promise<SubscriptionVendor[]> {
-    const run = await this.executionRepository.get(workspaceId, executionId)
-    if (!run) return []
-    const block = await this.blockRepository.get(workspaceId, run.blockId)
-    if (!block) return []
-    return this.resolveIndividualVendors(
-      workspaceId,
-      block.modelId,
-      block.modelPresetId,
-      run.steps.map((s) => s.agentKind),
-      hasPersonalSubscription,
-    )
-  }
-
-  /**
-   * The set of individual-usage vendors the given steps resolve to, used to gate a run
-   * on the initiator's personal subscription(s) up-front. Delegates to the pure
-   * {@link resolveIndividualVendors}, which mirrors the dispatch-time precedence: a
-   * resolvable block pin decides the set alone (NONE for a non-subscription model), and
-   * only an unpinned run falls to the workspace per-kind defaults.
-   */
-  private resolveIndividualVendors(
-    workspaceId: string,
-    blockModelId: string | undefined,
-    modelPresetId: string | undefined,
-    agentKinds: string[],
-    hasPersonalSubscription: HasPersonalSubscription,
-  ): Promise<SubscriptionVendor[]> {
-    const resolveDefault = this.resolveWorkspaceModelDefault
-    return resolveIndividualVendors(
-      blockModelId,
-      agentKinds,
-      resolveDefault ? (kind) => resolveDefault(workspaceId, kind, modelPresetId) : undefined,
-      hasPersonalSubscription,
-    )
+    return this.vendorGate.forRun(workspaceId, executionId, hasPersonalSubscription)
   }
 
   /**
@@ -897,8 +880,10 @@ export class ExecutionService {
       accountOf: (ws) => this.workspaceRepository.accountOf(ws),
       currentStepIsNonMetered: (ws, inst, step) =>
         this.runDispatcher.currentStepIsNonMetered(ws, inst, step),
-      skipGatedStep: (ws, inst, step, isFinal) =>
-        this.runDispatcher.skipGatedStep(ws, inst, step, isFinal),
+      skipGatedStep: (ws, inst, step, isFinal, note) =>
+        this.runDispatcher.skipGatedStep(ws, inst, step, isFinal, note),
+      serviceScopeOf: (ws, block) =>
+        resolveScopeForRun((id) => this.blockRepository.listByWorkspace(id), ws, block),
       blockOf: (ws, blockId) => this.blockRepository.get(ws, blockId),
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
@@ -1009,108 +994,14 @@ export class ExecutionService {
     return this.runDispatcher.resolveGatePollExhaustion(workspaceId, executionId)
   }
 
-  /** @see RunDispatcher.getFollowUps */
-  getFollowUps(workspaceId: string, executionId: string): Promise<FollowUpsStepState | null> {
-    return this.runDispatcher.getFollowUps(workspaceId, executionId)
-  }
-
-  /** @see RunDispatcher.getForkDecision */
-  getForkDecision(workspaceId: string, executionId: string): Promise<ForkDecisionStepState | null> {
-    return this.runDispatcher.getForkDecision(workspaceId, executionId)
-  }
-
-  /** @see RunDispatcher.chooseFork */
-  chooseFork(
-    workspaceId: string,
-    executionId: string,
-    input: ChooseForkInput,
-  ): Promise<ForkDecisionStepState> {
-    return this.runDispatcher.chooseFork(workspaceId, executionId, input)
-  }
-
-  /** @see RunDispatcher.forkChat */
-  forkChat(
-    workspaceId: string,
-    executionId: string,
-    input: ForkChatRequestInput,
-  ): Promise<ForkDecisionStepState> {
-    return this.runDispatcher.forkChat(workspaceId, executionId, input)
-  }
-
-  /** @see RunDispatcher.getPrReview */
-  getPrReview(workspaceId: string, executionId: string): Promise<PrReviewStepState | null> {
-    return this.runDispatcher.getPrReview(workspaceId, executionId)
-  }
-
-  /** @see RunDispatcher.resolvePrReview */
-  resolvePrReview(
-    workspaceId: string,
-    executionId: string,
-    input: ResolvePrReviewInput,
-  ): Promise<PrReviewStepState> {
-    return this.runDispatcher.resolvePrReview(workspaceId, executionId, input)
-  }
-
-  /** @see RunDispatcher.resumePrReview */
-  resumePrReview(workspaceId: string, executionId: string): Promise<PrReviewStepState> {
-    return this.runDispatcher.resumePrReview(workspaceId, executionId)
-  }
-
-  /** @see RunDispatcher.dismissPrReviewFinding */
-  dismissPrReviewFinding(
-    workspaceId: string,
-    executionId: string,
-    findingId: string,
-  ): Promise<PrReviewStepState> {
-    return this.runDispatcher.dismissPrReviewFinding(workspaceId, executionId, findingId)
-  }
-
-  /** @see RunDispatcher.challengePrReviewFinding */
-  challengePrReviewFinding(
-    workspaceId: string,
-    executionId: string,
-    findingId: string,
-    input: ChallengePrReviewFindingInput,
-  ): Promise<PrReviewStepState> {
-    return this.runDispatcher.challengePrReviewFinding(workspaceId, executionId, findingId, input)
-  }
-
-  /** @see RunDispatcher.fileFollowUp */
-  fileFollowUp(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-  ): Promise<FollowUpsStepState> {
-    return this.runDispatcher.fileFollowUp(workspaceId, executionId, itemId)
-  }
-
-  /** @see RunDispatcher.queueFollowUp */
-  queueFollowUp(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-  ): Promise<FollowUpsStepState> {
-    return this.runDispatcher.queueFollowUp(workspaceId, executionId, itemId)
-  }
-
-  /** @see RunDispatcher.answerFollowUp */
-  answerFollowUp(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-    answer: string,
-  ): Promise<FollowUpsStepState> {
-    return this.runDispatcher.answerFollowUp(workspaceId, executionId, itemId, answer)
-  }
-
-  /** @see RunDispatcher.dismissFollowUp */
-  dismissFollowUp(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-  ): Promise<FollowUpsStepState> {
-    return this.runDispatcher.dismissFollowUp(workspaceId, executionId, itemId)
-  }
+  /**
+   * The verbs a run's DEDICATED PARK WINDOWS are answered with: the Follow-up companion, the
+   * implementation-fork decision, the PR deep-review and the generated-candidate comparison.
+   *
+   * One property rather than sixteen delegates, because they are one concern and the family grows
+   * by two every time a park surface is added. See `run-decision-surfaces.ts`.
+   */
+  readonly decisions: RunDecisionSurfaces = runDecisionSurfaces(() => this.runDispatcher)
 
   /**
    * Infer + persist the block's `technical` label from the settled spec phase (item 5):
@@ -1436,6 +1327,16 @@ export class ExecutionService {
     options: RunStartOptions = {},
   ): Promise<ExecutionInstance> {
     return this.runActions.lifecycle.start(workspaceId, blockId, pipelineId, options)
+  }
+
+  /** @see RunLifecycleController.startAgentKind */
+  startAgentKind(
+    workspaceId: string,
+    blockId: string,
+    agentKind: string,
+    options: RunStartOptions = {},
+  ): Promise<ExecutionInstance> {
+    return this.runActions.lifecycle.startAgentKind(workspaceId, blockId, agentKind, options)
   }
 
   /** @see RunLifecycleController.retry */

@@ -120,6 +120,14 @@ export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/en
 // so a facade whose OWN resolver handles only the non-GitHub case can delegate the GitHub half
 // here instead of restating the URL, which would drift the moment this default learns anything.
 export { githubRepoOrigin } from './agents/containerAgentBody.js'
+// The backend half of the harness filesystem contract, exported so the harness's conformity
+// suite can pin it against the harness's own independently-computed copy.
+export {
+  HARNESS_SENTINEL_PATHS,
+  checkoutDirDigest,
+  safeDirSegment,
+  siblingCheckoutDir,
+} from './agents/harnessContract.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 // Tool servers (MCP) for a container dispatch: the resolution the executor runs, plus the
 // deployment-environment credential resolver every facade wires as the FALLBACK behind the
@@ -230,6 +238,13 @@ export {
   type FanOutEventPublisherDependencies,
 } from './events/FanOutEventPublisher.js'
 export { InAppNotificationChannel } from './events/InAppNotificationChannel.js'
+// The routed half of delivery (the notification manager + the per-channel gate + the email
+// channel), built once here so both facades wire it identically.
+export {
+  buildNotificationDelivery,
+  type NotificationDeliveryInput,
+  type NotificationDeliverySupport,
+} from './notifications/notificationDelivery.js'
 export {
   type MachineEventRelay,
   type MachineEventClient,
@@ -328,7 +343,7 @@ export {
   type ConfigProblem,
 } from './config/problems.js'
 export { createMisconfiguredApp, buildMisconfiguredResponse } from './config/misconfiguredApp.js'
-export { DOCS, ENV_VARS_ANCHORS, repoDocUrl } from './config/docs.js'
+export { DOCS, ENV_VARS_ANCHORS, SITE_DOCS, repoDocUrl } from './config/docs.js'
 export {
   parseNumericEnv,
   describeRejectedNumericEnv,
@@ -336,6 +351,18 @@ export {
   MAX_TIMER_DELAY_MS,
   type TimerEnvParse,
 } from './config/numeric.js'
+export {
+  parseConfigDuration,
+  resolveDurationEnv,
+  type ConfigDuration,
+  type DurationParse,
+} from './config/duration.js'
+export {
+  DEFAULT_ADVANCE_TIMEOUT,
+  DEFAULT_CI_POLL_INTERVAL,
+  DEFAULT_DECISION_TIMEOUT,
+  DEFAULT_JOB_POLL_INTERVAL,
+} from './config/executionDurations.js'
 export { base64url, base64urlToBytes, pkcs8PemToDer, timingSafeEqual } from './crypto/encoding.js'
 // Runtime-neutral (Web Crypto) credential encryption + GitHub-App authentication,
 // shared by both facades so the Node service can mint installation tokens and
@@ -383,7 +410,7 @@ export {
   type FetchGitHubClientDependencies,
 } from './github/FetchGitHubClient.js'
 export {
-  ProviderRoutingGitHubClient,
+  providerRoutingGitHubClient,
   type ProviderRoutingGitHubClientDependencies,
 } from './github/ProviderRoutingGitHubClient.js'
 export {
@@ -497,6 +524,9 @@ export {
   type InfraReachabilityEnvInput,
 } from './config/infraReachability.js'
 export { resolveUrlSafetyPolicy } from './config/url-safety.js'
+// The browser-facing host of each provider's configured instance, stamped onto every VCS
+// connection + connect option so the SPA links to the instance a workspace is actually bound to.
+export { resolveVcsWebUrls } from './config/vcsWebUrls.js'
 export {
   parseDetectionConventions,
   type DetectionConventionsConfig,
@@ -568,10 +598,32 @@ export {
   type GitHubDelegationClientOptions,
 } from './github/DelegatedAppTokenSource.js'
 
+// Mothership-mode SECRET DELEGATION: the mothership opens (and seals) an ORG-owned credential a
+// laptop holds no key for, addressed by ROW rather than by ciphertext. The closed source table is
+// the server-side binding of kernel's `OrgSecretSource` vocabulary; the client is what a local
+// facade composes into `createOrgSecretCipher`.
+export {
+  SEALED_SECRET_SOURCES,
+  SEALED_SECRET_SOURCE_NAMES,
+  sealedSecretSourceSpec,
+  type SealedSecretSourceBinding,
+  type SealedSecretSourceSpec,
+} from './secrets/sealedSecretSources.js'
+export {
+  HttpSecretDelegate,
+  MachineSecretDelegationUnavailableError,
+  type HttpSecretDelegateOptions,
+  type DelegatedSealRequest,
+  type DelegatedSealResponse,
+  type DelegatedUnsealRequest,
+  type DelegatedUnsealResponse,
+} from './persistence/secretDelegation.js'
+
 // Per-account binary-artifact store resolution (the blob backend is configured per-account
 // in the UI; each facade supplies its own backend factory + default).
 export {
   makeResolveBinaryArtifactStore,
+  withRegisteredBinaryStores,
   type MakeResolveBinaryArtifactStoreDeps,
   type BuildBlobBackend,
   type BuildBlobBackendOptions,

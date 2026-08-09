@@ -113,6 +113,10 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicNotificationWebhookSchema>
 >()
 expectMutuallyAssignable<
+  sdk.PublicNotificationWebhookList,
+  v.InferOutput<typeof contracts.publicNotificationWebhookListSchema>
+>()
+expectMutuallyAssignable<
   sdk.PutNotificationWebhook,
   v.InferOutput<typeof contracts.putNotificationWebhookSchema>
 >()
@@ -122,6 +126,12 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicUsageBudgetSchema>
 >()
 expectMutuallyAssignable<sdk.PublicUsage, v.InferOutput<typeof contracts.publicUsageSchema>>()
+expectMutuallyAssignable<sdk.PublicSpendRow, v.InferOutput<typeof contracts.publicSpendRowSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicSpendTotals,
+  v.InferOutput<typeof contracts.publicSpendTotalsSchema>
+>()
+expectMutuallyAssignable<sdk.PublicSpend, v.InferOutput<typeof contracts.publicSpendSchema>>()
 expectMutuallyAssignable<sdk.PublicIdentity, v.InferOutput<typeof contracts.publicIdentitySchema>>()
 expectMutuallyAssignable<
   sdk.PublicUnanswerableWait,
@@ -293,6 +303,21 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.prVerificationReportSchema>
 >()
 expectMutuallyAssignable<sdk.PrReportRun, v.InferOutput<typeof contracts.prReportRunSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportContext,
+  v.InferOutput<typeof contracts.prReportContextSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportContextDocument,
+  v.InferOutput<typeof contracts.prReportContextDocumentSchema>
+>()
+// Hoisted because it is a VARIANT reached from two sections (the report's `context` and the
+// outcome's `sources`), so left inline it would ship twice under two positional names that
+// RENUMBER if the union's members are reordered.
+expectMutuallyAssignable<
+  sdk.DocumentFreshness,
+  v.InferOutput<typeof contracts.documentFreshnessSchema>
+>()
 expectMutuallyAssignable<sdk.PrReportStep, v.InferOutput<typeof contracts.prReportStepSchema>>()
 expectMutuallyAssignable<sdk.PrReportIssue, v.InferOutput<typeof contracts.prReportIssueSchema>>()
 expectMutuallyAssignable<sdk.PrReportCi, v.InferOutput<typeof contracts.prReportCiSchema>>()
@@ -322,6 +347,44 @@ expectMutuallyAssignable<
   sdk.PrReportRequirements,
   v.InferOutput<typeof contracts.prReportRequirementsSchema>
 >()
+// The service SPEC read. Every level of the tree is asserted, not just the envelope: the tree is
+// served as the app's own shapes rather than a projection, so a mapping bug anywhere down it
+// reaches an integrator's code with nothing else in the repo checking the hop.
+expectMutuallyAssignable<
+  sdk.PublicServiceSpec,
+  v.InferOutput<typeof contracts.publicServiceSpecSchema>
+>()
+// The RUN's read of the same tree, at the run's own branch. Its own envelope (a `runId`, a
+// nullable provenance, one extra anchor state) over the identical components below.
+expectMutuallyAssignable<sdk.PublicRunSpec, v.InferOutput<typeof contracts.publicRunSpecSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicSpecProvenance,
+  v.InferOutput<typeof contracts.publicSpecProvenanceSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicSpecFeatureFile,
+  v.InferOutput<typeof contracts.publicSpecFeatureFileSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicSpecTruncation,
+  v.InferOutput<typeof contracts.publicSpecTruncationSchema>
+>()
+expectMutuallyAssignable<sdk.SpecReadIssue, v.InferOutput<typeof contracts.specReadIssueSchema>>()
+expectMutuallyAssignable<sdk.SpecDoc, v.InferOutput<typeof contracts.specDocSchema>>()
+expectMutuallyAssignable<sdk.SpecModule, v.InferOutput<typeof contracts.specModuleSchema>>()
+expectMutuallyAssignable<
+  sdk.RequirementGroup,
+  v.InferOutput<typeof contracts.requirementGroupSchema>
+>()
+expectMutuallyAssignable<
+  sdk.RequirementItem,
+  v.InferOutput<typeof contracts.requirementItemSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AcceptanceCriterion,
+  v.InferOutput<typeof contracts.acceptanceCriterionSchema>
+>()
+expectMutuallyAssignable<sdk.DomainRule, v.InferOutput<typeof contracts.domainRuleSchema>>()
 expectMutuallyAssignable<
   sdk.PrReportEnvironments,
   v.InferOutput<typeof contracts.prReportEnvironmentsSchema>
@@ -379,10 +442,14 @@ const ASSERTED_COMPONENTS = [
   'PublicNotificationList',
   'NotificationWebhook',
   'PublicNotificationWebhook',
+  'PublicNotificationWebhookList',
   'PutNotificationWebhook',
   'PublicUsageRow',
   'PublicUsageBudget',
   'PublicUsage',
+  'PublicSpendRow',
+  'PublicSpendTotals',
+  'PublicSpend',
   'PublicIdentity',
   'PublicUnanswerableWait',
   'PublicReviewFinding',
@@ -426,6 +493,9 @@ const ASSERTED_COMPONENTS = [
   'PublicRunArtifactList',
   'PrVerificationReport',
   'PrReportRun',
+  'PrReportContext',
+  'PrReportContextDocument',
+  'DocumentFreshness',
   'PrReportStep',
   'PrReportIssue',
   'PrReportCi',
@@ -437,6 +507,18 @@ const ASSERTED_COMPONENTS = [
   'PrReportTestOutcome',
   'PrReportTestConcern',
   'PrReportRequirements',
+  'PublicServiceSpec',
+  'PublicRunSpec',
+  'PublicSpecProvenance',
+  'PublicSpecFeatureFile',
+  'PublicSpecTruncation',
+  'SpecReadIssue',
+  'SpecDoc',
+  'SpecModule',
+  'RequirementGroup',
+  'RequirementItem',
+  'AcceptanceCriterion',
+  'DomainRule',
   'PrReportEnvironments',
   'PrReportMerge',
   'PrReportJudges',

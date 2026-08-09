@@ -1,4 +1,4 @@
-import { type Pipeline, seedPipelines } from '@cat-factory/kernel'
+import { type Pipeline, offeredPipelines, seedPipelines } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { makeApp, type TestApp } from '../helpers'
 
@@ -12,12 +12,16 @@ describe('pipelines', () => {
     wsId = workspace.id
   })
 
-  it('lists the seeded pipelines', async () => {
+  it('lists the seeded pipelines, minus the internal ones', async () => {
     const res = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
-    // The endpoint returns exactly the built-in catalog the kernel seeds — assert
-    // against that source of truth rather than a hardcoded list, so adding or
-    // removing a built-in pipeline doesn't churn this test.
-    expect(res.body).toEqual(seedPipelines())
+    // The endpoint returns exactly the built-in catalog the kernel seeds, minus what a user-facing
+    // surface may not OFFER — asserted against those sources of truth rather than a hardcoded
+    // list, so adding or removing a built-in pipeline doesn't churn this test.
+    const catalog = seedPipelines()
+    expect(res.body).toEqual(offeredPipelines(catalog, catalog))
+    // The catalog HAS an internal entry, or this assertion passes by comparing two identical
+    // lists and proves nothing about the filter.
+    expect(catalog.some((p) => p.internal)).toBe(true)
   })
 
   it('seeds well-formed, usable pipelines', async () => {
@@ -40,6 +44,7 @@ describe('pipelines', () => {
   it('creates a custom pipeline', async () => {
     const res = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Docs only',
+      purpose: 'document',
       agentKinds: ['documenter'],
     })
     expect(res.status).toBe(201)
@@ -50,6 +55,7 @@ describe('pipelines', () => {
   it('rejects a pipeline with no agents', async () => {
     const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Empty',
+      purpose: 'build',
       agentKinds: [],
     })
     expect(res.status).toBe(400)
@@ -66,6 +72,7 @@ describe('pipelines', () => {
 
     const custom = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Docs only',
+      purpose: 'document',
       agentKinds: ['documenter'],
     })
     expect(custom.body.builtin ?? false).toBe(false)
@@ -90,9 +97,13 @@ describe('pipelines', () => {
   })
 
   it('defaults a clone name to "<source> (copy)"', async () => {
-    const res = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines/pl_spec/clone`, {})
+    const res = await app.call<Pipeline>(
+      'POST',
+      `/workspaces/${wsId}/pipelines/pl_review/clone`,
+      {},
+    )
     expect(res.status).toBe(201)
-    expect(res.body.name).toBe('Write spec (copy)')
+    expect(res.body.name).toBe('Review a pull request (copy)')
   })
 
   it('refuses to edit a built-in pipeline (must clone first)', async () => {
@@ -113,8 +124,11 @@ describe('pipelines', () => {
     )
     const id = clone.body.id
     const steps = clone.body.agentKinds
-    // Disable the last step and rename; the id (and catalog position) is preserved.
-    const enabled = steps.map((_, i) => i !== steps.length - 1)
+    // Disable the REVIEWER and rename; the id (and catalog position) is preserved. Which step is
+    // switched off matters: disabling the trailing `disposer` would leave the preset's `deployer`
+    // with nothing to reclaim the environment it stands up, which the save boundary refuses
+    // (`validatePipelineAuthoring`), a different rule from the round-trip under test here.
+    const enabled = steps.map((kind) => kind !== 'reviewer')
     const res = await app.call<Pipeline>('PATCH', `/workspaces/${wsId}/pipelines/${id}`, {
       name: 'Quick minus tail',
       enabled,
@@ -129,7 +143,7 @@ describe('pipelines', () => {
   it('rejects an edit that disables every step', async () => {
     const clone = await app.call<Pipeline>(
       'POST',
-      `/workspaces/${wsId}/pipelines/pl_spec/clone`,
+      `/workspaces/${wsId}/pipelines/pl_review/clone`,
       {},
     )
     const res = await app.call('PATCH', `/workspaces/${wsId}/pipelines/${clone.body.id}`, {
@@ -163,6 +177,7 @@ describe('pipelines', () => {
     // test deployment has no Datadog connection wired, so the controller must reject it.
     const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Ship + watch',
+      purpose: 'build',
       agentKinds: ['coder', 'post-release-health'],
     })
     expect(res.status).toBe(422)
@@ -173,6 +188,7 @@ describe('pipelines', () => {
     // `reviewer` enabled would orphan the companion at run start, so it is rejected.
     const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Orphaned reviewer',
+      purpose: 'build',
       agentKinds: ['coder', 'reviewer'],
       enabled: [false, true],
     })

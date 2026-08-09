@@ -27,14 +27,10 @@ import {
   unmergedPaths,
 } from './git.js'
 import { inferVcsProvider, openPullRequest } from './vcs-api.js'
-import type { PiRunStats, RunDiagnostics } from './pi.js'
+import type { PiRunStats, RunDiagnostics } from './pi-reduction.js'
 import { applyPrDescription } from './pr-description.js'
-import {
-  makeDirClaimer,
-  noChangesReason,
-  runCodingAgent,
-  runMultiRepoCoding,
-} from './coding-agent.js'
+import { makeDirClaimer } from './checkout-dir.js'
+import { noChangesReason, runCodingAgent, runMultiRepoCoding } from './coding-agent.js'
 import { validationFailureMessage } from './validation-checks.js'
 import { prepopulateDependencies, withDependencyNote } from './dependency-install.js'
 import { agentCapabilities, mergeEffort } from './agent-shared.js'

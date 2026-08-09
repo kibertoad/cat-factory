@@ -1,4 +1,5 @@
 import type { BinaryArtifactMetadataStore, Clock, IdGenerator } from '@cat-factory/kernel'
+import { BinaryStoreRegistry } from '@cat-factory/kernel'
 import {
   type BuildBlobBackend,
   type ContentStorageSettingsResolver,
@@ -7,7 +8,7 @@ import {
 import { describe, expect, it } from 'vitest'
 import { MemoryBinaryBlobBackend } from './binary-artifacts-suite.js'
 
-type BackendKind = 'off' | 'fs' | 's3' | 'r2' | 'db'
+type BackendKind = 'off' | 'fs' | 's3' | 'r2' | 'db' | 'custom'
 
 // Cross-runtime parity for the PER-ACCOUNT binary-artifact store resolver
 // (`makeResolveBinaryArtifactStore`). The resolver itself is runtime-neutral shared code, but
@@ -41,11 +42,23 @@ export function defineContentStorageResolutionSuite(
       kind === 'fs' || kind === 's3' || kind === 'r2' ? new MemoryBinaryBlobBackend() : null
 
     // A mutable account-settings stub so a test can set an account's configured backend.
-    const configByAccount = new Map<string, { backend: BackendKind }>()
+    const configByAccount = new Map<
+      string,
+      { backend: BackendKind; custom?: { storeId: string } }
+    >()
     const accountSettings: ContentStorageSettingsResolver = {
       resolve: (accountId: string) =>
         Promise.resolve({ config: { contentStorage: configByAccount.get(accountId) } }),
     }
+
+    // A DEPLOYMENT-registered store, the seam a deployment extends storage through. Registered
+    // here rather than per test so both runtimes drive the same one.
+    const binaryStoreRegistry = new BinaryStoreRegistry()
+    binaryStoreRegistry.register({
+      id: 'conformance-store',
+      name: 'Conformance store',
+      create: () => new MemoryBinaryBlobBackend(),
+    })
 
     const makeResolve = (defaultBackend: BackendKind) =>
       makeResolveBinaryArtifactStore({
@@ -56,6 +69,7 @@ export function defineContentStorageResolutionSuite(
         clock: harness.clock,
         buildBlobBackend,
         defaultBackend,
+        binaryStoreRegistry,
       })
 
     it('resolves the runtime default and round-trips against the real metadata store', async () => {
@@ -111,6 +125,44 @@ export function defineContentStorageResolutionSuite(
     it('resolves to null when the runtime cannot serve the configured backend', async () => {
       const ws = `ws-${tag()}`
       configByAccount.set(`acc-${ws}`, { backend: 'db' }) // not served by this factory
+      expect(await makeResolve('fs')(ws)).toBeNull()
+    })
+
+    it('round-trips through a DEPLOYMENT-REGISTERED store, stamping its id on the row', async () => {
+      const ws = `ws-${tag()}`
+      configByAccount.set(`acc-${ws}`, {
+        backend: 'custom',
+        custom: { storeId: 'conformance-store' },
+      })
+      const store = await makeResolve('off')(ws)
+      if (!store) throw new Error('expected the registered store to resolve')
+      const bytes = png(3)
+      const executionId = `e-${tag()}`
+      const rec = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId,
+          blockId: `blk-${tag()}`,
+          kind: 'screenshot',
+          view: 'checkout',
+          contentType: 'image/png',
+        },
+        blob: bytes,
+      })
+      expect(await store.getBlob(ws, rec.id)).toEqual(bytes)
+      // Read back through the runtime's REAL metadata store: the `storage` column is where a
+      // custom store's id has to survive the round trip, and it is the one column whose
+      // vocabulary a facade could have narrowed to the platform's own backends.
+      const persisted = await store.getMetadata(ws, rec.id)
+      expect(persisted?.storage).toBe('conformance-store')
+      expect((await store.listByExecution(ws, executionId)).map((r) => r.storage)).toEqual([
+        'conformance-store',
+      ])
+    })
+
+    it('resolves to null when the account names a store this build does not register', async () => {
+      const ws = `ws-${tag()}`
+      configByAccount.set(`acc-${ws}`, { backend: 'custom', custom: { storeId: 'not-registered' } })
       expect(await makeResolve('fs')(ws)).toBeNull()
     })
   })

@@ -40,7 +40,7 @@ export const trackerSettingsSchema = v.object({
    * Deliberately scoped to runs whose `ExecutionInstance.intakeOrigin` is HEADLESS
    * (`isHeadlessIntake`: a `/api/v1` start or a per-ticket tracker dispatch): a task started
    * in the SPA has a human overseer in the app and its clarification surface is unchanged
-   * (see `docs/initiatives/headless-clarification-loop.md`).
+   * (see `backend/docs/adr/0047-headless-clarification-loop.md`).
    */
   writebackQuestionsOnPark: v.boolean(),
   updatedAt: v.number(),

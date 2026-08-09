@@ -1,10 +1,12 @@
 import {
   GitHubIssuesProvider,
+  GitLabIssuesProvider,
   IssueWritebackService,
   JiraProvider,
   LinearTaskProvider,
   VcsPatConnectionService,
-  githubIssuesLogic,
+  createTaskConnectionStore,
+  gitlabWebBaseFromApiBase,
 } from '@cat-factory/integrations'
 import { GitLabIdentityResolver, buildGitLabConnectClient } from '@cat-factory/gitlab'
 import type {
@@ -18,7 +20,7 @@ import type {
   RateLimitRepository,
   RateLimitSnapshot,
   RepoProjectionRepository,
-  TaskConnectionRepository,
+  TaskConnectionStore,
   TaskSourceProvider,
   TrackerSettingsRepository,
   WorkspaceRepository,
@@ -41,8 +43,9 @@ import {
   GitHubPullRequestMerger,
   GitHubPullRequestReviewProvider,
   PatPreferringAppRegistry,
-  ProviderRoutingGitHubClient,
+  providerRoutingGitHubClient,
   logger,
+  resolveVcsWebUrls,
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
   makeResolveRepoFilesForCoords,
@@ -86,25 +89,34 @@ class NoopRateLimitRepository implements RateLimitRepository {
   }
 }
 
-/** The result shape of {@link selectNodeTasksDeps}: the module deps plus the raw connection repo. */
+/**
+ * The result shape of {@link selectNodeTasksDeps}: the module deps plus the connection STORE the
+ * facade's own tracker/writeback closures read credentials through (the repository beside it holds
+ * only sealed rows).
+ */
 export interface NodeTasksDeps {
   deps: Partial<CoreDependencies>
-  taskConnectionRepository?: TaskConnectionRepository
+  taskConnectionStore?: TaskConnectionStore
 }
 
 /**
- * Wire the task-source integration for the Node facade (Jira + Linear always; GitHub Issues
- * only when a GitHub client is available, since it reuses the workspace's App installation).
- * Mirrors the Cloudflare facade's `config.github.enabled` gate (see CLAUDE.md parity rule).
- * Whether a workspace OFFERS a source is the per-workspace toggle (task_source_settings), not
- * a deployment env gate.
+ * Wire the task-source integration for the Node facade (Jira + Linear always; the two VCS-backed
+ * issue sources only when their client is available, since each reuses the workspace's own VCS
+ * connection). Mirrors the Cloudflare facade's gating (see CLAUDE.md parity rule). Whether a
+ * workspace OFFERS a source is the per-workspace toggle (task_source_settings), not a deployment
+ * env gate.
  */
-function selectNodeTasksDeps(
-  config: AppConfig,
-  db: DrizzleDb,
-  githubClient: GitHubClient | undefined,
-  installations: GitHubInstallationRepository,
-): NodeTasksDeps {
+function selectNodeTasksDeps(input: {
+  config: AppConfig
+  db: DrizzleDb
+  githubClient: GitHubClient | undefined
+  /** Whichever client can read the workspace's GitLab connection (the caller resolves which). */
+  gitlabClient: GitHubClient | undefined
+  installations: GitHubInstallationRepository
+  sourced: NodeGitHubDepsInput['sourced']
+  secretDelegate: CoreDependencies['secretDelegate']
+}): NodeTasksDeps {
+  const { config, db, githubClient, gitlabClient, installations, sourced, secretDelegate } = input
   if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
   // Jira and Linear are always registered (their credentials are per-workspace, entered in the UI).
   const providers: TaskSourceProvider[] = [new JiraProvider(), new LinearTaskProvider()]
@@ -114,28 +126,53 @@ function selectNodeTasksDeps(
   if (githubClient) {
     providers.push(new GitHubIssuesProvider({ githubClient, installations }))
   }
+  // GitLab Issues are the same credentialless shape over whichever client can read the
+  // workspace's GitLab connection (the caller resolves which). Fed that client DIRECTLY, never
+  // the provider-routing one: this source answers GitLab questions only, and the availability
+  // check keys on the connection row's own provider.
+  if (gitlabClient) {
+    providers.push(
+      new GitLabIssuesProvider({
+        gitlabClient,
+        installations,
+        webBaseUrl: gitlabWebBaseFromApiBase(config.gitlab.apiBase),
+      }),
+    )
+  }
 
-  const taskConnectionRepository = new DrizzleTaskConnectionRepository(
-    db,
-    // Source credentials are encrypted at rest under a tasks-scoped HKDF info (the
-    // same domain the Cloudflare facade uses), keyed by the shared ENCRYPTION_KEY.
-    new WebCryptoSecretCipher({
+  // Every repo here rides the `pickRepoSource` seam: these rows are org state, and since the
+  // connection row now carries its credential bag SEALED, the whole integration is serveable over
+  // the persistence RPC. A mothership-mode node opens the bag by naming the row.
+  const taskConnectionRepository = sourced(
+    'taskConnectionRepository',
+    (d) => new DrizzleTaskConnectionRepository(d),
+  )
+  const taskConnectionStore = createTaskConnectionStore({
+    taskConnectionRepository,
+    // Source credentials are sealed at rest under a tasks-scoped HKDF info (the same domain the
+    // Cloudflare facade uses), keyed by the shared ENCRYPTION_KEY.
+    secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.tasks.encryptionKey,
       info: 'cat-factory:tasks',
     }),
-  )
+    ...(secretDelegate ? { secretDelegate } : {}),
+  })
   return {
     deps: {
       taskSourceProviders: providers,
       taskConnectionRepository,
-      taskSourceSettingsRepository: new DrizzleTaskSourceSettingsRepository(db),
+      taskConnectionStore,
+      taskSourceSettingsRepository: sourced(
+        'taskSourceSettingsRepository',
+        (d) => new DrizzleTaskSourceSettingsRepository(d),
+      ),
       taskRepository: new DrizzleTaskRepository(db),
       // Idempotency markers for INBOUND tracker comments. Wired alongside the task module rather
       // than the writeback, because it guards the INGEST half (a redelivered comment applying its
       // answers twice), which exists only when the task projection does.
       trackerCommentIngestRepository: new DrizzleTrackerCommentIngestRepository(db),
     },
-    taskConnectionRepository,
+    taskConnectionStore,
   }
 }
 
@@ -147,6 +184,12 @@ export interface NodeGitHubDepsInput {
   remoteRepos: Record<string, unknown> | undefined
   /** Source one org/durable repo from the remote registry (mothership) else the Drizzle db. */
   sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T
+  /**
+   * Present ONLY on a mothership-mode node: opens a tracker connection sealed under the
+   * MOTHERSHIP's key, which this process holds none of. The tracker step files a ticket on the
+   * RUN path, so without it a mothership-mode run reaches that step and fails there.
+   */
+  secretDelegate?: CoreDependencies['secretDelegate']
   idGenerator: IdGenerator
   clock: Clock
   appRegistry: GitHubAppRegistry | undefined
@@ -265,22 +308,49 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
   // distinct from its GitLab engine fallback.
   const engineVcsClient: GitHubClient | undefined = githubClient ?? gitlabEngineClient
 
-  // Task-source integration (Jira + GitHub issues). Tenants connect their own Jira
-  // site through the UI (credentials stored per-workspace, encrypted at rest); the
-  // tracker resolves each workspace's own credentials from this same store. GitHub
-  // issues reuse the workspace's installed App, so they wire only when `githubClient`
-  // is available — kept here, after the client is built, for parity with the Worker.
-  const tasks = selectNodeTasksDeps(config, db, githubClient, githubInstallationRepository)
+  // Per-workspace GitLab PAT connect (opt-in): the GitLab-backed client whose token source
+  // decrypts each workspace's sealed PAT, plus the connect service the controller drives.
+  // Built HERE rather than inside the module-deps builder because two consumers need it: the
+  // `github` module's routing client and the GitLab Issues task source below.
+  const gitlabConnect = selectVcsConnectDeps({
+    config,
+    installations: githubInstallationRepository,
+    workspaceRepository: input.workspaceRepository,
+    clock,
+  })
+
+  // The client the GitLab Issues task source reads through. A hosted deployment uses the
+  // per-workspace connect client. LOCAL mode has no such connection and needs no second client:
+  // it is single-provider, and the injected client already ROUTES by the deployment credential,
+  // so the same client backs both VCS-backed sources there. Registering both is not ambiguous,
+  // because availability is the connection row's own `provider` — exactly one of the two is ever
+  // offered, and in local GitLab mode that is this one rather than a GitHub Issues source whose
+  // `owner/repo#n` grammar cannot spell a subgroup project.
+  const gitlabTasksClient = gitlabConnect?.client ?? githubClientOverride
+
+  // Task-source integration (Jira + Linear + the two VCS-backed issue sources). Tenants connect
+  // their own Jira site through the UI (credentials stored per-workspace, encrypted at rest); the
+  // tracker resolves each workspace's own credentials from this same store. GitHub and GitLab
+  // issues reuse the workspace's own VCS connection, so each wires only when its client is
+  // available — kept here, after the clients are built, for parity with the Worker.
+  const tasks = selectNodeTasksDeps({
+    config,
+    db,
+    githubClient,
+    gitlabClient: gitlabTasksClient,
+    installations: githubInstallationRepository,
+    sourced,
+    secretDelegate: input.secretDelegate,
+  })
 
   // Issue-tracker writeback (comment-on-PR-open + close-on-merge of a task's linked
   // issue), gated per workspace + per task inside the provider.
   const issueWritebackProvider = buildNodeIssueWriteback({
-    githubClient,
-    githubInstallationRepository,
     trackerSettingsRepository,
     sourced,
     clock,
-    taskConnectionRepository: tasks.taskConnectionRepository,
+    taskSourceProviders: tasks.deps.taskSourceProviders ?? [],
+    taskConnectionStore: tasks.taskConnectionStore,
   })
 
   let githubGateDeps: Partial<CoreDependencies> = {}
@@ -374,6 +444,7 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
   const githubModuleDeps = buildNodeGitHubModuleDeps({
     input,
     githubClient,
+    gitlabConnect,
   })
 
   return {
@@ -401,7 +472,7 @@ function selectVcsConnectDeps(input: {
 }): { client: GitHubClient; service: VcsPatConnectionService } | undefined {
   const { config, installations, workspaceRepository, clock } = input
   const gitlab = config.gitlab
-  if (!gitlab?.enabled || !gitlab.encryptionKey) return undefined
+  if (!gitlab.enabled || !gitlab.encryptionKey) return undefined
   // One cipher seals (connect) and unseals (token source) under the same domain, so the two
   // instances the client + service build from the same key + info interoperate.
   const cipher = new WebCryptoSecretCipher({
@@ -422,6 +493,9 @@ function selectVcsConnectDeps(input: {
     identityResolver: new GitLabIdentityResolver({ apiBase: gitlab.apiBase }),
     cipher,
     clock,
+    // Where this connection's projects can be opened in a browser, from the SAME resolver the
+    // App connect path and the connect-capability route read.
+    webUrls: resolveVcsWebUrls(config),
   })
   return { client, service }
 }
@@ -438,13 +512,14 @@ function buildNodeGitHubModuleDeps(args: {
   input: NodeGitHubDepsInput
   /** The engine/App client already resolved by the caller (an override or App-minted). */
   githubClient: GitHubClient | undefined
+  /** The per-workspace GitLab connect wiring, resolved once by the caller (two consumers). */
+  gitlabConnect: ReturnType<typeof selectVcsConnectDeps>
 }): Partial<CoreDependencies> {
-  const { input, githubClient } = args
+  const { input, githubClient, gitlabConnect } = args
   const {
     config,
     db,
     sourced,
-    clock,
     appRegistry,
     githubInstallationRepository,
     repoProjectionRepository,
@@ -457,17 +532,11 @@ function buildNodeGitHubModuleDeps(args: {
   // projection repos here makes the inline ingest actually persist (parity with the
   // Worker, which fans the same sync through a queue/Workflow). `canCreateRepos` /
   // `workflowsGranted` come from the App registry when present (advisory).
-  // Per-workspace GitLab PAT connect (opt-in): when GitLab is configured AND a sealing key is
-  // present, wire a GitLab-backed client whose token source decrypts each workspace's sealed PAT,
-  // plus the connect service that validates + seals a pasted PAT. This lets a workspace connect
-  // GitLab through the UI and reuse the SAME GitHub-shaped projection/sync surface. Mirrors the
-  // Worker's `selectGitHubDeps` (per "keep the runtimes symmetric").
-  const gitlabConnect = selectVcsConnectDeps({
-    config,
-    installations: githubInstallationRepository,
-    workspaceRepository: input.workspaceRepository,
-    clock,
-  })
+  // The per-workspace GitLab PAT connect wiring (resolved by the caller): a GitLab-backed client
+  // whose token source decrypts each workspace's sealed PAT, plus the connect service that
+  // validates + seals a pasted PAT. This lets a workspace connect GitLab through the UI and reuse
+  // the SAME GitHub-shaped projection/sync surface. Mirrors the Worker's `selectGitHubDeps` (per
+  // "keep the runtimes symmetric").
   const gitlabConnectClient = gitlabConnect?.client
   const vcsConnectionService = gitlabConnect?.service
 
@@ -478,7 +547,7 @@ function buildNodeGitHubModuleDeps(args: {
   const appClient = config.github.enabled ? githubClient : undefined
   const moduleClient: GitHubClient | undefined =
     appClient && gitlabConnectClient
-      ? new ProviderRoutingGitHubClient({
+      ? providerRoutingGitHubClient({
           installations: githubInstallationRepository,
           github: appClient,
           gitlab: gitlabConnectClient,
@@ -550,42 +619,28 @@ function buildNodeGitHubModuleDeps(args: {
 
 /**
  * Assemble the issue-tracker writeback provider (comment-on-PR-open + close/label-on-merge of a
- * task's linked issue), gated per workspace + per task inside the provider. GitHub uses the same
- * per-tenant client + installation lookup as the tracker/CI/merge providers; Jira and Linear reuse
- * the workspace's encrypted connection. Split out of {@link selectNodeGitHubDeps} for the
- * per-function line budget, in the same shape as its {@link selectNodeTasksDeps} sibling.
+ * task's linked issue), gated per workspace + per task inside the provider. Every vendor detail
+ * now rides the task-source providers themselves (each declares a `writeback` adapter), so this
+ * hands over the SAME provider array the tasks module registers and the SAME connection store the
+ * reads authenticate through. Split out of {@link selectNodeGitHubDeps} for the per-function line
+ * budget, in the same shape as its {@link selectNodeTasksDeps} sibling.
  */
 function buildNodeIssueWriteback(args: {
-  githubClient: GitHubClient | undefined
-  githubInstallationRepository: GitHubInstallationRepository
   trackerSettingsRepository: TrackerSettingsRepository
   sourced: NodeGitHubDepsInput['sourced']
   clock: Clock
-  taskConnectionRepository: TaskConnectionRepository | undefined
+  taskSourceProviders: readonly TaskSourceProvider[]
+  taskConnectionStore: TaskConnectionStore | undefined
 }): IssueWritebackService {
-  const {
-    githubClient,
-    githubInstallationRepository,
-    trackerSettingsRepository,
-    sourced,
-    clock,
-    taskConnectionRepository,
-  } = args
-  // Wired whenever the tracker-settings repo exists (always on Node) so the engine can write
-  // back when a tracker is set; the GitHub half resolves the workspace's installation per issue.
-  const resolveWritebackIssue = githubClient
-    ? async (workspaceId: string, externalId: string) => {
-        const parsed = githubIssuesLogic.parseGitHubIssueExternalId(externalId)
-        if (!parsed) return null
-        const installation = await githubInstallationRepository.getByWorkspace(workspaceId)
-        if (!installation) return null
-        return { installationId: installation.installationId, parsed }
-      }
-    : undefined
+  const { trackerSettingsRepository, sourced, clock, taskSourceProviders, taskConnectionStore } =
+    args
   return new IssueWritebackService({
     trackerSettingsRepository,
     taskRepository: sourced('taskRepository', (d) => new DrizzleTaskRepository(d)),
-    fetchImpl: fetch,
+    // BY REFERENCE, the same array `selectNodeTasksDeps` hands the tasks module: a source is
+    // registered once and is then both readable and writeable, so a deployment's own tracker
+    // cannot end up with intake and no way to answer it.
+    taskSourceProviders,
     // Idempotency markers for the headless clarification loop's question echo — without them
     // the writeback passes through, since a replaying driver would otherwise re-post.
     reviewQuestionPostRepository: sourced(
@@ -596,63 +651,10 @@ function buildNodeIssueWriteback(args: {
     // Every hook here is fire-and-forget; without a logger a permanently broken tracker
     // connection produces no symptom but comments that never appear.
     logger,
-    ...(githubClient && resolveWritebackIssue
-      ? {
-          commentOnGitHubIssue: async (workspaceId, externalId, body) => {
-            // An unresolvable target THROWS rather than returning quietly: returning is this
-            // seam's promise that the comment landed, and the parked-review writeback would
-            // otherwise mark the questions `posted` for an issue that never received them.
-            const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) {
-              throw new Error(`Cannot resolve GitHub issue ${externalId} for this workspace`)
-            }
-            await githubClient.comment(
-              target.installationId,
-              { owner: target.parsed.owner, repo: target.parsed.repo },
-              target.parsed.number,
-              body,
-            )
-          },
-          closeGitHubIssue: async (workspaceId, externalId) => {
-            const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) return
-            await githubClient.closeIssue(
-              target.installationId,
-              { owner: target.parsed.owner, repo: target.parsed.repo },
-              target.parsed.number,
-            )
-          },
-          labelGitHubIssue: async (workspaceId, externalId, label) => {
-            const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) return
-            await githubClient.applyIssueLabel?.(
-              target.installationId,
-              { owner: target.parsed.owner, repo: target.parsed.repo },
-              target.parsed.number,
-              label,
-            )
-          },
-        }
-      : {}),
-    ...(taskConnectionRepository
-      ? {
-          resolveJiraConnection: async (workspaceId: string) => {
-            const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'jira')
-            const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
-            if (!baseUrl || !accountEmail || !apiToken) return null
-            return { baseUrl, accountEmail, apiToken }
-          },
-          resolveLinearConnection: async (workspaceId: string) => {
-            const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'linear')
-            const { apiKey, token } = connection?.credentials ?? {}
-            return apiKey || token ? { apiKey, token } : null
-          },
-          // The same store, read for the ONE fact the parked-review question comment needs before
-          // it tells a reporter to answer on the ticket: whether an inbound webhook secret was ever
-          // minted for that connection. Without it the reply path fails closed, so the copy offers
-          // the API route alone. Mirrored in the Worker's `selectRecurringDeps`.
-          taskConnectionRepository,
-        }
-      : {}),
+    // The store the adapters authenticate through, and the one fact the parked-review question
+    // comment needs before it tells a reporter to answer on the ticket: whether an inbound
+    // webhook secret was ever minted for that connection. Without it the reply path fails closed,
+    // so the copy offers the API route alone. Mirrored in the Worker's `selectRecurringDeps`.
+    ...(taskConnectionStore ? { taskConnectionStore } : {}),
   })
 }

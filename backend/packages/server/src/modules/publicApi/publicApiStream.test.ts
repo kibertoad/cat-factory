@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createParkAnnouncer, isParked } from './publicApiStream.js'
+import type { PublicRun, PublicRunStep } from '@cat-factory/contracts'
+import {
+  createParkAnnouncer,
+  isParked,
+  reduceRunForStream,
+  STREAM_DELIVERABLE_PREVIEW_CHARS,
+} from './publicApiStream.js'
 
 // The public SSE streams' park announcement. Both stream loops share this, and both of its rules
 // fail in a way that is invisible from the code: announcing every tick floods a caller for as long
@@ -55,5 +61,71 @@ describe('createParkAnnouncer', () => {
     const b = createParkAnnouncer()
     expect(a.shouldAnnounce('blocked')).toBe(true)
     expect(b.shouldAnnounce('blocked')).toBe(true)
+  })
+})
+
+describe('reduceRunForStream', () => {
+  const step = (over: Partial<PublicRunStep> = {}): PublicRunStep => ({
+    agentKind: 'coder',
+    state: 'done',
+    progress: 1,
+    subtasks: null,
+    output: null,
+    data: null,
+    ...over,
+  })
+
+  const run = (steps: PublicRunStep[]): PublicRun => ({
+    runId: 'run_1',
+    taskId: 'blk_1',
+    status: 'running',
+    createdAt: 0,
+    currentStep: 0,
+    steps,
+    externalIdentity: null,
+    externalIdentityWithheld: false,
+    pullRequest: null,
+    error: null,
+  })
+
+  it('leaves a step that fits ENTIRELY alone, flag included', () => {
+    // `truncated` has to mean "something was left out of this frame", not "this frame came from
+    // the stream": a flag set unconditionally tells every caller its whole deliverable is partial
+    // and sends them all to the point read for nothing.
+    const small = step({ output: 'done', data: { verdict: 'ok' } })
+    expect(reduceRunForStream(run([small])).steps[0]).toEqual(small)
+  })
+
+  it('clips an oversized output to a preview and SAYS SO', () => {
+    const long = 'x'.repeat(STREAM_DELIVERABLE_PREVIEW_CHARS + 500)
+    const [reduced] = reduceRunForStream(run([step({ output: long })])).steps
+    expect(reduced?.output).toHaveLength(STREAM_DELIVERABLE_PREVIEW_CHARS)
+    expect(reduced?.truncated).toBe(true)
+  })
+
+  it('withholds an oversized `data` but keeps a small one on the same run', () => {
+    // Measured per step, not decided per run: the structured result a fork choice or an estimate
+    // carries is small, and withholding it because a SIBLING step wrote a long report would strip
+    // the stream of the very field a caller reacts to.
+    const big = { rows: Array.from({ length: 400 }, (_, i) => `row-${i}-padding-padding`) }
+    const [heavy, light] = reduceRunForStream(
+      run([step({ data: big }), step({ data: { verdict: 'ok' } })]),
+    ).steps
+    expect(heavy?.data).toBeNull()
+    expect(heavy?.truncated).toBe(true)
+    expect(light?.data).toEqual({ verdict: 'ok' })
+    expect(light?.truncated).toBeUndefined()
+  })
+
+  it('keeps every frame bounded however long the run gets', () => {
+    // The quadratic the reduction exists to prevent: the stream re-sends the WHOLE run on every
+    // change, so an unreduced late frame repeats every output produced so far. Asserted as a
+    // RELATION over the frame's own size rather than a pinned byte count, which would be re-pinned
+    // unread the first time a field is added.
+    const long = 'y'.repeat(STREAM_DELIVERABLE_PREVIEW_CHARS * 10)
+    const frame = JSON.stringify(
+      reduceRunForStream(run(Array.from({ length: 12 }, () => step({ output: long })))),
+    )
+    expect(frame.length).toBeLessThan(12 * (STREAM_DELIVERABLE_PREVIEW_CHARS + 500))
   })
 })

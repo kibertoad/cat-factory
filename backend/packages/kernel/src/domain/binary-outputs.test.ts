@@ -301,6 +301,33 @@ describe('parseBinaryOutputDeclaration', () => {
     expect(report.stored).toEqual([{ service: 'asset-store', location: 'real.png' }])
     expect(report.undeclared).toBeUndefined()
   })
+
+  // The delivery-side half of an exact size requirement: what the artifact actually came back
+  // as. The same self-report `contentType` is, recorded on the same terms.
+  it('keeps reported dimensions, and drops an unusable pair without losing the entry', () => {
+    const stored = (dimensions: unknown) =>
+      parseBinaryOutputDeclaration(
+        declaration(
+          JSON.stringify([{ service: 'asset-store', location: 'icons/potion.png', dimensions }]),
+        ),
+        known,
+      ).stored[0]
+
+    expect(stored({ width: 96, height: 96 })?.dimensions).toEqual({ width: 96, height: 96 })
+    // A malformed measurement is NOT a malformed artifact: the identity fields are intact, so
+    // the record survives and only the observation is dropped. Counting it as an invalid entry
+    // would lose a stored artifact over a field nothing required.
+    for (const bad of [
+      { width: 96 },
+      { width: 0, height: 96 },
+      { width: '96', height: '96' },
+      96,
+    ]) {
+      const row = stored(bad)
+      expect(row?.location).toBe('icons/potion.png')
+      expect(row?.dimensions).toBeUndefined()
+    }
+  })
 })
 
 describe('describeBinaryOutputConfigIssues', () => {
@@ -344,6 +371,67 @@ describe('renderBinaryOutputBrief', () => {
     expect(brief).toContain('`asset-store`')
     expect(brief).toContain(`.cat-context/${binaryContextFileFor('asset-store')}`)
     expect(brief).toContain('No context service is selected')
+    expect(brief).toContain(BINARY_OUTPUT_DECLARATION_TAG)
+  })
+
+  // A comparison step is TWO dispatches of one step, given opposite instructions. Getting the
+  // phase wrong is silent in both directions: a first pass told to deliver makes the very choice
+  // the comparison exists to take away, and a second pass told to generate candidates restarts
+  // the comparison with the human's decision already recorded and about to be ignored.
+  it('asks the FIRST pass of a comparison step for candidates, not deliverables', () => {
+    const brief = renderBinaryOutputBrief({
+      config: { storageServiceId: 'asset-store', comparison: { perGenerator: 2 } },
+      storage: view(),
+      contextServices: [],
+      unresolvedContextIds: [],
+    })
+    expect(brief).toContain('## Candidates for review')
+    expect(brief).toContain('```binary-candidates')
+    expect(brief).not.toContain(
+      `Declare what you stored in the fenced \`\`\`${BINARY_OUTPUT_DECLARATION_TAG}`,
+    )
+  })
+
+  it('asks the SECOND pass to deliver exactly what was kept', () => {
+    const brief = renderBinaryOutputBrief({
+      config: { storageServiceId: 'asset-store', comparison: {} },
+      storage: view(),
+      contextServices: [],
+      unresolvedContextIds: [],
+      candidates: {
+        status: 'chosen',
+        candidates: [{ id: 'cand_1', service: 'asset-store', location: 'staging/a.png' }],
+        invalidEntries: 0,
+        omitted: 0,
+        unusablePreviews: 0,
+        choice: { kept: [{ candidateId: 'cand_1' }], discarded: [], at: 1 },
+      },
+    })
+    expect(brief).toContain('## The candidate decision')
+    expect(brief).toContain('KEEP the candidate staged at `staging/a.png`')
+    expect(brief).toContain(BINARY_OUTPUT_DECLARATION_TAG)
+    expect(brief).not.toContain('## Candidates for review')
+  })
+
+  // A comparison whose first pass produced nothing gets no second pass at all, so the only brief
+  // that could read this is the first one. Treating it as a step with no comparison is the safe
+  // reading: it delivers directly, which is what a comparison with nothing to compare owed.
+  it('falls back to a plain delivering brief once a comparison settled with no choice', () => {
+    const brief = renderBinaryOutputBrief({
+      config: { storageServiceId: 'asset-store', comparison: {} },
+      storage: view(),
+      contextServices: [],
+      unresolvedContextIds: [],
+      candidates: {
+        status: 'no_choice',
+        noChoiceReason: 'undeclared',
+        candidates: [],
+        invalidEntries: 0,
+        omitted: 0,
+        unusablePreviews: 0,
+      },
+    })
+    expect(brief).not.toContain('## Candidates for review')
     expect(brief).toContain(BINARY_OUTPUT_DECLARATION_TAG)
   })
 

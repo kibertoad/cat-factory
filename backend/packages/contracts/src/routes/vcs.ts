@@ -26,6 +26,16 @@ export type VcsConnectMethod = v.InferOutput<typeof vcsConnectMethodSchema>
 export const vcsConnectOptionSchema = v.object({
   provider: vcsProviderSchema,
   method: vcsConnectMethodSchema,
+  /**
+   * The browser-facing base URL of the instance this option would connect to, or null when the
+   * deployment's API base does not name one. Same fact the connection carries once bound, and it
+   * has to be here too because the surfaces that need it render BEFORE anything is connected:
+   * the "create a token" link on the PAT box, and the bootstrap flow's "create a repository"
+   * button. Reading it off a connection there is impossible, and defaulting to the provider's
+   * public host is what sent a self-managed GitLab user to gitlab.com to make a project the
+   * bootstrap run could never push to.
+   */
+  webUrl: v.nullable(v.string()),
 })
 export type VcsConnectOption = v.InferOutput<typeof vcsConnectOptionSchema>
 

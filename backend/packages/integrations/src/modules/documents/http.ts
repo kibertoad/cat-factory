@@ -9,7 +9,10 @@
 //
 // The helper is host-*pinned*, not host-*allow-listed*: it serves providers whose API
 // lives at a single known host. A site-configurable provider (Confluence) keeps its own
-// guard because its allowed host is per-connection, not a constant.
+// guard because its allowed host is per-connection, not a constant. `host` accepts a small
+// FIXED SET for the one case where a vendor's API and its asset CDN are different constants
+// (Figma serves rendered PNGs from signed S3 URLs), which is still a constant and still not a
+// per-connection value: a hop to anything outside the set is refused exactly as before.
 
 /** Carries the HTTP status so a provider can surface a meaningful error to the caller. */
 export class DocumentHttpError extends Error {
@@ -29,7 +32,11 @@ export class DocumentHttpError extends Error {
  * unit-testable without a network; the caller maps it to a {@link DocumentHttpError}.
  * `label` names the provider in the message (e.g. `Figma`, `Claude Design`).
  */
-export function assertHostPinned(url: string, host: string, label: string): void {
+export function assertHostPinned(
+  url: string,
+  host: string | readonly string[],
+  label: string,
+): void {
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -39,7 +46,9 @@ export function assertHostPinned(url: string, host: string, label: string): void
   if (parsed.protocol !== 'https:') {
     throw new Error(`${label} request must use https`)
   }
-  if (parsed.hostname.toLowerCase() !== host.toLowerCase()) {
+  const allowed = typeof host === 'string' ? [host] : host
+  const hostname = parsed.hostname.toLowerCase()
+  if (!allowed.some((h) => h.toLowerCase() === hostname)) {
     throw new Error(`${label} redirect to a disallowed host: ${parsed.hostname}`)
   }
 }
@@ -48,8 +57,11 @@ export function assertHostPinned(url: string, host: string, label: string): void
 const DEFAULT_MAX_REDIRECTS = 5
 
 export interface HostPinnedFetchOptions {
-  /** The single host this provider's API lives on (e.g. `api.figma.com`). */
-  host: string
+  /**
+   * The host this provider's API lives on (e.g. `api.figma.com`), or the fixed SET of hosts when
+   * the vendor serves assets from a second constant host. Never a per-connection value.
+   */
+  host: string | readonly string[]
   /** Provider name used in error messages. */
   label: string
   /** Max redirect hops before giving up (default 5). */
@@ -102,12 +114,25 @@ export async function readCappedText(
   maxBytes: number,
   label = 'Response',
 ): Promise<string> {
+  return new TextDecoder().decode(await readCappedBytes(res, maxBytes, label))
+}
+
+/**
+ * The binary half of {@link readCappedText}: the same running byte cap, without the UTF-8 decode.
+ * A rendered design image is the one response a provider reads that is NOT text, and decoding it
+ * would both corrupt the bytes and double the memory the cap exists to bound.
+ */
+export async function readCappedBytes(
+  res: Response,
+  maxBytes: number,
+  label = 'Response',
+): Promise<Uint8Array> {
   const declared = res.headers.get('content-length')
   if (declared && Number(declared) > maxBytes) {
     throw new DocumentHttpError(502, `${label} response too large`)
   }
   const body = res.body
-  if (!body) return ''
+  if (!body) return new Uint8Array(0)
   const reader = body.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
@@ -132,5 +157,5 @@ export async function readCappedText(
     merged.set(c, offset)
     offset += c.byteLength
   }
-  return new TextDecoder().decode(merged)
+  return merged
 }

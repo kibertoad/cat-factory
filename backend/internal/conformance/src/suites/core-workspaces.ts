@@ -1,7 +1,9 @@
 import {
   type Block,
+  type Pipeline,
   type Workspace,
   type WorkspaceSnapshot,
+  offeredPipelines,
   seedPipelines,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -50,8 +52,10 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       expect(res.status).toBe(201)
       expect(res.body.workspace.name).toBe('My board')
       expect(res.body.blocks.find((b) => b.id === 'blk_auth')).toBeTruthy()
-      // Every facade seeds a new board with the full built-in pipeline catalog.
-      expect(res.body.pipelines).toEqual(seedPipelines())
+      // Every facade seeds a new board with the built-in pipeline catalog, minus the INTERNAL
+      // entries: those are seeded and resolvable for a run, but never OFFERED, so a picker built
+      // off this array cannot list a pipeline whose only sensible caller is the platform.
+      expect(res.body.pipelines).toEqual(offeredPipelines(seedPipelines(), seedPipelines()))
       expect(res.body.executions).toHaveLength(0)
     })
 
@@ -131,7 +135,24 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       expect(res.body.blocks).toHaveLength(0)
       // The pipeline catalog is product config, not sample data — seeded regardless
       // of the sample-block flag.
-      expect(res.body.pipelines).toEqual(seedPipelines())
+      expect(res.body.pipelines).toEqual(offeredPipelines(seedPipelines(), seedPipelines()))
+    })
+
+    it('withholds an INTERNAL pipeline from the snapshot while keeping it runnable', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const internal = seedPipelines().filter((p) => p.internal)
+      // The catalog HAS internal entries — otherwise this test passes by asserting nothing.
+      expect(internal.length).toBeGreaterThan(0)
+
+      const listed = await call<Pipeline[]>('GET', `/workspaces/${workspace.id}/pipelines`)
+      for (const p of internal) {
+        expect(listed.body.map((row) => row.id)).not.toContain(p.id)
+      }
+      // Withheld from the LISTING, not from the store: the flow that starts it by id still must
+      // resolve it, which is the whole difference between internal and retired.
+      const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+      expect(snapshot.body.pipelines.map((p) => p.id)).not.toContain(internal[0]!.id)
     })
 
     it('lists and deletes boards', async () => {
@@ -399,6 +420,34 @@ function defineMachineApiGate(harness: ConformanceHarness): void {
         args: ['exec_x'],
       })
       expect(res.status).toBe(403)
+    })
+
+    it('serves /internal/secrets/{unseal,seal} with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The SECRET DELEGATION pair (a mothership opening, and sealing, an ORG credential a
+      // mothership-mode node holds no key for). Mounted by the shared controller on both facades
+      // and machine-gated FIRST, before the "is this facade a mothership / does it have a cipher"
+      // 503, the source-table lookup and any scope resolution, so an unauthenticated call is a
+      // 403 everywhere. This is the endpoint where an ungated slip would be worst of all: it is
+      // the one surface in the machine API that answers with a PLAINTEXT credential.
+      expect(
+        (
+          await call('POST', '/internal/secrets/unseal', {
+            source: 'environment_access',
+            workspaceId: 'ws_x',
+            key: ['env_x'],
+          })
+        ).status,
+      ).toBe(403)
+      expect(
+        (
+          await call('POST', '/internal/secrets/seal', {
+            source: 'environment_access',
+            workspaceId: 'ws_x',
+            plaintext: 'x',
+          })
+        ).status,
+      ).toBe(403)
     })
 
     it('serves /internal/foundational-services with the machine-token gate active', async () => {

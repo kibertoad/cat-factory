@@ -36,6 +36,29 @@ The `deploy/*` packages depend on the libraries via `workspace:*` in this repo;
 external organizations swap that for the published npm version (see each
 `deploy/*/README.md`).
 
+## Where does a new doc go?
+
+Two surfaces, and **ownership follows the reader**. Anyone who can act without cloning this repo
+(deployers, operators, workspace users, integrators on the public API, the SDKs, MCP or manifests)
+reads [catfactory.ai](https://www.catfactory.ai/), whose source is
+[kibertoad/cat-factory-website](https://github.com/kibertoad/cat-factory-website). Anyone changing
+the code reads the docs here.
+
+Where a topic serves both, split it by DEPTH rather than copying: the website page owns the
+user-facing account and the doc here keeps the internal design plus a link. **Land the website page
+FIRST**, and only then reduce the doc here: a doc pointed at a page that does not exist yet is
+strictly worse than the doc it replaced. And before removing a section, check what deep-links its
+HEADING: error remedies build doc URLs in code (`config/docs.ts`, `vcs-errors.ts`,
+`providers/docs.ts`), `scripts/check-doc-anchors.mjs` resolves them, and a remedy whose instruction
+the website has taken over moves to `SITE_DOCS` rather than keeping a heading alive for it. The
+named exceptions that stay in this repo whatever their audience, and the findings behind them, are in
+[`docs/README.md`](./docs/README.md#where-does-a-new-doc-go) and
+[ADR 0051](./backend/docs/adr/0051-documentation-repo-website-split.md).
+
+Your PR's documentation sweep therefore has one extra question: **does this change alter behaviour a
+website page describes?** If it does, say so in the PR so the website's `sync-docs` pass picks it up,
+or open the website PR yourself.
+
 ## Common commands
 
 ```sh

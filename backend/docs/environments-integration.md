@@ -1,5 +1,13 @@
 # Ephemeral environment provider integration
 
+> **Setting one up is on the website**:
+> [Environments](https://www.catfactory.ai/operate/environments.html) owns configuring and
+> operating ephemeral environments, and
+> [Custom Providers](https://www.catfactory.ai/extend/custom-providers.html) owns writing a code
+> adapter, with the shared manifest concepts on
+> [Integration manifests](https://www.catfactory.ai/extend/manifests.html). This page is the
+> provider-integration DESIGN.
+
 Let a workspace plug in its **own** ephemeral/preview-environment tooling so a
 `deployer` agent can provision an environment and a `tester` agent can run against
 it. The integration is declarative and **API-only**: you describe your self-rolled
@@ -20,16 +28,24 @@ See also [ADR 0003](./adr/0003-ephemeral-environment-provider.md). When your too
 bespoke to describe declaratively, you can instead inject a hand-written **native adapter**:
 see [Native environment adapters](./native-environment-adapter.md).
 
-> **Before writing a manifest, check whether a built-in backend already covers you.** Three ship
-> in the box and need no manifest at all:
-> `kubernetes` (per-PR namespaces over the apiserver, provision type `kubernetes`),
-> `eks` (the same over an EKS cluster, via `@cat-factory/eks`), and
-> **`cloudflare`** (a per-PR Cloudflare Worker, provision type `cloudflare`), which stands the
-> Worker up by driving the target repository's OWN preview workflow over the VCS Deployments
-> API, so it needs nothing but outbound HTTPS and therefore works on every facade, including the
-> Cloudflare Worker one that has no Docker daemon and no filesystem. Its reference workflow and
-> the one-time account setup live in [`deploy/preview`](../../deploy/preview/README.md); wiring
-> it to a board is [`docs/internal/dogfooding.md`](../../docs/internal/dogfooding.md).
+> **A manifest is the last resort, not the first.** Four backends ship in the box and need none:
+> `kubernetes`, `eks`, `cloudflare` and `compose` (the `docker-compose` provision type, over the
+> `local-docker` engine); choosing between them is the site's
+> [Choosing a backend](https://www.catfactory.ai/operate/environments.html#choosing-a-backend).
+> What belongs here is why the two ends of that list are offered on different facades, which is a
+> property of what each one has to reach rather than a packaging decision:
+>
+> - **`cloudflare` is available everywhere**, the Cloudflare Worker facade with no Docker daemon
+>   and no filesystem included, because it stands its per-PR Worker up by driving the target
+>   repository's OWN preview workflow over the VCS Deployments API: outbound HTTPS is the whole
+>   requirement. Its reference workflow lives in
+>   [`deploy/preview`](../../deploy/preview/README.md); wiring it to a board is
+>   [`docs/internal/dogfooding.md`](../../docs/internal/dogfooding.md).
+> - **`compose` is the local facade's alone**, and only when `LOCAL_CONTAINER_RUNTIME` selects a
+>   Docker-family runtime, because it drives a host `docker compose` binary. It is therefore the
+>   one built-in the facade registers BY REFERENCE (closing over the host CLI seam) instead of
+>   building from config, and the one that rides the contract's generic backend-manifest member
+>   rather than a reserved kind.
 
 > **The connection is now per provision type, not one per workspace.** This doc describes the
 > generic HTTP `manifest` backend, which today serves the **`custom` provision type** via the
@@ -44,365 +60,138 @@ manifest_id)`), and a service selects its type/source independently of the works
 
 ## How it works (the sequence of actions)
 
-1. A pipeline on an `environment` block reaches its **`deployer`** step. The engine
-   calls `HttpEnvironmentProvider.provision`: interpolating your manifest's
-   `provision` template (with `{{input.*}}` from the block) and `POST`ing to your
-   management API with your auth. It runs **deterministically** (no LLM, no token
-   spend) and persists an environment handle.
-2. If your `provision` response is async, the cron sweep polls your `status` template
-   until the mapped status reaches `ready` (or `failed`); the handle's URL + access
-   creds are captured via the `response` dot-paths.
-3. Downstream **`tester`** (and later) steps receive the live environment in their
-   prompt context (the URL and how to authenticate) so they test the real build.
-   (The tester job's `test.environmentUrl` is wired straight from this handle.)
-4. When the handle's TTL elapses (from `expiresAtPath`, or `defaultTtlMs`), the cron
-   sweep (every 2 min) calls your `teardown` template and tombstones the record.
-   Teardown is best-effort and retried on the next pass rather than wedging the
-   registry.
+The shape a user sees (a deployer provisions, a tester runs against the preview, the environment
+goes away) is the site's
+[How it works](https://www.catfactory.ai/operate/environments.html#how-it-works). What that page
+does not say, and a change on this path has to hold:
+
+1. The **`deployer`** step calls `HttpEnvironmentProvider.provision`, interpolating the manifest's
+   `provision` template with `{{input.*}}` derived from the block. It runs **deterministically**:
+   no LLM, no token spend, so a provisioning failure is never a model's fault.
+2. An async `provision` is polled by the cron sweep against the `status` template until the mapped
+   status reaches `ready` or `failed`; the handle's URL and access creds come off the `response`
+   dot-paths, not off any fixed response shape.
+3. The tester job's `test.environmentUrl` is wired straight from the persisted handle, so nothing
+   downstream re-derives the address the environment was actually reached at.
+4. The sweep (every 2 min) tears down at the handle's TTL, taken from `expiresAtPath` or falling
+   back to `defaultTtlMs`, and tombstones the record. Teardown is best-effort and retried on the
+   next pass rather than wedging the registry, and a teardown call returning cleanly is not a
+   reclaim: see [Confirming a teardown](#confirming-a-teardown-confirmteardown).
 
 ## Enabling it
 
-The module assembles wherever a service-level encryption key is set (per-tenant
-credentials are always stored encrypted: there is no plaintext fallback). That key is
-already required service-wide (the always-on document/task sources fail config load
-without it), so there is nothing extra to turn on: register a connection and add a
-`deployer`/`tester` step to a pipeline. To keep environments out of a pipeline, omit
-those steps.
+There is nothing to turn on. The module assembles wherever the service-level encryption key is set,
+which is already required service-wide (the always-on document/task sources fail config load
+without it), and per-tenant credentials have no plaintext fallback. Setting the key is the site's
+[configuration page](https://www.catfactory.ai/deploy/configuration.html); the variable itself is
+`ENCRYPTION_KEY` in [`environment-variables.md`](../../docs/environment-variables.md).
 
-```sh
-# Credentials are sealed with the shared service-level master key (≥32 bytes, base64),
-# which is already required service-wide (a secret):
-openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
-```
-
-That master key encrypts, at rest in D1, both the per-tenant provider credentials
-and each provisioned environment's own access credentials (AES-256-GCM, per-record
-salt + IV, HKDF-derived key, versioned `v1.…` envelope for rotation).
+That master key encrypts, at rest, both the per-tenant provider credentials and each provisioned
+environment's own access credentials: AES-256-GCM, per-record salt + IV, HKDF-derived key, and a
+versioned `v1.…` envelope so a rotation can tell the generations apart.
 
 ## The manifest
 
-A manifest describes your management API. The worker's single generic
-`HttpEnvironmentProvider` interprets it; nothing about your endpoints is assumed.
+> **The manifest FORMAT is the website's**:
+> [Integration Manifests](https://www.catfactory.ai/extend/manifests.html#environment-provider-manifest)
+> owns the field schema, the `{{input.*}}` / `{{provision.*}}` namespaces including the git/PR/repo
+> context table, the auth-scheme table, the worked PR-environment example, and the two things to
+> check against a real platform's API (where the URL lives, and asynchronous provisioning). A
+> manifest is authored in the app by a user with no checkout, so none of it is here.
 
-```jsonc
-{
-  "providerId": "acme-envs", // [a-z0-9-]
-  "label": "Acme Ephemeral Envs",
-  "baseUrl": "https://envs.acme.internal-is-blocked.example", // https, public host
-  "auth": { "type": "bearer", "secretRef": { "key": "API_TOKEN" } },
+The single generic `HttpEnvironmentProvider` interprets it and nothing about your endpoints is
+assumed. Three facts about that interpretation belong to this repository:
 
-  // provision/status/teardown: arbitrary method + path + body, with templating.
-  "provision": {
-    "method": "POST",
-    "pathTemplate": "/environments",
-    "bodyTemplate": "{\"ref\":\"{{input.blockId}}\",\"title\":\"{{input.title}}\"}",
-  },
-  "status": { "method": "GET", "pathTemplate": "/environments/{{provision.externalId}}" },
-  "teardown": { "method": "DELETE", "pathTemplate": "/environments/{{provision.externalId}}" },
-
-  // Map YOUR response shape onto the canonical handle via dot-paths.
-  "response": {
-    "urlPath": "data.url",
-    "statusPath": "data.state",
-    "statusMap": [
-      { "from": "running", "to": "ready" },
-      { "from": "building", "to": "provisioning" },
-      { "from": "error", "to": "failed" },
-    ],
-    "externalIdPath": "data.id",
-    "expiresAtPath": "data.expires_at", // epoch-ms, numeric string, or ISO
-    // How the *provisioned env* itself is reached by the tester (per-env creds,
-    // read from the provision response - distinct from the management-API auth):
-    "access": { "scheme": "bearer", "tokenPath": "data.access_token" },
-  },
-
-  "defaultTtlMs": 3600000, // fallback TTL when no expiry returned
-}
-```
-
-### Worked example: a PR-environment platform
-
-Most preview-environment platforms expose three calls: "create an environment for
-this PR", "get its status", "delete it", and key the environment on the PR's git
-ref. Here is a complete manifest for that common shape. A project/tenant slug the
-platform requires (`my-project` below) isn't derivable from a block, so it lives as
-a literal in the paths; the git ref + repo come from the
-[git/PR/repo context](#gitprrepo-context-input-on-a-deployer-step):
-
-```jsonc
-{
-  "providerId": "preview-envs",
-  "label": "Preview Environments",
-  "baseUrl": "https://envs.example.com/v2",
-  "auth": { "type": "bearer", "secretRef": { "key": "API_TOKEN" } },
-
-  // Create: target the PR by number + repo. The platform returns a stable "ref"
-  // (or id) we capture and reuse on status/teardown.
-  "provision": {
-    "method": "POST",
-    "pathTemplate": "/projects/my-project/environments",
-    "bodyTemplate": "{\"git_ref\":{\"pr_number\":{{input.pullNumber}}},\"github\":{\"owner\":\"{{input.repoOwner}}\",\"repo\":\"{{input.repoName}}\"}}",
-  },
-  // Status/teardown address the env by the ref captured from the provision response.
-  "status": {
-    "method": "GET",
-    "pathTemplate": "/projects/my-project/environments/{{provision.externalId}}",
-  },
-  "teardown": {
-    "method": "DELETE",
-    "pathTemplate": "/projects/my-project/environments/{{provision.externalId}}",
-  },
-
-  "response": {
-    "externalIdPath": "data.ref", // the per-PR ref, reused as {{provision.externalId}}
-    "urlPath": "data.url",
-    "statusPath": "data.status",
-    "statusMap": [
-      { "from": "pending", "to": "provisioning" },
-      { "from": "online", "to": "ready" },
-      { "from": "failed", "to": "failed" },
-      { "from": "deleting", "to": "tearing_down" },
-      { "from": "deleted", "to": "torn_down" },
-    ],
-  },
-  "defaultTtlMs": 3600000,
-}
-```
-
-Two things to check against your platform's real API:
-
-- **Where the URL lives.** `urlPath` reads a single string via a dot-path
-  (`data.url`, or an array index like `data.links.0.href`). If your platform returns
-  the reachable URL only inside a nested/array-valued or templated structure that a
-  dot-path can't pull out cleanly, you have outgrown the manifest path: use the
-  [code-adapter seam](#code-adapter-seam-when-the-manifest-isnt-enough).
-- **Async provisioning.** If create returns before the environment is live, supply a
-  `status` template; the cron sweep polls it until `statusMap` yields `ready` (or
-  `failed`). A synchronous platform that returns a ready URL can omit `status`.
-
-### Templating
-
-- `{{input.*}}`: provision inputs. On a pipeline `deployer` step these are derived
-  from the block (`blockId`, `title`, `type`, `description`, `features`) plus the
-  **git/PR/repo context** below; on a manual provision they come from the request
-  `inputs` (plus `blockId`). Explicit request `inputs` always win over the derived
-  values.
-- `{{provision.*}}`: fields captured from the provision response (`externalId`,
-  `url`), available to `status`/`teardown`.
-- Unknown references resolve to empty: a manifest can't reach arbitrary state.
-
-#### Git/PR/repo context (`{{input.*}}` on a `deployer` step)
-
-A preview/PR-environment platform almost always keys an environment on **the git
-ref it is building** and **the repo it belongs to**, not on an opaque block id. So
-the `deployer` step derives that context from the block's open PR and exposes it
-both as flattened `{{input.*}}` strings (for the manifest path) and as a typed
-object for a [code adapter](#code-adapter-seam-when-the-manifest-isnt-enough). Each
-is present only when known (a manual provision, or a block with no PR, carries
-fewer):
-
-| Variable               | Value                                                    |
-| ---------------------- | -------------------------------------------------------- |
-| `{{input.blockId}}`    | The board block being deployed (always present).         |
-| `{{input.branch}}`     | The head branch the agent pushed its work to.            |
-| `{{input.pullNumber}}` | The pull request number within the repo (e.g. `42`).     |
-| `{{input.pullUrl}}`    | The pull request web URL.                                |
-| `{{input.repoOwner}}`  | The repo owner (org/user login), parsed from the PR URL. |
-| `{{input.repoName}}`   | The repo name, parsed from the PR URL.                   |
-
-This is what lets a manifest build a "create an environment for PR #N of
-owner/repo" request without any per-block configuration. Any identifier a
-platform needs which is **not** derivable from the block (a project/team/tenant
-slug, a target cluster) is not in this namespace: bake it into the manifest as a
-literal in the `pathTemplate`/`bodyTemplate`, or pass it as a manual-provision
-`input`. Register one manifest per such project if they differ.
+- **The schema is Valibot, in `backend/packages/contracts/src/environments.ts`**, enforced at
+  registration. A field added there is a field the website page has to gain, in the same change.
+- **`{{input.*}}` on a `deployer` step is DERIVED, and the derivation is the engine's.** The block
+  supplies `blockId` / `title` / `type` / `description` / `features`; the git/PR/repo half is read
+  off the block's open pull request, so it is present only when there is one. An explicit request
+  input always wins over a derived value, which is what makes a manual provision able to stand in
+  for a missing PR rather than being a second code path.
+- **A dot-path that cannot address the value is the boundary of this integration**, not a gap to
+  widen. The response mapping is deliberately a set of dot-paths rather than an expression
+  language: a platform whose URL is only reachable through a computed structure has outgrown the
+  manifest, and the answer is the code-adapter seam below.
 
 ### Auth schemes (calling the management API)
 
-Each references its secret(s) by **logical key**; values are supplied separately
-(see below) and never appear in the manifest.
-
-| `auth.type`                 | fields                                                                          | effect                                 |
-| --------------------------- | ------------------------------------------------------------------------------- | -------------------------------------- |
-| `none`                      | (none)                                                                          | no auth header                         |
-| `api_key`                   | `headerName`, `secretRef`, `valuePrefix?`                                       | `headerName: <prefix><secret>`         |
-| `bearer`                    | `secretRef`                                                                     | `Authorization: Bearer <secret>`       |
-| `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)`     |
-| `oauth2_client_credentials` | `tokenUrl`, `clientIdSecretRef`, `clientSecretSecretRef`, `scope?`, `audience?` | POST token → `Authorization: Bearer …` |
-| `custom_headers`            | `headers: [{ name, secretRef }]`                                                | each header set from its secret        |
+The scheme table is the website's too, and it is shared with the runner pool: both integrations
+accept the same six types, which is why the page states them once. What is worth knowing HERE is
+that the two integrations resolve their URL policies independently (see
+[Reaching an internal / VPN-hosted platform](#reaching-an-internal--vpn-hosted-platform)), so the
+schemes are shared and the network policy is not.
 
 ## Code-adapter seam (when the manifest isn't enough)
 
-The manifest path is declarative and code-free, but a single `fetch` + dot-path
-mapping can't express everything: a platform that paginates, needs a multi-step
-handshake, returns the env URL inside a structure no dot-path can address, signs
-requests in a bespoke way, or wants the typed git/PR/repo context as real fields
-rather than interpolated strings. For those, a **trusted, operator-installed** code
-adapter replaces the generic HTTP provider while keeping the rest of the
-integration (the connection registry, secret encryption, TTL sweep, agent-context
-surfacing) unchanged.
+A single `fetch` plus dot-path mapping cannot express everything: a platform that paginates, needs
+a multi-step handshake, returns the env URL inside a structure no dot-path can address, signs
+requests in a bespoke way, or wants the typed git/PR/repo context as real fields rather than
+interpolated strings. For those a **trusted, operator-installed** code adapter replaces the
+generic HTTP provider.
 
-An adapter implements the `EnvironmentProvider` port (`@cat-factory/kernel`):
+Deciding between the two is the site's
+[When the manifest isn't enough](https://www.catfactory.ai/operate/environments.html#when-the-manifest-isn-t-enough),
+and **[`native-environment-adapter.md`](./native-environment-adapter.md) is the full contract for
+writing one**: the `EnvironmentProvider` port and its optional connect-form methods, the typed
+`provisionContext`, `confirmTeardown`, registering an `EnvironmentBackendProvider` by reference
+into the app-owned registry (including the `engines` a custom backend must declare to be reachable
+at all), the single-tenant-versus-multi-tenant rationale, and the SSRF rule for a URL read out of
+`providerConfig`. None of it is restated here.
 
-```ts
-import type {
-  EnvironmentProvider,
-  ProvisionEnvironmentRequest,
-  ProvisionedEnvironment,
-} from '@cat-factory/kernel'
+What belongs to THIS doc is how a code adapter sits inside the manifest integration:
 
-export class MyEnvironmentProvider implements EnvironmentProvider {
-  async provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment> {
-    // Typed context - no string parsing. Present when the block has an open PR.
-    const ctx = req.provisionContext // { branch?, pullNumber?, pullUrl?, repoOwner?, repoName?, blockId? }
-    const token = req.resolveSecret('API_TOKEN') // resolved from the encrypted bundle
-    // ...call your platform however it needs to be called...
-    return {
-      externalId: createdRef,
-      url: liveUrl, // SSRF-guarded by the engine before it is stored
-      status: 'ready', // or 'provisioning' for async - status() is polled
-      expiresAt: null, // epoch ms, or null to use defaultTtlMs
-      access: null, // per-env creds for the tester, when applicable
-      fields: { ref: createdRef }, // arbitrary, persisted (encrypted) for status/teardown
-    }
-  }
-  async status(req) {
-    /* read live status; `req.provisionFields` carries `fields` back */
-  }
-  async teardown(req) {
-    /* destroy; best-effort, retried by the sweep */
-  }
-  // OPTIONAL, and the difference between a reported reclaim and a proven one.
-  async confirmTeardown(req): Promise<TeardownProbe> {
-    /* look the resource up again and say what you found */
-  }
-}
-```
+- **Everything around the provider is unchanged.** The connection registry, secret encryption, TTL
+  sweep and agent-context surfacing all still apply, so an adapter still registers a connection
+  (which is what encrypts its secrets at rest and assembles the module). Its `manifest`'s request
+  templates are ignored in favour of your code, while `secrets`, `providerId` and `label` still
+  apply.
+- **The URL it returns is still SSRF-guarded**, because the guard belongs to the engine rather than
+  to the provider that produced the URL. Installing your own code is therefore not a way around it;
+  reaching an internal platform means widening the URL policy
+  ([below](#reaching-an-internal--vpn-hosted-platform)).
 
 ### Confirming a teardown (`confirmTeardown`)
 
-`teardown()` returning without throwing does **not** mean anything was destroyed: the generic
-manifest provider reports `torn_down` even when its manifest declares no `teardown:` request, and
-an asynchronous delete (a Kubernetes namespace) is accepted while the resource is still
-terminating. So the platform never reads a teardown call's success as the environment's death. It
-asks separately, and only a probe that positively finds the resource gone is recorded as a
-reclaim:
-
-```ts
-type TeardownProbe =
-  | { state: 'gone' } // the ONLY answer that proves a teardown
-  | { state: 'present'; terminating: boolean; detail?: string }
-  | { state: 'unknown'; reason: string; retryable: boolean }
-```
-
-Three rules for writing one:
-
-- **Under-claim.** Anything you cannot establish is `unknown`, never `gone`. A 404 from a
-  misconfigured base URL and a 404 from a reclaimed environment are the same response; if your
-  adapter cannot tell them apart, say so. This signal exists to be trusted, so the only safe
-  direction to be wrong in is the cautious one.
-- **`terminating` and `retryable` decide whether anyone should wait.** A resource draining its
-  finalizers will confirm on a later pass; one that is simply still there never will. Likewise a
-  transient outage (`retryable: true`) is worth re-probing and a permanent inability to verify
-  (no status endpoint in the manifest) will answer identically forever and is only ever fixed by a
-  human.
-- **Don't reach for `status()` instead.** Every `status()` implementation is written to describe a
-  LIVE environment, so its answers about a destroyed one are incidental — the generic provider
-  with no `status:` template returns `ready` forever, which as a teardown verdict is a confident
-  lie in the worst direction.
-
-Omitting `confirmTeardown` is a supported choice, not a bug: the teardown is then recorded as
-`unverifiable` and reported as such, rather than as a reclaim. The probe is bounded in wall-clock
-time by the platform, so an unresponsive one costs the confirmation and never the teardown.
-
-The adapter still registers a connection (so secrets are encrypted at rest and the
-module assembles), but the `manifest`'s request templates are ignored in favour of
-your code: the `secrets`, `providerId`, and `label` still apply. Define the backend as a
-value and **register it by reference** into the app-owned registry, under a custom `kind`:
-
-```ts
-import type { EnvironmentBackendProvider } from '@cat-factory/integrations'
-
-export const myPlatformBackend: EnvironmentBackendProvider = {
-  kind: 'my-platform', // a lower-kebab slug, not a reserved built-in
-  displayLabel: 'My Platform',
-  referencedSecretKeys: () => ['API_TOKEN'],
-  connectionMeta: (c) => ({
-    providerId: 'my-platform',
-    label: c.manifest.label,
-    baseUrl: c.manifest.baseUrl,
-  }),
-  assertConfigSafe: () => {},
-  toManifest: (c) => c.manifest, // a custom kind rides the generic manifest member
-  fromManifest: (manifest) => ({ kind: 'my-platform', manifest }),
-  // REQUIRED: the per-type infra engine(s) this backend serves. A BYO ephemeral-environment
-  // backend rides `remote-custom`, which makes it selectable for a service's `custom` provision
-  // type. A backend that declares no engine is unreachable as a run target.
-  engines: () => ['remote-custom'],
-  buildProvider: (ctx) => new MyEnvironmentProvider(ctx),
-}
-
-// at the composition root (e.g. via start()'s `buildContainer` seam):
-const backendRegistries = createBackendRegistries()
-backendRegistries.environmentBackendRegistry.register(myPlatformBackend)
-// …pass `backendRegistries` into buildNodeContainer / buildContainer.
-```
-
-The registry is **app-owned and injected** (no deployment-wide provider singleton): it resolves
-a workspace's stored `kind` to your backend on Worker / Node / local alike, and registration is
-by reference so module identity never matters. Full model + the single-tenant-vs-multi-tenant
-rationale: [`native-environment-adapter.md`](./native-environment-adapter.md).
-
-Because the adapter is code you install and run, the URL it returns is still
-SSRF-guarded by the engine. To let it reach an internal platform, widen the URL
-policy (next section).
+`teardown()` returning without throwing does **not** mean anything was destroyed: this integration's
+generic provider reports `torn_down` even when its manifest declares no `teardown:` request, and an
+asynchronous delete (a Kubernetes namespace) is accepted while the resource is still terminating. So
+no teardown path reads a teardown call's success as the environment's death. It asks separately,
+through the optional `confirmTeardown` probe, and only a probe that positively finds the resource
+gone is recorded as a reclaim. Writing one is in
+[`native-environment-adapter.md`](./native-environment-adapter.md); why the seam exists, what the
+verdicts mean and which paths record them is
+[`environment-disposal-and-teardown-proof.md`](../../docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 ## Reaching an internal / VPN-hosted platform
 
-By default every URL the integration fetches or exposes must be public `https` (see
-[Security notes](#security-notes)). A platform reachable only on an internal/VPN host
-(`*.internal`, an RFC1918 address) is rejected by that guard. A **trusted operator**
-(not an arbitrary workspace) can widen the guard per facade so the manifest
-`baseUrl`, the OAuth `tokenUrl`, and the returned env URL may use specific
-hosts/schemes:
+Setting the allow-list is the site's
+[Reaching an internal provider](https://www.catfactory.ai/operate/environments.html#reaching-an-internal-provider),
+and the two variables are `ENVIRONMENTS_ALLOW_URL_HOSTS` / `ENVIRONMENTS_ALLOW_HTTP_URLS` in
+[`environment-variables.md`](../../docs/environment-variables.md). Three facts about the guard
+itself are the doc-side half:
 
-| Setting (env var / Worker `[vars]`) | Effect                                                                                                                                                                                                                     |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ENVIRONMENTS_ALLOW_URL_HOSTS`      | Comma-separated hostnames exempt from the private/internal-host block. Each entry matches the URL host exactly (`envs.corp`, `10.1.2.3`), or as a dot suffix when it starts with `.` (`.internal` matches `a.b.internal`). |
-| `ENVIRONMENTS_ALLOW_HTTP_URLS`      | `true` to also permit `http` (not just `https`).                                                                                                                                                                           |
-
-```toml
-# wrangler.toml (Worker) - or env vars on the Node facade
-ENVIRONMENTS_ALLOW_URL_HOSTS = "envs.corp.internal,.preview.internal"
-ENVIRONMENTS_ALLOW_HTTP_URLS = "false"
-```
-
-The widening only exempts the hosts you list; everything else stays strict, and
-embedded URL credentials are forbidden regardless. Leave both unset (the default) to
-keep the strict public-https guard everywhere.
-
-> The runner-pool integration has the matching `RUNNERS_ALLOW_URL_HOSTS` /
-> `RUNNERS_ALLOW_HTTP_URLS` knobs. The two integrations are scoped **independently**:
-> each resolves its own policy from its own settings, so a host you allow here does
-> **not** become reachable by the runner pool (and vice versa). Set each one's
-> allow-list to exactly what that integration needs.
+- **It covers three surfaces, not one**: the manifest `baseUrl`, the OAuth `tokenUrl`, and the env
+  URL extracted from your response. A widening reaches all three, so a host allowed to be called is
+  also a host a tester can be sent at.
+- **It is a facade-level setting, deliberately not a per-workspace one.** Widening is a trusted
+  operator's decision about the deployment's network position; letting a workspace name its own
+  exempt hosts would make the SSRF guard self-service.
+- **The policy is resolved per integration**, so a host allowed here is not thereby reachable by
+  the runner pool's matching `RUNNERS_*` knobs, or vice versa. Each resolves its own policy from
+  its own settings, and that separation is the point rather than an oversight.
 
 ## Registering a provider
 
-Supply the manifest and the **actual secret values** for every `secretRef.key` it
-references. The values are encrypted and stored; they are never returned.
+Registration, secret rotation and connection testing happen in-app, through the Infrastructure
+window's manifest editor: the site's
+[Registering an HTTP manifest provider](https://www.catfactory.ai/operate/environments.html#registering-an-http-manifest-provider).
+The editor drives the same endpoints, whose contract is that a secret VALUE goes in and never comes
+back out:
 
-```sh
-curl -X POST $API/workspaces/$WS/environments/connection \
-  -H 'content-type: application/json' \
-  -d '{
-        "manifest": { ... },
-        "secrets": { "API_TOKEN": "real-token-value" }
-      }'
-```
-
-- `GET /workspaces/:ws/environments/connection` → safe metadata + `secretKeys`
-  (names only).
+- `POST /workspaces/:ws/environments/connection` → manifest plus a value for every `secretRef.key`
+  it references; the values are encrypted at rest and never returned.
+- `GET /workspaces/:ws/environments/connection` → safe metadata plus `secretKeys` (names only).
 - `PUT /workspaces/:ws/environments/connection/secrets` → rotate the secret bundle.
 - `DELETE /workspaces/:ws/environments/connection` → unregister.
 

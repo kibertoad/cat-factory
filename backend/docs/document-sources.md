@@ -1,23 +1,29 @@
 # Document sources
 
+> **Connecting and using a source is on the website**:
+> [Connect Issue & Document Sources](https://www.catfactory.ai/guide/issue-sources.html)
+> owns connecting one and linking material to a task, and
+> [Feed Design Context to Agents](https://www.catfactory.ai/guide/design-context.html) owns
+> the design sources that ride this integration. This page is the PROVIDER port and the
+> import/link machinery behind them.
+
 Link requirements, RFCs and PRDs from external document sources to a workspace's
 board: import a page, expand it into board structure (services → modules →
 tasks), or attach it to a task as extra context the agents read during
 execution.
 
-The integration is **source-agnostic**. A `DocumentSourceProvider` encapsulates
-everything specific to one source (credential validation, page-id parsing,
-fetching, body → Markdown), and the rest of the stack (connection/import/plan/
-spawn/link services, the D1 tables, the HTTP surface and the frontend) is
-shared. Two providers ship today:
+The integration is **source-agnostic**. A `DocumentSourceProvider` encapsulates everything specific
+to one source (credential validation, page-id parsing, fetching, body → Markdown), and the rest of
+the stack (connection/import/plan/spawn/link services, the tables, the HTTP surface and the
+frontend) is shared. Which sources ship, and what credential each takes, is the site's
+[Supported sources](https://www.catfactory.ai/guide/issue-sources.html#supported-sources); the
+vocabulary they come from is `documentSourceKindSchema` in `@cat-factory/contracts`, and it is the
+list every exhaustive `Record` over sources is built from.
 
-- **Confluence Cloud**: HTTP Basic (account email + API token), storage-format
-  XHTML bodies.
-- **Notion**: a single internal-integration token (Bearer), block-based bodies.
-
-Adding a third source is just another provider: implement
-`DocumentSourceProvider` (a `kind`, a `descriptor`, `normalizeConnection`,
-`parseRef`, `fetchDocument`) and register it in `selectDocumentsDeps`.
+Adding a source is another provider: implement `DocumentSourceProvider` (a `kind`, a `descriptor`,
+`normalizeConnection`, `parseRef`, `fetchDocument`), add the `kind` to that picklist, and register
+it in `selectDocumentsDeps`. The picklist is what makes the rest of the work a compile error rather
+than a runtime gap: the traits below, the descriptors and the connect surfaces all key off it.
 
 ## A stored document need not come from a source
 
@@ -53,6 +59,44 @@ new source fails to compile until it is classified.
 Almost everything here is WORKSPACE-scoped: a tenant connects its own Confluence or Notion through
 the app, the credential is sealed per workspace, and `DocumentContentResolverService` resolves it
 per read. That is the model for documents people import onto their board.
+
+## Two ways in: a credential someone TYPES, and a grant someone MAKES
+
+Every source is connected with a credential bag. Where the bag comes from is a second question,
+and a source may answer it twice: a `credentialFields` form (an API token, an email + token pair)
+and, when the source declares an `oauth` half, an `authorization_code` grant.
+
+- **The provider DECLARES, it does not implement.** `DocumentSourceProvider.oauth`
+  (`DocumentSourceOAuthSpec`) is four constants: the authorize endpoint, the token endpoint, the
+  refresh endpoint or `null`, and the scopes. The protocol itself lives once, in
+  `DocumentSourceOAuthService`, so the second source to gain OAuth adds a declaration rather than
+  a second copy of the flow. Figma is the first, and the only one today.
+- **The credential bag is PLATFORM-owned** (`DOCUMENT_OAUTH_CREDENTIAL_KEYS`: an access token, a
+  refresh token, an absolute expiry). A provider's only job at the other end is to notice a token
+  in the bag it was handed and authenticate with it instead of with the typed credential. That is
+  what keeps the whole token lifecycle out of every provider.
+- **Declaring an OAuth half is not offering one.** Running the flow needs a registered app, which
+  is deployment configuration (`figmaOAuth` in the account's settings, beside the Slack and Linear
+  clients: an OAuth client IS per vendor, registered in that vendor's own console against a
+  redirect URL it holds). So `GET /document-sources` answers both questions separately: the
+  descriptors say what each source SUPPORTS, and `oauthSources` says what this deployment can
+  actually run. Folded into one, a board with no registered Figma app would render a "Connect with
+  Figma" button that can only 503.
+- **ONE public callback serves every source**, at `GET /documents/oauth/callback`, because a
+  deployment registers one redirect URL per vendor app and the source cannot ride the path. It
+  therefore rides the signed `state`, and the callback REFUSES a state whose `source` is not one
+  of its own: the GitHub install, Slack and Linear flows mint no `source`, so a state from one of
+  them cannot be presented here even though the signing secret is shared.
+- **Renewal happens on ONE seam.** `DocumentConnectionService.resolveConnection` /
+  `resolveConnections` is where every read resolves a credential (import, search, the content
+  resolver, the dispatch-time refresher), so an access token inside its expiry skew is renewed and
+  re-stored there. A renewal that cannot be made answers `null` rather than throwing: the read
+  must fail on the source call that follows, where it is reported as the outage it looks like, not
+  on the resolution. What could not be renewed is logged with WHICH of the three causes applies (no
+  refresh token, no refresh endpoint, the refresh call failed), because each needs a different fix.
+  The renewal is deliberately unguarded against a lost race, which is only safe while the supported
+  endpoints leave the refresh token unrotated; a source whose refresh ROTATES cannot be added
+  without revisiting it.
 
 There is a second, narrower home. A DEPLOYMENT can configure credentials in its own environment
 (`DOC_SOURCE_<SOURCE>_<FIELD>`), and `DeploymentDocumentResolverService` reads them. It exists for
@@ -116,98 +160,79 @@ the feature from the UI.
 
 ## Configuring it
 
-Per-workspace credentials are entered in the app and stored (encrypted) in D1;
-there are no source secrets in `wrangler.toml`. A couple of knobs are global,
-plus the one required secret: the master key used to encrypt the per-workspace
-source credentials at rest:
+The three settings an operator sets (`DOCUMENT_SOURCES`, `DOCUMENT_PLANNER`, and the required
+`ENCRYPTION_KEY`) are described in [`docs/environment-variables.md`](../../docs/environment-variables.md)
+and on the site's
+[Document & task sources](https://www.catfactory.ai/deploy/configuration.html#document-task-sources).
+Two facts about what they select are engine behaviour:
 
-```toml
-# wrangler.toml [vars]
-# Optional allow-list of sources to register (default: all known sources).
-DOCUMENT_SOURCES = "confluence,notion"
-# Doc → board planner: "llm" (default) uses the configured agent model; "headings"
-# forces the deterministic heading parser.
-DOCUMENT_PLANNER = "llm"
-```
+- **The planner degrades rather than failing.** In `llm` mode it reuses the agents' default model
+  through the provider-agnostic `ModelProvider` port; if no provider credential is usable, or the
+  response cannot be parsed, it falls back to the deterministic heading parser, so import, plan and
+  spawn always produce something. `DOCUMENT_PLANNER=headings` is that path taken deliberately.
+- **No source secret lives in configuration.** Per-workspace credentials are entered in the app and
+  stored sealed, and the one key the deployment holds is shared with every other integration, which
+  is why the cipher domain-separates per integration through its HKDF `info` tag.
 
-```sh
-# Shared master key for credential encryption at rest (REQUIRED - config load throws
-# without it; set as a secret, never commit it). One key backs every integration; the
-# cipher domain-separates per integration via its HKDF `info` tag:
-openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
-```
+Credentials are stored encrypted at rest: the per-source JSON bag is sealed with AES-256-GCM (the
+same `WebCryptoSecretCipher` envelope the environments integration uses, under a documents-scoped
+HKDF `info`). The SEAL is the row's own value: the repository stores and returns the envelope, and
+the one place it is opened is `createDocumentConnectionStore`, which every service in the module
+holds instead of the repository. That is what lets a deployment holding no key for these rows (a
+mothership-mode node) still resolve them: it names the row over `/internal/secrets/unseal` and the
+mothership opens it. Credentials are never returned on the wire, and a bag that cannot be opened
+raises rather than resolving to an empty one, so "connected with nothing in it" and "this row is
+unreadable" stay different answers.
 
-In `llm` mode the planner reuses the agents' default model
-(`AGENT_DEFAULT_PROVIDER` / `AGENT_DEFAULT_MODEL`) via the provider-agnostic
-`ModelProvider` port. If no provider credential is usable, or a response can't be
-parsed, it degrades to the deterministic heading parser, so import/plan/spawn
-always work.
+Which credential each source takes, and where an operator gets it, is the site's
+[Supported sources](https://www.catfactory.ai/guide/issue-sources.html#supported-sources). Two
+per-source facts are about this codebase rather than about connecting:
 
-Credentials are stored encrypted at rest in D1: the per-source JSON bag is
-sealed with AES-256-GCM (the same `WebCryptoSecretCipher` envelope the
-environments integration uses, under a documents-scoped HKDF `info`) before it
-is written, and decrypted only on the import path. They are never returned on the
-wire. Rows written before encryption was introduced are read back as legacy
-plaintext and re-encrypted on the next write.
-
-- **Confluence**: each workspace owner connects their own site with an Atlassian
-  **API token** (`id.atlassian.com → Security → API tokens`); the backend
-  authenticates with HTTP Basic (`email:token`). The stored base URL is
-  SSRF-guarded (https, public host).
-- **Notion**: create an **internal integration**
-  (`notion.so/my-integrations`), share each page with it, and paste the token.
-  The API host is fixed (`api.notion.com`), so there is no SSRF surface.
-- **GitHub** (repo docs: READMEs / RFCs / notes under `docs/`): rides the
-  workspace's installed GitHub App (or PAT in local mode), so it stores **no
-  per-workspace credential and needs no separate connect step**. It is reported as a
-  live connection as soon as the App is installed: the provider's
-  `resolveImplicitConnection` resolves the workspace's installation, and
-  `DocumentConnectionService` surfaces it in `listConnections` / `requireConnection`
-  without a stored marker row (an explicit stored connection, if one exists, still
-  wins). This mirrors the GitHub-issues **task** source's App-presence availability.
-  Reads are **tenant-scoped**: `fetchDocument` / `probeVersion` resolve the installation
-  via `getByWorkspace` and require the doc's `owner` to match the workspace's own
-  installation account, so a crafted `owner/repo:path` id can't reach another tenant's
-  repo through a different workspace's installation token (the same scoping `search` uses).
-  In the UI the GitHub (and, via the VCS adapter, GitLab) source doesn't use the generic
-  free-text search box: instead the context-document picker offers a **repository
-  picker**: search for a repo (reusing the shared server-side repo search), then pick one
-  or more **files** from it by searching the whole tree by path or browsing it with the
-  same tree browser the monorepo add-service flow uses (now multi-pick in file mode). The
-  file search is backed by a single recursive tree read per repo: `listRepoFiles`
-  (`GET /github/repos/:repoGithubId/files`) over the `listTree` client port, so the
-  picker filters files client-side without walking the contents API level-by-level.
+- **GitHub stores NO per-workspace credential and needs no connect step.** The provider's
+  `resolveImplicitConnection` resolves the workspace's installation and `DocumentConnectionService`
+  surfaces it in `listConnections` / `requireConnection` with no stored marker row (an explicit
+  stored connection still wins). This mirrors the GitHub-issues task source's App-presence
+  availability, and anything new with an implicit connection copies that seam rather than seeding a
+  row.
+- **GitHub reads are TENANT-SCOPED at the provider.** `fetchDocument` / `probeVersion` resolve the
+  installation via `getByWorkspace` and require the doc's `owner` to match the workspace's own
+  installation account, so a crafted `owner/repo:path` id cannot reach another tenant's repo through
+  a different workspace's installation token. `search` applies the same scoping; a new read on this
+  provider that skips it is a cross-tenant hole with no other guard behind it.
 
 ## HTTP API
 
 All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
-`503` when the integration is unconfigured. `:source` is `confluence` | `notion`.
+`503` when the integration is unconfigured. `:source` is any registered `DocumentSourceKind`, which
+is the picklist the descriptors are built from rather than a list restated here.
 
-| Method & path                                 | Purpose                                                    |
-| --------------------------------------------- | ---------------------------------------------------------- |
-| `GET /document-sources`                       | Configured sources + their connect/import descriptors      |
-| `GET /document-sources/connections`           | The workspace's live connections (no credentials)          |
-| `POST /document-sources/:source/connect`      | Connect: `{ credentials: { … } }`                          |
-| `DELETE /document-sources/:source/connection` | Disconnect a source                                        |
-| `GET /documents`                              | List imported documents (all sources)                      |
-| `POST /document-sources/:source/resolve-ref`  | Canonicalise `{ ref }`: id, canonical URL, dropped scope   |
-| `POST /document-sources/:source/import`       | Fetch + persist a page: `{ ref }` (id or URL)              |
-| `POST /document-sources/:source/plan`         | Preview the board plan for `{ externalId }` (no writes)    |
-| `POST /document-sources/:source/spawn`        | Apply structure: `{ externalId, frameId? }`                |
-| `POST /documents/link`                        | Attach a doc to a block: `{ source, externalId, blockId }` |
-| `POST /documents/refresh`                     | Re-confirm one doc now: `{ source, externalId }`           |
+| Method & path                                     | Purpose                                                                         |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `GET /document-sources`                           | Configured sources, their descriptors, and which ones this deployment can OAuth |
+| `GET /document-sources/connections`               | The workspace's live connections (no credentials)                               |
+| `POST /document-sources/:source/connect`          | Connect: `{ credentials: { … } }`                                               |
+| `GET /document-sources/:source/oauth/install-url` | Begin an OAuth connect: the vendor authorization URL                            |
+| `DELETE /document-sources/:source/connection`     | Disconnect a source                                                             |
+| `GET /documents`                                  | List imported documents (all sources)                                           |
+| `POST /document-sources/:source/resolve-ref`      | Canonicalise `{ ref }`: id, canonical URL, dropped scope                        |
+| `POST /document-sources/:source/import`           | Fetch + persist a page: `{ ref }` (id or URL)                                   |
+| `POST /document-sources/:source/plan`             | Preview the board plan for `{ externalId, frameId? }` (no writes)               |
+| `POST /document-sources/:source/spawn`            | Apply structure: `{ externalId, frameId? }`                                     |
+| `POST /documents/link`                            | Attach a doc to a block: `{ source, externalId, blockId }`                      |
+| `POST /documents/refresh`                         | Re-confirm one doc now: `{ source, externalId }`                                |
 
 ### Who may call what: the tier split
 
 This controller is one of the few that MIXES permission tiers, and the line is what a call
 touches rather than which controller serves it:
 
-| Routes                                                                                                   | Permission            | Why                                                                                                                                         |
-| -------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /document-sources/:source/connect`, `DELETE …/connection`                                          | `integrations.manage` | Writes and clears the per-workspace source CREDENTIAL.                                                                                      |
-| `POST /document-role-links`, `POST /document-role-links/remove`                                          | `integrations.manage` | A per-DocKind template/exemplar tag decides what EVERY doc run in the board writes from: the fragment-library blast radius, not one task's. |
-| `resolve-ref`, `import`, `search`, `plan`, `spawn`, `POST /documents/link`, `POST /documents/refresh`    | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                            |
-| every `GET` (`/document-sources`, `/document-sources/connections`, `/documents`, `/document-role-links`) | `workspace.read`      | Reads pass the admin gate by design.                                                                                                        |
+| Routes                                                                                                   | Permission            | Why                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /document-sources/:source/connect`, `DELETE …/connection`                                          | `integrations.manage` | Writes and clears the per-workspace source CREDENTIAL.                                                                                                                                                                               |
+| `GET /document-sources/:source/oauth/install-url`                                                        | `integrations.manage` | The one gated READ here, and the one gated IMPERATIVELY: the mount lets GET through by design, and what this hands back is the first half of a credential write, completed through the PUBLIC callback where no tier can be checked. |
+| `POST /document-role-links`, `POST /document-role-links/remove`                                          | `integrations.manage` | A per-DocKind template/exemplar tag decides what EVERY doc run in the board writes from: the fragment-library blast radius, not one task's.                                                                                          |
+| `resolve-ref`, `import`, `search`, `plan`, `spawn`, `POST /documents/link`, `POST /documents/refresh`    | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                                                                                                                     |
+| every `GET` (`/document-sources`, `/document-sources/connections`, `/documents`, `/document-role-links`) | `workspace.read`      | Reads pass the admin gate by design.                                                                                                                                                                                                 |
 
 The member tier is enforced by the auth gate's own write floor (any non-GET requires `≥ member`),
 so those routes mount no permission gate at all, exactly like `boardController`'s writes. The
@@ -237,88 +262,99 @@ to a block is resolved at execution time and injected into the agent prompt
 
 ### A pasted reference is judged BEFORE anything is written
 
+> What the author SEES (the trimmed link, the widened-reference warning, the two refusal shapes,
+> why an unreachable source still stages) is the site's
+> [What a pasted link resolves to](https://www.catfactory.ai/guide/issue-sources.html#what-a-pasted-link-resolves-to).
+
 `resolve-ref` is `import` with the fetch removed: `DocumentImportService.resolveRef` runs the
-provider's own `parseRef` and answers `{ externalId, canonicalUrl }`, and `import` now goes
-through it rather than re-parsing, so the pre-flight and the import cannot disagree about which
-refs are usable. It spends no upstream call and needs no connection, which is what lets the
-attach picker call it as the user types.
+provider's own `parseRef` and answers `{ externalId, canonicalUrl }`, and `import` goes through it
+rather than re-parsing, so the pre-flight and the import cannot disagree about which refs are
+usable. It spends no upstream call and needs no connection, which is what lets the picker call it as
+the user types. Four rules bind anything added to it:
 
-Two things ride on it, and both were real defects in the attach flow:
-
-- **The paste is TRIMMED to the canonical form and that form is what gets staged.** A share link
-  carries a title segment and tracking params (`?p=` / `&t=` on Figma's own Copy link output);
-  accepting it verbatim hid whether the frame the URL named had survived the parse at all.
-  `canonicalUrl` is the provider rebuilding the link from the id, so what the picker shows is what
-  the import will do. It is `null` where the id genuinely cannot rebuild one: Confluence needs the
-  connection's site base URL and Linear the workspace slug, and GitHub docs needs the deployment's
-  VCS HOST (a GitLab-backed deployment reaches that source through the adapter, so a `github.com`
-  link would be wrong for it and `ResolveRepoOrigin`, which resolves a host, needs a workspace a
-  pure method does not get). The id itself is the canonical form in those cases, NOT a weaker
-  answer, and callers render it rather than reading the null as a failed resolution.
-- **A reference that had to be WIDENED says so, separately from the trim.** A node/screen id the
-  parser cannot read (Figma's Copy link emits a complex instance id for any component instance)
-  makes `parseRef` fall back to the whole file or project rather than guess which frame was meant.
-  That is the right fallback and an invisible one: the result is a valid id with a valid canonical
-  URL, so "I attached this frame" and "I attached the entire design" render identically under a
-  bare "trimmed to the supported form" note. `droppedScope` (optional
-  `DocumentSourceProvider.droppedScope`, implemented by the design sources) carries the discarded
-  qualifier AS PASTED, and the picker states it in its own amber line. Never normalised onto a
-  supported form: nothing knows which frame it meant, which is why the parser refused it.
+- **A `null` `canonicalUrl` is an ANSWER, not a failure.** The provider rebuilds the link from the
+  id, and some ids cannot: Confluence needs the connection's site base URL, Linear the workspace
+  slug, and GitHub docs the deployment's VCS host (a GitLab-backed deployment reaches that source
+  through the adapter, so a `github.com` link would be wrong for it, and `ResolveRepoOrigin` needs a
+  workspace this pure method does not get). The id itself is the canonical form there. A caller that
+  reads the null as a failed resolution is the bug.
+- **A WIDENED reference is reported separately from the trim**, through the optional
+  `DocumentSourceProvider.droppedScope`. A node id the parser cannot read (Figma's Copy link emits a
+  complex instance id for any component instance) falls back to the whole file, and the result is a
+  valid id with a valid canonical URL, so the widening is invisible in everything except this field.
+  It carries the discarded qualifier AS PASTED and is never normalised onto a supported form:
+  nothing knows which frame was meant, which is why the parser refused it.
 - **A refusal names WHICH correction it needs**, as `details.reason` (the closed
-  `documentRefReasonSchema`). `document_ref_unrecognized` means no link of this shape will ever
-  work here, and carries the `expected` format; `document_ref_claimed_by_other_source` means the
-  link is fine and pointed at the wrong source, and names the claimant so the surface can offer
-  to switch with the text unchanged. Claimants are searched host-PINNED first, through the SAME
-  `orderSourcesByClaimConfidence` that `makeDocumentUrlResolver` reads rather than a second copy of
-  its two passes: a blind parser claims a shape, so registration order deciding would point a Figma
-  paste at Notion, and a rule living in two places would be refined in one of them.
+  `documentRefReasonSchema`): `document_ref_unrecognized` carries the `expected` format, and
+  `document_ref_claimed_by_other_source` names the claimant so a surface can offer to switch.
+  Claimants are searched host-PINNED first, through the SAME `orderSourcesByClaimConfidence` that
+  `makeDocumentUrlResolver` reads rather than a second copy of its two passes: a blind parser claims
+  a shape, so registration order deciding would point a Figma paste at Notion, and a rule living in
+  two places would be refined in one of them.
+- **A refusal is a verdict; a failed CALL is not.** `unchecked` (offline, 5xx, a proxy's own error
+  page, a reason value this build does not know) leaves the reference unjudged and still stageable,
+  with the import as the backstop it always was. An unknown reason value lands here rather than
+  being treated as a refusal, which is what lets the vocabulary grow without older builds rejecting
+  good links.
 
 The SPA half is the other side of the same rule: `ContextDocumentPicker` stages the RESOLVED
 reference rather than the pasted text, and `useContextLinking().resolvePending` fetches every staged
-attachment BEFORE the task or initiative is created, so an unreachable page is a correction the
-author can still make instead of a toast over a task that already exists without its context.
-
-Two consequences of running the fetch first, both about not overstating what the pre-flight knows:
-
-- **A refusal blocks a paste; a failed CALL does not.** `unchecked` (offline, 5xx, a proxy's own
-  error page, a reason value this build does not know) leaves the reference unjudged and still
-  stageable, with the import as the backstop it always was. Treating the two alike would make a
-  transient outage as final as a refusal, so a perfectly good link could not be attached at all.
-- **A staged item that could not be fetched is MARKED on the form** (`PendingContext.unreadable`),
-  not only named in the toast. The create is refused while any attachment is unresolved, so the
-  chip that caused it has to be identifiable where the author is still working. A tracker ISSUE has
-  no `parseRef` to pre-flight, so the add-task form's body pre-fetch is its warning: it records the
-  cause instead of swallowing it.
+attachment BEFORE the task or initiative is created, marking what it could not read
+(`PendingContext.unreadable`) rather than only naming it in a toast. A tracker ISSUE has no
+`parseRef` to pre-flight, so the add-task form's body pre-fetch is its warning: it records the cause
+instead of swallowing it.
 
 ### The picker names its source, and is the route to adding one
 
-`ContextDocumentPicker` also decides WHICH source it is reading, and that selector is the surface
-where the tier split above becomes visible copy. The selection rules are shared with the tracker
-pickers through `frontend/app/app/utils/sourcePicker.ts` (see
-[`bug-hunt.md`](./bug-hunt.md) for the tracker side).
+The copy and the tier it shows are the site's (the table under
+[Who can connect a source](https://www.catfactory.ai/guide/issue-sources.html#who-can-connect-a-source-and-who-can-attach-one)).
+Two structural facts stay here, both about where the answer is computed rather than what it says.
+`ContextDocumentPicker`'s selection rules are shared with the tracker pickers through
+`frontend/app/app/utils/sourcePicker.ts` (see [`bug-hunt.md`](./bug-hunt.md) for the tracker side).
 
-- **The source in use is always on screen**, single source or not, because which source is selected
-  decides what a pasted ref resolves to and which repository a file pick browses. When the menu has
-  nothing to decide it renders as a LABEL rather than a chevron: a trigger whose one entry re-selects
-  the current source promises a choice that isn't there.
-- **Its second tier connects a source from inside the form** (`ui.openDocumentConnect`, opened OVER
-  the caller's modal so nothing typed is lost), and `reconcileSource`'s `awaiting` selects that source
-  the moment the probe reports it connected. It routes to that source's own connect screen, never to
-  the Integrations hub, for the reason the bug hunt's tracker menu does.
-- **That second tier is WITHHELD from a member**, because connecting stores a workspace credential
-  and is `integrations.manage` while attaching what it holds is member-tier. `connectableSources` is
-  the one answer to "which sources could I connect", read by the picker's add tier AND by both hosts'
-  connect shortcuts (`ContextAttachmentFields`, `TaskContextDocs`); it withholds everything when the
-  integration is unavailable to the deployment OR the reader may not connect one. So a member sees
-  the source NAMED with no add entry, rather than a connect that opens a modal, takes a token and
-  403s. The no-source empty state splits the same way: the admin tier is told to connect one, a
-  member is told to ask an admin, because an instruction the reader's own menu withholds is not
-  advice they can act on.
+- **`connectableSources` is the ONE answer to "which sources could I connect"**, read by the
+  picker's add tier and by both hosts' connect shortcuts (`ContextAttachmentFields`,
+  `TaskContextDocs`). It withholds everything when the integration is unavailable to the deployment
+  OR the reader may not connect one, so a surface cannot accidentally offer a connect that takes a
+  token and then 403s. A third surface asking the question its own way is how the two halves drift.
 - **A document source cannot be "connected but switched off here"** the way a tracker can, so
   `buildConnectionSourceChoices` cannot emit the `enable` wording at all, and `sourceMenuItems`
   derives its wording map from what the choices can carry. A source that one day gains a
   per-workspace toggle therefore fails the typecheck at this surface rather than rendering
   "Connect X" over something already connected.
+
+## A design document is imported twice: as text, and as pixels
+
+A prose source has one representation; a design source has two, and only one of them fits in a
+Markdown body. `DocumentSourceProvider.fetchRenders` is the optional second half: it downloads the
+rendered images of the document's blocks, which the import retains as `kind: 'reference'` binary
+artifacts keyed to the document (`binary_artifacts.document_source` / `document_external_id`). It is
+implemented by Figma today; a source that omits it has nothing to rasterise, and that absence is a
+real answer rather than a gap. Details of the Figma mapping and its caps:
+[`figma-claude-design-context.md`](./figma-claude-design-context.md#renders).
+
+Three rules bind anything that touches it:
+
+- **It is a SEPARATE port method from `fetchDocument`, and only runs on the import that WRITES a
+  body.** The freshness ladder below re-fetches the text whenever a probe finds a moved version, and
+  a whole-file design source moves its token on any edit anywhere in the file, so most of those
+  re-fetches write nothing but a token. Carrying the images on the same call would put megabytes of
+  PNGs on the critical path of a step dispatch that had no reason to spend them. A token-only write
+  therefore carries the previous render status forward untouched.
+- **`documents.render_status` is what says how it went**, because every way of ending up with no
+  images is the same absence: `stored`, `partial`, `none`, `failed`, `storage_unavailable`, and NULL
+  for a document the question does not apply to. It is derived from what was RETAINED rather than
+  downloaded, so a blob backend that rejects half the bytes reads as `partial` exactly like a source
+  that rendered half the frames. Where the account has no image storage the download is not even
+  attempted, and the row says so rather than reporting an empty design.
+- **The whole pass is BEST-EFFORT.** The text is the load-bearing half (a run refuses on an
+  unreadable context document); an image is an enrichment, so nothing about it may fail an import.
+
+The retained frames are read back by the **visual-confirmation gate**, which folds the designs a
+task links into its actual-vs-reference gallery so a designer gets screenshot-vs-design comparison
+with no manual upload. What that fold does with a name two designs both claim, and how it states a
+design that retained nothing, is in
+[`visual-confirmation.md`](./visual-confirmation.md).
 
 ## Freshness: a stored document is a projection of a page someone keeps editing
 
@@ -359,9 +395,9 @@ states it in the reader's own language off an exhaustive `Record` keyed by its m
 `confirmed` names the revision (so "which revision did this run build against" is answerable
 afterwards), `not-applicable` renders nothing at all (an `upload` has no source to trail, so a
 warning would invent a problem), and `unconfirmed` names which of four gaps applies, because
-"reconnect the source" / "this deployment cannot read the credentials at all" (mothership mode,
-where the read fails permanently and by design) / "wait out the outage" / "this source has no
-revision" are four different fixes. Every gap also increments the `document.freshness_gap` counter,
+"reconnect the source" / "this deployment cannot read the credentials at all" (a corrupt envelope,
+a drifted key, or a mothership that could not be reached to open the row) / "wait out the outage" /
+"this source has no revision" are four different fixes. Every gap also increments the `document.freshness_gap` counter,
 dimensioned by reason and source: each repeats per dispatch while it lasts, so the log line says
 which run and only the rate says whether it is spreading.
 
@@ -457,14 +493,35 @@ Two deliberate NON-refusals:
   notices are themselves BOUNDED (the inline one names a handful and counts the rest) since
   a notice that reports a budget overrun must not be able to cause one.
 
-**The SPA never sends `frameId`.** Planning is target-blind: `plan(record)` takes
-only the document, and its prompt asks for a whole architecture (top-level frames →
-modules → tasks), so the `frameId` path can only flatten the planned frames into
-the target, discarding the frame titles, types and descriptions the preview renders.
-That makes the spawn produce something other than what the user approved, so the
-affordance is board-level only. Scoping a spawn to one service is a target-aware
-PLAN (a second prompt yielding modules and tasks for an existing service), not a
-target-aware write; until that exists, `frameId` is an API-only capability.
+**Planning is TARGET-AWARE when it is given a frame.** What the two shapes produce, and why a design
+document always needs a target, is the site's
+[Expand a document into board structure](https://www.catfactory.ai/guide/issue-sources.html#expand-a-document-into-board-structure).
+The engine side is that `plan(record, target?)` runs two DIFFERENT prompts rather than one prompt
+with a hint, because the answers have different shapes: without a target, "what architecture does
+this document describe", answered as frames; with one, "what work does it imply inside this service
+that already exists", answered as that service's modules and tasks with the modules it ALREADY holds
+named in the prompt.
+
+Flattening a board-wide plan into a frame instead is what this replaced, and it made the spawn
+dishonest: the flatten discards the frame titles, types and descriptions the preview rendered, so
+what was created was not what was approved. A plan authored FOR the target carries exactly one
+frame, which IS the target, and discards nothing.
+
+Two rules keep the two shapes from bleeding into each other:
+
+- **A targeted response that proposes FRAMES is refused, not re-read.** `coerceTargetedPlan` reads
+  `{ modules, tasks }`; a model that answered with `frames` is proposing services where one already
+  exists, and quietly reading those frames as modules would launder that mistake onto the board.
+  Null sends the caller to the targeted heading parser instead.
+- **The fallback matches the SHAPE of the request.** A targeted plan that could not be produced
+  degrades to the targeted heading parser, never to a board-wide plan the caller did not ask for.
+  Under a target the outline shifts up a level: h1 is consumed by the target (which occupies the
+  level h1 would have created), h2 becomes a module, h3 a task.
+
+**A DESIGN document is planned into a service, always**, and `isDesignSource` is what decides: the
+SPA's spawn preview requires a target frame for one, and the design origin folds a paragraph into
+whichever prompt runs, redirecting the decomposition to one task per screen, state or flow. A source
+added to that trait inherits both without a second edit here.
 
 The `credentials` bag a source expects is described by its descriptor
 (`GET /document-sources` → `credentialFields`), so the connect UI renders

@@ -55,6 +55,9 @@ const DocumentTemplatesModal = defineAsyncComponent(
 const SpawnPreviewModal = defineAsyncComponent(
   () => import('~/components/documents/SpawnPreviewModal.vue'),
 )
+const StartFromDesignModal = defineAsyncComponent(
+  () => import('~/components/documents/StartFromDesignModal.vue'),
+)
 const BootstrapModal = defineAsyncComponent(
   () => import('~/components/bootstrap/BootstrapModal.vue'),
 )
@@ -63,6 +66,9 @@ const AddServiceFromRepoModal = defineAsyncComponent(
 )
 const GitHubPanel = defineAsyncComponent(() => import('~/components/github/GitHubPanel.vue'))
 const SlackPanel = defineAsyncComponent(() => import('~/components/slack/SlackPanel.vue'))
+const NotificationSettingsPanel = defineAsyncComponent(
+  () => import('~/components/notifications/NotificationSettingsPanel.vue'),
+)
 const FragmentLibraryPanel = defineAsyncComponent(
   () => import('~/components/fragments/FragmentLibraryPanel.vue'),
 )
@@ -472,10 +478,12 @@ watch(
         <DocumentImportModal v-if="ui.documentImport" />
         <DocumentTemplatesModal v-if="ui.documentTemplates" />
         <SpawnPreviewModal v-if="ui.spawnPreview" />
+        <StartFromDesignModal v-if="ui.startFromDesign" />
         <BootstrapModal v-if="ui.bootstrapOpen" />
         <AddServiceFromRepoModal v-if="ui.addServiceOpen" />
         <GitHubPanel v-if="ui.githubOpen" />
         <SlackPanel v-if="ui.slackOpen" />
+        <NotificationSettingsPanel v-if="ui.notificationSettingsOpen" />
         <FragmentLibraryPanel v-if="ui.fragmentLibraryOpen" />
         <FoundationalServicePanel v-if="ui.foundationalServicesOpen" />
         <PipelineHealthModal v-if="ui.pipelineHealthOpen" />

@@ -62,10 +62,10 @@ export function createPipelinePersistence(
       stepOptions: ctx.draftStepOptions.value.map((o) => o ?? null),
       // Only send labels when there are any.
       ...(ctx.draftLabels.value.length ? { labels: [...ctx.draftLabels.value] } : {}),
-      // Only send purpose when the pipeline is classified (null ⇒ leave unclassified). Like the
-      // legacy per-step arrays, an omitted `purpose` on update reads as "keep existing"; clearing
-      // a classification back to unclassified is not a supported edit (every built-in ships one).
-      ...(ctx.draftPurpose.value ? { purpose: ctx.draftPurpose.value } : {}),
+      // ALWAYS sent, like `stepOptions` above and for the same reason: `purpose` is mandatory on
+      // create, and on update an omitted field reads as "keep existing", so a re-classification
+      // would silently not persist. There is no "unclassified" to clear back to.
+      purpose: ctx.draftPurpose.value,
     }
   }
 

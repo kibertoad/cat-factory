@@ -1,12 +1,15 @@
 import {
   actNotificationContract,
   dismissNotificationContract,
+  getNotificationSettingsContract,
   listNotificationsContract,
+  updateNotificationSettingsContract,
 } from '@cat-factory/contracts'
 import type { ReviewEffort } from '~/types/merge'
+import type { NotificationRoutingMatrix } from '~/types/notifications'
 import type { ApiContext } from './context'
 
-/** The human-actionable notification inbox (act / dismiss). */
+/** The human-actionable notification inbox (act / dismiss) + the per-workspace manager. */
 export function notificationsApi({ send, ws }: ApiContext) {
   return {
     // ---- notifications (human-actionable board items) ---------------------
@@ -29,5 +32,14 @@ export function notificationsApi({ send, ws }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { notificationId: id },
       }),
+
+    // ---- the notification manager (per-workspace channel routing) ---------
+    // Which types this board delivers on which channel. The read is member-visible; the
+    // write is admin-tier (a 403 from the backend, which the panel surfaces).
+    getNotificationSettings: (workspaceId: string) =>
+      send(getNotificationSettingsContract, { pathPrefix: ws(workspaceId) }),
+
+    updateNotificationSettings: (workspaceId: string, matrix: NotificationRoutingMatrix) =>
+      send(updateNotificationSettingsContract, { pathPrefix: ws(workspaceId), body: { matrix } }),
   }
 }

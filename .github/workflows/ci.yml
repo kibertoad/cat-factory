@@ -44,15 +44,16 @@ jobs:
       cliSupervise: ${{ steps.filter.outputs.cliSupervise }}
       deployHarness: ${{ steps.filter.outputs.deployHarness }}
       eks: ${{ steps.filter.outputs.eks }}
+      gatekeeper: ${{ steps.filter.outputs.gatekeeper }}
       sdk: ${{ steps.filter.outputs.sdk }}
       # Coarse test-lane gating (computed in the `scope` step below):
       #   backendCode — backend source OR a root build/dependency input changed. Gates the
       #                 pure-backend lanes (`test-worker`, `test-db`); a frontend- or
       #                 docs-only PR leaves it false so those lanes skip.
-      #   code        — ANY real source changed (backend, frontend, a `deploy/*` example, or
-      #                 a root build input), i.e. NOT a docs-/prose-only diff. Gates the
-      #                 cross-stack lanes (`test-units`, `test-e2e`) AND the build lanes
-      #                 (`build-typecheck`, `publish-integrity`, `frontend-check`), so a
+      #   code        — ANY real source changed (backend, frontend, `sdk/*`, a `deploy/*`
+      #                 example, or a root build input), i.e. NOT a docs-/prose-only diff.
+      #                 Gates the cross-stack lanes (`test-units`, `test-e2e`) AND the build
+      #                 lanes (`build-typecheck`, `publish-integrity`, `frontend-check`), so a
       #                 docs-only PR runs no tests and no builds — only lint, the repo
       #                 guards, changeset, and zizmor. (On non-PR events both flags are
       #                 forced true — see `scope`.)
@@ -145,6 +146,47 @@ jobs:
               - 'backend/packages/contracts/src/primitives.ts'
               - 'backend/packages/integrations/src/modules/kubernetes/**'
               - '.github/workflows/ci.yml'
+            # The Cloudflare OS Gatekeeper (`test-gatekeeper`) is a CONSUMER of the published
+            # surface, not part of the backend: `@cat-factory/gatekeeper-worker` and the template
+            # that installs it depend on `@cat-factory/sdk` and `@cat-factory/gatekeeper-bindings`
+            # exactly as an outside integrator would, and nothing in `backend/packages` may depend
+            # on either. This lane is its own for the same reason it is NON-BLOCKING (not in the
+            # aggregated `Test` gate, the shape `test-eks` has): the Cloudflare OS protocol is
+            # still moving, and a partner-side breaking change must not turn this repo's CI red.
+            #
+            # The non-blockingness is scoped to the RUNTIME suite, which is where a moving
+            # protocol actually bites: `test-units` excludes `@cat-factory/gatekeeper-worker` so
+            # its workerd run happens only here. Build and typecheck are the opposite case and
+            # deliberately DO block: the machinery is a published npm package, so a `dist` that
+            # does not compile is our break to fix before it ships, and `publish-integrity` has
+            # to see that `dist` to run publint/attw over it. `sdkSrc` in the `src` filter below
+            # is what makes that true rather than merely intended: without it an
+            # `sdk/gatekeeper-worker/**`-only diff left `code` false and skipped both lanes.
+            #
+            # The last four entries are what the LIVE half of this lane needs. A change to the
+            # `/api/v1` CONTRACTS already lands here through `sdk/gatekeeper/**`, because the
+            # bindings table is generated from the spec and `check:sdk` refuses a diff that did not
+            # regenerate it; what that cannot see is BEHAVIOUR that moved under an unchanged
+            # contract, which is exactly the disagreement the live suite exists to catch. That is
+            # the whole publicApi module, and `orchestration` one layer under it: the live suite's
+            # central claim is that a real run PARKS, RAISES the notification the card is built
+            # from, and LEAVES the park when answered, and all three of those live in the engine
+            # rather than in the controller that serves them. Without it the lane skips exactly the
+            # PRs that would break it. The line is drawn there and not deeper: the repositories the
+            # engine persists through are covered cross-runtime by conformance, which the live
+            # suite adds nothing to. The harness paths are here because the phase and the boot it
+            # runs against live in them.
+            gatekeeper:
+              - 'deploy/gatekeeper/**'
+              - 'sdk/gatekeeper/**'
+              - 'sdk/gatekeeper-worker/**'
+              - 'sdk/typescript/**'
+              - 'backend/packages/server/src/modules/publicApi/**'
+              - 'backend/packages/orchestration/**'
+              - 'backend/internal/sdk-smoketest/**'
+              - 'backend/internal/e2e/src/**'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             # The cross-SDK smoketest (`sdk-smoketest`) boots a real backend and drives all four
             # SDK clients plus the published MCP server against it, so it runs when EITHER side of
             # that contract moves: the
@@ -210,6 +252,20 @@ jobs:
             frontendSrc:
               - 'frontend/**'
               - '!**/*.md'
+            # The `sdk/*` tree: the four published clients, the MCP and gatekeeper projections
+            # over them, and the Gatekeeper Worker machinery. Real source that the `code` flag
+            # used to miss entirely, which meant an sdk-ONLY diff (a hand-written transport, the
+            # Gatekeeper machinery) skipped `build-typecheck`, `publish-integrity` and
+            # `test-units`, the three lanes that compile the published `dist`, run publint/attw
+            # over it and run these packages' own unit suites. `sdk-smoketest` has its own filter
+            # and stayed green on its own, so the `Test` and `Build` gates read as passes with
+            # nothing having typechecked the diff. It also drags `test-e2e` in, which an sdk
+            # change cannot affect: accepted, because an sdk-only PR is rare (a generated change
+            # rides a contracts edit, which is `backendSrc` already) and a fourth flag to shave it
+            # would buy less than it costs in scope to reason about.
+            sdkSrc:
+              - 'sdk/**'
+              - '!**/*.md'
             # Example deployments (`deploy/*`) — the assembled-product wiring. `test-e2e`
             # builds and serves `deploy/frontend` as its real SPA (Playwright's webServer
             # runs `pnpm --filter @cat-factory/deploy-frontend run build && ... preview`), so a
@@ -230,13 +286,14 @@ jobs:
           BACKEND_SRC: ${{ steps.src.outputs.backendSrc }}
           FRONTEND_SRC: ${{ steps.src.outputs.frontendSrc }}
           DEPLOY_SRC: ${{ steps.src.outputs.deploySrc }}
+          SDK_SRC: ${{ steps.src.outputs.sdkSrc }}
           ROOT_BUILD: ${{ steps.filter.outputs.rootBuild }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           backend=false
           code=false
           if [ "$BACKEND_SRC" = 'true' ] || [ "$ROOT_BUILD" = 'true' ]; then backend=true; fi
-          if [ "$backend" = 'true' ] || [ "$FRONTEND_SRC" = 'true' ] || [ "$DEPLOY_SRC" = 'true' ]; then code=true; fi
+          if [ "$backend" = 'true' ] || [ "$FRONTEND_SRC" = 'true' ] || [ "$DEPLOY_SRC" = 'true' ] || [ "$SDK_SRC" = 'true' ]; then code=true; fi
           # Change-gating only makes sense against a PR base. On non-PR events (a push to
           # `main`, or a manual `workflow_dispatch`) paths-filter diffs against the default
           # branch, so a dispatch on `main` — HEAD == base tip — yields an EMPTY diff and every
@@ -249,7 +306,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "backendCode=$backend | code=$code" \
             "(backendSrc=$BACKEND_SRC frontendSrc=$FRONTEND_SRC deploySrc=$DEPLOY_SRC" \
-            "rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
+            "sdkSrc=$SDK_SRC rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
 
       # Pick the shard shape for the sharded test lanes. Gate on `push` specifically (not
       # "not a PR") so a manual workflow_dispatch — the way CI timing is measured before a
@@ -434,6 +491,27 @@ jobs:
       # above. Pure node, no install.
       - name: Guard shipped documentation links
         run: node scripts/check-shipped-doc-links.mjs
+
+      # Requires every doc URL built in code to resolve to a file AND a heading. Three modules build
+      # them (server, kernel, agents: each sits below the last and cannot import it) and they land in
+      # operator-facing error messages, so the reader who follows a stale one is already mid-failure.
+      # Nothing else can see the coupling: reducing `vcs-providers.md` deleted the `## Setup` the
+      # GitLab webhook-rejection warning deep-linked, and the unit test asserting that message
+      # contains `vcs-providers.md#setup` passed throughout, because it only knew about the string.
+      # Its fixtures run in the `node --test` step above. Pure node, no install, no network.
+      - name: Guard documentation anchors
+        run: node scripts/check-doc-anchors.mjs
+
+      # Requires every RELATIVE link in a repo markdown file to resolve to a path and, where it
+      # deep-links one, a heading. The two guards above sound like they cover this and neither does:
+      # the shipped-doc one walks published package directories only, and the anchor one resolves
+      # only URLs that CODE builds. So `git rm`ing a doc was green, which matters because CLAUDE.md
+      # REQUIRES that when a completed initiative tracker converts to an ADR. Twelve links were
+      # dangling when this landed, three of them at trackers deleted exactly that way. Generated
+      # CHANGELOGs are out of scope: frozen history correctly naming what was true when written. Its
+      # fixtures run in the `node --test` step above. Pure node, no install, no network.
+      - name: Guard documentation links
+        run: node scripts/check-doc-links.mjs
 
       # Requires `pnpm test:quick` to exclude exactly the packages the `test-units` lane below
       # excludes. The two deny-lists are the same fact written twice, and `running-tests.md` sells
@@ -754,14 +832,21 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      # Exclude the worker (its own sharded job) and the two Postgres facades (the
-      # test-db job below). Everything left is database-free pure-unit work.
+      # Exclude the worker (its own sharded job), the two Postgres facades (the test-db job
+      # below) and the Gatekeeper machinery, whose suite boots real `workerd` and belongs to
+      # the non-blocking `test-gatekeeper` lane. Everything left is infra-free pure-unit work.
+      # `@cat-factory/deploy-gatekeeper` deliberately stays: its remaining suite is a plain-Node
+      # check that the template's policy still compiles against the generated operation table,
+      # and that one SHOULD gate, because a policy the table no longer supports is our break
+      # rather than a partner's. `scripts/check-test-lane-parity.mjs` holds this list and
+      # `pnpm test:quick` to the same set.
       - name: Run unit packages
         run: >-
           pnpm
           --filter='!@cat-factory/worker'
           --filter='!@cat-factory/node-server'
           --filter='!@cat-factory/local-server'
+          --filter='!@cat-factory/gatekeeper-worker'
           -r run test:run
 
       # `cat-factory supervise` driven as its own process against the `dist/bin.js` built above.
@@ -1224,11 +1309,84 @@ jobs:
         if: ${{ always() }}
         run: docker rm -f floci || true
 
+  # The Cloudflare OS Gatekeeper, in real workerd: the machinery package's own suite, plus the
+  # template that installs it. NON-BLOCKING (deliberately NOT in the aggregated `Test` gate's
+  # `needs`, the shape `test-eks` and `test-e2e` have): this Worker tracks a partner protocol that
+  # is still moving, and a change on that side must not red this repo's required check.
+  #
+  # It runs the same Worker TWICE, against two origins, and the second one is why this job now
+  # needs a database. The hermetic run binds a scripted cat-factory as the pool's outbound service,
+  # which is what makes it fast and deterministic — and is also the only thing it cannot check,
+  # since a fixture agrees with the package by construction. The LIVE run takes that fixture away:
+  # `@cat-factory/sdk-smoketest` boots the real Node facade (real Postgres, real pg-boss, fake
+  # agents), seeds a workspace that parks, and points the Worker at it, so a request shape the
+  # bindings and the SDK both consider correct meets the surface that has to accept it.
+  test-gatekeeper:
+    name: Test Gatekeeper (workerd)
+    needs: changes
+    if: ${{ needs.changes.outputs.gatekeeper == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Backgrounded, the same pair the DB and e2e lanes use, so the image pull hides behind the
+      # install and the build below rather than running serially in front of them.
+      - name: Start Postgres (background)
+        run: nohup .github/scripts/start-postgres.sh > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Both packages import their dependencies through the built `dist`: the machinery imports the
+      # SDK and the bindings table, and the template imports the machinery. The smoketest harness is
+      # filtered in as well because the live run below boots a real backend through it, which is
+      # every backend package's `dist`.
+      - name: Build the published surface it consumes
+        run: >-
+          pnpm exec turbo run build
+          --filter=@cat-factory/gatekeeper-worker... --filter=@cat-factory/sdk-smoketest...
+
+      - name: Typecheck
+        run: >-
+          pnpm exec turbo run typecheck
+          --filter=@cat-factory/gatekeeper-worker --filter=@cat-factory/deploy-gatekeeper
+
+      - name: Gatekeeper tests (hermetic, scripted origin)
+        run: >-
+          pnpm exec turbo run test:run
+          --filter=@cat-factory/gatekeeper-worker --filter=@cat-factory/deploy-gatekeeper
+
+      - name: Wait for Postgres
+        run: .github/scripts/wait-postgres.sh
+
+      # The same Worker against the real `/api/v1`. The harness owns the boot and the seed and runs
+      # the package's `test/live` specs in workerd with no outbound service, so every call the
+      # Gatekeeper makes leaves the isolate and lands on the deployment.
+      - name: Gatekeeper tests (live, against a real deployment)
+        run: pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --only=gatekeeper
+
   # Single aggregated status named "Test" so branch protection can require one
   # check regardless of the job/shard layout. Fails unless every test job passed OR was
   # legitimately skipped by the change-detection gate (no relevant changes → nothing to run).
-  # NOTE: `test-e2e` and `test-eks` are intentionally NOT in `needs` — they're non-blocking for
-  # now (see their job comments above), so their result does not gate this required status.
+  # NOTE: `test-e2e`, `test-eks` and `test-gatekeeper` are intentionally NOT in `needs`: they're
+  # non-blocking for now (see their job comments above), so their result does not gate this
+  # required status.
   test-gate:
     name: Test
     needs: [changes, test-worker, test-units, test-db, test-k8s, sdk-smoketest]

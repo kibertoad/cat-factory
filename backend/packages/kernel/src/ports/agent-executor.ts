@@ -14,6 +14,7 @@ import type {
   PullRequestRef,
   PeerPullRequest,
   ReferenceRepo,
+  ReferenceScreenshotSet,
   AprioriBranch,
   ServiceProvisioning,
   StepSubtasks,
@@ -440,6 +441,20 @@ export interface AgentRunContext {
    * reports live on the step, not in the repo, and must not be gated on a resolved run repo.
    */
   injectedContextFiles?: InjectedContextFile[]
+  /**
+   * The reference design images this run's task already has (the frames its linked designs
+   * retained plus the images a person uploaded against it), for a kind that CAPTURES views
+   * (`agent.image === 'ui'`). The executor turns them into the manifest the harness downloads
+   * into `.cat-context/reference-screenshots/`, the directory the UI-tester prompt names.
+   *
+   * ABSENT and EMPTY say different things and both are reachable: absent means this dispatch
+   * never asked (a kind that captures nothing, or a deployment with no artifact storage), and an
+   * empty `files` means it asked and the task has no reference at all. Neither is an error (a
+   * tester with no references names its own views), but the executor only sends a manifest when
+   * the set says SOMETHING, so the container never creates an empty directory that reads as "the
+   * designs gave nothing".
+   */
+  referenceScreenshots?: ReferenceScreenshotSet
   /**
    * A live ephemeral environment a deployer step provisioned earlier in this run
    * (resolved from the run's block). Present only when the environment
@@ -1004,14 +1019,25 @@ export type AgentJobUpdate =
        * for a job that dispatched no subagents / on an older harness image.
        */
       sliceReviews?: unknown
+      /**
+       * What the agent's CLI reported about the tool servers it loaded (forwarded from
+       * {@link RunnerJobView.toolServers}), so the step's tool-server record gains the OBSERVED
+       * half while the run is still going — which is when a failed server is still worth acting
+       * on. Absent for a job that wired none, a harness whose CLI reports nothing, or an older
+       * image; the engine records that as "not observed", never as a failure.
+       */
+      toolServers?: unknown
     }
   /**
    * Finished successfully; `result` carries the work product. `followUps`, when present,
    * carries any final burst of streamed items the harness drained on the SAME poll that
    * observed completion (the tailer is flushed before the job is marked done), so the
    * engine never loses the last items — notably a question that must hold the gate.
+   * `toolServers` carries the CLI's startup report for the same reason it rides the failed
+   * variant: a job short enough to settle between two polls is never seen `running` at all, so
+   * the settled poll is the ONLY one that can deliver it.
    */
-  | { state: 'done'; result: AgentRunResult; followUps?: StreamedFollowUp[] }
+  | { state: 'done'; result: AgentRunResult; followUps?: StreamedFollowUp[]; toolServers?: unknown }
   /**
    * Finished with a failure (agent error, inactivity/max-duration watchdog, …). When the
    * harness reported a STRUCTURED `failureCause`, it is forwarded here so the driver can
@@ -1044,6 +1070,14 @@ export type AgentJobUpdate =
        * failure — recorded on the step so the work is not lost with the run.
        */
       reproductionReport?: unknown
+      /**
+       * What the agent's CLI reported about the tool servers it loaded (forwarded from
+       * {@link RunnerJobView.toolServers}). Carried on the FAILED path deliberately, and this is
+       * the disposition that matters most: a run that failed after the prompt promised it tools
+       * its CLI never managed to start is exactly the run whose post-mortem needs this, and a job
+       * that dies before its first successful poll would otherwise carry no observation at all.
+       */
+      toolServers?: unknown
     }
 
 /**

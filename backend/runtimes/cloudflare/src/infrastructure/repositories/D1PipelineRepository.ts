@@ -32,7 +32,7 @@ function pipelineBindings(workspaceId: string, pipeline: Pipeline): unknown[] {
     pipeline.version ?? null,
     pipeline.public ? 1 : null,
     pipeline.availability ?? null,
-    pipeline.purpose ?? null,
+    pipeline.purpose,
   ]
 }
 
@@ -106,7 +106,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.version ?? null,
         pipeline.public ? 1 : null,
         pipeline.availability ?? null,
-        pipeline.purpose ?? null,
+        pipeline.purpose,
         workspaceId,
         pipeline.id,
       )

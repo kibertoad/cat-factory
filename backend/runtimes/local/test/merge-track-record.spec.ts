@@ -4,7 +4,7 @@ import { makeConformanceApp, setupTestDb } from './harness.js'
 
 // The merge track record against the LOCAL facade (Node persistence built through
 // buildLocalContainer), so the local wiring of the track-record repository + the classification
-// seam can't drift from the Node/Worker facades. See docs/initiatives/merge-track-record.md.
+// seam can't drift from the Node/Worker facades. See backend/docs/adr/0046-merge-track-record.md.
 
 const databaseUrl = process.env.DATABASE_URL
 

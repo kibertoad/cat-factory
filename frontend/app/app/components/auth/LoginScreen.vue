@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import SecretInput from '~/components/common/SecretInput.vue'
 import type { VcsProvider } from '~/types/domain'
-import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS, VCS_PROVIDER_TOKEN_URLS } from '~/utils/vcs'
+import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS, vcsTokenCreateUrl } from '~/utils/vcs'
 import { SSO_ERROR_MESSAGE_KEYS } from '~/utils/sso'
 
 const auth = useAuthStore()
@@ -21,7 +21,13 @@ type PatProvider = VcsProvider
 const ALL_PROVIDERS: PatProvider[] = ['github', 'gitlab']
 const PROVIDER_LABELS = VCS_PROVIDER_LABELS
 const PROVIDER_ICONS = VCS_PROVIDER_ICONS
-const PROVIDER_TOKEN_URLS = VCS_PROVIDER_TOKEN_URLS
+// Sign-in happens before any workspace is connected, so there is no host to read: these fall
+// back to the provider's public instance. The server's scopes-preselected `setupUrls` win when
+// the deployment supplies them.
+const PROVIDER_TOKEN_URLS: Record<PatProvider, string> = {
+  github: vcsTokenCreateUrl('github'),
+  gitlab: vcsTokenCreateUrl('gitlab'),
+}
 
 const patLoginCfg = computed(() => auth.localMode?.patLogin)
 // Providers whose token the deployment already holds: one-click sign-in. A provider without one

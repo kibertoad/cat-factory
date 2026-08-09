@@ -15,6 +15,7 @@ import type { BlockRepository } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { BoardWritePort } from '@cat-factory/kernel'
 import { toSourceDocument } from './DocumentImportService.js'
+import type { PlanTarget } from './documents.logic.js'
 
 /** The `(origin, externalId)` key a document is addressed by, as one string for `Map` indexing. */
 function refKey(ref: DocumentRef): string {
@@ -38,10 +39,64 @@ export interface SpawnResult {
   frames: number
   modules: number
   tasks: number
+  /**
+   * Planned modules whose tasks went into a module the frame ALREADY had, rather than into a new
+   * one (see {@link DocumentLinkService.spawnInto}).
+   *
+   * Reported rather than folded into `modules`, because the two answer different questions and
+   * only one of them is about what changed. Without it a spawn that reused every module reports
+   * "0 modules · 12 tasks" against a preview that showed three, which reads as three modules
+   * having failed; and counting a reuse as a creation would claim a write that never happened.
+   */
+  reusedModules: number
+}
+
+/**
+ * The key a planned module name is matched against an existing one by.
+ *
+ * Case- and whitespace-insensitive on purpose: the planner is TOLD to reuse the names it was
+ * shown, but the thing being asked is a language model, and "Checkout" against "checkout" is a
+ * duplicate module on the board either way. Matching exactly would make the reuse work in testing
+ * and fail on the drift it exists to absorb.
+ */
+function moduleKey(name: string): string {
+  return name.trim().toLowerCase()
 }
 
 export class DocumentLinkService {
   constructor(private readonly deps: DocumentLinkServiceDependencies) {}
+
+  /**
+   * Describe an existing service frame as a {@link PlanTarget}, so a plan can be authored FOR it.
+   *
+   * It lives here rather than in the planner because it is a fact about the BOARD: the planner is
+   * a pure document→structure translator and must not learn to query blocks for a prompt detail.
+   * It refuses exactly what {@link spawn} refuses, one step earlier, so a preview cannot be
+   * rendered against a target the write would then reject.
+   */
+  async resolvePlanTarget(workspaceId: string, frameId: string): Promise<PlanTarget> {
+    const frame = assertFound(
+      await this.deps.blockRepository.get(workspaceId, frameId),
+      'Block',
+      frameId,
+    )
+    if (frame.level !== 'frame') {
+      throw new ValidationError('Document structure can only be planned into a service frame', {
+        reason: 'plan_target_not_a_frame',
+      })
+    }
+    const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
+    return {
+      frameId,
+      title: frame.title,
+      type: frame.type,
+      // The names the frame ALREADY holds, so the plan adds beside them instead of proposing a
+      // second module meaning the same thing. One board read rather than a per-module lookup.
+      existingModules: blocks
+        .filter((b) => b.parentId === frameId && b.level === 'module')
+        .map((b) => b.title),
+    }
+  }
 
   /**
    * Apply a board plan to a workspace. Without `frameId` each planned frame
@@ -58,7 +113,7 @@ export class DocumentLinkService {
     editor: BlockEditAuthority,
     frameId?: string,
   ): Promise<SpawnResult> {
-    const result: SpawnResult = { frames: 0, modules: 0, tasks: 0 }
+    const result: SpawnResult = { frames: 0, modules: 0, tasks: 0, reusedModules: 0 }
 
     if (frameId) {
       const target = assertFound(
@@ -69,8 +124,18 @@ export class DocumentLinkService {
       if (target.level !== 'frame') {
         throw new ValidationError('Document structure can only be spawned into a service frame')
       }
+      // The frame's existing modules, read ONCE for the whole spawn and indexed by name. This is
+      // the write half of what `resolvePlanTarget` showed the planner: the prompt asks the model to
+      // reuse the names it was given, and until this existed nothing acted on the answer, so a plan
+      // that obeyed produced a second "Checkout" beside the first. A model's cooperation is not an
+      // implementation — the platform has to COMPUTE the reuse.
+      const existing = new Map(
+        (await this.deps.blockRepository.listByWorkspace(workspaceId))
+          .filter((block) => block.parentId === frameId && block.level === 'module')
+          .map((block) => [moduleKey(block.title), block.id]),
+      )
       for (const frame of plan.frames) {
-        await this.spawnInto(workspaceId, target.id, frame, result, editor)
+        await this.spawnInto(workspaceId, target.id, frame, result, editor, existing)
       }
       return result
     }
@@ -89,29 +154,50 @@ export class DocumentLinkService {
         { title: frame.title, ...(frame.description ? { description: frame.description } : {}) },
         editor,
       )
-      await this.spawnInto(workspaceId, created.id, frame, result, editor)
+      // A frame created a line ago holds nothing, so its index starts empty; it still travels,
+      // because two planned modules within ONE frame can name the same thing.
+      await this.spawnInto(workspaceId, created.id, frame, result, editor, new Map())
     }
     return result
   }
 
-  /** Add a planned frame's modules and tasks inside an existing frame. */
+  /**
+   * Add a planned frame's modules and tasks inside an existing frame.
+   *
+   * `modulesByName` is the frame's modules indexed by {@link moduleKey}, and it is both the input
+   * and the running record: a module created here is registered in it, so two planned modules that
+   * name the same thing converge on one block exactly as a planned name matching a pre-existing
+   * module does. A freshly created frame passes an empty map and every module is new.
+   */
   private async spawnInto(
     workspaceId: string,
     frameId: string,
     frame: PlanFrame,
     result: SpawnResult,
     editor: BlockEditAuthority,
+    modulesByName: Map<string, string>,
   ): Promise<void> {
     for (const task of frame.tasks) {
       await this.addTask(workspaceId, frameId, task, result, editor)
     }
     for (const planModule of frame.modules) {
-      const module = await this.deps.boardService.addModule(workspaceId, frameId, {
-        name: planModule.name,
-      })
-      result.modules += 1
+      const key = moduleKey(planModule.name)
+      // A module with nothing but whitespace for a name is not a module to reuse OR to key on: it
+      // would collapse every such module onto one block. Treated as its own new module each time.
+      const reused = key ? modulesByName.get(key) : undefined
+      let moduleId = reused
+      if (moduleId === undefined) {
+        const created = await this.deps.boardService.addModule(workspaceId, frameId, {
+          name: planModule.name,
+        })
+        moduleId = created.id
+        result.modules += 1
+        if (key) modulesByName.set(key, moduleId)
+      } else {
+        result.reusedModules += 1
+      }
       for (const task of planModule.tasks) {
-        await this.addTask(workspaceId, module.id, task, result, editor)
+        await this.addTask(workspaceId, moduleId, task, result, editor)
       }
     }
   }
@@ -189,6 +275,37 @@ export class DocumentLinkService {
     await this.assertNotHeldElsewhere(workspaceId, block.id, documents)
     await this.deps.documentRepository.linkBlockMany(workspaceId, refs, block.id)
     return documents.map((doc) => toSourceDocument({ ...doc, linkedBlockId: block.id }))
+  }
+
+  /** Every document attached to one block, in the order the agents read them. */
+  async listBlockLinks(workspaceId: string, blockId: string): Promise<SourceDocument[]> {
+    const rows = await this.deps.documentRepository.listByBlock(workspaceId, blockId)
+    return rows.map(toSourceDocument)
+  }
+
+  /**
+   * Detach ONE document from ONE block, naming the document by its `(source, externalId)` key.
+   *
+   * Scoped to the block on purpose, unlike the repository's own by-ref detach: a document row
+   * carries exactly one attachment, so clearing it by ref alone would strip the document from
+   * whichever task is holding it, which need not be the one the caller named. Asking "does this
+   * block hold it" first means the worst case is a no-op.
+   *
+   * Idempotent, and that is the same decision the guard above forces: a document this block does
+   * not hold is left alone and reported as detached, because a caller retrying after a timeout
+   * should converge rather than have to tell "it was never attached" from "I already detached it".
+   * Nothing is deleted either way: the document stays in the workspace, so re-attaching it later
+   * costs no re-import.
+   */
+  async detachFromBlock(
+    workspaceId: string,
+    blockId: string,
+    source: DocumentOrigin,
+    externalId: string,
+  ): Promise<void> {
+    const document = await this.deps.documentRepository.get(workspaceId, source, externalId)
+    if (!document || document.linkedBlockId !== blockId) return
+    await this.deps.documentRepository.linkBlock(workspaceId, source, externalId, null)
   }
 
   /**

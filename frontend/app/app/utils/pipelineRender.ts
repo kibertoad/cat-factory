@@ -3,6 +3,7 @@
 // in one place rather than being re-derived as inline ternaries per component.
 
 import type { AgentState, ExecutionInstance, PipelineStep } from '~/types/execution'
+import { isStepSkipReason } from '@cat-factory/contracts'
 
 /**
  * Visual state of a conditionally-run companion attached to a gate step (today the
@@ -134,9 +135,16 @@ export function isCompanionKind(kind: string): boolean {
 }
 
 /**
+ * The parks a surface must NOT answer with the generic approve rail, named so the tables below
+ * and every consumer can be keyed exhaustively by them rather than by a string.
+ */
+export type DedicatedParkView = 'follow-ups' | 'fork-decision' | 'binary-candidates' | 'input-gate'
+
+/**
  * The dedicated window that owns a step's approval park, when the park is NOT a generic
  * prose approval: the implementation-fork window while a coder waits on (or chats about)
- * an approach choice, or the follow-up triage window while surfaced items are undecided.
+ * an approach choice, the follow-up triage window while surfaced items are undecided, or the
+ * candidate-comparison window while a generating step waits on which candidates survive.
  * The generic approve/request-changes/reject resolvers deliberately refuse these parks
  * server-side (`assertNotIterativeGate`), so every surface that offers a step's pending
  * approval must route these to their window instead of the generic "Approve & proceed"
@@ -149,7 +157,7 @@ export function isCompanionKind(kind: string): boolean {
 export function dedicatedParkView(
   step: PipelineStep,
   instance: ExecutionInstance | null | undefined,
-): 'follow-ups' | 'fork-decision' | 'input-gate' | null {
+): DedicatedParkView | null {
   // The PRE-DISPATCH INPUT GATE parks whatever step 0 happens to be, so it leaves nothing on the
   // STEP to recognise it by: its verdict is a fact about the RUN. Checked first, and off the
   // instance: approving it generically would mark the run's first working step done and skip
@@ -168,6 +176,9 @@ export function dedicatedParkView(
   // flight) still belongs to the fork window, which renders the pending reply.
   const fork = step.forkDecision?.status
   if (fork === 'awaiting_choice' || fork === 'answering') return 'fork-decision'
+  // A generating step parked between its candidate pass and its delivering pass. Approving it
+  // generically would mark a step done that has staged files and delivered nothing.
+  if (step.binaryCandidates?.status === 'awaiting_choice') return 'binary-candidates'
   // Follow-ups only own the park itself: while the coder is still WORKING (streaming
   // items, no approval raised) a step click should keep opening the ordinary detail.
   if (
@@ -178,6 +189,64 @@ export function dedicatedParkView(
     return 'follow-ups'
   }
   return null
+}
+
+/**
+ * The parks a dedicated WINDOW answers: every member of {@link DedicatedParkView} except the
+ * pre-dispatch input gate, which is answered by an inline notice because its remedy is to go and
+ * edit the task.
+ */
+export type RedirectParkView = Exclude<DedicatedParkView, 'input-gate'>
+
+/** How a redirect park presents itself on a surface that has to send a human to its window. */
+export interface RedirectParkPresentation {
+  icon: string
+  /** Prose explaining why the generic approve rail is not offered here. */
+  noticeKey: string
+  /** The label on the step overlay's redirect button, which has room for a full phrase. */
+  actionKey: string
+  /**
+   * The label on the inspector's compact action rail. A separate key rather than a reuse of
+   * {@link actionKey}: that rail sits in a list of one-line step rows and words the same action
+   * more tersely, and collapsing the two would silently restyle copy that is already shipped.
+   */
+  railActionKey: string
+}
+
+/**
+ * What each redirect park LOOKS like, in one exhaustive table.
+ *
+ * A `Record` over the vocabulary rather than a ternary at each of the three surfaces that render
+ * one (the step overlay's redirect notice, the pipeline chip, the inspector's action rail),
+ * because a ternary has no arm for a member it has never heard of: adding `binary-candidates` to
+ * {@link dedicatedParkView} left every one of those surfaces rendering the FORK's copy and icon
+ * for it, which is worse than rendering nothing: it names the wrong decision, and the surfaces
+ * kept compiling and kept passing. Keyed this way, a new park fails the build here until it says
+ * how it presents itself, and each surface picks the entry up with no edit of its own.
+ *
+ * Presentation only. WHICH window opens is the caller's, because the openers differ in what they
+ * need to resolve, and a park with no window (`input-gate`) is excluded from the type entirely
+ * rather than carrying null fields nobody may read.
+ */
+export const REDIRECT_PARK_PRESENTATION: Record<RedirectParkView, RedirectParkPresentation> = {
+  'follow-ups': {
+    icon: 'i-lucide-compass',
+    noticeKey: 'panels.stepDetail.followUpsParked',
+    actionKey: 'panels.stepDetail.openFollowUps',
+    railActionKey: 'inspector.execution.triageFollowUps',
+  },
+  'fork-decision': {
+    icon: 'i-lucide-git-fork',
+    noticeKey: 'panels.stepDetail.forkParked',
+    actionKey: 'panels.stepDetail.chooseApproach',
+    railActionKey: 'inspector.execution.chooseApproach',
+  },
+  'binary-candidates': {
+    icon: 'i-lucide-images',
+    noticeKey: 'panels.stepDetail.candidatesParked',
+    actionKey: 'panels.stepDetail.chooseCandidates',
+    railActionKey: 'inspector.execution.chooseCandidates',
+  },
 }
 
 /**
@@ -196,6 +265,48 @@ export function containerPhaseLabel(
   if (!phase) return null
   const key = `panels.stepMeta.container.phase.${phase}`
   return i18n.te(key) ? i18n.t(key) : phase
+}
+
+/**
+ * The i18n key naming WHY a skipped step was skipped, or null when the step ran.
+ *
+ * The engine records a machine-readable {@link StepSkipReason} rather than a sentence, so the
+ * sentence is composed here where it can be translated. The `condition` case narrows further off
+ * the step's own `stepOptions.condition.serviceScope` — the condition stays on the step, so the
+ * copy and the scope it names are read from one place and cannot drift.
+ *
+ * An UNRECOGNISED reason (a stored run naming a member this bundle no longer knows, or a browser
+ * older than the member it reads) falls back to the bare "skipped" line rather than rendering
+ * nothing or guessing onto a current member: what a reader must not lose is that the step did not
+ * run. A `skipped` step with NO reason is the same case — runs predating the field.
+ */
+export function stepSkipReasonKey(step: PipelineStep): string | null {
+  if (!step.skipped) return null
+  if (!isStepSkipReason(step.skipReason)) return 'pipeline.progress.skipped.unknown'
+  switch (step.skipReason) {
+    case 'gated':
+      return 'pipeline.progress.skipped.gated'
+    case 'producer_skipped':
+      return 'pipeline.progress.skipped.producerSkipped'
+    case 'run_complete':
+      return 'pipeline.progress.skipped.runComplete'
+    case 'condition':
+      return step.stepOptions?.condition?.serviceScope === 'frontend'
+        ? 'pipeline.progress.skipped.conditionFrontend'
+        : 'pipeline.progress.skipped.conditionBackend'
+    default:
+      return describeUnhandledSkipReason(step.skipReason)
+  }
+}
+
+/**
+ * The `never` sink that keeps {@link stepSkipReasonKey}'s switch total: adding a member to
+ * `stepSkipReasonSchema` fails the build here until it has copy, while the runtime narrowing above
+ * still renders a RETIRED member honestly.
+ */
+function describeUnhandledSkipReason(reason: never): string {
+  void reason
+  return 'pipeline.progress.skipped.unknown'
 }
 
 /**

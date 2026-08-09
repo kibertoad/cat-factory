@@ -25,6 +25,7 @@ import {
   logger,
   mcpOAuthContainerFields,
   resolveUrlSafetyPolicy,
+  WebCryptoSecretCipher,
 } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
 // builds an app-owned `GateRegistry` pre-loaded with the suite via `gateRegistryWithBuiltins()`
@@ -95,7 +96,7 @@ function buildNodeVcsIdentityRegistry(config: AppConfig): VcsIdentityRegistry {
   const registry: VcsIdentityRegistry = {
     github: { resolver: new GitHubIdentityResolver({ apiBase: config.github.apiBase, logger }) },
   }
-  if (config.gitlab?.enabled) {
+  if (config.gitlab.enabled) {
     registry.gitlab = {
       resolver: new GitLabIdentityResolver({ apiBase: config.gitlab.apiBase, logger }),
     }
@@ -234,11 +235,12 @@ function wirePreviewModule(
  * (`documentRepository`/`taskRepository`.listByBlock/get) on EVERY container agent dispatch, so
  * these are on the board-load + run path even though the document/task INTEGRATIONS are opt-in.
  * The sub-helpers (`selectNodeDocumentsDeps`/`selectNodeTasksDeps`) build them directly over the
- * absent `db`, so re-source the context-builder run-path repos from the remote registry — plus the
- * environment CONNECTION management surface. The document/task connection/provider surfaces they
- * also build stay db-direct (a later integration slice remotes them — their credential rows would
- * ship DECRYPTED over the RPC, an open secrets design point, unlike the sealed-blob environment
- * connection here). Routing is orthogonal to the allow-list: an un-allow-listed remote method
+ * absent `db` and only when their integration is CONFIGURED, so the context-builder run-path repos
+ * are re-sourced here instead: they are read on every dispatch whether or not a workspace ever
+ * connected a source. The integrations' own connection/settings repos need no line here, because
+ * those helpers source them at construction now that a connection row carries its credential bag
+ * SEALED (the mothership opens it by name over `/internal/secrets/unseal`) — plus the environment
+ * CONNECTION management surface below. Routing is orthogonal to the allow-list: an un-allow-listed remote method
  * returns a clean `unknown_method`, never a `db`-undefined `TypeError`. A no-op outside mothership
  * mode (`remoteRepos` undefined). Extracted from {@link buildNodeContainer} to keep it under budget.
  */
@@ -253,10 +255,10 @@ function applyMothershipRemoteRepos(
   // The context builder also resolves the block's live environment per step
   // (`environmentProvisioning.resolveForBlock` → `environmentRegistryRepository.getByBlock`,
   // null when no env is provisioned — the common path). Route both environment repos so the
-  // service `createCore` builds reads org state remotely. NOTE: a remotely-stored env access
-  // cipher is sealed with the mothership's key, which never reaches the laptop, so actually
-  // DECRYPTING a provisioned env's creds locally is a later (secrets-delegation) slice — only
-  // the non-secret block→env mapping read is on the basic run path here.
+  // service `createCore` builds reads org state remotely. The row's access cipher is sealed with
+  // the mothership's key, which still never reaches this laptop: it is OPENED by the mothership
+  // over `/internal/secrets/unseal`, addressed by row, through `CoreDependencies.secretDelegate`.
+  // So provisioning, status polling and teardown all run here for real.
   dependencies.environmentRegistryRepository =
     remoteRepos.environmentRegistryRepository as CoreDependencies['environmentRegistryRepository']
   dependencies.environmentConnectionRepository =
@@ -265,8 +267,7 @@ function applyMothershipRemoteRepos(
   // catalog (`EnvironmentConnectionService.listCustomTypes`/`upsertCustomType`), built directly
   // over the absent `db` by `selectNodeEnvironmentsDeps`. Route it from the remote registry too so
   // the connection + infra-handler management surface is functional (no secrets — just manifest
-  // metadata; the RPC allow-list gates its CRUD). Provisioning WRITES stay db-direct/off (a later
-  // secrets-delegation slice), like the environment registry above.
+  // metadata; the RPC allow-list gates its CRUD).
   dependencies.customManifestTypeRepository =
     remoteRepos.customManifestTypeRepository as CoreDependencies['customManifestTypeRepository']
   // The prompt-fragment library (`FragmentLibraryService`, built directly over the absent `db`
@@ -659,11 +660,8 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     // The per-user "repos my PAT can reach" projection (board redaction + picker expansion);
     // Postgres-backed, so absent in the no-DB mothership node (redaction degrades to visible).
     userRepoAccess: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
-    // The sealed-secret inventory the key-drift sweep + drop remediation use (ADR 0026 D6.2/D6.3);
-    // Postgres-backed and gated on ENCRYPTION_KEY (no key ⇒ nothing is sealed to scan).
-    ...(db && env.ENCRYPTION_KEY?.trim()
-      ? { sealedSecretInventory: new DrizzleSealedSecretInventory(db) }
-      : {}),
+    // The two ENCRYPTION_KEY-gated sealed-secret seams (inventory + cipher factory).
+    ...selectNodeSealedSecretDeps(env, db),
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
     // Flush + release the external trace sink on graceful shutdown so the OpenTelemetry SDK
@@ -831,6 +829,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     notificationChannel,
     externalNotificationChannel,
     notificationWebhookSupport,
+    notificationSettingsRepository,
   } = buildNodeRealtimeDeps({
     env,
     config,
@@ -865,7 +864,9 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     clock,
     providerRegistry,
     packageRegistrySecretCipher,
+    ...(options.secretDelegate ? { secretDelegate: options.secretDelegate } : {}),
     contentStorageDefaultBackend: options.contentStorageDefaultBackend,
+    binaryStoreRegistry: options.binaryStoreRegistry,
     caches: options.caches,
   })
 
@@ -933,6 +934,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     executionEventPublisher,
     agentExecutor,
     notificationChannel,
+    notificationSettingsRepository,
     runLifecycleSink: notificationWebhookSupport?.runLifecycleSink,
     releaseHealthDeps,
     packageRegistryDeps,
@@ -1122,3 +1124,40 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
  * No registered providers → `{ deps: {} }` and both the tasks module and the Jira
  * tracker stay off (the encryption key is guaranteed present by `loadTasksConfig`).
  */
+
+/**
+ * The deployment's two sealed-secret seams, the Node twin of the Worker's
+ * `selectWorkerSealedSecretDeps`, in the same shape and for the same reason: they are one concern
+ * read from one variable, and keeping the facades legible side by side is what makes a seam wired
+ * on one visibly missing from the other.
+ *
+ * BOTH are gated on `db` as well as the key, and the `db` half is what makes the pair correct
+ * rather than merely tidy. On Node, no `db` means MOTHERSHIP MODE (`buildNodeContainer` asserts
+ * exactly that: a db-less boot must supply the RPC-backed `repos` instead), and a mothership-mode
+ * node is the one deployment that must never answer `/internal/secrets/*`. Its `ENCRYPTION_KEY` is
+ * the LOCAL key that seals its own agent/model credentials, which is a different key from the one
+ * the org's rows were sealed under, so answering there would seal a delegated `POST .../seal` under
+ * a key the org cannot read: the silent split the delegation exists to remove, one write later.
+ *
+ * The `repositories` registry cannot stand in for this check, which is why the gate lives here.
+ * A mothership-mode node populates it too (with the REMOTE, RPC-backed repos), so it is present on
+ * exactly the deployment it would need to exclude; the capability the controller 503s on has to be
+ * the one seam only an authoritative deployment wires, and that is the cipher. The Worker takes a
+ * non-optional `D1Database` and so is always authoritative, which is why its twin gates on the key
+ * alone.
+ */
+function selectNodeSealedSecretDeps(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb | undefined,
+): Pick<ServerContainer, 'sealedSecretInventory' | 'secretCipherFor'> {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64 || !db) return {}
+  return {
+    // ADR 0026 D6.2/D6.3: what the boot drift sweep attempts to decrypt, and what an operator's
+    // drop remediation targets.
+    sealedSecretInventory: new DrizzleSealedSecretInventory(db),
+    // What `/internal/secrets/{unseal,seal}` opens and seals an ORG credential through on a
+    // mothership-mode node's behalf.
+    secretCipherFor: (info: string) => new WebCryptoSecretCipher({ masterKeyBase64, info }),
+  }
+}

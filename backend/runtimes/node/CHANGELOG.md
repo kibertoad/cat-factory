@@ -1,5 +1,1218 @@
 # @cat-factory/node-server
 
+## 0.195.8
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/contracts@0.286.0
+  - @cat-factory/kernel@0.281.0
+  - @cat-factory/orchestration@0.250.0
+  - @cat-factory/agents@0.123.0
+  - @cat-factory/server@0.262.0
+  - @cat-factory/consensus@0.14.74
+  - @cat-factory/eks@0.1.286
+  - @cat-factory/gates@0.10.14
+  - @cat-factory/gitlab@0.19.5
+  - @cat-factory/integrations@0.153.5
+  - @cat-factory/observability-otel@0.18.21
+  - @cat-factory/prompt-fragments@1.0.38
+  - @cat-factory/spend@0.15.56
+  - @cat-factory/caching@0.18.29
+  - @cat-factory/observability-langfuse@0.10.58
+  - @cat-factory/provider-bedrock@0.7.435
+  - @cat-factory/provider-cloudflare@0.7.436
+  - @cat-factory/provider-s3@0.2.355
+
+## 0.195.7
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+  - @cat-factory/kernel@0.280.0
+  - @cat-factory/agents@0.122.0
+  - @cat-factory/orchestration@0.249.0
+  - @cat-factory/server@0.261.0
+  - @cat-factory/consensus@0.14.73
+  - @cat-factory/eks@0.1.285
+  - @cat-factory/gates@0.10.13
+  - @cat-factory/gitlab@0.19.4
+  - @cat-factory/integrations@0.153.4
+  - @cat-factory/observability-otel@0.18.20
+  - @cat-factory/prompt-fragments@1.0.37
+  - @cat-factory/spend@0.15.55
+  - @cat-factory/caching@0.18.28
+  - @cat-factory/observability-langfuse@0.10.57
+  - @cat-factory/provider-bedrock@0.7.434
+  - @cat-factory/provider-cloudflare@0.7.435
+  - @cat-factory/provider-s3@0.2.354
+
+## 0.195.6
+
+### Patch Changes
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+  - @cat-factory/integrations@0.153.3
+  - @cat-factory/server@0.260.3
+  - @cat-factory/eks@0.1.284
+  - @cat-factory/agents@0.121.4
+  - @cat-factory/consensus@0.14.72
+  - @cat-factory/gates@0.10.12
+  - @cat-factory/gitlab@0.19.3
+  - @cat-factory/kernel@0.279.3
+  - @cat-factory/observability-otel@0.18.19
+  - @cat-factory/orchestration@0.248.5
+  - @cat-factory/prompt-fragments@1.0.36
+  - @cat-factory/spend@0.15.54
+  - @cat-factory/provider-bedrock@0.7.433
+  - @cat-factory/provider-cloudflare@0.7.434
+  - @cat-factory/caching@0.18.27
+  - @cat-factory/observability-langfuse@0.10.56
+  - @cat-factory/provider-s3@0.2.353
+
+## 0.195.5
+
+### Patch Changes
+
+- 3036af7: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with
+  (`ai@7.0.58`, `@ai-sdk/*@4.0.36` / `openai-compatible@3.0.27` / `amazon-bedrock@5.0.50`), and the
+  Vue singleton pin plus its `@vue/*` overrides move together to 3.5.41 so the SPA still bundles
+  exactly one Vue.
+
+- Updated dependencies [3036af7]
+  - @cat-factory/agents@0.121.3
+  - @cat-factory/caching@0.18.26
+  - @cat-factory/consensus@0.14.71
+  - @cat-factory/eks@0.1.283
+  - @cat-factory/integrations@0.153.2
+  - @cat-factory/kernel@0.279.2
+  - @cat-factory/orchestration@0.248.4
+  - @cat-factory/provider-bedrock@0.7.432
+  - @cat-factory/provider-cloudflare@0.7.433
+  - @cat-factory/provider-s3@0.2.352
+  - @cat-factory/server@0.260.2
+  - @cat-factory/gates@0.10.11
+  - @cat-factory/gitlab@0.19.2
+  - @cat-factory/observability-langfuse@0.10.55
+  - @cat-factory/observability-otel@0.18.18
+  - @cat-factory/prompt-fragments@1.0.35
+  - @cat-factory/spend@0.15.53
+
+## 0.195.4
+
+### Patch Changes
+
+- Updated dependencies [de7caaf]
+  - @cat-factory/contracts@0.283.1
+  - @cat-factory/agents@0.121.2
+  - @cat-factory/consensus@0.14.70
+  - @cat-factory/eks@0.1.282
+  - @cat-factory/gates@0.10.10
+  - @cat-factory/gitlab@0.19.1
+  - @cat-factory/integrations@0.153.1
+  - @cat-factory/kernel@0.279.1
+  - @cat-factory/observability-otel@0.18.17
+  - @cat-factory/orchestration@0.248.3
+  - @cat-factory/prompt-fragments@1.0.34
+  - @cat-factory/server@0.260.1
+  - @cat-factory/spend@0.15.52
+  - @cat-factory/provider-bedrock@0.7.431
+  - @cat-factory/provider-cloudflare@0.7.432
+  - @cat-factory/caching@0.18.25
+  - @cat-factory/observability-langfuse@0.10.54
+  - @cat-factory/provider-s3@0.2.351
+
+## 0.195.3
+
+### Patch Changes
+
+- f0e1c45: Issue writeback is a `TaskSourceProvider` capability, and GitLab Issues accept webhooks
+
+  The engine's writeback (a comment when the PR opens, comment + resolve on merge, the intake
+  pickup claim, a parked review's questions and the acknowledgement of a reply) dispatched on a
+  hard-coded `github | jira | linear` chain inside one service. GitLab Issues, a shipped task
+  source, therefore had full intake and no way to answer it, and a tracker a deployment registers
+  could not have one however it was wired. Providers now declare `writeback`, the outbound mirror
+  of the existing `webhook` capability, and the service dispatches through the registry.
+
+  `GitLabIssuesProvider` also gains the inbound half: GitLab echoes a shared secret in
+  `x-gitlab-token` rather than signing the body, so its adapter compares that in constant time and
+  still fails closed on an empty secret. Board equality is now the source's own rule
+  (`TaskSourceProvider.sameBoard`), because GitLab project paths are case-sensitive where every
+  other board id folds.
+
+  A writeback adapter declares where it gets its authority (`authenticates`), which decides what an
+  unreadable tracker connection costs. Jira and Linear post with the stored bag, so a row that will
+  not open takes their writeback with it. GitHub Issues and GitLab Issues authenticate through the
+  workspace's VCS installation and read that row only for the inbound reply secret, so they keep
+  posting and lose just the reply grammar, which is withheld rather than promised.
+
+  Two internal breaks, per the pre-1.0 policy. The facades' `commentOnGitHubIssue` /
+  `closeGitHubIssue` / `labelGitHubIssue` writeback seams are gone (the source resolves its own
+  installation now), and a writeback for a workspace with no stored connection REFUSES where the
+  Jira and Linear legs used to return quietly: that silent return let the parked-review echo record
+  its idempotency marker for a comment the tracker never received.
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+  - @cat-factory/integrations@0.153.0
+  - @cat-factory/gitlab@0.19.0
+  - @cat-factory/server@0.260.0
+  - @cat-factory/orchestration@0.248.2
+  - @cat-factory/agents@0.121.1
+  - @cat-factory/caching@0.18.24
+  - @cat-factory/consensus@0.14.69
+  - @cat-factory/eks@0.1.281
+  - @cat-factory/gates@0.10.9
+  - @cat-factory/observability-langfuse@0.10.53
+  - @cat-factory/observability-otel@0.18.16
+  - @cat-factory/prompt-fragments@1.0.33
+  - @cat-factory/provider-bedrock@0.7.430
+  - @cat-factory/provider-cloudflare@0.7.431
+  - @cat-factory/provider-s3@0.2.350
+  - @cat-factory/spend@0.15.51
+
+## 0.195.2
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+  - @cat-factory/agents@0.121.0
+  - @cat-factory/consensus@0.14.68
+  - @cat-factory/eks@0.1.280
+  - @cat-factory/gates@0.10.8
+  - @cat-factory/gitlab@0.18.15
+  - @cat-factory/integrations@0.152.8
+  - @cat-factory/observability-otel@0.18.15
+  - @cat-factory/orchestration@0.248.1
+  - @cat-factory/prompt-fragments@1.0.32
+  - @cat-factory/server@0.259.2
+  - @cat-factory/spend@0.15.50
+  - @cat-factory/caching@0.18.23
+  - @cat-factory/observability-langfuse@0.10.52
+  - @cat-factory/provider-bedrock@0.7.429
+  - @cat-factory/provider-cloudflare@0.7.430
+  - @cat-factory/provider-s3@0.2.349
+
+## 0.195.1
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/orchestration@0.248.0
+  - @cat-factory/kernel@0.277.0
+  - @cat-factory/integrations@0.152.7
+  - @cat-factory/agents@0.120.2
+  - @cat-factory/consensus@0.14.67
+  - @cat-factory/eks@0.1.279
+  - @cat-factory/gates@0.10.7
+  - @cat-factory/gitlab@0.18.14
+  - @cat-factory/observability-otel@0.18.14
+  - @cat-factory/prompt-fragments@1.0.31
+  - @cat-factory/server@0.259.1
+  - @cat-factory/spend@0.15.49
+  - @cat-factory/caching@0.18.22
+  - @cat-factory/observability-langfuse@0.10.51
+  - @cat-factory/provider-bedrock@0.7.428
+  - @cat-factory/provider-cloudflare@0.7.429
+  - @cat-factory/provider-s3@0.2.348
+
+## 0.195.0
+
+### Minor Changes
+
+- 2585b2f: Narrow the pipeline builder's saved-pipeline library on the purpose being edited, and make a
+  pipeline's purpose mandatory
+
+  The purpose dial narrowed the agent palette beside it and gated the save, but the library in the
+  third column listed the whole workspace catalog whatever the draft was for. `pipelineMatchesPurpose`
+  is the membership predicate, applied through `narrowPipelineLibrary` alongside the label and archive
+  filters. Each of those dials now counts what relaxing IT alone would reveal, so the "Archived (n)"
+  toggle no longer promises rows the current purpose is hiding either way, and the purpose hint is
+  itself the control that lists every purpose again: the draft's purpose is an authoring field that is
+  saved, so browsing past it may not require editing it.
+
+  Breaking change (internal surfaces, pre-1.0). `Pipeline.purpose` is now REQUIRED, which is what lets
+  those four narrowings drop their private policies for the pipelines that skipped it:
+
+  - `POST /workspaces/:ws/pipelines` requires `purpose`; `PATCH` still treats it as an optional patch
+    field. Not part of `/api/v1`, so no published SDK or external integration is affected.
+  - `PipelineRegistry.register` requires it at compile time, so a deployment's own pipeline can no
+    longer land unclassified and fall silently out of a narrowed picker. Same for the built-in seed
+    catalog, where it was previously only asserted in a test.
+  - A row persisted before the field was mandatory still reads: the shared `rowToPipeline` resolves an
+    empty column to `build`, which is byte-for-byte the behaviour such a row already had. A stored
+    classifier this build cannot NAME passes through untouched instead, and every narrowing predicate
+    reads it default-open, because "never set" and "a member this build has no name for" are different
+    facts that must not render the same.
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+  - @cat-factory/orchestration@0.247.0
+  - @cat-factory/server@0.259.0
+  - @cat-factory/agents@0.120.1
+  - @cat-factory/consensus@0.14.66
+  - @cat-factory/eks@0.1.278
+  - @cat-factory/gates@0.10.6
+  - @cat-factory/gitlab@0.18.13
+  - @cat-factory/integrations@0.152.6
+  - @cat-factory/observability-otel@0.18.13
+  - @cat-factory/prompt-fragments@1.0.30
+  - @cat-factory/spend@0.15.48
+  - @cat-factory/caching@0.18.21
+  - @cat-factory/observability-langfuse@0.10.50
+  - @cat-factory/provider-bedrock@0.7.427
+  - @cat-factory/provider-cloudflare@0.7.428
+  - @cat-factory/provider-s3@0.2.347
+
+## 0.194.6
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/agents@0.120.0
+  - @cat-factory/orchestration@0.246.0
+  - @cat-factory/server@0.258.0
+  - @cat-factory/consensus@0.14.65
+  - @cat-factory/eks@0.1.277
+  - @cat-factory/gates@0.10.5
+  - @cat-factory/gitlab@0.18.12
+  - @cat-factory/integrations@0.152.5
+  - @cat-factory/kernel@0.275.4
+  - @cat-factory/observability-otel@0.18.12
+  - @cat-factory/prompt-fragments@1.0.29
+  - @cat-factory/spend@0.15.47
+  - @cat-factory/provider-bedrock@0.7.426
+  - @cat-factory/provider-cloudflare@0.7.427
+  - @cat-factory/caching@0.18.20
+  - @cat-factory/observability-langfuse@0.10.49
+  - @cat-factory/provider-s3@0.2.346
+
+## 0.194.5
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/server@0.257.0
+  - @cat-factory/orchestration@0.245.0
+  - @cat-factory/agents@0.119.3
+  - @cat-factory/consensus@0.14.64
+  - @cat-factory/eks@0.1.276
+  - @cat-factory/gates@0.10.4
+  - @cat-factory/gitlab@0.18.11
+  - @cat-factory/integrations@0.152.4
+  - @cat-factory/kernel@0.275.3
+  - @cat-factory/observability-otel@0.18.11
+  - @cat-factory/prompt-fragments@1.0.28
+  - @cat-factory/spend@0.15.46
+  - @cat-factory/provider-bedrock@0.7.425
+  - @cat-factory/provider-cloudflare@0.7.426
+  - @cat-factory/caching@0.18.19
+  - @cat-factory/observability-langfuse@0.10.48
+  - @cat-factory/provider-s3@0.2.345
+
+## 0.194.4
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/orchestration@0.244.0
+  - @cat-factory/server@0.256.0
+  - @cat-factory/agents@0.119.2
+  - @cat-factory/consensus@0.14.63
+  - @cat-factory/eks@0.1.275
+  - @cat-factory/gates@0.10.3
+  - @cat-factory/gitlab@0.18.10
+  - @cat-factory/integrations@0.152.3
+  - @cat-factory/kernel@0.275.2
+  - @cat-factory/observability-otel@0.18.10
+  - @cat-factory/prompt-fragments@1.0.27
+  - @cat-factory/spend@0.15.45
+  - @cat-factory/provider-bedrock@0.7.424
+  - @cat-factory/provider-cloudflare@0.7.425
+  - @cat-factory/caching@0.18.18
+  - @cat-factory/observability-langfuse@0.10.47
+  - @cat-factory/provider-s3@0.2.344
+
+## 0.194.3
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/agents@0.119.1
+  - @cat-factory/consensus@0.14.62
+  - @cat-factory/eks@0.1.274
+  - @cat-factory/gates@0.10.2
+  - @cat-factory/gitlab@0.18.9
+  - @cat-factory/integrations@0.152.2
+  - @cat-factory/kernel@0.275.1
+  - @cat-factory/observability-otel@0.18.9
+  - @cat-factory/orchestration@0.243.1
+  - @cat-factory/prompt-fragments@1.0.26
+  - @cat-factory/server@0.255.1
+  - @cat-factory/spend@0.15.44
+  - @cat-factory/provider-bedrock@0.7.423
+  - @cat-factory/provider-cloudflare@0.7.424
+  - @cat-factory/caching@0.18.17
+  - @cat-factory/observability-langfuse@0.10.46
+  - @cat-factory/provider-s3@0.2.343
+
+## 0.194.2
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/orchestration@0.243.0
+  - @cat-factory/kernel@0.275.0
+  - @cat-factory/agents@0.119.0
+  - @cat-factory/server@0.255.0
+  - @cat-factory/caching@0.18.16
+  - @cat-factory/consensus@0.14.61
+  - @cat-factory/eks@0.1.273
+  - @cat-factory/gates@0.10.1
+  - @cat-factory/gitlab@0.18.8
+  - @cat-factory/integrations@0.152.1
+  - @cat-factory/observability-langfuse@0.10.45
+  - @cat-factory/observability-otel@0.18.8
+  - @cat-factory/prompt-fragments@1.0.25
+  - @cat-factory/provider-bedrock@0.7.422
+  - @cat-factory/provider-cloudflare@0.7.423
+  - @cat-factory/provider-s3@0.2.342
+  - @cat-factory/spend@0.15.43
+
+## 0.194.1
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+  - @cat-factory/kernel@0.274.0
+  - @cat-factory/gates@0.10.0
+  - @cat-factory/orchestration@0.242.0
+  - @cat-factory/integrations@0.152.0
+  - @cat-factory/server@0.254.0
+  - @cat-factory/agents@0.118.1
+  - @cat-factory/consensus@0.14.60
+  - @cat-factory/eks@0.1.272
+  - @cat-factory/gitlab@0.18.7
+  - @cat-factory/observability-otel@0.18.7
+  - @cat-factory/prompt-fragments@1.0.24
+  - @cat-factory/spend@0.15.42
+  - @cat-factory/caching@0.18.15
+  - @cat-factory/observability-langfuse@0.10.44
+  - @cat-factory/provider-bedrock@0.7.421
+  - @cat-factory/provider-cloudflare@0.7.422
+  - @cat-factory/provider-s3@0.2.341
+
+## 0.194.0
+
+### Minor Changes
+
+- a62bcf8: Deliver notifications by email, and add the notification manager that decides which events go to
+  which channel.
+
+  The `EmailSender` port, its SendGrid/Resend adapters and the per-account connection have been live
+  for a while and were used only for invitations. A new `EmailNotificationChannel` puts them behind
+  the same `NotificationChannel` port the in-app and Slack transports implement, so the engine call
+  sites that raise notifications are untouched. It resolves recipients from the SAME rules
+  `resolveWorkspaceAccess` applies (account membership is the prerequisite, an account admin always
+  qualifies, a `workspace_members` row counts only for a still-current account member), reads them in
+  three batched queries rather than a point-read per person, and isolates each send so one bad address
+  cannot cost every other recipient their notification. An account with no sender connected produces
+  zero attempts and zero warnings.
+
+  The manager (`notification_settings`, one row per workspace, D1 ⇄ Drizzle with a conformance suite)
+  stores per-type, per-channel OVERRIDES over the shipped defaults, and one service answers both the
+  settings API and the delivery gate so the toggle a human sees cannot say something the engine does
+  not do. **By default email carries only the high-impact events**: the ones where something is
+  stopped until a human acts (`merge_review`, `decision_required`, `ci_failed`, `test_failed`,
+  `release_regression`) or the deployment itself is degraded (`platform_health`, `infra_unreachable`,
+  `budget_paused`, `key_drift`). The per-step review parks are deliberately off by default — several
+  arrive on nearly every task, and mailing them is the firehose that gets a sender's domain filtered.
+
+  Only the channels whose delivery is a plain yes/no are routed here: the in-app push and email.
+  Slack and the outbound webhooks answer "which types" where their DESTINATION is declared (a Slack
+  route's channel, a webhook endpoint's own `types` filter), so a second switch would be a place to
+  look that does not decide. The settings panel says so and links to the Slack routing.
+
+  Delivery now carries WHICH lifecycle edge it reports (`NotificationDeliveryReason`: `raised` /
+  `refreshed` / `settled`), because the service re-delivers a card on every transition it makes and
+  the transports split hard on what that means. A STATE transport (the in-app push, the outbound
+  webhook) takes every edge, so a board holding an open card sees it settle instead of rendering an
+  already-made decision as still actionable. An ALERT transport (email, Slack) takes the `raised` edge
+  alone: a mailbox and a chat channel cannot render a correction, so a second "Decision needed" after
+  the decision was made is simply false. This also corrects Slack, which re-posted on every resolve
+  and dismissal before the edge existed, and it is why the escalation sweep's loop over a workspace's
+  overdue cards now performs no routing or audience reads at all. **The edge is a required parameter
+  and rides the mothership delegation wire**, where it is refused rather than defaulted: the persisted
+  row cannot supply it (a raise and an escalation are both `open`), so a node one build behind fails
+  loudly instead of mailing the org about decisions already made.
+
+  Two more behaviours to watch for when reviewing. The in-app push is gated too, but only on the raise:
+  muting a type stops the live toast, while the card is still persisted, still in the inbox on the next
+  snapshot, and still pushed when it settles. And a settings read that FAILS falls back to the shipped
+  default and logs, rather than defaulting to deliver-everything (a mailshot) or deliver-nothing (the
+  parked run nobody hears about). In the settings panel the same distinction is explicit: a deployment
+  with no routing store and a read that broke are separate states, and only the first renders the
+  shipped defaults, because saving is a full replace and a grid built from defaults would otherwise
+  overwrite overrides nobody had seen.
+
+- fe8ca56: Let a deployment define its own binary artifact stores in code. Implement the kernel
+  `BinaryBlobBackend` port, register it on the new app-owned `BinaryStoreRegistry`, and pass the
+  registry to `start()` / `startLocal()` / `createWorker({ overrides })`: each registered store then
+  appears in the account-settings storage picker beside the platform's `fs` / `db` / `s3` / `r2`
+  backends, and the per-account resolver builds it when an account selects it. The registered id is
+  stamped onto every artifact row, an account naming a store this build does not register resolves to
+  no storage and is named in the log and the settings panel, and the retention sweeps reclaim through
+  a custom store like any built-in one.
+
+  On the Worker the registry is held PROCESS-WIDE rather than on the app, alongside the model-provider
+  and capability-credential registrations and for the same reason: that runtime builds a container per
+  entry point, and the entry points that write and reclaim artifacts (the durable driver, the queue
+  consumers, the retention cron) take no overrides. A store must be registered on every process that
+  handles its bytes, which in mothership mode means the nodes that write them AND the mothership that
+  sweeps them; a mothership-mode node now says so at boot.
+
+  Internal break: `ContentStorageCapability` gains a required `customStores` and `ContentStorageSummary`
+  a required `customStoreId`, so a facade or test building either literal must add them (the compile
+  error is the point). `BinaryArtifactStorageKind` is now open at the type level, since a registered
+  store's id is a legitimate value of the `storage` column.
+
+### Patch Changes
+
+- 2544fb3: Give the five HKDF cipher-info tags their own exported constants beside the services that
+  own the sealed data, and import them in both facades instead of re-typing the literals.
+
+  These strings derive the keys that seal provider subscriptions, provider API keys, personal
+  subscriptions, local model endpoints and user secrets at rest, so a divergence between the
+  two facades produces credentials one seals and the other cannot open, with nothing failing
+  loudly. Four of their siblings were already imported constants; these five had been missed.
+
+- 2544fb3: Make the provider-routing VCS client reflective, so it can no longer under-report the port.
+
+  `ProviderRoutingGitHubClient` was a hand-written delegate over a 53-method port, 20 of whose
+  methods are optional. It implemented the 33 required ones and 18 of the optional ones were
+  simply absent, which typechecks precisely because they are optional. `providerRoutingGitHubClient`
+  replaces it with a `Proxy` (the shape `runtimes/local/src/vcsClientRouter.ts` already documents),
+  so the surface it presents is the union of what its backing clients implement.
+
+  Behaviour change, in a deployment running BOTH a GitHub App and GitLab connect: the branch
+  protection preflight now answers for real on GitHub installations, where it previously reported
+  `capability: 'unavailable'` for the whole workspace. A call landing on a provider whose client
+  does not implement the method refuses with the new `VcsCapabilityUnsupportedError` rather than
+  `undefined is not a function`; `GitHubService.checkDefaultBranchProtection` absorbs it and keeps
+  reporting `unavailable`, which is exactly the fact it already models.
+
+  Reflecting means deciding what counts as a member, and the first answer was too generous:
+  membership was tested with `Reflect.has`, which walks into `Object.prototype`, so `toString`,
+  `valueOf`, `constructor` and the rest were answered with installation-routing functions. Coercing
+  the client to a string called `toString()` with no arguments, which routed on `undefined` as the
+  installation id and returned a promise where a primitive was required, so a template literal or a
+  logger touching the client threw `TypeError: Cannot convert object to primitive value` with an
+  unawaited repository read rejecting behind it. Membership now stops at `Object.prototype` and
+  anything that is not a port member is answered by the proxy target, so those names behave as they
+  do on any object while an unimplemented optional method still reads as absent.
+
+  `VcsCapabilityUnsupportedError`'s reason joins the shared `UNAVAILABLE_REASONS` vocabulary and
+  gains translated SPA copy. Without it the refusal rendered as the generic 503 wording, "this
+  deployment has not configured the capability", which is the misattribution the class exists to
+  prevent: no operator wiring changes what a provider does not offer. Its sibling
+  `vcs_client_unconfigured` deliberately stays on the generic copy, because that one IS a wiring gap.
+
+- Updated dependencies [2544fb3]
+- Updated dependencies [a62bcf8]
+- Updated dependencies [2544fb3]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+- Updated dependencies [2544fb3]
+- Updated dependencies [2544fb3]
+  - @cat-factory/server@0.253.0
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/contracts@0.275.0
+  - @cat-factory/integrations@0.151.0
+  - @cat-factory/orchestration@0.241.0
+  - @cat-factory/agents@0.118.0
+  - @cat-factory/caching@0.18.14
+  - @cat-factory/consensus@0.14.59
+  - @cat-factory/eks@0.1.271
+  - @cat-factory/gates@0.9.39
+  - @cat-factory/gitlab@0.18.6
+  - @cat-factory/observability-langfuse@0.10.43
+  - @cat-factory/observability-otel@0.18.6
+  - @cat-factory/prompt-fragments@1.0.23
+  - @cat-factory/provider-bedrock@0.7.420
+  - @cat-factory/provider-cloudflare@0.7.421
+  - @cat-factory/provider-s3@0.2.340
+  - @cat-factory/spend@0.15.41
+
+## 0.193.0
+
+### Minor Changes
+
+- 882b94f: Feed the visual-confirmation gate from the designs a task links. The frames an import retained for
+  a linked Figma/Zeplin document now populate the gate's actual-vs-reference gallery on their own, so
+  a designer who linked a frame gets screenshot-vs-design comparison with no manual upload at all.
+
+  A reference that was explicitly chosen for a view still wins: an upload is a deliberate act against
+  that one task and survives every re-import, while a design render is a projection the next
+  body-changing import replaces wholesale. So an upload assigns over the fold, and a view whose
+  reference the capture itself named is left alone. Each pair now says which of the two it is showing,
+  and says nothing when the capture named its own, because a reference the gate did not source is one
+  whose provenance it can only guess at.
+
+  A view name two designs both claim is qualified with its design on BOTH sides rather than just the
+  second, the same rule the Figma import applies to a frame name repeated across pages: leaving the
+  first bare would hand the plain name to whichever design is listed first, and re-ordering the links
+  would then silently re-point a reviewed view at a different screen.
+
+  The gate also states what the linked designs contributed whenever a design is attached, including
+  when everything worked, so "no design is linked" stays distinguishable from "one is and it gave
+  nothing". The latter carries a per-design reason, since retaining part of a design, failing to
+  download it, having no frames at all, and having had nowhere to store them each ask for a different
+  fix. That verdict is derived from what the artifact store actually holds rather than from the
+  recorded render status alone, so any status claiming retention over an empty shelf reports the
+  absence rather than describing a gallery that is not there. The gallery's ceiling on design views is
+  shared round-robin across the linked designs instead of being spent in read order, and each design
+  that loses frames to it is named, so a design the ceiling shut out cannot read as one with no
+  frames.
+
+  Gathering the pairs no longer confuses a gallery ROW with a captured screenshot. A reference-only row
+  (a design frame, an uploaded mock) makes a pair too, so a run that captured nothing had been losing
+  the warning that gates the gate's approve button behind an acknowledgement, reporting a verified
+  gallery of blanks in its run outcome, and summoning reviewers to screenshots that were not there. The
+  rule now lives once in `@cat-factory/contracts` and all three ask it.
+
+  `BinaryArtifactStore` grows a batched `listByDocuments`, mirrored D1 ⇄ Drizzle with a conformance
+  assertion and allow-listed for mothership mode, so a task linking several designs still costs the
+  driver path one read.
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+  - @cat-factory/integrations@0.150.0
+  - @cat-factory/contracts@0.274.0
+  - @cat-factory/orchestration@0.240.0
+  - @cat-factory/server@0.252.0
+  - @cat-factory/agents@0.117.12
+  - @cat-factory/caching@0.18.13
+  - @cat-factory/consensus@0.14.58
+  - @cat-factory/eks@0.1.270
+  - @cat-factory/gates@0.9.38
+  - @cat-factory/gitlab@0.18.5
+  - @cat-factory/observability-langfuse@0.10.42
+  - @cat-factory/observability-otel@0.18.5
+  - @cat-factory/prompt-fragments@1.0.22
+  - @cat-factory/provider-bedrock@0.7.419
+  - @cat-factory/provider-cloudflare@0.7.420
+  - @cat-factory/provider-s3@0.2.339
+  - @cat-factory/spend@0.15.40
+
+## 0.192.0
+
+### Minor Changes
+
+- 6e07961: Retain a design document's rendered frames when it is imported. A Figma import now downloads the
+  PNGs (the linked frame, or the first six top-level frames of a whole file) and stores them as
+  `reference` binary artifacts keyed to the document, on the same shelf the visual-confirmation gate
+  already reads from; a re-import that changes the body replaces the previous set wholesale. The
+  download is host-pinned to Figma's signed-asset hosts and carries no credential.
+
+  Renders ride a new `DocumentSourceProvider.fetchRenders` port rather than `fetchDocument`, and only
+  run on an import that actually writes a body: a design file's version moves on any edit anywhere in
+  it, so the dispatch-time freshness ladder re-fetches the text far more often than the pictures
+  change.
+
+  A new `documents.render_status` records what became of them (`stored` / `partial` / `none` /
+  `failed` / `storage_unavailable`, or null where the question does not apply), because every way of
+  ending up with no images is otherwise the same absence. It is derived from what was RETAINED, and
+  counts the frames a provider's own cap excluded as unillustrated, so a six-picture pass over a
+  twenty-frame file reads as `partial` rather than as a complete design with six screens. A
+  deployment with no image storage configured imports the design textually and says so rather than
+  downloading bytes it cannot keep; a settings read that FAILS is `failed`, not
+  `storage_unavailable`, since telling an operator to configure storage they already have sends them
+  to fix the wrong thing.
+
+  A document's renders are exempt from the age-based artifact retention sweep. Age is the right
+  lifetime for run debris and the wrong one for a projection of a live row: renders are replaced by
+  the next import that changes the body and by nothing else, and an unedited design is never
+  re-imported, so a clock-based sweep would leave the row claiming `stored` over an empty set with
+  nothing to re-download them.
+
+  Internal break: `binary_artifacts` rows and `documents` rows written before this change carry no
+  document keying and no render status. Both self-heal on the next import; nothing needs a backfill.
+  `BinaryArtifactMetadataStore.deleteByDocument` is replaced by `deleteByIds`: every id-scoped
+  reclaim now names the rows whose bytes it has already removed, so a concurrent import's fresh row
+  cannot be deleted out from under its blob.
+
+- 9f9c240: Bound a wedged pipeline step on Node, and stop an idle container reclaim from reading as a
+  crash. The last two findings of the stuck-run audit.
+
+  **One hang bound, both facades.** `ExecutionConfig.advanceTimeout` (`ADVANCE_TIMEOUT`, default
+  `30 minutes`) is now the ceiling on a single `advanceInstance` AND on a single status read: the
+  Worker hands it to the durable driver's `step.do` (where it had been a hard-coded constant), and
+  Node races it in `driveExecution` through a new injected `DriveOptions.withStepCeiling` seam.
+  Node previously had no ceiling at all, and nothing else supplies one: pg-boss heartbeats an
+  active job regardless of handler progress, so a hung call left the run `running` with a frozen
+  `updated_at`, invisible to the stale-run sweeper, until the queue's expire cap (up to 24h). A
+  timed-out advance fails the run rather than retrying in-process, because a second concurrent
+  advance would double-drive it; a timed-out poll counts as one unreadable poll against
+  `jobPollFailureTolerance`, which is the disposition the Worker has always had for the same
+  event.
+
+  **One knob now means one parser.** Every duration knob in `ExecutionConfig` resolves through the
+  shared `resolveDurationEnv`, which canonicalises the value both runtimes go on to use. Node's
+  own parser knew four of the units Workflows accepts and silently substituted its built-in
+  default for the rest, so `ADVANCE_TIMEOUT="1 week"` was a week on Cloudflare and five minutes on
+  Node. Values past what a timer can hold, and the calendar units whose length the two runtimes
+  would each have to invent, are refused with one warning rather than honoured differently on each
+  side.
+
+  **A container that reclaims itself says so.** A per-run Cloudflare Container is kept warm only
+  by the driver's job polls, so a poll gap longer than its idle window reclaimed it mid-job; the
+  resulting 404 poll was indistinguishable from an OOM and spent the single crash-eviction budget,
+  so two hiccups in one step failed a healthy run. The container now records the reclaim cause it
+  observed (`idle` alongside the existing `rollout`) and the transport reads it back over one RPC,
+  classifying an idle reclaim as `transient` churn with its own operator-facing wording. A record
+  is claimed by the polling job rather than deleted, so a retried durable poll reads the same
+  answer, and it is dropped when a new job is accepted, so a marker left by a routine idle reclaim
+  cannot excuse a later step's genuine crash. The two per-run container classes collapsed onto a
+  shared `RunContainer` base carrying this bookkeeping.
+
+  Internal break: the old `rolledOutAt` Durable-Object storage key is gone. A rollout in flight
+  across the deploy that ships this loses its attribution and is recovered as a crash instead,
+  which costs one eviction on the smaller budget during a single release.
+
+  `DriveConfig` gained a required `advanceTimeoutMs` (`0` disables the ceiling, which is what the
+  conformance harness and the unit fakes use), so every construction site declares it.
+  `ADVANCE_TIMEOUT` is reserved against capability-credential lookup by exact name, not as an
+  `ADVANCE_` family, so a credential key that merely starts with it stays valid.
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/kernel@0.271.0
+  - @cat-factory/contracts@0.273.0
+  - @cat-factory/integrations@0.149.0
+  - @cat-factory/orchestration@0.239.0
+  - @cat-factory/server@0.251.0
+  - @cat-factory/agents@0.117.11
+  - @cat-factory/caching@0.18.12
+  - @cat-factory/consensus@0.14.57
+  - @cat-factory/eks@0.1.269
+  - @cat-factory/gates@0.9.37
+  - @cat-factory/gitlab@0.18.4
+  - @cat-factory/observability-langfuse@0.10.41
+  - @cat-factory/observability-otel@0.18.4
+  - @cat-factory/prompt-fragments@1.0.21
+  - @cat-factory/provider-bedrock@0.7.418
+  - @cat-factory/provider-cloudflare@0.7.419
+  - @cat-factory/provider-s3@0.2.338
+  - @cat-factory/spend@0.15.39
+
+## 0.191.0
+
+### Minor Changes
+
+- 6c6dd0c: Bring the document and task source integrations to a mothership-mode node
+
+  Every other connection surface reached mothership mode long ago: environments, observability,
+  Slack, runner pools all store their credential as a sealed blob, so only ciphertext crosses the
+  persistence RPC and the mothership opens it on request. The document-source and tracker connections
+  were the last two outside that, and the reason was mechanical rather than a judgement about how
+  sensitive a Figma or Jira token is. Their repositories decrypted INSIDE, which shuts both doors at
+  once: a repository that decrypts can only be called by a key-holder, so proxying its read would have
+  put a plaintext token on the wire, and it exposes no sealed field, so `/internal/secrets/unseal` had
+  nothing to name either. That is why the prerequisite was always "give those repositories a
+  sealed-blob read first, and only then a source-table entry".
+
+  The row now carries its envelope. `DocumentConnectionRecord` and `TaskConnectionRecord` split into a
+  stored `Sealed*Record` the repository persists and an open record the services read, with a new
+  kernel port pair (`DocumentConnectionStore` / `TaskConnectionStore`) as the seam and one shared
+  implementation over `createOrgSecretCipher`. All four repositories (D1 and Drizzle, documents and
+  tasks) stopped decrypting and became ordinary sealed-blob stores.
+
+  With that in place, `document_source_connection` and `task_source_connection` join the closed
+  org-secret table, keyed by `(workspace, source)` under their own HKDF domains, and the persistence
+  allow-list widens to the whole of both integrations: the connection repositories and the
+  per-workspace source toggle, the document import/link writes and the role-link surface, and the task
+  import/link writes including the atomic claim that holds one-task-per-ticket. Batched forms move
+  with their point siblings rather than behind them, since `linkBlockMany`/`detachBlocks` are the same
+  write as `linkBlock` and a claim whose import cannot land claims nothing.
+
+  The store's surface is deliberately split by how much a caller needs opened rather than how much it
+  reads. Listing summaries opens nothing, because a settings panel renders labels and opening a bag
+  per connected source would turn one page load into a burst of unseal round trips and fail the whole
+  list on the first unopenable row. Connecting and disconnecting read the summary for the same reason
+  from the other direction: replacing or removing a connection is the remedy for a bag that has gone
+  bad, so neither may be the call that needs the key.
+
+  Dispatch-time document freshness now runs on a mothership-mode node. Its `credentials_unreadable`
+  verdict stays a distinct gap and is worth more than it was: it no longer means "this deployment
+  structurally cannot read the credentials" on every dispatch of every run, so its remaining causes are
+  real faults. Its log line went back to `warn` accordingly.
+
+  How many row identifiers a delegated unseal must carry is now declared once, in kernel's
+  `ORG_SECRET_KEY_ARITY`, and enforced by the type system. It previously lived only in the server-side
+  bindings table, which is the one part of a binding a caller has to get right and the one table a
+  caller in `@cat-factory/integrations` cannot see. `DelegatedSecretRef` became a union over the source
+  vocabulary, so a literal is checked against its own source's arity, and `orgSecretRef` is the door
+  for a generic caller that never names a member. This matters more than it reads: a deployment with no
+  delegate wired ignores the reference entirely, so a malformed one is invisible everywhere except the
+  single deployment shape that delegates.
+
+  Two behaviour changes worth knowing about. A credential bag that cannot be opened now raises instead
+  of resolving to an empty bag, because an empty bag is indistinguishable from a connection saved with
+  no credentials and every caller was re-deriving the difference from whatever the vendor said next. It
+  raises a 503 carrying `reason: 'connection_credentials_unreadable'`, so the surfaces that genuinely
+  cannot proceed refuse with translated copy rather than a generic server error. And the legacy
+  plaintext `credentials` column fallback is gone: a row written before these tables were encrypted at
+  all is no longer read as JSON and re-encrypted on the next write, so re-connect the affected source.
+  Pre-1.0 internals break rather than grow a compatibility path, and keeping the fallback would have
+  meant the unseal endpoint answering for a field that is sometimes not an envelope.
+
+  Raising rather than emptying puts weight on WHO raises and to whom, so the failure is scoped to what
+  actually failed. A batched open answers per source: the sources in one call are independent facts
+  about independent vendors, and one rejection speaking for all of them would report a run's whole
+  document corpus as unreadable because a single shelf entry drifted, or take the reply channel away
+  from a healthy ticket because a different tracker's envelope went bad. Both read to an operator as
+  the healthy sources being broken. A corpus-wide verdict is now reachable only when the stored-row
+  query itself failed, where nothing about any source was learned.
+
+  For the same reason, a surface whose job is to REPAIR an unopenable connection is not allowed to be a
+  surface that needs the key. Re-connecting a tracker reads the old bag only to carry the
+  platform-owned webhook secret across a vendor-credential rotation; refusing on that read left a
+  workspace with no way out of a bad row at all, so it now degrades and says so, and the operator mints
+  a fresh secret. Sealing rides the same delegation as opening, which is what keeps that from being a
+  silent loss on a transient fault: a node that cannot reach its key service fails the write too, so
+  nothing is overwritten. The setup check reports the fault as a verdict instead of failing, and the
+  read-only webhook panel states it as a new `credentialsReadable: false` rather than reporting
+  `configured: false`, which would send an operator to mint a secret over a bag that still holds the
+  live one. Clearing the webhook secret still refuses, because clearing rewrites the bag minus a key
+  and proceeding blind would replace the vendor credentials with an empty object.
+
+- 70745b6: Link repositories, merge/pull requests and issues to the instance a workspace is actually
+  connected to. A VCS connection (and each connect option) now carries `webUrl`, the browser-facing
+  host derived from the provider's configured API base, and the SPA builds every repo link from it
+  in the provider's own shape instead of hand-building `https://github.com/...`. A deployment whose
+  API base does not name a host withholds those links rather than pointing at the provider's public
+  instance. The source-control panel's pull-request vocabulary is provider-keyed, so a GitLab
+  workspace sees merge requests.
+
+  `AppConfig.gitlab` is now always present, shaped like its GitHub sibling: `apiBase` is the address
+  of the instance a deployment talks to, and `enabled` alone carries the `GITLAB_TOKEN` opt-in for
+  the single-token engine connection. Gating the whole config on that token had made the address
+  unreadable on a deployment reaching GitLab any other way, so local mode's `GITLAB_PAT` shape got
+  no links at all.
+
+  Internal breaks, so a SPA build and a backend must be deployed together: `webUrl` is required on
+  the connection and connect-option shapes, and `AppConfig.gitlab` is no longer optional.
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+  - @cat-factory/contracts@0.272.0
+  - @cat-factory/orchestration@0.238.0
+  - @cat-factory/integrations@0.148.0
+  - @cat-factory/server@0.250.0
+  - @cat-factory/agents@0.117.10
+  - @cat-factory/caching@0.18.11
+  - @cat-factory/consensus@0.14.56
+  - @cat-factory/eks@0.1.268
+  - @cat-factory/gates@0.9.36
+  - @cat-factory/gitlab@0.18.3
+  - @cat-factory/observability-langfuse@0.10.40
+  - @cat-factory/observability-otel@0.18.3
+  - @cat-factory/prompt-fragments@1.0.20
+  - @cat-factory/provider-bedrock@0.7.417
+  - @cat-factory/provider-cloudflare@0.7.418
+  - @cat-factory/provider-s3@0.2.337
+  - @cat-factory/spend@0.15.38
+
+## 0.190.1
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/contracts@0.271.0
+  - @cat-factory/kernel@0.269.0
+  - @cat-factory/integrations@0.147.0
+  - @cat-factory/server@0.249.0
+  - @cat-factory/orchestration@0.237.0
+  - @cat-factory/agents@0.117.9
+  - @cat-factory/consensus@0.14.55
+  - @cat-factory/eks@0.1.267
+  - @cat-factory/gates@0.9.35
+  - @cat-factory/gitlab@0.18.2
+  - @cat-factory/observability-otel@0.18.2
+  - @cat-factory/prompt-fragments@1.0.19
+  - @cat-factory/spend@0.15.37
+  - @cat-factory/caching@0.18.10
+  - @cat-factory/observability-langfuse@0.10.39
+  - @cat-factory/provider-bedrock@0.7.416
+  - @cat-factory/provider-cloudflare@0.7.417
+  - @cat-factory/provider-s3@0.2.336
+
+## 0.190.0
+
+### Minor Changes
+
+- 17687a1: Let a headless provisioner say who a key acts for, and carry that onto the runs the key starts
+
+  `POST /api/v1/keys` accepts an optional `externalIdentity`: an opaque string naming who, on the
+  CALLER's side, the key acts for. An integration that mints one key per person (the Cloudflare OS
+  gatekeeper of `docs/initiatives/cloudflare-os-gatekeeper.md` is the motivating consumer) could
+  already get real per-user attribution, but only by keeping its own keyId-to-person table and
+  joining it against every run it read. The field removes that table: the identity is echoed on the
+  key resource, on `GET /api/v1/me`, and on both run projections (`publicRun`, `publicJob`) as the
+  identity the run was started for.
+
+  It is opaque in the strongest sense: stored verbatim, never parsed, never resolved against a user,
+  never an authorization input. What a key may do is still its `scope`; what a run may do is still
+  its pinned role and mode. Bounded at 200 characters and refused if it carries control characters,
+  because it is echoed onto surfaces that later render it.
+
+  The run's copy is PINNED at admission rather than resolved from the key on read, which is the
+  decision worth reviewing. Revoking a per-user key is exactly what an integration does when someone
+  leaves, and that must not erase who a finished run was for; pinning also keeps a page of runs from
+  becoming a page of credential reads, and matches what the run already does with `initiatedByRole`
+  and `mode`. It rides `agent_runs.detail` through the shared mappers, so a retry carries it forward
+  (same work, same requester, whoever pressed retry) and the conformance case asserts it survives
+  both the store round-trip and the key's revocation on each facade.
+
+  A run's identity is not readable by every key. A key that carries an `externalIdentity` of its own
+  sees the value only on the runs started for that identity; a key with none (the provisioner, or
+  one a member minted in the app) sees every run's. Without the rule, the one-key-per-person
+  deployment this feature is built for would hand each person's key the roster of everyone else, and
+  the value is routinely an email. The run projections carry `externalIdentityWithheld` beside the
+  value so a withholding is STATED: `null` already means "this run names nobody", and reporting a
+  mapping the platform holds as one it never had is the failure the flag exists to prevent.
+
+  Two smaller calls: the identity is never inherited from the provisioning key, since a provisioner
+  mints for many identities and naming itself would attribute every run to the integration; and the
+  field is offered on the headless mint only, because the session-authed create already records
+  `createdByUserId`, an account the platform can resolve.
+
+  The validation splits along what can be PUBLISHED. The shipped `pattern` refuses the C0 controls,
+  DEL and the C1 controls, spelled with `\xHH` escapes because that is the one syntax ECMA-262, RE2,
+  PCRE, Python and Java all read: the `\uHHHH` spelling this started with is a parse error in RE2 and
+  PCRE, so it would have broken the Go client outright rather than rejected a value. U+2028 and
+  U+2029 have no portable spelling at all and are refused off the schema, which makes the published
+  pattern a necessary condition rather than a sufficient one.
+
+  Additive on the public surface: one optional request field, one nullable field plus its
+  withheld flag on the run projections, `null` being the correct answer for every key and run that
+  predates it. New nullable `external_identity` column on both stores (D1 0086, Drizzle). OpenAPI
+  `info.version` goes to 1.30.0 (1.29.0 was published by the dispatch-diagnostics change while this
+  branch was in flight).
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+  - @cat-factory/kernel@0.268.0
+  - @cat-factory/integrations@0.146.0
+  - @cat-factory/orchestration@0.236.0
+  - @cat-factory/server@0.248.0
+  - @cat-factory/agents@0.117.8
+  - @cat-factory/consensus@0.14.54
+  - @cat-factory/eks@0.1.266
+  - @cat-factory/gates@0.9.34
+  - @cat-factory/gitlab@0.18.1
+  - @cat-factory/observability-otel@0.18.1
+  - @cat-factory/prompt-fragments@1.0.18
+  - @cat-factory/spend@0.15.36
+  - @cat-factory/caching@0.18.9
+  - @cat-factory/observability-langfuse@0.10.38
+  - @cat-factory/provider-bedrock@0.7.415
+  - @cat-factory/provider-cloudflare@0.7.416
+  - @cat-factory/provider-s3@0.2.335
+
+## 0.189.0
+
+### Minor Changes
+
+- 2b74bd0: Let a mothership open the org credentials a mothership-mode node holds no key for
+
+  Mothership mode splits the encryption keys on purpose: a laptop seals its own agent and model
+  credentials under a local key, and the mothership's `ENCRYPTION_KEY` never travels. That split is
+  what made every sealed-blob repository safe to serve over the persistence RPC, and it is also what
+  left those blobs unreadable on the node. A row a hosted teammate wrote is sealed under the
+  mothership's key, so a mothership-mode node could save an infrastructure connection and never
+  provision with it, save a Datadog connection and never probe with it, and four earlier slices parked
+  a surface rather than ship it broken.
+
+  `POST /internal/secrets/unseal` and `POST /internal/secrets/seal` close that. The node names the
+  ROW, never the ciphertext: it posts a source from a closed table plus the row's identifiers, and the
+  mothership re-reads the authoritative row from its own store, binds the workspace to an account
+  exactly as the persistence RPC does, and decrypts under its own key. A compromised node token can
+  therefore only ask for a value it could already have read had it held the key, in an account it can
+  already reach, which is what keeps this from being a decryption oracle. The seal direction matters
+  just as much: a mothership-mode node provisions environments, and a row it sealed locally would be
+  unopenable by the mothership's own teardown with nothing saying so until a reclaim failed.
+
+  Consumers reach it through one kernel seam, `createOrgSecretCipher`. With no delegate wired (every
+  hosted deployment, and local mode over its own Postgres) it is a pass-through to the facade's own
+  cipher, so nothing changes there.
+
+  With provisioning writes now safe to persist, `environmentRegistryRepository.insert`/`update` join
+  the persistence allow-list, and so does `softDelete`, the tombstone half every re-provision and
+  every reclaim runs. A mothership-mode node therefore provisions, polls and tears down environments
+  for real, and the ephemeral-environment self-test runs end to end. Provisioning and teardown take
+  the delegate together rather than separately: teardown opens the very provision fields provisioning
+  sealed, so a node holding one and not the other could stand infrastructure up and never reclaim it.
+
+  A mothership-mode node may not itself answer the delegation endpoints. They are wired only where a
+  facade holds its own main database, because a node's `ENCRYPTION_KEY` is the local key that seals
+  its own agent credentials, and sealing an org row under it is the split this change removes.
+
+  Behaviour change worth knowing about on an existing mothership-mode node: rows it previously sealed
+  under its LOCAL key are no longer opened locally. Pre-1.0 internals break rather than grow a
+  compatibility path, so re-save an affected environment or observability connection; the key-drift
+  sweep reports them.
+
+  Deliberately still off, and stated in the tracker: the document/task source connections (their
+  repositories decrypt inside, so there is no sealed field for a row-addressed unseal to name), the
+  mothership-side Slack residual, and the sealed-blob consumers a mothership-mode node does not
+  currently drive. Each is a table entry plus service threading on the same pattern, not a new
+  mechanism.
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+  - @cat-factory/orchestration@0.235.0
+  - @cat-factory/observability-otel@0.18.0
+  - @cat-factory/server@0.247.0
+  - @cat-factory/integrations@0.145.0
+  - @cat-factory/gitlab@0.18.0
+  - @cat-factory/agents@0.117.7
+  - @cat-factory/consensus@0.14.53
+  - @cat-factory/eks@0.1.265
+  - @cat-factory/gates@0.9.33
+  - @cat-factory/prompt-fragments@1.0.17
+  - @cat-factory/spend@0.15.35
+  - @cat-factory/caching@0.18.8
+  - @cat-factory/observability-langfuse@0.10.37
+  - @cat-factory/provider-bedrock@0.7.414
+  - @cat-factory/provider-cloudflare@0.7.415
+  - @cat-factory/provider-s3@0.2.334
+
+## 0.188.0
+
+### Minor Changes
+
+- eaab22a: Register several NAMED outbound webhooks per workspace, instead of one that each integration overwrites
+
+  `/api/v1/notification-webhook` was one endpoint per workspace, which made a second integration's
+  enrolment a destructive act: registering it replaced whatever was already there, and the only symptom
+  was that the previous receiver went quiet. `GET /api/v1/notification-webhooks` plus
+  `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId` are the additive fix. The singular routes
+  keep working unchanged and now address the reserved id `default`, which appears in the collection
+  like any other entry, so the two surfaces are two views of one store rather than two stores.
+
+  The endpoint id is CALLER-CHOSEN and `PUT` is idempotent by it. That is what the motivating consumer
+  needs (a credential-holding front-end, the Cloudflare OS gatekeeper of
+  `docs/initiatives/cloudflare-os-gatekeeper.md`): a Worker booting cold writes its own well-known id
+  and is enrolled, whether or not it has ever run, with no id table of its own and no
+  create-or-discover round trip it might be racing a second instance on. A server-minted id would have
+  pushed exactly that state back onto the caller.
+
+  Each endpoint carries its own sealed signing secret and its own three filters, and every rule the
+  singular routes enforce holds identically: the `admin` floor, keep-on-omit in every field, the
+  write-only secret, the SSRF guard at the write boundary and per redirect hop. Deliveries FAN OUT to
+  every subscribed endpoint, concurrently but BOUNDED at six in flight, isolated per endpoint, and
+  sharing ONE wall-clock budget. All three are deliberate: the caller awaits the fan-out on a run's
+  terminal path, so serial delivery would make enrolling a second integration a latency cost on every
+  run; six is the Workers ceiling on simultaneous connections, past which a `fetch` queues invisibly
+  while the delivery's clock runs, so an unbounded fan-out reports failures it never attempted; and a
+  shared failure path would let one permanently broken receiver mask every sibling's health. An
+  endpoint the budget never reached is reported as not attempted rather than as a delivery failure.
+  `deliveryId` is unchanged and carries no endpoint segment, because each receiver only ever sees its
+  own copy.
+
+  Watch for two things in review. `notification_webhooks` is re-keyed to `(workspace_id, id)` on both
+  stores, and neither generator produces a migration that survives existing rows: the D1 side is the
+  usual SQLite rebuild, and drizzle-kit's in-place `ALTER` adds `name` as `NOT NULL` with no default,
+  so both are hand-healed (add nullable, backfill to `default` / `Default`, then constrain). And the
+  per-workspace cap of 10 is a 409 `webhook_limit_reached` that bounds only what CREATES an endpoint,
+  since disabling and deleting are the actions an operator at the cap needs. The cap is enforced in
+  the STORE, because counting in the service and writing a statement later admits two racing
+  enrolments, which is the access pattern this exists for: D1 gets it from one conditional upsert,
+  Postgres from a transaction-scoped advisory lock per workspace.
+
+  Additive on the public surface throughout: four new operations, and two new response fields (`id`,
+  `name`) on a projection consumers already tolerate unknown members of. OpenAPI `info.version` goes to
+  1.25.0 and all four SDK clients, the MCP facade and the gatekeeper bindings pick the operations up
+  from the same generation pass.
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+  - @cat-factory/kernel@0.266.0
+  - @cat-factory/integrations@0.144.0
+  - @cat-factory/server@0.246.0
+  - @cat-factory/agents@0.117.6
+  - @cat-factory/consensus@0.14.52
+  - @cat-factory/eks@0.1.264
+  - @cat-factory/gates@0.9.32
+  - @cat-factory/gitlab@0.17.3
+  - @cat-factory/observability-otel@0.17.7
+  - @cat-factory/orchestration@0.234.1
+  - @cat-factory/prompt-fragments@1.0.16
+  - @cat-factory/spend@0.15.34
+  - @cat-factory/caching@0.18.7
+  - @cat-factory/observability-langfuse@0.10.36
+  - @cat-factory/provider-bedrock@0.7.413
+  - @cat-factory/provider-cloudflare@0.7.414
+  - @cat-factory/provider-s3@0.2.333
+
+## 0.187.2
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+  - @cat-factory/kernel@0.265.0
+  - @cat-factory/orchestration@0.234.0
+  - @cat-factory/server@0.245.0
+  - @cat-factory/agents@0.117.5
+  - @cat-factory/consensus@0.14.51
+  - @cat-factory/eks@0.1.263
+  - @cat-factory/gates@0.9.31
+  - @cat-factory/gitlab@0.17.2
+  - @cat-factory/integrations@0.143.1
+  - @cat-factory/observability-otel@0.17.6
+  - @cat-factory/prompt-fragments@1.0.15
+  - @cat-factory/spend@0.15.33
+  - @cat-factory/caching@0.18.6
+  - @cat-factory/observability-langfuse@0.10.35
+  - @cat-factory/provider-bedrock@0.7.412
+  - @cat-factory/provider-cloudflare@0.7.413
+  - @cat-factory/provider-s3@0.2.332
+
+## 0.187.1
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/contracts@0.266.0
+  - @cat-factory/kernel@0.264.0
+  - @cat-factory/orchestration@0.233.0
+  - @cat-factory/integrations@0.143.0
+  - @cat-factory/server@0.244.0
+  - @cat-factory/agents@0.117.4
+  - @cat-factory/consensus@0.14.50
+  - @cat-factory/eks@0.1.262
+  - @cat-factory/gates@0.9.30
+  - @cat-factory/gitlab@0.17.1
+  - @cat-factory/observability-otel@0.17.5
+  - @cat-factory/prompt-fragments@1.0.14
+  - @cat-factory/spend@0.15.32
+  - @cat-factory/caching@0.18.5
+  - @cat-factory/observability-langfuse@0.10.34
+  - @cat-factory/provider-bedrock@0.7.411
+  - @cat-factory/provider-cloudflare@0.7.412
+  - @cat-factory/provider-s3@0.2.331
+
+## 0.187.0
+
+### Minor Changes
+
+- 6637bbd: Add GitLab Issues as a task source: import, search and setup check.
+
+  `gitlab` joins `BUILTIN_TASK_SOURCE_KINDS`, so a shop that runs GitLab for both code and issues can
+  link an issue onto a board block as agent context instead of connecting a second vendor beside its
+  repositories. `GitLabIssuesProvider` stores no credentials of its own: it reads through the
+  workspace's existing GitLab connection, the same credentialless shape GitHub Issues has. The
+  recurring `bug-intake` schedule, the bug hunt, push intake and ticket writeback are the remaining
+  slices ([`docs/initiatives/gitlab-issues-intake.md`](./docs/initiatives/gitlab-issues-intake.md)).
+
+  The public-API `TaskSourceKind` enum gains a member (OpenAPI 1.25.0, SDKs regenerated). Additive on
+  a closed vocabulary the clients already tolerate unknown members of, so a consumer built against
+  1.24.0 keeps parsing every response it understood.
+
+  Four internal shapes changed, none externally consumed:
+
+  - `VcsClient` / `GitHubClient` gain an optional `searchProjectIssues(connection, ref, query)`.
+    GitLab's global issue search accepts no project qualifier, so a repo scope cannot be expressed as
+    query text there the way GitHub's `repo:` does; the scope is an argument instead, and the
+    predicates ride a `ProjectIssueQuery` the vendor evaluates.
+  - `TaskSourceProvider.fetchTask` takes `workspaceId`. A GitLab PAT connection is keyed on the
+    workspace, not on the account owning the project, so without it the provider could only scan
+    every connection on the deployment for one able to read the id.
+  - `TaskSourceProvider` gains an optional `repoScope`, whose PRESENCE declares the source
+    repo-backed. One member rather than a flag beside a matcher, because the same fact decides two
+    things that must agree: that the source's search is handed a resolved repository, and that the
+    workspace's imported rows narrow to one.
+  - `TaskSourceState` gains `supportsIntake` and `ridesVcsProvider`, both derived from the registered
+    provider: whether it implements the predicate search a schedule fires, and which VCS connection
+    it authenticates through (so the settings panel can name the right remedy for an unavailable
+    source instead of inferring one).
+
+  Two live bugs are fixed on the way. A workspace connected to GitLab reported **GitHub Issues** as
+  available (availability keyed on a connection EXISTING rather than on its provider, and both live in
+  one row per workspace), so the source looked connected and its import resolved an empty projection.
+  And the recurring-schedule form offered every connected source regardless of whether its provider
+  could search on a schedule, which saved a schedule that could never fire.
+
+  Three surfaces that hard-coded `github` are now asked of the registry, which is what makes a
+  FOURTH source work rather than merely exist: the search route resolves a repo scope for any source
+  declaring `repoScope` (a repo-backed source refuses a null one, so GitLab search was 422ing on
+  every query), the imported-issue list narrows every repo-backed source's rows to the service's own
+  repository, and the issue-tracker settings panel renders one card per registered source instead of
+  one hard-coded card per built-in.
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+  - @cat-factory/kernel@0.263.0
+  - @cat-factory/gitlab@0.17.0
+  - @cat-factory/integrations@0.142.0
+  - @cat-factory/server@0.243.0
+  - @cat-factory/agents@0.117.3
+  - @cat-factory/consensus@0.14.49
+  - @cat-factory/eks@0.1.261
+  - @cat-factory/gates@0.9.29
+  - @cat-factory/observability-otel@0.17.4
+  - @cat-factory/orchestration@0.232.1
+  - @cat-factory/prompt-fragments@1.0.13
+  - @cat-factory/spend@0.15.31
+  - @cat-factory/caching@0.18.4
+  - @cat-factory/observability-langfuse@0.10.33
+  - @cat-factory/provider-bedrock@0.7.410
+  - @cat-factory/provider-cloudflare@0.7.411
+  - @cat-factory/provider-s3@0.2.330
+
 ## 0.186.2
 
 ### Patch Changes

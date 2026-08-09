@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ValidationError } from '@cat-factory/kernel'
-import { normalizeServiceDirectory } from './BoardService.js'
+import { normalizeServiceDirectory } from './serviceRepoLinkage.js'
 
 // The monorepo service subdirectory is stored on the service and later becomes an
 // agent's cwd, so it must be coerced to a safe relative path before persistence (the

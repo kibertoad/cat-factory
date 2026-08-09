@@ -3,6 +3,7 @@ import type {
   Clock,
   IdGenerator,
   Notification,
+  NotificationDeliveryReason,
   NotificationRepository,
   NotificationType,
   WorkspaceRepository,
@@ -134,18 +135,20 @@ function makeService(now: () => number) {
     },
   } as unknown as WorkspaceRepository
   const delivered: Notification[] = []
+  const reasons: Array<{ id: string; reason: NotificationDeliveryReason }> = []
   const service = new NotificationService({
     notificationRepository: repo,
     workspaceRepository,
     idGenerator,
     clock,
     channel: {
-      async deliver(_ws, n) {
+      async deliver(_ws, n, reason) {
         delivered.push(n)
+        reasons.push({ id: n.id, reason })
       },
     },
   })
-  return { service, rows, delivered }
+  return { service, rows, delivered, reasons }
 }
 
 const raiseInput = (over: Partial<Parameters<NotificationService['raise']>[1]> = {}) => ({
@@ -388,5 +391,84 @@ describe('NotificationService', () => {
     expect(reraised.id).toBe(first.id)
     expect(reraised.severity).toBe('urgent')
     expect(reraised.createdAt).toBe(first.createdAt)
+  })
+})
+
+// The delivery EDGE this service stamps on each re-delivery. It is the whole basis on which an
+// ALERT transport (email, Slack) decides to interrupt a human, and the row it re-delivers cannot
+// carry it: an escalated card and a freshly raised one are both `open`. Getting a transition's
+// edge wrong is therefore not a rendering bug, it is a board-wide mail announcing a decision that
+// was already made, so every transition that delivers is pinned here by name.
+describe('NotificationService delivery edges', () => {
+  let time = 0
+  beforeEach(() => {
+    time = 1_000_000
+  })
+  const now = () => time
+
+  it('stamps a new card, and a content change on an open one, as `raised`', async () => {
+    const { service, reasons } = makeService(now)
+
+    await service.raise(WS, raiseInput())
+    // An identical re-raise is persisted but NOT re-delivered, so it adds no edge at all.
+    await service.raise(WS, raiseInput())
+    await service.raise(WS, raiseInput({ title: 'still waiting' }))
+
+    expect(reasons.map((r) => r.reason)).toEqual(['raised', 'raised'])
+  })
+
+  it('stamps every settlement as `settled`, so no transport re-announces the ask', async () => {
+    const { service, reasons } = makeService(now)
+
+    // A human dismissal…
+    const dismissed = await service.raise(WS, raiseInput({ blockId: 'blk_dismiss' }))
+    await service.resolve(WS, dismissed.id, 'dismiss')
+    // …a successful act…
+    const acted = await service.raise(WS, raiseInput({ blockId: 'blk_act' }))
+    await service.act(WS, acted.id, async () => {})
+    // …the auto-clear when a run advances past its gate…
+    await service.raise(WS, raiseInput({ blockId: 'blk_gate' }))
+    await service.clearWaitingDecision(WS, 'blk_gate')
+    // …and the block-less sweep's self-clear.
+    await service.raise(
+      WS,
+      raiseInput({ type: 'platform_health', blockId: null, executionId: null }),
+    )
+    await service.clearByType(WS, 'platform_health')
+
+    // Four raises, each followed by exactly one settlement. Asserted as a relation over the
+    // recorded edges rather than a hand-counted list, so adding a settling path here fails
+    // loudly instead of quietly joining the raises.
+    expect(reasons.filter((r) => r.reason === 'raised')).toHaveLength(4)
+    expect(reasons.filter((r) => r.reason === 'settled')).toHaveLength(4)
+    expect(reasons.filter((r) => r.reason === 'refreshed')).toHaveLength(0)
+  })
+
+  it('stamps the escalation sweep as `refreshed`, not a second ask', async () => {
+    const { service, reasons } = makeService(now)
+
+    const raised = await service.raise(WS, raiseInput())
+    time += 60_000
+    expect(await service.escalateStale(WS, 30_000, now())).toBe(1)
+
+    expect(reasons).toEqual([
+      { id: raised.id, reason: 'raised' },
+      { id: raised.id, reason: 'refreshed' },
+    ])
+  })
+
+  it("stamps a FAILED action's reopen as `refreshed`: the ask never changed", async () => {
+    const { service, reasons } = makeService(now)
+
+    const raised = await service.raise(WS, raiseInput())
+    await expect(
+      service.act(WS, raised.id, async () => {
+        throw new Error('merge rejected')
+      }),
+    ).rejects.toThrow('merge rejected')
+
+    // The card is open and retryable again, and the human is at the screen they just acted from.
+    // Re-alerting the whole board because one call failed states a decision nobody has to make.
+    expect(reasons.map((r) => r.reason)).toEqual(['raised', 'refreshed'])
   })
 })

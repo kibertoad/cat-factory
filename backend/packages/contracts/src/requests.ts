@@ -59,7 +59,17 @@ export type RenameWorkspaceInput = v.InferOutput<typeof renameWorkspaceSchema>
 
 export const addFrameSchema = v.object({
   type: blockTypeSchema,
-  position: positionSchema,
+  /**
+   * Where to drop the frame. OPTIONAL: the board lays one out on its own grid when omitted, the
+   * same fallback {@link addServiceFromRepoSchema} has always had. The app's drag-drop always sends
+   * one (the drop point IS the request); a caller with no canvas, such as the public API's
+   * service creation, deliberately sends none: board coordinates are not part of that surface.
+   */
+  position: v.optional(positionSchema),
+  /** The frame's name. Omitted ⇒ a generated `<Role> <n>` placeholder, as drag-drop has always had. */
+  title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  /** What the service is, for the agents that read it as context. Omitted ⇒ the generated line. */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
 })
 export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 
@@ -73,6 +83,13 @@ export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 export const addServiceFromRepoSchema = v.object({
   repoGithubId: v.number(),
   position: v.optional(positionSchema),
+  /**
+   * The service's name. Omitted ⇒ named after the repository (or, for a monorepo service, after
+   * its subdirectory), which is what the app's import button relies on.
+   */
+  title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  /** What the service is, for the agents that read it as context. Omitted ⇒ the generated line. */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
   /**
    * The repository role for the imported frame (backend service / frontend / library /
    * document repository). Omitted → `service`, so existing callers are unchanged.
@@ -336,9 +353,12 @@ export const createPipelineSchema = v.object({
   ),
   /**
    * The pipeline's use-case classifier (`build` / `document` / `review` / `research` /
-   * `planning`). Omitted ⇒ unclassified. Drives the task pickers + the builder palette gate.
+   * `planning`). REQUIRED, like the field it writes: every pipeline says what it exists to do, so
+   * the pickers, the palette and the library never have to guess for the ones that skipped it. The
+   * builder's dial defaults to `build`, so a caller who has not thought about it still states the
+   * classifier it would have behaved as.
    */
-  purpose: v.optional(pipelinePurposeSchema),
+  purpose: pipelinePurposeSchema,
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 
@@ -404,6 +424,18 @@ export const startExecutionSchema = v.object({
   mode: v.optional(runModeSchema),
 })
 export type StartExecutionInput = v.InferOutput<typeof startExecutionSchema>
+
+/**
+ * Start ONE agent kind against a block — a run with no pipeline behind it (the board's "Map
+ * service" action, the environment wizard's deep analysis). A SEPARATE body from
+ * {@link startExecutionSchema} rather than an either/or field on it: the two name different
+ * things to run, and a single endpoint taking whichever of two mutually exclusive keys was
+ * supplied is a shape every client has to get right and no schema can state.
+ */
+export const startAgentKindExecutionSchema = v.object({
+  agentKind: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+})
+export type StartAgentKindExecutionInput = v.InferOutput<typeof startAgentKindExecutionSchema>
 
 // NOTE: the personal password that unlocks a run's individual-usage credential
 // (Claude / GLM / Codex) is NOT a body field on any of the run endpoints below

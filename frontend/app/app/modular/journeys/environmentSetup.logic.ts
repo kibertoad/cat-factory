@@ -1,6 +1,6 @@
 /**
  * Pure navigation logic for the environment-setup journey (slice 3 of the
- * modular-vue adoption — docs/initiatives/modular-vue-adoption.md).
+ * modular-vue adoption — backend/docs/adr/0049-modular-vue-adoption.md).
  *
  * The journey owns only the WIZARD NAVIGATION — the ordered steps
  * (pick → review → preflight → save), the forward transitions, and the

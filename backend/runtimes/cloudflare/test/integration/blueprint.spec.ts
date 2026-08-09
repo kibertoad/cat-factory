@@ -29,13 +29,14 @@ describe('blueprint pipeline step', () => {
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
 
-    // `pl_blueprint` is the blueprints-ONLY preset — the focused fixture for this step (the build
-    // presets that merely happened to carry a blueprints step were retired in the catalog collapse).
+    // A SINGLE-KIND run of the mapping agent — the focused fixture for this step, and now the
+    // real production path too: the post-bootstrap mapping and the board's "Map service" action
+    // both go through this door, and the one-step preset that used to wrap it is retired.
     // task_login sits under frame blk_auth.
     const start = await app.call<ExecutionInstance>(
       'POST',
-      `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: 'pl_blueprint' },
+      `/workspaces/${wsId}/blocks/task_login/agent-kind-executions`,
+      { agentKind: 'blueprints' },
     )
     expect(start.status).toBe(201)
 
@@ -63,8 +64,8 @@ describe('blueprint pipeline step', () => {
     const wsId = workspace.id
 
     for (let i = 0; i < 2; i++) {
-      await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-        pipelineId: 'pl_blueprint',
+      await app.call('POST', `/workspaces/${wsId}/blocks/task_login/agent-kind-executions`, {
+        agentKind: 'blueprints',
       })
       await app.drive(wsId)
     }

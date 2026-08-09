@@ -78,7 +78,7 @@ function select() {
           <UIcon name="i-lucide-milestone" class="h-4 w-4 shrink-0 text-indigo-400" />
           <div class="text-xs font-semibold text-white">{{ block.title }}</div>
         </div>
-        <UBadge :color="INITIATIVE_STATUS_CHIPS[status] as any" variant="subtle" size="sm">
+        <UBadge :color="INITIATIVE_STATUS_CHIPS[status]" variant="subtle" size="sm">
           {{ statusLabel }}
         </UBadge>
       </div>

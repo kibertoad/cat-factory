@@ -39,9 +39,14 @@ watch(
 
 const slack = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
 const linear = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
+// The deployment's registered Figma app, which is what turns "Connect with Figma" on for every
+// board in the account. Without it the Figma document source still connects, by personal access
+// token — which is the step this exists to spare a designer.
+const figma = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
 const web = reactive({ braveApiKey: '', searxngUrl: '', searxngApiKey: '' })
 const savingSlack = ref(false)
 const savingLinear = ref(false)
+const savingFigma = ref(false)
 const savingWeb = ref(false)
 
 const summary = computed(() => store.view?.summary ?? null)
@@ -55,16 +60,67 @@ const contentBackendLabels = computed<Record<ContentStorageBackend, string>>(() 
   s3: t('layout.accountDeployment.contentStorage.backends.s3'),
   r2: t('layout.accountDeployment.contentStorage.backends.r2'),
   db: t('layout.accountDeployment.contentStorage.backends.db'),
+  custom: t('layout.accountDeployment.contentStorage.backends.custom'),
 }))
 const storageCapability = computed(() => store.view?.contentStorageCapability ?? null)
 const storageSummary = computed(() => summary.value?.contentStorage ?? null)
-const backendItems = computed(() =>
-  (storageCapability.value?.supportedBackends ?? []).map((b) => ({
-    label: contentBackendLabels.value[b],
-    value: b,
-  })),
+// A deployment-registered store is selected as `custom` PLUS an id, so one select carries both:
+// each registered store is its own option, tagged so the save path can tell it from a built-in
+// backend. A two-control version (backend, then store) would leave "custom" selectable with no
+// store chosen, which is the one content-storage config that means nothing.
+const CUSTOM_OPTION_PREFIX = 'custom:'
+const customStores = computed(() => storageCapability.value?.customStores ?? [])
+/**
+ * The store an account is configured with that this deployment does NOT register: its build no
+ * longer carries it, or it never did. Kept as its own selectable option rather than dropped, so
+ * the control shows what is actually stored; hiding it would render an empty select over a
+ * working-looking account whose artifacts are going nowhere.
+ */
+const unregisteredStoreId = computed(() => {
+  const configured = store.view?.config?.contentStorage
+  if (configured?.backend !== 'custom') return null
+  const id = configured.custom?.storeId
+  if (!id || customStores.value.some((s) => s.id === id)) return null
+  return id
+})
+const backendItems = computed(() => [
+  ...(storageCapability.value?.supportedBackends ?? []).flatMap((b) =>
+    b === 'custom'
+      ? customStores.value.map((s) => ({
+          label: s.name,
+          value: `${CUSTOM_OPTION_PREFIX}${s.id}`,
+        }))
+      : [{ label: contentBackendLabels.value[b], value: b as string }],
+  ),
+  ...(unregisteredStoreId.value
+    ? [
+        {
+          label: t('layout.accountDeployment.contentStorage.unregisteredStore', {
+            store: unregisteredStoreId.value,
+          }),
+          value: `${CUSTOM_OPTION_PREFIX}${unregisteredStoreId.value}`,
+        },
+      ]
+    : []),
+])
+/** The select's value: a backend id, or `custom:<storeId>` for a registered store. */
+const csBackend = ref<string>('off')
+/** The registered store the select currently names, for the note under it. */
+const selectedCustomStore = computed(() =>
+  customStores.value.find((s) => `${CUSTOM_OPTION_PREFIX}${s.id}` === csBackend.value),
 )
-const csBackend = ref<ContentStorageBackend>('off')
+/**
+ * What the status badge says. `custom` is the one backend whose own label names nothing an
+ * operator can act on, so it resolves to the STORE: its registered name, or the bare id when this
+ * build does not register it (which the warning below then explains).
+ */
+const configuredStorageLabel = computed(() => {
+  const configured = storageSummary.value
+  if (!configured?.backend) return null
+  if (configured.backend !== 'custom') return contentBackendLabels.value[configured.backend]
+  const registered = customStores.value.find((s) => s.id === configured.customStoreId)
+  return registered?.name ?? configured.customStoreId ?? contentBackendLabels.value.custom
+})
 const cs = reactive({
   basePath: '',
   region: '',
@@ -79,7 +135,10 @@ const savingStorage = ref(false)
 
 function hydrateStorage() {
   const cfg = store.view?.config?.contentStorage
-  csBackend.value = cfg?.backend ?? storageCapability.value?.defaultBackend ?? 'off'
+  csBackend.value =
+    cfg?.backend === 'custom' && cfg.custom?.storeId
+      ? `${CUSTOM_OPTION_PREFIX}${cfg.custom.storeId}`
+      : (cfg?.backend ?? storageCapability.value?.defaultBackend ?? 'off')
   cs.basePath = cfg?.fs?.basePath ?? ''
   cs.region = cfg?.s3?.region ?? ''
   cs.bucket = cfg?.s3?.bucket ?? ''
@@ -108,8 +167,16 @@ onMounted(async () => {
 })
 
 async function saveStorage() {
-  const backend = csBackend.value
-  const config: ContentStorageConfig = { backend }
+  const selected = csBackend.value
+  const customStoreId = selected.startsWith(CUSTOM_OPTION_PREFIX)
+    ? selected.slice(CUSTOM_OPTION_PREFIX.length)
+    : null
+  const backend: ContentStorageBackend = customStoreId
+    ? 'custom'
+    : (selected as ContentStorageBackend)
+  const config: ContentStorageConfig = customStoreId
+    ? { backend, custom: { storeId: customStoreId } }
+    : { backend }
   if (backend === 'fs' && cs.basePath.trim()) {
     config.fs = { basePath: cs.basePath.trim() }
   }
@@ -286,6 +353,62 @@ async function clearLinear() {
     })
   } finally {
     savingLinear.value = false
+  }
+}
+
+async function saveFigma() {
+  if (!figma.clientId.trim() || !figma.clientSecret.trim() || !figma.redirectUrl.trim()) {
+    toast.add({ title: t('layout.accountDeployment.figma.validation'), color: 'error' })
+    return
+  }
+  savingFigma.value = true
+  try {
+    await store.save(props.accountId, {
+      secrets: {
+        figmaOAuth: {
+          clientId: figma.clientId.trim(),
+          clientSecret: figma.clientSecret.trim(),
+          redirectUrl: figma.redirectUrl.trim(),
+        },
+      },
+    })
+    figma.clientId = ''
+    figma.clientSecret = ''
+    figma.redirectUrl = ''
+    toast.add({
+      title: t('layout.accountDeployment.figma.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
+  } catch (e) {
+    toast.add({
+      title: t('layout.accountDeployment.figma.saveFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  } finally {
+    savingFigma.value = false
+  }
+}
+
+async function clearFigma() {
+  if (!(await confirmAction('clear', 'Figma'))) return
+  savingFigma.value = true
+  try {
+    await store.save(props.accountId, { secrets: { figmaOAuth: null } })
+    toast.add({
+      title: t('layout.accountDeployment.figma.cleared'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
+  } catch (e) {
+    toast.add({
+      title: t('layout.accountDeployment.figma.clearFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  } finally {
+    savingFigma.value = false
   }
 }
 
@@ -479,6 +602,67 @@ async function clearWeb() {
       </div>
     </section>
 
+    <!-- Figma app OAuth (the document source's designer-doable connect) -->
+    <section class="space-y-2 border-t border-slate-800 pt-6">
+      <div class="flex items-center gap-2">
+        <h4 class="text-sm font-semibold text-slate-200">
+          {{ t('layout.accountDeployment.figma.title') }}
+        </h4>
+        <UBadge
+          :color="summary?.figmaOAuthConfigured ? 'success' : 'neutral'"
+          variant="subtle"
+          size="xs"
+        >
+          {{
+            summary?.figmaOAuthConfigured
+              ? t('layout.accountDeployment.configured')
+              : t('layout.accountDeployment.notSet')
+          }}
+        </UBadge>
+      </div>
+      <p class="text-[11px] text-slate-400">
+        {{ t('layout.accountDeployment.figma.description') }}
+      </p>
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <UInput
+          v-model="figma.clientId"
+          :placeholder="t('layout.accountDeployment.figma.clientId')"
+          size="sm"
+        />
+        <SecretInput
+          v-model="figma.clientSecret"
+          :placeholder="t('layout.accountDeployment.figma.clientSecret')"
+          size="sm"
+        />
+        <UInput
+          v-model="figma.redirectUrl"
+          :placeholder="t('layout.accountDeployment.figma.redirectUrl')"
+          size="sm"
+        />
+      </div>
+      <div class="flex gap-2">
+        <UButton
+          color="primary"
+          size="xs"
+          icon="i-lucide-save"
+          :loading="savingFigma"
+          @click="saveFigma"
+        >
+          {{ t('common.save') }}
+        </UButton>
+        <UButton
+          v-if="summary?.figmaOAuthConfigured"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          :loading="savingFigma"
+          @click="clearFigma"
+        >
+          {{ t('layout.accountDeployment.clear') }}
+        </UButton>
+      </div>
+    </section>
+
     <!-- Web search keys -->
     <section class="space-y-2 border-t border-slate-800 pt-6">
       <div class="flex items-center gap-2">
@@ -555,11 +739,10 @@ async function clearWeb() {
           size="xs"
         >
           {{
-            storageSummary?.backend
-              ? contentBackendLabels[storageSummary.backend]
-              : t('layout.accountDeployment.contentStorage.default', {
-                  backend: contentBackendLabels[storageCapability.defaultBackend],
-                })
+            configuredStorageLabel ??
+            t('layout.accountDeployment.contentStorage.default', {
+              backend: contentBackendLabels[storageCapability.defaultBackend],
+            })
           }}
         </UBadge>
       </div>
@@ -569,6 +752,16 @@ async function clearWeb() {
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <USelect v-model="csBackend" :items="backendItems" value-key="value" size="sm" />
       </div>
+      <p v-if="selectedCustomStore?.summary" class="text-[11px] text-slate-400">
+        {{ selectedCustomStore.summary }}
+      </p>
+      <p v-if="unregisteredStoreId" class="text-[11px] text-amber-400">
+        {{
+          t('layout.accountDeployment.contentStorage.unregisteredStoreWarning', {
+            store: unregisteredStoreId,
+          })
+        }}
+      </p>
 
       <!-- Filesystem -->
       <div v-if="csBackend === 'fs'" class="grid grid-cols-1 gap-2">

@@ -6,7 +6,7 @@ import {
   HEADLESS_KEY_MINT_SCOPE,
   publicApiKeyListResultSchema,
 } from '../public-api-keys.js'
-import { notificationSchema } from '../notifications.js'
+import { actNotificationSchema, notificationSchema } from '../notifications.js'
 import {
   createPublicJobSchema,
   createPublicTaskSchema,
@@ -26,6 +26,7 @@ import {
   startPublicTaskSchema,
   updatePublicTaskSchema,
 } from '../public-api.js'
+import { publicSpendQuerySchema, publicSpendSchema } from '../public-spend.js'
 import { publicTaskTypeListSchema } from '../public-task-types.js'
 import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 
@@ -113,7 +114,7 @@ export const getPublicJobContract = withMinScope(
 
 /**
  * Cancel a headless job run. The escape hatch that makes admitting a PARKING pipeline
- * safe (see `docs/initiatives/headless-clarification-loop.md`, D1): a parked run waits for a
+ * safe (see `backend/docs/adr/0047-headless-clarification-loop.md`, D1): a parked run waits for a
  * human indefinitely and holds one of the workspace's in-flight job slots, so a caller
  * that decides not to answer must be able to free it. Idempotent — a run already terminal comes
  * back as-is. Board tasks have had `POST /api/v1/tasks/:taskId/stop` all along; this is its
@@ -283,6 +284,11 @@ export const listPublicPipelinesContract = withMinScope(
 // (merge a `merge_review` / `pipeline_complete` PR, retry a `ci_failed` / `test_failed`
 // run), `dismiss` waves a card off. `act` performs a real GitHub merge, so it is the
 // top of the scope ladder (`admin`); `dismiss` is `write`; the list is `read`.
+//
+// Recording the reviewer EFFORT a merge took does not sit at that top rung, and is not on this
+// route at all: `POST /api/v1/merge-records/:recordId/effort` (`write`, see
+// `./public-merge-evidence.ts`) is where a headless caller tags a landed pull request, before or
+// after the `act` that merged it.
 
 /** List the workspace's OPEN notifications (the inbox). */
 export const listPublicNotificationsContract = withMinScope(
@@ -294,14 +300,29 @@ export const listPublicNotificationsContract = withMinScope(
   }),
 )
 
-/** Act on a notification (run its typed side-effect, then resolve it). Requires an `admin` key. */
+/**
+ * Act on a notification (run its typed side-effect, then resolve it). Requires an `admin` key.
+ *
+ * All-optional body, matching the session-authed twin (`routes/notifications.ts`): on a
+ * `merge_review` / `pipeline_complete` card, `reviewEffort` records how much review the pull
+ * request needed in the SAME request that confirms the merge, so the app's one-tap
+ * confirm-and-tag has a headless equivalent rather than a two-call approximation of one.
+ *
+ * Additive on every axis. The route mounts `optionalJsonBody`, so a caller that has always sent
+ * no body at all still gets the historical behaviour; the four SDK clients render an all-optional
+ * body as an OMITTABLE parameter, so `act(id)` keeps compiling and `act(id, { reviewEffort })` is
+ * the new form. Tagging LATER through `POST /api/v1/merge-records/:recordId/effort`
+ * (`./public-merge-evidence.ts`) stays the right call for a caller that learns the effort after
+ * the fact, and remains a rung LOWER than this route: tagging a landed pull request merges
+ * nothing, where this merges one for real.
+ */
 export const actPublicNotificationContract = withMinScope(
   'admin',
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: idParams,
     pathResolver: ({ id }) => `/api/v1/notifications/${id}/act`,
-    requestBodySchema: ContractNoBody,
+    requestBodySchema: actNotificationSchema,
     responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
   }),
 )
@@ -354,6 +375,27 @@ export const getPublicUsageContract = withMinScope(
     method: 'get',
     pathResolver: () => '/api/v1/usage',
     responsesByStatusCode: { 200: publicUsageSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * The workspace's spend over a window, sliced by ONE dimension: the TCO read the period
+ * breakdown above cannot produce: it groups by `(billing, vendor, provider, model)` within the
+ * current calendar month, and carries no board-shape axis at all.
+ *
+ * A sub-resource of `/usage` rather than a surface of its own, because it is the same money
+ * from the same ledger: `/usage` answers the budget question ("what has this period cost, and
+ * are runs paused"), this answers the attribution one ("what did this repository / ticket /
+ * run cost"). Scoped in SQL to the key's own workspace and its account, so `read` is the whole
+ * scope story here too.
+ */
+export const getPublicSpendContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/usage/spend',
+    requestQuerySchema: publicSpendQuerySchema,
+    responsesByStatusCode: { 200: publicSpendSchema, ...errorResponses },
   }),
 )
 

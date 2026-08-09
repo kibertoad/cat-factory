@@ -35,6 +35,12 @@ function deriveFinishReason(calls: HarnessCallMetric[] | undefined): 'stop' | 'l
  * directory. The job's watchdog (inactivity + max-duration, see {@link JobRegistry}) bounds
  * it through `opts.signal`; `opts.onActivity` keeps the inactivity timer alive while the CLI
  * streams. The temp cwd is always removed.
+ *
+ * `opts.beginToolWindow` is deliberately NOT forwarded. An inline completion is a one-shot
+ * answer with no checkout and no tool loop, so the tool-silence watchdog would arm a window this
+ * run could never beat and could only ever expire — force-failing a healthy completion under a
+ * cause ("kept talking, completed no tool call") that misdescribes what it is. The inactivity and
+ * max-duration watchdogs still bound it, which is the whole bound this work ever had.
  */
 export async function handleInline(job: InlineJob, opts: RunOptions): Promise<InlineResult> {
   opts.onPhase?.('agent')

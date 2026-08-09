@@ -309,6 +309,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     db,
     remoteRepos,
     sourced,
+    ...(options.secretDelegate ? { secretDelegate: options.secretDelegate } : {}),
     idGenerator,
     clock,
     appRegistry,

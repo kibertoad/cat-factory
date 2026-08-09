@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { binaryCandidateStatusSchema, stepSkipReasonSchema } from '@cat-factory/contracts'
 import type { ExecutionInstance, PipelineStep } from '~/types/execution'
-import { dedicatedParkView } from './pipelineRender'
+import { missingI18nKeys } from '../../test/i18nKeys'
+import { REDIRECT_PARK_PRESENTATION, dedicatedParkView, stepSkipReasonKey } from './pipelineRender'
 
 /** A minimal coder step; the predicate only reads approval/followUps/forkDecision. */
 const step = (over: Partial<PipelineStep>): PipelineStep =>
@@ -75,6 +77,26 @@ describe('dedicatedParkView', () => {
     }
   })
 
+  // A generating step parks BETWEEN its candidate pass and its delivering pass. Approving it
+  // generically would mark done a step that has staged files and delivered nothing, so it owns
+  // the park exactly as the fork choice one subject over does.
+  it('owns the candidate park while awaiting a choice', () => {
+    expect(
+      dedicatedParkView(step({ binaryCandidates: { status: 'awaiting_choice' } as never }), run()),
+    ).toBe('binary-candidates')
+  })
+
+  // Derived from the picklist the engine itself writes, rather than a hand-listed set: every
+  // status EXCEPT the parked one must release the step, and a status added to the vocabulary is
+  // then covered here the day it lands instead of quietly falling outside a stale literal list.
+  it('releases the step on every settled status the vocabulary holds', () => {
+    const settled = binaryCandidateStatusSchema.options.filter((s) => s !== 'awaiting_choice')
+    expect(settled.length).toBeGreaterThan(0)
+    for (const status of settled) {
+      expect(dedicatedParkView(step({ binaryCandidates: { status } as never }), run())).toBeNull()
+    }
+  })
+
   it('leaves a plain approval park to the generic rail', () => {
     expect(dedicatedParkView(step({}), run())).toBeNull()
   })
@@ -106,5 +128,104 @@ describe('dedicatedParkView', () => {
       inputGate: { status: 'blocked', mode: 'standard', issues: [], checkedAt: 1 },
     } as never)
     expect(dedicatedParkView(step({ approval: null, state: 'working' }), blocked)).toBeNull()
+  })
+})
+
+describe('REDIRECT_PARK_PRESENTATION', () => {
+  // The `Record` over the park vocabulary already proves at COMPILE time that every park has an
+  // entry, which is the whole reason it replaced the ternaries that rendered the fork's copy for
+  // the candidate park. What no type can prove is that an entry still names a key that EXISTS:
+  // a table lookup is invisible to typed message keys and to `i18n:check` alike, so deleting the
+  // catalog entry reads as a clean removal and the button renders its own key path at runtime.
+  it('names catalog keys that resolve', () => {
+    const keys = Object.values(REDIRECT_PARK_PRESENTATION).flatMap((p) => [
+      p.noticeKey,
+      p.actionKey,
+      p.railActionKey,
+    ])
+    expect(missingI18nKeys(keys)).toEqual([])
+  })
+
+  // Two parks pointing at one string is how the bug this table replaced would come back: the
+  // copy would be uniform and wrong again, and every other check would still pass.
+  it('gives each park its own copy', () => {
+    const notices = Object.values(REDIRECT_PARK_PRESENTATION).map((p) => p.noticeKey)
+    expect(new Set(notices).size).toBe(notices.length)
+  })
+})
+
+describe('stepSkipReasonKey', () => {
+  const skipped = (over: Partial<PipelineStep>): PipelineStep =>
+    ({ agentKind: 'tester-ui', state: 'done', skipped: true, ...over }) as PipelineStep
+
+  it('answers null for a step that ran', () => {
+    expect(stepSkipReasonKey(step({ state: 'done' }))).toBeNull()
+  })
+
+  it('names the axis, and narrows a condition by the scope still on the step', () => {
+    expect(stepSkipReasonKey(skipped({ skipReason: 'gated' }))).toBe(
+      'pipeline.progress.skipped.gated',
+    )
+    expect(stepSkipReasonKey(skipped({ skipReason: 'producer_skipped' }))).toBe(
+      'pipeline.progress.skipped.producerSkipped',
+    )
+    // The condition case reads the scope off the step's own `stepOptions`, so the copy and the
+    // scope it names cannot disagree.
+    expect(
+      stepSkipReasonKey(
+        skipped({
+          skipReason: 'condition',
+          stepOptions: { condition: { serviceScope: 'frontend' } },
+        } as Partial<PipelineStep>),
+      ),
+    ).toBe('pipeline.progress.skipped.conditionFrontend')
+    expect(
+      stepSkipReasonKey(
+        skipped({
+          skipReason: 'condition',
+          stepOptions: { condition: { serviceScope: 'backend' } },
+        } as Partial<PipelineStep>),
+      ),
+    ).toBe('pipeline.progress.skipped.conditionBackend')
+  })
+
+  it('still states the SKIP for a reason this build does not know', () => {
+    // A stored run can name a member since retired, and a browser can be older than the member it
+    // reads. Losing the reason is acceptable; rendering nothing (so the step reads as one that ran
+    // and said nothing) is not, and neither is guessing onto a current member.
+    // Cast through `unknown`: the type is CLOSED, so a retired member is unrepresentable at compile
+    // time and only reachable from persisted data — which is exactly the case being pinned.
+    expect(
+      stepSkipReasonKey(
+        skipped({ skipReason: 'retired_axis' } as unknown as Partial<PipelineStep>),
+      ),
+    ).toBe('pipeline.progress.skipped.unknown')
+    expect(stepSkipReasonKey(skipped({}))).toBe('pipeline.progress.skipped.unknown')
+  })
+
+  it('every reason it can name has copy in the catalog', () => {
+    // Derived from the vocabulary the engine writes rather than a hand-listed set, so a member
+    // added to the picklist is covered here the day it lands instead of falling outside a stale
+    // literal list. The `condition` member fans out into two keys (one per service scope).
+    const keys = stepSkipReasonSchema.options.flatMap((reason) =>
+      reason === 'condition'
+        ? [
+            stepSkipReasonKey(
+              skipped({
+                skipReason: reason,
+                stepOptions: { condition: { serviceScope: 'frontend' } },
+              } as unknown as Partial<PipelineStep>),
+            )!,
+            stepSkipReasonKey(
+              skipped({
+                skipReason: reason,
+                stepOptions: { condition: { serviceScope: 'backend' } },
+              } as unknown as Partial<PipelineStep>),
+            )!,
+          ]
+        : [stepSkipReasonKey(skipped({ skipReason: reason }))!],
+    )
+    expect(keys).toHaveLength(stepSkipReasonSchema.options.length + 1)
+    expect(missingI18nKeys([...keys, 'pipeline.progress.skipped.unknown'])).toEqual([])
   })
 })

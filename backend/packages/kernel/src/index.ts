@@ -178,13 +178,16 @@ export {
   seedBlocks,
   seedPipelines,
   retiredPipelines,
-  BLUEPRINT_PIPELINE_ID,
+  offeredPipelines,
+  BLUEPRINT_AGENT_KIND,
+  ENVIRONMENT_ANALYST_AGENT_KIND,
   INITIATIVE_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,
   BUILD_PIPELINE_ID,
   SIMPLE_PIPELINE_ID,
   ADAPTIVE_BUILD_PIPELINE_ID,
-  TECH_DEBT_PIPELINE_ID,
+  COMPLEX_BUILD_PIPELINE_ID,
+  defaultBuildPipelineId,
   BUG_TRIAGE_PIPELINE_ID,
   BUGFIX_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,
@@ -356,6 +359,19 @@ export {
   defaultBinaryGeneratorRegistry,
 } from './domain/binary-generator-registry.js'
 
+// Where a binary artifact's BYTES may go: the app-owned registry a DEPLOYMENT registers its own
+// stores on, each an implementation of the `BinaryBlobBackend` port, selected per account beside
+// the platform's own `fs` / `db` / `s3` / `r2` backends. Per-process by design (a store is a live
+// client, not data a run resolves); see `domain/binary-store-registry.ts`.
+export {
+  type BinaryStoreContext,
+  type BinaryStoreDefinition,
+  type BinaryStoreView,
+  BinaryStoreRegistrationError,
+  BinaryStoreRegistry,
+  defaultBinaryStoreRegistry,
+} from './domain/binary-store-registry.js'
+
 // Where those integrations are READ from: the in-process registry by default, the MOTHERSHIP's
 // over `/internal/binary-generators` on a mothership-mode node (whose own build can only hold a
 // second, drifting copy of what the builder's picker offered). See
@@ -374,10 +390,24 @@ export {
   type ResolvedBinaryGenerator,
   type ResolvedBinaryGeneratorSelection,
   binaryGeneratorSelectionIssues,
+  describeCapability,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,
   resolveBinaryGeneratorSelection,
 } from './domain/binary-generators.js'
+
+// SIDE-BY-SIDE CANDIDATE COMPARISON on a binary-output step: the two-phase brief (generate
+// comparable candidates → deliver what a human kept, under the alternate ids they assigned) and
+// the read-back of what was staged. See `domain/binary-candidates.ts`.
+export {
+  type BinaryCandidateDeclaration,
+  BINARY_CANDIDATE_DECLARATION_TAG,
+  MAX_BINARY_CANDIDATES,
+  isRenderablePreviewUrl,
+  parseBinaryCandidateDeclaration,
+  renderBinaryCandidateChoiceSection,
+  renderBinaryCandidateSection,
+} from './domain/binary-candidates.js'
 
 // The shared reader for an agent's machine-read ` ```<tag> ` declaration block — the LAST one
 // wins, because every contract using it asks the agent to END its reply with it.
@@ -397,6 +427,7 @@ export {
   type GateContext,
   type GateFactory,
   type GateRegistration,
+  type GatePollExhaustion,
   type GateConfigFields,
   recordGateAttempt,
   GateRegistry,
@@ -461,6 +492,9 @@ export {
   githubConnectionRef,
   githubInstallationId,
 } from './domain/vcs-types.js'
+// The browser-facing host each provider's API base addresses, so the SPA can render a repo /
+// pull request / issue as a link instead of hand-building `github.com` URLs.
+export { type VcsWebUrls, vcsWebBaseUrl } from './domain/vcs-web-urls.js'
 export {
   type VcsProviderBundle,
   VcsProviderRegistry,
@@ -471,6 +505,7 @@ export {
   describeVcsApiError,
   VCS_DOC_URLS,
   GITHUB_SETTINGS_URLS,
+  VcsCapabilityUnsupportedError,
 } from './domain/vcs-errors.js'
 export {
   DispatchError,
@@ -610,6 +645,8 @@ export {
   type DocumentFreshness,
   type DocumentFreshnessChange,
   type DocumentFreshnessGap,
+  type StepContextDocument,
+  describeFreshnessGap,
   freshnessHeaderLines,
 } from './domain/document-freshness.js'
 
@@ -744,6 +781,11 @@ export {
   redactSecretsDeep,
 } from './shared/redact-secrets.logic.js'
 export { describeProcessExit } from './shared/process-exit.logic.js'
+export {
+  composePostMortem,
+  MAX_POST_MORTEM_CHARS,
+  tailPostMortemMaterial,
+} from './shared/post-mortem.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
   createStoreAgentContextGate,
@@ -806,5 +848,11 @@ export {
   type WorkspaceAccessRow,
   type ResolveWorkspaceAccessInput,
 } from './domain/workspace-access.js'
+
+export {
+  notificationAudienceUserIds,
+  type AudienceAccountMember,
+  type NotificationAudienceInput,
+} from './domain/notification-audience.js'
 
 export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.logic.js'

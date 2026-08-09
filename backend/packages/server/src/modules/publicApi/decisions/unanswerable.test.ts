@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ExecutionStatus, GateStepState, PipelineStep } from '@cat-factory/contracts'
+import type { GateDefinition, GatePollExhaustion } from '@cat-factory/kernel'
+import { defaultGateRegistry } from '@cat-factory/kernel'
 import type { UnwiredInterviewGate } from './projection.js'
 import { unanswerableWaits } from './projection.js'
 
@@ -26,6 +28,32 @@ const step = (agentKind: string, over: Partial<PipelineStep> = {}): PipelineStep
   ({ agentKind, state: 'working', progress: 0, ...over }) as PipelineStep
 
 /**
+ * The gate registrations these cases reason against: the shipped suite's own declarations, plus a
+ * deployment gate that declares itself a human wait.
+ *
+ * The classification is read off the REGISTRATION, so `acme-legal-hold` is named as a human wait
+ * exactly like `human-review` is, which is the change these cases pin. A kind absent from this map
+ * entirely (`legal-signoff` below) is the remaining `unclassified_gate` case: nothing registered
+ * it here, so nothing can say whether its poll ever ends.
+ */
+const GATE_DECLARATIONS: Record<string, GatePollExhaustion> = {
+  'human-review': 'rearm',
+  'acme-legal-hold': 'rearm',
+  ci: 'fail',
+  conflicts: 'fail',
+  'post-release-health': 'pass',
+  'doc-quality': 'fail',
+}
+
+const gates = (() => {
+  const registry = defaultGateRegistry()
+  for (const [kind, pollExhaustion] of Object.entries(GATE_DECLARATIONS)) {
+    registry.register(kind, () => ({ kind }) as unknown as GateDefinition, { pollExhaustion })
+  }
+  return registry
+})()
+
+/**
  * Ask the question the projection asks. Both extra inputs default to "nothing else is going on"
  * (a live run, no unwired interviewer, no step answerable through `decisions[]`), so each case
  * below states only the fact it is about.
@@ -40,6 +68,7 @@ function waitsFor(
 ) {
   return unanswerableWaits(
     { status: over.status ?? 'blocked', steps },
+    gates,
     over.unwiredGate ?? null,
     over.answered ?? new Set(),
   )
@@ -63,10 +92,23 @@ describe('unanswerableWaits', () => {
     expect(wait!.detail).toContain('POST /api/v1/tasks/:taskId/stop')
   })
 
-  it('names a gate the DEPLOYMENT registered, without claiming to know if it ever ends', () => {
+  it("names a DEPLOYMENT's own wait gate as a human wait, not as an unknown", () => {
+    // The gap this closed. A gate's `pollExhaustion` is declared at registration, so a gate a
+    // deployment registered itself is classified by exactly the rule `human-review` goes through.
+    // Before, only the SHIPPED wait gates were nameable and everything else was reported as
+    // unclassifiable, which told an operator to go and find out something the platform knew.
+    const [wait, ...rest] = waitsFor([step('acme-legal-hold', { gate: gate() })])
+    expect(rest).toEqual([])
+    expect(wait).toMatchObject({ reason: 'human_wait_gate', stepKind: 'acme-legal-hold' })
+  })
+
+  it('reports a gate kind NOTHING registers here as unclassified', () => {
+    // What survives of the old reason, with a narrower meaning: a run outlives a registration (a
+    // retired gate, or a node one build behind), and a kind this process has no registration for is
+    // the one case where "cannot say whether that poll ever ends" is still the honest answer.
     const [wait] = waitsFor([step('legal-signoff', { gate: gate() })])
     expect(wait).toMatchObject({ reason: 'unclassified_gate', stepKind: 'legal-signoff' })
-    expect(wait!.detail).toContain('registered itself')
+    expect(wait!.detail).toContain('no registration')
   })
 
   it.each(['ci', 'conflicts', 'post-release-health', 'doc-quality'])(

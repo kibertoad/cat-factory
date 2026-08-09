@@ -1,15 +1,14 @@
 import { mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { RepoSpec } from './job.js'
+import type { RepoSpec, ReferenceScreenshotsSpec } from './job.js'
+import { deliverReferenceScreenshots } from './reference-screenshots.js'
 import type { McpServerSpec, SkillSpec } from './agent-capabilities.js'
 import { readEffortReport } from './effort.js'
 import { log } from './logger.js'
 import {
   type ContextFileInfo,
   type PiRunOutcome,
-  type PiRunStats,
-  type RunDiagnostics,
   CONTEXT_DIR,
   materializeContextFiles,
   materializeSkillResources,
@@ -21,6 +20,7 @@ import {
   writePiModelsConfig,
   writeWebToolsConfig,
 } from './pi.js'
+import type { PiRunStats, RunDiagnostics } from './pi-reduction.js'
 import {
   type ProgressGuardLimits,
   mergeGuardLimits,
@@ -214,6 +214,12 @@ export interface AgentRunSpec {
    */
   contextFiles?: ContextFileInfo[]
   /**
+   * The task's reference design images. Downloaded into `.cat-context/reference-screenshots/`
+   * before the run and named in the agent's prompt, so a capturing agent can compare against them
+   * and use their view names. Absent ⇒ nothing is downloaded and nothing is said.
+   */
+  referenceScreenshots?: ReferenceScreenshotsSpec
+  /**
    * The skills to make available for this run — a `skill` step's picked skill and/or the playbooks
    * the running agent kind declares. Installed HARNESS-AWARE: the claude-code runner writes them
    * natively into the config dir's `skills/`; for Pi/codex the resource files are materialised
@@ -284,6 +290,21 @@ export async function runAgentInWorkspace(
   // harness paths; kept out of the agent's commits via a local git exclude entry.
   const contextFiles = spec.contextFiles ?? []
   await materializeContextFiles(spec.dir, contextFiles)
+  // The task's reference designs, fetched into `.cat-context/reference-screenshots/` for the kinds
+  // that capture views. Delivered here (beside the linked context, before either harness path
+  // branches) so the Pi and subscription runs are handed the SAME directory and the SAME view
+  // names; a per-path copy is how one of them would end up silently without it.
+  //
+  // This runs once per PASS, not once per job: a coding flow re-enters its workspace for every
+  // repair round. That is safe because the delivery is idempotent over the checkout (a file
+  // already on disk is counted, never re-fetched), so a later round costs a stat per reference and
+  // cannot report a view an earlier round successfully delivered as absent. A view that MISSED is
+  // retried, which is the behaviour worth having: the next round is a fresh chance at a blob
+  // backend that was briefly down.
+  const referenceGuidance = await deliverReferenceScreenshots(spec.dir, spec.referenceScreenshots, {
+    ...(opts.signal ? { signal: opts.signal } : {}),
+    log: opts.log ?? log,
+  })
   // Skills: claude-code installs them natively into its ISOLATED config dir, so it reads from
   // there. Everything else reads the checkout, so materialise each skill's resources under
   // `.cat-context/skill/<name>/` (their instructions are folded into the prompt by the backend) —
@@ -307,7 +328,7 @@ export async function runAgentInWorkspace(
     const subOutcome = await runSubscriptionHarness(spec.harness, {
       cwd: spec.dir,
       model: spec.model,
-      systemPrompt: subscriptionSystemPrompt(spec.systemPrompt, contextFiles),
+      systemPrompt: `${subscriptionSystemPrompt(spec.systemPrompt, contextFiles)}${referenceGuidance}`,
       userPrompt: spec.userPrompt,
       ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
       subscriptionBaseUrl: spec.subscriptionBaseUrl,
@@ -328,10 +349,19 @@ export async function runAgentInWorkspace(
       // The run's tool-call trajectory, the same hook the Pi path feeds — so a subscription run
       // and a proxied one produce the same evidence rather than one of them producing none.
       onSpan: opts.onSpan,
+      // The tool-silence window (stuck-run audit F13), opened by whichever CLI actually runs.
+      // Wired for BOTH subscription harnesses: each reports tool activity on its own stream, so
+      // each can beat the window it opens.
+      beginToolWindow: opts.beginToolWindow,
       // Per-slice review capture, so a parallel review's finished slices are persisted as they
       // land rather than only in the terminal output. Only the subscription runners fan work out
       // across subagents, so this is the only path that can produce it.
       onSliceReviews: opts.onSliceReviews,
+      // What the CLI reported about the tool servers it loaded. Wired for BOTH subscription
+      // harnesses even though only claude-code's stream carries the report today: the hook is a
+      // pass-through, and a codex run that never calls it leaves the backend's record honestly
+      // absent rather than claiming every server it wired failed to start.
+      onToolServers: opts.onToolServers,
       // Stream this run's per-call telemetry to the job's live drain. The subscription
       // harnesses are the only producers of `callMetrics` (Pi's calls are metered by the LLM
       // proxy as they happen), so this is the only path that needs the hook.
@@ -368,6 +398,7 @@ export async function runAgentInWorkspace(
     serviceDirectory: spec.serviceDirectory,
     contextFiles,
     hasBlueprints,
+    ...(referenceGuidance ? { referenceGuidance } : {}),
     ...(spec.multiRepo ? { multiRepo: true } : {}),
   })
   // Pi's calls are metered server-side by the LLM proxy, which sees only an HTTP request — so
@@ -379,7 +410,7 @@ export async function runAgentInWorkspace(
     model: spec.model,
     proxyBaseUrl: phasedProxyBaseUrl(proxyBaseUrl, opts.currentPhase?.(), spec.proxyPhasePath),
   })
-  const { signal, onActivity, onProgress, onSpan } = opts
+  const { signal, onActivity, onProgress, onSpan, beginToolWindow } = opts
   const piOutcome = await runPi({
     cwd: spec.dir,
     model: spec.model,
@@ -389,6 +420,7 @@ export async function runAgentInWorkspace(
     onActivity,
     onProgress,
     onSpan,
+    beginToolWindow,
     expectsEdits: spec.expectsEdits ?? true,
     // Start from the env/built-in defaults and apply only the per-knob overrides the
     // backend set for this kind (loosen-only), so an unspecified knob keeps its default.

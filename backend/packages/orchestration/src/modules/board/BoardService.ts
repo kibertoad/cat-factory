@@ -32,7 +32,6 @@ import type {
   RepoProjectionRepository,
   ResolveRunRepoContext,
   RiskPolicyRepository,
-  Service,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
   TaskRepository,
@@ -44,12 +43,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
-import {
-  applyMountLayout,
-  noopLogger,
-  registerServiceForFrame,
-  requireWorkspace,
-} from '@cat-factory/kernel'
+import { noopLogger, registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
 import { createBoardLayoutWrites } from './layoutWrites.js'
 import { createBoardReparentWrite } from './reparentWrite.js'
 import { createMountProjection } from './mountProjection.js'
@@ -67,9 +61,9 @@ import type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 import { ReviewFrictionGuard } from './reviewFrictionGuard.js'
 import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 import type { NewServiceFrameDefaults } from './newServiceFrameDefaults.js'
-import { resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
+import { nextFrameSlot, resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { createInternalAnchors } from './internalAnchors.js'
-import { PublicBoardReads } from './publicBoardReads.js'
+import { PublicBoardReads, type PublicRepoOption } from './publicBoardReads.js'
 import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
 import type { BlockPatchNarrowing } from './blockPatchNarrowing.js'
 import { createBlockPatchNarrowing } from './blockPatchNarrowing.js'
@@ -79,7 +73,11 @@ import type { TaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
 import { createRiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
+import { createSharedServiceMount } from './sharedServiceMount.js'
+import type { SharedServicePolicy } from './serviceRepoLinkage.js'
+import { resolveServiceRepoLinkage } from './serviceRepoLinkage.js'
 
+export type { SharedServicePolicy } from './serviceRepoLinkage.js'
 export type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 export type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 
@@ -270,6 +268,12 @@ export class BoardService {
    */
   private readonly mountProjection: ReturnType<typeof createMountProjection>
   /**
+   * The repo side of `addServiceFromRepo` (see sharedServiceMount.ts): the account-wide dedupe
+   * that mounts an existing whole-repo service, and the repository-wide monorepo flag write it
+   * has to stay ordered behind.
+   */
+  private readonly sharedServiceMount: ReturnType<typeof createSharedServiceMount>
+  /**
    * What a new task's TYPE implies for the row `addTask` writes (see taskTypeCreationDefaults.ts):
    * the fragment set it owns from creation, and the pipeline its Run controls default to.
    */
@@ -335,6 +339,16 @@ export class BoardService {
       serviceRepository,
       workspaceMountRepository,
     })
+    this.sharedServiceMount = createSharedServiceMount({
+      blockRepository,
+      workspaceRepository,
+      clock,
+      serviceRepository,
+      workspaceMountRepository,
+      repoProjectionRepository,
+      repoProjectionCache,
+      emitBoardChanged: (workspaceId, change) => this.emitBoardChanged(workspaceId, change),
+    })
     this.taskTypeDefaults = createTaskTypeCreationDefaults({
       taskTypeRegistry,
       promptFragmentSource,
@@ -395,6 +409,9 @@ export class BoardService {
     })
     this.publicReads = new PublicBoardReads({
       blockRepository,
+      repoProjectionRepository,
+      serviceRepository,
+      accountOf: (workspaceId) => workspaceRepository.accountOf(workspaceId),
       requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
       addTask: (workspaceId, containerId, input, editor, createdBy) =>
         this.addTask(workspaceId, containerId, input, editor, createdBy),
@@ -565,7 +582,14 @@ export class BoardService {
     return workspaceId
   }
 
-  /** Add a top-level frame (service/api/database/…) to the board. */
+  /**
+   * Add a top-level frame (service/api/database/…) to the board.
+   *
+   * `title`, `description` and `position` are each optional and each falls back to what drag-drop
+   * has always produced. The fallbacks are what let a caller with NO CANVAS create a frame at all:
+   * the public API's service creation deliberately publishes no coordinate system (a board layout
+   * is ergonomics for a human looking at one), so it names the service and lets the board place it.
+   */
   async addFrame(workspaceId: string, input: AddFrameInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
@@ -574,10 +598,11 @@ export class BoardService {
     const { serviceFragmentIds, provisioning } = await this.newFrameDefaults(workspaceId)
     const block: Block = {
       id: this.idGenerator.next('blk'),
-      title: `${BLOCK_TYPE_LABEL[type]} ${count}`,
+      title: input.title ?? `${BLOCK_TYPE_LABEL[type]} ${count}`,
       type,
-      description: 'Newly dropped building block. Drag a pipeline onto it to start.',
-      position: input.position,
+      description:
+        input.description ?? 'Newly dropped building block. Drag a pipeline onto it to start.',
+      position: input.position ?? nextFrameSlot(blocks),
       status: 'planned',
       progress: 0,
       dependsOn: [],
@@ -601,8 +626,20 @@ export class BoardService {
    * projection row is linked to it so execution resolves this repo for tasks
    * dropped on the frame. The frontend's drag-drop path uses {@link addFrame};
    * this is the "import an existing repo as a service" button.
+   *
+   * `sharedService` decides what a repository that already backs an account service homed on
+   * ANOTHER board means here; see {@link SharedServicePolicy}. It defaults to the app's `mount`,
+   * so only a caller that cannot address a foreign-homed frame has to say so.
+   *
+   * NOTHING is written until every guard has passed — including the repository's own `isMonorepo`
+   * flag, which this call may change. See `serviceRepoLinkage.ts` for why that ordering is the
+   * rule and not an accident.
    */
-  async addServiceFromRepo(workspaceId: string, input: AddServiceFromRepoInput): Promise<Block> {
+  async addServiceFromRepo(
+    workspaceId: string,
+    input: AddServiceFromRepoInput,
+    sharedService: SharedServicePolicy = 'mount',
+  ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     if (!this.repoProjectionRepository) {
       throw new ValidationError('GitHub integration is not configured')
@@ -612,45 +649,43 @@ export class BoardService {
       'GitHubRepo',
       String(input.repoGithubId),
     )
-    // The monorepo flag is sent with the add request (no separate up-front PATCH).
-    // Persist it when provided so it sticks for subsequent adds + the repo picker, then
-    // proceed with the guards below reading the now-current flag.
-    if (input.isMonorepo !== undefined && input.isMonorepo !== repo.isMonorepo) {
-      await this.repoProjectionRepository.setMonorepo(workspaceId, repo.githubId, input.isMonorepo)
-      repo.isMonorepo = input.isMonorepo
-      // The monorepo flag decides whether `resolveRepoTarget` hands agents the service
-      // subdirectory, so drop the cached projection or a warmed entry keeps serving the
-      // old flag until its TTL — the agent would run at the repo root instead of the pin.
-      await this.repoProjectionCache?.invalidateGroup(workspaceId)
-    }
-    // Normalise the requested service subdirectory to a clean, SAFE relative path:
-    // strip slashes/`.` and reject any `..` segment, so a stored directory can never
-    // point an agent's cwd outside the checkout (the harness enforces the same — this
-    // is defence in depth, and surfaces a clean error before the row is written).
-    const directory = normalizeServiceDirectory(input.directory)
+    // The monorepo flag rides the add request (no separate up-front PATCH), so every guard below
+    // reads the flag as it will stand AFTER this call rather than as it is stored, and the
+    // subdirectory is normalised to a safe relative path before anything can store it.
+    const linkage = resolveServiceRepoLinkage(input, repo.isMonorepo === true)
+    const { directory } = linkage
     // A monorepo can back SEVERAL service frames (one per subdirectory), so the
-    // single-service guard applies only to whole-repo (non-monorepo) repos. A monorepo
-    // service MUST name its subdirectory so execution can scope agents to it. The link
+    // single-service guard applies only to whole-repo (non-monorepo) repos. The link
     // is the account-owned Service, so a duplicate is detected via `getByRepo`.
-    if (!repo.isMonorepo && this.serviceRepository) {
+    if (!linkage.isMonorepo && this.serviceRepository) {
       // Dedup ACCOUNT-scoped (not just same-installation): a service is account-owned and shared
       // across the org's boards, so an existing whole-repo service for this repo anywhere in the
       // account must be MOUNTED here — not duplicated by minting a rival (which could happen if two
       // boards reach the repo through different installations). Mounting gives both boards one
       // shared subtree + task list (composeBoard); idempotent when already on this board. Monorepos
       // are exempt — each subdirectory is its own service (handled by the directory guard below).
-      const existing = await this.findAccountWholeRepoService(workspaceId, repo.githubId)
+      const existing = await this.sharedServiceMount.findAccountWholeRepoService(
+        workspaceId,
+        repo.githubId,
+      )
       if (existing) {
-        return this.mountExistingService(workspaceId, existing, input.position)
+        // Mount FIRST: it carries the last two refusals this path can raise (a cross-account
+        // service, a stale orphan frame, and a foreign home under `refuse`), and the flag write
+        // below must not outlive one of them.
+        const mounted = await this.sharedServiceMount.mountExistingService(
+          workspaceId,
+          existing,
+          sharedService,
+          input.position,
+        )
+        await this.sharedServiceMount.persistMonorepoFlag(workspaceId, repo, linkage)
+        return mounted
       }
-    }
-    if (repo.isMonorepo && !directory) {
-      throw new ValidationError('Select a service directory for this monorepo')
     }
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
     // Each subdirectory of a monorepo backs at most one service — reject a duplicate so
     // two frames don't fight over the same subtree (each resolves to the same repo+dir).
-    if (repo.isMonorepo && directory && this.serviceRepository) {
+    if (linkage.isMonorepo && directory && this.serviceRepository) {
       // One batched read for every frame's service, not a getByFrameBlock per frame (N+1).
       const frameIds = blocks.filter((b) => b.level === 'frame').map((b) => b.id)
       const existing = await this.serviceRepository.listByFrameBlocks(frameIds)
@@ -658,19 +693,21 @@ export class BoardService {
         throw new ValidationError(`A service for '${directory}' already exists in this repository`)
       }
     }
-    const frames = blocks.filter((b) => b.level === 'frame').length
+    await this.sharedServiceMount.persistMonorepoFlag(workspaceId, repo, linkage)
     const title = directory ? (directory.split('/').pop() ?? repo.name) : repo.name
     const { serviceFragmentIds, provisioning } = await this.newFrameDefaults(workspaceId)
     const frameType = input.type ?? 'service'
     const roleLabel = BLOCK_TYPE_LABEL[frameType]
     const block: Block = {
       id: this.idGenerator.next('blk'),
-      title,
+      title: input.title ?? title,
       type: frameType,
-      description: directory
-        ? `${roleLabel} backed by ${repo.owner}/${repo.name} (${directory}/).`
-        : `${roleLabel} backed by ${repo.owner}/${repo.name}.`,
-      position: input.position ?? { x: 80 + (frames % 5) * 48, y: 80 + (frames % 5) * 48 },
+      description:
+        input.description ??
+        (directory
+          ? `${roleLabel} backed by ${repo.owner}/${repo.name} (${directory}/).`
+          : `${roleLabel} backed by ${repo.owner}/${repo.name}.`),
+      position: input.position ?? nextFrameSlot(blocks),
       status: 'ready',
       progress: 0,
       dependsOn: [],
@@ -689,75 +726,6 @@ export class BoardService {
     // A service FRAME, so no payload (see `addBlock`).
     await this.emitBoardChanged(workspaceId, { reason: 'block-added', blockId: block.id })
     return block
-  }
-
-  /**
-   * The account's existing WHOLE-REPO (non-monorepo, no subdirectory) service for a repo, or null.
-   * Account-scoped so it dedups a shared repo across the org regardless of which installation each
-   * board reached it through. Requires the service repo to be wired.
-   */
-  private async findAccountWholeRepoService(
-    workspaceId: string,
-    repoGithubId: number,
-  ): Promise<Service | null> {
-    if (!this.serviceRepository) return null
-    const account = (await this.workspaceRepository.accountOf(workspaceId)) ?? null
-    const services = await this.serviceRepository.listByAccount(account)
-    return services.find((s) => s.repoGithubId === repoGithubId && !s.directory) ?? null
-  }
-
-  /**
-   * Mount an EXISTING account-owned service onto `workspaceId` and return its frame block —
-   * the shared-service path taken by {@link addServiceFromRepo} when the repo already backs a
-   * service. Mounting (not re-creating) is how two boards in one org work on the same service
-   * with a shared subtree/task list. Same-org only; idempotent when already mounted here.
-   */
-  private async mountExistingService(
-    workspaceId: string,
-    service: Service,
-    position?: { x: number; y: number },
-  ): Promise<Block> {
-    if (!this.workspaceMountRepository) {
-      throw new ValidationError('This repository is already linked to a board service')
-    }
-    // A service is shared strictly within its account — never mount one from another org.
-    const account = await this.workspaceRepository.accountOf(workspaceId)
-    if ((account ?? null) !== (service.accountId ?? null)) {
-      throw new ValidationError(
-        'This repository is already linked to a service in another organization',
-      )
-    }
-    const home = await this.blockRepository.findById(service.frameBlockId)
-    if (!home) {
-      // The service's frame block is gone (a stale orphan). Surface a clean error rather than
-      // mounting a dead frame; the delete cascade normally reclaims such orphans.
-      throw new ValidationError('This repository is already linked to a board service')
-    }
-    let mount = await this.workspaceMountRepository.get(workspaceId, service.id)
-    if (!mount) {
-      const existingMounts = await this.workspaceMountRepository.listByWorkspace(workspaceId)
-      // Lay a new mount out on a 5-wide grid (matching ServiceMountService) when no explicit
-      // position is given, so shared services don't pile onto the same point.
-      const n = existingMounts.length
-      mount = {
-        workspaceId,
-        serviceId: service.id,
-        position: position ?? { x: 80 + (n % 5) * 48, y: 80 + Math.floor(n / 5) * 48 },
-        size: null,
-        createdAt: this.clock.now(),
-      }
-      await this.workspaceMountRepository.upsert(mount)
-      // Fan out from the frame's HOME so every board mounting the shared service refreshes. A
-      // FRAME, and each target board reads its own mount, so there is no payload to carry.
-      await this.emitBoardChanged(home.workspaceId, {
-        reason: 'block-added',
-        blockId: home.block.id,
-      })
-    }
-    // The frame block is the one homed on ANOTHER board, carrying that board's coordinates —
-    // return it placed where THIS board just mounted it, or the SPA drops the imported service
-    // at the home board's spot until the next full refresh.
-    return applyMountLayout(home.block, mount)
   }
 
   /**
@@ -966,6 +934,11 @@ export class BoardService {
     return this.publicReads.listServices(workspaceId)
   }
 
+  /** Public-API: the repositories a service can be created against, and what already backs each. */
+  listRepoOptions(workspaceId: string): Promise<PublicRepoOption[]> {
+    return this.publicReads.listRepoOptions(workspaceId)
+  }
+
   /** Public-API: create a task under a visible service frame the workspace owns. */
   addServiceTask(
     workspaceId: string,
@@ -979,6 +952,11 @@ export class BoardService {
   /** Public-API: refuse a service frame that cannot hold a new task, before doing work for one. */
   assertTaskContainer(workspaceId: string, serviceId: string): Promise<Block> {
     return this.publicReads.assertTaskContainer(workspaceId, serviceId)
+  }
+
+  /** Public-API: one visible service frame; null when the id names no service this key may read. */
+  getService(workspaceId: string, serviceId: string): Promise<Block | null> {
+    return this.publicReads.getService(workspaceId, serviceId)
   }
 
   /** Public-API: a board task + its enclosing service frame; null when not externally visible. */
@@ -1351,19 +1329,63 @@ export class BoardService {
 
   /** Toggle a dependency edge: target dependsOn source. */
   async toggleDependency(workspaceId: string, targetId: string, sourceId: string): Promise<Block> {
+    return this.writeDependency(workspaceId, targetId, sourceId, 'toggle')
+  }
+
+  /**
+   * Set a dependency edge EXPLICITLY: `linked` true declares that `targetId` waits for `sourceId`,
+   * false drops the edge. Idempotent in both directions: an edge already in the requested state
+   * is a no-op returning the block as it stands.
+   *
+   * The explicit form beside {@link toggleDependency} rather than instead of it, because the two
+   * doors want different things and neither is the other's read-modify-write. The board CANVAS
+   * toggles: a human clicks an edge they can see, so "flip it" is exactly the intent. An API caller
+   * declares: a provisioning integration re-running its own setup must converge, and a toggle would
+   * INVERT every edge it declared last time, silently, since both calls succeed and the graph it
+   * asked for is the one it does not get. Deriving the explicit form from the toggle would mean the
+   * caller reading the graph first and racing whoever else is editing it.
+   */
+  async setDependency(
+    workspaceId: string,
+    targetId: string,
+    sourceId: string,
+    linked: boolean,
+  ): Promise<Block> {
+    return this.writeDependency(workspaceId, targetId, sourceId, linked ? 'add' : 'remove')
+  }
+
+  private async writeDependency(
+    workspaceId: string,
+    targetId: string,
+    sourceId: string,
+    mode: 'toggle' | 'add' | 'remove',
+  ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     if (targetId === sourceId) {
       throw new ValidationError('A block cannot depend on itself')
     }
     const { homeWorkspaceId, block: target } = await this.resolveBlock(workspaceId, targetId)
-    // The source need only be visible to this board (it may be homed elsewhere); the edge is
-    // stored as an id on the target, which lives at `homeWorkspaceId`.
-    const { block: source } = await this.resolveBlock(workspaceId, sourceId)
-    const i = target.dependsOn.indexOf(sourceId)
+    const existing = target.dependsOn.indexOf(sourceId)
+    // Idempotent for the explicit modes: an edge already where the caller asked for it is returned
+    // untouched rather than re-written, so no event fans out for a change nobody made.
+    if ((mode === 'add' && existing >= 0) || (mode === 'remove' && existing < 0)) return target
+    // Past that guard the three modes agree: `add` can only be here with no edge, `remove` only
+    // with one, and `toggle` means whichever it found. So the branches below stay written against
+    // the edge's ACTUAL presence rather than against the mode, and there is one write path.
+    const i = existing
     if (i < 0) {
-      // Adding a NEW edge. Both endpoints must be tasks: only a task ever reaches `done`, so an
-      // edge onto a frame/module/epic (which never executes) would wedge the engine's start gate
-      // forever (`dependenciesMet` requires the blocker to be `done`). Reject it up front.
+      // Adding a NEW edge. The source need only be visible to this board (it may be homed
+      // elsewhere); the edge is stored as an id on the target, which lives at `homeWorkspaceId`.
+      //
+      // Resolved only on the ADD, because the rules below are about what an edge may point AT and
+      // a REMOVAL is a fact about the target's own row. `pruneDanglingEdges` runs against the
+      // deleted block's home workspace, so a blocker deleted on the board that homes it leaves the
+      // edge behind on a task homed elsewhere — and resolving the source first would make that
+      // edge permanently unremovable, gating the task on a blocker that can never reach `done`.
+      const { block: source } = await this.resolveBlock(workspaceId, sourceId)
+      // Both endpoints must be tasks: only a task ever reaches `done`, so an edge onto a
+      // frame/module/epic (which never executes) would wedge the engine's start gate forever
+      // (`dependenciesMet` requires the blocker to be `done`). Reject it up front.
       if (target.level !== 'task' || source.level !== 'task') {
         throw new ValidationError('Only tasks can have dependency edges')
       }
@@ -1401,25 +1423,4 @@ export class BoardService {
     await this.emitBoardChanged(homeWorkspaceId, { reason: 'dependency-toggled', block: updated })
     return updated
   }
-}
-
-/**
- * Coerce a user-supplied monorepo service subdirectory into a clean, SAFE relative path
- * (or undefined when absent/empty): normalise separators, drop `.`/empty segments, and
- * reject any `..` segment or absolute path so the stored value can never escape the repo
- * checkout when it later becomes an agent's cwd. Mirrors the harness's `sanitizeService
- * Directory`, kept here so a bad value is rejected before the service row is written.
- */
-export function normalizeServiceDirectory(raw: string | undefined): string | undefined {
-  if (!raw) return undefined
-  const segments = raw
-    .trim()
-    .replace(/\\/g, '/')
-    .split('/')
-    .filter((s) => s !== '' && s !== '.')
-  if (segments.length === 0) return undefined
-  if (segments.some((s) => s === '..')) {
-    throw new ValidationError('Service directory must be a path inside the repository')
-  }
-  return segments.join('/')
 }

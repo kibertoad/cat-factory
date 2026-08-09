@@ -95,6 +95,24 @@ export {
   type BinaryGeneratorDefinition,
   defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
+// Installation-level extension point for the deployment's OWN BINARY ARTIFACT STORES (parity with
+// the Node facade): a deployment news a `defaultBinaryStoreRegistry()`, registers stores
+// implementing the `BinaryBlobBackend` port on it, and passes it via the `binaryStoreRegistry`
+// option. Each becomes a `custom` choice in the account-settings storage picker. Register these
+// HERE even in mothership mode, unlike the integrations above: this node writes the bytes, so this
+// node is the only process that can hold the client that writes them. Register them on the
+// MOTHERSHIP too, and for the mirror image of the same reason: the artifact-retention sweep runs
+// there and deletes through its own client, so stores registered only here are written to and
+// never reclaimed.
+export {
+  BinaryStoreRegistry,
+  BinaryStoreRegistrationError,
+  type BinaryStoreContext,
+  type BinaryStoreDefinition,
+  type BinaryStoreView,
+  type BinaryBlobBackend,
+  defaultBinaryStoreRegistry,
+} from '@cat-factory/kernel'
 // Installation-level extension point for polling GATES and STEP RESOLVERS (parity with the Node
 // facade). `gateRegistryWithBuiltins()` is the one a deployment almost always wants: a bare
 // `defaultGateRegistry()` is EMPTY, so injecting one silently drops `ci` / `conflicts` /
@@ -191,13 +209,15 @@ export {
 // The BUILT-IN pipeline ids, so an operation can pin one of the shipped pipelines (or a task type
 // can name it as its `defaultPipelineId`) without restating a string the platform owns.
 export {
-  BLUEPRINT_PIPELINE_ID,
+  BLUEPRINT_AGENT_KIND,
+  ENVIRONMENT_ANALYST_AGENT_KIND,
   INITIATIVE_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,
   BUILD_PIPELINE_ID,
   SIMPLE_PIPELINE_ID,
   ADAPTIVE_BUILD_PIPELINE_ID,
-  TECH_DEBT_PIPELINE_ID,
+  COMPLEX_BUILD_PIPELINE_ID,
+  defaultBuildPipelineId,
   BUG_TRIAGE_PIPELINE_ID,
   BUGFIX_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,

@@ -14,7 +14,7 @@ import type { ConformanceHarness } from '../harness.js'
 // controller wiring. A facade that mounts the decision routes but forgets the review store — or
 // persists `intakeOrigin` on one runtime only — fails here instead of shipping divergent behaviour.
 //
-// See docs/initiatives/headless-clarification-loop.md.
+// See backend/docs/adr/0047-headless-clarification-loop.md.
 
 /** Mint a public-API key of the given scope and return its bearer header. */
 async function mintKey(
@@ -481,7 +481,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     expect(initiative.headlessStartable).toBe(true)
 
     // A container/repo pipeline is never headless-startable, whatever the caller's scope.
-    const build = listed.body.pipelines.find((p) => !p.public && p.pipelineId !== 'pl_blueprint')
+    const build = listed.body.pipelines.find((p) => !p.public)
     expect(build?.headlessStartable).toBe(false)
   })
 
@@ -500,6 +500,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Coder only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const started = await app.call(
@@ -520,6 +521,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     const { workspace: uiWorkspace } = await app.createOrgWorkspace({ seed: true })
     const uiPipeline = await app.call<Pipeline>('POST', `/workspaces/${uiWorkspace.id}/pipelines`, {
       name: 'Coder only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const uiStart = await app.call<ExecutionInstance>(
@@ -546,6 +548,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     // An approval gate on an enabled step is the simplest park: no review module involved.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated coder',
+      purpose: 'build',
       agentKinds: ['coder'],
       gates: [true],
     })
@@ -594,6 +597,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     registry.register({
       id: PIPELINE_ID,
       name: 'Gated coder',
+      purpose: 'build',
       builtin: true,
       version: 1,
       agentKinds: ['coder'],
@@ -647,6 +651,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
 
     const parking = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Coder then human review',
+      purpose: 'build',
       agentKinds: ['coder', 'human-review'],
     })
     const refused = await app.call<{ error: { code: string; message: string } }>(
@@ -668,6 +673,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     // quietly re-scope ordinary board work, which is the failure mode that would hurt most.
     const plain = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Coder only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const started = await app.call(
@@ -702,6 +708,7 @@ function registerAnsweringTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Coder only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const started = await app.call<ExecutionInstance>(
@@ -753,6 +760,7 @@ function registerAnsweringTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Unparking estimator',
+      purpose: 'build',
       agentKinds: ['task-estimator'],
     })
     // A title-only task: nothing an agent could act on.
@@ -884,6 +892,7 @@ function registerApprovalAnsweringTests(harness: ConformanceHarness): void {
 
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated architect',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       gates: [true, false],
     })
@@ -1010,6 +1019,7 @@ function registerDialogueAnsweringTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Triage & investigate',
+      purpose: 'build',
       agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
     })
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -1092,6 +1102,7 @@ function registerStaleRunTests(harness: ConformanceHarness): void {
     await app.seedReadyReview(wsId, 'task_login')
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Coder only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
 
@@ -1156,6 +1167,7 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Coder only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const started = await app.call<ExecutionInstance>(
@@ -1184,6 +1196,7 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${a.id}/pipelines`, {
       name: 'Coder only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const started = await app.call<ExecutionInstance>(

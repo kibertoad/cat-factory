@@ -107,8 +107,7 @@ export class GateHelperDispatcher {
       // `pendingFix.instructions`), which both arrive here as `failureSummary`.
       lastDispatchedInstructions: failureSummary ?? step.gate?.lastDispatchedInstructions ?? null,
     }
-    await this.deps.runStateMachine.casPersist(workspaceId, instance)
-    await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+    await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 }

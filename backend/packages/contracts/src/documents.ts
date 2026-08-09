@@ -144,6 +144,34 @@ export function deploymentScopedSources(): DocumentSourceKind[] {
 }
 
 /**
+ * What became of the RENDERED IMAGES of a design document at its last import.
+ *
+ * A design source describes screens twice over: as the structure/styling text an agent reads, and
+ * as the pixels a person recognises. The second half is retained as `reference` binary artifacts
+ * keyed to the document, and this is the one field that says whether that happened, because every
+ * failure mode of it renders as the same absence of images and each asks for a different fix:
+ * configure image storage, retry a rate-limited source, or nothing at all.
+ *
+ * NULL is a fourth state and the commonest one: this document has no renders to speak of, either
+ * because its source is prose or because it was imported before renders existed. That is
+ * "not applicable", never "none were retained" — the distinction the vocabulary below exists to
+ * keep.
+ */
+export const documentRenderStatusSchema = v.picklist([
+  /** Every image the source offered was retrieved and retained. */
+  'stored',
+  /** Some were retained and some could not be; the document is partly illustrated. */
+  'partial',
+  /** The source offered no image for this reference (an empty file, a frame that renders to nothing). */
+  'none',
+  /** The source's render read failed outright. A retry or a look at the source is the fix. */
+  'failed',
+  /** This deployment/account retains no image storage, so nothing was even downloaded. */
+  'storage_unavailable',
+])
+export type DocumentRenderStatus = v.InferOutput<typeof documentRenderStatusSchema>
+
+/**
  * Order sources by how much a claim over a URL is WORTH: host-pinned first, registration order
  * within each pass. Every caller that asks "which source does this text belong to" reads this,
  * because the answer is only as good as the ordering (see {@link DocumentSourceTraits.hostPinned}):
@@ -255,6 +283,43 @@ export const documentFreshnessSchema = v.variant('status', [
 export type DocumentFreshness = v.InferOutput<typeof documentFreshnessSchema>
 
 /**
+ * One linked document a DISPATCH put in front of an agent, and the freshness verdict that
+ * dispatch reached about it.
+ *
+ * The verdict is computed per dispatch and rendered into the agent's context, where it does its
+ * job and then vanishes with the container. So "which revision did this run build against" was
+ * answerable only while the run was still live, and only by re-probing the source, which by then
+ * answers about the CURRENT revision, not the one the agent read. A design under active iteration
+ * is exactly where that question gets asked, and exactly where re-probing gives the wrong answer.
+ *
+ * Recorded on the step for the same reason `toolServers` and `skillVersions` are: it is what the
+ * dispatch resolved and no later reader can re-derive. The BODY is deliberately not here: it is
+ * large, it is already in the documents table, and what is unrecoverable is the pairing of a
+ * document with the revision this step read.
+ *
+ * `freshness` absent means the deployment ran no check at all (no refresher wired), which is not
+ * the same as {@link DocumentFreshness}'s `unconfirmed`: nobody asked, versus asked and could not
+ * tell. Only the second is a warning about the copy.
+ */
+export const stepContextDocumentSchema = v.object({
+  title: v.string(),
+  /**
+   * The source's own id for this page, which is what makes a row IDENTIFIABLE across the
+   * dispatches that read it. It is carried rather than derived because the two visible fields
+   * cannot stand in for it: `url` is EMPTY for an `upload`, so a key falling back to the title
+   * would merge two same-titled uploads into one row and read their differing revisions as a
+   * single page that MOVED mid-run. Same `(origin, externalId)` pair the
+   * document repository and the linked-context resolver key by.
+   */
+  externalId: v.string(),
+  /** Canonical URL on the source. EMPTY for an `upload`, which has no source to link to. */
+  url: v.string(),
+  origin: documentOriginSchema,
+  freshness: v.optional(documentFreshnessSchema),
+})
+export type StepContextDocument = v.InferOutput<typeof stepContextDocumentSchema>
+
+/**
  * The role a workspace+`DocKind`-scoped document link plays for the forward document-authoring
  * track (WS1 items 2–4). A `template` link's parsed sections REPLACE the built-in skeleton for
  * that kind (singular per kind — linking a new one replaces the prior override); `exemplar`
@@ -283,6 +348,26 @@ export const credentialFieldSchema = v.object({
 export type CredentialField = v.InferOutput<typeof credentialFieldSchema>
 
 /**
+ * A source's OAuth (`authorization_code`) connect half, when it declares one.
+ *
+ * Presence here says the SOURCE can be connected this way, never that this DEPLOYMENT can run the
+ * flow: that needs a registered OAuth client, which is deployment configuration and is reported
+ * separately (`oauthSources` on the source listing). The two are deliberately different facts,
+ * because they need different fixes: a source with no OAuth half will never gain a button, while
+ * one whose deployment has registered no client gains it the moment an admin does.
+ */
+export const documentSourceOAuthDescriptorSchema = v.object({
+  /**
+   * What the vendor's consent screen will ask for, so the operator reads it BEFORE being sent
+   * there rather than on a page they cannot come back from without deciding.
+   */
+  scopes: v.array(v.string()),
+})
+export type DocumentSourceOAuthDescriptor = v.InferOutput<
+  typeof documentSourceOAuthDescriptorSchema
+>
+
+/**
  * Everything the frontend needs to render a source's connect form and import
  * box without hard-coding any provider specifics.
  */
@@ -304,6 +389,12 @@ export const documentSourceDescriptorSchema = v.object({
    * backward-compatibility; absent is treated as `false`.
    */
   searchable: v.optional(v.boolean()),
+  /**
+   * The source's OAuth connect half, when it has one. Absent means the credential fields above
+   * are the ONLY way in; present means a deployment MAY additionally offer "Connect with <source>"
+   * (see {@link documentSourceOAuthDescriptorSchema} for why presence is not availability).
+   */
+  oauth: v.optional(documentSourceOAuthDescriptorSchema),
 })
 export type DocumentSourceDescriptor = v.InferOutput<typeof documentSourceDescriptorSchema>
 
@@ -345,6 +436,12 @@ export const sourceDocumentSchema = v.object({
   docKind: v.nullable(v.picklist(DOC_KINDS)),
   /** When this projection row was last refreshed (epoch ms). */
   syncedAt: v.number(),
+  /**
+   * What became of this document's rendered images at its last import, or null when the question
+   * does not apply (see {@link documentRenderStatusSchema}). Nullable rather than optional so a
+   * reader cannot mistake a source that has no renders for a field the server forgot to send.
+   */
+  renderStatus: v.nullable(documentRenderStatusSchema),
 })
 export type SourceDocument = v.InferOutput<typeof sourceDocumentSchema>
 
@@ -403,6 +500,21 @@ export const documentBoardPlanSchema = v.object({
   source: documentOriginSchema,
   externalId: v.string(),
   planner: v.picklist(['llm', 'headings']),
+  /**
+   * The existing service frame this plan was authored FOR, or null when it proposes a whole
+   * architecture at the board root.
+   *
+   * The preview reads completely differently under the two: a board-scoped plan's `frames` are
+   * services about to be created, while a targeted plan carries exactly ONE frame standing for the
+   * target, whose modules and tasks are what will be added inside it. Without this the SPA would
+   * announce three new services over a spawn that creates three modules in one.
+   *
+   * It is also what makes the `frameId` spawn honest. Flattening a board-scoped plan into a frame
+   * discards the frame titles, types and descriptions the preview rendered, which is why the SPA
+   * never sent one; a plan authored for the target discards nothing, because the single frame IS
+   * the target.
+   */
+  targetFrameId: v.nullable(v.string()),
   frames: v.array(planFrameSchema),
 })
 export type DocumentBoardPlan = v.InferOutput<typeof documentBoardPlanSchema>
@@ -526,9 +638,16 @@ export const searchDocumentsSchema = v.object({
 })
 export type SearchDocumentsInput = v.InferOutput<typeof searchDocumentsSchema>
 
-/** Preview the board structure a page would expand into (no writes). */
+/**
+ * Preview the board structure a page would expand into (no writes).
+ *
+ * `frameId` makes the plan TARGET-AWARE: the planner is told which service it is proposing work
+ * inside, and answers with that frame's modules and tasks rather than an architecture. It is the
+ * same frame the following spawn is given, so the preview and the write agree about the target.
+ */
 export const planDocumentSchema = v.object({
   externalId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  frameId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
 })
 export type PlanDocumentInput = v.InferOutput<typeof planDocumentSchema>
 

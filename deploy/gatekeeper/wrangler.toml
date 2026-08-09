@@ -1,0 +1,60 @@
+# Cloudflare OS Gatekeeper: the Cloudflare Worker.
+#
+# This is a TEMPLATE, not a live deployment. Every origin below is an example.com
+# hostname or a REPLACE_WITH_* placeholder, so `wrangler deploy` fails loudly
+# against it until you have filled them in rather than pointing your OS workspace
+# at somebody else's cat-factory.
+#
+# Copy this package, set the vars below, put the three secrets, then deploy:
+#
+#   wrangler secret put PROVISIONING_KEY   # an `admin` cat-factory API key
+#   wrangler secret put WEBHOOK_SECRET     # 16-200 chars; signs every delivery
+#   wrangler secret put OS_SHARED_TOKEN    # the bearer your Cloudflare OS presents
+#
+# The provisioning key is the only cat-factory credential this Worker holds. Every
+# per-user key it mints is derived from it and stored in the Durable Object, never
+# handed to an agent. Revoking the provisioning key revokes every key it minted,
+# which is the intended kill switch: rotating it costs one refused call per actor,
+# because a 401 drops the cached key and mints again. To retire ONE person rather
+# than everybody, POST /admin/retire?actorId=<their OS identity>.
+name = "cat-factory-gatekeeper"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# The cat-factory deployment this Gatekeeper is paired with.
+CAT_FACTORY_BASE_URL = "https://cat-factory.example.com"
+# This Worker's own public origin. The platform delivers webhooks to <PUBLIC_URL>/webhook,
+# and the URL must be public https: loopback and private hosts are refused at registration.
+PUBLIC_URL = "https://gatekeeper.example.com"
+# The outbound-webhook id this Gatekeeper enrols under. Caller-chosen and idempotent, so a
+# cold start re-asserts it without displacing another integration's endpoint. Keep it stable:
+# changing it leaves the old registration behind, still delivering.
+WEBHOOK_ID = "gatekeeper"
+
+# One object per paired deployment: the delivery dedupe log, the open approval cards, and the
+# per-actor keys minted from the provisioning secret.
+[[durable_objects.bindings]]
+name = "STATE"
+class_name = "GatekeeperState"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GatekeeperState"]
+
+# Re-assert the webhook registration hourly. The registration lives on the cat-factory side
+# where it can be edited or dropped, and a Gatekeeper that enrolled only at first boot would
+# then go quiet with nothing failing.
+[triggers]
+crons = ["0 * * * *"]
+
+[observability]
+enabled = true
+
+# The per-resource object a Cloudflare OS workspace binds. It holds a session's submitted-but-
+# undecided actions in memory (an approved action is performed by the same suspended call that
+# submitted it, so nothing has to survive the object), but the class still has to be declared.
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["CatFactoryResource"]

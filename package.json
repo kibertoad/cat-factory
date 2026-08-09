@@ -11,7 +11,7 @@
     "test": "turbo run test:run",
     "test:run": "turbo run test:run",
     "test:changed": "turbo run test:run --concurrency=50% --output-logs=errors-only --env-mode=loose --filter='...[origin/main]'",
-    "test:quick": "turbo run test:run --concurrency=50% --output-logs=errors-only --filter='!@cat-factory/worker' --filter='!@cat-factory/node-server' --filter='!@cat-factory/local-server'",
+    "test:quick": "turbo run test:run --concurrency=50% --output-logs=errors-only --filter='!@cat-factory/worker' --filter='!@cat-factory/node-server' --filter='!@cat-factory/local-server' --filter='!@cat-factory/gatekeeper-worker'",
     "lint": "oxlint && oxfmt --check .",
     "lint:fix": "oxlint --fix && oxfmt .",
     "lint:monorepo": "sherif -i typescript -i @types/node",
@@ -35,12 +35,12 @@
     "@changesets/cli": "^2.31.1",
     "@stryker-mutator/api": "9.6.1",
     "@valibot/to-json-schema": "^1.7.1",
-    "knip": "^6.31.0",
+    "knip": "^6.32.0",
     "oxfmt": "^0.62.0",
     "oxlint": "^1.77.0",
     "publint": "^0.3.23",
     "sherif": "^1.13.0",
-    "turbo": "^2.10.8",
+    "turbo": "^2.10.9",
     "typescript": "7.0.2"
   },
   "engines": {

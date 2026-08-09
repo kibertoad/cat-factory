@@ -29,10 +29,10 @@ export function publicDiscoveryController(): Hono<AppEnv> {
     // the caller just presented.
     const gate = await authorize(c, getPublicIdentityContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    const { keyId, accountId, workspaceId, scope, label, createdAt } = gate.auth
+    const { keyId, accountId, workspaceId, scope, label, externalIdentity, createdAt } = gate.auth
     // Straight off the auth result: `authenticate` already loaded the row, so self-description
     // costs no read of its own.
-    return c.json({ keyId, accountId, workspaceId, scope, label, createdAt }, 200)
+    return c.json({ keyId, accountId, workspaceId, scope, label, externalIdentity, createdAt }, 200)
   })
 
   buildHonoRoute(app, listPublicTaskTypesContract, async (c) => {

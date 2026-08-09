@@ -1,5 +1,6 @@
 import type {
   BugCandidate,
+  IssueIntakePredicate,
   TaskSourceKind,
   TaskSourceDescriptor,
   TaskSourceDiagnostic,
@@ -9,6 +10,7 @@ import type {
   TrackerBoard,
 } from '../domain/types.js'
 import type { TaskSourceWebhookAdapter } from './tracker-webhook.js'
+import type { TaskSourceWritebackAdapter } from './task-source-writeback.js'
 
 // Port for a single task source (Jira, …). A provider is the only place that
 // knows a source's specifics: how to validate its credentials, how to turn user
@@ -79,6 +81,25 @@ export interface TaskSearchRepoScope {
 }
 
 /**
+ * The rules a REPO-BACKED source states about the one repository an issue of its belongs to.
+ * See {@link TaskSourceProvider.repoScope} for why they are one member rather than several.
+ */
+export interface TaskRepoScopeRules {
+  /**
+   * Whether an external id of this source names `scope`'s repository.
+   *
+   * Owned by the source because the COMPARISON differs per vendor: GitHub owner/repo names are
+   * case-insensitive, GitLab project paths are not, and a GitLab path NESTS where a GitHub owner
+   * is one segment. A shared comparator would have to pick one rule and would then either hide a
+   * legitimately-cased GitHub row or fold two distinct GitLab projects together.
+   *
+   * An id that does not parse (a stale or hand-edited row) is OUT of scope rather than in every
+   * scope: a row whose repository cannot be read is not evidence that it is this one.
+   */
+  matches(externalId: string, scope: TaskSearchRepoScope): boolean
+}
+
+/**
  * A predicate search for issue intake (the recurring `bug-intake` step) and for the
  * interactive bug hunt: find **open** issues on one vendor board matching the caller's
  * predicates, **oldest first** (deterministic pickup order). Providers push every
@@ -100,13 +121,19 @@ export interface IssueIntakeQuery {
     jiraProjectKey?: string
     linearTeamId?: string
     githubRepo?: string
+    /** GitLab project as its full path with namespace, e.g. `group/sub/project`. */
+    gitlabProject?: string
     boardId?: string
   }
   /** Substring that must appear in the issue title. */
   titleFragment?: string
   /** Label(s) that must ALL be present on the issue. */
   labels?: string[]
-  /** Issue type name (Jira issue type / GitHub org issue type). Sources without a type notion ignore it. */
+  /**
+   * Issue type name (Jira issue type / GitHub org issue type). A source whose vendor has no
+   * type notion that can mean "bug" ignores it, and SAYS SO through
+   * {@link TaskSourceProvider.ignoredIntakePredicates} rather than dropping it quietly.
+   */
   issueType?: string
   /**
    * Restrict to issues with NO assignee. The bug hunt sets it (an unowned bug is what
@@ -123,6 +150,18 @@ export interface IssueIntakeQuery {
   /** Max hits to return. Small — the intake step picks exactly one. */
   limit: number
 }
+
+/**
+ * The narrowing predicates on {@link IssueIntakeQuery} a source can be asked to evaluate, named
+ * so a provider whose vendor cannot express one can STATE that rather than drop it.
+ *
+ * Only the predicates a caller CHOOSES are members. `board` and `limit` are not: a source that
+ * could not scope its scan or bound its result would not be an intake source at all, so there is
+ * no honest "ignored" answer for either. `excludeExternalIds` is not one either, because no
+ * vendor expresses it and every provider already overscans and filters, which is evaluation
+ * rather than omission.
+ */
+export type { IssueIntakePredicate }
 
 /**
  * A selectable "board" on a tracker (Jira project / Linear team / GitHub repository) and one
@@ -156,8 +195,39 @@ export interface TaskSourceProvider {
   normalizeConnection(input: TaskCredentials): NormalizedTaskConnection
   /** Resolve a stable issue key from raw user input (a bare key or an issue URL); null if unparseable. */
   parseRef(input: string): string | null
-  /** Fetch a single issue by its key using the connection credentials. */
-  fetchTask(credentials: TaskCredentials, externalId: string): Promise<TaskContent>
+  /**
+   * Present ⇔ this source is REPO-BACKED: every issue of its belongs to one repository, named by
+   * its external id. Absent for a source with no repository notion (Jira, Linear).
+   *
+   * That single fact drives BOTH of the consequences a repo-backed source has, which is why they
+   * ride one member instead of a declared flag beside a matcher:
+   *
+   *  - {@link TaskSourceProvider.search} REQUIRES a {@link TaskSearchRepoScope} and refuses
+   *    `null`, so the caller resolves the searching service's repo before it asks.
+   *  - The workspace's imported rows are FILTERED to a resolved scope, so a service frame's
+   *    quick-pick list holds its own repository's issues and not the connection's other ones.
+   *
+   * Two members could disagree, and each direction is a live bug that reads as working: a source
+   * declared repo-backed with nothing to match by is a search that refuses and a list that never
+   * narrows, and a matcher on a source nothing asks to scope is an unscoped vendor search
+   * returning whatever the credential can reach. Neither is spellable here.
+   */
+  readonly repoScope?: TaskRepoScopeRules
+  /**
+   * Fetch a single issue by its key using the connection credentials.
+   *
+   * `workspaceId` is the workspace the import runs in, and it is REQUIRED for the same reason
+   * {@link TaskSourceProvider.search}'s is: a provider that authenticates out-of-band (GitHub
+   * Issues rides the workspace's App; GitLab Issues rides its VCS connection) has no
+   * credentials in the bag to resolve, and an external id names a repository, not a tenant.
+   * Without it such a provider can only scan every connection on the deployment for one that
+   * can read the id, which reads another tenant's issue whenever the ids collide.
+   */
+  fetchTask(
+    credentials: TaskCredentials,
+    externalId: string,
+    workspaceId: string,
+  ): Promise<TaskContent>
   /**
    * Search the tracker by free text and return lean hits (no description/
    * comments). Optional: a provider that only supports paste-a-URL import omits
@@ -169,15 +239,16 @@ export interface TaskSourceProvider {
    * ignores `credentials`) can scope the search to that workspace's installation
    * instead of leaking across tenants.
    *
-   * `scope` pins a repo-backed source (GitHub Issues) to a single repository — the one the
-   * service the search runs from is linked to — so the results are that service's own issues
-   * and a bare issue number resolves against it. It is a REQUIRED parameter carrying a
-   * NULLABLE value, deliberately: `null` means "this source has no repo to narrow to" (Jira,
-   * Linear), which every caller must state rather than reach by omitting an argument. That
-   * distinction is load-bearing, because a repo-backed search is not merely broader without a
-   * scope — GitHub's `/search/issues` has no scope of its own, so an unscoped query returns
-   * whatever the CREDENTIAL can reach, which under a PAT is every public repository on GitHub.
-   * A repo-backed provider therefore throws on `null`; a repo-less one ignores it (and its
+   * `scope` pins a repo-backed source (one declaring {@link TaskSourceProvider.repoScope}) to a
+   * single repository: the one the service the search runs from is linked to, so the results are
+   * that service's own issues and a bare issue number resolves against it. It is a REQUIRED
+   * parameter carrying a NULLABLE value, deliberately: `null` means "this source has no repo to
+   * narrow to" (Jira, Linear), which every caller must state rather than reach by omitting an
+   * argument. That distinction is load-bearing, because a repo-backed search is not merely
+   * broader without a scope: GitHub's `/search/issues` has no scope of its own, so an unscoped
+   * query returns whatever the CREDENTIAL can reach, which under a PAT is every public
+   * repository on GitHub, and GitLab's `/search?scope=issues` is the same shape one instance
+   * down. A repo-backed provider therefore throws on `null`; a repo-less one ignores it (and its
    * implementation simply declares fewer parameters).
    */
   search?(
@@ -199,6 +270,26 @@ export interface TaskSourceProvider {
     query: IssueIntakeQuery,
     workspaceId: string,
   ): Promise<TaskSearchResult[]>
+  /**
+   * The {@link IssueIntakeQuery} predicates this provider does NOT push into its vendor query,
+   * because the vendor has no way to express them. Absent or empty ⇒ every predicate bites.
+   *
+   * It exists because a dropped predicate is INVISIBLE at every layer that would otherwise catch
+   * it: the query still compiles, the vendor still answers, and the caller still gets issues, just
+   * a wider set than the one it asked for. On a `bug-intake` schedule that is not a cosmetic gap —
+   * `issueType` defaults to `bug`, so a source that ignores it starts the bugfix pipeline on
+   * whatever is oldest and open, and the operator's only evidence is a run on a docs chore.
+   *
+   * DECLARED rather than derived, unlike `supportsIntake`: the four vendor grammars share no shape
+   * to inspect (JQL text, a GraphQL filter tree, GitHub qualifiers, GitLab request parameters), so
+   * there is nothing to ask. What keeps a declaration honest is a test that compiles each source's
+   * query with and without each predicate and asserts the pair differs exactly where this list
+   * says it should, which is the same fact read off the compiler rather than restated beside it.
+   *
+   * It reaches the SPA on `TaskSourceState`, so the form that offers a predicate is the form that
+   * says when it will not be applied and what to narrow with instead.
+   */
+  readonly ignoredIntakePredicates?: readonly IssueIntakePredicate[]
   /**
    * List the boards a hunt can be scoped to — Jira projects, Linear teams, GitHub
    * repositories. Optional: a provider without it can't back the bug hunt's board
@@ -246,6 +337,31 @@ export interface TaskSourceProvider {
    * receiver owns only the transport (raw body, ack fast, hand off to the facade's queue).
    */
   readonly webhook?: TaskSourceWebhookAdapter
+  /**
+   * Outbound-writeback capability: comment on / resolve / claim one of this source's issues, so
+   * the engine can write a run's progress back where the work was requested. Optional: a
+   * provider without it never receives a writeback call, which is the outbound counterpart of a
+   * provider without {@link TaskSourceProvider.webhook} never receiving a delivery.
+   *
+   * It rides the provider for the same reason the webhook adapter does: the writeback was a
+   * per-vendor `if`-chain in one service, so a source outside the chain (GitLab Issues, anything
+   * a deployment registers) got the whole intake path and none of the loop that answers it.
+   */
+  readonly writeback?: TaskSourceWritebackAdapter
+  /**
+   * Whether two of this source's BOARD ids name the same board (a Jira project key, a Linear team
+   * id, an `owner/repo` slug, a GitLab project path). Absent ⇒ compared case-INSENSITIVELY, which
+   * is right for every vendor that folds case itself and harmless for an opaque id.
+   *
+   * Declared here because the answer is the source's, exactly as {@link TaskRepoScopeRules.matches}
+   * is: GitHub owner/repo names and Jira project keys fold case, GitLab project paths do NOT, and
+   * a shared comparator has to pick one. Getting it wrong is invisible rather than loud: the
+   * caller is the push-intake matcher, so a folded GitLab comparison silently admits a delivery
+   * from `Acme/web` to a schedule scoped to `acme/web`, two different projects at the vendor,
+   * and under the `per-ticket` dispatch mode that is a real block and a real agent run on a
+   * stranger's issue.
+   */
+  sameBoard?(a: string, b: string): boolean
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

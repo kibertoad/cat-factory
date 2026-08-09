@@ -11,6 +11,7 @@ import type { IssueIntakeRefusalReason } from '@cat-factory/contracts'
 import { BUILTIN_TASK_SOURCE_KINDS } from '@cat-factory/contracts'
 import { apiErrorReason } from '~/composables/api/errors'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
+import { appliesIntakePredicate } from '~/utils/intakePredicates'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -48,6 +49,10 @@ const intakeSource = ref<TaskSourceKind | null>(null)
 const intakeJiraProjectKey = ref('')
 const intakeLinearTeamId = ref('')
 const intakeGithubRepo = ref('')
+// A GitLab project is its full path with namespace, which NESTS (`group/sub/project`), so it is
+// its own field rather than a reuse of the GitHub one: the two are not the same shape and the two
+// providers read different legs of the stored board scope.
+const intakeGitlabProject = ref('')
 /**
  * The board scope for a DEPLOYMENT-REGISTERED source, held opaquely. Its own field rather than
  * reusing one of the three above, mirroring `issueIntakeConfigSchema.board.boardId`: only that
@@ -136,17 +141,29 @@ const selectedPipeline = computed(() => pipelines.getPipeline(pipelineId.value))
 // description (and so we know to show the tracker config).
 //
 // Only the pipelines whose SHAPE is specific to one kind of recurring work can be inferred this
-// way. `dep-update` no longer can: its pipeline was retired in the catalog collapse (it was the
-// ordinary build tail under a recurring name), so a dependency-update schedule now runs an ordinary
-// build rung — which is also what every generic schedule runs, so inferring the template from it
-// would mislabel all of them. The template itself survives for an explicit API caller; see
-// `scheduleTemplateSchema`.
-const template = computed<ScheduleTemplate>(() => {
-  if (pipelineId.value === 'pl_tech_debt') return 'tech-debt'
-  if (pipelineId.value === 'pl_bug_triage') return 'bug-triage'
-  return 'custom'
+// way, and `bug-triage` is now the only one: `dep-update` and `tech-debt` were both retired from
+// the catalog (the first was the ordinary build tail under a recurring name, the second that tail
+// behind an audit head), so those schedules now run an ordinary build rung — which is also what
+// every generic schedule runs, so inferring a template from it would mislabel all of them. Both
+// templates survive for an explicit API caller; see `scheduleTemplateSchema`.
+const template = computed<ScheduleTemplate>(() =>
+  pipelineId.value === 'pl_bug_triage' ? 'bug-triage' : 'custom',
+)
+/**
+ * Whether the picked pipeline FILES a ticket (an enabled `tracker` step), so the schedule's first
+ * run has somewhere to file it. Read off the pipeline's SHAPE, exactly as `isBugIntake` below is,
+ * rather than off the inferred template: `pl_tech_debt` — the one preset this used to key on — was
+ * retired, and what replaces it is a schedule pointed at a pipeline someone composed with an
+ * `analysis` + `tracker` head. Keying on the id would have offered the tracker config to exactly
+ * the one pipeline that no longer exists, and to none of the pipelines that now do this work.
+ */
+const filesTicket = computed(() => {
+  const pipeline = selectedPipeline.value
+  if (!pipeline) return false
+  return pipeline.agentKinds.some(
+    (kind, i) => kind === 'tracker' && pipeline.enabled?.[i] !== false,
+  )
 })
-const isTechDebt = computed(() => template.value === 'tech-debt')
 
 // A pipeline whose ENABLED steps include `bug-intake` pulls its work from the tracker board, so
 // the intake config is surfaced + required. Mirrors the backend `pipelineHasEnabledBugIntake`
@@ -175,8 +192,25 @@ const intakeDispatch = computed<'queue' | 'per-ticket'>(() =>
   isBugIntake.value ? 'queue' : 'per-ticket',
 )
 
-// Sources that can back intake right now (connected / App-installed AND enabled).
-const intakeSources = computed(() => tasks.offeredSources)
+// Sources that can back intake right now: connected / App-installed AND enabled, AND able to run
+// the predicate search intake fires. The last is not a refinement of the first two — a source
+// without it saves a schedule that can never produce a ticket — so it is asked of the server
+// (`supportsIntake`, derived from the registered provider) rather than inferred from the id here.
+const intakeSources = computed(() => tasks.offeredSources.filter((s) => s.supportsIntake))
+
+/** The selected source's state, which is what declares the predicates it will not apply. */
+const intakeSourceState = computed(() =>
+  intakeSource.value ? tasks.descriptorFor(intakeSource.value) : undefined,
+)
+const intakeSourceLabel = computed(() => intakeSourceState.value?.label ?? '')
+/**
+ * Whether the selected source will actually apply the issue-type predicate. A schedule fires
+ * unattended, and `BugIntakeService` defaults the predicate to `bug`, so a source that drops it
+ * starts the bugfix pipeline on whatever is oldest and open with nothing to point at.
+ */
+const intakeIssueTypeApplies = computed(() =>
+  appliesIntakePredicate(intakeSourceState.value, 'issueType'),
+)
 
 watch(open, (isOpen) => {
   if (!isOpen) return
@@ -196,6 +230,7 @@ watch(open, (isOpen) => {
   intakeJiraProjectKey.value = ''
   intakeLinearTeamId.value = ''
   intakeGithubRepo.value = ''
+  intakeGitlabProject.value = ''
   intakeBoardId.value = ''
   trackerTrigger.value = false
   intakeTitleFragment.value = ''
@@ -226,6 +261,7 @@ const { requestClose } = useUnsavedGuard({
     intakeJiraProjectKey: intakeJiraProjectKey.value.trim(),
     intakeLinearTeamId: intakeLinearTeamId.value.trim(),
     intakeGithubRepo: intakeGithubRepo.value.trim(),
+    intakeGitlabProject: intakeGitlabProject.value.trim(),
     intakeBoardId: intakeBoardId.value.trim(),
     trackerTrigger: trackerTrigger.value,
     intakeTitleFragment: intakeTitleFragment.value.trim(),
@@ -250,6 +286,7 @@ const intakeReady = computed(() => {
   if (intakeSource.value === 'jira') return intakeJiraProjectKey.value.trim().length > 0
   if (intakeSource.value === 'linear') return intakeLinearTeamId.value.trim().length > 0
   if (intakeSource.value === 'github') return intakeGithubRepo.value.trim().length > 0
+  if (intakeSource.value === 'gitlab') return intakeGitlabProject.value.trim().length > 0
   // A registered source is scoped by its opaque board id. Falling through to `false` here would
   // make its schedule permanently unsaveable rather than merely unscoped.
   if (intakeSource.value) return intakeBoardId.value.trim().length > 0
@@ -274,6 +311,9 @@ function buildIssueIntake(): IssueIntakeConfig {
       ...(source === 'github' && intakeGithubRepo.value.trim()
         ? { githubRepo: intakeGithubRepo.value.trim() }
         : {}),
+      ...(source === 'gitlab' && intakeGitlabProject.value.trim()
+        ? { gitlabProject: intakeGitlabProject.value.trim() }
+        : {}),
       ...(!intakeSourceIsBuiltin.value && intakeBoardId.value.trim()
         ? { boardId: intakeBoardId.value.trim() }
         : {}),
@@ -283,7 +323,12 @@ function buildIssueIntake(): IssueIntakeConfig {
         ? { titleFragment: intakeTitleFragment.value.trim() }
         : {}),
       ...(labels.length ? { labels } : {}),
-      ...(intakeIssueType.value.trim() ? { issueType: intakeIssueType.value.trim() } : {}),
+      // Withheld for a source that would drop it anyway, so the STORED config carries no
+      // predicate the schedule never applies: a config read back later is evidence of what the
+      // schedule does, and a dead `issueType: 'bug'` on it is the same lie the form would tell.
+      ...(intakeIssueTypeApplies.value && intakeIssueType.value.trim()
+        ? { issueType: intakeIssueType.value.trim() }
+        : {}),
     },
     ...(source === 'github' && intakeInProgressLabel.value.trim()
       ? { inProgressLabel: intakeInProgressLabel.value.trim() }
@@ -310,7 +355,7 @@ async function add() {
   try {
     // Persist the tracker selection first when the tech-debt pipeline needs it, so
     // the very first run can file its ticket.
-    if (isTechDebt.value && trackerKind.value) {
+    if (filesTicket.value && trackerKind.value) {
       await tracker.save({
         tracker: trackerKind.value,
         jiraProjectKey: trackerKind.value === 'jira' ? jiraProjectKey.value.trim() : null,
@@ -401,7 +446,7 @@ async function add() {
 
         <RecurringRecurrenceEditor v-if="!onDemand" v-model="recurrence" />
 
-        <div v-if="isTechDebt" class="space-y-3 rounded-lg border border-slate-800 p-3">
+        <div v-if="filesTicket" class="space-y-3 rounded-lg border border-slate-800 p-3">
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             {{ t('board.recurring.issueTracker') }}
           </p>
@@ -490,8 +535,14 @@ async function add() {
           <p class="text-[11px] text-slate-500">
             {{ t('board.recurring.intakeHint') }}
           </p>
+          <!-- Two different remedies: connect something, versus connect something ELSE. A source
+               that is connected but cannot run a scheduled search is not an absent connection. -->
           <p v-if="intakeSources.length === 0" class="text-[11px] text-amber-500">
-            {{ t('board.recurring.intakeNoSources') }}
+            {{
+              tasks.anyOffered
+                ? t('board.recurring.intakeNoIntakeSources')
+                : t('board.recurring.intakeNoSources')
+            }}
           </p>
           <div v-else class="flex flex-wrap gap-1">
             <UButton
@@ -538,6 +589,15 @@ async function add() {
             <UInput v-model="intakeGithubRepo" placeholder="owner/name" class="w-full" />
           </UFormField>
           <UFormField
+            v-if="intakeSource === 'gitlab'"
+            :label="t('board.recurring.intakeGitlabProject')"
+            :help="t('board.recurring.intakeGitlabProjectHelp')"
+            required
+          >
+            <!-- A GitLab project path is literal, and NESTS: subgroups are part of it. -->
+            <UInput v-model="intakeGitlabProject" placeholder="group/project" class="w-full" />
+          </UFormField>
+          <UFormField
             v-if="intakeSource && !intakeSourceIsBuiltin"
             :label="t('board.recurring.intakeBoardId')"
             :help="t('board.recurring.intakeBoardIdHelp')"
@@ -570,7 +630,23 @@ async function add() {
             </UFormField>
             <UFormField :label="t('board.recurring.intakeIssueType')">
               <!-- A literal issue-type example (tracker vocabulary), kept verbatim across locales. -->
-              <UInput v-model="intakeIssueType" placeholder="bug" class="w-full" />
+              <UInput
+                v-if="intakeIssueTypeApplies"
+                v-model="intakeIssueType"
+                placeholder="bug"
+                class="w-full"
+              />
+              <!-- Not a disabled input: this source's provider never sends the predicate, so a box
+                   still holding a value would read as a filter that is on. Stated here because a
+                   schedule fires unattended — the only other evidence of the gap is a bugfix run
+                   started on a docs chore. -->
+              <p v-else class="text-xs text-amber-400">
+                {{
+                  t('board.recurring.intakeIssueTypeUnsupported', {
+                    tracker: intakeSourceLabel,
+                  })
+                }}
+              </p>
             </UFormField>
             <UFormField
               v-if="intakeSource === 'github'"

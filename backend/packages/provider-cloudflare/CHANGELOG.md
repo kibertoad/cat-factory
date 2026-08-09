@@ -1,5 +1,227 @@
 # @cat-factory/provider-cloudflare
 
+## 0.7.436
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/kernel@0.281.0
+  - @cat-factory/agents@0.123.0
+
+## 0.7.435
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/kernel@0.280.0
+  - @cat-factory/agents@0.122.0
+
+## 0.7.434
+
+### Patch Changes
+
+- @cat-factory/agents@0.121.4
+- @cat-factory/kernel@0.279.3
+
+## 0.7.433
+
+### Patch Changes
+
+- 3036af7: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with
+  (`ai@7.0.58`, `@ai-sdk/*@4.0.36` / `openai-compatible@3.0.27` / `amazon-bedrock@5.0.50`), and the
+  Vue singleton pin plus its `@vue/*` overrides move together to 3.5.41 so the SPA still bundles
+  exactly one Vue.
+
+- Updated dependencies [3036af7]
+  - @cat-factory/agents@0.121.3
+  - @cat-factory/kernel@0.279.2
+
+## 0.7.432
+
+### Patch Changes
+
+- @cat-factory/agents@0.121.2
+- @cat-factory/kernel@0.279.1
+
+## 0.7.431
+
+### Patch Changes
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+  - @cat-factory/agents@0.121.1
+
+## 0.7.430
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/kernel@0.278.0
+  - @cat-factory/agents@0.121.0
+
+## 0.7.429
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/kernel@0.277.0
+  - @cat-factory/agents@0.120.2
+
+## 0.7.428
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/kernel@0.276.0
+  - @cat-factory/agents@0.120.1
+
+## 0.7.427
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/agents@0.120.0
+  - @cat-factory/kernel@0.275.4
+
+## 0.7.426
+
+### Patch Changes
+
+- @cat-factory/agents@0.119.3
+- @cat-factory/kernel@0.275.3
+
+## 0.7.425
+
+### Patch Changes
+
+- @cat-factory/agents@0.119.2
+- @cat-factory/kernel@0.275.2
+
+## 0.7.424
+
+### Patch Changes
+
+- @cat-factory/agents@0.119.1
+- @cat-factory/kernel@0.275.1
+
+## 0.7.423
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/kernel@0.275.0
+  - @cat-factory/agents@0.119.0
+
+## 0.7.422
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/kernel@0.274.0
+  - @cat-factory/agents@0.118.1
+
+## 0.7.421
+
+### Patch Changes
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+- Updated dependencies [2544fb3]
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/agents@0.118.0
+
+## 0.7.420
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+  - @cat-factory/agents@0.117.12
+
+## 0.7.419
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+  - @cat-factory/kernel@0.271.0
+  - @cat-factory/agents@0.117.11
+
+## 0.7.418
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+  - @cat-factory/agents@0.117.10
+
+## 0.7.417
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/kernel@0.269.0
+  - @cat-factory/agents@0.117.9
+
+## 0.7.416
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/kernel@0.268.0
+  - @cat-factory/agents@0.117.8
+
+## 0.7.415
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/kernel@0.267.0
+  - @cat-factory/agents@0.117.7
+
+## 0.7.414
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/kernel@0.266.0
+  - @cat-factory/agents@0.117.6
+
+## 0.7.413
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/kernel@0.265.0
+  - @cat-factory/agents@0.117.5
+
+## 0.7.412
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/kernel@0.264.0
+  - @cat-factory/agents@0.117.4
+
+## 0.7.411
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/kernel@0.263.0
+  - @cat-factory/agents@0.117.3
+
 ## 0.7.410
 
 ### Patch Changes

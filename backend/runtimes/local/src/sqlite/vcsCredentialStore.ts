@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:cr
 import type { DatabaseSync } from 'node:sqlite'
 import type { VcsProvider } from '@cat-factory/kernel'
 import { MIN_ENCRYPTION_KEY_BYTES } from '@cat-factory/server'
-import { openSqliteDb } from './db.js'
+import { openSqliteDb, queryOne } from './db.js'
 
 // The deployment's OWN source-control credential, on the machine that runs it.
 //
@@ -140,11 +140,11 @@ class SqliteVcsCredentialStore implements LocalVcsCredentialStore {
   ) {}
 
   read(): StoredVcsCredential | null {
-    const row = this.db
-      .prepare(
-        'SELECT provider, token_cipher, login, created_at, updated_at FROM vcs_credential WHERE id = ?',
-      )
-      .get(CREDENTIAL_ID) as unknown as CredentialRow | undefined
+    const row = queryOne<CredentialRow>(
+      this.db,
+      'SELECT provider, token_cipher, login, created_at, updated_at FROM vcs_credential WHERE id = ?',
+      CREDENTIAL_ID,
+    )
     if (!row) return null
     const token = open(this.key, row.token_cipher)
     if (!token) return null

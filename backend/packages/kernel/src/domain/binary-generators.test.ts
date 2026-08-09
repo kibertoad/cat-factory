@@ -22,6 +22,7 @@ function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGenerato
     description: 'Good for sprites and tiles; not for photorealism.',
     modalities: ['image'],
     mediaTypes: ['image/png'],
+    capabilities: [],
     endpoint: 'https://api.retrodiffusion.ai/v1',
     credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token request header' },
     contracts: [],
@@ -818,5 +819,121 @@ describe('describeModality', () => {
     )
     expect(new Set(phrases).size).toBe(phrases.length)
     for (const phrase of phrases) expect(phrase).not.toContain('undefined')
+  })
+})
+
+describe('generation options', () => {
+  // The THIRD refusal axis, and it has the same three outcomes the format one does. That is what
+  // lets it ship without invalidating every integration registered before capabilities existed.
+  it('refuses an option no DECLARING integration supports', () => {
+    const issues = binaryGeneratorSelectionIssues(
+      {
+        storageServiceId: 'store',
+        generatorIds: ['retro-diffusion'],
+        generation: { seed: 7 },
+      },
+      [generator({ capabilities: ['aspect-ratio'] })],
+    )
+    expect(issues).toEqual([{ problem: 'capability_unsupported', capability: 'seed' }])
+  })
+
+  // The motivating case, end to end at the refusal: a step whose deliverable is a 96x96 sprite,
+  // holding an integration that can only be asked for a bucket, is refused BEFORE it spends
+  // anything. Left admitted it succeeds, charges, stores a downscaled render, and every other
+  // check on it passes.
+  it('refuses an exact size against an integration that only takes a shape', () => {
+    const issues = binaryGeneratorSelectionIssues(
+      {
+        storageServiceId: 'store',
+        generatorIds: ['retro-diffusion'],
+        generation: { outputSize: { width: 96, height: 96 } },
+      },
+      [generator({ capabilities: ['aspect-ratio'] })],
+    )
+    expect(issues).toEqual([{ problem: 'capability_unsupported', capability: 'exact-size' }])
+  })
+
+  it('states the exact size to the agent as a requirement, not a preference', () => {
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'store', generatorIds: ['retro-diffusion'] },
+        [generator({ capabilities: ['exact-size'] })],
+      ),
+      requestedModalities: [],
+      generation: { outputSize: { width: 96, height: 96 } },
+    }).join('\n')
+    expect(section).toContain('EXACTLY 96x96 pixels')
+    // The brief deliberately states NO resize policy: the platform has no view of whether a
+    // downscale is acceptable for a given asset. What it does require is that a substitution is
+    // reported and the delivered size declared, so the loss is never silent.
+    expect(section).toContain('declare the size you actually delivered')
+  })
+
+  it('admits an option nothing has declared either way', () => {
+    const issues = binaryGeneratorSelectionIssues(
+      { storageServiceId: 'store', generatorIds: ['retro-diffusion'], generation: { seed: 7 } },
+      [generator({ capabilities: [] })],
+    )
+    expect(issues).toEqual([])
+  })
+
+  // The requirement is DERIVED, so one reference image never trips the multi-reference rule.
+  it('asks for multi-reference only above one reference image', () => {
+    const config = (count: number) => ({
+      storageServiceId: 'store',
+      generatorIds: ['retro-diffusion'],
+      generation: {
+        referenceImages: Array.from({ length: count }, () => ({
+          location: 'a.png',
+          role: 'style' as const,
+        })),
+      },
+    })
+    const only = [generator({ capabilities: ['reference-image'] })]
+    expect(binaryGeneratorSelectionIssues(config(1), only)).toEqual([])
+    expect(binaryGeneratorSelectionIssues(config(2), only)).toEqual([
+      { problem: 'capability_unsupported', capability: 'multi-reference' },
+    ])
+  })
+
+  it('names the unsupported capability in words an operator can act on', () => {
+    const message = describeBinaryGeneratorSelectionIssues('imager', [
+      { problem: 'capability_unsupported', capability: 'mask-edit' },
+    ])
+    expect(message).toContain('editing only the region an image mask names')
+    expect(message).not.toContain('undefined')
+  })
+
+  it('states the options, who honours them, and what could not be checked', () => {
+    const lines = renderBinaryGeneratorSection({
+      selection: {
+        selected: [
+          generator({ id: 'flux', capabilities: ['seed', 'reference-image'] }),
+          generator({ id: 'nano', capabilities: ['reference-image'] }),
+        ],
+        unresolvedIds: [],
+      },
+      requestedModalities: [],
+      generation: {
+        seed: 7,
+        referenceImages: [{ location: 'refs/hero.png', service: 'asset-store', role: 'subject' }],
+      },
+    }).join('\n')
+    // A reference the platform never fetches has to be NAMED, or the agent generates without it
+    // and reports success.
+    expect(lines).toContain('`refs/hero.png` in the `asset-store` service')
+    // With two producers, "supported" is not the whole answer: an option one of them ignores
+    // leaves nothing on the artifact to say which happened.
+    expect(lines).toContain('a fixed seed: `flux`.')
+    expect(lines).toContain('The others do not declare it')
+  })
+
+  it('states an unverifiable option as unknown rather than as unavailable', () => {
+    const lines = renderBinaryGeneratorSection({
+      selection: { selected: [generator({ capabilities: [] })], unresolvedIds: [] },
+      requestedModalities: [],
+      generation: { tileable: true },
+    }).join('\n')
+    expect(lines).toContain('unknown rather than settled')
   })
 })

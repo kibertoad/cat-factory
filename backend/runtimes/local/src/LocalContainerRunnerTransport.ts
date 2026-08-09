@@ -10,12 +10,13 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
-import { describeError, redactSecrets, runBestEffort } from '@cat-factory/kernel'
+import { composePostMortem, describeError, runBestEffort } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
 import {
   EVICTION_ERROR,
+  type EvictionCause,
   type HarnessEndpoint,
   type InlineJobResult,
   delay,
@@ -436,6 +437,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.cache.delete(ref.runId)
         return true
       },
+      // Ignores the eviction cause on purpose: a per-RUN container serves this run and nothing
+      // else, so its output is this run's on either branch. Only the shared pool member has to
+      // ask (see {@link pooledPostMortem}).
       postMortem: () => this.containerPostMortem(resolved.containerId),
     })
     // Surface the container's id + the (credential-free) host URL the harness is published
@@ -662,8 +666,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     if (!member) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
     // The member died mid-run: drop it from the pool so it isn't re-leased, and report an
     // eviction so the stale-run sweeper re-drives (a retry leases a healthy member and the
-    // harness's persistent checkout resumes the work branch). A 404 with the member still
-    // healthy keeps it leased for a re-dispatch (handled inside pollHarnessJob).
+    // harness's persistent checkout resumes the work branch). A 404 from a member that is still
+    // healthy is an eviction for THIS job only (its harness forgot it); the member stays in the
+    // pool, which is exactly why the post-mortem below has to know which branch it is on.
     const view = await pollHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint: member,
@@ -676,6 +681,13 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.dropMember(member)
         return true
       },
+      // Same last chance to read the dying member as the per-run path: this is the only
+      // moment its exit state and log tail are still readable, and a pooled member is where
+      // a long coding step actually runs on a warm deployment. Without it the whole class of
+      // mid-run container deaths that pooling is meant to make cheaper were the ones that
+      // reported nothing but the bare eviction sentinel. Cause-aware, unlike the per-run
+      // path: see {@link pooledPostMortem}.
+      postMortem: (cause) => this.pooledPostMortem(member.containerId, cause),
     })
     // Same container id + host URL enrichment as the per-run path (the leased pool member
     // is just a differently-sourced container); the harness view carries the live `phase`.
@@ -942,9 +954,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     const logs = (await this.adapter.logs(this.exec, containerId)).trim()
     if (logs) parts.push(`Container logs:\n${logs}`)
     // The container's own output is free text that can echo a token it was handed; this string
-    // is persisted on the run and rendered in its details, so scrub known secret shapes first
-    // (the same defence the harness applies to its structured failure messages).
-    return redactSecrets(parts.join('\n')) ?? ''
+    // is persisted on the run and rendered in its details, so it goes through the shared
+    // compose (scrub + cap) every transport's post-mortem does.
+    return composePostMortem(parts) ?? ''
   }
 
   /**
@@ -972,9 +984,35 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         : `Container ${containerId} stopped serving the job; the runtime reports no exit state for it (it may still be running).`,
     ]
     if (logs) parts.push(`Container logs:\n${logs}`)
-    // Persisted on the run and rendered in its details, so scrub known secret shapes out of the
-    // container's own output first.
-    return redactSecrets(parts.join('\n')) ?? undefined
+    // Persisted on the run and rendered in its details, so the container's own output goes
+    // through the shared compose (scrub + cap) rather than a per-transport copy of it.
+    return composePostMortem(parts)
+  }
+
+  /**
+   * The POOLED sibling of {@link containerPostMortem}, and the reason the poll reports which
+   * eviction branch it took.
+   *
+   * A per-run container serves one run, so reading it is safe on either branch. A pool member is
+   * a SHARED, long-lived backend: on the `job_unknown` branch it answered the poll, so it is
+   * alive and has simply forgotten this job, and its output right now belongs to whatever it is
+   * serving instead. Lifting a log tail off it would attach another run's work (possibly another
+   * repo's) to this run's recorded failure, which is worse than attaching nothing: the operator
+   * cannot tell it apart from a genuine tail. State the situation instead.
+   *
+   * On `unreachable` the member is confirmed gone while leased to this run, so its exit state and
+   * final output are this run's last words and the ordinary post-mortem applies.
+   */
+  private async pooledPostMortem(
+    containerId: string,
+    cause: EvictionCause,
+  ): Promise<string | undefined> {
+    if (cause === 'unreachable') return this.containerPostMortem(containerId)
+    return (
+      `Pool member ${containerId} answered the poll but no longer knows this job (its harness ` +
+      `restarted or reaped it). The member is still serving other runs, so its output is not ` +
+      `this run's and no log tail is attached.`
+    )
   }
 }
 

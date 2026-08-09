@@ -248,6 +248,8 @@ export type {
   InstallationSummary,
   ListOptions,
   Paged,
+  ProjectIssueQuery,
+  ProjectIssuePage,
   RateLimitSnapshot,
   RepoContentEntry,
   RepoEntry,
@@ -285,13 +287,19 @@ export type {
   BinaryArtifactKind,
   BinaryArtifactRecord,
   BinaryArtifactStorageKind,
+  BuiltinBinaryArtifactStorageKind,
   BinaryArtifactStore,
   BinaryArtifactMetadataStore,
   BinaryBlobBackend,
+  DocumentArtifactRef,
   ResolveBinaryArtifactStore,
   StoreBinaryArtifactInput,
 } from './binary-artifacts.js'
-export { createBinaryArtifactStore } from './binary-artifacts.js'
+export {
+  BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS,
+  createBinaryArtifactStore,
+  dedupeDocumentRefs,
+} from './binary-artifacts.js'
 export type {
   AgentCloneSpec,
   AgentDispatchContext,
@@ -319,8 +327,14 @@ export type {
 } from './github-repositories.js'
 export type { WebhookVerifier } from './webhook-verifier.js'
 export type {
+  DesignRender,
   DocumentCredentials,
   DocumentContent,
+  DocumentOAuthTokens,
+  DocumentRenderPlan,
+  DocumentRenderResult,
+  DocumentRenderTarget,
+  DocumentSourceOAuthSpec,
   NormalizedConnection,
   DocumentSourceProvider,
   DocumentSourceRegistry,
@@ -330,10 +344,18 @@ export type {
   LinkedDocumentRefreshOutcome,
   RefreshedDocument,
 } from './document-source.js'
-export { DEPLOYMENT_DOCUMENT_CACHE_GROUP } from './document-source.js'
+export {
+  assertDocumentSourceOAuthAgrees,
+  DEPLOYMENT_DOCUMENT_CACHE_GROUP,
+  DOCUMENT_OAUTH_CREDENTIAL_KEYS,
+  documentOAuthAccessToken,
+} from './document-source.js'
 export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
+  DocumentConnectionStore,
+  DocumentConnectionSummary,
+  SealedDocumentConnectionRecord,
   DocumentRecord,
   DocumentRef,
   DocumentRepository,
@@ -342,15 +364,24 @@ export type {
   TaskCredentials,
   TaskContent,
   TaskSearchRepoScope,
+  TaskRepoScopeRules,
   IssueIntakeQuery,
+  IssueIntakePredicate,
   BugCandidate,
   TrackerBoard,
   NormalizedTaskConnection,
   TaskSourceProvider,
   TaskSourceRegistry,
 } from './task-source.js'
+export type {
+  TaskInProgressMark,
+  TaskSourceWritebackAdapter,
+  TaskWritebackContext,
+} from './task-source-writeback.js'
+export { createTaskWritebackContext } from './task-source-writeback.js'
 export type { BugHuntAssessor, BugHuntSubject } from './bug-hunt.js'
 export type {
+  BuiltinTaskSourceKind,
   TaskSourceWebhookAdapter,
   TrackerCommentAuthor,
   TrackerCommentEvent,
@@ -368,6 +399,9 @@ export {
 export type {
   TaskConnectionRecord,
   TaskConnectionRepository,
+  TaskConnectionStore,
+  TaskConnectionSummary,
+  SealedTaskConnectionRecord,
   TaskSourceSettingsRecord,
   TaskSourceSettingsRepository,
   TaskRecord,
@@ -439,6 +473,25 @@ export type {
   DropSealedSecretResult,
 } from './sealed-secret-inventory.js'
 export type { PersonalSecretCipher } from './personal-secret-cipher.js'
+export type { SealedConnectionOpenResult } from './sealed-connections.js'
+export { openedConnections } from './sealed-connections.js'
+export type {
+  OrgSecretSource,
+  OrgSecretKeyArity,
+  OrgSecretKeyOf,
+  OrgSecretSourceOfArity,
+  DelegatedSecretRef,
+  DelegatedSealRef,
+  SecretDelegate,
+  OrgSecretCipher,
+  OrgSecretCipherOptions,
+} from './secret-delegation.js'
+export {
+  ORG_SECRET_SOURCES,
+  ORG_SECRET_KEY_ARITY,
+  createOrgSecretCipher,
+  orgSecretRef,
+} from './secret-delegation.js'
 export type {
   EnvironmentProvider,
   AsyncProvisionCapability,
@@ -534,6 +587,7 @@ export type {
   RunnerJobResult,
   RunnerJobStopOutcome,
   RunnerJobView,
+  RunnerObservedToolServer,
   RunnerReproductionPhase,
   RunnerReproductionReport,
   RunnerSliceReview,
@@ -694,6 +748,7 @@ export type {
 export type { BranchUpdateOutcome, BranchUpdater } from './branch-updater.js'
 export type { NotificationRepository } from './notification-repositories.js'
 export type {
+  NotificationWebhookPutOutcome,
   NotificationWebhookRecord,
   NotificationWebhookRepository,
 } from './notification-webhook-repositories.js'
@@ -772,7 +827,17 @@ export type {
 export { TRACKER_COMMENT_INGEST_CLAIM_TTL_MS } from './tracker-comment-ingest-repositories.js'
 export {
   type NotificationChannel,
+  type NotificationDeliveryReason,
+  type NotificationRouter,
   type RaiseNotificationInput,
   CompositeNotificationChannel,
   NoopNotificationChannel,
+  NOTIFICATION_DELIVERY_REASONS,
+  RoutedNotificationChannel,
+  isAlertingDelivery,
+  isNotificationDeliveryReason,
 } from './notification-channel.js'
+export type {
+  NotificationSettingsRecord,
+  NotificationSettingsRepository,
+} from './notification-settings-repositories.js'

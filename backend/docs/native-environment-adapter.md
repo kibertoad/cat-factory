@@ -1,5 +1,11 @@
 # Native environment adapters
 
+> **Choosing between a manifest and code is on the website**:
+> [Provision Ephemeral Environments](https://www.catfactory.ai/operate/environments.html#when-the-manifest-isn-t-enough)
+> owns that decision and
+> [Custom Providers](https://www.catfactory.ai/extend/custom-providers.html) owns the seam.
+> This page is the CONTRACT for writing one adapter.
+
 cat-factory provisions **ephemeral environments** (the live URLs the Tester agent runs
 against) through the `EnvironmentProvider` port. The default implementation,
 `HttpEnvironmentProvider`, is fully generic: it interprets a declarative **manifest** of
@@ -70,6 +76,20 @@ Every call receives the per-workspace `manifest` plus a `resolveSecret(key)` cal
 `blockId`) derived from the block under deployment. `status`/`teardown` get the `externalId`
 and the `provisionFields` captured at provision time.
 
+### `confirmTeardown`: proving the environment is gone
+
+A fourth optional method, and the difference between a reported reclaim and a proven one. The
+`TeardownProbe` shape and the three rules for writing one (under-claim, what `terminating` and
+`retryable` decide, and why `status()` must not answer instead) are on the website's
+[teardown probe](https://www.catfactory.ai/extend/custom-providers.html#proving-a-teardown).
+
+What stays here is where the verdict GOES. Omitting the method is a supported choice rather than a
+bug: the teardown is recorded as `unverifiable` and reported as such, never as a reclaim. The probe
+is bounded in wall-clock time by the service (awaited inline on an on-demand teardown and on the TTL
+sweep), so an unresponsive one costs the confirmation and never the teardown. Which paths record
+which verdict, and what a `disposer` step does with them:
+[`environment-disposal-and-teardown-proof.md`](../../docs/initiatives/environment-disposal-and-teardown-proof.md).
+
 ### `frontendOrigins`: wiring a bound frontend's CORS
 
 When a `deployer` step provisions a service that one or more `frontend` frames bind (via the
@@ -92,76 +112,28 @@ manifest and skip the re-provision; exact-origin injection is the recommended pa
 
 ## Registering the backend
 
-A native backend is **registered programmatically** as an import side effect: the same
-seam the built-in `manifest` and `kubernetes` backends use, and the analogue of custom agent
-kinds / gates / model providers. The registry is **app-owned and injected** (no deployment-wide
-provider singleton): you define an `EnvironmentBackendProvider`, which maps a discriminated
-connect config → an `EnvironmentProvider`, and register it **by reference** into the registry
-the facade builds, then hand that registry to the container build.
+The registration walkthrough is on the website:
+[Custom Providers → Wire it in](https://www.catfactory.ai/extend/custom-providers.html#wire-it-in)
+owns the `EnvironmentBackendProvider` shape, the `createBackendRegistries()` bundle, both facades'
+entry points, and the by-reference rule. Two facts about the seam ITSELF stay here, because both are
+about why the platform is arranged this way rather than about wiring one adapter:
 
-```ts
-// my-org-backends.ts - a plain value, NOT a side-effect import.
-import type { EnvironmentBackendProvider } from '@cat-factory/integrations'
+- **There is no facade injection option for a provider**, and there deliberately isn't one. The old
+  `buildNodeContainer({ environmentProvider })` / `startLocal({ environmentProvider })` singletons
+  were removed: a deployment-wide provider cannot serve two workspaces on different platforms, and
+  selection is a per-workspace fact. `EnvironmentConnectionService` resolves a workspace's stored
+  connection `kind` to the registered backend and builds its provider, on every runtime.
+- **Because registration is by reference into the injected registry, module identity does not
+  matter.** There is no "you must share the same `@cat-factory/integrations` instance" footgun, and
+  a custom kind rides the contract's generic manifest member
+  (`environmentBackendConfigSchema`), so it needs no new config variant, table, service, controller
+  or UI window. It becomes an option in the connect form, advertised to the SPA through the
+  workspace snapshot's `environmentBackendKinds`: the descriptor-driven flat fields when your
+  provider implements `describeConfig` / `describeManifestTemplate`, else the raw manifest editor.
 
-export const acmeEnvsEnvironmentBackend: EnvironmentBackendProvider = {
-  kind: 'acme-envs', // any lower-kebab slug that isn't a reserved built-in
-  displayLabel: 'Acme ephemeral environments', // shown in the connect-form backend selector
-  referencedSecretKeys: () => ['acme_envs_token'],
-  connectionMeta: (config) => ({
-    providerId: 'acme-envs',
-    label: 'manifest' in config ? config.manifest.label : 'Acme envs',
-    baseUrl: 'manifest' in config ? config.manifest.baseUrl : '',
-  }),
-  assertConfigSafe: () => {}, // SSRF-guard any URL you read out of providerConfig (see below)
-  toManifest: (config) => {
-    if (!('manifest' in config)) throw new Error('expected a manifest-shaped acme-envs config')
-    return config.manifest
-  },
-  fromManifest: (manifest) => ({ kind: 'acme-envs', manifest }),
-  // REQUIRED: the per-type infra engine(s) this backend serves. An ephemeral-environment
-  // backend rides `remote-custom` - this is what makes it selectable as a run target for a
-  // service's `custom` provision type. Omit it and the backend is unreachable from the UI.
-  engines: () => ['remote-custom'],
-  buildProvider: (ctx) => new AcmeEnvsEnvironmentProvider(ctx.urlPolicy),
-}
-```
-
-```ts
-// main.ts - register by reference, then pass the registries to the container build. `start()`
-// exposes a `buildContainer` seam exactly for this facade-level customization (local mode uses it).
-import { start, buildNodeContainer } from '@cat-factory/node-server'
-import { createBackendRegistries } from '@cat-factory/integrations'
-import { acmeEnvsEnvironmentBackend } from './my-org-backends.js'
-
-const backendRegistries = createBackendRegistries()
-backendRegistries.environmentBackendRegistry.register(acmeEnvsEnvironmentBackend)
-// A `remote-custom` backend ALSO needs a custom manifest type in the catalog, else no service can
-// pin it - see "Also register a custom manifest type" below.
-backendRegistries.customManifestTypeRegistry.register({
-  manifestId: 'acme-envs',
-  label: 'Acme envs',
-})
-
-await start({ buildContainer: (opts) => buildNodeContainer({ ...opts, backendRegistries }) })
-```
-
-Because registration is by reference into the injected registry, your backend is seen
-regardless of module identity: there is no "must share the same `@cat-factory/integrations`
-instance" footgun. This works on **every** runtime (Worker / Node / local):
-`EnvironmentConnectionService`
-resolves a workspace's stored connection `kind` to the registered backend and builds its
-provider. So one seam serves both a **single-tenant** install (register one bespoke backend)
-and a **multi-tenant** deployment (each workspace selects a `kind`). Registering code is
-something only a deployment OWNER can do (you can't let an arbitrary tenant inject a
-provider), which is exactly why it is the self-hosted / single-tenant extension path; a
-multi-tenant SaaS still offers the built-in `manifest` / `kubernetes` kinds per workspace.
-
-A custom kind rides the contract's **generic manifest member**
-(`environmentBackendConfigSchema`), so it needs **no new config variant**, no new table,
-service, controller, or UI window. It becomes a first-class option in the connect form,
-advertised to the SPA via the workspace snapshot's `environmentBackendKinds`; the form is
-the descriptor-driven flat fields when your provider implements
-`describeConfig`/`describeManifestTemplate`, else the raw manifest editor.
+Registering code is something only a deployment OWNER can do (you cannot let an arbitrary tenant
+inject a provider), which is why this is the self-hosted extension path; a multi-tenant deployment
+still offers the built-in `manifest` / `kubernetes` kinds per workspace.
 
 ### Also register a custom manifest type (for `remote-custom` backends)
 
@@ -224,6 +196,28 @@ validates it off `req.manifest.providerConfig`. It serializes inside the existin
 `manifest_json` JSON column on both runtimes (D1 + Drizzle): **no migration**, automatic
 cross-runtime parity.
 
+#### Re-read it, and validate what the OPERATION uses
+
+Validate the bag on the way out with `parseStoredProviderConfig(schema, raw, label)` rather than
+asserting it. The connect form did validate it on the way in, but the value has been through
+storage since: a config written before a schema change, or edited in the database, otherwise flows
+on as a fake-valid object and misbehaves deep inside a provision instead of being named here.
+
+Then split that read by what each call actually reads, because the two halves fail in opposite
+directions. **A provision should refuse an off-contract config**, having no honest way to build
+from one. **A teardown should not**: refusing there leaves a live namespace, cluster or preview
+with nothing able to delete it, and nothing later fixes that by itself, so the sweep re-fails on
+the same parse forever while the resource keeps costing money. So parse the CONNECTION on the
+reclaim paths (`teardown` + `confirmTeardown`) and the full config everywhere else. The built-ins
+model this: `kubernetesConnectionConfigSchema` carries the apiserver URL and its TLS settings and
+nothing about manifests or URL derivation, and the Kubernetes provider's `parseConnection` is the
+seam a subclass widens (the EKS one adds the AWS coordinates its token is minted from).
+
+The fields the reclaim itself reads stay validated: there is no safe default for which cluster to
+send a `DELETE` to, and a GitHub Enterprise deployment whose API root silently fell back to the
+public one would post its teardown to the wrong host. Forgive drift in what you do not read, never
+in what you do.
+
 ### The connection is required, and that is intended
 
 The environments module assembles when **`ENCRYPTION_KEY`** is set (it is always set:
@@ -284,6 +278,9 @@ idempotent and an already-gone environment never wedges the registry. A provider
 own auto-expiry (e.g. an `online_until` cap) coexists safely: cat-factory owns teardown of
 the environments it created; the provider's auto-expiry is a backstop. Make your adapter's
 `teardown` tolerant of an already-deleted environment (treat 404 as success).
+
+Tombstoning is bookkeeping, not proof: whether the resource actually went away is a separate probe,
+which is why [`confirmTeardown`](#confirmteardown-proving-the-environment-is-gone) exists.
 
 ## Dependency: `@cat-factory/kernel`
 

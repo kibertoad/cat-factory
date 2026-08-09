@@ -14,6 +14,19 @@ transport + the GitHub token/client seams differ.
 
 - `LocalContainerRunnerTransport.ts`: the per-run container transport (the local analogue of
   the CF Container transport + the runner-pool transport, over the same `RunnerTransport` port).
+- `LocalProcessRunnerTransport.ts`: the NATIVE backend (`LOCAL_NATIVE_AGENTS`), one long-lived
+  host process serving every concurrent job. Its stderr is PIPED and kept as a bounded tail
+  (nothing is forwarded to the developer's console), because that is where the harness routes its
+  warn/error lines: it is the post-mortem for a host process that dies mid-job, and it is folded
+  into the dispatch error for one that never becomes healthy at all. The backend OUTLIVES a run,
+  so the tail is attached only when the process serving a job is confirmed gone; a live process
+  that merely 404s says so instead, exactly as the warm pool does. "The process serving this job"
+  is a GENERATION, not "the process": one death evicts every concurrent job, and answering the
+  first eviction re-dispatches, which spawns the replacement while the siblings have yet to poll.
+  So the exit record is kept ACROSS a respawn and stamped with the generation it belongs to, and
+  each job remembers the generation it was dispatched to. Without that pairing a sibling's 404 is
+  read off whatever process is answering NOW and the run is told its harness "is still serving
+  other local runs", which is a fact about a different process.
 - `runtimes/`: the `ContainerRuntimeAdapter`s per engine (docker CLI shared by
   Docker/Podman/OrbStack/Colima; a separate Apple `container` adapter), selected by
   `LOCAL_CONTAINER_RUNTIME`. Two contracts an adapter is easy to get wrong: `endpoint()`
@@ -57,9 +70,25 @@ transport + the GitHub token/client seams differ.
   `/internal/*` machine API and only credentials/settings/the work queue/**telemetry** stay on the
   laptop in `node:sqlite`. `mothershipPropagator.ts` (outbound engine events) and
   `mothershipSubscriber.ts` (inbound per-workspace subscriptions, opened on demand from the local
-  hub's rooms) are the two halves of its real-time channel. Read
+  hub's rooms) are the two halves of its real-time channel. The key split cuts BOTH ways: the
+  laptop's own credentials never go up, and the ORG's never come down as keys: a sealed org row is
+  opened (and a row this node provisions is sealed) BY the mothership, addressed by row, through
+  the `secretDelegate` `composeMothership` builds. So a mothership-mode node provisions
+  environments and probes release-health monitors for real without ever holding the org key. Read
   `docs/initiatives/mothership-mode.md` before touching any of it, and `CLAUDE.md` → "Every new
   feature ships MOTHERSHIP-READY" before adding a repository method anywhere in the backend.
+- `sqlite/db.ts`: the shared open/init for every local `node:sqlite` store, plus the typed
+  `queryAll<Row>` / `queryOne<Row>` every read goes through. `StatementSync.all()` is typed
+  `Record<string, SQLOutputValue>[]`, so a raw `.prepare(…).all(…)` needs an `as unknown as` at
+  each call site; run the query through these instead. The `SqliteRow<Row>` bound checks the row
+  shape is one SQLite could actually return, so a `boolean`, a nested object or a domain union
+  fails the build rather than being asserted into existence (decode it from the raw column).
+- `sqlite/*.conformance.test.ts`: this store runs the SAME conformance suites D1 and Postgres do,
+  for every one of its six telemetry repositories. It is the store a developer's own runs are
+  recorded in, so a property all three must agree about belongs in the shared suite rather than in
+  a hand-rolled local sibling; `sqlite/telemetryStore.test.ts` is what is left after that, and holds
+  only what no other store has to answer for (the synchronous BEGIN/COMMIT, the exact prune count,
+  the ingest reader).
 - `sqlite/telemetryStore.ts` (+ `sqlite/telemetryRows.ts`, `sqlite/telemetryIngestReader.ts`) +
   `telemetryRetention.ts` + `telemetryIngest.ts`: the LOCAL-FIRST telemetry bucket (per-call
   LLM metrics, agent-context snapshots, performed web searches, the provisioning log, modeled quota

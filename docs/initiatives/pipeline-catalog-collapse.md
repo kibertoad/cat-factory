@@ -6,6 +6,13 @@ design a task gets), making the axes they were really toggling (reviewer, human 
 architect) into **estimate-gated steps**, and scoping every picker to the task type's real
 use-case. 27 presets → 21 live, 6 tombstoned, with the build family down from 13 to 5.
 
+**WS6 extends the same goal along a second axis.** Where the ladder collapsed presets that differed
+by a TOGGLE, WS6 collapses the ones that differed by WHAT THE CHANGE TOUCHES — by giving a step a
+run CONDITION, so one preset can carry both testers and let each decide whether a given run is its
+business. It also draws the line the catalog never had between a preset a user PICKS and a chain the
+platform STARTS: 21 live → 17, plus one new rung (`pl_complex`) for the case estimate-gating
+structurally cannot reach.
+
 **Why now.** Two independent problems compound:
 
 1. **Seven build presets are the same spine with at most two toggles.** `coder → [reviewer] →
@@ -108,6 +115,17 @@ export function isGatableKind(kind: AgentKind, registry?: AgentKindRegistry): bo
 `registry.get(kind)?.gatable` alone would return `undefined` for every built-in: the trap to avoid
 when extending this.
 
+**Gatability governs every SKIP AXIS, not just the estimate gate.** WS6's run condition is the
+second one, and it reaches the identical failure by a different route: a condition on `merger` drops
+the merge on every run outside its scope while the pipeline still reports success. So
+`assertValidRunConditions` asks the same `isGatableKind` and enforces the same human-gate
+exclusivity, and the answer is mirrored in all three places the estimate gate is: the run door and
+the save door (`validatePipelineShape`), the SPA's health advisory, and what the builder OFFERS
+(`mayCarrySkipAxis`, which allows a deployment-registered kind the browser cannot answer for, since
+over-offering costs a 422 and under-offering silently removes a declared capability). A third axis
+added later inherits this list. What is deliberately NOT refused is a condition BESIDE an estimate
+gate: they compose, and answer different questions.
+
 ### The cascade is a LOCAL rule, not lookahead
 
 When a gated producer is skipped, its companion must be skipped too, or the companion grades whatever
@@ -149,12 +167,21 @@ being offered on task blocks.
 The two narrowings run in **opposite directions**, which was a correction made during review rather
 than the first cut. `document` / `review` demand the EXPLICIT classifier, because a build pipeline on
 a document task is actively wrong. `feature`/`bug` only EXCLUDE `document` / `review` / `planning`,
-because `purpose` is optional at every write boundary: the builder's dropdown starts unset
-(`draftPurpose = null`) and the create request omits it, and a `PipelineRegistry` entry need not
+because a pipeline could reach the picker unclassified: the builder's dropdown started unset
+(`draftPurpose = null`), the create request omitted it, and a `PipelineRegistry` entry need not
 declare one. Requiring the classifier there would have hidden every workspace's own hand-built
 pipelines from the picker they were built for, silently, with nothing on screen to explain it. The
-kernel guard that every BUILT-IN declares a purpose is what the document/review half leans on; it
+kernel guard that every BUILT-IN declares a purpose is what the document/review half leaned on; it
 never covered the pipelines actually at risk.
+
+**`Pipeline.purpose` is mandatory as of the library-narrowing change**, so that write-boundary hole
+is closed at each of the three producers rather than absorbed by the readers: the entity and the
+create request require it, `definePipeline` and therefore every `PipelineRegistry` entry require it
+at compile time, and the shared `rowToPipeline` resolves a pre-mandatory NULL column to `build` (the
+classifier such a row already behaved as). The asymmetry above SURVIVES, drawn now on the one thing
+still open: a stored classifier this build cannot NAME, which the persisted closed vocabulary makes
+reachable in both directions. `document` / `review` hide it; `feature`/`bug` keep it, for exactly
+the reason they kept an unclassified pipeline.
 
 Both predicates are composed at every manual-start picker: the add-task modal, the focus view's Run
 menu, the inspector's Run menu and the task's default-pipeline setting. All four, not the two the
@@ -188,12 +215,15 @@ explicitly rather than papered over.
       ~30 fixture references, the two initiative presets, and the planner prompt's pipeline menu.
 - [x] **WS3a: picker scoping.** `pipelineAllowedForTaskType` narrows feature/bug to build +
       research; `pipelineAllowedForBlockLevel` added and wired into both manual-start call sites.
-- [ ] **WS3b: `availability: 'system'`.** A third availability member for the presets only the
-      platform invokes (`pl_blueprint` after a bootstrap, `pl_environment_analysis` from the setup
-      wizard, `pl_initiative_breakdown` from the public API), so they leave every picker. Needs the
-      schema member, the `assertPipelineLaunchable` arm, and care that the programmatic start paths
-      pass no user `origin`. Until it lands, those three are still offered on a task (and
-      `pl_initiative_breakdown` on an initiative block, where the engine would refuse it).
+- [x] **WS3b: the platform-invoked presets leave every picker** — solved by two mechanisms rather
+      than the proposed `availability: 'system'` member, because the three cases turned out not to
+      be one case. A single-step preset is not a pipeline at all: `pl_blueprint` and
+      `pl_environment_analysis` are retired, and the platform starts those agents through
+      `ExecutionService.startAgentKind` (one agent, no chain, ordinary run). A multi-step chain a
+      FEATURE spawns onto is: `pl_code_comments` carries `internal: true` and is withheld from
+      every listing while staying resolvable for a run. `pl_initiative_breakdown` keeps its picker
+      entry deliberately: it is `public`, so an external caller names it by id and a reader has to
+      be able to see what that id is. See WS6.
 - [x] **WS3c: make the omitted steps actually addable.** The `remain available in the builder`
       promise above was never true for `spec-writer`, `blueprints` or `deployer`: the first two are
       registered kinds that declared no `presentation`, and the SPA's `SYSTEM_AGENT_META` shadowed
@@ -201,9 +231,42 @@ explicitly rather than papered over.
       to reseed because adding a Deployer was impossible.
 - [ ] **WS4: the merge-preset human-gate floor.** Per-change-class required-human-review rules on
       the merge preset, so the estimate can escalate but never fall below policy.
-- [ ] **WS5: second retirement wave.** `pl_visual` + `pl_frontend` (both `experimental`, both
-      blocked on unwired `ui`-image routing), `pl_spike_direct`, `pl_initiative_docs`; reclassify
-      `pl_spec` / `pl_code_comments` / `pl_business_docs` off the `build` purpose.
+- [ ] **WS5: second retirement wave.** `pl_visual` (`experimental`, blocked on unwired `ui`-image
+      routing), `pl_spike_direct`, `pl_initiative_docs`; reclassify `pl_business_docs` off the
+      `build` purpose. (`pl_frontend` and `pl_spec` went in WS6; `pl_code_comments` is internal.)
+- [x] **WS6: the catalog narrowing + the CONDITIONAL step.** Five more presets withdrawn, one
+      added, and the mechanism that made most of the withdrawals possible. Detail below.
+
+## WS6 in detail: the catalog narrowing and the conditional step
+
+**The mechanism.** A step can now carry a RUN CONDITION (`stepOptions[i].condition`, a
+service scope) beside its estimate gate, and the two answer different questions: the estimate
+asks "is this task big enough to be worth the step", the condition asks "does this step apply
+to a change of this shape at all". Every build rung carries BOTH testers, each conditional —
+the browser pass where the change touches a frontend service, the API pass where it touches
+anything else. Run admission drops the condition-excluded steps before its gates, so one
+preset carrying `tester-ui` is not refused on every backend service.
+
+`RunServiceScope` can express a task in BOTH scopes at once, but no board state produces
+one today: an involved service must be a connection neighbour, and only a `service`-type
+frame may declare or be named by a connection, so a frontend frame has no peers in either
+direction. Widening that is a change to the CONNECTION model, not to the condition, and is
+not in this slice; the reduction stays general so it is the one place that would change.
+
+**Retired:** `pl_frontend` (a near-duplicate of the ladder that existed only because
+`tester-ui` could not say "not on this run"), `pl_tech_debt` (the build tail behind an
+`analysis` + `tracker` head — a schedule pointed at a rung, not a preset), `pl_blueprint` and
+`pl_environment_analysis` and `pl_spec` (one step each; see WS3b).
+
+**Added:** `pl_complex` — the requirements-review conversation and a `researcher` pass in
+front of `pl_build`, for work whose SCOPE is the risky part. It is the one thing no amount of
+estimate-gating can add to `pl_full`: an estimator scores the task as written, and a task
+written vaguely enough to need that conversation is the one it scores wrong.
+
+**Also:** an interface-mode default (`defaultBuildPipelineId` — basic gets the fixed
+`pl_build`, advanced the adaptive `pl_full`), the builder showing per-step conditions in both
+the draft chain and the library, and `presentation.internal` keeping the environment analyst
+out of the palette now that nothing places it.
 
 ## Gotchas the first slice surfaced
 
@@ -240,8 +303,10 @@ explicitly rather than papered over.
   coder-class agent, it is not, which is why it is retired rather than gated.
 - **`pl_quick` was the repo's default short-pipeline test fixture** (~30 files). Retiring it was
   mechanical but wide; the repoint target is `pl_simple`. One exception mattered:
-  `blueprint.spec.ts` depended on `pl_quick` actually containing a `blueprints` step, so it now
-  names the blueprints-only `pl_blueprint`; the focused fixture it always wanted.
+  `blueprint.spec.ts` depended on `pl_quick` actually containing a `blueprints` step, so it named
+  the blueprints-only `pl_blueprint`; the focused fixture it always wanted. WS6 retired that one
+  too, and the spec now drives the SINGLE-KIND endpoint — which is the production path as well, so
+  the fixture and the real caller are finally the same thing.
 - **Estimate gating costs one always-on inline call.** `task-estimator` has to run for any gate to
   have an estimate to read (`assertValidGating` rule 4), which is precisely why the two fixed rungs
   carry no estimator: a pipeline that cannot escalate has nothing to consult an estimate for, so
@@ -253,6 +318,24 @@ explicitly rather than papered over.
   from it would mislabel every plain schedule. The template value survives in
   `scheduleTemplateSchema` for an explicit API caller. Giving the recurring modal a real template
   picker is the honest fix and is not in this initiative.
+- **A retirement and an `internal` flag are opposite dispositions, and picking the wrong one
+  breaks a feature silently.** A tombstone tells a seeded workspace to REMOVE its stored row; an
+  internal flag tells every listing to withhold it while the row keeps resolving. `pl_code_comments`
+  looks exactly like the other single-purpose presets from the catalog side, but the
+  documentation-refresh preset SPAWNS tasks onto it, so retiring it would have taken that doc type
+  down with it — with nothing failing until someone ran the preset. The test to apply is not "would
+  a user pick this" but "does anything START it by id".
+- **`internal` is a property of the DEFINITION, so it is not persisted.** `offeredPipelines` filters
+  by asking the CATALOG which ids are internal, not by reading a column off the row. A column would
+  be a second copy of a fact kernel already holds, stale from the moment a pipeline's status changed
+  and correctable only by a reseed — and it would need a D1 migration plus a Drizzle schema change
+  to say something the code already knows. The Worker integration suite caught the first cut of this
+  precisely because the flag round-tripped through neither store.
+- **A conditional step must be dropped from ADMISSION, not only from dispatch.** Putting `tester-ui`
+  in every build rung is refused on a backend service by three separate start gates (the visual-frame
+  gate, the tester-infra gate, the binary-storage gate) unless admission first drops the steps this
+  run's scope excludes. Skipping it at dispatch alone would mean the preset could never START where
+  the condition was the whole point.
 - **Rung order in `buildDeliveryPipelines` is the default.** Nothing resolves the default by id, so a
   reorder silently changes what every `Start` button runs. Pinned by a test asserting
   `seedPipelines()[0].id === 'pl_build'`, and `BUILD_PIPELINE_ID` exists so a programmatic caller

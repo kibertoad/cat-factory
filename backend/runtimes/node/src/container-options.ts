@@ -47,6 +47,7 @@ import {
   type ProviderRegistry,
   type BinaryGeneratorRegistry,
   type BinaryGeneratorSource,
+  type BinaryStoreRegistry,
   type FoundationalBuiltinSource,
   type FoundationalServiceRegistry,
   type PromptFragmentRegistry,
@@ -129,6 +130,15 @@ export interface NodeContainerOptions {
    * whole API-key service turns off when neither a db nor this override is present).
    */
   providerApiKeyRepository?: ProviderApiKeyRepository
+  /**
+   * Mothership-mode SECRET DELEGATION: opens (and seals) the ORG-owned credentials a laptop holds
+   * no key for, over the mothership's `/internal/secrets/{unseal,seal}`. The mirror image of the
+   * credential overrides above: those keep a LAPTOP's own secrets off the mothership; this makes
+   * the ORG's secrets usable on the laptop without ever moving the key. Threaded onto
+   * `CoreDependencies.secretDelegate` and into the two gate providers the composition root wires
+   * directly. Undefined (every hosted deployment) ⇒ the local cipher, unchanged.
+   */
+  secretDelegate?: CoreDependencies['secretDelegate']
   /**
    * Override the per-user locally-run model-endpoint repository (the symmetric local-sqlite
    * credential seam to {@link providerApiKeyRepository}). Undefined → the Drizzle repo over
@@ -423,6 +433,18 @@ export interface NodeContainerOptions {
    * See docs/initiatives/binary-output-foundational-storage.md.
    */
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  /**
+   * The app-owned registry of BINARY ARTIFACT STORES a deployment defines in CODE: its own
+   * implementations of the `BinaryBlobBackend` port (GCS, Azure Blob, an internal object
+   * service), offered in the account-settings storage picker beside this runtime's `fs` / `db` /
+   * `s3` backends and selected as `backend: 'custom'` with the store's id. Empty by default, so a
+   * deployment that registers none sees exactly the picker it sees today.
+   *
+   * Per-process by design, with no mothership `Source` sibling: a store is a live client only the
+   * process about to write the bytes can build, so the process serving the picker is the one that
+   * stores. See `kernel/src/domain/binary-store-registry.ts`.
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry
   /**
    * The app-owned prompt-fragment registry: the deployment's best-practice standards and the
    * per-task-type default sets that select them, registered BY REFERENCE. Optional; the facade

@@ -26,7 +26,10 @@ else imports its **ports** and domain types from here.
   GENERATIVE binary integrations a deployment declares in code: an image / music / video API a
   `binary-output` step selects to PRODUCE its artifacts, with the pure selection validation and
   agent-facing rendering beside it; deliberately NOT the foundational catalog, which is what a
-  DESIGN consumes), `service-registration.ts`. Two of those registries are also READ through a
+  DESIGN consumes), `binary-store-registry.ts` (the binary artifact STORES a deployment defines in
+  code: its own `BinaryBlobBackend` implementations, offered per account beside the platform's own
+  backends; per-process rather than port-read, because a store is a live client only the process
+  writing the bytes can build), `service-registration.ts`. Two of those registries are also READ through a
   port, because a mothership deployment is two processes and what a deployment registers in code
   is org state its node's build can only hold a stale copy of: `ports/foundational-builtins.ts`
   and `ports/binary-generators.ts`, each defaulting to the in-process registry and pointed at the
@@ -71,6 +74,14 @@ else imports its **ports** and domain types from here.
   physical copy of that package, which a published dependency graph does not guarantee. The source
   is the third `/internal/*` read of the mothership family beside `FoundationalBuiltinSource` and
   `BinaryGeneratorSource`, and it THROWS rather than answering an empty pool for the reason they do.
+- `ports/secret-delegation.ts`: `OrgSecretSource` (a CLOSED vocabulary of org-owned sealed rows),
+  `SecretDelegate` and `createOrgSecretCipher`: the seam every service holding one of those rows
+  composes with its own `SecretCipher`. With no delegate (every hosted deployment) it is a
+  pass-through; on a mothership-mode node it routes BOTH directions to the mothership, which holds
+  the key. Deliberately NOT a `SecretCipher` decorator: an envelope alone carries no claim about
+  who may open it, so the delegated call addresses a ROW and the mothership re-reads it under the
+  node's account scope. The server binds each member to one repository read in
+  `SEALED_SECRET_SOURCES`; a member with no binding fails to compile.
 - `domain/llm-phase.ts`: `normalizeCallPhase` + `UNATTRIBUTED_CALL_PHASE`, the boundary for the
   **phase axis** on `llm_call_metrics` (which slice of a run spent a model call). The label is
   free-form and comes from producers the platform does not fully author (a proxy request path, a
@@ -140,6 +151,18 @@ else imports its **ports** and domain types from here.
   plain `string` because kernel compiles without Node's ambient types. The executor-harness carries
   a pinned COPY (`src/process-exit.ts`, it can depend on no workspace package), held equal by
   `test/process-exit.conformity.test.ts`: the same arrangement as `host-markdown`.
+- `shared/post-mortem.logic.ts`: **`composePostMortem(parts)`**, the other half of the same job.
+  A transport that finds its backend gone gets ONE chance to say why (`RunnerJobView.detail`,
+  which the engine keeps as the step's `firstEvictionDetail`), and every producer of that text
+  owes the same two things: a `redactSecrets` pass, because the material is a container's own
+  output, and a cap, because it is a diagnostic rather than a log sink. Both live here so a new
+  transport inherits them. The cap keeps the HEAD, so a caller puts its one-line verdict first
+  and bulk material after it; everything empty answers `undefined`, which the eviction view omits
+  the field for rather than rendering "nothing could be read" as an empty tail. Bulk material is
+  bounded by the caller with **`tailPostMortemMaterial`**, which keeps the TAIL, and the opposite
+  directions are the point: a log's value is at its end, so letting one reach the head-keeping cap
+  unbounded keeps the boot chatter and drops the crash. A LINE bound (`--tail 50`, a stderr ring)
+  does not count as bounded.
 - `ports/sso.ts`: the shape of a DISCOVERED enterprise identity provider
   (`OidcProviderMetadata` / `SsoDiscoveryDocument`, the value `AppCaches.ssoDiscovery` holds) plus
   **`oidcIdentitySubject`**, the one place the `<issuer>#<sub>` identity key is spelled. The issuer

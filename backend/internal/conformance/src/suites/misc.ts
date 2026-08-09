@@ -10,6 +10,7 @@ import {
   type TrackerSettings,
   type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
+import { adHocPipelineIdFor } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { FakeTaskSourceProvider } from '../FakeTaskSourceProvider.js'
 import { defineBugHuntConformance } from './bug-hunt.js'
@@ -175,6 +176,7 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
     // A single-step inline pipeline keeps the run deterministic across runtimes.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Recurring inline',
+      purpose: 'build',
       agentKinds: ['architect'],
     })
     const created = await app.call<PipelineSchedule>(
@@ -237,6 +239,7 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
     // proves the run advances past intake when an issue is picked up.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Bug triage',
+      purpose: 'build',
       agentKinds: ['bug-intake', 'architect'],
       availability: 'recurring',
     })
@@ -301,6 +304,7 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Bug triage',
+      purpose: 'build',
       agentKinds: ['bug-intake', 'architect'],
       availability: 'recurring',
     })
@@ -350,6 +354,7 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Bug triage',
+      purpose: 'build',
       agentKinds: ['bug-intake', 'architect'],
       availability: 'recurring',
     })
@@ -489,6 +494,7 @@ function registerTrackerWritebackTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'On-demand inline',
+      purpose: 'build',
       agentKinds: ['architect'],
     })
     // No `recurrence` on the body — an on-demand schedule needs none.
@@ -659,6 +665,44 @@ function registerBugTriagePhaseTests(harness: ConformanceHarness): void {
     })
   })
 
+  // SINGLE-KIND runs: one agent against a block, with no pipeline behind it. Two flows depend on
+  // this door (the post-bootstrap service mapping, the environment wizard's stack-recipe draft),
+  // and it is a run in every other respect — same persistence, same board projection — which is
+  // exactly what a cross-runtime assertion is for.
+  describe('single-kind agent runs', () => {
+    it('starts a run for one agent kind, with no catalog pipeline behind it', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const start = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/task_login/agent-kind-executions`,
+        { agentKind: 'blueprints' },
+      )
+      expect(start.status).toBe(201)
+      expect(start.body.steps.map((step) => step.agentKind)).toEqual(['blueprints'])
+      // The synthesized id says there is no pipeline, rather than naming one nothing defines.
+      expect(start.body.pipelineId).toBe(adHocPipelineIdFor('blueprints'))
+
+      // It is an ORDINARY run from here: it persists, drives, and projects onto the board like
+      // any other, which is the reason it is a synthesized Pipeline rather than a bespoke path.
+      const runs = await app.drive(wsId)
+      expect(runs.find((r) => r.blockId === 'task_login')).toBeTruthy()
+    })
+
+    it('refuses an unknown agent kind, naming it', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const res = await app.call(
+        'POST',
+        `/workspaces/${workspace.id}/blocks/task_login/agent-kind-executions`,
+        { agentKind: 'org:does-not-exist' },
+      )
+      expect(res.status).toBe(422)
+    })
+  })
+
   // The `bug-investigator` is a structured `container-explore` kind whose `clarity`/`questions`
   // drive the downstream `clarity-review` gate (phase F): `clear` auto-passes with no human
   // park; `needs_clarification` seeds one finding per question and parks the run for a human.
@@ -686,6 +730,7 @@ function registerBugTriagePhaseTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Triage & investigate',
+        purpose: 'build',
         agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -727,6 +772,7 @@ function registerBugTriagePhaseTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Triage & investigate',
+        purpose: 'build',
         agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
       })
       await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -789,6 +835,7 @@ function registerBugTriagePhaseTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: `Reproduce & fix (${outcome})`,
+        purpose: 'build',
         agentKinds: ['repro-test', 'coder'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {

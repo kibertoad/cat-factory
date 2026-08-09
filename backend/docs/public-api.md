@@ -6,6 +6,25 @@ dashboard that reads spend. Every route is the external counterpart of a service
 already makes (same behaviour, same arbitration), projected through deliberately small public
 resources (`publicTask`, `publicRun`, `publicPipeline`, …) rather than the raw internal entities.
 
+> **Where this sits after the documentation split.** Three surfaces, and the line between them is
+> now drawn by what each one CAN state rather than by who reads it:
+>
+> - The website's [Public API](https://www.catfactory.ai/extend/public-api.html) owns the account an
+>   integrator reads first (what the surface is for, keys and scopes, the webhook contract), with
+>   [SDKs](https://www.catfactory.ai/extend/sdks.html) and
+>   [MCP server](https://www.catfactory.ai/extend/mcp-server.html) owning how to drive it.
+> - The
+>   [API Endpoint Reference](https://www.catfactory.ai/extend/api-reference.html) is GENERATED from
+>   `docs/openapi.json` and owns every operation's SHAPE: path, method, minimum scope, parameters,
+>   request body and response schemas, field by field. It cannot drift, so nothing here should
+>   restate a field name or a payload shape.
+> - This file keeps what the spec structurally cannot express and a generated page therefore cannot
+>   carry: the refusal codes behind each `4XX`, the caps and quotas, the ordering and idempotency
+>   rules, the worked walkthroughs, and the judgement about which exit a caller is expected to take.
+>
+> A change to a route updates the spec (which re-renders the reference page), the behaviour stated
+> here, and whichever website page describes it.
+
 This is the **how-to and reference**. Its siblings each own a different slice:
 
 - [ADR 0030](./adr/0030-public-api-surface.md): the design record covering why the surface has this
@@ -62,12 +81,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                                                                            |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                      |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                     |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                           |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhook-push), and [provision keys](#key-provisioning-apiv1keys). |
+| Scope    | Adds                                                                                                                                                                                                                                                                                                                                          |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage` and its [spend breakdowns](#spend-by-repository-ticket-or-run), a run's [evidence](#run-evidence-report--outcome--artifacts) and its [merge record](#merge-evidence-apiv1merge-records), the whole [`/debug` surface](./debug-api.md). |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification, tag the [reviewer effort](#merge-evidence-apiv1merge-records) a merged pull request needed.                                                                                                                       |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                                                                                                                                         |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge** and carries the optional reviewer-effort tag), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys).                                                                 |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -153,7 +172,7 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly  |
   | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                   |
   | `no_review`                      | 404     | an iterative-review decision route (requirements / clarity / brainstorm): the run carries no such live entity |
-  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                     |
+  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act`: `details.reason` is `no_automated_action` or `review_effort_required`          |
 
 ### Pagination
 
@@ -208,7 +227,12 @@ The replacement is not a rename. An agent-context snapshot exists only where the
 prompt recording on, and is pruned on the telemetry retention window, so the copy on the snapshot
 was blank or gone for most readers of it; the step carries the same facts unconditionally and for
 as long as the run exists. Both are projected from the same value at dispatch, so they cannot
-disagree while both are served.
+disagree about what the platform decided while both are served.
+
+The step's copy is also the only one that grows. It gained `observed` in spec `1.24.0`, the agent
+CLI's own account of the servers it managed to load, which is not a dispatch-time fact and so has
+no place on the snapshot to project onto. A reader still on the deprecated copy is not seeing a
+smaller version of the same answer; it is missing the half that says a wired server never came up.
 
 ## Quick start
 
@@ -246,8 +270,15 @@ curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/decisions"
 # 7. Once it finishes, the EVIDENCE, the same bundle the pull request carries:
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/report"
 
+# 7b. …and the criteria it was scored against: the service's own spec, keyed by the same
+#     requirement ids the report's `requirements` rows carry.
+curl -s -H "$AUTH" "$BASE/api/v1/services/$SERVICE_ID/spec"
+
 # 8. The period's spend + budget position, for a dashboard:
 curl -s -H "$AUTH" "$BASE/api/v1/usage"
+
+# 9. …and what the quarter cost per repository, for the budget conversation:
+curl -s -H "$AUTH" "$BASE/api/v1/usage/spend?dimension=repo&window=90d"
 ```
 
 The headless-job flow is the same shape one level up: `POST /api/v1/jobs` with
@@ -376,19 +407,34 @@ error codes, scopes and paging rules are the same whichever you use.
 
 Scope column = the minimum rung. Refusal codes are in the [conventions table](#the-error-envelope).
 
+**Read this beside the generated
+[API Endpoint Reference](https://www.catfactory.ai/extend/api-reference.html), which owns the
+shapes.** Every table below states a `Behaviour` rather than a payload: the cap, the refusal code,
+the mapping, the exit. The spec collapses every client failure into one `4XX` with a shared
+`ErrorResponse`, so `429 too_many_active_runs` and the five-in-flight limit that raises it exist on
+no generated page and are the reason these tables were not replaced by one.
+
+**No cell spells a request or response body any more.** It used to, and those were the copies that
+could go stale: the spec carries every field and every `maxLength`, so the generated page states
+them per operation and this one cannot disagree with it by construction. What a cell keeps is the
+half the spec has no way to say: that `fields` is MERGED rather than replaced, that a start falls
+back to the task's pinned pipeline, that an edited proposal is what flows downstream, that a
+question step RE-RUNS on an answer. If you find yourself adding a field list back, the thing you
+actually wanted to write down is what the platform DOES with it.
+
 ### Jobs (headless runs)
 
 A headless job executes a **public, inline pipeline** against a supplied brief, anchored on an
 internal block; it is not a board task and never touches GitHub. Jobs are double-scoped: this
 surface only ever sees runs it created, never the workspace's ordinary board runs.
 
-| Method / path                  | Scope    | Behaviour                                                                                                                                                                                            |
-| ------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/jobs`            | `write`¹ | Start a run. Body `{ pipelineId, input (≤50k chars), title? (≤200) }` → `202 { jobId, status, links: { self, events } }`. Capped at **5 in-flight** runs per workspace (`429 too_many_active_runs`). |
-| `GET /api/v1/jobs`             | `read`   | List this surface's jobs, newest first. `?limit=`, `?cursor=`, `?status=running\|succeeded\|failed`, `?since=<epoch-ms>`.                                                                            |
-| `GET /api/v1/jobs/:id`         | `read`   | One job: `{ jobId, status, pipelineId, createdAt, result, error }`. `result.output` is the final agent reply, `result.data` its structured output (when produced).                                   |
-| `POST /api/v1/jobs/:id/cancel` | `write`  | Cancel (idempotent; a terminal job comes back as-is). The escape hatch for a parked run.                                                                                                             |
-| `GET /api/v1/jobs/:id/events`  | `read`   | SSE stream; see [Streaming](#streaming-sse).                                                                                                                                                         |
+| Method / path                  | Scope    | Behaviour                                                                                                                                   |
+| ------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/jobs`            | `write`¹ | Start a run; `202` with the job and its `self` / `events` links. Capped at **5 in-flight** runs per workspace (`429 too_many_active_runs`). |
+| `GET /api/v1/jobs`             | `read`   | List this surface's jobs, newest first. `?limit=`, `?cursor=`, `?status=running\|succeeded\|failed`, `?since=<epoch-ms>`.                   |
+| `GET /api/v1/jobs/:id`         | `read`   | One job. `result.output` is the final agent reply, `result.data` its structured output (when produced).                                     |
+| `POST /api/v1/jobs/:id/cancel` | `write`  | Cancel (idempotent; a terminal job comes back as-is). The escape hatch for a parked run.                                                    |
+| `GET /api/v1/jobs/:id/events`  | `read`   | SSE stream; see [Streaming](#streaming-sse).                                                                                                |
 
 ¹ Starting a pipeline that can park on a human requires `decide`; the `403
 pipeline_requires_decide_scope` message names which of its park surfaces are answerable through the
@@ -400,17 +446,25 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                                                                                          |
-| ---------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                                                                                                                                                                                     |
-| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, fields?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
-| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                                                                                                  |
-| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                                                                                                                                                                          |
-| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit the task's authored input: `{ title?, description?, fields? }` (an empty patch is a no-op). `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                                                       |
-| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                                                                                   |
-| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                                                                                      |
-| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                                                                                   |
-| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                                                                                       |
+| Method / path                                    | Scope    | Behaviour                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                           | `read`   | The board's service frames: the service projection.                                                                                                                                                                                                                                                                     |
+| `POST /api/v1/services/:serviceId/tasks`         | `write`  | Create a task. Create a task. `taskType` defaults to `feature`; `recurring` is not creatable here. See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
+| `GET /api/v1/services/:serviceId/tasks`          | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                       |
+| `GET /api/v1/tasks/:taskId`                      | `read`   | One task: the task projection.                                                                                                                                                                                                                                                                                          |
+| `PATCH /api/v1/tasks/:taskId`                    | `write`  | Edit the task's authored input; an empty patch is a no-op. `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                  |
+| `POST /api/v1/tasks/:taskId/start`               | `write`¹ | Run it. Start the task's run, falling back to its pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                               |
+| `POST /api/v1/tasks/:taskId/stop`                | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                           |
+| `POST /api/v1/tasks/:taskId/retry`               | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                        |
+| `DELETE /api/v1/tasks/:taskId`                   | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                            |
+| `POST /api/v1/services`                          | `admin`  | Create a service, optionally backed by a repository. See [Provisioning the board](#provisioning-the-board).                                                                                                                                                                                                             |
+| `GET /api/v1/repos`                              | `read`   | The repositories a service can be created against, and which service each already backs.                                                                                                                                                                                                                                |
+| `GET /api/v1/services/:serviceId/spec`           | `read`   | The service's in-repo **specification**: the requirement tree, the Gherkin rendered from it, and the commit both were read at. See [Service specification](#service-specification).                                                                                                                                     |
+| `POST /api/v1/tasks/:taskId/dependencies`        | `write`  | Declare that this task waits for another. Declare a dependency. Idempotent. See [Ordering a batch of tasks](#ordering-a-batch-of-tasks).                                                                                                                                                                                |
+| `POST /api/v1/tasks/:taskId/dependencies/remove` | `write`  | Drop the edge. Idempotent.                                                                                                                                                                                                                                                                                              |
+| `GET /api/v1/tasks/:taskId/documents`            | `read`   | The requirements documents attached to the task, in reading order.                                                                                                                                                                                                                                                      |
+| `POST /api/v1/tasks/:taskId/documents`           | `write`  | Attach one, in either form creation takes. See [Attaching requirements documents](#attaching-requirements-documents).                                                                                                                                                                                                   |
+| `POST /api/v1/tasks/:taskId/documents/detach`    | `write`  | Detach one by its `(source, externalId)` pair. Idempotent; `204`. The document itself stays in the workspace.                                                                                                                                                                                                           |
 
 ¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
 the paragraph below for what counts as a park.
@@ -425,19 +479,120 @@ ways a pipeline parks:
 - an **approval gate** on an enabled step;
 - an inline **review or brainstorm** kind (`requirements-review`, `clarity-review`, and the two
   brainstorms), which sets the run `blocked` awaiting an answer;
-- an unbounded **human-wait gate** (`human-review`), a gate step whose poll never times out because
-  it is waiting for a person to review the PR;
+- an unbounded **human-wait gate**, a gate step whose poll never times out because it is waiting for
+  a person (the shipped `human-review`, and any a deployment registers with
+  `pollExhaustion: 'rearm'`, which the rule reads off the gate's own registration);
 - an **interview gate**: a step whose kind carries the `interview-gate` trait (the planning and
   document interviewers, plus any a deployment registers), which asks a batch of questions and waits.
 
 Any of them needs a `decide`-scope key (`403 pipeline_requires_decide_scope`; the refusal names this
 surface's exit, `POST /tasks/:taskId/stop`). Note that this covers the shipped **Adaptive build**
-preset, which carries a risk-gated `human-review`: a `write`-only key cannot start it. The
-unconditional presets (`Standard build`, `Simple build`) never park and stay `write`-startable.
+preset, which carries a risk-gated `human-review`, and **Complex build**, whose leading
+requirements review parks for a human by design: a `write`-only key cannot start either. **Standard
+build** and **Simple build** never park and stay `write`-startable — their conditional tester steps
+do not change that, since a run condition only ever SKIPS a step, and a skipped step parks for
+nobody.
 
 What the rule does **not** see: a park raised dynamically mid-run (an agent-raised decision, a judge
-`park`), a deployment's own unbounded-wait gate, and follow-up triage. See
+`park`), and follow-up triage. A deployment's own unbounded-wait gate used to be a third blind spot
+and no longer is: every gate declares what a spent poll budget means at registration, so the rule
+asks the gate rather than a list of the shipped ones. See
 [Pick the right scope](#2-pick-the-right-scope) for what that means when you mint a key.
+
+#### Provisioning the board
+
+`/api/v1` could always list services and file work under one, and nothing could CREATE one. That was
+the last act of board setup with no headless counterpart: a deployment that provisions its own keys
+(`POST /api/v1/keys`) and enrols its own webhook still had to open the app once, to have anywhere to
+file work at all.
+
+```http
+GET /api/v1/repos
+{ "repos": [ { "repoId": 40123, "provider": "github", "owner": "acme", "name": "payments-api",
+               "defaultBranch": "main", "private": true, "monorepo": false,
+               "serviceId": null, "linkedElsewhere": false } ] }
+
+POST /api/v1/services
+{ "title": "Payments API", "type": "service", "repo": { "repoId": 40123 } }
+```
+
+**The repository link is the load-bearing half.** Execution resolves a task's repository by walking
+up to its enclosing service frame, deliberately with no first-repo fallback, so a service with none
+holds tasks and can start none of them. Creating an unlinked frame is still allowed (omit `repo`) and
+is a legitimate intermediate state for a caller mapping out a board before its repositories exist,
+but it is not a finished service.
+
+`GET /api/v1/repos` is the discovery half, and it is what makes the create usable at all: the create
+takes a `repoId`, and until now there was nowhere to learn one. `serviceId` on each row names the
+service that repository already backs **on this board**, so a caller re-running its provisioning
+finds what it created last time rather than discovering it through a `409`. A monorepo answers
+`null` there even when its subdirectories back services, since it can back more.
+
+`linkedElsewhere` is the third state the pair cannot express: the repository already backs a service
+homed on ANOTHER board of the account, so the choice is spent and there is no id here that would
+address it (every read on this API is scoped to your key's workspace, so a frame homed elsewhere
+would not appear in `GET /api/v1/services` and `POST /api/v1/services/{serviceId}/tasks` would 404
+on it). Read the flag before treating `serviceId: null` as "available".
+
+Guards, all of them the app's own rather than a second set:
+
+- A whole-repo repository that already backs a service **anywhere in the account** is MOUNTED onto
+  this board rather than duplicated, so two boards in one org share the service, its subtree and its
+  task list. Where that mount would answer with a frame homed on another board, this surface
+  REFUSES instead (`422`, `reason: repo_service_homed_elsewhere`): a `serviceId` a workspace-scoped
+  key cannot then list or file work under is worse than a refusal, because it reads as success. Use
+  the board that homes the service, or a key scoped to it.
+- A **monorepo** service must name its `repo.directory`, and a subdirectory another service already
+  claims is refused. Send `repo.monorepo: true` with the create to flag the repository as you go. A
+  `repo.directory` on a whole-repo repository is refused (`422`,
+  `reason: directory_requires_monorepo`) rather than stored: dispatch reads a service's directory
+  only while its repository is flagged a monorepo, so storing one would run the agents at the
+  repository root while the created service says otherwise. Omitting `repo.monorepo` leaves the
+  repository's flag as it stands, so it is the STORED flag that decides — and a refused create never
+  changes it.
+- `type` is the repo-backed subset (`service` / `frontend` / `library` / `document`). A `database` or
+  `queue` frame documents infrastructure for the agents and runs nothing, so nothing here creates one.
+
+There is deliberately **no `position`**: board coordinates are ergonomics for a human looking at a
+canvas, and publishing a coordinate system into a surface that is frozen forever would buy an
+integration nothing. The board lays a new service out itself. Positions, sizes, reparenting,
+archive/restore and the module/epic vocabulary stay out for the same reason.
+
+Service creation is `admin`, which is board STRUCTURE and the rung a provisioning integration holds
+anyway.
+
+#### Ordering a batch of tasks
+
+An integration filing five related tasks and starting them got five runs racing against one
+repository, each opening a pull request against a base the others were moving. The platform has had
+the mechanism to serialise them all along and no way for an external caller to be told about it.
+
+```http
+POST /api/v1/tasks/blk_ui/dependencies      { "dependsOnTaskId": "blk_api" }
+PATCH /api/v1/tasks/blk_api                 { "autoStartDependents": true }
+```
+
+Two halves, and they do different jobs. The **edge** stops `blk_ui` starting until `blk_api` is
+`done`: the engine's start gate refuses it, so a caller that starts the whole batch at once gets one
+run and four refusals rather than five races. **`autoStartDependents` on the BLOCKER** is what makes
+a declared chain run itself: when `blk_api`'s pull request merges, every task depending on it whose
+other blockers are also done starts. Without it a dependent is merely refused until the blocker
+lands, and something has to notice and start it.
+
+Both writes are **explicit and idempotent**, not toggles: an edge that already exists is returned
+as-is, and one that is not there is a no-op to remove. A REMOVE also converges on an edge whose
+blocker no longer resolves as a visible task (deleted, or homed on a board this key cannot read):
+the edge is a fact about the task's own row, and refusing to drop it would leave the task gated on a
+blocker that can never reach `done`. An id that is neither a visible task nor a declared edge is
+still `404`, so a transposed pair is answered rather than silently doing nothing. That is the difference from the app's own
+canvas gesture, where "flip it" is exactly the intent. A provisioning integration re-running its own
+setup has to CONVERGE, and a toggle would invert every edge it declared last time, silently, since
+both calls succeed and the graph it asked for is the one it does not get.
+
+Both ends must be tasks in this workspace, and an edge that would close a cycle is refused (`422`),
+so the start gate and the auto-start can never deadlock. A task's own edges come back on
+`GET /api/v1/tasks/:taskId` as `dependsOn`, which is what makes the declaration verifiable rather
+than fire-and-forget.
 
 #### Filling a task type's form
 
@@ -735,6 +890,35 @@ what did not fit.
 Documents attached this way are ordinary workspace documents: they appear in the app alongside
 imported pages, and a human can detach or re-attach them there.
 
+**After the task exists**, the same two forms are reachable on their own routes, because a spec
+routinely arrives after the task does (a ticket filed first and specified later, a PRD that lands
+mid-review):
+
+```http
+GET  /api/v1/tasks/blk_9c2/documents
+POST /api/v1/tasks/blk_9c2/documents
+{ "document": { "kind": "upload", "title": "Checkout PRD", "content": "# Checkout PRD\n…" } }
+
+POST /api/v1/tasks/blk_9c2/documents/detach
+{ "source": "upload", "externalId": "doc_71f" }
+```
+
+The list identifies each document by the `(source, externalId)` pair the detach takes, and an
+`upload` carries `source: "upload"` with an empty `url` (there is no page behind it). Detach is a
+POST rather than a `DELETE .../documents/{id}` because that identity is two values, one of which is
+a free-form external id that is a PATH for some sources (`docs/architecture/adr-0001.md`).
+
+Two properties are worth relying on. Detaching is **idempotent** and never deletes: the document
+stays in the workspace, so re-attaching it later costs no re-import, and detaching one the task does
+not hold is a no-op rather than an error. Attaching a document that a DIFFERENT live task already
+holds is **refused rather than moved** (`409`), because a document carries exactly one attachment:
+moving it would strip the other task of a spec it was created with, and nothing in that task's next
+run would report the absence.
+
+Before this, editing a task's corpus headlessly meant deleting the task and filing it again, which
+loses the id every stored reference points at, its ticket claim (which then refuses every future
+filing of that ticket) and the documents it already carried.
+
 The inline-only rule stays jobs-only: a `decide` key may start container pipelines on board tasks.
 Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically
 knowable, so they do not gate the start; see
@@ -742,14 +926,30 @@ knowable, so they do not gate the start; see
 
 ### Task runs & streaming
 
-| Method / path                      | Scope  | Behaviour                                                                                                                                       |
-| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/tasks/:taskId/run`    | `read` | The rich run projection: `{ runId, taskId, status, createdAt, currentStep, steps[], pullRequest, error }`. `404 no_run` before the first start. |
-| `GET /api/v1/tasks/:taskId/events` | `read` | SSE stream of that projection; see [Streaming](#streaming-sse).                                                                                 |
+| Method / path                      | Scope  | Behaviour                                                                         |
+| ---------------------------------- | ------ | --------------------------------------------------------------------------------- |
+| `GET /api/v1/tasks/:taskId/run`    | `read` | The rich run projection: the run projection. `404 no_run` before the first start. |
+| `GET /api/v1/tasks/:taskId/events` | `read` | SSE stream of that projection; see [Streaming](#streaming-sse).                   |
 
 Run `status` distinguishes the states a caller reacts to: `running`, `blocked` (parked on a human;
 go read `/runs/:runId/decisions`), `paused` (spend-gated), `done`, `failed`. Each step reports
-`{ agentKind, state, progress, subtasks }`, with live subtask counts while a container step works.
+`{ agentKind, state, progress, subtasks, output, data, truncated? }`, with live subtask counts while
+a container step works.
+
+**`output` is the step's deliverable** (the agent's final reply), and `data` its structured result
+when its kind produces one; both are `null` for a step that produced none. This is what a board task
+running an INLINE-only pipeline delivers: a research pass, an estimate, a written assessment opens
+no pull request, so before 1.31.0 its result was readable only in the app. **This endpoint serves
+both whole**, matching `publicJob.result.output`, which carries the same class of content for a
+headless job. For raw diagnostics, use the [`/debug` surface](./debug-api.md) instead, which sizes
+every body before it serves it.
+
+**The SSE stream serves them REDUCED, and says so per step.** A frame carries the whole run, so an
+unreduced late frame repeats every output the run has produced so far and the traffic grows with the
+square of the pipeline's length. On the stream an oversized `output` is clipped to a leading preview,
+an oversized `data` is withheld as `null`, and the step carries `truncated: true`. A step whose
+deliverable already fits rides the stream untouched and unflagged, so `truncated` means exactly
+"something was left out of this frame". Read this endpoint for the whole thing.
 
 #### Streaming (SSE)
 
@@ -759,7 +959,7 @@ there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 
 | Event      | Meaning                                                                                                                                                      |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `progress` | The run advanced; data is the full job / run projection (same shape as the GET).                                                                             |
+| `progress` | The run advanced; data is the job / run projection (same shape as the GET, with a run's step deliverables reduced — see above).                              |
 | `decision` | The run just **parked** on a human decision. Answer via `/runs/:runId/decisions`; the stream stays open, and a later park after a resume is announced again. |
 | `done`     | Terminal success. Stream closes.                                                                                                                             |
 | `error`    | Terminal failure. Stream closes.                                                                                                                             |
@@ -767,13 +967,13 @@ there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 | `timeout`  | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong; reconnect to keep watching.                                                                |
 
 A revoked key cuts a live stream within ~5 seconds. Streams are per-run reads bounded by their own
-poll; for push at scale, register the [outbound webhook](#outbound-webhook-push) instead.
+poll; for push at scale, register the [outbound webhook](#outbound-webhooks-push) instead.
 
 ### Pipelines & task types (discovery)
 
 | Method / path            | Scope  | Behaviour                                                                                                                                        |
 | ------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/v1/pipelines`  | `read` | The workspace's pipelines (archived excluded): `{ pipelineId, name, steps[], public, headlessStartable }`.                                       |
+| `GET /api/v1/pipelines`  | `read` | The workspace's pipelines (archived excluded): the pipeline projection.                                                                          |
 | `GET /api/v1/task-types` | `read` | What a task may be created as here, and the form each accepts. See [Filling a task type's form](#filling-a-task-types-form) for the field rules. |
 
 `public` marks the pipelines `POST /jobs` accepts. `headlessStartable` means every enabled
@@ -817,39 +1017,39 @@ field to demand a person nobody has to send:
   parks on an ordinary approval, which arrives as a `decisions[]` entry; it is not also reported as
   unanswerable, so the two halves of one payload never contradict each other.
 
-The same blind spot applies one step earlier, at admission; see [Scopes](#scopes) below.
+The same blind spot applies one step earlier, at admission; see [Pick the right scope](#2-pick-the-right-scope) below.
 
 | Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                               |
 | ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                                    |
-| `POST …/approvals/:approvalId/approve`                | `decide` | Approve a gated step's proposal and advance. Body `{ proposal? (≤50000) }`; an edit replaces the agent's text and is what flows downstream. Refused under an unmet quorum (see below).  |
-| `POST …/approvals/:approvalId/request-changes`        | `decide` | Body `{ feedback (1–10000) }`; the gated step re-runs with the guidance folded in.                                                                                                      |
-| `POST …/approvals/:approvalId/reject`                 | `decide` | Body `{ reason? (≤2000) }`; the run stops entirely (a terminal `rejected` failure the board can retry).                                                                                 |
+| `POST …/approvals/:approvalId/approve`                | `decide` | Approve a gated step's proposal and advance. An edit to the proposal replaces the agent's text and is what flows downstream. Refused under an unmet quorum (see below).                 |
+| `POST …/approvals/:approvalId/request-changes`        | `decide` | The gated step re-runs with the guidance folded in.                                                                                                                                     |
+| `POST …/approvals/:approvalId/reject`                 | `decide` | The run stops entirely (a terminal `rejected` failure the board can retry).                                                                                                             |
 | `POST …/approvals/:approvalId/resolve-exceeded`       | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a companion gate at its automatic-rework cap (`exceeded: true`), which refuses the plain approve.                |
-| `POST …/questions/:decisionId/answer`                 | `decide` | Body `{ choice (1–4000) }`; answer a decision an agent raised. The asking step **re-runs** with it.                                                                                     |
+| `POST …/questions/:decisionId/answer`                 | `decide` | Answer a decision an agent raised. The asking step **re-runs** with it.                                                                                                                 |
 | `POST …/requirements/findings/:itemId/reply`          | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                                                                                                 |
 | `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }`; dismiss a finding as not applicable, or reopen one.                                                                                           |
-| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous**: the response shows `incorporating`; poll or stream for the next round.            |
+| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. **Asynchronous**: the response shows `incorporating`; poll or stream for the next round.                                          |
 | `POST …/requirements/re-review`                       | `decide` | One more reviewer pass over the incorporated document.                                                                                                                                  |
 | `POST …/requirements/proceed`                         | `decide` | Settle the requirements phase and advance the run.                                                                                                                                      |
 | `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a review that hit its iteration cap.                                                                             |
 | `POST\|PATCH …/clarity/…`                             | `decide` | The **same six verbs** as `…/requirements/…`, over the bug-report triage loop: `findings/:itemId/reply`, `findings/:itemId`, `incorporate`, `re-review`, `proceed`, `resolve-exceeded`. |
 | `POST\|PATCH …/brainstorm/:stage/…`                   | `decide` | The same six verbs again, over a dialogue stage (`requirements` \| `architecture`), with the items called `options/:itemId` rather than `findings/:itemId`.                             |
-| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)`; choose the implementation approach.                                                            |
+| `POST …/fork/choose`                                  | `decide` | Choose the implementation approach: exactly one of a listed fork or a custom one, plus an optional note.                                                                                |
 | `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                            |
 | `POST …/input-gate/resolve`                           | `decide` | Body `{ choice: "recheck" \| "proceed" }`; answer the task's input check. `recheck` re-evaluates the task as it now stands, `proceed` waives the findings.                              |
 | `POST …/pr-review/resolve`                            | `decide` | Body `{ action?: "finish" \| "fix" \| "post", findingIds?: string[] }`; record the curated selection. `fix`/`post` need ≥1 finding and **act on the real pull request**.                |
 | `POST …/pr-review/findings/:findingId/dismiss`        | `decide` | Drop one finding from the review. Curation, not a resolution: the run stays parked.                                                                                                     |
-| `POST …/pr-review/findings/:findingId/challenge`      | `decide` | Body `{ question? (≤4000) }`; dispatch a read-only investigator to uphold, strengthen or retract the finding.                                                                           |
+| `POST …/pr-review/findings/:findingId/challenge`      | `decide` | Dispatch a read-only investigator to uphold, strengthen or retract the finding.                                                                                                         |
 | `POST …/human-test/confirm`                           | `decide` | The change works in the ephemeral environment: it is torn down and the run advances.                                                                                                    |
-| `POST …/human-test/request-fix`                       | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the tested environment, then rebuild it.                                                                                        |
+| `POST …/human-test/request-fix`                       | `decide` | Dispatch a fixer against the tested environment, then rebuild it.                                                                                                                       |
 | `POST …/visual-confirmation/approve`                  | `decide` | Approve the captured screenshots against the reference designs and advance.                                                                                                             |
-| `POST …/visual-confirmation/request-fix`              | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the captured screenshots.                                                                                                       |
+| `POST …/visual-confirmation/request-fix`              | `decide` | Dispatch a fixer against the captured screenshots.                                                                                                                                      |
 | `POST …/follow-ups/items/:itemId/file`                | `decide` | File one `follow_up` item as a tracker issue. Refused for a `question` item, and for a workspace with no tracker connected.                                                             |
 | `POST …/follow-ups/items/:itemId/send-back`           | `decide` | Fold one `follow_up` item into another Coder pass (it records as `queued`).                                                                                                             |
-| `POST …/follow-ups/items/:itemId/answer`              | `decide` | Body `{ answer (1–4000) }`; answer one `question` item. Refused for a `follow_up` item.                                                                                                 |
+| `POST …/follow-ups/items/:itemId/answer`              | `decide` | Answer one `question` item. Refused for a `follow_up` item.                                                                                                                             |
 | `POST …/follow-ups/items/:itemId/dismiss`             | `decide` | Wave one item off without acting on it. Valid for either kind.                                                                                                                          |
-| `POST …/interview/answer`                             | `decide` | Body `{ questionId, answer (≤2000) }`; record one answer. Does **not** resume the run.                                                                                                  |
+| `POST …/interview/answer`                             | `decide` | Record one answer. Does **not** resume the run.                                                                                                                                         |
 | `POST …/interview/continue`                           | `decide` | Submit the answers and resume; the interviewer may ask more. **Asynchronous** (the pass runs in the durable driver).                                                                    |
 | `POST …/interview/proceed`                            | `decide` | Stop the questions: the interviewer converges on what it has and the run advances. Also asynchronous.                                                                                   |
 
@@ -960,11 +1160,31 @@ The workspace's open notification cards: the human-gated run tails (a PR awaitin
 run whose CI could not be fixed). `act` runs the card's typed side-effect; on a `merge_review` /
 `pipeline_complete` card that is a **real merge** of the PR, which is why it sits at `admin`.
 
-| Method / path                            | Scope   | Behaviour                                                                                                                                                                                                                        |
-| ---------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/notifications`              | `read`  | All **open** cards (unpaginated; humans keep this list short).                                                                                                                                                                   |
-| `POST /api/v1/notifications/:id/act`     | `admin` | Run the side-effect, resolve the card: `merge_review` / `pipeline_complete` → merge the PR; `ci_failed` / `test_failed` → retry the run. Any other type → `409 notification_not_actionable` (resolve it in the app, or dismiss). |
-| `POST /api/v1/notifications/:id/dismiss` | `write` | Resolve the card with no side-effect (idempotent).                                                                                                                                                                               |
+| Method / path                            | Scope   | Behaviour                                                                                                                                                                                                                         |
+| ---------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/notifications`              | `read`  | All **open** cards (unpaginated; humans keep this list short).                                                                                                                                                                    |
+| `POST /api/v1/notifications/:id/act`     | `admin` | Run the side-effect, resolve the card: `merge_review` / `pipeline_complete` → merge the PR; `ci_failed` / `test_failed` → retry the run; `merge_tag_request` → record the tag. Anything else → `409 notification_not_actionable`. |
+| `POST /api/v1/notifications/:id/dismiss` | `write` | Resolve the card with no side-effect (idempotent).                                                                                                                                                                                |
+
+`act` takes an **all-optional body**: `{ "reviewEffort": "none" | "minor" | "major" | null }`. On a
+`merge_review` / `pipeline_complete` card it records how much review the pull request needed in the
+SAME request that merges it, which is what the app's one-tap confirm-and-tag does. Sending no body at
+all is still the historical no-tag act, and stays supported; the four SDK clients render an
+all-optional body as a parameter you may omit, so `act(id)` is unchanged and `act(id, { reviewEffort })`
+is the new form.
+
+Tagging LATER through [`POST /api/v1/merge-records/:recordId/effort`](#merge-evidence-apiv1merge-records)
+remains the right call when the effort becomes known after the fact: the tag is idempotent and
+orthogonal to the decision, and that route is a rung LOWER (`write`) since it merges nothing.
+
+A `merge_tag_request` card (a pull request a human merged directly on the provider) is actionable
+**only with a `reviewEffort`**, because recording one is its entire side-effect: acting on it with
+nothing to record would resolve the nudge and write nothing, so a bare `act` answers `409` with
+`details.reason: "review_effort_required"` rather than silently losing the reminder. An explicit
+`null` counts as supplied (clearing a tag is a decision somebody made). Dismiss the card instead to
+wave it off. The two `409`s on this route are told apart by `details.reason`:
+`no_automated_action` (the card parks a run on an interactive human decision and can never be acted
+on headlessly) and `review_effort_required` (one field away from working).
 
 ### Discovery: the key and the spec
 
@@ -977,18 +1197,24 @@ itself need a wider key.
 | `GET /api/v1/me`           | `read` | What the calling key is and what it may do.                  |
 | `GET /api/v1/openapi.json` | `read` | **This deployment's** OpenAPI 3.1 document, served verbatim. |
 
-`GET /api/v1/me` answers `{ keyId, accountId, workspaceId, scope, label, createdAt }`. Before it,
+`GET /api/v1/me` answers
+`{ keyId, accountId, workspaceId, scope, label, externalIdentity, createdAt }`. Before it,
 "can this key do X" was answerable only by attempting X and reading the `403`, which for a
 destructive operation is not a check at all. Two things to hold on to when you read `scope`: the
 ladder is **inclusive** (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so compare against the rung an
 action needs rather than for equality; and `workspaceId` is the ONE workspace every call under this
 key acts within, which is what a multi-tenant integration should log alongside its own tenant id.
+`externalIdentity` is who whoever provisioned this key said it acts for, or `null`
+([key provisioning](#key-provisioning-apiv1keys)).
 
 `GET /api/v1/openapi.json` serves the same bytes as the committed
 [`docs/openapi.json`](../../docs/openapi.json), generated from the route contracts by
 `pnpm gen:openapi` and CI-guarded against drift. Prefer it over the repo file whenever the two can
 differ, which is exactly the case that matters: a deployment a release behind describes the
-operations it actually has. It is deliberately **not** an operation in the spec it serves (an
+operations it actually has. That is also why the website's
+[API Endpoint Reference](https://www.catfactory.ai/extend/api-reference.html), rendered from the
+committed file, states the surface version it was rendered at: it describes THIS repository's
+`main`, and a deployment behind it should read its own `/openapi.json` instead. It is deliberately **not** an operation in the spec it serves (an
 "any JSON object" response would mint an untyped method in four generated SDKs and an MCP tool that
 pours the whole schema into a model's context), so it is documented here instead, and it is public
 surface under the stability commitment all the same. Like `POST /api/v1/mcp`, it is authenticated:
@@ -996,9 +1222,10 @@ the document leaks no workspace state, but it is the map of everything else on t
 
 ### Usage & budget
 
-| Method / path       | Scope  | Behaviour                                                      |
-| ------------------- | ------ | -------------------------------------------------------------- |
-| `GET /api/v1/usage` | `read` | The current period's spend + budget position, as one resource. |
+| Method / path             | Scope  | Behaviour                                                               |
+| ------------------------- | ------ | ----------------------------------------------------------------------- |
+| `GET /api/v1/usage`       | `read` | The current period's spend + budget position, as one resource.          |
+| `GET /api/v1/usage/spend` | `read` | The same money over a window, sliced by ONE cost-attribution dimension. |
 
 Response: `{ periodStart, currency, budget, rows }`. `budget` is the **metered** position the spend
 safeguard acts on: `costSpent`, `costLimit` and `exceeded: true` when runs are paused at the cap.
@@ -1007,17 +1234,109 @@ kinds**: a `subscription` row's `costEstimate` is illustrative (flat-rate plans 
 token); only `metered` rows are money. Workspace tier only, by design: a workspace key never learns
 a sibling workspace's spend.
 
+#### Spend by repository, ticket or run
+
+`/usage` answers the BUDGET question: what has this calendar month cost, and are runs paused. It
+carries no board-shape axis, so it cannot answer the one an organisation actually budgets against:
+what did this repository cost us last quarter, what did that ticket cost, what did one pipeline run
+cost. `/usage/spend` is that read.
+
+```http
+GET /api/v1/usage/spend?dimension=repo&window=90d
+```
+
+```json
+{
+  "dimension": "repo",
+  "window": "90d",
+  "generatedAt": 1775000000000,
+  "since": 1767224000000,
+  "currency": "USD",
+  "source": "daily-rollup",
+  "rolledUpThrough": 1774915200000,
+  "truncated": false,
+  "totals": {
+    "inputTokens": 41200311,
+    "outputTokens": 903122,
+    "calls": 5140,
+    "meteredCost": 612.44,
+    "subscriptionCost": 88.1
+  },
+  "rows": [
+    {
+      "key": "40123",
+      "label": "acme/payments-api",
+      "inputTokens": 28110402,
+      "outputTokens": 611893,
+      "calls": 3311,
+      "meteredCost": 402.19,
+      "subscriptionCost": 61.0
+    },
+    {
+      "key": "",
+      "label": null,
+      "inputTokens": 902,
+      "outputTokens": 40,
+      "calls": 3,
+      "meteredCost": 0.04,
+      "subscriptionCost": 0
+    }
+  ]
+}
+```
+
+`dimension` is required and closed: `repo`, `ticket` and `run` are the attribution axes, and
+`model`, `agentKind`, `service` and `taskType` slice the same money the other ways. There is no
+`workspace` dimension: every key is bound to one board, so it would return a single row naming the
+board you already addressed, and the account-wide view it exists for is admin-gated and
+cross-workspace by design. `window` is `24h` / `7d` (default) / `30d` / `90d`, and `limit` is
+`1..500` (default 100).
+
+Six things decide whether a number off this is read correctly:
+
+- **`meteredCost` is money; `subscriptionCost` is not.** The same rule as `/usage`, and for the same
+  reason: a flat-rate harness plan bills nothing per token, so the second figure is what those tokens
+  WOULD have cost metered. Their sum denominates nothing.
+- **The EMPTY `key` is a real slice, not a gap.** It is spend whose run, service, repository or
+  ticket could not be resolved. It is reported rather than dropped, so an untruncated `rows` sums
+  to `totals`; an inner join would have under-reported the window while the breakdown still looked
+  complete.
+- **`totals` covers the window; `rows` covers `limit`.** The rows come back heaviest first and
+  `truncated` says when there was a tail, but the totals aggregate every slice either way. So a
+  capped breakdown still reports what the board spent, and the share the returned rows account
+  for is computable: what you lose to the cap is the identity of the tail, never its money.
+- **`source` says which store answered, and the two attribute differently.** `24h`/`7d` scan the
+  metered ledger live: exact to the millisecond, and resolving a repository or a ticket through
+  TODAY's links, so re-pointing a service or re-importing an issue re-attributes history. `30d`/`90d`
+  read the durable daily rollup, which froze that attribution while the money was being spent and is
+  never pruned. Comparing a `7d` figure against a `90d` one means comparing two different questions.
+- **Read `rolledUpThrough` before reporting a quiet quarter.** On a rollup window it is the newest
+  UTC day the sweep has covered, or `null` when no pass has ever completed, and a rollup that has
+  never run and a board that spent nothing produce the same empty breakdown.
+- **`since` is the real span**, snapped down to a bucket edge, so a window covers up to one bucket
+  more than its nominal length. Do not re-derive it from `window`.
+
+`rows` is CAPPED, and the cap is not silent. Five of the dimensions have catalog-bounded
+cardinality (models, agent kinds, the board's services, its repositories, the task-type picklist)
+and fit inside the default with room to spare. The other two grow with ACTIVITY: `run` is one row
+per pipeline execution and `ticket` one per issue a run touched, so a busy board over `90d` is
+thousands of rows on a response nobody sized. What this surface refuses is the smaller number that
+still reads as complete, which is why the cap comes with `truncated` beside it and with totals
+that do not move: raise `limit` for a longer tail, and read `truncated` before calling a list
+exhaustive.
+
 ### Run evidence (report + outcome + artifacts)
 
 What a run PROVED, for a consumer whose job is to judge it rather than debug it: a trial harness
 deciding whether to accept a change, an evaluation pipeline scoring a fleet of runs.
 
-| Method / path                            | Scope  | Behaviour                                                               |
-| ---------------------------------------- | ------ | ----------------------------------------------------------------------- |
-| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                       |
-| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up. |
-| `GET /api/v1/runs/:runId/artifacts`      | `read` | The binary artifacts the run captured (metadata; unpaged).              |
-| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.         |
+| Method / path                            | Scope  | Behaviour                                                                                                                                   |
+| ---------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                                                                                           |
+| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up.                                                                     |
+| `GET /api/v1/runs/:runId/artifacts`      | `read` | The run's binary artifacts, captured and task-attached (metadata; unpaged).                                                                 |
+| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.                                                                             |
+| `GET /api/v1/runs/:runId/spec`           | `read` | The **specification this run was judged against**, at the run's own branch. See [The run's own specification](#the-runs-own-specification). |
 
 A run is addressable here on the same terms as the [decision routes](#parked-decisions-apiv1runsruniddecisions)
 that share the `/api/v1/runs/:runId/*` prefix: the runs this key could already read through
@@ -1034,11 +1353,22 @@ that never opened a pull request at all (a headless job, or a run that failed be
 those get `run.repo: null` rather than an invented one.
 
 Every section carries `status: "reported" | "absent"` plus a `note`, so _"this pipeline had no
-tester step"_ and _"the tester found nothing"_ never read the same. What it covers: the CI gate's
-verdict and failing checks, the platform's own run of the service's lint/test/build commands with
-the failing output, the red-then-green reproduction proof for a bugfix, the tester's structured
-report, requirement coverage, the throwaway-environment lifecycle, judge verdicts, and the merge
-decision. `truncations` names anything a per-list cap left out.
+tester step"_ and _"the tester found nothing"_ never read the same. What it covers: what the run
+built FROM, the CI gate's verdict and failing checks, the platform's own run of the service's
+lint/test/build commands with the failing output, the red-then-green reproduction proof for a
+bugfix, the tester's structured report, requirement coverage, the throwaway-environment lifecycle,
+judge verdicts, and the merge decision. `truncations` names anything a per-list cap left out.
+
+`context` is the one that answers what the run was working from: each linked document its agents
+read, with the revision the dispatch confirmed it at. `freshness` is the same three-way verdict the
+board surfaces (`confirmed` naming a `version`, `not-applicable` for a body with no source,
+`unconfirmed` naming which of four gaps applies), and an ABSENT `freshness` means the deployment
+runs no freshness check at all, which is not the same fact as a check that ran and could not
+conclude. `movedDuringRun` is computed from the run's own records: the source moved WHILE the run
+was in flight, so its earlier steps built against something its later ones did not read. Nothing
+here is re-probed at read time, by design: the source has moved on since, so a fresh probe would
+answer about a revision no agent on this run ever saw. Added in 1.27.0 (report `version` 9), so a
+consumer written earlier simply does not see the key.
 
 `observability` carries the links back: `runUrl` (the app's panel, for a person), `trajectoryUrl`
 (the run's tool calls in order, on the debug surface) and `reportUrl` (this endpoint). Each is
@@ -1058,10 +1388,19 @@ unaffected.
 reader: the report is a reviewer's bundle (every failing check by name, every captured log tail, the
 merge assessment), and the outcome is the product-language answer for someone reporting what shipped:
 `disposition`, the requester's own `ask`, every pull request the run opened, requirement coverage,
-the tester's verdict and concerns, the views it captured, and the machine checks that recorded a
-verdict. It is the reduction the app's outcome card renders, served verbatim for the same reason the
-report is: one deployment answering a question two ways is how the app and an integration come to
-disagree about what a run did.
+the tester's verdict and concerns, the views it captured, the linked pages its agents built from,
+and the machine checks that recorded a verdict. It is the reduction the app's outcome card renders,
+served verbatim for the same reason the report is: one deployment answering a question two ways is
+how the app and an integration come to disagree about what a run did.
+
+`sources` is the outcome's half of the report's `context`, reduced from the same per-dispatch
+records by the same code, so the card, this endpoint and the pull request cannot disagree about
+which revision a run built from. One row per linked page, carrying the LAST verdict the run
+recorded about it (that is the state the run ended on) plus `movedDuringRun`, which says the source
+changed while the run was in flight and is therefore the one thing that last verdict cannot say.
+`url` is null for an `upload`, which has no source page to open, and a null `freshness` means the
+deployment runs no freshness check at all rather than a check that ran and could not conclude. Its
+`gap` when absent is `none_linked` or `run_unavailable`. Added in 1.27.0 (outcome `version` 2).
 
 Both are composed by the same code over one read of the run's evidence, so the coverage counts
 (`met` / `notMet` / `notCovered` / `regressions` / `total`) and the regression rule are the same
@@ -1069,7 +1408,8 @@ numbers on both endpoints and on the pull request. What differs is the SHAPE, de
 report is bounded to what FITS IN A PULL-REQUEST BODY, a budget of a few dozen rows, so a tally
 taken off its capped tables would be quietly wrong. The outcome's own caps are a ceiling on a
 pathological producer rather than a routine truncation (500 requirement rows, 200 tester areas or
-concerns, 2000 characters of any one free-text field), so an ordinary run is complete.
+concerns, 200 linked-source rows, 2000 characters of any one free-text field), so an ordinary run
+is complete.
 
 Both name what they left out in `truncations`, in one vocabulary
 (`"requirements.entries: showing 500 of 640"`), and **neither endpoint's counts are ever affected**:
@@ -1081,7 +1421,8 @@ so a cut can never leave half a credential in the payload.
 
 Every outcome section is `{ status: "reported" } | { status: "absent", gap }` where
 `gap` is a machine-readable CODE (`no_tester_step`, `tester_not_reported`, `no_verdicts`,
-`no_requirements`, `run_unavailable`) rather than prose, since the platform does not localize:
+`no_requirements`, `none_linked`, `run_unavailable`) rather than prose, since the platform does not
+localize:
 `requirements.spec` says whether coverage was counted against the service's `spec/` (`joined`) or
 only against the ids the tester reported (`not_read`, a narrower denominator), and
 `unmatchedVerdicts` counts rulings the spec could not place, on both endpoints. A spec that
@@ -1093,11 +1434,25 @@ The `spec/` both endpoints join against is read from the branch the RUN pushed t
 the repo default: the spec increment a task wrote has not merged while its pull request is open, so
 the default branch is missing exactly the requirements the tester just ruled on.
 
-The **artifact** rows are `{ artifactId, kind, view, contentType, byteSize, hash, createdAt }`.
+The **artifact** rows are `{ artifactId, kind, scope, view, contentType, byteSize, hash, createdAt }`.
 `kind` is `screenshot` (machine-captured during the run) or `reference` (the image a human uploaded
-for it to be judged against); `view` pairs the two. The list is deliberately unpaged: the capture
-path caps how many artifacts one run may store, so the response size is bounded before the request,
-and `byteSize` lets a caller decide whether to fetch the bytes at all.
+for it to be judged against); `view` pairs the two. The list is deliberately unpaged, and both of
+its halves carry a standing row cap for that to hold: the capture path bounds how many artifacts one
+run may store, and the upload path bounds how many one task may hold (a `429` once it is full, never
+an eviction of a design somebody already attached). So the response size is bounded before the
+request, and `byteSize` lets a caller decide whether to fetch the bytes at all.
+
+**`scope` says which anchor a row came from**, and the list carries BOTH: `run` for what this run
+captured, `task` for what is attached to its task and outlives any single run of it. Until 1.31.0
+the list was the run's own rows alone, and a reference design is deliberately task-anchored (a person
+uploads it once, not once per attempt), so a caller enumerating a run's artifacts to compare a
+screenshot against the design it was judged against saw one half and concluded the run had captured
+evidence against nothing. Both halves were individually fetchable through the blob endpoint the whole
+time: it was the LIST that was half the truth.
+
+Two consequences for a consumer. A count that means "screenshots this run captured" must filter on
+`scope: "run"`. And a row that satisfies both anchors (a screenshot the run captured against its own
+task) appears ONCE, as `run`, so no count off this list double-reports it.
 
 The blob endpoint answers the artifact's stored image content type with `nosniff`, and is
 **authenticated like everything else**: a report on a public repository can link to it without
@@ -1130,6 +1485,257 @@ curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/artifacts" | jq '.artifacts[] | {arti
 curl -s -H "$AUTH" "$BASE/api/v1/artifacts/$ART/blob" -o login.png
 ```
 
+### Merge evidence (`/api/v1/merge-records`)
+
+The evidence behind the auto-merge policy: what KIND of change each run made, what the `merger`
+scored it, what happened to its pull request, and **how much review a human actually spent**. Design
+record: [ADR 0046](./adr/0046-merge-track-record.md).
+
+| Method / path                                 | Scope   | Behaviour                                                                         |
+| --------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| `GET /api/v1/runs/:runId/merge-record`        | `read`  | The merge decision this run left behind (and the `recordId` the tag route takes). |
+| `GET /api/v1/merge-records/rollups`           | `read`  | Every change class's accumulated track record, as one aggregate.                  |
+| `GET /api/v1/merge-records/:recordId`         | `read`  | One record by id.                                                                 |
+| `POST /api/v1/merge-records/:recordId/effort` | `write` | Tag (or clear) the reviewer effort that pull request needed.                      |
+
+**Tagging is `write`, not `admin`, and that is the point of the surface.** `POST /notifications/:id/act`
+sits at the top of the ladder because it MERGES a pull request for real; recording how much review an
+already-landed one took performs no external side-effect and can merge nothing. Before 1.33.0 the only
+way to record a tag over the API was through that `admin` route's session-authed twin, so an
+integration whose whole job is collecting evidence had no path at all, and a `read` key could not see
+what the workspace had accumulated. The reads sit at `read` for the same reason the
+[run evidence](#run-evidence-report--outcome--artifacts) does.
+
+The **change class** is derived on the backend from the pull request's changed-file list and never
+from an agent's opinion: `docs`, `test`, `dependency`, `config`, `source`, `schema`, or `unknown`. A
+mixed diff resolves to the **highest-ranked class present**, so a diff touching `package.json` and
+`src/foo.ts` is `source` and one touching a migration and docs is `schema`. That is what makes a
+per-class auto-merge rule safe: an "always auto-merge dependency bumps" rule can only fire on a diff
+carrying nothing riskier than a bump. `unknown` means no changed-file list was available (no VCS
+client wired, or an unreadable diff) and **never matches a per-class rule**, so a transient VCS outage
+cannot change merge policy. Do not collapse it onto a class: it is a classification failure, not a
+kind of change.
+
+The **effort tag** is `none` (zero blocking comments), `minor` (a nit pass) or `major` (real rework),
+and it is **never mandatory**: an untagged merge records `null`, and `null` means "nobody said",
+never `none`. Tagging is idempotent and orthogonal to the decision, so a record can be tagged
+whenever the effort becomes known, before or after the merge; `{ "reviewEffort": null }` clears a
+tag that was recorded wrongly.
+
+A **rollup** carries `total`, `merged` (the landed denominator: auto + through the app + directly on
+the provider), each decision's own count, and the distribution of effort tags including `untagged`.
+Every class is present, as zeros when it holds nothing, so "no data yet" never reads as a class the
+response left out. This is the number that justifies **widening** a per-class rule, and nothing
+widens one automatically: the rules live on the workspace's merge presets and a human edits them.
+
+Refusals carry `error.details.reason`: `run_not_found` (the id names no run this key may read),
+`no_merge_record` (the run is readable and simply made no merge decision, because its pipeline has no
+`merger` step or it never reached one) and `merge_record_not_found` (the id names no record this
+workspace holds), which the record-addressed **read and tag answer identically**, so a client can
+branch on one value whichever of the two it called. A deployment that wired no track-record store
+answers `503` rather than an empty rollup set.
+
+A run is addressable here on the same terms as every other `/api/v1/runs/:runId/*` route: the runs
+this key could already read through `GET /api/v1/jobs/:id` or `GET /api/v1/tasks/:taskId/run`. The
+two record-addressed routes are scoped to the key's workspace instead, like every point read on this
+API.
+
+**A record outlives its run, and that is deliberate.** A track record holds no foreign key to the
+execution row, so re-running or cancelling a task leaves the evidence its earlier merge decision
+produced exactly where it was. The visible consequence is that the two addresses stop agreeing:
+`GET /runs/:runId/merge-record` starts answering `run_not_found` while
+`GET /merge-records/:recordId` still serves the record, which is the same set of rows the rollups
+have been counting all along. Address a record you intend to keep reading by its `recordId`, which
+is stable, rather than by the run that minted it. Neither door is wider than the other: both re-apply
+the key's workspace, which is the one boundary this surface enforces.
+
+```sh
+# The loop: merge the tail, then record what reviewing it actually cost.
+REC=$(curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/merge-record" | jq -r .recordId)
+curl -s -X POST -H "$AUTH" -H 'content-type: application/json' \
+  -d '{"reviewEffort":"none"}' "$BASE/api/v1/merge-records/$REC/effort"
+
+# What the board has earned, per class.
+curl -s -H "$AUTH" "$BASE/api/v1/merge-records/rollups" \
+  | jq '.rollups[] | select(.merged > 0) | {changeClass, merged, autoMerged, effort}'
+```
+
+### Service specification
+
+`GET /api/v1/services/:serviceId/spec`, at `read` scope.
+
+The service's **prescriptive specification**: what it must be true of, as opposed to what any one
+run did. It lives in the service's own repository under `spec/`, sharded so concurrent task branches
+merge cleanly, and this serves it reassembled: modules → feature groups → requirement items, each
+with its MoSCoW `priority`, its `kind` (`functional` / `nonfunctional` / `constraint`), its
+`state`, and its Given/When/Then `acceptance` criteria, plus the domain rules scoped to each group
+and the `.feature` files rendered from the same tree.
+
+`state` is the axis a prescriptive document is otherwise missing: `aspirational` means the
+requirement was agreed and has not been observed to hold, `established` means a tester actually
+exercised its criteria and they passed. Only the second is standing behaviour, which is why a
+`not_covered` verdict against an `aspirational` requirement is the expected reading rather than a
+gap. Nothing on this surface can change it: promotion is mechanical, driven by an observed test
+pass.
+
+**The join this exists for.** The requirement ids here are the same ids
+`GET /api/v1/runs/:runId/report` and `GET /api/v1/runs/:runId/outcome` key their `requirements`
+rows on. Fetch the spec once per service, fetch a run's outcome per run, and criterion → evidence
+is a map lookup:
+
+```sh
+SVC=$(curl -s -H "$AUTH" "$BASE/api/v1/services" | jq -r '.services[0].serviceId')
+
+# Every requirement the service declares, by id.
+curl -s -H "$AUTH" "$BASE/api/v1/services/$SVC/spec" \
+  | jq '[.spec.modules[].groups[].requirements[] | {key: .id, value: .}] | from_entries' > spec.json
+
+# What one run observed against them, keyed the same way.
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/outcome" \
+  | jq '.requirements.entries' > verdicts.json
+
+# criterion → evidence, entirely outside the platform.
+jq --slurpfile s spec.json 'map(. + {spec: $s[0][.id]})' verdicts.json
+```
+
+(`--slurpfile` binds `$s` to an ARRAY of the file's values, so the index into the map is
+`$s[0][.id]`.)
+
+A run's join reads the spec from the branch that run pushed to, not the default branch, because a
+task's spec increment has not merged while its pull request is open. This endpoint always answers
+the **default branch**, which is the service's agreed truth; its sibling
+[`GET /api/v1/runs/:runId/spec`](#the-runs-own-specification) answers the run's branch and is what a
+join keyed on one run should use. The two differ exactly for the requirements a run is still adding,
+and `provenance.commit` is what lets a caller notice.
+
+**What the response says about itself.** A spec read has several outcomes and this endpoint keeps
+them apart, because most of them produce an empty tree and need different reactions:
+
+| Outcome                               | Answer                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| No spec on the default branch         | `200`, `anchor: "absent"`, `spec: null`. A real and common answer.                  |
+| A `spec/service.json` that is corrupt | `200`, `anchor: "unparsed"`, `spec: null`, with the file named in `issues`.         |
+| The branch could not be resolved      | `503`, `error.details.reason: "spec_ref_unresolved"`. The repo link, not an outage. |
+| The repository could not be read      | `503`, `error.details.reason: "spec_read_failed"`. Retry; the spec may be there.    |
+| No version control connected          | `503`, `error.details.reason: "vcs_not_configured"`. The deployment or workspace.   |
+| The spec read partially               | `200` with the tree, and `issues` naming every file that did not survive.           |
+
+`anchor` is how the endpoint refuses to fold the three states that all render as "no tree". Branch
+on it rather than on `spec === null`: `absent` is the only one that means the service declares
+nothing, `unparsed` means a file in the repository needs fixing, and an outage never reaches a
+`200` at all.
+
+The distinction that matters most is the one between an answer and an outage. The reader behind
+this endpoint is deliberately total (a flaky read degrades rather than throwing) and the app's own
+requirements window folds an unreadable repository into the same empty state as a repository with
+no spec, which is right for a window drawing an empty state and wrong for an integrator: folded
+here, it would report every service as requirement-free for the duration of a VCS incident, with
+nothing in the payload saying otherwise.
+
+`spec_ref_unresolved` is the subtle member. Git hosts answer `404` for a file that is absent, a
+repository that was renamed, transferred or deleted, a branch that no longer exists and an
+installation that lost access, so "no such file" and "no such repository" arrive identically. The
+endpoint resolves the branch's head commit before walking, and that resolution is the only positive
+evidence it has that the branch is reachable at all: an empty read with an unresolved ref is
+unproven and refused, rather than served as a confident `absent`. The fix is a repository link or a
+default branch, not a retry.
+
+A service frame with **no linked repository** answers `422`, the same refusal starting a run on it
+gets. There is deliberately no "first repo in the workspace" fallback anywhere in the platform, so
+a service nothing can run never reads as one that merely has nothing to say.
+
+`issues` is one row per file the read could not fully account for: `read_failed` (the provider
+answered with something other than "absent", so the file may well exist), `unparsed` (read, and
+nothing recoverable, so its subtree is missing from the tree above), `partial` with a `dropped`
+count (a group salvaged item by item, so it looks valid and is quietly missing that many
+requirements or rules), and `unread` against the `spec` root (the walk hit its read budget, and
+`dropped` counts the files it never fetched). An empty `issues` is the statement that the tree is
+whole.
+
+A `dropped` of **`null`** means content was lost there and no count describes it: a shard whose
+`requirements` is an object rather than a list has requirements that are structurally unreadable,
+so the rebuilt group is served as damaged rather than as one that legitimately declares nothing.
+Treat `null` as "some, unknown", never as zero.
+
+`truncations` is the same idea for the caps. Every row counts ITEMS, so `shown` and `total` share
+one unit:
+
+| Section        | Cap                                                         |
+| -------------- | ----------------------------------------------------------- |
+| `requirements` | 2,000 rows across the tree                                  |
+| `rules`        | 2,000 rows across the tree                                  |
+| `acceptance`   | 5,000 criteria across the tree                              |
+| `features`     | 500 files, and 1,000,000 characters of Gherkin between them |
+| `issues`       | 200 rows                                                    |
+
+Each feature file is also clamped to 20,000 characters on its own and carries `chars` /
+`totalChars` / `truncated`. Caps cut in the tree's own traversal order and nothing is re-ranked
+(the platform does not judge which requirement matters more); a group the cap emptied stays in the
+tree rather than vanishing, because a missing group reads as a feature the service never specified;
+and a requirement whose criteria the `acceptance` budget could not fit is still carried, because
+its id is the join key this endpoint exists for. `issues` is capped for the opposite reason to the
+rest: it grows with FAILURE rather than with the spec, so a rate-limit window part-way through a
+large walk would otherwise make the report of a degraded read the largest thing in the response.
+
+`provenance` names `provider`, `owner`, `repo`, the `ref` (the default branch) and the `commit` it
+describes. There is no `directory`, and the absence is the fact: the `spec/` tree is anchored at the
+repository ROOT, so two services carved out of one monorepo share one spec and this endpoint answers
+both the same way. `commit` is resolved immediately before the walk, and the walk itself reads by
+branch name, so a push landing mid-read can leave the response describing a slightly later commit; a
+`null` means the head could not be resolved at all, not that the tree is unknown.
+
+**There is no write side, by decision.** The files are the truth and the spec's write path is a
+reviewed commit: agents propose changes through pull requests, and `state` is promoted only by an
+observed test pass. An API write would bypass exactly the review that makes the spec worth reading.
+The natural sibling, importing Gherkin as requirement items, is a separate proposal for the same
+reason: it AUTHORS requirements, so it belongs behind the review path rather than behind an API key.
+
+#### The run's own specification
+
+`GET /api/v1/runs/:runId/spec`, at `read` scope. The same document, read at the branch THAT RUN
+pushed its work to.
+
+This is the one the criterion to evidence join actually needs, and the join example above is the
+short version rather than the correct one. A task's spec increment lives on its pull request's
+branch until it merges, so while a run is open the service read is missing exactly the requirements
+that run ADDED, and every verdict naming one of them has no criterion to join to. Swapping the first
+fetch is the whole change:
+
+```sh
+# Every requirement THIS RUN was scored against, by id, from the branch it pushed to.
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/spec" \
+  | jq '[.spec.modules[].groups[].requirements[] | {key: .id, value: .}] | from_entries' > spec.json
+```
+
+Reach for the service read when the question is about the SERVICE (what is it committed to, what
+does its board declare); reach for this one whenever the answer is paired with a run.
+
+`provenance.ref` is the branch it read, and `commit` the head it was at, so a caller can see which
+of the two trees it got rather than infer it. Read it rather than assume the pull request's head:
+once a run merges, its head branch is usually deleted, and the read then answers the default branch,
+which by then carries the very requirements the run added. A pull request closed WITHOUT merging and
+then deleted is the one case where that tree is not what the run was judged against, and `ref` is
+what makes it visible. Only a branch the host confirms does not exist moves the read; a host that
+will not answer for the ref leaves it where it was, so a provider incident never quietly swaps the
+tree under a caller.
+
+The refusals are the service read's, with one addition and one omission. The addition is a fourth
+`anchor` value, `not_read`: nothing was read, and `provenance` is `null`. That is not an empty spec
+and not an outage. The run's spec read is gated on a tester having reported, so that the tree served
+is the one the verdicts were made against rather than one re-read afterwards (the promotion post-op
+rewrites this very branch as soon as the tester settles); before that gate opens, the platform has
+consulted no tree, which is the same fact `requirements.spec: "not_read"` on the run's own outcome
+already states. Both endpoints answer it from ONE read for that reason: a spec fetched here and a
+coverage count fetched there can never disagree about the tree they describe.
+
+`not_read` outranks the `vcs_not_configured` refusal, so a run answers it whatever the deployment
+wired: a read that was never due stopped at the gate and never reached the resolver. That ordering is
+what stops one unchanged deployment answering `200` early in a run and `503` later in it.
+
+The omission is `422`: a service with no linked repository cannot be reached down this path, because
+a run resolved a repository to push to before it could exist. A repository that becomes unreadable
+answers `503 spec_read_failed` here, as everywhere else on this surface.
+
 ### Key provisioning (`/api/v1/keys`)
 
 The external counterpart of the key panel, so a deployment whose operator is headless can mint the
@@ -1145,6 +1751,51 @@ Create body: `{ "label": "tenant-42 reader", "scope": "read" }`; omitting `scope
 same safe middle rung the app defaults to. Everything else comes from the calling key: the mint
 lands in **its** workspace, and this surface has no vocabulary for another one.
 
+#### Mapping a run back to a person (`externalIdentity`)
+
+The create body also takes an optional `externalIdentity`: an opaque string naming who, on **your**
+side, this key acts for (an OS user id, a tenant slug, a service-account name). Up to 200
+characters, no control characters. It is stored verbatim and never parsed, resolved against a user,
+or used to decide anything: what a key may do is its `scope`, and what a run may do is the policy
+the workspace authored.
+
+It is echoed in three places, which together are the whole feature:
+
+- on the key resource (`POST`/`GET /api/v1/keys`, and the app's key list),
+- on `GET /api/v1/me`, so a subsystem handed a credential can discover which identity it holds
+  rather than being told twice,
+- on **every run that key starts**: `externalIdentity` on the run resource
+  (`GET /api/v1/tasks/:taskId/run`) and on the job resource (`GET /api/v1/jobs`,
+  `GET /api/v1/jobs/:id`, `POST /api/v1/jobs/:id/cancel`, and the two SSE run streams), `null` for
+  a run started from the app, by a schedule, or by a key with no identity. The 202 that
+  `POST /api/v1/jobs` answers with is the accepted-job envelope (`jobId`, `status`, `links`) and
+  carries no run fields at all, identity included: follow `links.self` for the resource.
+
+So an integration that mints one key per person gets real per-person attribution without keeping a
+keyId table of its own. Three properties are worth relying on:
+
+- **The run's copy is pinned when it starts, not looked up when you read it.** Revoking the key
+  (what you do when someone leaves) does not erase who a finished run was for, and reading a page
+  of runs costs no key reads.
+- **A retry keeps it.** A re-drive is the same work for the same requester, whoever pressed retry.
+- **A key that has an identity of its own only sees runs started for THAT identity.** Every run
+  projection carries `externalIdentityWithheld` beside the value, and `true` there means the run
+  does have an identity your key may not read. It is never `true` for a run that simply names
+  nobody, so the two stay distinguishable: a withheld attribution is one the platform is holding,
+  not one it never had. A key minted with no identity (your provisioning key, or one a member
+  minted in the app) reads every run's, which is the mapping this feature exists to give you, so
+  do the mapping from the provisioner rather than from the per-person keys. Your own key's
+  identity is on `GET /api/v1/me`.
+
+  The rule is what keeps one-key-per-person from handing each person the roster of everyone else:
+  the identity is often an email, and workspace reach is otherwise shared. It compares the stored
+  bytes exactly, with no case folding or trimming, because the value is opaque everywhere else
+  too.
+
+For attribution that actually _governs_ a run (role-scoped merge policy, submission allow-lists),
+mint per-user keys and keep them per-user: `externalIdentity` is provenance you supplied, not an
+authorization input the platform verified.
+
 Two bounds are what make this safe to offer, and both are enforced, not advisory:
 
 - **`admin` cannot be minted here** (`400 validation`). A key provisioned over the API can never
@@ -1155,7 +1806,9 @@ Two bounds are what make this safe to offer, and both are enforced, not advisory
   the credential they can see and the ones an attacker made keep working.
 
 A provisioned key records `createdByKeyId` (and no `createdByUserId`, since no person minted it), which
-is what the app's key list shows and what the cascade follows. Revoking the **calling** key is
+is what the app's key list shows and what the cascade follows. `externalIdentity` is never inherited
+from the provisioning key: a provisioner mints for many identities, so defaulting to its own would
+name the integration on every run it starts for anyone. Revoking the **calling** key is
 allowed: a harness handing back a scratch credential is the case it exists for.
 
 ### Run debugging (`/api/v1/debug/*`)
@@ -1167,15 +1820,16 @@ keys, `read` scope. Fully documented in [`debug-api.md`](./debug-api.md).
 
 ### Outbound webhook management
 
-`GET|PUT|DELETE /api/v1/notification-webhook`, `admin` scope: register the endpoint this workspace
-pushes to, read what is registered, or unregister. Documented with the delivery contract it
-configures, in [Outbound webhook](#outbound-webhook-push) below.
+`GET|PUT|DELETE /api/v1/notification-webhook` and the
+`GET /api/v1/notification-webhooks` collection beside it, `admin` scope: register the endpoints this
+workspace pushes to, read what is registered, or unregister. Documented with the delivery contract
+they configure, in [Outbound webhooks](#outbound-webhooks-push) below.
 
-## Outbound webhook (push)
+## Outbound webhooks (push)
 
 Polling has no answer for the two cases that matter most: a parked run waits **indefinitely**, and a
-fully-successful run raises no notification at all. A workspace can register **one** outbound HTTPS
-endpoint and subscribe it to any of three delivery families:
+fully-successful run raises no notification at all. A workspace can register outbound HTTPS
+endpoints and subscribe each to any of three delivery families:
 
 - **Notification cards**: the same cards as `GET /api/v1/notifications`, pushed as they are raised
   and again as they are resolved.
@@ -1204,11 +1858,15 @@ curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: appl
   "$BASE/api/v1/notification-webhook"
 ```
 
-| Route                                 | Scope   | Notes                                                          |
-| ------------------------------------- | ------- | -------------------------------------------------------------- |
-| `GET /api/v1/notification-webhook`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set. |
-| `PUT /api/v1/notification-webhook`    | `admin` | Register, edit or rotate. Returns the stored config.           |
-| `DELETE /api/v1/notification-webhook` | `admin` | Unregister. Idempotent, `204`.                                 |
+| Route                                             | Scope   | Notes                                                                  |
+| ------------------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `GET /api/v1/notification-webhook`                | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set.         |
+| `PUT /api/v1/notification-webhook`                | `admin` | Register, edit or rotate. Returns the stored config.                   |
+| `DELETE /api/v1/notification-webhook`             | `admin` | Unregister. Idempotent, `204`.                                         |
+| `GET /api/v1/notification-webhooks`               | `admin` | `{ "webhooks": [ … ] }`, every endpoint, ordered by id. Not paginated. |
+| `GET /api/v1/notification-webhooks/:webhookId`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when that id has none.    |
+| `PUT /api/v1/notification-webhooks/:webhookId`    | `admin` | Register, edit or rotate ONE named endpoint.                           |
+| `DELETE /api/v1/notification-webhooks/:webhookId` | `admin` | Unregister one. Idempotent, `204`; siblings untouched.                 |
 
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
 at rest, never readable back. An `admin` key can rotate the signing secret but never learn the
@@ -1256,6 +1914,52 @@ are followed at most 5 times, each hop re-validated; a cross-origin hop drops th
 headers). For local development, a deployment can relax this with
 `NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS` / `NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS`
 ([environment variables](../../docs/environment-variables.md)).
+
+### Several endpoints, one per integration
+
+The routes above address **one** endpoint, the one whose id is `default`. A workspace can register
+up to **10**, each with its own URL, its own signing secret and its own three filters, addressed
+under `/api/v1/notification-webhooks/:webhookId`. That is what lets a second integration enroll
+without displacing the first: before the collection existed, registering a receiver overwrote
+whatever was already there, and the only symptom was that the previous one went quiet.
+
+**You choose the id**, and the route is idempotent by it, so a receiver enrolls itself on every cold
+start without tracking whether it has enrolled before and without a create-or-discover round trip it
+might be racing a second instance on. An id is 1-63 characters of lowercase letters, digits, `-` or
+`_`, starting with a letter or digit; anything else is refused with
+`details.reason: "invalid_webhook_id"`.
+
+```sh
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
+  -d '{
+    "url": "https://gatekeeper.example.com/cat-factory",
+    "name": "Cloudflare OS gatekeeper",
+    "secret": "<16-200 chars, THIS endpoint’s own signing secret>",
+    "runEvents": ["run.completed", "run.failed"]
+  }' \
+  "$BASE/api/v1/notification-webhooks/gatekeeper"
+```
+
+Everything else is identical to the singular routes: same `admin` floor, same keep-on-omit rule,
+same write-only secret, same SSRF guard, same `webhook_url_required` refusal. The two extras are
+`id` (which the projection now carries, and which the `default` entry reports like any other) and
+`name`, an operator-facing label that defaults to the id.
+
+A delivery **fans out**: every enabled endpoint subscribed to the family gets its own copy, signed
+with its own secret, delivered concurrently (up to six at a time) so a second receiver costs a run's
+settlement no extra latency. One receiver failing costs only its own delivery. `deliveryId` is
+unchanged and carries no endpoint segment: each receiver sees only its own copy, so the key it
+dedupes on is the same one it always was.
+
+The whole fan-out shares ONE retry budget rather than giving each endpoint its own, because the
+budget exists to bound what a run's settlement waits for. Delivery stays best-effort, as it always
+was: if enough subscribed receivers are slow enough to spend that budget between them, the endpoints
+behind them are logged as not attempted rather than delivered late. A receiver that needs a
+guarantee should treat the push as a prompt and reconcile over the polling endpoints.
+
+Registering an 11th endpoint is refused with `409` and
+`details.reason: "webhook_limit_reached"` (`details.limit` carries the cap). Editing or removing an
+existing endpoint is admitted regardless, since those are the actions that resolve it.
 
 ### Delivery contract
 

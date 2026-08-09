@@ -60,6 +60,169 @@ export interface McpServerSpec {
 }
 
 /**
+ * What the agent's CLI reported about ONE wired tool server when it started up.
+ *
+ * This is the OBSERVED half of the run's tool-server record, and it answers a question the
+ * backend's own half structurally cannot: the dispatch record says why the platform WITHHELD a
+ * tool, while this says a server the platform wired failed to start anyway. A vendor endpoint
+ * that 500s, an `npx` package that no longer resolves, a credential the vendor has since revoked
+ * — every one of those leaves the prompt promising a tool the agent then cannot call, and before
+ * this the only evidence was the agent saying so in prose, if it noticed at all.
+ *
+ * OBSERVED, never decided: nothing here changes what the run does. The harness reports what the
+ * CLI said and the backend records it beside what it decided; no code path branches on it.
+ */
+export interface ObservedMcpServer {
+  /** The server id the CLI named — the same id the backend declared (`--strict-mcp-config`). */
+  id: string
+  status: ObservedMcpStatus
+  /**
+   * How many of the CLI's exposed tools belong to this server (`mcp__<id>__…`).
+   *
+   * ABSENT and `0` are different facts and both are worth having: absent means this image counted
+   * nothing for the server, while `0` means it counted and the server contributed none: a server
+   * that connected and exposes nothing, which reads to the agent exactly like a server that was
+   * never wired. Never defaulted to 0.
+   *
+   * Two things leave it absent, and neither is "the server has no tools": the CLI listed no tools
+   * at all, or the tool namespace cannot say which of two declared servers a name belongs to (see
+   * {@link tallyToolsByServer}).
+   */
+  toolCount?: number
+}
+
+/**
+ * The status vocabulary of {@link ObservedMcpServer}, normalised from the CLI's own word.
+ *
+ * A CLOSED list mapped from an OPEN one, which is why `unknown` is a member rather than a reason
+ * to drop the row. The CLI's status strings are a third party's vocabulary and it may add to them;
+ * a server whose status this image cannot name is still a server the CLI knows about, and the
+ * honest report is "it was there, this image could not read its state" rather than silence
+ * (which reads as a server the CLI never mentioned) or a guess at `ready` (which would report a
+ * dead tool as a live one, the precise failure the whole unavailability vocabulary exists to
+ * prevent).
+ *
+ * `unknown` covers two causes that share one remedy, which is why they share one member: a word
+ * this image cannot map, and a word the CLI uses for a state that is not resolved YET. Neither
+ * says anything about the server, and the surface paints neither as a fault.
+ */
+export type ObservedMcpStatus = 'ready' | 'failed' | 'needs_auth' | 'unknown'
+
+/**
+ * Map one status word from the CLI onto {@link ObservedMcpStatus}.
+ *
+ * The synonyms are grouped rather than listed one-to-one because the CLI has spelled the same
+ * two states more than one way across versions (`connected`/`ready`, `failed`/`error`), and an
+ * image that pinned the exact spelling would silently start reporting `unknown` for every server
+ * on a CLI upgrade — a regression that looks identical to a genuine outage.
+ */
+function normalizeMcpStatus(value: unknown): ObservedMcpStatus {
+  if (typeof value !== 'string') return 'unknown'
+  const status = value.trim().toLowerCase()
+  if (status === 'connected' || status === 'ready' || status === 'ok') return 'ready'
+  if (status === 'failed' || status === 'error') return 'failed'
+  // The vendor spells the OAuth-required state with a hyphen; the underscore form costs nothing
+  // to accept and is what a JSON-ish vocabulary tends to drift toward.
+  if (status === 'needs-auth' || status === 'needs_auth') return 'needs_auth'
+  // Everything else, INCLUDING the CLI's `pending`. A server still handshaking when the session
+  // was announced has no resolved state, which is exactly what `unknown` says, and `needs_auth` is
+  // the tempting wrong guess for it: the surface paints that one amber as "waiting for you to
+  // authorize it", sending an operator to re-issue a working credential for a server that was
+  // merely slow and came up a second later.
+  return 'unknown'
+}
+
+/**
+ * Read the claude-code CLI's startup report (`{"type":"system","subtype":"init"}`) into one
+ * {@link ObservedMcpServer} per server the CLI knows about.
+ *
+ * The CLI announces its resolved session ONCE, before the first model call: which MCP servers it
+ * loaded and with what status, and the flat list of tool names it will expose. Both halves are
+ * read here because neither answers the question alone — a `ready` server exposing no tools is as
+ * useless to the agent as a failed one, and a tool count with no status cannot say why.
+ *
+ * Returns `undefined` when the event names no servers at all, which keeps "this run wired none"
+ * and "this image observed none" from collapsing into an empty list on the backend's record.
+ * Pure, so the parsing is testable without a CLI: {@link runClaudeCode} feeds it the raw event.
+ */
+export function observeClaudeMcpInit(
+  event: Record<string, unknown>,
+): ObservedMcpServer[] | undefined {
+  if (event.type !== 'system' || event.subtype !== 'init') return undefined
+  const reported = event.mcp_servers
+  if (!Array.isArray(reported) || reported.length === 0) return undefined
+  const rows: { id: string; status: ObservedMcpStatus }[] = []
+  const declared = new Set<string>()
+  for (const entry of reported) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const record = entry as Record<string, unknown>
+    const id = sanitizeServerId(record.name)
+    // An id this image cannot hold is dropped rather than reported under a mangled name: the
+    // whole row is only useful if it JOINS the backend's declaration, and `--strict-mcp-config`
+    // means every server the CLI loaded came from the config this harness wrote.
+    if (!id || declared.has(id)) continue
+    declared.add(id)
+    rows.push({ id, status: normalizeMcpStatus(record.status) })
+  }
+  if (rows.length === 0) return undefined
+  // Counted from the CLI's own tool list rather than from a per-server field, because there is no
+  // per-server field: the CLI flattens every server's tools into one array namespaced by server
+  // id. A missing/non-array list leaves every count ABSENT rather than 0 (see `toolCount`).
+  const tally = tallyToolsByServer(event.tools, declared)
+  return rows.map((row) => ({
+    ...row,
+    ...(tally && !tally.ambiguous.has(row.id) ? { toolCount: tally.counts.get(row.id) ?? 0 } : {}),
+  }))
+}
+
+/** What {@link tallyToolsByServer} read out of the CLI's flat tool list. */
+interface ToolTally {
+  /** Tools attributed to each declared server. A server with none is simply absent from the map. */
+  counts: ReadonlyMap<string, number>
+  /**
+   * Servers whose count could not be established, because at least one tool name belongs to more
+   * than one of them. Their count is reported ABSENT rather than short.
+   */
+  ambiguous: ReadonlySet<string>
+}
+
+/**
+ * Tally the CLI's flat tool list (`mcp__<id>__<tool>`) against the servers the SAME event
+ * declared, or `undefined` when it carried no list, which is the distinction
+ * {@link ObservedMcpServer.toolCount} preserves.
+ *
+ * Matched against the declared ids rather than split on the first `__`, because the id vocabulary
+ * ({@link MCP_SERVER_ID_PATTERN}) permits an underscore: a server named `code__search` owns
+ * `mcp__code__search__query`, which a first-separator split files under a server called `code`,
+ * leaving the real one reporting `toolCount: 0`. That is the single most diagnostic value on the
+ * field, so the mis-split renders a fully healthy server as one that started and exposes nothing.
+ *
+ * The same underscore makes genuine ambiguity representable: with both `code` and `code__search`
+ * declared, `mcp__code__search__query` is a name either could own and nothing in the report says
+ * which. Neither server is counted then, and both are named `ambiguous` so their count stays
+ * absent. Guessing an owner would move a real tool onto the wrong server and take the other's
+ * count to a `0` that reads as a fault.
+ */
+function tallyToolsByServer(tools: unknown, declared: ReadonlySet<string>): ToolTally | undefined {
+  if (!Array.isArray(tools)) return undefined
+  const counts = new Map<string, number>()
+  const ambiguous = new Set<string>()
+  for (const tool of tools) {
+    if (typeof tool !== 'string' || !tool.startsWith('mcp__')) continue
+    const owners: string[] = []
+    for (const id of declared) {
+      const prefix = `mcp__${id}__`
+      // The tool name after the prefix must be non-empty: `mcp__slack__` names no tool.
+      if (tool.length > prefix.length && tool.startsWith(prefix)) owners.push(id)
+    }
+    const [owner] = owners
+    if (owners.length === 1 && owner) counts.set(owner, (counts.get(owner) ?? 0) + 1)
+    else for (const id of owners) ambiguous.add(id)
+  }
+  return { counts, ambiguous }
+}
+
+/**
  * The credential values carried by a run's tool servers, for {@link registerKnownSecrets}. An MCP
  * server that fails to start routinely echoes its own argv or request headers into stderr, and
  * that tail reaches the step's diagnostics — so these have to be scrubbed exactly like the leased
@@ -219,19 +382,28 @@ export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
  * reached the container by any other route is held to the rule too.
  */
 export function isAllowedMcpHttpUrl(raw: string): boolean {
-  const match = /^(https?):\/\/([^/?#]*)/i.exec(raw)
-  if (!match) return false
-  if (match[1]!.toLowerCase() === 'https') return true
-  // Plain http from here: the host must be loopback. Strip userinfo FIRST and from the LAST `@`,
-  // or `http://127.0.0.1@evil.example` reads as loopback while the request goes to evil.example.
-  const authority = match[2]!
-  const hostPort = authority.slice(authority.lastIndexOf('@') + 1)
-  const closingBracket = hostPort.indexOf(']')
-  const host = (
-    hostPort.startsWith('[') && closingBracket !== -1
-      ? hostPort.slice(1, closingBracket) // IPv6 literal, e.g. [::1]:8080
-      : (hostPort.split(':')[0] ?? '')
-  ).toLowerCase()
+  // ASCII control characters and the space are refused ANYWHERE rather than canonicalised: the
+  // WHATWG parser trims leading/trailing C0-and-space and removes tab, LF and CR from anywhere, so
+  // a url carrying one parses to something other than what it reads as, and this url is written
+  // VERBATIM into the CLI's MCP config below.
+  for (let i = 0; i < raw.length; i += 1) if (raw.charCodeAt(i) <= 0x20) return false
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    // silent-catch-ok: an unparseable url is exactly what this predicate refuses.
+    return false
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+  if (parsed.protocol === 'https:') return true
+  // Plain http from here: the host must be loopback. `new URL` rather than a hand-written parse
+  // because it is the parser the CLI resolves the request with, so the host ruled on is the host
+  // the credential header travels to. It strips userinfo from the LAST `@` (or
+  // `http://127.0.0.1@evil.example` reads as loopback while the request goes to evil.example), and
+  // it terminates the authority at a backslash as well as at `/?#` (or
+  // `http://evil.example\@127.0.0.1` reads as loopback the same way).
+  const hostname = parsed.hostname
+  const host = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname
   return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
 }
 

@@ -164,12 +164,13 @@ export function createUiResultViews() {
   // The run-scoped openers (a caller that knows only the RUN, so the step index has to be
   // resolved) live in a sibling module: they share one shape and one hazard, and lifting them out
   // keeps this factory inside its per-function line budget. Their two seams are bound here.
-  const { openFollowUps, openForkDecision, openPrReview, openTestEvidence } = createRunStepOpeners({
-    dispatchStepView: (instanceId, stepIndex) => dispatchStepView(instanceId, stepIndex),
-    setResultView: (view, instance, stepIndex) => {
-      resultView.value = { view, blockId: instance.blockId, instanceId: instance.id, stepIndex }
-    },
-  })
+  const { openFollowUps, openForkDecision, openBinaryCandidates, openPrReview, openTestEvidence } =
+    createRunStepOpeners({
+      dispatchStepView: (instanceId, stepIndex) => dispatchStepView(instanceId, stepIndex),
+      setResultView: (view, instance, stepIndex) => {
+        resultView.value = { view, blockId: instance.blockId, instanceId: instance.id, stepIndex }
+      },
+    })
 
   function closeResultView() {
     resultView.value = null
@@ -209,6 +210,7 @@ export function createUiResultViews() {
     openInitiativePlanning,
     openFollowUps,
     openForkDecision,
+    openBinaryCandidates,
     openPrReview,
     openTestEvidence,
     openOutcome,

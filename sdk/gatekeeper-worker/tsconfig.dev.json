@@ -1,0 +1,15 @@
+{
+  // The suite, which is not shipped. It runs inside workerd, so it gets the pool's own types on
+  // top of the Worker ones the source already compiles against; `cloudflare:test` itself is
+  // declared through the reference in `test/env.d.ts` (the bare package name resolves to the
+  // POOL's types, not the module's).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"],
+    // The suite is loaded by vitest, which resolves through vite rather than Node's ESM resolver,
+    // and `vitest.config.ts` sits outside `src`. Bundler resolution is what those two want.
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "vitest.live.config.ts"]
+}

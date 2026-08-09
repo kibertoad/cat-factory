@@ -345,7 +345,10 @@
       "intake": "課題の取り込み",
       "intakeHint": "各実行はトラッカーから条件に一致する未解決の課題を1件選び、最後まで対応します。",
       "intakeNoSources": "課題を取り込むには、まずタスクソースを接続してください。",
+      "intakeNoIntakeSources": "タスクソースは接続されていますが、接続済みのソースはいずれもまだ定期的な課題検索を実行できません。",
       "intakeGithubRepo": "リポジトリ",
+      "intakeGitlabProject": "プロジェクト",
+      "intakeGitlabProjectHelp": "GitLab プロジェクトのフルパス。サブグループを含みます (例: group/sub/project)。",
       "intakeBoardId": "ボード ID",
       "intakeBoardIdHelp": "このトラッカーが取り込み対象とするボード、プロジェクト、またはキュー。形式はトラッカーが定めます。",
       "trackerTrigger": "トラッカーの Webhook から実行を開始",
@@ -357,6 +360,7 @@
       "intakeLabels": "ラベル",
       "intakeLabelsPlaceholder": "カンマ区切り",
       "intakeIssueType": "課題タイプ",
+      "intakeIssueTypeUnsupported": "{tracker} には「bug」を意味する課題タイプがないため、このスケジュールでは適用されません。代わりにラベルで取得対象を絞り込んでください。",
       "intakeInProgressLabel": "進行中ラベル",
       "refusalPerTicketRequiresOnDemand": "トラッカー起動のスケジュールはオンデマンドである必要があります。定期実行のタイミングには、割り当てるチケットがありません。",
       "refusalPerTicketConflictsWithBugIntake": "このパイプラインはボードから自分で課題を選ぶため、送信されたチケットで駆動することはできません。bug-intake ステップのないパイプラインを選んでください。"
@@ -426,7 +430,8 @@
       "accessDenied": {
         "title": "アクセスが拒否されました",
         "hint": "このサービスの基盤となるリポジトリにアクセスする権限がありません。"
-      }
+      },
+      "startFromDesignTitle": "デザインから始める"
     },
     "decisionBadge": {
       "decisionNeeded": "判断が必要",
@@ -456,7 +461,6 @@
       "noPipelineBody": "まずビルダーで作成してください。",
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "{pr} を GitHub で開く",
       "readOutcome": "成果",
       "readOutcomeHint": "何が変わったかを、その根拠とともに読む",
       "review": "レビュー",
@@ -474,7 +478,8 @@
       "startedToast": {
         "title": "実行を開始しました",
         "body": "「{name}」を実行中です。"
-      }
+      },
+      "openPrLink": "{pr} を開く"
     },
     "dryRunToast": {
       "title": "ドライランを開始しました",
@@ -563,7 +568,11 @@
     "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
     "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
     "importsOnAdd": "追加時にインポート",
-    "unreadable": "取得できませんでした: {error}"
+    "unreadable": "取得できませんでした: {error}",
+    "pastedLink": {
+      "offer": "この説明は {source} のページにリンクしています。コンテキストとして添付しますか？",
+      "attach": "添付"
+    }
   },
   "errors": {
     "generic": {
@@ -585,7 +594,9 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "このデプロイメントの生成系インテグレーションを現在読み取れなかったため、実行は開始されませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
-        "foundational_builtins_unreachable": "このデプロイメントの組み込み基盤サービスを現在読み取れませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。"
+        "foundational_builtins_unreachable": "このデプロイメントの組み込み基盤サービスを現在読み取れませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
+        "connection_credentials_unreadable": "この接続に保存されている認証情報を読み取れませんでした。このデプロイメントが鍵を保持しているサービスに到達できる場合は、ソースを接続し直して認証情報を置き換えてください。到達できない場合は、その接続が回復してからもう一度お試しください。",
+        "vcs_capability_unsupported": "このワークスペースに接続されているソース管理プロバイダーは、この操作に対応していません。設定に誤りはなく、設定を変更しても解決しません。このプロバイダーでは利用できない操作です。"
       }
     },
     "action": {
@@ -647,7 +658,8 @@
         "ticket_already_linked": "この課題にはすでにタスクがあります",
         "document_already_linked": "ドキュメントは既に添付されています",
         "dry_run_not_mergeable": "ドライランはマージできません",
-        "submission_not_allowed": "この実行ではマージできません"
+        "submission_not_allowed": "この実行ではマージできません",
+        "webhook_limit_reached": "Webhook の上限に達しました"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -656,7 +668,7 @@
         "agent_backend_unconfigured": "コンテナエージェントを実行できるランナーバックエンドがありません。セルフホストのランナープールを登録するか、デプロイで Cloudflare Containers を有効にしてください。",
         "run_not_retryable": "再試行できるのは失敗または完了した実行のみです。この実行はまだ実行中か、再試行できない状態です。",
         "no_pr_to_merge": "この実行はまだプルリクエストを開いていないため、マージするものがありません。",
-        "github_not_connected": "エージェントがリポジトリのクローン、変更のプッシュ、プルリクエストのオープンを行えるように、このワークスペースを GitHub に接続してください。",
+        "github_not_connected": "エージェントがリポジトリをクローンし、変更をプッシュし、プルリクエストを作成できるように、このワークスペースをリポジトリホストに接続してください。",
         "bootstrap_not_retryable": "このブートストラップジョブは現在の状態では再試行できません（まだ実行中か、すでに正常に完了しています）。",
         "bootstrap_reference_missing": "このブートストラップが利用する参照リポジトリにアクセスできなくなりました。削除されたか、アクセス権が取り消されています。別の参照を選択するか、最初から作成してください。",
         "preset_unsatisfiable": "インラインステップのモデルは、このデプロイではインラインで実行できません（インライン非対応のサブスクリプション専用モデル）。インライン対応のモデルまたはプリセットを選択してください。",
@@ -685,7 +697,8 @@
         "ticket_already_linked": "1 つの課題が支えられるタスクは 1 つだけです。もう一度リンクすると、既存のタスクは作成時の文脈を失います。代わりにそのタスクを開くか、先に課題のリンクを解除してください。",
         "document_already_linked": "そのドキュメントは別のタスクに添付されています。先にそちらで添付を解除するか、別のコピーを添付してください。",
         "dry_run_not_mergeable": "このプルリクエストはドライランによるものなので、ここからはマージできません。このワークスペースがマージするプルリクエストを作るには、タスクを通常の実行として開始し直してください。",
-        "submission_not_allowed": "このタスクのマージポリシーでは、実行を開始したロールがこの種類の変更をマージすることを許可していません。マージできるロールのメンバーが対応するか、管理者がマージプリセットでポリシーを広げてください。"
+        "submission_not_allowed": "このタスクのマージポリシーでは、実行を開始したロールがこの種類の変更をマージすることを許可していません。マージできるロールのメンバーが対応するか、管理者がマージプリセットでポリシーを広げてください。",
+        "webhook_limit_reached": "このワークスペースには送信 Webhook がすでに上限数まで登録されています。不要なものを削除してから、もう一度登録してください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",
@@ -1161,6 +1174,7 @@
       },
       "chooseApproach": "アプローチを選択",
       "triageFollowUps": "フォローアップを決定",
+      "chooseCandidates": "候補を決定",
       "elapsedTooltip": "このステップの経過時間",
       "reviewFindings": "指摘を確認",
       "dryRun": "ドライラン",
@@ -1440,8 +1454,10 @@
       "decisionRequired": "判断が必要",
       "followUpsParked": "Coderが決定待ちのフォローアップ項目を提起しています。実行を続行するには、フォローアップウィンドウで各項目を処理してください(起票、差し戻し、回答、または却下)。",
       "forkParked": "このCoderステップは、コードを書く前に実装アプローチの選択を待っています。決定ウィンドウで提案されたアプローチを選ぶか、独自のアプローチを入力してください。",
+      "candidatesParked": "このステップは候補を生成し、成果物を引き渡す前にどれを残すかの選択を待っています。候補ウィンドウで見比べて、残したいものを選んでください。",
       "openFollowUps": "フォローアップを開く",
       "chooseApproach": "アプローチを選択",
+      "chooseCandidates": "候補を選択",
       "expandAll": "すべてのセクションを展開",
       "collapseAll": "すべてのセクションを折りたたむ",
       "copyRawOutput": "生の出力をコピー",
@@ -1509,6 +1525,16 @@
           "oauthNotConnected": "インフラストラクチャ ウィンドウからこのボードを接続してください。ENCRYPTION_KEY のないデプロイには許可を保管する場所がないため、まず運用者がそれを設定する必要があります。",
           "oauthTokenFailed": "インフラストラクチャ ウィンドウから接続し直すか、提供元の障害が収まるのを待ってください。",
           "overBudget": "1 回の実行ですべて運べるよう、このエージェントの宣言を減らしてください。"
+        },
+        "observed": {
+          "ready": "起動済み",
+          "readyTools": "ツール {count} 個",
+          "readyNoTools": "起動済み、ツールなし",
+          "failed": "起動に失敗",
+          "needsAuth": "認可が必要",
+          "unknown": "状態は未確定",
+          "notLoaded": "読み込まれませんでした",
+          "unattributed": "エージェント CLI が、このステップでは接続していないサーバーを報告しました: {id}。"
         }
       },
       "adherence": {
@@ -1588,6 +1614,8 @@
       "priorDocHint": "前回のレビューより。これをベースに、上の説明を編集して再送信してください。",
       "bootstrapping": "ブートストラップ中…",
       "viewRequirements": "要件を表示",
+      "mapService": "サービスをマッピング",
+      "mapServiceNoRepo": "先にこのサービスにリポジトリをリンクしてください。まだマッピングするものがありません。",
       "reRun": "再実行",
       "run": "実行",
       "focus": "フォーカス",
@@ -2064,8 +2092,11 @@
           "fs": "ローカルファイルシステム",
           "s3": "Amazon S3 / S3 互換",
           "r2": "Cloudflare R2",
-          "db": "Postgres データベース"
+          "db": "Postgres データベース",
+          "custom": "カスタムストア（このデプロイ）"
         },
+        "unregisteredStore": "{store}（このデプロイには登録されていません）",
+        "unregisteredStoreWarning": "このアカウントは成果物を「{store}」に保存する設定ですが、このデプロイには登録されていません。登録済みのストアを選ぶか、コードで再度登録するまで何も保存されません。",
         "basePath": "ベースパス（デフォルト: .file-storage）",
         "region": "リージョン（例: us-east-1）",
         "bucket": "バケット",
@@ -2081,6 +2112,18 @@
         "keysValidation": "S3 のアクセスキー ID とシークレットを入力してください",
         "saved": "コンテンツストレージを保存しました",
         "saveFailed": "コンテンツストレージを保存できませんでした"
+      },
+      "figma": {
+        "title": "Figma アプリ (OAuth)",
+        "description": "「Figma で接続」の流れを有効にします。設定しなくても、ワークスペースはパーソナルアクセストークンを貼り付けて Figma に接続できます。",
+        "clientId": "クライアント ID",
+        "clientSecret": "クライアントシークレット",
+        "redirectUrl": "リダイレクト URL",
+        "validation": "クライアント ID、シークレット、リダイレクト URL を入力してください",
+        "saved": "Figma の OAuth を保存しました",
+        "saveFailed": "Figma の OAuth を保存できませんでした",
+        "cleared": "Figma の OAuth を削除しました",
+        "clearFailed": "Figma の OAuth を削除できませんでした"
       }
     },
     "accountFragments": {
@@ -2366,7 +2409,8 @@
         "shortcuts": "キーボードショートカット",
         "bugHunt": "バグハント",
         "toggleUiMode": "インターフェースモードを切り替え",
-        "foundationalServices": "基盤サービス"
+        "foundationalServices": "基盤サービス",
+        "notificationSettings": "通知ルーティングを管理"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -2390,7 +2434,8 @@
         "bugHunt": "bug バグ ハント トリアージ バックログ 課題 未割り当て",
         "toggleUiMode": "インターフェース モード 基本 詳細 表示 非表示",
         "tutorial": "チュートリアル ツアー ガイド ヘルプ 使い方 オンボーディング",
-        "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ"
+        "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ",
+        "notificationSettings": "通知 メール ルーティング チャネル 受信箱"
       }
     },
     "integrationsHub": {
@@ -2460,6 +2505,10 @@
         "bugHunt": {
           "label": "バグハント",
           "description": "ボードの未割り当ての未解決バグを評価し、修正するものをひとつ選びます"
+        },
+        "notificationSettings": {
+          "label": "通知",
+          "description": "受信箱とメールに届くイベントを選びます。"
         }
       }
     },
@@ -2966,27 +3015,21 @@
         "linearTeamSearchPlaceholder": "チームを検索…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "課題をコンテキストとしてリンク",
         "description": "ソースが提供されている場合、その課題をインポートしてタスクに添付できます。これにより、エージェントは実装中に課題の説明とコメントを参照できます。これは上記の起票トラッカーとは独立しています。",
-        "github": {
-          "available": "インストール済みの GitHub App を利用します。認証情報は不要です。",
-          "unavailable": "このソースを提供するには GitHub App (Integrations → GitHub) をインストールしてください。"
-        },
         "checkSetup": "セットアップを確認",
-        "install": "インストール",
         "connected": "接続済み。",
-        "jira": {
-          "connectHint": "Jira アカウントと API トークンで接続します。"
+        "connect": "接続",
+        "state": {
+          "ridesConnected": "このワークスペースの {provider} 接続を利用するため、独自の認証情報は不要です。",
+          "ridesMissing": "このソースを利用するには、連携設定で {provider} を接続してください。",
+          "notConnected": "まだ接続されていません。"
         },
-        "linear": {
-          "connectHint": "Linear の個人 API キーで接続します。"
-        },
-        "connect": "接続"
+        "connectProvider": "{provider} を接続",
+        "none": "このデプロイにはタスクソースが設定されていません。"
       },
       "writeback": {
         "heading": "ライトバック",
@@ -4102,14 +4145,11 @@
       "loading": "読み込み中…",
       "tabs": {
         "repos": "リポジトリ",
-        "pulls": "プルリクエスト",
         "issues": "イシュー"
       },
       "linkedToBoard": "このボードにリンク済み",
       "manageRepos": "リポジトリを管理",
-      "manageHint": "このボードで追跡するリポジトリを選択します。GitHub 接続はアカウント全体で共有され、各ボードがそれぞれのリポジトリをリンクします。",
       "loadingRepos": "リポジトリを読み込み中…",
-      "noAvailableRepos": "このインストールはまだどのリポジトリにもアクセスできません。",
       "private": "プライベート",
       "saveSelection": "選択を保存",
       "noLinkedRepos": "リンクされたリポジトリはまだありません。このボードが追跡するリポジトリを選ぶには「リポジトリの管理」を使用してください。",
@@ -4119,15 +4159,11 @@
       "fromSha": "SHAから",
       "commitShaPlaceholder": "コミットsha",
       "createBranch": "ブランチを作成",
-      "openPr": "PRを開く",
       "repository": "リポジトリ",
       "chooseRepository": "リポジトリを選択",
       "prTitle": "タイトル",
       "headBranch": "ヘッドブランチ",
       "baseBranch": "ベースブランチ",
-      "openPullRequest": "プルリクエストを開く",
-      "noPulls": "同期されたプルリクエストはありません。",
-      "mergePr": "プルリクエストをマージ",
       "noIssues": "同期されたイシューはありません。",
       "prState": {
         "open": "オープン",
@@ -4141,9 +4177,7 @@
       "toast": {
         "resync": "{status}を再同期",
         "reposUpdated": "リンクされたリポジトリを更新しました",
-        "branchCreated": "ブランチ{name}を作成しました",
-        "prOpened": "プルリクエストを開きました",
-        "prMerged": "PR #{number}をマージしました"
+        "branchCreated": "ブランチ{name}を作成しました"
       },
       "errors": {
         "disconnect": "接続を解除できませんでした",
@@ -4152,7 +4186,6 @@
         "updateRepos": "リポジトリを更新できませんでした",
         "loadBranches": "ブランチを読み込めませんでした",
         "createBranch": "ブランチを作成できませんでした",
-        "openPr": "プルリクエストを開けませんでした",
         "merge": "マージできませんでした"
       }
     },
@@ -4276,6 +4309,58 @@
       "body": "再接続するまで Slack の通知が停止します。"
     }
   },
+  "notificationSettings": {
+    "panel": {
+      "title": "通知",
+      "intro": "このボードがどのイベントをどのチャネルで通知するかを選びます。変更しない項目は既定値のままです。",
+      "inAppNote": "「アプリ内」はリアルタイム通知のみを制御します。カードは常に保存され、再読み込み後も受信箱に残ります。",
+      "emailNote": "メールにはアカウントに接続された送信元が必要です (アカウント設定)。既定では影響の大きいイベントのみ送信されます。",
+      "otherChannelsNote": "Slack と送信 Webhook は、宛先を設定する画面でそれぞれの対象イベントを選びます。",
+      "openSlack": "Slack のルーティング"
+    },
+    "column": {
+      "event": "イベント",
+      "inApp": "アプリ内",
+      "email": "メール"
+    },
+    "action": {
+      "save": "保存",
+      "reset": "既定に戻す"
+    },
+    "toast": {
+      "saved": "通知のルーティングを保存しました"
+    },
+    "error": {
+      "load": "通知設定を読み込めませんでした",
+      "save": "通知設定を保存できませんでした"
+    },
+    "unavailable": "このデプロイでは通知ルーティングを保存しないため、すべてのイベントが既定値を使用します。",
+    "loadFailed": "このボードの通知ルーティングを読み取れませんでした。以下のスイッチは現在の設定ではありません。変更する前に再試行してください。",
+    "type": {
+      "merge_review": "マージレビュー",
+      "pipeline_complete": "パイプライン完了",
+      "ci_failed": "CI失敗",
+      "test_failed": "テスト失敗",
+      "requirement_review": "要件レビュー",
+      "clarity_review": "明確性レビュー",
+      "release_regression": "リリースリグレッション",
+      "decision_required": "判断が必要",
+      "human_test_ready": "人手テスト準備完了",
+      "visual_confirmation_ready": "ビジュアル確認準備完了",
+      "human_review": "コードレビュー待ち",
+      "followup_pending": "フォローアップの判断",
+      "fork_decision_pending": "実装アプローチ",
+      "judge_review": "レビュー判定",
+      "pr_review_ready": "PRレビューの指摘",
+      "initiative": "イニシアチブの更新",
+      "platform_health": "プラットフォームの健全性",
+      "infra_unreachable": "インフラ障害",
+      "budget_paused": "実行の一時停止 (予算)",
+      "budget_threshold": "予算の警告",
+      "key_drift": "暗号化キーの不一致",
+      "merge_tag_request": "レビュー工数の記録依頼"
+    }
+  },
   "docInterview": {
     "title": "ドキュメントを精緻化",
     "subtitle": "インタビュアーの質問に答えてドキュメントを形作ります",
@@ -4368,16 +4453,27 @@
       },
       "refreshFailed": "変更を確認できませんでした"
     },
+    "renders": {
+      "partial": "一部のデザインフレームを画像として保存できませんでした。",
+      "failed": "ソースからデザイン画像を取得できませんでした。",
+      "storage_unavailable": "デザイン画像は保存されていません。このデプロイには画像ストレージが設定されていません。"
+    },
     "connect": {
       "title": "ソースを接続",
       "sourceFallback": "ソース",
-      "intro": "{source} を接続すると、要件、RFC、PRD をインポートし、ボード構造を生成したり、エージェントのコンテキストとしてタスクに添付したりできます。",
+      "intro": "{source} を接続して、ページやデザインをこのボードに取り込みます。インポートしてボード構造に展開したり、タスクにエージェント用のコンテキストとして添付したりできます。",
       "disconnect": "切断",
       "connect": "接続",
       "update": "接続を更新",
       "connected": "{source} を接続しました",
       "disconnected": "{source} を切断しました",
-      "connectFailed": "接続できませんでした"
+      "connectFailed": "接続できませんでした",
+      "oauth": {
+        "action": "{source} で接続",
+        "scopes": "次の権限が求められます: {scopes}",
+        "fallback": "トークンを使いますか？下のフィールドをご利用ください。",
+        "failed": "{source} へのサインインを開始できませんでした"
+      }
     },
     "spawn": {
       "title": "構造をプレビュー",
@@ -4392,7 +4488,15 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} フレーム | {count} フレーム",
       "moduleCount": "{count} モジュール | {count} モジュール",
-      "taskCount": "{count} タスク | {count} タスク"
+      "taskCount": "{count} タスク | {count} タスク",
+      "reusedCount": "{count} 個のモジュールを再利用 | {count} 個のモジュールを再利用",
+      "intoService": "選択したサービスの中に",
+      "target": {
+        "label": "サービスに追加",
+        "help": "デザインが表すのはアーキテクチャではなく画面です。そのため計画は、すでに存在するサービスの中の作業を提案します。",
+        "placeholder": "サービスを選択",
+        "required": "このデザインが属するサービスを選んでください。"
+      }
     },
     "taskDocs": {
       "heading": "コンテキストドキュメント",
@@ -4425,6 +4529,20 @@
       "remove": "削除",
       "linkFailed": "ドキュメントのリンクを更新できませんでした",
       "loadFailed": "ドキュメントテンプレートを読み込めませんでした"
+    },
+    "startFromDesign": {
+      "title": "デザインから始める",
+      "intro": "フレームまたはファイル全体のリンクを貼り付けてください。新しいタスクに添付され、エージェントがレイアウト・テキスト・コンポーネント・トークンを読み取ります。",
+      "noSource": "デザインソースがまだ接続されていません。管理者が連携画面から Figma または Zeplin を接続できます。",
+      "linkLabel": "デザインのリンク",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "リンクを確認しています…",
+      "trimmed": "このリンクのサポートされた形式に整形しました。",
+      "widened": "フレーム {scope} を読み取れなかったため、ファイル全体を添付しました。",
+      "unchecked": "今はリンクを確認できませんでした。タスク作成時に取得されます。",
+      "uncheckedAmbiguous": "リンクを確認できず、デザインソースが複数接続されているため、どれに属するか判断できません。もう一度お試しください。",
+      "rejected": "接続済みのデザインソースはどれもこのリンクを認識できません。",
+      "continue": "続ける"
     }
   },
   "tasks": {
@@ -4521,6 +4639,7 @@
     "boardsFailed": "ボードを読み込めませんでした: {reason}",
     "issueType": "課題タイプ",
     "issueTypeHelp": "既定は bug です。課題タイプを持たないトラッカーでは無視されます。",
+    "issueTypeUnsupported": "{tracker} には「bug」を意味する課題タイプがないため、このフィルターは適用されません。代わりにラベルでスキャンを絞り込んでください。",
     "labels": "ラベル",
     "labelsHelp": "カンマ区切り。すべて付いている必要があります。",
     "adoptInto": "選んだバグの追加先",
@@ -4561,7 +4680,11 @@
     "preview": {
       "stepCount": "{count}ステップ | {count}ステップ",
       "gateCount": "{count}件の承認 | {count}件の承認",
-      "gated": "このステップの後に人による承認"
+      "gated": "このステップの後に人による承認",
+      "conditionalCount": "条件付きステップ {count} 件 | 条件付きステップ {count} 件",
+      "conditionEstimate": "タスクの見積もりがこのステップのしきい値を超えた場合にのみ実行されます",
+      "conditionFrontend": "タスクがフロントエンドサービスを変更する場合にのみ実行されます",
+      "conditionBackend": "タスクがフロントエンド以外のサービスを変更する場合にのみ実行されます"
     },
     "picker": {
       "noneHint": "デフォルトのパイプラインはありません。タスクの実行時に選択します。",
@@ -4613,7 +4736,7 @@
       "strategy": "戦略",
       "rounds": "ラウンド",
       "purposeLabel": "目的",
-      "purposePlaceholder": "目的を選択",
+      "purposeUnrecognized": "認識できません ({purpose})",
       "purposeOption": {
         "build": "開発",
         "document": "ドキュメント",
@@ -4631,6 +4754,10 @@
       "removeParticipant": "参加者を削除(最低2)",
       "addParticipant": "参加者を追加",
       "savedPipelines": "保存済みパイプライン",
+      "purposeHiddenPipelines": "この目的では {count} 件の保存済みパイプラインが非表示です。",
+      "everyPurposeListed": "すべての目的の保存済みパイプラインを表示しています。",
+      "listEveryPurpose": "すべての目的を表示",
+      "narrowToDraftPurpose": "この目的に絞り込む",
       "hideArchived": "アーカイブを非表示",
       "archivedCount": "アーカイブ済み({count})",
       "allLabels": "すべて",
@@ -4643,6 +4770,11 @@
       "edit": "このパイプラインを編集",
       "delete": "このパイプラインを削除",
       "disabledStepTooltip": "無効、実行時にスキップ",
+      "condition": {
+        "always": "すべてのタスクで実行されます。クリックすると条件付きになります",
+        "frontend": "フロントエンドサービスを変更するタスクでのみ実行されます",
+        "backend": "フロントエンド以外のサービスを変更するタスクでのみ実行されます"
+      },
       "cancelEdit": "編集をキャンセル",
       "clear": "クリア",
       "update": "パイプラインを更新",
@@ -4689,6 +4821,13 @@
       "binaryOutputPlaceholder": "保存サービスを選択",
       "binaryOutputContextPlaceholder": "任意: 生成の範囲を定めるサービス",
       "binaryOutputNeedsPick": "バイナリ成果物を生成するステップに保存サービスが選択されていません。保存前に選んでください。",
+      "envNeedsDeployer": "Tester、手動テスト、または Playwright のステップの前には Deployer が必要です。追加しないとパイプラインは保存できません（プロビジョニングしないサービスでは何もしません）。",
+      "envNeedsDisposer": "Deployer の後には、用意した環境を解放する Disposer が必要です。追加するか、Deployer に実行後も環境を残す設定を付けてください。どちらもない場合、パイプラインは保存できません。",
+      "envDisposerNeedsDeployer": "この Disposer の前に Deployer がないため、解放する対象がありません。Deployer を追加するか、Disposer を削除してください。",
+      "envConsumerAfterDisposer": "Tester、手動テスト、または Playwright のステップが、Disposer が環境を解放した後に実行されるため、実行対象が残りません。Disposer をそのステップより後ろに移すか、その前にもう一つ Deployer を追加してください。",
+      "envRetainedButReclaimed": "この Deployer には実行後も環境を残す設定が付いていますが、後続の Disposer がまさにその環境を解放します。Disposer を削除するか、環境を残す設定を解除してください。",
+      "retainEnvironmentSetTooltip": "実行の終了時に解放されます。クリックすると実行後も環境を残します（PR を開いた後にレビュアーが使うプレビュー用）。その後は TTL または運用者が停止します。",
+      "retainEnvironmentClearTooltip": "実行の終了後も環境を残します。クリックすると Disposer ステップで解放する動作に戻ります。",
       "binaryOutputNoStorage": "このボードのカタログに {capability} 機能を宣言するサービスがありません。基盤サービスで新たに登録するか、意図したサービスにこの機能を追加してください。",
       "binaryOutputMissing": "この保存サービスはカタログに存在しません。別のサービスを選んでください。",
       "binaryOutputNotStorage": "このサービスは {capability} 機能を宣言しなくなったため、実行は拒否されます。別のサービスを選んでください。",
@@ -4716,7 +4855,51 @@
         "3d-model": "3D モデル",
         "3d-scene": "3D シーン",
         "document": "ドキュメント"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "参照画像",
+        "multi-reference": "複数の参照画像",
+        "instruction-edit": "指示による編集",
+        "mask-edit": "マスク編集",
+        "negative-prompt": "ネガティブプロンプト",
+        "seed": "固定シード",
+        "aspect-ratio": "アスペクト比",
+        "exact-size": "正確なサイズ",
+        "candidate-batch": "1回の呼び出しで複数の候補",
+        "upscale": "アップスケール",
+        "transparent-background": "背景の透過",
+        "tileable": "シームレスなタイル"
+      },
+      "binaryCapabilityUnknown": "{capability}（このデプロイでは定義されていない機能）",
+      "binaryCapabilityUnsupported": "このステップの生成オプションが要求する {capabilities} に対応した連携が選択されていません。オプションを外すか、その機能を宣言している連携を選択してください。",
+      "binaryCapabilityUnverifiable": "選択された連携のどれも {capabilities} への対応を宣言していませんが、そのうち一つは機能を一切宣言していないため確認できませんでした。ステップは開始されます。連携の API で確認してください。",
+      "binaryReferenceImages": "参照画像",
+      "binaryReferenceImagesPlaceholder": "役割{'|'}場所{'|'}サービス（1行に1件）",
+      "binaryReferenceImagesUnusable": "参照として保存されませんでした: {entries}。各行は 役割{'|'}場所 の形式で、役割は style / subject / composition / base のいずれかです。",
+      "binaryEditMode": "既存を編集",
+      "binaryEditModeNone": "新規に生成",
+      "binaryEditModeInstruction": "指示から",
+      "binaryEditModeMask": "マスク領域",
+      "binaryEditInstruction": "変更内容",
+      "binaryEditInstructionPlaceholder": "例: 空を差し替える",
+      "binaryNegativePrompt": "ネガティブプロンプト",
+      "binaryNegativePromptPlaceholder": "避けたい要素",
+      "binaryAspectRatio": "アスペクト比",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "出力サイズ",
+      "binaryOutputSizeWidth": "幅",
+      "binaryOutputSizeHeight": "高さ",
+      "binaryOutputSizeIncomplete": "幅と高さの両方がないと、正確なサイズは保存されません。",
+      "binaryOutputSizeAmbiguous": "正確な出力サイズは {options} と併用できません。どちらも納品される寸法を二重に指定します。要件であるほうだけを残してください。",
+      "binarySeed": "シード",
+      "binarySeedPlaceholder": "固定シード",
+      "binaryTransparent": "背景を透過",
+      "binaryTileable": "シームレスなタイル",
+      "binaryUpscale": "結果をアップスケール",
+      "binaryComparison": "納品前に候補を比較する",
+      "binaryPerGenerator": "連携ごとの候補数",
+      "binaryMultiSelect": "複数を残せるようにする",
+      "binaryComparisonUnreachable": "このステップは対象ごとに候補を1つしか作れないため、比較するものがなく、その1つが確認なしで採用されます。2つ目の連携を選ぶか、連携ごとの候補数を増やしてください。"
     },
     "progress": {
       "status": {
@@ -4763,9 +4946,20 @@
         "proposing": "アプローチを提案中…",
         "choose": "アプローチを選択"
       },
+      "binaryCandidates": {
+        "choose": "候補を選択"
+      },
       "elapsedTooltip": "このステップの経過時間",
       "prReview": {
         "review": "指摘を確認"
+      },
+      "skipped": {
+        "gated": "スキップ：タスクの見積もりがこのステップのしきい値を下回りました。",
+        "conditionFrontend": "スキップ：このタスクはフロントエンドサービスを変更しないため、検証するUIがありません。",
+        "conditionBackend": "スキップ：このタスクはフロントエンドサービスのみを変更するため、背後に検証するAPIがありません。",
+        "producerSkipped": "スキップ：レビュー対象のステップがスキップされたため、評価するものがありません。",
+        "runComplete": "スキップ：このステップの前に実行が終了し、行う作業が残っていませんでした。",
+        "unknown": "スキップ：このステップは実行されませんでした。"
       }
     },
     "health": {
@@ -4864,7 +5058,8 @@
   },
   "palette": {
     "hint": "エージェントをクリックするとパイプラインに追加されます。",
-    "customAgents": "カスタムエージェント"
+    "customAgents": "カスタムエージェント",
+    "purposeHidden": "この目的では {count} 件のエージェントが非表示です。"
   },
   "gates": {
     "subtitle": {
@@ -4896,7 +5091,7 @@
       "suffixFixing": "· fixer がコメントに対応中…",
       "suffixFailing": "· 対応すべきレビューコメントあり",
       "suffixAwaiting": "· レビュー待ち",
-      "reviewPr": "GitHub でプルリクエストをレビュー",
+      "reviewPr": "プルリクエストをレビュー",
       "requestFixHeading": "修正をリクエスト",
       "requestFixDescription": "fixer に今すぐ PR ブランチで行わせる変更を記述してください(自動的に対応されるレビューコメントに加えて)。",
       "requestFixPlaceholder": "例: ヘルパーの名前を変更し、空入力ケースのユニットテストを追加する",
@@ -4910,12 +5105,12 @@
     },
     "conflicts": {
       "mergeability": "マージ可能性",
-      "viewPr": "GitHub でプルリクエストを表示"
+      "viewPr": "プルリクエストを表示"
     },
     "docQuality": {
       "findings": "文書の問題",
       "findingsFallback": "文書は構造チェックに合格しました。",
-      "viewPr": "GitHub でプルリクエストを表示"
+      "viewPr": "プルリクエストを表示"
     },
     "attemptsHeading": "{helper} の試行",
     "attempt": "試行 {number}",
@@ -5620,6 +5815,19 @@
     "history": {
       "heading": "履歴（ラウンドなし） | 履歴（{count} ラウンド） | 履歴（{count} ラウンド）",
       "fixRequested": "修正をリクエスト済み"
+    },
+    "design": {
+      "summary": "リンクされたデザインからのフレームはありません。 | リンクされたデザインから {count} 件のフレーム。 | リンクされたデザインから {count} 件のフレーム。",
+      "dropped": "非表示のものはありません。 | 他に {count} 件はここに表示されていません。 | 他に {count} 件はここに表示されていません。",
+      "gapDropped": "非表示のフレームはありません。 | このデザインのフレーム {count} 件はここに表示されていません。 | このデザインのフレーム {count} 件はここに表示されていません。",
+      "gapLine": "{title}：",
+      "gap": {
+        "partial": "フレームの一部のみが保持されました。ドキュメントを更新して再試行してください。",
+        "failed": "前回のインポートでフレームをダウンロードできませんでした。ドキュメントを更新して再試行してください。",
+        "none": "表示できるフレームがありません。",
+        "storage_unavailable": "インポート時に画像ストレージが設定されていなかったため、何もダウンロードされていません。",
+        "not_retained": "画像は保持されていません。ソースがフレームを生成しないか、フレームの保持が始まる前にインポートされた可能性があります。再インポートすると判別できます。"
+      }
     }
   },
   "outcome": {
@@ -5639,6 +5847,15 @@
     "ask": {
       "title": "依頼内容",
       "none": "このタスクには説明がないため、結果と照らし合わせるものがありません。"
+    },
+    "sources": {
+      "title": "参照した資料",
+      "unchecked": "ソースとの照合は行われていません。",
+      "noSource": "比較できるソースページがありません。",
+      "moved": "このページは実行中に変更されたため、前半のステップは古いリビジョンを読んでいます。",
+      "gap": {
+        "none_linked": "この実行のエージェントにはページが渡されなかったため、タスクの説明だけを頼りに作業しました。"
+      }
     },
     "gap": {
       "run_unavailable": "このタスクの実行が読み込まれていないため、そこに記録された根拠をここには表示できません。何も記録しなかった実行とは別のことです。"
@@ -5857,6 +6074,7 @@
       },
       "actual": "実際",
       "reference": "リファレンス",
+      "fromLinkedDesign": "· リンクされたデザインから",
       "actualAlt": "{view}（実際）",
       "referenceAlt": "{view}（リファレンス）",
       "replace": "置き換え",
@@ -6185,13 +6403,21 @@
       "unknownServices": "カタログにないサービスが指定されています: {ids}。宣言のまま保持されます。ボードのカタログで ID を確認してください。",
       "targetUnknown": "このステップ自身の保存サービス ({id}) がカタログにもうありません。このため下のどれも照合できませんでした。再登録するか、別のサービスを指定してください。",
       "undeliveredMediaTypes": "このステップは {formats} を提供するはずでしたが、下のどの成果物もそれを報告していません。",
+      "missized": "{count} 件の成果物が {width}×{height} 以外のサイズで提供されました。",
+      "sizeUnreported": "{count} 件の成果物が寸法を報告していないため、サイズを確認できませんでした。",
       "misdirected": "{count} 件の成果物が {target} 以外のサービスに保存されました。",
       "invalidEntries": "サービスと場所のどちらも示さない宣言項目 {count} 件を破棄しました。",
       "omitted": "レポートの上限を超えてさらに {count} 件が宣言されており、一覧には含まれていません。",
       "unknownGenerators": "このデプロイメントが登録していない生成統合が指定されました: {ids}。エントリは申告どおり保持されます。統合はこのワークスペースではなくデプロイメントのコードで登録します。",
       "generatorsUnverified": "ステップの完了時にこのデプロイメントの生成系インテグレーションを読み取れなかったため、以下に記載されたインテグレーションは照合されていません。エントリは申告どおり保持されます。"
     },
-    "unknownGeneratorBadge": "未登録"
+    "unknownGeneratorBadge": "未登録",
+    "missizedBadge": "サイズ不一致",
+    "candidates": {
+      "automatic": "候補が {total} 件生成され、確認なしで自動的に採用されました。",
+      "chosen": "生成された {total} 件の候補のうち {kept} 件が採用されました。",
+      "awaiting": "{total} 件の候補が生成され、比較を待っています。"
+    }
   },
   "sandbox": {
     "title": "Sandbox: プロンプトとモデルのテスト",
@@ -6916,7 +7142,33 @@
       },
       "toast": {
         "disconnected": "{provider} の接続を解除しました"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "プルリクエスト",
+          "open": "PR を作成",
+          "openSubmit": "プルリクエストを作成",
+          "merge": "このプルリクエストをマージ",
+          "none": "同期済みのプルリクエストはありません。",
+          "opened": "プルリクエストを作成しました",
+          "mergedToast": "PR #{number} をマージしました",
+          "openFailed": "プルリクエストを作成できませんでした"
+        },
+        "gitlab": {
+          "tab": "マージリクエスト",
+          "open": "MR を作成",
+          "openSubmit": "マージリクエストを作成",
+          "merge": "このマージリクエストをマージ",
+          "none": "同期済みのマージリクエストはありません。",
+          "opened": "マージリクエストを作成しました",
+          "mergedToast": "MR !{number} をマージしました",
+          "openFailed": "マージリクエストを作成できませんでした"
+        }
+      },
+      "manageHintApp": "このボードが追跡するリポジトリを選びます。App のインストールはアカウント全体で共有され、各ボードは自分のリポジトリを紐づけます。",
+      "manageHintToken": "このボードが追跡するリポジトリを選びます。一覧は接続中のトークンが到達できる範囲で、各ボードは自分のリポジトリを紐づけます。",
+      "noAvailableReposApp": "App のインストールはまだどのリポジトリにもアクセスできません。",
+      "noAvailableReposToken": "接続中のトークンはまだどのリポジトリにも到達できません。スコープと自分のアクセス権を確認してください。"
     },
     "connect": {
       "or": "または",
@@ -7024,7 +7276,8 @@
       "library": "この環境で有効なコンテキストフラグメントのライブラリ",
       "failedRun": "失敗した実行",
       "infrastructure": "このワークスペースに接続された実行バックエンド",
-      "advancedTier": "詳細インターフェースモード"
+      "advancedTier": "詳細インターフェースモード",
+      "designSource": "接続済みのデザインソース"
     },
     "overlay": {
       "next": "次へ",
@@ -7404,6 +7657,36 @@
             "body": "どれを使うか宣言した設計は、次のステップでその完全な契約を受け取ります。何も宣言しなければ何も受け取りません。ここを最新に保つことが、これが機能する条件です。"
           }
         }
+      },
+      "startFromDesign": {
+        "title": "デザインから始める",
+        "description": "デザインのフレームを、エージェントが実装できるタスクに変えます。",
+        "steps": {
+          "intro": {
+            "title": "デザインから進める",
+            "body": "デザインツールから仕事が始まるとき、フレームそのものが指示書です。このツアーではフレームを新しいタスクに添付します。"
+          },
+          "open": {
+            "title": "デザインから始める",
+            "body": "デザインソースを接続すると、すべてのサービスフレームにこのボタンが表示されます。"
+          },
+          "paste": {
+            "title": "リンクを貼り付ける",
+            "body": "デザインツールでフレームまたはファイル全体のリンクをコピーし、ここに貼り付けてください。"
+          },
+          "resolved": {
+            "title": "添付された内容を確認する",
+            "body": "リンクはサポートされた形式に整形されます。フレーム自体を読み取れなかった場合はファイル全体が添付され、その旨がここに表示されます。"
+          },
+          "continue": {
+            "title": "タスクへ進む",
+            "body": "デザインは新しいタスクに用意されています。望む結果を書いて作成してください。"
+          },
+          "finish": {
+            "title": "実行の準備ができました",
+            "body": "エージェントはデザインのレイアウト・テキスト・コンポーネント・トークンを読み取り、実行のたびにソースと照合し直します。"
+          }
+        }
       }
     },
     "nudge": {
@@ -7419,6 +7702,33 @@
       "unresolved": "このツールは現在のワークスペース向けのアドレスを返しませんでした。",
       "resolverFailed": "このツールはアドレスの算出中にエラーが発生しました。原因はブラウザーのコンソールに出力されています (このデプロイメントの管理者向け)。",
       "unsafeUrl": "このツールが返したアドレスはウェブリンクではないため、開きませんでした。"
+    }
+  },
+  "binaryCandidates": {
+    "title": "生成された候補",
+    "titleWithBlock": "生成された候補: {title}",
+    "subtitle": "各連携が生成したものを比較し、残すものを選びます",
+    "automatic": "候補が1つしか生成されなかったため、自動的に採用されました。誰も確認していません。",
+    "unlabelledSubject": "対象の申告なし",
+    "noPreview": "プレビューはありません",
+    "fromGenerator": "{generator} から",
+    "unattributed": "連携の記録なし",
+    "kept": "採用",
+    "keptAs": "{id} として採用",
+    "storeAsPlaceholder": "この ID で保存",
+    "notePlaceholder": "保存時に変更してほしいこと（任意）",
+    "missingAlias": "採用する候補それぞれに固有の ID を付けてください。付けないとすべて同じ名前で保存されます。",
+    "duplicateAlias": "採用した候補のうち2つで ID が重複しています。同じ場所にある2つの成果物は1つです。",
+    "keepAction": "{count} 件を採用",
+    "warning": {
+      "omitted": "上限を超えた候補が {count} 件破棄されたため、この一覧は先頭部分だけです。",
+      "invalid": "申告された {count} 件の項目が読み取れず、ここには含まれていません。",
+      "previews": "{count} 件のプレビューリンクが拒否されたため、それらの候補は画像なしで表示されます。"
+    },
+    "noChoice": {
+      "undeclared": "このステップは候補を申告しなかったため、比較するものがありませんでした。実行は続行されました。",
+      "parseFailed": "このステップの候補の申告を読み取れなかったため、比較するものがありませんでした。実行は続行されました。",
+      "noCandidates": "このステップは候補を用意しなかったため、比較するものがありませんでした。実行は続行されました。"
     }
   }
 }

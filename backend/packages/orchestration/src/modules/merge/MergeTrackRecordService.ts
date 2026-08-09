@@ -13,12 +13,16 @@ import type {
   WorkspaceRepository,
   Logger,
 } from '@cat-factory/kernel'
-import { CHANGE_CLASSES, emptyMergeClassRollup } from '@cat-factory/contracts'
 import {
-  assertFound,
+  CHANGE_CLASSES,
+  emptyMergeClassRollup,
+  MERGE_RECORD_NOT_FOUND_REASON,
+} from '@cat-factory/contracts'
+import {
   classifyChangedFiles,
   describeError,
   noopLogger,
+  NotFoundError,
   requireWorkspace,
 } from '@cat-factory/kernel'
 
@@ -95,7 +99,7 @@ export interface MergeTrackRecordServiceDependencies {
  * classification or persistence fault must NEVER block or fail a merge. The read paths
  * (`rollups`, `tag`) are ordinary request-scoped operations and do throw.
  *
- * Full design: `docs/initiatives/merge-track-record.md`.
+ * Full design: `backend/docs/adr/0046-merge-track-record.md`.
  */
 export class MergeTrackRecordService {
   private readonly log: Logger
@@ -293,6 +297,18 @@ export class MergeTrackRecordService {
     return this.deps.mergeTrackRecordRepository.get(workspaceId, id)
   }
 
+  /**
+   * The record a RUN left behind, or null when the merge path never wrote one (a pipeline with
+   * no `merger` step, or a run that never reached its merge decision).
+   *
+   * The run-scoped entry point into the record, which is what a headless caller holds: it started
+   * the run and knows its id, where the record's own id is minted inside the merge path.
+   */
+  async getForRun(workspaceId: string, executionId: string): Promise<MergeTrackRecord | null> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    return this.deps.mergeTrackRecordRepository.getByExecution(workspaceId, executionId)
+  }
+
   /** The most recent record for a block — the seam the block-scoped merge controls tag through. */
   async getLatestByBlock(workspaceId: string, blockId: string): Promise<MergeTrackRecord | null> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
@@ -302,6 +318,12 @@ export class MergeTrackRecordService {
   /**
    * Tag (or clear) how much review effort a human spent. Unlike the write paths above this is a
    * deliberate user action, so an unknown id is a real 404 rather than a silent skip.
+   *
+   * That 404 carries {@link MERGE_RECORD_NOT_FOUND_REASON}, the same `details.reason` the
+   * record-addressed READ answers, because from a caller's side the two are one condition: the id
+   * names no record this workspace holds. Refusing here rather than pre-checking in the caller is
+   * what keeps the write a single round-trip and leaves no window between the check and the patch;
+   * the reason has to ride the throw for that to cost the caller nothing.
    */
   async tag(
     workspaceId: string,
@@ -309,11 +331,10 @@ export class MergeTrackRecordService {
     reviewEffort: ReviewEffort | null,
   ): Promise<MergeTrackRecord> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const existing = assertFound(
-      await this.deps.mergeTrackRecordRepository.get(workspaceId, id),
-      'MergeTrackRecord',
-      id,
-    )
+    const existing = await this.deps.mergeTrackRecordRepository.get(workspaceId, id)
+    if (!existing) {
+      throw new NotFoundError('MergeTrackRecord', id, { reason: MERGE_RECORD_NOT_FOUND_REASON })
+    }
     const taggedAt = reviewEffort ? this.deps.clock.now() : null
     await this.deps.mergeTrackRecordRepository.patch(workspaceId, id, { reviewEffort, taggedAt })
     return { ...existing, reviewEffort, taggedAt }

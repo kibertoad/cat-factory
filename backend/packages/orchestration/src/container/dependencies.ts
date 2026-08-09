@@ -40,6 +40,7 @@ import type {
   AuditRecorder,
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
+  BinaryStoreRegistry,
   BlockRepository,
   BootstrapJobRepository,
   BootstrapRunner,
@@ -58,6 +59,7 @@ import type {
   DeploymentDocumentResolver,
   DocInterviewRepository,
   DocumentConnectionRepository,
+  DocumentConnectionStore,
   DocumentContentResolver,
   DocumentRepository,
   DocumentSourceProvider,
@@ -112,6 +114,7 @@ import type {
   ModelRef,
   NotificationChannel,
   NotificationRepository,
+  NotificationSettingsRepository,
   ObservabilityConnectionRepository,
   OperationalMetrics,
   PackageRegistryConnectionRepository,
@@ -151,6 +154,7 @@ import type {
   SandboxPromptVersionRepository,
   SandboxRunRepository,
   SecretCipher,
+  SecretDelegate,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
   SharedStackRepository,
@@ -162,6 +166,7 @@ import type {
   StepResolverRegistry,
   SubscriptionActivationRepository,
   TaskConnectionRepository,
+  TaskConnectionStore,
   TaskRepository,
   TaskSourceProvider,
   TaskSourceSettingsRepository,
@@ -177,6 +182,7 @@ import type {
   TutorialProgressRepository,
   UserSettingsRepository,
   VcsProviderRegistry,
+  VcsWebUrls,
   WebhookVerifier,
   WorkRunner,
   TaskTypeSuppressionRepository,
@@ -618,6 +624,13 @@ export interface CoreDependencies {
    * 503, exactly like the App-based `github` module when unconfigured.
    */
   vcsConnectionService?: VcsPatConnectionService
+  /**
+   * The browser-facing base URL of each provider's configured instance, derived from its API
+   * base by the facade (`resolveVcsWebUrls`). Stamped onto every connection the SPA reads, which
+   * renders each repo / pull request / issue link from it; a provider absent here reports a null
+   * host and the SPA withholds those links rather than pointing at the public instance.
+   */
+  vcsWebUrls?: VcsWebUrls
   repoProjectionRepository?: RepoProjectionRepository
   branchProjectionRepository?: BranchProjectionRepository
   pullRequestProjectionRepository?: PullRequestProjectionRepository
@@ -675,7 +688,15 @@ export interface CoreDependencies {
   /** Model the document planner uses (the agents' default model ref). */
   documentPlannerModel?: ModelRef
   documentSourceProviders?: DocumentSourceProvider[]
+  /** The SEALED connection rows (persistence only: this facade may hold no key for them). */
   documentConnectionRepository?: DocumentConnectionRepository
+  /**
+   * The credential-bearing view of the rows above, and the only thing the module's services hold.
+   * Built by the facade beside the repository (`createDocumentConnectionStore`) so a
+   * mothership-mode node composes the mothership delegate in and needs no local key. Absent
+   * whenever the repository is: the two are one wiring decision.
+   */
+  documentConnectionStore?: DocumentConnectionStore
   documentRepository?: DocumentRepository
 
   // ---- Task-source integration (optional; wired only when configured) ------
@@ -686,7 +707,10 @@ export interface CoreDependencies {
   // TaskSourceProvider port. `taskRepository` is additionally consumed by the
   // execution engine to feed issues linked to a block to agents as context.
   taskSourceProviders?: TaskSourceProvider[]
+  /** The SEALED connection rows (persistence only: this facade may hold no key for them). */
   taskConnectionRepository?: TaskConnectionRepository
+  /** Their credential-bearing view; the document-source sibling above carries the rationale. */
+  taskConnectionStore?: TaskConnectionStore
   /** Per-workspace on/off toggle for each task source (absent row ⇒ enabled). */
   taskSourceSettingsRepository?: TaskSourceSettingsRepository
   taskRepository?: TaskRepository
@@ -757,6 +781,14 @@ export interface CoreDependencies {
   /** The app-owned registry of code-defined custom manifest types (merged into the catalog). */
   customManifestTypeRegistry?: CustomManifestTypeRegistry
   secretCipher?: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node: opens (and seals) the ORG-owned credentials this
+   * process holds no key for, by asking the mothership over `/internal/secrets/{unseal,seal}`.
+   * Threaded into every service that handles one of kernel's `OrgSecretSource` rows, where
+   * `createOrgSecretCipher` composes it with {@link secretCipher}. Absent (every hosted
+   * deployment, and local mode over its own Postgres) ⇒ byte-for-byte the local cipher.
+   */
+  secretDelegate?: SecretDelegate
   /**
    * INTERNAL override: when set, this provider is used for every env operation instead of
    * the kind registry. NOT a public facade seam (a native backend registers into the
@@ -1030,6 +1062,21 @@ export interface CoreDependencies {
    */
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
   /**
+   * The app-owned registry of BINARY ARTIFACT STORES a DEPLOYMENT ships in CODE: its own
+   * implementations of the `BinaryBlobBackend` port, selectable per account beside the platform's
+   * `fs` / `db` / `s3` / `r2` backends. Optional + defaulted to `defaultBinaryStoreRegistry()`
+   * (EMPTY: the platform's own stores are not registry entries), so every existing construction
+   * site behaves exactly as before.
+   *
+   * Unlike its generative sibling above this one does NOT get a mothership `Source`, and the
+   * asymmetry is the point: a generator definition is DATA a run resolves, so a node reading its
+   * own copy can disagree with the picker the mothership fed; a store is a live client that only
+   * the process about to write the bytes can construct, so the process that answers the settings
+   * picker is by construction the one that stores. There is nothing here for a machine API to
+   * carry, and a `Source` would only invite pointing one node at another's credentials.
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry
+  /**
    * Where those integrations are READ from, when that is not this process's own registry.
    * Defaulted to `registryBinaryGeneratorSource(binaryGeneratorRegistry)` — i.e. exactly the
    * behaviour above — and overridden by ONE caller: a MOTHERSHIP-MODE node, which reads the
@@ -1107,6 +1154,14 @@ export interface CoreDependencies {
   // (CI gate passes through, `done` is a board-only flip, the built-in preset is used).
   notificationRepository?: NotificationRepository
   notificationChannel?: NotificationChannel
+  /**
+   * The notification MANAGER's store: which types this workspace delivers on which channel
+   * (`in_app` / `email`). Powers the settings API here; the facade builds the same service
+   * from the same repository to gate the channels it composes, so the surface a human edits
+   * and the decision the delivery path makes read one row. Absent ⇒ the settings surface
+   * 503s and every type keeps its shipped default.
+   */
+  notificationSettingsRepository?: NotificationSettingsRepository
   /**
    * The outbound RUN-LIFECYCLE push (`run.started` / `run.completed` / `run.failed`) — the other
    * half of what a headless integration needs, since the happy path (a pipeline whose `merger`

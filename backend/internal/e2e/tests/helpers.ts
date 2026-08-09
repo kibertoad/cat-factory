@@ -234,6 +234,24 @@ export async function readReviewAttempts(
   return (await res.json()) as ReviewAttempt[]
 }
 
+/**
+ * Add a bare service frame (the `POST /blocks` the palette drag-drop calls). The sample board
+ * seeds exactly ONE `type: 'service'` frame, so a spec about anything that offers the OTHER
+ * service frames has to create its own.
+ */
+export async function addFrame(
+  request: APIRequestContext,
+  workspaceId: string,
+  title: string,
+  type = 'service',
+): Promise<Block> {
+  return json<Block>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks`, {
+      data: { type, title },
+    }),
+  )
+}
+
 /** Import a repo as a board service frame (the `POST /blocks/from-repo` the add-service modal calls). */
 export async function addServiceFromRepo(
   request: APIRequestContext,
@@ -419,7 +437,7 @@ export async function createSimplePipeline(
 ): Promise<Pipeline> {
   return json<Pipeline>(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/pipelines`, {
-      data: { name: 'E2E pipeline', agentKinds, ...(gates ? { gates } : {}) },
+      data: { name: 'E2E pipeline', purpose: 'build', agentKinds, ...(gates ? { gates } : {}) },
     }),
   )
 }
@@ -960,6 +978,26 @@ export async function switchBoard(page: Page, workspaceId: string): Promise<void
 /** Locate a task card by its block id (the card root carries `data-block-id`). */
 export function taskCard(page: Page, blockId: string): Locator {
   return page.locator(`[data-block-id="${blockId}"]`)
+}
+
+/**
+ * Open a task's FOCUS VIEW (the full-screen run view whose step list is `pipeline-step`).
+ *
+ * Click the card's own Review affordance, NEVER the card root. Playwright clicks the CENTRE of
+ * what it is given, and the centre of a `pr_ready` card sits in its ACTION ROW, whose membership
+ * is asynchronous: `Outcome` renders only while `outcomeReadable` holds, which is composed from
+ * the EXECUTION INSTANCE in the store, and that arrives on a different event than the
+ * `data-status` a spec gates on. So a card gated as `pr_ready` shows `Review | Merge` until the
+ * instance lands and `Outcome | Review | Merge` after, and the identical centre click resolves
+ * to Review in the second case and to Merge in the first, where it opens the merge confirm and
+ * no focus view at all. The spec then waits out its full timeout on a step list nothing opened,
+ * and the failure points at the assertion rather than at the click.
+ *
+ * A spec that only needs the card SELECTED (the inspector's `run-step` list) may still click the
+ * root: selection is what every path through the card does, `review()` included.
+ */
+export async function openTaskFocusView(card: Locator): Promise<void> {
+  await card.getByTestId('task-review').click()
 }
 
 /**

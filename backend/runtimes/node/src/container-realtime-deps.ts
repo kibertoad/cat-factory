@@ -1,6 +1,8 @@
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
 import {
+  EMAIL_CIPHER_INFO,
+  EmailConnectionService,
   NOTIFICATION_WEBHOOK_CIPHER_INFO,
   SLACK_CIPHER_INFO,
   SlackNotificationChannel,
@@ -20,6 +22,7 @@ import {
   FanOutEventPublisher,
   InAppNotificationChannel,
   WebCryptoSecretCipher,
+  buildNotificationDelivery,
   logger,
   resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
@@ -27,6 +30,7 @@ import type { DrizzleDb } from './db/client.js'
 import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
 import type { createDrizzleRepositories } from './repositories/drizzle.js'
 import { DrizzleNotificationWebhookRepository } from './repositories/drizzle/settings.js'
+import { DrizzleNotificationSettingsRepository } from './repositories/notifications.js'
 import {
   DrizzleSlackConnectionRepository,
   DrizzleSlackMemberMappingRepository,
@@ -182,6 +186,56 @@ function selectNodeNotificationWebhookSupport(
 }
 
 /**
+ * Build the notification MANAGER (per-workspace, per-channel routing), the gate each routed
+ * channel is wrapped in, and the email transport.
+ *
+ * The routing store rides the `sourced` seam like the Slack repos, so mothership mode reads the
+ * same remote-backed row the settings API writes. The email channel is built only when the
+ * per-account email module is configured (`EMAIL_ENABLED` + a sealing key) — unconfigured means
+ * no channel at all, not a channel that fails on every send.
+ *
+ * Symmetric with the Worker's `buildWorkerNotificationDelivery`: a channel routed on one runtime
+ * and unrouted on the other would honour a workspace's mutes on one deployment shape only.
+ */
+function selectNodeNotificationDelivery(
+  config: AppConfig,
+  repos: NodeRepositories,
+  clock: Clock,
+  sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T,
+) {
+  const emailConnections =
+    config.email.enabled && config.email.encryptionKey
+      ? new EmailConnectionService({
+          emailConnectionRepository: repos.emailConnectionRepository,
+          secretCipher: new WebCryptoSecretCipher({
+            masterKeyBase64: config.email.encryptionKey,
+            info: EMAIL_CIPHER_INFO,
+          }),
+          clock,
+        })
+      : null
+  const notificationSettingsRepository = sourced(
+    'notificationSettingsRepository',
+    (d) => new DrizzleNotificationSettingsRepository(d),
+  )
+  return {
+    notificationSettingsRepository,
+    ...buildNotificationDelivery({
+      notificationSettingsRepository,
+      clock,
+      workspaceRepository: repos.workspaceRepository,
+      membershipRepository: repos.membershipRepository,
+      workspaceMemberRepository: repos.workspaceMemberRepository,
+      userRepository: repos.userRepository,
+      ...(emailConnections
+        ? { resolveEmailSender: (accountId: string) => emailConnections.resolveSender(accountId) }
+        : {}),
+      ...(config.email.appBaseUrl ? { appBaseUrl: config.email.appBaseUrl } : {}),
+    }),
+  }
+}
+
+/**
  * The real-time event-publisher + notification-channel + optional consensus wrap of the Node
  * composition root, lifted out of `buildNodeContainer` so that root stays within the file-size
  * budget. Builds the Slack deps, the fan-out event publisher (when a realtime hub is wired),
@@ -209,6 +263,8 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
   const slackDeps = selectNodeSlackDeps(config, repos, sourced)
+  // The notification manager + the channels it routes (in-app below, email in the external set).
+  const notificationDelivery = selectNodeNotificationDelivery(config, repos, clock, sourced)
   const notificationWebhookSupport = selectNodeNotificationWebhookSupport(
     env,
     config,
@@ -250,7 +306,7 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
     ...(slackDeps.notificationChannel ? [slackDeps.notificationChannel] : []),
     // The outbound webhook is what a HEADLESS caller relies on: it has no in-app inbox and no
     // browser WebSocket, so a parked run would otherwise reach it only by polling (see
-    // docs/initiatives/headless-clarification-loop.md). Symmetric with the Worker.
+    // backend/docs/adr/0047-headless-clarification-loop.md). Symmetric with the Worker.
     //
     // It belongs in the EXTERNAL set by the definition above — it is not the in-app push, and its
     // signing secret is sealed with the deployment key. That placement is what makes it work under
@@ -259,11 +315,24 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
     // would leave a laptop failing every delivery on a decrypt it cannot perform while the
     // mothership never attempted one.
     ...(notificationWebhookSupport ? [notificationWebhookSupport.channel] : []),
+    // Email is the lowest-common-denominator channel: it reaches the people who are not
+    // looking at the board and do not run Slack. It is EXTERNAL by the definition above — it
+    // sends through the account's sealed provider key, so under mothership mode only the
+    // mothership can decrypt and deliver it. Already wrapped in the manager's gate, which by
+    // default admits the high-impact types alone.
+    ...(notificationDelivery.emailChannel ? [notificationDelivery.emailChannel] : []),
     ...(extraNotificationChannels ?? []),
   ]
   const notificationChannels: NotificationChannel[] = []
-  if (executionEventPublisher)
-    notificationChannels.push(new InAppNotificationChannel(executionEventPublisher))
+  // The in-app push goes through the manager's gate too: a workspace that muted a type
+  // in-app keeps the persisted card (the inbox still lists it on the next snapshot) and
+  // stops being interrupted live. Only the channels the manager owns are wrapped — Slack
+  // and the webhook filter by type where their destination is configured.
+  if (executionEventPublisher) {
+    notificationChannels.push(
+      notificationDelivery.route('in_app', new InAppNotificationChannel(executionEventPublisher)),
+    )
+  }
   notificationChannels.push(...externalNotificationChannels)
 
   return {
@@ -273,6 +342,7 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
     notificationChannel: composeChannels(notificationChannels),
     externalNotificationChannel: composeChannels(externalNotificationChannels),
     notificationWebhookSupport,
+    notificationSettingsRepository: notificationDelivery.notificationSettingsRepository,
   }
 }
 

@@ -18,7 +18,7 @@ import {
 
 /**
  * The environment-setup journey — the slice-3 pilot of the modular-vue adoption
- * (docs/initiatives/modular-vue-adoption.md). It replaces the wizard's hand-rolled
+ * (backend/docs/adr/0049-modular-vue-adoption.md). It replaces the wizard's hand-rolled
  * `STEP_ORDER` + `step` ref + `goToStep` navigation (in `stores/environmentWizard.ts`)
  * with a typed, back/rewind-capable, resumable journey; the per-step data + async
  * actions stay in that Pinia store, driven by the step components below.

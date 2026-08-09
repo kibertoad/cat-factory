@@ -6,6 +6,7 @@ import type {
   RequirementReview,
 } from '@cat-factory/contracts'
 import type { GateActor } from '@cat-factory/kernel'
+import { NotFoundError } from '@cat-factory/kernel'
 import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import type { Context } from 'hono'
 import { findParkedInterviewStep } from '@cat-factory/orchestration'
@@ -66,6 +67,37 @@ export async function loadScopedRun<E extends AppEnv>(
   if (task) return { execution, blockId: execution.blockId }
   const anchor = await container.boardService.getInternalTask(workspaceId, execution.blockId)
   return anchor ? { execution, blockId: execution.blockId } : null
+}
+
+/**
+ * The refusal every THROWING route under `/api/v1/runs/:runId/*` shares: the id names no run this
+ * key may read.
+ *
+ * One factory rather than a literal per route so no two routes answer the same condition with
+ * different words, and so the reason a caller branches on is decided once for the whole prefix.
+ * It lives beside {@link loadScopedRun} because the two are one thought: this is what a null from
+ * that loader MEANS on a surface whose refusals throw.
+ */
+export const runNotFound = (runId: string): NotFoundError =>
+  new NotFoundError('Run', runId, { reason: 'run_not_found' })
+
+/**
+ * {@link loadScopedRun}'s total twin: resolve the run or THROW {@link runNotFound}.
+ *
+ * The nullable loader stays exported for the DATA-returning decision surface (which must emit its
+ * own typed envelope) and for the two evidence reads that answer the same 404 a second time when
+ * the composed report comes back empty. Every other caller wants the run or nothing, and a
+ * `require*` accessor is how this codebase spells that. A nullable read plus an `if` at each
+ * route is the shape it replaced.
+ */
+export async function requireScopedRun<E extends AppEnv>(
+  c: Context<E>,
+  workspaceId: string,
+  runId: string,
+): Promise<ScopedRun> {
+  const scoped = await loadScopedRun(c, workspaceId, runId)
+  if (!scoped) throw runNotFound(runId)
+  return scoped
 }
 
 /** The error a gate rejected with, kept as DATA so each handler emits its own typed `c.json`. */

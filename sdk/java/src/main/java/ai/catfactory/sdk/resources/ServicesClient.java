@@ -13,7 +13,8 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The workspace's board services — the frames tasks are created under.
+ * The workspace's board services, the frames tasks are created under: list them, or create one
+ * (optionally backed by a repository).
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class ServicesClient {
@@ -21,6 +22,27 @@ public final class ServicesClient {
 
     ServicesClient(Transport transport) {
         this.transport = transport;
+    }
+
+    /**
+     * Create a service (no body).
+     */
+    public PublicService create() {
+        return create(CreatePublicServiceRequest.builder().build());
+    }
+
+    /**
+     * Create a service
+     * Create a board service, optionally backed by a repository from `GET /api/v1/repos`. The
+     * repository link is what makes the service runnable: execution resolves a task’s repository
+     * by walking up to its enclosing service frame, so a service with none holds tasks and can
+     * start none of them. A whole-repo repository that already backs a service in this account is
+     * MOUNTED rather than duplicated; a monorepo service must name its subdirectory. The board
+     * lays the service out itself: this surface publishes no coordinates. Requires an `admin` key.
+     * {@code POST /api/v1/services} (operation {@code createPublicService}).
+     */
+    public PublicService create(CreatePublicServiceRequest body) {
+        return transport.request("POST", "/api/v1/services", body, Map.of(), new TypeReference<PublicService>() {});
     }
 
     /**

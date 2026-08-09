@@ -2,9 +2,7 @@ import {
   createPublicApiKeyContract,
   listPublicApiKeysContract,
   revokePublicApiKeyContract,
-  type PublicApiKey,
 } from '@cat-factory/contracts'
-import type { PublicApiKeyRecord } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -12,6 +10,7 @@ import type { AppEnv } from '../../http/env.js'
 import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
+import { publicApiKeyToWire } from './keyProjection.js'
 
 // Management of INBOUND public-API keys, mounted under `/workspaces/:workspaceId` — so these
 // routes are session-authed and pass through the per-workspace authorization gate (only a member
@@ -19,28 +18,12 @@ import { requireCapability } from '../../http/guards.js'
 // external system then presents to the `/api/v1` surface (see PublicApiController). The raw key is
 // returned exactly once, on create; thereafter only metadata is exposed.
 
-/** Project a stored record onto the secret-free wire type. */
-function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
-  return {
-    id: record.id,
-    accountId: record.accountId,
-    workspaceId: record.workspaceId,
-    label: record.label,
-    scope: record.scope,
-    createdByUserId: record.createdByUserId,
-    createdByKeyId: record.createdByKeyId,
-    createdAt: record.createdAt,
-    lastUsedAt: record.lastUsedAt,
-    revokedAt: record.revokedAt,
-  }
-}
-
-/** Public-API-key management routes, mounted under `/workspaces/:workspaceId`. */
 /** Resolve the public API-key store, or refuse with a 503 naming what isn't wired. */
 function requirePublicApiKeys<E extends AppEnv>(c: Context<E>) {
   return requireCapability(c.get('container').publicApiKeys, 'Public API keys are not configured')
 }
 
+/** Public-API-key management routes, mounted under `/workspaces/:workspaceId`. */
 export function publicApiKeyController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
   mountWorkspacePermission(app, 'secrets.manage', ['/public-api-keys'])

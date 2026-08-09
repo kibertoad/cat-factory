@@ -696,10 +696,197 @@ IDENTITY ONLY (id, name, summary, modalities, mediaTypes) and deliberately omits
 KEY NAME: the picker has no use for it, and a workspace viewer has no business learning which
 environment variables the deployment sets.
 
+## Capability traits: what an integration can be ASKED FOR
+
+`modalities` and `mediaTypes` say what an integration MAKES. Neither says what it will accept
+while making it, and the four image APIs a deployment is most likely to register agree on almost
+none of that: Flux Kontext edits from an instruction and Flux Fill takes a mask, Nano Banana fuses
+several reference images and exposes no seed, Grok Imagine returns `n` candidates from one call
+and takes no aspect ratio, Retro Diffusion takes a negative prompt, a seed, tiling, background
+removal and an upscale factor. A step that hands a reference image to an endpoint with no image
+input does not produce a worse picture. It errors at the end of a paid run, or it succeeds having
+silently ignored the one input that made the output correct, which is worse because every
+downstream check passes.
+
+So a definition declares `capabilities` (`binary-capabilities.ts`, `@cat-factory/contracts`), a
+closed vocabulary, and a step declares `binaryOutput.generation`: reference images with a ROLE,
+an edit (instruction or masked), a negative prompt, a seed, an aspect ratio, an upscale factor,
+a transparent background, seamless tiling.
+
+**Why this is not the discriminator the section above refuses.** `style` / `resolutionRange` /
+`intendedUse` were refused on three grounds, and the third is the one that decides: `modalities`
+and `mediaTypes` can carry an admission rule because each PARTITIONS the deliverable, while style
+does not, so a rule built on it refuses correct steps by the taste of whoever wrote the picklist.
+A capability partitions exactly: an endpoint either accepts an input image or it does not, either
+takes a mask or it does not, and the answer is a fact about the API rather than an opinion about
+the art. It also decides nothing about WHICH of two producers to call, which is the job the
+design record left with `generatorIds`, the format requirement and the step's own prompt. A
+capability that told two producers apart without unlocking an option would be the refused
+discriminator wearing a new name, which is why the membership bar is **the platform exposes
+something because of it**: a control the builder shows, a paragraph the brief writes, a
+requirement admission refuses. Everything else stays prose in `description` / `guidance`.
+
+Five rules bind it:
+
+- **The requirement is DERIVED, never declared.** `requiredBinaryCapabilities` reads what the step
+  actually asks for, so one reference image needs `reference-image` and not `multi-reference`, and
+  an edit needs exactly the capability its mode names. A declared requirement would let a step be
+  refused over an option it does not exercise.
+- **THREE outcomes, the same three the format check has.** `binaryCapabilityCoverage` is
+  `binaryFormatCoverage` one axis over: a definition declaring no capabilities has said "only the
+  coarse facts are known", so a requirement against it is UNVERIFIABLE rather than uncovered. That
+  is what lets this ship without retroactively invalidating every integration registered before
+  the axis existed, and it is why the picker still OFFERS a control against an undeclared
+  selection (hiding one would be a claim about a vendor's API that nobody established).
+- **Coverage is not the whole answer once two producers are held.** `binaryCapabilityProviders`
+  names which of them honour each option, because an aspect ratio honoured by one and ignored by
+  the other leaves nothing on the artifact to say which happened.
+- **The brief speaks the platform's vocabulary, never a vendor's.** The agent writes the request
+  and only it knows what the endpoint in front of it calls a seed. It also NAMES every reference,
+  source and mask as a location the agent must fetch itself, because the platform never fetches
+  them and an agent not told where a file lives generates without it and reports success.
+- **`candidate-batch` unlocks no control**, and is the one member that earns its place by changing
+  an INSTRUCTION: ask a batching API for `n` in one call, repeat the call with a different seed
+  otherwise. Getting that backwards either multiplies the bill or sends a parameter the endpoint
+  rejects.
+
+A per-vendor knob nobody else has (`prompt_upsampling`, `safety_tolerance`, a sampler name) stays
+in that integration's `guidance`, where a sentence can say what it means, rather than becoming a
+field every other integration ignores.
+
+### The size axis, and why one member could not carry it
+
+`aspect-ratio` shipped meaning "an explicit aspect ratio OR output size", and that disjunction was
+the bug. The four image APIs a deployment is likely to register split cleanly in two: Flux and Retro
+Diffusion take a width and a height, Nano Banana takes one of four `image_size` buckets and Grok
+Imagine a `resolution` of `1k` or `2k`. Under one member all four declare the same thing, so a step
+whose deliverable is a 96x96 inventory icon is admitted holding only the bucketed one. It then
+generates a 1K image and downsamples, which on a small sprite is not a worse render of the same
+asset, and nothing reports it: the modality is covered, the format is covered, the upload succeeded,
+and the deliverable is wrong in the one dimension the inventory actually specified.
+
+So `exact-size` is its own member, unlocking `generation.outputSize` (`{ width, height }`). It clears
+the membership bar the section above sets, on the ground that DECIDES: an endpoint either accepts
+pixel dimensions or it does not, which is a fact about the request shape rather than an opinion about
+the art, so `covered` / `uncovered` is computable and a refusal is a fact. That is the same property
+that got `mediaTypes` its admission rule and that `style` / `resolutionRange` / `intendedUse` could
+not supply.
+
+Four rulings bound it, and each is the reason a nearby version was refused:
+
+- **The vocabulary stays FLAT: `exact-size` does not IMPLY `aspect-ratio`.** An API taking width and
+  height honours any ratio, so it declares both, exactly as a multi-reference API declares
+  `reference-image` beside `multi-reference`. An implication table is an ordering over a picklist
+  that every future member then has to be placed in, bought to save a deployment one word in its own
+  registration, and the cost of forgetting that word is a refusal that NAMES the missing capability.
+- **The platform states no per-integration size table.** Flux caps at 4 MP and wants multiples of 32;
+  Retro Diffusion's range moves with the style. A table of that is the refused `resolutionRange`
+  wearing a new name, and it would go stale in this repo while the vendor changed it in theirs. This
+  axis answers only "can it be handed dimensions at all"; the limits stay in `guidance`.
+- **A size is stated ONCE.** `outputSize` is mutually exclusive with `aspectRatio` and `upscale`,
+  refused structurally at save (`assertUnambiguousOutputSize`), because each of those states the
+  delivered dimensions a second time and can disagree. Resolving it by precedence instead would hand
+  the leftover decision to the agent writing the vendor call, which is the same party the
+  every-format-required rule keeps it away from. WHICH options conflict is contracts'
+  `conflictingOutputSizeOptions`, not a rule stated twice: the builder offers all three controls
+  together, so it has to raise the same refusal (`output_size_ambiguous`) where the fix is deleting
+  one of two visible fields, and a rule with a home on only one side is one the two sides drift on.
+- **No resize POLICY, at any layer.** The platform has no view of whether a downscale is acceptable
+  for a given asset, so the brief states the target and requires that a substitution be REPORTED and
+  the delivered size declared. What it never says is what to do instead, and it makes no claim about
+  what the CONSUMER of the artifacts does with a substituted one: that is a fact about a game, a
+  storefront or a print run, none of which the platform can see.
+- **A size covers what is MEASURED in pixels**, which is contracts' `modalityCarriesPixelDimensions`
+  (`image` and `video`; not audio, 3D or documents). A step generating an icon and its pickup sound
+  states one size and means it about the icon, so the brief scopes it and the report judges only the
+  covered artifacts. An artifact the platform could not CLASSIFY stays covered: absent is not "not an
+  image", and excluding it would turn an unreadable content type into a silent pass on the one axis
+  the requirement exists to check.
+
+**The read-back closes it, and admission alone would not have.** The capability gate checks what a
+selected integration can be ASKED for; the complaint that motivated the axis is a DELIVERY fact. So a
+declared artifact carries optional `dimensions`, and `BinaryOutputView` derives `missized` against
+the step's own `outputSize` (and renders the reported dimensions on the row beside it, so a counted
+failure names which artifact), the same judgement `undeliveredMediaTypes` makes one axis over and from
+the same kind of self-report (the platform never holds the bytes; `contentType` has always been the
+agent's own claim on the same terms). `sizeUnreported` counts the unmeasured artifacts SEPARATELY,
+because an artifact that stated no dimensions and one that came back wrong are the same value and
+opposite facts. A malformed `dimensions` drops the measurement and KEEPS the entry: the identity
+fields are what make a record findable, and losing a stored artifact over an optional observation
+would be the reporting loss this feature exists to prevent.
+
+## Side-by-side candidates: the choice the platform CAN make visible
+
+The section above states the overlap and ranks nothing, on the ground that the platform has no
+cost model, no quality model and no view of what the step is for. That is right while the choice
+has to be made BEFORE the pictures exist. It is the wrong answer when it does not have to be: two
+image APIs asked for the same sprite return two sprites, and a person decides in a second what no
+description could have decided in advance.
+
+So `binaryOutput.comparison` turns a generating step into TWO dispatches of one step with a human
+park between them, exactly the shape [ADR 0022](../../backend/docs/adr/0022-coder-fork-decision.md)
+established for the fork decision (a container job cannot pause mid-run). Phase A generates a
+candidate per subject from every selected integration, stages them through the step's OWN storage
+service, and declares them in a fenced ` ```binary-candidates ` block; the run parks; phase B
+re-runs the same step with the kept candidates folded into its brief.
+
+- **The platform never holds the bytes**, which is the rule the whole feature runs on. What the
+  SPA renders is whatever preview URL the storage service issued, admitted `https`-only because it
+  is model-authored text going into an `<img src>` on the board (deliberately not
+  `isAllowedMcpHttpUrl`, whose own note says it is not a guard for untrusted input). A service
+  that issues no link leaves the candidate legible as metadata and SAYS the preview is
+  unavailable, which is what lets a private estate use the feature at all; a refused link costs
+  the candidate its picture, never its row.
+- **The decision is DATA and the agent executes it.** Keeping a candidate moves no file: it
+  records which survive and under which id, and phase B promotes exactly those and clears the
+  rest. The platform's own artifact store is for run evidence, and a product asset it never
+  touched is not something it should start touching to implement a picker.
+- **ALTERNATE IDS are what make keeping two a real outcome.** Two survivors at one address is one
+  artifact, so `storeAs` is required per kept candidate above one, refused at the write boundary
+  (duplicate ids, and a second survivor with no id at all) rather than left to an agent that
+  cannot tell a deliberate overwrite from a collision.
+- **Three dispositions, and only one of them parks.** Two or more candidates park. Exactly ONE is
+  kept automatically, with `choice.automatic` set so no surface can present an unreviewed artifact
+  as a reviewed one: the fork decision's `single_path` escape hatch, one subject over. NONE falls
+  through to the ordinary completion with a `noChoiceReason` (`undeclared` / `parse_failed` /
+  `no_candidates`) on the step, because a comparison that wedged a run over a forgotten fenced
+  block would be a worse failure than the one it exists to prevent.
+- **A comparison that cannot compare is refused at SAVE.** One integration and `perGenerator: 1`
+  yields one candidate per subject, which is auto-kept, so the review someone configured silently
+  never happens. `assertComparableCandidates` is structural (both halves are readable off the
+  step), so it lands beside the missing-storage refusal rather than at run start.
+- **The window doubles as the RECORD.** It is reachable as a park view only while the run is
+  stopped on it, so what was compared, what was kept and under which id is also stated as a line
+  in `BinaryOutputReport`: the same placement rule the artifacts follow, one decision earlier.
+
+**Runtime symmetry is structural here rather than asserted.** Nothing new is persisted: the
+comparison config rides `stepOptions`, the candidates and the choice ride `PipelineStep`, and both
+facades serialise a step through the SAME `rowToExecution` mapper in `@cat-factory/server`. There
+is no repository method to mirror, no migration, and no facade-specific file in the change, which
+is the same argument `forkDecision` / `followUps` make. The one surface that does cross a wire is
+the snapshot's `binaryGenerators.capabilities` projection, and it is built in the shared
+controller both facades mount.
+
 ## Remaining work
 
 - [ ] **A worked example generator** in `backend/internal/example-custom-agent`, once a real
       image-generation harness path exists to demonstrate against.
+- [ ] **A conformance assertion for the capability projection** on the snapshot's
+      `binaryGenerators`, alongside the existing `binaryOutput` trait one. It needs a
+      `binaryGeneratorRegistry` option on the conformance harness, which no suite has needed yet;
+      the projection itself is built in the shared controller both facades mount, so the gap it
+      would close is a regression guard rather than a live parity risk.
+- [ ] **A `publicDecision` kind for the candidate park.** Every other dedicated park is projected
+      onto `/api/v1` as its own decision kind, so a headless caller currently sees a `blocked` run
+      with no decision to answer. It is deliberately NOT added here, because `publicDecisionKindSchema`'s
+      own rule is that a member ships with its routes: the kind needs a `keep-candidates` verb, an
+      entry in `PUBLICLY_ANSWERABLE_PARK_SURFACES`, a `scripts/sdk/surface.mjs` row and a
+      regeneration of all four SDKs plus the MCP projection. Until then the park is an in-app
+      surface, and this line is the record of that.
+- [ ] **An e2e spec for the candidate park**, driving generate → park → compare → keep through the
+      live pushed UI. It is the assembled-product half the unit tests cannot reach (the window is
+      opened by the park classifier and settled over the stream), and it needs a fake generating
+      kind in the e2e stack.
 
 When that lands, convert this tracker into a numbered ADR under `backend/docs/adr/` and `git rm`
 it in the same PR.

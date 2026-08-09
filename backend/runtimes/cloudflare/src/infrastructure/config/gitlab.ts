@@ -5,16 +5,20 @@ import type { Env } from '../env'
 export type { GitLabConfig }
 
 /**
- * GitLab VCS provider config. Enabled (opt-in, default off) as soon as a `GITLAB_TOKEN` is
- * present — the single-token model (one connection per deployment) that mirrors local-mode's
- * PAT. The token itself is read straight from env at wiring time; this carries only the
- * non-secret address + the webhook secret the neutral ingest route verifies against.
+ * GitLab VCS provider config. `enabled` is the opt-in (default off) for the single-token model
+ * (one connection per deployment) that mirrors local-mode's PAT, and flips as soon as a
+ * `GITLAB_TOKEN` is present. The token itself is read straight from env at wiring time; this
+ * carries only the non-secret address + the webhook secret the neutral ingest route verifies
+ * against.
+ *
+ * The config itself is always returned: `apiBase` is the address of the instance a deployment
+ * talks to, which is a fact independent of that opt-in (see {@link GitLabConfig}). Mirrors the
+ * Node facade's `loadGitLabConfig` (per "keep the runtimes symmetric").
  */
-export function loadGitLabConfig(env: Env): GitLabConfig | undefined {
+export function loadGitLabConfig(env: Env): GitLabConfig {
   const token = env.GITLAB_TOKEN?.trim()
-  if (!token) return undefined
   return {
-    enabled: true,
+    enabled: !!token,
     apiBase: env.GITLAB_API_BASE?.trim() || GITLAB_PUBLIC_API_BASE,
     connectionId: env.GITLAB_CONNECTION_ID?.trim() || 'gitlab',
     webhookSecret: env.GITLAB_WEBHOOK_SECRET ?? '',

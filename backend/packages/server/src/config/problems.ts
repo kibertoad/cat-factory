@@ -1,6 +1,6 @@
 import type { ConfigProblem } from '@cat-factory/contracts'
 import { base64urlToBytes, pkcs8PemToDer } from '../crypto/encoding.js'
-import { DOCS, ENV_VARS_ANCHORS } from './docs.js'
+import { DOCS, ENV_VARS_ANCHORS, SITE_DOCS } from './docs.js'
 
 export type { ConfigProblem }
 
@@ -170,7 +170,9 @@ export const ENV_HELP = {
       "The GitHub App private key the service signs its App JWT with, to mint the short-lived installation tokens the harness clones, pushes, and opens PRs with. Must be a PKCS#8 PEM — Web Crypto (used on both Node and the Worker) cannot import GitHub's default PKCS#1 key.",
     remedy:
       'Set GITHUB_APP_PRIVATE_KEY to the App private key in PKCS#8 PEM form (`-----BEGIN PRIVATE KEY-----`, including the BEGIN/END lines). GitHub issues a PKCS#1 key (`-----BEGIN RSA PRIVATE KEY-----`); convert it once with `openssl pkcs8 -topk8 -nocrypt -in key.pem -out key.pk8.pem` and use the result.',
-    docsUrl: DOCS.githubOperations(),
+    // The website owns registering the App and converting its key, so the remedy points there
+    // rather than at the in-repo runbook, which now keeps only what needs the code open.
+    docsUrl: SITE_DOCS.githubApp,
   },
   REDIS_URL: {
     summary:

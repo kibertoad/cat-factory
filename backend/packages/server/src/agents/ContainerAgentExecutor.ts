@@ -53,7 +53,12 @@ import {
   type ResolvedToolServers,
 } from './toolServers.js'
 import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
-import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
+import {
+  buildDoneUpdate,
+  buildFailureMeta,
+  buildRunningUpdate,
+  toRunResult,
+} from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
 import { containerJobLog } from './containerAgentLogging.js'
 import { acceptContainerJob } from './containerAgentDispatch.js'
@@ -627,7 +632,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       runResult.usageVendor = handle.provider ?? providerOf(handle.model)
     }
     jobLog.settled('done', { model: handle.model })
-    return { state: 'done', result: runResult, ...followUps }
+    return buildDoneUpdate(view, runResult, followUps)
   }
 
   /**

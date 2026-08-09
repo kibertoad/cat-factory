@@ -37,6 +37,11 @@ function makeController(over: Partial<TesterControllerDeps> = {}) {
       casPersist,
       emitInstance: vi.fn(async () => {}),
       stopRunContainer: vi.fn(async () => {}),
+      // The pair helper the controller now writes through. Faked through `casPersist` so the
+      // `casPersist` assertions below still observe every persist the controller performs.
+      persistAndEmit: vi.fn(async () => {
+        await casPersist()
+      }),
     },
     ...over,
   } as unknown as TesterControllerDeps

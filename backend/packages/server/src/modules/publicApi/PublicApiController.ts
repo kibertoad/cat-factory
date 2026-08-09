@@ -25,10 +25,7 @@ import {
   type PublicPipeline,
   type PublicApiScope,
   type PublicRun,
-  type PublicService,
-  type PublicTask,
 } from '@cat-factory/contracts'
-import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   CredentialRequiredError,
   inputGateInputOf,
@@ -42,16 +39,17 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { personalGateForBlock, personalGateForRun } from '../providers/personalCredentialGate.js'
-import {
-  HEADLESS_ACTIONABLE_NOTIFICATION_TYPES,
-  notificationActEffect,
-} from '../notifications/notificationActions.js'
+import { headlessActRefusal, notificationActEffect } from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
+import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { authorize } from './publicApiAuth.js'
+import { toPublicService, toPublicTask } from './boardProjection.js'
 import { createTaskWithAttachments, taskCreationDeps } from './taskCreation.js'
 import { resolveTaskTypeFieldsPatch } from './taskTypeFields.js'
 import {
   type AdmissiblePipelineShape,
+  type AdmissionRegistries,
+  admissionRegistries,
   publicRunParkSurfaces,
   isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
@@ -59,7 +57,8 @@ import {
   PUBLIC_JOB_CANCEL_PATH,
   PUBLIC_TASK_STOP_PATH,
 } from './publicApiAdmission.js'
-import { createParkAnnouncer, isParked } from './publicApiStream.js'
+import { createParkAnnouncer, isParked, reduceRunForStream } from './publicApiStream.js'
+import { viewRunIdentity } from './runIdentityVisibility.js'
 import {
   decodeCursor,
   decodeTimeCursor,
@@ -100,9 +99,17 @@ const MAX_ACTIVE_JOB_RUNS = 5
 const DEFAULT_JOB_PAGE = 25
 const DEFAULT_TASK_PAGE = 50
 
-/** Project a persisted execution onto the external job resource (no block/board internals). */
-function toPublicJob(execution: ExecutionInstance): PublicJob {
+/**
+ * Project a persisted execution onto the external job resource (no block/board internals).
+ *
+ * Takes the READING key's own identity because the run's pinned one is not visible to every key
+ * (`runIdentityVisibility.ts` holds the rule and why there is one). Passed as a parameter rather
+ * than read off the context here, so the projection stays a pure function of the run plus the
+ * caller and the SSE loops can render frame after frame without re-reading anything.
+ */
+function toPublicJob(execution: ExecutionInstance, readerIdentity: string | null): PublicJob {
   const status = mapStatus(execution.status)
+  const identity = viewRunIdentity(execution.initiatedByExternalIdentity, readerIdentity)
   // The deliverable is the LAST step that actually produced output — normally the terminal step,
   // but scanning from the end keeps the result meaningful for a multi-step public pipeline whose
   // final step is a side-effect-only tail that emits nothing (the built-in initiative pipeline is
@@ -126,39 +133,19 @@ function toPublicJob(execution: ExecutionInstance): PublicJob {
     jobId: execution.id,
     status,
     pipelineId: execution.pipelineId,
+    // Pinned at admission from the starting key, so it survives that key's revocation and costs
+    // this projection no lookup (`toPublicJob` also renders every row of a paged list). Withheld
+    // from a key that acts for someone else, which the flag STATES rather than blanking to a
+    // `null` that already means "this run names nobody". Named field by field rather than spread,
+    // for the reason `keyProjection.ts` gives: a spread is exempt from excess-property checking,
+    // so a member added to the view type later would reach the wire with nothing to stop it.
+    externalIdentity: identity.externalIdentity,
+    externalIdentityWithheld: identity.externalIdentityWithheld,
     // The run's own creation stamp — the SAME value the list's keyset cursor is minted from
     // (`jobSortKey`), so a caller can page and correlate on one consistent number.
     createdAt: jobSortKey(execution),
     result,
     error,
-  }
-}
-
-/** Project a board task block onto the external task resource (no block/board internals). */
-function toPublicTask(block: Block, serviceId: string): PublicTask {
-  return {
-    taskId: block.id,
-    serviceId,
-    title: block.title,
-    description: block.description,
-    taskType: block.taskType ?? 'feature',
-    status: block.status,
-    progress: block.progress,
-    // The public name is `runId`, one vocabulary with `publicRun.runId` and `/runs/:runId/...`;
-    // `executionId` is the internal engine name for the same id.
-    runId: block.executionId,
-    pullRequestUrl: block.pullRequest?.url ?? null,
-  }
-}
-
-/** Project a service frame block onto the external service resource. */
-function toPublicService(frame: Block): PublicService {
-  return {
-    serviceId: frame.id,
-    title: frame.title,
-    description: frame.description,
-    type: frame.type,
-    status: frame.status,
   }
 }
 
@@ -170,8 +157,13 @@ function toPublicService(frame: Block): PublicService {
  * a caller can tell an awaiting-a-human `blocked` from a still-`running` step. The PR branch
  * lives on the BLOCK (`block.pullRequest`), not the run, so both are joined here.
  */
-function toPublicRun(execution: ExecutionInstance, block: Block): PublicRun {
+function toPublicRun(
+  execution: ExecutionInstance,
+  block: Block,
+  readerIdentity: string | null,
+): PublicRun {
   const pr = block.pullRequest
+  const identity = viewRunIdentity(execution.initiatedByExternalIdentity, readerIdentity)
   return {
     runId: execution.id,
     taskId: block.id,
@@ -189,7 +181,19 @@ function toPublicRun(execution: ExecutionInstance, block: Block): PublicRun {
             total: s.subtasks.total,
           }
         : null,
+      // The step's deliverable. An EMPTY output is projected as null, matching the way
+      // `toPublicJob` reads "produced something": a step that ran and wrote nothing and a step
+      // that has not run yet are the same fact to a caller reading for a result, and the step's
+      // own `state` is what distinguishes them.
+      output: (s.output ?? '') === '' ? null : (s.output ?? null),
+      data: s.custom ?? null,
     })),
+    // Who the run was started for, as pinned at admission; null for a run the app, a schedule or
+    // an identity-less key started, and withheld (flagged, not blanked) from a key that acts for
+    // someone else. See `runIdentityVisibility.ts`, and `toPublicJob` for why both members are
+    // named rather than spread.
+    externalIdentity: identity.externalIdentity,
+    externalIdentityWithheld: identity.externalIdentityWithheld,
     pullRequest: pr ? { url: pr.url, branch: pr.branch ?? null } : null,
     error:
       execution.status === 'failed'
@@ -215,14 +219,14 @@ function toPublicPipeline(
     gates?: boolean[]
     public?: boolean
   },
-  registry: AgentKindRegistry,
+  registries: AdmissionRegistries,
 ): PublicPipeline {
   return {
     pipelineId: pipeline.id,
     name: pipeline.name,
     steps: pipeline.agentKinds.filter((_, i) => pipeline.enabled?.[i] !== false),
     public: pipeline.public === true,
-    headlessStartable: isHeadlessInlinePipeline(pipeline, registry),
+    headlessStartable: isHeadlessInlinePipeline(pipeline, registries),
   }
 }
 
@@ -300,7 +304,7 @@ async function unanswerableParkRefusal(
   gateInput: InputGateInput,
   cancelPath: string,
 ): Promise<string | null> {
-  const surfaces = publicRunParkSurfaces(pipeline, container.agentKindRegistry, {
+  const surfaces = publicRunParkSurfaces(pipeline, admissionRegistries(container), {
     inputGateBlocks: await container.executionService.inputGateWouldBlock(
       auth.workspaceId,
       gateInput,
@@ -456,6 +460,9 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     try {
       execution = await container.executionService.start(auth.workspaceId, block.id, pipelineId, {
         initiatedBy: null,
+        // No `usr_*` initiator, but the KEY may still name who it acts for. Pinned on the run so
+        // a caller minting one key per person can map this job back to that person later.
+        initiatedByExternalIdentity: auth.externalIdentity,
         intakeOrigin: 'public-api',
       })
     } catch (err) {
@@ -532,7 +539,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     const last = page[page.length - 1]
     return c.json(
       {
-        jobs: page.map(toPublicJob),
+        jobs: page.map((row) => toPublicJob(row, gate.auth.externalIdentity)),
         // The cursor rides the SAME `(createdAt, id)` composite the repository orders and filters
         // on, so a burst of runs sharing a millisecond pages correctly instead of losing the ties.
         // `jobSortKey` is that shared definition — the sort key here is by construction the value
@@ -557,7 +564,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     if (!execution) {
       return c.json({ error: { code: 'not_found', message: 'Job not found' } }, 404)
     }
-    return c.json(toPublicJob(execution), 200)
+    return c.json(toPublicJob(execution, gate.auth.externalIdentity), 200)
   })
 
   // Cancel a headless job run. This is what makes admitting a PARKING pipeline safe (see
@@ -584,7 +591,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
       return c.json({ error: { code: 'not_found', message: 'Job not found' } }, 404)
     }
     const stopped = await c.get('container').executionService.stopRun(auth.workspaceId, id)
-    return c.json(toPublicJob(stopped), 200)
+    return c.json(toPublicJob(stopped, auth.externalIdentity), 200)
   })
 
   registerJobStreamRoute(app)
@@ -632,7 +639,7 @@ function registerJobStreamRoute(app: Hono<AppEnv>): void {
         }
         const execution = await container.executionRepository.get(auth.workspaceId, id)
         if (!execution) break
-        const job = toPublicJob(execution)
+        const job = toPublicJob(execution, auth.externalIdentity)
         const data = JSON.stringify(job)
         if (data !== last) {
           await stream.writeSSE({
@@ -901,6 +908,8 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     // abuse backstop for board starts — the analogue of the jobs surface's active-run cap.
     await container.executionService.start(auth.workspaceId, taskId, pipelineId, {
       initiatedBy: null,
+      // As on the jobs surface: no user, but the key can still name who it started this for.
+      initiatedByExternalIdentity: auth.externalIdentity,
       intakeOrigin: 'public-api',
     })
     // Re-read the task so the caller gets its AUTHORITATIVE post-start projection (status,
@@ -1066,7 +1075,7 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
     if (!run) {
       return c.json({ error: { code: 'no_run', message: 'Task has not been started' } }, 404)
     }
-    return c.json(toPublicRun(run, found.block), 200)
+    return c.json(toPublicRun(run, found.block, auth.externalIdentity), 200)
   })
 
   // Delete a task (and its run history). DESTRUCTIVE, so it requires an `admin`-scoped key (the
@@ -1154,7 +1163,11 @@ function registerTaskRunStreamRoute(app: Hono<AppEnv>): void {
         // the block (not the execution) carries it.
         const block = await container.boardService.getServiceTask(auth.workspaceId, taskId)
         if (!execution || !block) break
-        const runView = toPublicRun(execution, block.block)
+        // Reduced for the wire: the frame carries the whole run, so an oversized step deliverable
+        // would be re-sent on every change for the rest of the run. See `reduceRunForStream`.
+        const runView = reduceRunForStream(
+          toPublicRun(execution, block.block, auth.externalIdentity),
+        )
         const data = JSON.stringify(runView)
         if (data !== last) {
           await stream.writeSSE({
@@ -1207,7 +1220,7 @@ function registerPipelineRoutes(app: Hono<AppEnv>): void {
       {
         pipelines: pipelines
           .filter((p) => !p.archived)
-          .map((p) => toPublicPipeline(p, container.agentKindRegistry)),
+          .map((p) => toPublicPipeline(p, admissionRegistries(container))),
       },
       200,
     )
@@ -1251,6 +1264,11 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
   // RETRY a run on an individual-usage model is refused up front, since a headless key has
   // no personal-credential unlock (`ci_failed`/`test_failed` are the only side-effects that
   // resume LLM work; the merge tails need no personal credential).
+  // The route GAINED an all-optional body, and this is what keeps that additive: the contract
+  // validator reads `c.req.json()` first, which throws on an absent one, so without this every
+  // integration that has been calling `act` with no body at all since 1.0 would start getting a
+  // 400 the moment the tag field landed.
+  app.use('/api/v1/notifications/:id/act', optionalJsonBody)
   buildHonoRoute(app, actPublicNotificationContract, async (c) => {
     const gate = await authorize(c, actPublicNotificationContract.minScope)
     if ('fail' in gate) {
@@ -1266,6 +1284,10 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
       throw new UnavailableError('Notifications are not configured')
     }
     const { id } = c.req.valid('param')
+    // All-optional body, and the route mounts `optionalJsonBody`, so a caller that has always
+    // sent nothing still lands here with `{}`. On a merge card the tag rides the SAME request
+    // that confirms the merge, which is what the app's one-tap confirm-and-tag does.
+    const { reviewEffort } = c.req.valid('json')
     const existing = await notifications.service.get(auth.workspaceId, id)
     if (!existing) {
       return c.json({ error: { code: 'not_found', message: 'Notification not found' } }, 404)
@@ -1275,13 +1297,15 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
     // mark the card read while leaving the run parked, silently losing the reminder for a
     // still-pending decision. Refuse it and steer the caller to `dismiss` instead. (Skipped for
     // an already-resolved card, which `service.act` returns idempotently.)
-    if (existing.status === 'open' && !HEADLESS_ACTIONABLE_NOTIFICATION_TYPES.has(existing.type)) {
+    const refusal =
+      existing.status === 'open' ? headlessActRefusal(existing.type, reviewEffort) : null
+    if (refusal) {
       return c.json(
         {
           error: {
             code: 'notification_not_actionable',
-            message:
-              'This notification has no automated action; it parks a run on an interactive human decision. Resolve it in the app, or dismiss the card through the API.',
+            message: refusal.message,
+            details: { reason: refusal.reason },
           },
         },
         409,
@@ -1323,7 +1347,7 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
     const acted = await notifications.service.act(
       auth.workspaceId,
       id,
-      notificationActEffect(container, auth.workspaceId, null),
+      notificationActEffect(container, auth.workspaceId, null, reviewEffort),
     )
     return c.json(acted, 200)
   })

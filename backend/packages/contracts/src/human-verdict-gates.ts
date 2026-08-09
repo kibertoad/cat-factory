@@ -104,6 +104,19 @@ export const humanTestStepStateSchema = v.object({
 export type HumanTestStepState = v.InferOutput<typeof humanTestStepStateSchema>
 
 /**
+ * Where a pair's reference image came from: a person UPLOADED it against this task, or an import
+ * of a linked DESIGN document retained it as a rendered frame.
+ *
+ * The two are not interchangeable to a reviewer. An upload is a deliberate act against this one
+ * task and outlives every re-import; a design render is a projection of a live document that the
+ * next body-changing import replaces wholesale. So "this is what your Figma file says today" and
+ * "this is the mock someone attached" are different claims, and the surface states which it is
+ * showing rather than presenting both as one anonymous "reference".
+ */
+export const visualConfirmReferenceOriginSchema = v.picklist(['upload', 'design'])
+export type VisualConfirmReferenceOrigin = v.InferOutput<typeof visualConfirmReferenceOriginSchema>
+
+/**
  * One actual-vs-reference pairing the visual-confirmation gate shows the human: a logical
  * view, the screenshot the UI tester captured of it (`actualArtifactId`), and the reference
  * design image for the same view when one was uploaded (`referenceArtifactId`). Either side
@@ -113,8 +126,99 @@ export const visualConfirmPairSchema = v.object({
   view: v.string(),
   actualArtifactId: v.optional(v.nullable(v.string())),
   referenceArtifactId: v.optional(v.nullable(v.string())),
+  /**
+   * Where `referenceArtifactId` came from. Absent when the pair has no reference, and ALSO when
+   * the capture named its own reference: a reference the gate did not source is one whose
+   * provenance it can only guess at, and "unknown" is a different answer from "an upload".
+   */
+  referenceOrigin: v.optional(v.nullable(visualConfirmReferenceOriginSchema)),
 })
 export type VisualConfirmPair = v.InferOutput<typeof visualConfirmPairSchema>
+
+/**
+ * Why a linked design contributed no (or not all of its) reference images.
+ *
+ * Every one of these renders to the reviewer as the same absence (a design is attached and its
+ * screens are not on the screen), and each asks for a different fix, which is the whole reason
+ * the gate states them instead of showing a shorter gallery. Derived from the document's own
+ * {@link DocumentRenderStatus} plus what the artifact store actually holds, never from the status
+ * alone: a row claiming `stored` over an empty shelf is exactly the case a reviewer must not read
+ * as "this design has no screens".
+ */
+export const visualConfirmDesignGapReasonSchema = v.picklist([
+  /** Some frames were retained and some were not: the gallery is missing part of the design. */
+  'partial',
+  /** The last import's render read failed outright. Refreshing the document is the fix. */
+  'failed',
+  /** The source offered no frame to rasterise (an empty file). Nothing to fix. */
+  'none',
+  /** No image storage was configured when the design was imported, so nothing was downloaded. */
+  'storage_unavailable',
+  /**
+   * No images are held for this design, and its last import either recorded no render outcome or
+   * claimed one that the shelf does not bear out (`stored` / `partial` over nothing held). The
+   * causes it covers all end in the same place: the source may not rasterise at all, the document
+   * may predate render retention, or the frames it did keep are gone. Re-importing is what tells
+   * them apart, and is the fix for each.
+   */
+  'not_retained',
+])
+export type VisualConfirmDesignGapReason = v.InferOutput<typeof visualConfirmDesignGapReasonSchema>
+
+/**
+ * One linked design that contributed less than its whole set of frames.
+ *
+ * A design can fall short in two INDEPENDENT ways, so the entry carries both rather than picking
+ * one: its source kept fewer frames than the design has (`reason`), and the gallery's own ceiling
+ * left out some of what it did keep (`dropped`). A design can be short on either axis alone or on
+ * both, and collapsing them into a single field would silently drop whichever lost the coin toss.
+ */
+export const visualConfirmDesignGapSchema = v.object({
+  /** The document's title, so the reviewer knows WHICH design is short. */
+  title: v.string(),
+  /**
+   * Why the SOURCE holds fewer frames than the design has, or null when retention is complete and
+   * this entry exists only because the gallery ceiling dropped some of them.
+   */
+  reason: v.nullable(visualConfirmDesignGapReasonSchema),
+  /**
+   * How many of THIS design's views the gallery's ceiling left out. Per-design rather than only in
+   * the summary's total, because the budget is shared: a bare total says frames are missing
+   * without saying whose, and a design the ceiling shut out entirely would otherwise look to a
+   * reviewer exactly like one that has no frames at all.
+   */
+  dropped: v.optional(v.number()),
+})
+export type VisualConfirmDesignGap = v.InferOutput<typeof visualConfirmDesignGapSchema>
+
+/**
+ * What the task's LINKED DESIGNS contributed to the gallery, stated separately from the pairs
+ * themselves.
+ *
+ * Present whenever the task links at least one design document, even when everything worked: a
+ * reviewer approving a screen against a Figma frame needs to know the frame is the design's own
+ * and not a hand-uploaded mock, and a reviewer seeing nothing needs to know whether a design is
+ * linked at all. ABSENT means the task links no design, which is a different fact from "links one
+ * and it gave nothing".
+ */
+export const visualConfirmDesignReferencesSchema = v.object({
+  /** Linked design documents considered. */
+  documents: v.number(),
+  /** Rendered frames folded into the pairs above. */
+  images: v.number(),
+  /**
+   * Frames left out by the gate's own ceiling on how many design views one gallery may carry,
+   * summed across every linked design. Reported rather than silently trimmed: unstated, a capped
+   * gallery reads as the whole design. Which designs the ceiling cut, and by how much, is on each
+   * one's own {@link visualConfirmDesignGapSchema} entry.
+   */
+  dropped: v.optional(v.number()),
+  /** Designs that contributed less than their whole set; see {@link visualConfirmDesignGapSchema}. */
+  gaps: v.optional(v.array(visualConfirmDesignGapSchema)),
+})
+export type VisualConfirmDesignReferences = v.InferOutput<
+  typeof visualConfirmDesignReferencesSchema
+>
 
 /** One human-requested fix round on a visual-confirmation gate (dispatches the `fixer`). */
 export const visualConfirmRoundSchema = v.object({
@@ -148,6 +252,14 @@ export const visualConfirmStepStateSchema = v.object({
   pairs: v.optional(v.array(visualConfirmPairSchema)),
   /** Set when no screenshots could be gathered (no UI tester ran / no storage) — manual mode. */
   degradedReason: v.optional(v.nullable(v.string())),
+  /**
+   * What the task's linked DESIGNS contributed, when it links any. Kept apart from
+   * {@link degradedReason} because that field gates the approve button behind an "I reviewed this
+   * another way" acknowledgement, and a design that gave fewer frames than it has is not a
+   * degraded review BASIS: a task's references have always been optional. See
+   * {@link visualConfirmDesignReferencesSchema}.
+   */
+  designReferences: v.optional(v.nullable(visualConfirmDesignReferencesSchema)),
   /** How many fixer attempts have been dispatched so far. */
   attempts: v.number(),
   /** Ceiling on fixer attempts, resolved from the task's merge preset (`ciMaxAttempts`). */

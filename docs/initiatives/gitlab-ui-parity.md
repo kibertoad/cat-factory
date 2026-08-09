@@ -1,6 +1,6 @@
 # Initiative: GitLab product-surface parity (SPA)
 
-**Status:** in progress (connect flow landed end to end; add-service + bootstrap are provider-aware) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (connect flow landed end to end; browse, bootstrap and every repo link are provider-aware) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -184,15 +184,18 @@ Slice 2a landed the backend of the per-workspace GitLab PAT connect. Read this b
   a per-workspace token, never account-shared). `StoredGitLabTokenSource` (`@cat-factory/gitlab`)
   reads + decrypts it per call; `buildGitLabConnectClient` bridges a `FetchGitLabClient` over it to
   the `GitHubClient` port, so the whole `GitHubSyncService` seed path works unchanged for GitLab.
-- **Provider routing = `ProviderRoutingGitHubClient`** (`@cat-factory/server`). When BOTH a GitHub
+- **Provider routing = `providerRoutingGitHubClient`** (`@cat-factory/server`). When BOTH a GitHub
   App and GitLab connect are configured, the `github` module reads through a router that dispatches
   each installation-keyed call to the App or GitLab client by the connection's stored provider
-  (memoised per installation: an immutable identity, so no N+1 in the sync loops). It forwards
-  every required `GitHubClient` method + the two token-keyed optionals `GitHubSyncService` probes;
-  the installation-keyed optionals (PR-review threads, sub-issues, …) are consumed by the engine
-  through `engineVcsClient` and by the task sources through the App client directly, never through
-  the router, so they're intentionally not forwarded. The GitHub-issue/docs consumers keep the raw
-  App client (they must not gain the GitLab fallback).
+  (memoised per installation: an immutable identity, so no N+1 in the sync loops). It is a `Proxy`,
+  so the surface it presents is the UNION of what the configured backing clients implement: every
+  required method plus every optional one at least one client has. An optional method the routed
+  provider lacks refuses by name (`VcsCapabilityUnsupportedError`) rather than resolving to
+  `undefined`, because "this deployment wired no such capability" and "this provider does not offer
+  it" need different fixes. An earlier hand-written delegate forwarded the required methods and two
+  optionals only, which reported a capability the deployment HAD as absent; see the module header
+  for what that cost. The GitHub-issue/docs consumers still keep the raw App client (they must not
+  gain the GitLab fallback), so they never reach the router at all.
 - **Wiring is symmetric.** Both facades relax the `github` module gate to build when EITHER the App
   OR GitLab connect is enabled (`selectVcsConnectDeps` in Node's `container-github-deps.ts`,
   `selectWorkerVcsConnectDeps` in the Worker's `vcsConnect.ts`), feeding the module the router /
@@ -335,6 +338,62 @@ provider-aware: add-service-from-repo and bootstrap. Read this before slice 4 or
   obvious carrier is the connection (a host is a per-connection fact, like `provider` and
   `method`), derived from `config.gitlab.apiBase` with its `/api/v4` suffix stripped; a
   repo-projection column would make it a per-repo fact it is not.
+  **Update: slice 5 (below) took exactly that carrier**, and put the same value on the connect
+  OPTION so the pre-connection surfaces have it too.
+
+## Findings (slice 5: the host, and the vocabulary that hangs off it)
+
+Slice 5 answered the question slices 3 and 4 kept deferring: WHERE a repo actually lives. Read
+this before slice 4 (webhook setup) or 6 (the onboarding provider choice).
+
+- **The host is a per-CONNECTION fact, DERIVED from the API base, and it is `null` when it does
+  not invert.** `webUrl` is now required on `GitHubConnection` and on each `VcsConnectOption`,
+  resolved once by `resolveVcsWebUrls(config)` (`@cat-factory/server`) off kernel's
+  `vcsWebBaseUrl`: `/api/v3` and `/api/v4` are stripped, `api.github.com` maps to `github.com`,
+  and a relative-URL install keeps its prefix (`https://host/gitlab/api/v4` →
+  `https://host/gitlab`). A SECOND config variable was the obvious alternative and was rejected:
+  every deployment that has a web host already told us its API base, and a second variable is a
+  second thing to get wrong on exactly the deployments (self-managed) this slice exists for.
+- **It rides the connect OPTION as well as the connection, and that is not redundancy.** The two
+  surfaces that most need a host render BEFORE anything is bound: the PAT box's "create a token"
+  link and bootstrap's "create a repository" button. Reading a connection there is impossible,
+  which is precisely how slice 3 ended up withholding GitLab's new-project button entirely.
+- **Only the TOKEN link may fall back to the provider's public instance.** Every other builder
+  withholds. The two failures are not the same size: a settings page on the wrong host costs a
+  click and is noticed immediately, while a repo/project link on the wrong host resolves to a
+  real page belonging to somebody else, and a project CREATED there looks like success until the
+  bootstrap push cannot find it. `~/utils/vcs` states that split at each builder rather than
+  leaving it to call sites.
+- **`appInstallationManageUrl` now withholds on an un-nameable host too.** An installation id
+  means nothing on an instance other than its own, so a GitHub Enterprise connection whose host
+  we cannot name gets no grant-access link rather than a github.com one.
+- **The PROVIDER comes off the repo row, the HOST off the connection.** `repoUrl`/`pullUrl`/
+  `issueUrl`/`branchUrl` read `repo.provider` for the path shape (`/-/merge_requests/` vs
+  `/pull/`) and `connection.webUrl` for the origin. Asking the connection for both would be
+  wrong the moment a row predating the discriminator sits under a GitLab connection. The
+  inspector's branch link lost its old fallback (slicing `/pull/<n>` off the PR url), which
+  silently yields nothing on a merge-request url and would have needed a second provider guess
+  to repair.
+- **Terminology is provider-keyed only where a provider's DATA is on screen.** The source-control
+  panel lists one connection's merge/pull requests, so its eight PR nouns moved to
+  `vcs.panel.pulls.{github,gitlab}.*`, resolved through an exhaustive `Record` of STATIC catalog
+  keys. The platform's own vocabulary elsewhere (risk policies, gate subtitles, the merge
+  effort prompt) stays as it is: it describes what cat-factory does, not what a host calls it,
+  and provider-keying all 130 of those strings would buy nothing a GitLab user notices. What DID
+  change there is the handful that named GitHub while describing whichever host the workspace is
+  on ("Open {pr} on GitHub", "View pull request on GitHub", the `github_not_connected` remedy):
+  those are now neutral, not provider-keyed, because the surfaces rendering them have no
+  connection in hand.
+- **Two repo-picker strings turned out to be METHOD-keyed, not provider-keyed.** "The
+  installation can't access any repositories yet" and "the connection is shared across the
+  account" are true of a GitHub App and false of any pasted token, GitHub PATs and local mode's
+  synthetic connection included. They key off `connection.method`, the same discriminator slice 3
+  introduced for the grant-access link.
+- **What is still GitHub-shaped, deliberately:** `github.panel.connectIntro` and
+  `github.onboarding.appIntro` describe the App install flow and render only above the App
+  picker. Local mode's `patCreationUrl` helpers still hard-code gitlab.com; they serve the
+  sign-in screen, which has no workspace and therefore no host, and they are the fallback case
+  the token-link rule above already accepts.
 
 ## Conventions & gotchas
 

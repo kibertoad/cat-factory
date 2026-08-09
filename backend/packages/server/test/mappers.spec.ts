@@ -405,6 +405,32 @@ describe('rowToExecution', () => {
     expect(rowToExecution({ ...base, detail }).initiatedByRole).toBeUndefined()
   })
 
+  it('round-trips who the run was started for, and stores nothing when nobody was named', () => {
+    // Pinned at admission from the starting key, read back on every projection of the run. It
+    // rides the same JSON as the pair above and would fail the same silent way: a run that could
+    // not say who it was for reads exactly like one an anonymous integration started.
+    const pinned = { ...rowToExecution(base), initiatedByExternalIdentity: 'os-user:ada' }
+    const back = rowToExecution({ ...base, detail: executionToDetail(pinned) })
+    expect(back.initiatedByExternalIdentity).toBe('os-user:ada')
+
+    const stored = JSON.parse(executionToDetail(rowToExecution(base))) as Record<string, unknown>
+    expect(stored.initiatedByExternalIdentity).toBeUndefined()
+    expect(rowToExecution(base).initiatedByExternalIdentity).toBeUndefined()
+  })
+
+  it('reads an unusable stored identity as nobody rather than as a name', () => {
+    // Opaque, so the only decode rule is "a non-empty string". Unlike `mode` there is nothing to
+    // fail closed about: the platform never acts on this value, so an unreadable one names nobody
+    // and the empty string must not become an identity that renders as blank.
+    for (const bad of ['', 0, null, {}, []]) {
+      const detail = JSON.stringify({
+        ...JSON.parse(base.detail),
+        initiatedByExternalIdentity: bad,
+      })
+      expect(rowToExecution({ ...base, detail }).initiatedByExternalIdentity).toBeUndefined()
+    }
+  })
+
   it('FAILS CLOSED on an unreadable mode instead of dropping it to live', () => {
     // The asymmetry with the role above is deliberate. A mode that is present-but-unreadable
     // means one was settled and we cannot tell which; reading it as `live` would hand the run
@@ -460,6 +486,7 @@ describe('rowToWorkspace / rowToPipeline', () => {
       {
         id: 'pl_1',
         name: 'P',
+        purpose: 'build',
         agentKinds: ['coder'],
       },
     )
@@ -467,6 +494,21 @@ describe('rowToWorkspace / rowToPipeline', () => {
       rowToPipeline({ id: 'pl_2', name: 'P', agent_kinds: '["coder"]', gates: '[true,false]' })
         .gates,
     ).toEqual([true, false])
+  })
+
+  it('reads the mandatory purpose totally, telling an empty column from an unnameable member', () => {
+    // The two states the column can hold that the required `Pipeline.purpose` cannot, and they get
+    // OPPOSITE dispositions. An empty column is a row written before the classifier was mandatory,
+    // and `build` is what such a row has always behaved as, so resolving it changes nothing. A
+    // value this build cannot name is a member it does not have, so it passes through untouched:
+    // dropping it would erase a deployment's own classifier on the next write, and folding it onto
+    // `build` would state a classification nobody chose. The narrowing predicates handle it.
+    const base = { id: 'pl_p', name: 'P', agent_kinds: '["coder"]', gates: null }
+    expect(rowToPipeline(base).purpose).toBe('build')
+    expect(rowToPipeline({ ...base, purpose: null }).purpose).toBe('build')
+    expect(rowToPipeline({ ...base, purpose: '' }).purpose).toBe('build')
+    expect(rowToPipeline({ ...base, purpose: 'review' }).purpose).toBe('review')
+    expect(rowToPipeline({ ...base, purpose: 'acme-migration' }).purpose).toBe('acme-migration')
   })
 
   it('surfaces the truthy flag columns as literal true, omitting them otherwise', () => {

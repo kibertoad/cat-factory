@@ -13,6 +13,7 @@ export {
 } from './validation/validateRegistrations.js'
 
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
+export type { PublicRepoOption } from './modules/board/publicBoardReads.js'
 export * as boardLogic from './modules/board/board.logic.js'
 export { sweepBinaryArtifactRetention } from './modules/artifacts/artifactRetention.js'
 
@@ -26,6 +27,9 @@ export {
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService.js'
 export type { TesterQualityReviewer } from './modules/execution/TesterQualityReviewService.js'
+// Where a run's `spec/` read stopped, for the ONE caller that reports the read rather than
+// surviving it: `GET /api/v1/runs/:runId/spec`.
+export type { RunSpecRead } from './modules/execution/RunEvidenceLoader.js'
 // The default judge assessor (the inline LLM verdict producer). Exported so a facade or a test
 // harness can build/replace it explicitly; `createCore` builds one from the model-provider deps
 // by default, so a deployment normally never names it. See `docs/initiatives/judge-registry.md`.
@@ -69,6 +73,7 @@ export {
   type DriveConfig,
   type DriveOptions,
   type DriveOutcome,
+  type StepOutcome,
 } from './modules/execution/drive.js'
 export {
   failureFromAdvanceError,
@@ -141,6 +146,13 @@ export {
   NotificationService,
   type NotificationServiceDependencies,
 } from './modules/notifications/NotificationService.js'
+// The notification manager. Exported for the FACADES, which build it from the same
+// repository they pass to Core so the routing gate in front of their channels and the
+// settings API a human edits cannot resolve differently.
+export {
+  NotificationSettingsService,
+  type NotificationSettingsServiceDependencies,
+} from './modules/notifications/NotificationSettingsService.js'
 // `RaiseNotificationInput` lives in @cat-factory/kernel (so runtime-neutral extension
 // seams — e.g. a custom gate's `onExhausted` — can build one without depending on this
 // package); surfaced here for discovery alongside the NotificationService that consumes it.

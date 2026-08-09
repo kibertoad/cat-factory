@@ -32,6 +32,10 @@ const jiraDescriptor: TaskSourceState = {
   refPlaceholder: 'PROJ-123',
   available: true,
   enabled: true,
+  supportsIntake: true,
+  ignoredIntakePredicates: [],
+  // Jira carries its own credentials, so it rides no VCS connection.
+  ridesVcsProvider: null,
 }
 
 const jiraConnection: TaskConnection = { source: 'jira', label: 'acme', connectedAt: 0 }

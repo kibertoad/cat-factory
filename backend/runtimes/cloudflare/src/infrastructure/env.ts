@@ -168,6 +168,16 @@ export interface Env {
    */
   CI_MAX_POLLS?: string
   /**
+   * Ceiling on ONE pipeline-step advance or status read, applied as the durable driver's
+   * `step.do` timeout here and raced in `driveExecution` on Node: the engine's hang bound, kept
+   * as one knob so a wedged call is waited out for the same length of time on both facades.
+   *
+   * A duration string ("30 minutes", the default), written as a whole number and one of
+   * seconds/minutes/hours/days/weeks. Both facades parse it with the same parser, so a value one
+   * accepts the other honours identically; an unusable one warns and falls back on both.
+   */
+  ADVANCE_TIMEOUT?: string
+  /**
    * Per-workspace WebSocket fan-out hub (Durable Object). Pushes execution/board
    * changes to subscribed browsers in real time. When absent, the engine pushes
    * nothing (clients still get state on connect / refresh).
@@ -806,4 +816,41 @@ export function requireDb(env: Env): D1Database {
     throw configProblem({ key: 'DB', ...ENV_HELP.DB })
   }
   return env.DB
+}
+
+/**
+ * The Worker bindings read as an opaque key→value bag, for a runtime-neutral consumer that
+ * looks up its own keys by name.
+ *
+ * `Env` is an `interface`, so it carries no implicit index signature and cannot widen to a
+ * record without an assertion. The assertion is confined here, and values stay `unknown`
+ * because a binding is routinely not a scalar: `DB` is a D1 database, `GITHUB_SYNC_QUEUE` a
+ * queue, `WORKSPACE_EVENTS` a Durable Object namespace.
+ */
+export function envBag(env: Env): Record<string, unknown> {
+  return env as unknown as Record<string, unknown>
+}
+
+/**
+ * One plain string VAR off the bindings, by name; `undefined` when it is unset OR when the
+ * binding under that name is not a string.
+ *
+ * The `typeof` check is the point. Asserting `Env` to `Record<string, string | undefined>`, the
+ * shape this replaced, claims every binding is a string. That is false for every non-var binding
+ * on it, so a caller reading a mistyped or misnamed key was handed a D1 database where it
+ * expected a token and only found out several frames later.
+ */
+export function envVar(env: Env, key: string): string | undefined {
+  const value = envBag(env)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+/** Every plain string VAR on the bindings, for a consumer that wants the whole bag at once.
+ *  Non-string bindings are omitted, for the reason {@link envVar} states. */
+export function envVars(env: Env): Record<string, string | undefined> {
+  const vars: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(envBag(env))) {
+    if (typeof value === 'string') vars[key] = value
+  }
+  return vars
 }

@@ -12,7 +12,7 @@ Supersedes the `tracker-webhook-intake` initiative tracker, whose committed scop
 
 The task-source layer was complete on the write side and on the POLLING read side (see the
 "Requirements review flow" and bug-triage notes in [`CLAUDE.md`](../../../CLAUDE.md), plus
-[`headless-clarification-loop.md`](../../../docs/initiatives/headless-clarification-loop.md)). Two
+[ADR 0047](./0047-headless-clarification-loop.md)). Two
 asymmetries remained:
 
 1. **Intake was pull-only.** An issue entered the system when a recurring `bug-intake` schedule
@@ -36,7 +36,7 @@ and a triaged ticket can instead run as its own task. Replays and duplicate deli
 apply once.
 
 This work COMPLETED slice 2b of
-[`headless-clarification-loop.md`](../../../docs/initiatives/headless-clarification-loop.md): that
+[ADR 0047](./0047-headless-clarification-loop.md): that
 tracker's D4 (reply grammar), D5 (per-provider ingest), D6 (loop policy) and D7 (threat model) are
 the design of record for the reply half and are not restated here, only refined where reality
 differed.
@@ -93,9 +93,25 @@ verification AND parsing (`TaskSourceProvider.webhook`), exactly as VCS provider
 provider without the capability simply never receives deliveries (404 at the receiver, so an
 operator misconfiguring the URL learns immediately rather than into a silent void).
 
-All three vendors sign HMAC-SHA256 over the raw body and differ only in header + encoding
+Three of the four vendors sign HMAC-SHA256 over the raw body and differ only in header + encoding
 (`x-hub-signature-256: sha256=<hex>` / `x-hub-signature: sha256=<hex>` / `linear-signature: <hex>`),
 so the crypto is one shared helper and each adapter supplies its header name and prefix.
+
+**GitLab signs nothing.** It echoes the caller-chosen secret itself in `x-gitlab-token`, so its
+adapter compares that value in constant time (`verifySharedToken`) rather than a digest. The scheme
+is weaker by construction (the secret travels on every delivery and nothing binds it to the body),
+which is why it is named as its own function rather than dressed up as a signature check. The two
+guards that matter still hold: an empty stored secret fails closed FIRST, and the comparison is
+timing-safe. The receiver still reads the RAW body before any parse, because that is the property
+the platform controls whether or not the vendor binds a signature to it.
+
+**One board id, one equality rule, and it belongs to the source.** The matcher folds case by
+default (a Jira project key and a GitHub `owner/repo` are case-insensitive at the vendor, and an
+operator typed one of them into a form), but GitLab project paths are case-SENSITIVE: `Acme/web`
+and `acme/web` are two different projects. So a provider may declare `sameBoard`, and the fold is
+the default rather than the rule. Getting this wrong is silent in the direction that costs most:
+under `per-ticket` dispatch an over-forgiving comparison is a real block and a real agent run on a
+stranger's issue.
 
 ### D3: Event-driven intake FIRES THE SCHEDULE; it does not re-implement intake
 

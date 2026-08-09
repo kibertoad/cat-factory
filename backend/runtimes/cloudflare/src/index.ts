@@ -36,6 +36,7 @@ import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1Pla
 import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
 import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
+import { registeredBinaryStoreRegistry } from './infrastructure/binaryStores'
 // The deployment's OWN document credentials, read from `env`. Shared with the per-request container
 // build so the boot check and the engine agree about what this deployment can read.
 import {
@@ -93,6 +94,7 @@ import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   defaultBinaryGeneratorRegistry,
+  defaultBinaryStoreRegistry,
   defaultFoundationalServiceRegistry,
   defaultPipelineRegistry,
   defaultTaskTypeRegistry,
@@ -207,6 +209,21 @@ export {
 // the platform's. Both are legitimate, which is why both are exported and neither is inferred.
 export { PromptFragmentRegistry, defaultPromptFragmentRegistry } from '@cat-factory/kernel'
 export { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+// Installation-level extension point for the deployment's OWN BINARY ARTIFACT STORES: a
+// deployment news a `defaultBinaryStoreRegistry()`, registers stores implementing the
+// `BinaryBlobBackend` port (GCS, Azure Blob, an internal object service) on it, and passes it via
+// the `binaryStoreRegistry` override. Each becomes a `custom` choice in the account-settings storage
+// picker, beside the platform's own backends; the per-account resolver builds one when an account
+// selects it, and stamps the store's id onto every artifact row it writes.
+export {
+  BinaryStoreRegistry,
+  BinaryStoreRegistrationError,
+  type BinaryStoreContext,
+  type BinaryStoreDefinition,
+  type BinaryStoreView,
+  type BinaryBlobBackend,
+  defaultBinaryStoreRegistry,
+} from '@cat-factory/kernel'
 // Installation-level extension point for polling GATES and STEP RESOLVERS. `gateRegistryWithBuiltins()`
 // is the one a deployment almost always wants: a bare `defaultGateRegistry()` is EMPTY, so injecting
 // one silently drops `ci` / `conflicts` / `post-release-health` from every pipeline that names them.
@@ -288,13 +305,15 @@ export {
 // The BUILT-IN pipeline ids, so an operation can pin one of the shipped pipelines (or a task type
 // can name it as its `defaultPipelineId`) without restating a string the platform owns.
 export {
-  BLUEPRINT_PIPELINE_ID,
+  BLUEPRINT_AGENT_KIND,
+  ENVIRONMENT_ANALYST_AGENT_KIND,
   INITIATIVE_PIPELINE_ID,
   INITIATIVE_DOCS_PIPELINE_ID,
   BUILD_PIPELINE_ID,
   SIMPLE_PIPELINE_ID,
   ADAPTIVE_BUILD_PIPELINE_ID,
-  TECH_DEBT_PIPELINE_ID,
+  COMPLEX_BUILD_PIPELINE_ID,
+  defaultBuildPipelineId,
   BUG_TRIAGE_PIPELINE_ID,
   BUGFIX_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,
@@ -353,6 +372,11 @@ function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     // ones are what a binary-generating step may produce with, and a malformed definition or a
     // cleartext endpoint fails boot rather than a dispatch.
     binaryGeneratorRegistry: overrides.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry(),
+    // The deployment's own binary artifact stores. Resolved here so registration validation sees
+    // the same instance the engine does; `createApp` then registers it PROCESS-WIDE, which is how
+    // it reaches the builders that take no overrides at all (the durable driver, the queue
+    // consumers, the retention cron). See `infrastructure/binaryStores.ts`.
+    binaryStoreRegistry: overrides.binaryStoreRegistry ?? defaultBinaryStoreRegistry(),
     // The best-practice standards pool: the SHIPPED catalog plus whatever a deployment registered
     // onto the same instance. Defaulted to the built-ins by the FACADE (here and, for a container
     // built with no overrides, in `resolveWorkerRegistries`) rather than by `createCore`, because
@@ -380,6 +404,23 @@ const SWEEP_HARD_STALL_MS = 60 * 60 * 1000
  * per-process `orphanedSince` map.
  */
 const runSweepOrphanedSince = new Map<string, number>()
+/**
+ * Run kinds already reported as unsweepable in this isolate. The condition is a DEPLOYMENT
+ * fault (a workflow binding this build's runs need, not declared in `wrangler.toml`) and it
+ * holds for every stale run of that kind on every tick, so warning per run per tick would
+ * bury the one line that matters under its own repetitions.
+ */
+const warnedUnsweepableKinds = new Set<string>()
+
+/** Warn once per isolate that a run kind has no workflow binding, so the sweeper is blind to it. */
+function warnUnsweepableKind(kind: string): void {
+  if (warnedUnsweepableKinds.has(kind)) return
+  warnedUnsweepableKinds.add(kind)
+  logger.warn('no workflow binding for run kind; its stale runs cannot be swept', {
+    cron: 'stale-run',
+    kind,
+  })
+}
 /** A `running` Kaizen grading older than this is re-driven (its sweep crashed mid-flight). */
 const KAIZEN_STALE_MS = 10 * 60 * 1000
 /** Max Kaizen gradings to run per scheduled pass (each is an LLM call; keep the batch small). */
@@ -510,9 +551,11 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
     }),
   )
   // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, and
-  // the blob backend is per-account (R2 or S3), so it resolves each workspace's store. Run
-  // whenever storage could be configured: the R2 default (ARTIFACT_BUCKET) OR a per-account
-  // S3 backend (which needs the encryption key to unseal its credentials).
+  // the blob backend is per-account (R2, S3, or one the DEPLOYMENT registered), so it resolves
+  // each workspace's store. Run whenever storage could be configured: the R2 default
+  // (ARTIFACT_BUCKET) OR any per-account selection, which is readable only once ENCRYPTION_KEY
+  // can unseal the account's settings, a registered store included, so it needs no clause of
+  // its own here.
   if (env.ARTIFACT_BUCKET || env.ENCRYPTION_KEY) {
     const settingsRepo = new D1WorkspaceSettingsRepository({ db: env.DB })
     tick.run(
@@ -523,6 +566,12 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
           env.DB,
           clock,
           new CryptoIdGenerator(),
+          // Read off the process-wide registration rather than threaded down from `createWorker`:
+          // this sweep builds its resolver outside the container, so it used to be the one caller
+          // an entry point had to remember to hand the registry to, while the durable driver (the
+          // other override-less builder) had no such parameter available and silently got none.
+          // One mechanism now serves both. See `infrastructure/binaryStores.ts`.
+          registeredBinaryStoreRegistry(),
         ),
         listWorkspaceIds: () =>
           new D1WorkspaceRepository({ db: env.DB })
@@ -551,10 +600,15 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
  */
 function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): void {
   if (env.EXECUTION_WORKFLOW || env.BOOTSTRAP_WORKFLOW || env.ENV_CONFIG_REPAIR_WORKFLOW) {
-    const execLookup = env.EXECUTION_WORKFLOW ? new WorkflowsLookup(env.EXECUTION_WORKFLOW) : null
-    const bootLookup = env.BOOTSTRAP_WORKFLOW ? new WorkflowsLookup(env.BOOTSTRAP_WORKFLOW) : null
+    const sweepLogger = logger.child({ cron: 'stale-run' })
+    const execLookup = env.EXECUTION_WORKFLOW
+      ? new WorkflowsLookup(env.EXECUTION_WORKFLOW, sweepLogger)
+      : null
+    const bootLookup = env.BOOTSTRAP_WORKFLOW
+      ? new WorkflowsLookup(env.BOOTSTRAP_WORKFLOW, sweepLogger)
+      : null
     const repairLookup = env.ENV_CONFIG_REPAIR_WORKFLOW
-      ? new WorkflowsLookup(env.ENV_CONFIG_REPAIR_WORKFLOW)
+      ? new WorkflowsLookup(env.ENV_CONFIG_REPAIR_WORKFLOW, sweepLogger)
       : null
     const execRunner = env.EXECUTION_WORKFLOW
       ? new WorkflowsWorkRunner({ workflow: env.EXECUTION_WORKFLOW, queue: env.EXECUTION_QUEUE })
@@ -576,8 +630,14 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
               : ref.kind === 'env-config-repair'
                 ? repairLookup
                 : execLookup
-          // No binding for this kind → can't classify, so treat as alive (skip).
-          return lookup ? lookup.instanceState(ref.id) : Promise.resolve('alive' as const)
+          // No binding for this kind → nothing can classify this run, now or on any later
+          // tick. `alive` said that in a way indistinguishable from a healthy run, so the
+          // kind was silently exempt from sweeping forever; `unknown` says it and counts it.
+          if (!lookup) {
+            warnUnsweepableKind(ref.kind)
+            return Promise.resolve({ state: 'unknown' as const })
+          }
+          return lookup.instanceState(ref.id)
         },
         redrive: async (ref) => {
           if (ref.kind === 'bootstrap') await bootRunner?.startRun(ref.workspaceId, ref.id)
@@ -588,10 +648,14 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
         // The durable instance is terminal and can't be recreated → finalize the
         // run as stopped so it stops showing `running` forever (also reclaims any
         // leftover container). Reuses the same stop path the user-facing button hits.
-        finalizeOrphan: async (ref) => {
+        finalizeOrphan: async (ref, cause) => {
           const container = buildContainer(env)
-          const reason =
-            'The run was stopped automatically: its durable driver ended without finalizing it.'
+          // The dead instance's own error, when Workflows kept one. Every run this branch
+          // settles otherwise carries the identical sentence, which is the least useful thing
+          // a stopped run can say about why it stopped.
+          const reason = cause
+            ? `The run was stopped automatically: its durable driver ended without finalizing it. It reported: ${cause}`
+            : 'The run was stopped automatically: its durable driver ended without finalizing it.'
           if (ref.kind === 'bootstrap') {
             if (container.bootstrap) {
               await container.bootstrap.service.stop(ref.workspaceId, ref.id, {
@@ -634,9 +698,17 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
       })
         // Surface what the sweep did — the key signal for "are runs getting stuck?"
         // Only log when it actually acted.
-        .then(({ redriven, finalized, stalled }) => {
-          if (redriven > 0 || finalized > 0 || stalled > 0) {
-            logger.warn('swept stuck runs', { cron: 'stale-run', redriven, finalized, stalled })
+        .then(({ redriven, finalized, stalled, unknown }) => {
+          if (redriven > 0 || finalized > 0 || stalled > 0 || unknown > 0) {
+            logger.warn('swept stuck runs', {
+              cron: 'stale-run',
+              redriven,
+              finalized,
+              stalled,
+              // Reported even when nothing else happened: a pass that classified nothing is
+              // the one shape of sweep failure that produces no other evidence at all.
+              unknown,
+            })
           }
         }),
     )
@@ -650,7 +722,10 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
  */
 function redriveStuckEnvTests(env: Env, tick: SweepTick, clock: SystemClock): void {
   if (env.ENV_TEST_WORKFLOW) {
-    const envTestLookup = new WorkflowsLookup(env.ENV_TEST_WORKFLOW)
+    const envTestLookup = new WorkflowsLookup(
+      env.ENV_TEST_WORKFLOW,
+      logger.child({ cron: 'env-test-sweeper' }),
+    )
     const envTestRunner = new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
     tick.run(
       { name: 'env-test-sweeper', failureMessage: 'env-test sweep failed' },
@@ -658,22 +733,25 @@ function redriveStuckEnvTests(env: Env, tick: SweepTick, clock: SystemClock): vo
         repository: new D1EnvironmentTestRunRepository({ db: env.DB }),
         instanceState: (runId) => envTestLookup.instanceState(runId),
         redrive: (workspaceId, runId) => envTestRunner.startRun(workspaceId, runId),
-        finalizeOrphan: async (workspaceId, runId) => {
+        finalizeOrphan: async (workspaceId, runId, cause) => {
           const container = buildContainer(env)
+          const base =
+            'The environment test was stopped automatically: its durable driver ended without finalizing it.'
           await container.environments?.environmentTest?.expire(
             workspaceId,
             runId,
-            'The environment test was stopped automatically: its durable driver ended without finalizing it.',
+            cause ? `${base} It reported: ${cause}` : base,
           )
         },
         clock,
         leaseMs: SWEEP_LEASE_MS,
-      }).then(({ redriven, finalized }) => {
-        if (redriven > 0 || finalized > 0) {
+      }).then(({ redriven, finalized, unknown }) => {
+        if (redriven > 0 || finalized > 0 || unknown > 0) {
           logger.warn('swept stuck env-test runs', {
             cron: 'env-test-sweeper',
             redriven,
             finalized,
+            unknown,
           })
         }
       }),

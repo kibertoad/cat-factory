@@ -3,12 +3,13 @@ import {
   LIVE_TIMEOUT,
   RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
+  openTaskFocusView,
   setFakeProfile,
   startRun,
   taskCard,
 } from './helpers'
 
-// Slice 5 of the modular-vue adoption (docs/initiatives/modular-vue-slice5-progress.md):
+// Slice 5 of the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md):
 // every agent-run result window now renders inside the shared `ResultWindowShell`, which
 // centralises the modal chrome AND owns the modal *behaviour* via the upstream
 // `useModalBehavior` — focus-trap, body-scroll lock, and a shared overlay stack so Escape
@@ -42,11 +43,11 @@ test.describe('result-window shell (merger)', () => {
     // The run drives through the merger and settles at `pr_ready` (pushed live).
     await expect(card).toHaveAttribute('data-status', 'pr_ready', { timeout: RUN_TERMINAL_TIMEOUT })
 
-    // Clicking the task card opens the full-screen focus view (`ui.focus`), which lists the
-    // run's steps (`PipelineProgress`). Clicking the completed merger step there routes to its
-    // dedicated result window (`dispatchStepView`) — rendered in the shell, teleported above
-    // the focus view.
-    await card.click()
+    // The card's Review affordance opens the full-screen focus view (`ui.focus`), which lists
+    // the run's steps (`PipelineProgress`). Clicking the completed merger step there routes to
+    // its dedicated result window (`dispatchStepView`), rendered in the shell and teleported
+    // above the focus view.
+    await openTaskFocusView(card)
     const mergerStep = page.locator('[data-testid="pipeline-step"][data-step-kind="merger"]')
     await expect(mergerStep).toBeVisible({ timeout: LIVE_TIMEOUT })
 
@@ -80,7 +81,7 @@ test.describe('result-window shell (merger)', () => {
   })
 })
 
-// A SECOND converted window — the CI `gate` (docs/initiatives/modular-vue-slice5-progress.md,
+// A SECOND converted window — the CI `gate` (backend/docs/adr/0049-modular-vue-adoption.md,
 // window #4) — through the same shared shell, so the coverage isn't pilot-only. Unlike the
 // merger, the gate contributes a status badge to the shell's `#header-extras` slot and passes
 // `manageEscape: false`, so this proves both the extras slot and the Escape handoff generalise
@@ -111,7 +112,7 @@ test.describe('result-window shell (gate)', () => {
     await expect(card).toHaveAttribute('data-status', 'pr_ready', { timeout: RUN_TERMINAL_TIMEOUT })
 
     // Open the run's step list (the focus view) and route to the finished ci gate's window.
-    await card.click()
+    await openTaskFocusView(card)
     const ciStep = page.locator('[data-testid="pipeline-step"][data-step-kind="ci"]')
     await expect(ciStep).toBeVisible({ timeout: LIVE_TIMEOUT })
 
@@ -165,7 +166,15 @@ test.describe('result-window shell (nested lightbox)', () => {
       testReports: [greenWithShot],
       pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
     })
-    const pipeline = await createSimplePipeline(request, workspaceId, ['coder', 'tester-api'])
+    // The Deployer / Disposer pair rides along because a chain that tests has to spell the
+    // environment lifecycle out (`validatePipelineAuthoring`); both no-op on the seeded
+    // `infraless` board, so the step this spec routes to is reached exactly as before.
+    const pipeline = await createSimplePipeline(request, workspaceId, [
+      'coder',
+      'deployer',
+      'tester-api',
+      'disposer',
+    ])
 
     const card = taskCard(page, 'task_login')
     await startRun(request, workspaceId, 'task_login', pipeline.id)
@@ -174,7 +183,7 @@ test.describe('result-window shell (nested lightbox)', () => {
     await expect(card).toHaveAttribute('data-status', 'pr_ready', { timeout: RUN_TERMINAL_TIMEOUT })
 
     // Open the run's step list (the focus view) and route to the finished tester step's window.
-    await card.click()
+    await openTaskFocusView(card)
     const testerStep = page.locator('[data-testid="pipeline-step"][data-step-kind="tester-api"]')
     await expect(testerStep).toBeVisible({ timeout: LIVE_TIMEOUT })
     await testerStep.click()

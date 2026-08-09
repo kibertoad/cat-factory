@@ -35,8 +35,10 @@ import {
   operationalMetrics,
   runWithInitiator,
   resolveWorkspaceCapabilities,
+  resolveVcsWebUrls,
   testEnvHasZeroConfigDefault,
   WebCryptoPasswordHasher,
+  WebCryptoSecretCipher,
   type PersistenceRegistry,
   type ServerContainer,
   type ToolSecretChain,
@@ -127,15 +129,19 @@ import {
   selectSandboxDeps,
   selectFoundationalServiceDeps,
   selectSkillLibraryDeps,
-  selectTasksDeps,
   selectTraceSink,
   selectWorkRunner,
 } from './container.js'
 import { selectRecurringDeps } from './container-tracker-deps.js'
 import { selectDocumentsDeps } from './container-documents-deps'
 import { selectGitHubDeps } from './github-deps.js'
+import { selectTasksDeps } from './tasks-deps.js'
 import type { D1Database } from '@cloudflare/workers-types'
-import { buildExternalNotificationChannel, selectSlackDeps } from './container-notification-deps'
+import {
+  buildExternalNotificationChannel,
+  buildWorkerNotificationDelivery,
+  selectSlackDeps,
+} from './container-notification-deps'
 
 /**
  * The pre-built infrastructure handles + app-owned registries `buildContainer` computes
@@ -560,6 +566,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     initiativePresetRegistry,
     providerRegistry,
     promptFragmentRegistry,
+    binaryStoreRegistry,
   } = registries
   // The Bedrock allow-list that gates `bedrock`-flavour selectability, derived from `env` here
   // (like `baseUrlFor` below) because it is one deployment-level read with nothing
@@ -577,6 +584,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     clock,
     logger,
   })
+  // Resolved before the literal below rather than spread inline, because the recurring selector's
+  // issue-writeback provider dispatches through these same providers (see the spread site).
+  const tasksDeps = selectTasksDeps(env, config, db, clock, idGenerator)
 
   return {
     // The structured logger every domain service emits through. Must be wired on BOTH facades
@@ -626,6 +636,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // registered on the same instance). `createCore` wraps it in the default `PromptFragmentSource`
     // every prompt-assembly site and the catalog endpoint read through.
     promptFragmentRegistry,
+    // The app-owned registry of the deployment's OWN binary artifact stores. The per-account
+    // resolver above was already composed from it; re-exposed on Core so what this build offers
+    // is readable rather than only observable by storing something.
+    binaryStoreRegistry,
     stepResolverRegistry,
     // The app-owned provider registry the gate providers were wired onto above; the engine's gate
     // machine reads the SAME instance through its GateContext.
@@ -633,6 +647,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     initiativePresetRegistry,
     workRunner: selectWorkRunner(env),
     executionEventPublisher: eventPublisher,
+    // The browser-facing host of each provider's configured instance, stamped onto every VCS
+    // connection + connect option so the SPA links to the instance a workspace is bound to.
+    // Derived by the shared resolver both facades call, so they cannot name different hosts.
+    vcsWebUrls: resolveVcsWebUrls(config),
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.
@@ -684,9 +702,19 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
     ...selectTraceSink(config),
-    ...selectRecurringDeps(env, config, db, clock, idGenerator),
+    // Ordered, not merely spread: the writeback provider `selectRecurringDeps` builds dispatches
+    // through the task sources themselves, so it is handed the SAME array `selectTasksDeps`
+    // registers rather than a second wiring of the same vendors.
+    ...selectRecurringDeps(
+      env,
+      config,
+      db,
+      clock,
+      idGenerator,
+      tasksDeps.taskSourceProviders ?? [],
+    ),
     ...selectDocumentsDeps(env, config, db, clock, idGenerator),
-    ...selectTasksDeps(env, config, db, clock, idGenerator),
+    ...tasksDeps,
     ...selectRequirementsDeps(env, config, db),
     ...selectSandboxDeps(env.SANDBOX_DB),
     ...selectEnvironmentsDeps(env, config, db),
@@ -827,6 +855,10 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     config,
     db,
     notificationWebhookSupport?.channel,
+    // The email transport, already wrapped in the notification manager's routing gate. It rides
+    // this set for the same reason Slack does: it sends through the account's sealed provider
+    // key, so a mothership-mode laptop cannot deliver it and this side must.
+    buildWorkerNotificationDelivery(config, db, clock).emailChannel,
   )
 
   return {
@@ -982,11 +1014,8 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     userSecrets,
     // The per-user "repos my PAT can reach" projection (board redaction + picker expansion).
     userRepoAccess: new D1UserRepoAccessRepository({ db }),
-    // The sealed-secret inventory the key-drift sweep + drop remediation use (ADR 0026 D6.2/D6.3);
-    // gated on ENCRYPTION_KEY (no key ⇒ nothing is sealed to scan).
-    ...(env.ENCRYPTION_KEY?.trim()
-      ? { sealedSecretInventory: new D1SealedSecretInventory({ db }) }
-      : {}),
+    // The two ENCRYPTION_KEY-gated sealed-secret seams (inventory + cipher factory).
+    ...selectWorkerSealedSecretDeps(env, db),
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
     gateways: {
@@ -1045,5 +1074,30 @@ function workerCapabilityCredentialFields(input: {
     // The probe resolves through the SAME chain a dispatch does, or it reports on a tenant's value
     // that is not this board's.
     ...toolSecretContainerFields(input.toolSecretChain),
+  }
+}
+
+/**
+ * The deployment's two sealed-secret seams, both gated on `ENCRYPTION_KEY` and for the same
+ * reason: with no key nothing is sealed, so there is neither an inventory to scan nor a cipher to
+ * answer with. Named together because they are one concern read from one variable: the drift
+ * sweep enumerates what is sealed, and the delegation endpoints open it for a mothership-mode node.
+ * The Node facade wires the symmetric pair.
+ */
+function selectWorkerSealedSecretDeps(
+  env: Env,
+  db: D1Database,
+): Pick<ServerContainer, 'sealedSecretInventory' | 'secretCipherFor'> {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return {}
+  return {
+    // ADR 0026 D6.2/D6.3: what the boot drift sweep attempts to decrypt, and what an operator's
+    // drop remediation targets.
+    sealedSecretInventory: new D1SealedSecretInventory({ db }),
+    // What `/internal/secrets/{unseal,seal}` opens and seals an ORG credential through on a
+    // mothership-mode node's behalf. Gated on the key alone, unlike the Node twin's extra `db`
+    // check: a Worker takes a non-optional `D1Database`, so it is authoritative for the rows it
+    // would be asked about and can never itself be the mothership-mode node this endpoint serves.
+    secretCipherFor: (info: string) => new WebCryptoSecretCipher({ masterKeyBase64, info }),
   }
 }

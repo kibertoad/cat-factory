@@ -18,6 +18,7 @@ export type {
   DocumentFreshness,
   DocumentFreshnessChange,
   DocumentFreshnessGap,
+  DocumentRenderStatus,
   RefreshedDocumentView,
   SourceDocument,
   DocumentSearchResult,

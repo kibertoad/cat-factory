@@ -1,7 +1,25 @@
 import type { ProvisionType, ServiceProvisioning, WorkspaceSettings } from '@cat-factory/contracts'
-import type { Logger, ServiceFragmentDefaultsRepository } from '@cat-factory/kernel'
+import type { Block, Logger, ServiceFragmentDefaultsRepository } from '@cat-factory/kernel'
 import { runBestEffort } from '@cat-factory/kernel'
 import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
+
+/**
+ * Where to place a frame the caller did not position: the next slot on a 5-wide grid, sized to the
+ * frames the board already carries.
+ *
+ * Beside the seeds above for the same reason they are together: BOTH frame-creation paths need it,
+ * and the one that had it kept its own copy while `addFrame` demanded a position outright. So the
+ * moment a caller with no canvas needed a frame (the public API's service creation), the choice was
+ * either to publish a coordinate system into a frozen surface or to invent a third layout rule.
+ *
+ * It is only a STARTING point: a service's position on any board is its per-board mount, which a
+ * human moves. Overlap is possible on a board whose frames were all dragged elsewhere, and that is
+ * fine: the alternative is a placement search that pretends to know where the user wants it.
+ */
+export function nextFrameSlot(blocks: readonly Block[]): { x: number; y: number } {
+  const frames = blocks.filter((block) => block.level === 'frame').length
+  return { x: 80 + (frames % 5) * 48, y: 80 + Math.floor(frames / 5) * 48 }
+}
 
 /**
  * Everything a NEWLY CREATED SERVICE FRAME inherits from its workspace — today the default

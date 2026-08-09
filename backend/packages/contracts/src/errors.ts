@@ -53,6 +53,12 @@ export const CONFLICT_REASONS = [
   'preset_unsatisfiable',
   'dependencies_unmet',
   'task_limit_reached',
+  // The workspace already has as many outbound notification webhooks as it may register
+  // (`MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE`), so registering ANOTHER one is refused; editing or
+  // removing an existing endpoint still works, which is the remedy. `details.limit` carries the
+  // cap. Kept apart from `task_limit_reached` because nothing here clears on its own: waiting does
+  // not help, an operator has to remove a receiver they no longer want.
+  'webhook_limit_reached',
   'tester_infra_unsupported',
   'binary_storage_unconfigured',
   'agent_backend_unconfigured',
@@ -228,10 +234,36 @@ export type ConflictReason = (typeof CONFLICT_REASONS)[number]
  *                                        unknown set. Retryable; nothing is misconfigured.
  *  - `foundational_builtins_unreachable` — the same shape for the deployment's `builtin`
  *                                        foundational-services tier.
+ *  - `connection_credentials_unreadable` — a stored document-source or tracker connection exists,
+ *                                        but its sealed credential bag would not open. `details`
+ *                                        carries the `source`. Two causes reach this and the
+ *                                        deployment genuinely cannot tell them apart (the
+ *                                        mothership collapses "no such row" / "out of scope" /
+ *                                        "nothing sealed" into one uniform 404), so the copy names
+ *                                        BOTH remedies rather than picking one: retry if the key
+ *                                        service is unreachable, re-connect the source if the row
+ *                                        itself has drifted.
+ *  - `vcs_capability_unsupported`      : the workspace's source-control provider does not offer
+ *                                        the operation at all (kernel's
+ *                                        `VcsCapabilityUnsupportedError`, raised by the
+ *                                        provider-routing VCS client when a call lands on the
+ *                                        provider whose client lacks it). A PERMANENT property of
+ *                                        the provider that was connected, which is why it cannot
+ *                                        ride the generic copy: no amount of operator wiring
+ *                                        changes it, so telling someone their deployment is
+ *                                        misconfigured sends them to a build with nothing wrong
+ *                                        in it. `details` carries `provider` and `operation`.
+ *
+ * Its sibling `vcs_client_unconfigured` (no client wired for the routed connection's provider) is
+ * deliberately NOT here. That one IS a wiring gap, so the generic copy states it correctly, and
+ * this list is a short set of exceptions to that copy rather than a second vocabulary mirroring
+ * every reason the backend emits.
  */
 export const UNAVAILABLE_REASONS = [
   'binary_generators_unreachable',
   'foundational_builtins_unreachable',
+  'connection_credentials_unreadable',
+  'vcs_capability_unsupported',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]

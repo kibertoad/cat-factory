@@ -4,6 +4,7 @@ import {
   debugAgentContextListSchema,
   debugLlmCallListSchema,
   debugLlmCallSchema,
+  debugLlmExportSchema,
   debugLogListSchema,
   debugRunListSchema,
   debugRunOverviewSchema,
@@ -11,6 +12,7 @@ import {
   debugToolCallListSchema,
   getDebugAgentContextQuerySchema,
   getDebugLlmCallQuerySchema,
+  getDebugLlmExportQuerySchema,
   listDebugAgentContextQuerySchema,
   listDebugLlmCallsQuerySchema,
   listDebugPageQuerySchema,
@@ -80,6 +82,23 @@ export const getDebugLlmCallContract = withMinScope(
     pathResolver: ({ callId }) => `/api/v1/debug/llm-calls/${callId}`,
     requestQuerySchema: getDebugLlmCallQuerySchema,
     responsesByStatusCode: { 200: debugLlmCallSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * The run's model activity as one self-describing bundle: the complete SQL rollups plus a
+ * bounded window of the calls behind them. The external counterpart of the app's own export
+ * button, and the one call a caller with a fixed context budget makes instead of the overview
+ * plus a walk of the call list.
+ */
+export const getDebugLlmExportContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/debug/runs/${runId}/llm-export`,
+    requestQuerySchema: getDebugLlmExportQuerySchema,
+    responsesByStatusCode: { 200: debugLlmExportSchema, ...errorResponses },
   }),
 )
 

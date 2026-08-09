@@ -1,22 +1,17 @@
 import {
   type Clock,
-  CompositeNotificationChannel,
   type EmailSender,
   type ExecutionEventPublisher,
   type GitHubClient,
   type IdGenerator,
   type NotificationChannel,
   NoopWorkRunner,
-  type TaskSourceProvider,
   type VcsIdentityRegistry,
   type WorkRunner,
   type ProviderRegistry,
 } from '@cat-factory/kernel'
 import { createTierInstallationResolvers } from '@cat-factory/agents'
 import {
-  GitHubIssuesProvider,
-  JiraProvider,
-  LinearTaskProvider,
   EMAIL_CIPHER_INFO,
   ProvisioningLogRecorder,
   OBSERVABILITY_CIPHER_INFO,
@@ -71,7 +66,6 @@ import {
   makeResolveDeployCloneTarget,
   RunnerJobClient,
   FanOutEventPublisher,
-  InAppNotificationChannel,
   PatPreferringAppRegistry,
   buildToolSecretChain,
   buildDispatchTokenMint,
@@ -87,7 +81,7 @@ import {
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
-import { requireDb, requireTelemetryDb } from './env'
+import { envBag, requireDb, requireTelemetryDb } from './env'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
@@ -161,10 +155,6 @@ import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
-import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
-import { D1TaskSourceSettingsRepository } from './repositories/D1TaskSourceSettingsRepository'
-import { D1TaskRepository } from './repositories/D1TaskRepository'
-import { D1TrackerCommentIngestRepository } from './repositories/D1TrackerCommentIngestRepository'
 import { D1FragmentBriefRepository } from './repositories/D1FragmentBriefRepository'
 import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
 import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
@@ -229,7 +219,7 @@ function selectEngineVcsClient(
       apiBase: config.github.apiBase,
     })
   }
-  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+  if (config.gitlab.enabled && env.GITLAB_TOKEN) {
     return buildGitLabEngineClient({
       token: env.GITLAB_TOKEN,
       apiBase: config.gitlab.apiBase,
@@ -280,21 +270,18 @@ export function selectMergeLifecycleDeps(
     ...selectWorkspaceConfigDeps(db),
     initiativeRepository: new D1InitiativeRepository({ db }),
   }
-  // Compose the delivery channels: in-app push (when the events binding is present), Slack (when
-  // the integration is enabled) and the outbound webhook (when a workspace registered one) all
-  // implement the same NotificationChannel port and fan out via CompositeNotificationChannel —
-  // realizing the seam the kernel port documents, with no change to the engine call sites that
-  // raise notifications. The webhook channel is what a HEADLESS caller relies on: it has no
-  // in-app inbox and no browser WebSocket, so a parked run would otherwise reach it only by
-  // polling (see docs/initiatives/headless-clarification-loop.md).
-  const channels: NotificationChannel[] = []
-  const publisher = selectEventPublisher(env, db)
-  if (publisher) channels.push(new InAppNotificationChannel(publisher))
-  const externalChannel = buildExternalNotificationChannel(config, db, webhookChannel)
-  if (externalChannel) channels.push(externalChannel)
-  if (channels.length === 1) deps.notificationChannel = channels[0]
-  else if (channels.length > 1)
-    deps.notificationChannel = new CompositeNotificationChannel(channels)
+  // How this deployment tells a human, composed whole in `container-notification-deps.ts`: the
+  // routed in-app push, the external transports, and the manager's store the settings API writes.
+  Object.assign(
+    deps,
+    selectNotificationDeliveryDeps({
+      config,
+      db,
+      clock,
+      publisher: selectEventPublisher(env, db),
+      webhookChannel,
+    }),
+  )
 
   // The engine's CI gate + merge / mergeability / review providers read through a single
   // GitHubClient. Prefer the GitHub App; else fall back to a GitLab-backed client (single-token,
@@ -461,6 +448,7 @@ export function selectIncidentEnrichmentDeps(
     new WorkspaceIncidentEnrichmentProvider({
       incidentEnrichmentConnectionRepository,
       secretCipher: incidentEnrichmentSecretCipher,
+      logger,
     }),
   )
   return {
@@ -490,7 +478,7 @@ export {
   cloudflareContentStorage,
 } from './container-artifact-storage'
 import { cloudflareContentStorage } from './container-artifact-storage'
-import { buildExternalNotificationChannel } from './container-notification-deps'
+import { selectNotificationDeliveryDeps } from './container-notification-deps'
 
 /**
  * Wire account invitations + per-account email senders. Invitations are always
@@ -573,59 +561,6 @@ export function selectEventPublisher(
   return new FanOutEventPublisher(new DurableObjectEventPublisher(env.WORKSPACE_EVENTS), {
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
   })
-}
-/**
- * Build the task-source integration's concrete ports. Mirrors `selectDocumentsDeps`
- * but with no planner — issues are linked for context, not expanded into board
- * structure. Always on (config load fails loudly without the encryption key), so this
- * is wired on every deployment.
- */
-export function selectTasksDeps(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-): Partial<CoreDependencies> {
-  // Jira and Linear are always registered (their credentials are per-workspace, entered in the UI).
-  const providers: TaskSourceProvider[] = [new JiraProvider(), new LinearTaskProvider()]
-  // GitHub Issues reuse the workspace's installed GitHub App, so this provider is
-  // wired whenever the GitHub integration is configured — it has no credentials of
-  // its own and resolves the installation per issue. Whether a workspace OFFERS it
-  // is the per-workspace toggle (task_source_settings), not a deployment env gate.
-  if (config.github.enabled) {
-    const registry = buildAppRegistry(env, config, db, clock)
-    providers.push(
-      new GitHubIssuesProvider({
-        githubClient: new FetchGitHubClient({
-          registry,
-          rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
-          idGenerator,
-          clock,
-          apiBase: config.github.apiBase,
-        }),
-        installations: new D1GitHubInstallationRepository({ db }),
-      }),
-    )
-  }
-  return {
-    taskSourceProviders: providers,
-    taskConnectionRepository: new D1TaskConnectionRepository({
-      db,
-      // The config gate guarantees the key is present when enabled; source
-      // credentials are encrypted at rest under a tasks-scoped HKDF info.
-      cipher: new WebCryptoSecretCipher({
-        masterKeyBase64: config.tasks.encryptionKey!,
-        info: 'cat-factory:tasks',
-      }),
-    }),
-    taskSourceSettingsRepository: new D1TaskSourceSettingsRepository({ db }),
-    taskRepository: new D1TaskRepository({ db }),
-    // Idempotency markers for INBOUND tracker comments. Wired alongside the task module rather
-    // than the writeback, because it guards the INGEST half (a redelivered comment applying its
-    // answers twice), which exists only when the task projection does.
-    trackerCommentIngestRepository: new D1TrackerCommentIngestRepository({ db }),
-  }
 }
 
 /**
@@ -913,7 +848,7 @@ export function buildWorkerVcsIdentityRegistry(config: AppConfig): VcsIdentityRe
   const registry: VcsIdentityRegistry = {
     github: { resolver: new GitHubIdentityResolver({ apiBase: config.github.apiBase, logger }) },
   }
-  if (config.gitlab?.enabled) {
+  if (config.gitlab.enabled) {
     registry.gitlab = {
       resolver: new GitLabIdentityResolver({ apiBase: config.gitlab.apiBase, logger }),
     }
@@ -1002,7 +937,7 @@ export function buildContainer(
   // changes. The store is resolved per request/run from the account settings
   // (`resolveBinaryArtifactStore`, built below once `accountSettings` exists).
   const { capability: contentStorageCapability, buildBlobBackend: buildCfBlobBackend } =
-    cloudflareContentStorage(env)
+    cloudflareContentStorage(env, registries.binaryStoreRegistry)
 
   // The built-in gates' providers are wired onto the app-owned `providerRegistry` (news'd above,
   // fresh per build unless injected via `overrides`). `selectMergeLifecycleDeps` /
@@ -1017,7 +952,7 @@ export function buildContainer(
   // the app-owned `vcsRegistry` above so the neutral webhook route + any VcsConnectionRef holder
   // resolves it. A no-op unless GITLAB_TOKEN is set; symmetric with the Node facade (local
   // inherits it) per "keep the runtimes symmetric".
-  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+  if (config.gitlab.enabled && env.GITLAB_TOKEN) {
     registerGitLab(vcsRegistry, {
       tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
       clock,
@@ -1072,6 +1007,7 @@ export function buildContainer(
     userSecretKindRegistry,
     contentStorageCapability,
     buildCfBlobBackend,
+    binaryStoreRegistry: registries.binaryStoreRegistry,
     cloudflareModelsEnabledOverride: opts.cloudflareModelsEnabled,
   })
 
@@ -1091,7 +1027,7 @@ export function buildContainer(
   const toolSecretChain = buildToolSecretChain({
     custom: resolveRegisteredToolSecretResolver(env),
     credentials: shared.capabilityCredentialsService,
-    env: env as unknown as Record<string, unknown>,
+    env: envBag(env),
     environmentFallback: registeredToolSecretEnvironmentFallback(),
     logger,
   })

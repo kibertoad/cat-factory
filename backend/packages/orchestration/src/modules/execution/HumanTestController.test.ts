@@ -100,6 +100,56 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
         },
       ),
       emitInstance: vi.fn(async () => {}),
+      // The pair helper the controllers now write through (persist under CAS, then emit, with
+      // the block-status write folded in). Faked faithfully so the sibling fakes still record
+      // the same calls the assertions read.
+      persistAndEmit: vi.fn(
+        async (
+          ws: string,
+          i: ExecutionInstance,
+          o: { blockStatus?: 'in_progress' | 'blocked' } = {},
+        ) => {
+          const sm = deps.stateMachine as unknown as {
+            updateBlockProgress: (ws: string, i: ExecutionInstance, s: string) => Promise<void>
+            casPersist: (ws: string, i: ExecutionInstance) => Promise<void>
+            emitInstance: (ws: string, i: ExecutionInstance) => Promise<void>
+          }
+          if (o.blockStatus) await sm.updateBlockProgress(ws, i, o.blockStatus)
+          await sm.casPersist(ws, i)
+          await sm.emitInstance(ws, i)
+        },
+      ),
+      // The shared settle helpers the controllers now delegate their terminal transition to.
+      // Faked FAITHFULLY (delegating to the sibling fakes) rather than as bare `vi.fn()`s, so the
+      // assertions below still observe the real sequence: a final step finalizes the block and
+      // reclaims the container, a non-final step advances the cursor and starts the next step.
+      finishHumanGateStep: vi.fn((s: PipelineStep, o: { clearPendingInterview?: boolean } = {}) => {
+        const graph = deps.stepGraph as unknown as { finishStep: (s: PipelineStep) => void }
+        graph.finishStep(s)
+        s.progress = 1
+        s.subtasks = undefined
+        s.approval = null
+        if (o.clearPendingInterview) s.pendingInterview = null
+      }),
+      settleStepAndAdvance: vi.fn(
+        async (_ws: string, i: ExecutionInstance, isFinalStep: boolean) => {
+          const sm = deps.stateMachine as unknown as {
+            finalizeBlock: () => Promise<void>
+            stopRunContainer: () => Promise<void>
+          }
+          const graph = deps.stepGraph as unknown as { startStep: (s: PipelineStep) => void }
+          if (isFinalStep) {
+            i.status = 'done'
+            await sm.finalizeBlock()
+            await sm.stopRunContainer()
+            return { kind: 'done' } as const
+          }
+          i.currentStep += 1
+          const next = i.steps[i.currentStep]
+          if (next) graph.startStep(next)
+          return { kind: 'continue' } as const
+        },
+      ),
     } as never,
     stepGraph: {
       finishStep: vi.fn((s: PipelineStep) => {

@@ -24,7 +24,7 @@ them the ability to land code:
 
 Both are compositions of primitives that already existed: the RBAC role lattice
 ([ADR 0025](./0025-workspace-rbac.md)), the per-class rules
-([merge-track-record.md](../../docs/initiatives/merge-track-record.md)), and `MergeResolver`'s
+([ADR 0046](./0046-merge-track-record.md)), and `MergeResolver`'s
 precedence ladder. No new table, no new permission, no change to the auth gate.
 
 ### Why not just `autoMergeEnabled: false`?

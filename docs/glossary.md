@@ -3,6 +3,13 @@
 A single lookup for the vocabulary and naming traps that otherwise take grepping to resolve.
 When code and docs use different words for the same thing, this is the reconciliation.
 
+> **This is the CODE-LEVEL map**: directory ⇄ package names, which layer calls one entity by which
+> word, where a cross-cutting concept's implementation lives. The PRODUCT vocabulary (what a user
+> means by a block, a gate, a preset) is the website's
+> [Glossary](https://www.catfactory.ai/reference/glossary.html). A term whose whole content is "what
+> this word means to someone using the product" belongs there; a term here earns its place by
+> resolving an ambiguity you can only hit with the source open.
+
 ## Domain nouns: the unit of work
 
 The canonical domain entity is a **`Block`**. The same underlying thing is called three names
@@ -86,6 +93,43 @@ These are used near-interchangeably; the definitions are the kernel ports
 
 So a "tool server" is always the consuming side; the package literally named `mcp-server` is the
 serving side, and neither imports the other.
+
+## Gatekeeper: one pattern, three packages
+
+"Gatekeeper" names a credential-holding front-end over the public API (the Cloudflare OS
+integration pattern), and it is spread across three packages that a search hits together. None of
+them is part of the backend: all three consume `/api/v1` and the outbound webhook contract as an
+outside integrator would.
+
+| Piece                   | Package                            | What it is                                                                        | Taken by |
+| ----------------------- | ---------------------------------- | --------------------------------------------------------------------------------- | -------- |
+| `sdk/gatekeeper`        | `@cat-factory/gatekeeper-bindings` | the GENERATED per-operation policy table (`minScope`, consequence, invoke thunks) | install  |
+| `sdk/gatekeeper-worker` | `@cat-factory/gatekeeper-worker`   | the hand-written Worker machinery: capability surface, key broker, approval inbox | install  |
+| `deploy/gatekeeper`     | `@cat-factory/deploy-gatekeeper`   | the unpublished deployment template: the policy file and wrangler bindings        | copy     |
+
+So "the bindings" are data, "the worker" is machinery, and "the template" is the one file an
+operator really writes (`policy.config.ts`). Docs: each package's README; design record:
+`docs/initiatives/cloudflare-os-gatekeeper.md`.
+
+Four more pairs of words are routinely confused inside that Worker, and each pair is two things:
+
+- **The two DOORS.** A Cloudflare OS workspace arrives on a service binding to the
+  `GatekeeperVendor` entrypoint (native Workers RPC, and holding the binding is the authorization);
+  everything else arrives at `ALL /rpc` (Cap'n Web over HTTP, behind `OS_SHARED_TOKEN`). Cap'n Web
+  is NOT the Cloudflare OS protocol, and prose calling `/rpc` "the endpoint the OS talks to" is
+  wrong.
+- **The two APPROVAL directions.** The approvals INBOX carries the platform's parked runs OUTWARD,
+  so a person in the workspace can answer them. The approval QUEUE carries the workspace's
+  governance INWARD over every call an agent makes. A Gatekeeper needs both, and neither substitutes
+  for the other.
+- **The two DEFAULT tiers.** `defaultTier` is what an actor named on `/rpc` gets; `autoProvisionedTier`
+  is what a Cloudflare OS account gets. They do not inherit from each other, because an account is
+  minted with no identity a `grants` entry could ever have named.
+- **The WEBHOOK and the HOOK.** The webhook is cat-factory's outbound delivery INTO the Gatekeeper,
+  signed and deduped, and it is what makes the durable projection. A hook is the Gatekeeper's push
+  OUT to a workspace callback, registered through the workspace's own `bindHook`. The first is the
+  ingestion path and the truth; the second is an accelerator over what `approvals_list()` and
+  `runs_watched()` already answer.
 
 ## Concept indexes, where the cross-cutting things live
 

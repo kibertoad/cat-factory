@@ -2,7 +2,7 @@
 -- notifications as they are raised. This is the delivery channel a HEADLESS integration needs —
 -- it has no in-app inbox to watch and no browser to hold a WebSocket open — and it exists chiefly
 -- so a public-API run that PARKS on a human decision reaches its caller by push rather than by
--- polling. See docs/initiatives/headless-clarification-loop.md (D3).
+-- polling. See backend/docs/adr/0047-headless-clarification-loop.md (D3).
 --
 -- `secret_sealed` is the signing secret, encrypted with the deployment SecretCipher; it is never
 -- read back over the API (the projection reports only whether one is set). `types` is a JSON array

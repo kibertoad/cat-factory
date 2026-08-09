@@ -29,6 +29,8 @@ binary-artifact storage (the substrate both rely on)
   programmatic precheck).
 - The UI tester is the browser sibling of the (renamed) API tester; both share the Tester→Fixer
   loop via `isTesterKind`.
+- The gate's REFERENCE side has two producers: images a person uploaded against the task, and the
+  frames an import retained for the designs the task links. See "Design references" below.
 
 ---
 
@@ -103,6 +105,101 @@ binary-artifact storage (the substrate both rely on)
 - **Verified:** Node conformance incl. a new gate pass-through test (59 tests total); frontend
   `nuxt typecheck` + catalog tests pass.
 
+### Design references: a linked design populates the gallery itself ✅
+
+A designer who links a Figma/Zeplin frame to a task gets screenshot-vs-design comparison with no
+manual upload. When the gate gathers its pairs it reads the task's linked DESIGN documents
+(`documentRepository.listByBlock`, filtered by contracts' `isDesignSource`) and the frames their
+last import retained (`BinaryArtifactStore.listByDocuments`, one batched read however many designs
+are attached), and folds those in beside the hand-uploaded set. The fold itself lives in
+`orchestration/.../visual-confirm-design-references.ts`; four rules bind it.
+
+- **An EXPLICITLY CHOSEN reference outranks a design frame for the same view.** An upload is a
+  deliberate act against this one task and survives every re-import; a design render is a
+  projection of a live document that the next body-changing import replaces wholesale. So the
+  design fold runs FIRST and the uploads assign over it, and the fold skips a view whose reference
+  the capture itself named: the fold cannot tell which choice it would be overwriting, and once the
+  container half lands the tester will be naming the design files it was handed.
+- **A view name two designs both claim is qualified on BOTH sides** (`Summary (Checkout flow)`),
+  the same rule the Figma import applies to a frame name repeated across pages. Leaving the first
+  occurrence bare would hand the plain name to whichever design is listed first, so re-ordering the
+  links would silently re-point a reviewed view at a different screen.
+- **Each pair carries `referenceOrigin`**, so the surface can say whether a reviewer is looking at
+  the design's own frame or at somebody's attachment. It is ABSENT when the capture named its own
+  reference: the gate did not source that one and can only guess at its provenance, which is a
+  different answer from "an upload".
+- **`designReferences` states what the designs contributed, gaps included.** Present whenever a
+  design is linked, so a reviewer can tell "no design is attached" from "one is attached and gave
+  nothing", with a per-design reason (`partial` / `failed` / `none` / `storage_unavailable` /
+  `not_retained`) because each asks for a different fix. `not_retained` covers any status CLAIMING
+  retention over an empty shelf (`stored` and `partial` alike) as well as a document whose import
+  recorded no render outcome: left to speak for itself, "only part of its frames were retained"
+  above an empty gallery reads as a design that is merely short.
+- **The 12-view ceiling is SHARED, and what it cuts is named per design.** Slots go round-robin, so
+  every linked design is represented before any gets a second one and re-ordering the links does
+  not move the split; taking the first twelve in read order would let the design linked longest ago
+  fill the gallery while one linked this morning contributed nothing, indistinguishable to a
+  reviewer from a design with no frames. Each short design carries its own `dropped` count beside
+  its `reason`, since the two are independent (a design can be short at its source, at the ceiling,
+  or both). Emission stays grouped by design: the allocation decides how many, never the order.
+
+The reads are LIVE at gather time, like the hand-uploaded ones: **recapture** is the action a person
+takes after attaching something mid-review, and linking a design is that same act.
+
+### Reference designs on disk: what the container is handed ✅
+
+The gate's reference SET (which artifact is the reference for each view) is now read by two callers,
+so it lives in one module (`orchestration/.../block-reference-set.ts`) rather than being derived
+twice: the gate pairs captures against it, and a dispatch of a CAPTURING kind hands the same set to
+the container. A second derivation would let the two disagree about a view name, and the view name is
+exactly the join the gate performs, so the pairing would fall apart with both halves still looking
+correct on their own.
+
+- **The gate is the kind's declared `ui` image**, the same fact the transport routes the job by, not
+  a kind-name list: a deployment's own browser-driven kind is served without registering anywhere
+  else, and every other kind never pays the two reads.
+- **The job body carries a MANIFEST, never the bytes.** A design frame is a full-page PNG and a job
+  body is JSON that crosses every transport and is persisted with the dispatch, so only
+  `{ artifactId, fileName, view }` travels. The harness fetches the bytes from
+  `GET ${proxyBaseUrl}/artifacts/reference/:id` with the SAME container session token it already
+  holds for the LLM proxy: no new credential, no publicly reachable URL, and the mirror image of the
+  ingest route beside it. That route serves `kind:'reference'` only, within the token's workspace,
+  so it cannot become a way to read another run's captured screenshots (`security-model.md`).
+- **The file NAME is chosen by the engine, not the container.** The name is how the agent learns the
+  view name; derived in the harness, a sanitiser change in an image a deployment has not rolled out
+  yet would rename every view a run reports. Two views that slug to one name are suffixed rather
+  than deduped: dropping one hands the agent a directory quietly missing a screen it was asked to
+  compare.
+- **A reference that is not on disk is NAMED in the prompt.** On disk an absent file and a screen the
+  design does not have are identical, so the guidance lists the misses beside the files and tells the
+  agent to capture those views anyway, under the same names. It covers both causes of that absence,
+  because the agent's job is the same either way: a transfer that failed, and a view the cap below
+  dropped before the container was asked for it. The "these are on disk" sentence is bound to the
+  files that ARE, so a pass that wrote nothing does not send the agent after a path that may not
+  exist.
+- **The set is CAPPED, and the cap states what it dropped.** A task's references are unbounded (a
+  block may carry a hundred uploads beside a design's frames) while the download pass is deliberately
+  budgeted well under the inactivity watchdog, so an uncapped set spends the whole budget and
+  delivers whatever finished. `capReferences` bounds it at `MAX_REFERENCE_SCREENSHOTS` and carries
+  the dropped view names on the set's `omitted`. It drops DESIGN frames before uploads: the merge
+  emits frames first and appends upload-only views, so a plain prefix would discard exactly the half
+  the precedence rule calls more deliberate. The harness keeps a higher backstop against a malformed
+  body, and it too names what it drops rather than truncating.
+- **The download pass is IDEMPOTENT over the checkout.** An agent flow re-enters its workspace once
+  per repair round, so this runs several times per job. A file already on disk (non-empty: a
+  zero-length file is what a half-written transfer leaves) is counted and never re-fetched, so a
+  later round costs a stat per reference and cannot downgrade a view an earlier round delivered to
+  "NOT on disk". A view that MISSED is retried, which is the point: the next round is a fresh chance
+  at a blob backend that was briefly down.
+- **The per-image ceiling bounds the TRANSFER, not just the write.** The declared `content-length` is
+  refused before a byte is read, and the body is counted as it streams and cancelled the moment it
+  crosses the line, so a chunked or lying response cannot buffer past the ceiling (times the pass's
+  concurrency) in a container that has not started working yet.
+- **An empty set sends no manifest at all.** The engine resolving no files (the task has no reference)
+  and a kind that captures nothing are different facts, but neither should produce an empty
+  directory: that reads to the agent as designs that gave nothing. A set the CAP emptied is the
+  exception and does send one, carrying names and no files: those views still have to be captured.
+
 ---
 
 ## What's LEFT (deploy-time, intentionally not landed)
@@ -152,11 +249,12 @@ flags them as predating the fix). Auto re-running `tester-ui` after a fix to ref
 needs the gate to dispatch a `tester-ui` job and consume its result back into the gate (a small
 extension of `onHelperComplete` + the `pollAgentJob` capture-result path).
 
-### 3. Reference-screenshot pre-op injection
+### 3. Reference screenshots INSIDE the container: DONE
 
-The UI-tester prompt references `.cat-context/reference-screenshots/`; a `preOps` that pulls the
-block's `kind:'reference'` artifacts from the store and writes them into the container context is
-not yet wired (the gate still pairs by view from the store, so the comparison works regardless).
+The container half is wired (see "Reference designs on disk" below): a dispatch of a kind declaring
+the `ui` image resolves the task's reference set, the job body carries it as a MANIFEST, and the
+harness downloads the images into `.cat-context/reference-screenshots/` before the agent's first
+turn. The tester is told each file's view name, so what it captures pairs with what the gate holds.
 
 ### 4. Non-redundant capture heuristic
 

@@ -17,10 +17,12 @@
 > `pickRepoSource` seam.
 >
 > **Residuals that are explicitly NOT gating** (a maintainer decides if/when to lift any draft
-> status in light of them): decrypting a remotely-sealed PROVISIONED environment's access cipher
-> (needs the mothership's key; the secrets-delegation slice); the best-effort kaizen no-ops a run
-> makes over the remote (telemetry itself is now local-first; see PR 5 below); and the document/task
-> connection integration (blocked on its decrypt-inside connection repos). (Subscription activation,
+> status in light of them): the best-effort kaizen no-ops a run makes over the remote (telemetry
+> itself is now local-first; see PR 5 below). The document/task connection integration is no longer
+> among them: the document/task slice gave those rows a sealed envelope and admitted them to both
+> the persistence allow-list and the org-secret table (see below). Decrypting a remotely-sealed PROVISIONED environment's
+> access cipher is no longer among them: the secrets-delegation slice landed it (see below), along
+> with the provisioning writes, the release-health gate probe and the incident enrichment. (Subscription activation,
 > the prompt-fragment library, the Claude Skills library (catalog AND repo sync) and the Slack
 > settings surface are no longer among these: PR 3 gave
 > them, and the subscription-credential trio + local settings their real `local-sqlite` home; see the
@@ -146,7 +148,10 @@
   self-hosted runner-backend connection settings panel, its credentials a SEALED `secretsCipher`
   blob (the observability/environment-connection precedent); (2) the visual-confirmation gate's
   `binaryArtifactMetadataStore` metadata surface (`insert` via `workspaceField`;
-  `get`/`listByExecution`/`countByExecution`/`listByBlock`/`delete` via `workspace`); the blob
+  `get`/`listByExecution`/`countByExecution`/`listByBlock`/`delete` via `workspace`, joined later by
+  the design-render pair `listByDocument`/`deleteByDocument` on the same rule, so an import running
+  on a node retains a design source's frames and replaces the previous revision's rather than
+  silently keeping neither); the blob
   BYTES stay per-account local, only the metadata is proxied, and the retention sweep
   (`listOlderThan`/`deleteOlderThan`) stays mothership-internal. This one is NOT a pure allow-list
   change: `binaryArtifactMetadataStore` isn't in `CoreDependencies` (it's composed into
@@ -159,8 +164,9 @@
   `environmentConnectionRepository` and `customManifestTypeRepository` (reads via `workspace`,
   record-based `upsert` via `workspaceField`). Safe because the connection carries handler secrets as a
   SEALED `secretsCipher` blob (sealed/decrypted in the service under the LOCAL key, no plaintext
-  crosses the machine API); custom-manifest-type rows carry no secrets. Contrast the document/task
-  connection repos, which decrypt INSIDE the repo: left off. Provisioning WRITES + access-cipher
+  crosses the machine API); custom-manifest-type rows carry no secrets. The document/task
+  connection repos decrypted INSIDE the repo and were left off; the document/task slice below is
+  what changed that. Provisioning WRITES + access-cipher
   decryption stay off (secrets-delegation slice).
 - **GitHub token delegation + environment self-test run surface**: the first GitHub-in-mothership
   slice, in two halves. (1) **GitHub installation-token delegation**: the mothership serves a new
@@ -326,6 +332,194 @@
   `fragmentLibrary.enabled`: the mothership folds the skill repos into its reflected registry only
   when its own library is configured, exactly as it does for fragments, so a node with the library on
   against a mothership with it off gets a clean `... is not wired`.
+
+**Secrets delegation (the residual every earlier slice deferred to)**
+
+- **`POST /internal/secrets/unseal` + `POST /internal/secrets/seal`**: the mothership opens (and
+  seals) an ORG-owned credential a laptop holds no key for. Product decision 3's key split is what
+  made every sealed-blob repository safe to allow-list, and it is also what left those blobs
+  unreadable ON the node: a row a hosted teammate (or the mothership's own engine) wrote is sealed
+  under the mothership's key, so a mothership-mode node could save an infra connection and never
+  provision with it, save a Datadog connection and never probe with it. Four earlier slices parked
+  a surface here rather than ship it broken.
+  - **The wire names the ROW, never the ciphertext**, and that is the whole security argument. A
+    node posts a source from a CLOSED table (`SEALED_SECRET_SOURCES`) plus the row's identifiers;
+    the mothership re-reads the authoritative row from its OWN registry, binds the workspace to an
+    account exactly as the persistence RPC's `workspace` rule does, and decrypts under its own key.
+    So it is not a decryption oracle: a compromised node token can only ask for a value it could
+    already have read had it held the key, in an account it can already reach. An envelope-taking
+    endpoint would have opened ciphertext obtained anywhere at all. Same choice, same reason, as
+    the notification relay's identifiers-only body.
+  - **The SEAL half is not optional, and leaving it out would have been the quiet failure.** A
+    mothership-mode node PROVISIONS environments, so it produces org secrets as well as consuming
+    them. Sealed under the local key, such a row is unopenable by the mothership's own teardown and
+    by every hosted teammate, and nothing says so until a reclaim fails. Sealing takes no row read
+    (encryption depends on the key, not on stored state), so it binds on the workspace alone, and
+    it grants nothing further: a caller in scope can already write arbitrary bytes into that field
+    through the allow-listed `upsert`.
+  - **When a delegate is wired, EVERY call routes to it.** `createOrgSecretCipher` (kernel) is the
+    one seam; with no delegate (every hosted deployment, and local mode over its own Postgres) it
+    is a byte-for-byte pass-through to the facade's cipher. The rejected alternative was to try the
+    local key first and fall back on a `key-mismatch`, which reads as a cheap optimisation and is
+    the same silent split one write later: the fallback opens legacy rows and the SEAL still lands
+    under the wrong key. One route, decided by whether a delegate exists.
+  - **Every failure REJECTS; there is no degraded answer.** A client that returned an empty
+    credential where it could not reach the mothership would have a service provision against an
+    empty bundle or report a monitor as unconfigured. Same rule the telemetry sweep learned:
+    `MachineSecretDelegationUnavailableError` exists so a token-less node is a rejection rather
+    than a zero. On the server, an absent row and a row holding no sealed value are the SAME
+    uniform 404 (no existence leak), while a failed row read and a DRIFTED mothership key are 500s,
+    because those are the mothership's own fault and must not read as "nothing here".
+  - **Sources (five at the time, each bound to one read, one field and one HKDF tag)**:
+    `environment_access`, `environment_provision_fields`, `environment_connection`,
+    `observability_connection`, `incident_enrichment_connection`. The document/task slice below
+    added the sixth and seventh. The `Record<OrgSecretSource, …>` keeps the table exhaustive,
+    so a source added to the kernel vocabulary fails to compile until it is bound. Adding one
+    admits one more org credential to a laptop, so the bar is that a run needs the PLAINTEXT on the
+    node, not merely the row.
+  - **`environmentRegistryRepository.insert`/`update`/`softDelete` go remote** in the same slice,
+    and could not have gone earlier: the provisioning WRITE is exactly what would have stored a
+    laptop-sealed row. With the seal delegated, a mothership-mode node provisions, polls and tears
+    down for real, and the ephemeral-environment self-test runs end to end (its store went remote in
+    the GitHub delegation slice precisely against this day). `softDelete` is the TOMBSTONE half of
+    that same write and is inseparable from it: `supersedePriorEnvironment` runs it before every
+    re-provision (unguarded, so a deployer re-run fails outright without it) and it is how every
+    reclaim ends. Opening the insert alone would let a node stand infrastructure up and never record
+    it as reclaimed, which is the one failure the seal direction was opened to prevent.
+  - Consumers wire through `CoreDependencies.secretDelegate` (top-level, like the logger: it is not
+    one integration's concern) and the `NodeContainerOptions.secretDelegate` seam:
+    `EnvironmentProvisioningService`, `EnvironmentTeardownService`, `EnvironmentConnectionService`,
+    `RegistryReleaseHealthProvider` and `WorkspaceIncidentEnrichmentProvider` each compose it with
+    their own cipher. **Provisioning and teardown are one unit, not two consumers.** Teardown opens
+    the very `provisionFieldsCipher` that provisioning sealed, so a node holding a delegate for one
+    and not the other stands infrastructure up under the mothership's key and then cannot open the
+    fields its own reclaim needs, failing before `provider.teardown` on every mothership-sealed row.
+  - **A mothership-mode node may not itself ANSWER `/internal/secrets/*`**, and the gate is the
+    `secretCipherFor` capability, wired only where a facade holds its OWN main database. Its
+    `ENCRYPTION_KEY` seals the node's own agent/model credentials under the LOCAL key, so answering
+    a delegated `seal` there would store a row the org can never read: the same silent split, one
+    write later. The `repositories` registry cannot stand in for that check, because a
+    mothership-mode node populates it too, with the RPC-backed remote repos.
+  - Tested in `packages/server/test/secretsDelegation.spec.ts` (auth pin, scope binding, the
+    open-the-stored-row-not-the-body property, the closed table incl. prototype members, the
+    declared key arity, 404-vs-500 dispositions, 503 edges, and the client's throw-never-degrade
+    contract), `packages/kernel/src/ports/secret-delegation.test.ts` (the pass-through and
+    always-delegate compositions, and that the envelope never reaches the delegate),
+    `runtimes/local/src/mothership.test.ts` (the wire shape both directions, the token-less throw,
+    an END-TO-END guard where a no-Postgres container resolves an environment handle whose access
+    cipher only the mothership can open, and both halves of the answer-side gate above), and the
+    shared cross-runtime suite (`core-workspaces.ts` asserts both routes are mounted +
+    machine-gated on BOTH facades).
+  - **Deliberately still off.** (1) The mothership-SIDE Slack residual: a connection a LAPTOP sealed. That is the seal
+    direction pointed at a source this slice does not carry, so it is a table entry plus
+    `SlackConnectionService` threading, not a new mechanism. (2) The remaining sealed-blob
+    consumers a mothership-mode node does not currently drive (`testSecrets`,
+    `capabilityCredential`, `mcpOAuthGrant`, `packageRegistryConnection`, `runnerPoolConnection`).
+    Each is a table entry and a service threading away, on the same pattern; they wait for a
+    reported need rather than widening the plaintext surface speculatively.
+  - Threat-model consequence (a stolen machine token now reads those sources' plaintext for the
+    accounts it is scoped to, bounded by the table and revocable at the roster) is stated in
+    [`backend/docs/security-model.md`](../../backend/docs/security-model.md).
+
+**Document / task source integration (the last decrypt-inside surface)**
+
+- **The whole documents + tasks surface goes remote**, closing the residual every earlier slice
+  deferred to and the one the secrets-delegation slice explicitly could not close. Two halves, and
+  the first is why the second was impossible before it.
+  - **The connection row now carries its credential bag SEALED.** `DocumentConnectionRecord` /
+    `TaskConnectionRecord` split into a stored `Sealed*Record` (`credentialsCipher`) that the
+    repository persists and an OPEN record the services read, with the seam between them a new
+    kernel port pair, `DocumentConnectionStore` / `TaskConnectionStore`, implemented once by
+    `createSealedConnectionStore` (`@cat-factory/integrations`) over an `OrgSecretCipher`. So the
+    four repositories (D1 ⇄ Drizzle × documents ⇄ tasks) stopped decrypting and became ordinary
+    sealed-blob stores, exactly like the environment / observability / Slack / runner-pool
+    connections that crossed the RPC long before them.
+
+    **This was the actual blocker, and it was never about the credential being more sensitive.** A
+    repository that decrypts can only be CALLED by a key-holder, so proxying its read would have put
+    a plaintext Figma or Jira token on the wire; and it exposes no sealed FIELD, so
+    `/internal/secrets/unseal` had nothing to name either. Both doors were shut by the same fact,
+    which is why "give those repos a sealed-blob read first" was the standing prerequisite.
+
+  - **Two new `ORG_SECRET_SOURCES`**, `document_source_connection` and `task_source_connection`,
+    bound to `getByWorkspace` with **key arity 1** (the source kind) under the
+    `cat-factory:documents` / `cat-factory:tasks` HKDF tags. Both clear the table's bar — the node
+    needs the PLAINTEXT, not merely the row: the dispatch-time freshness refresh authenticates
+    against the source on the run path, an import is the node's own outbound call, and the `tracker`
+    step files a real ticket from wherever the run runs.
+  - **Key arity is declared in KERNEL (`ORG_SECRET_KEY_ARITY`) and enforced by the type system.**
+    It used to live only in the server's `SEALED_SECRET_SOURCES`, which is the one part of a binding
+    the CALLER has to get right and the one table the caller cannot see: `@cat-factory/integrations`
+    does not depend on `@cat-factory/server`. Stated only there it was prose a call site could
+    disagree with silently — and a local cipher IGNORES the ref entirely, so a store that sent no
+    key passed every hosted test and answered 422 on every open on the only deployment shape that
+    delegates. Now `DelegatedSecretRef` is a union over the vocabulary (a literal is checked against
+    its own source's arity) and `orgSecretRef(source, workspaceId, ...key)` is the door for a
+    generic caller, with the server READING the same numbers rather than restating them.
+  - **The allow-list widens to the whole of both integrations**: the connection repos
+    (`getByWorkspace`/`listByWorkspace`/`softDelete` via `workspace`, `upsert` via `workspaceField`),
+    `taskSourceSettingsRepository`, the document import/link writes plus the WS1 role-link surface,
+    and the task import/link writes including `claimBlockLink`. The batched forms move WITH their
+    point siblings rather than behind them: `linkBlockMany`/`detachBlocks` are the same write as
+    `linkBlock` (a task created with a list of documents, and the cascade that undoes it), and a
+    `claimBlockLink` whose `upsert` cannot land claims nothing. `documentRepository` and
+    `taskRepository` are now fully remote; both connection repos keep only their `rowToRecord`
+    helper classified.
+  - **The store's surface is split by how much a caller needs OPENED, not by how much it reads**,
+    and that is the part worth copying. `listSummaries` opens nothing (a settings panel renders
+    labels, and opening a bag per connected source would turn one page load into a burst of unseal
+    round trips and fail the whole list on the first unopenable row); `listBySources` takes the
+    sources the caller is about to authenticate as, so a corpus refresh never opens a shelf entry
+    its documents say nothing about. **`connect` and `disconnect` read the SUMMARY on purpose**:
+    replacing or removing a connection is precisely the remedy for a bag that has gone bad, so
+    neither may be the call that needs the key.
+  - **A bag that cannot be opened now THROWS.** The repositories this replaced answered a failed
+    decrypt with an empty bag "so the import path fails closed", which is indistinguishable from a
+    connection saved with no credentials: every caller re-derived the difference from whatever the
+    vendor said next, as a 401. Throwing is what lets `LinkedDocumentRefreshService` keep reporting
+    `credentials_unreadable` separately from `source_unreachable`. That gap's log line went back to
+    `warn` in the same change: it was `info` only because a mothership-mode node failed it
+    permanently and by design, and a warning that repeats forever is how a channel gets tuned out.
+    It throws a `ConnectionCredentialsUnreadableError` (a 503 carrying
+    `reason: 'connection_credentials_unreadable'`) rather than a bare `Error`, so the surfaces that
+    genuinely cannot proceed refuse with translated copy instead of a 500.
+  - **A BATCHED open answers per source; only a POINT read throws.** The sources in one
+    `listBySources` are independent facts about independent vendors, so one rejection speaking for
+    all of them was the same bug twice: a run's whole document corpus reported
+    `credentials_unreadable` because one shelf entry drifted, and a block's every ticket losing its
+    reply channel because one tracker's envelope did. Both read to an operator as the HEALTHY
+    sources being broken, which is the misattribution this work exists to remove rather than
+    relocate. `SealedConnectionOpenResult` (kernel) is the shape; a corpus-wide verdict is now
+    reachable only when the stored-row QUERY itself failed, where nothing about any source was
+    learned.
+  - **A surface that REPAIRS this state may not be the surface that needs the key.** `connect`
+    reads the old bag for one reason (`preservedPlatformCredentials` carries the platform-owned
+    webhook secret across a vendor rotation, and it lives inside the bag), and refusing on that read
+    left a workspace with no way out of an unopenable row at all. So the read degrades: the secret
+    is lost, loudly, and `getWebhookState` reports it. What keeps that from being a silent loss on a
+    TRANSIENT fault is that sealing rides the same delegation as opening — a node that cannot reach
+    its key service fails the `upsert` too, so nothing is overwritten. `diagnose` reports the fault
+    as a verdict, and the read-only webhook panel states it as `credentialsReadable: false`.
+    `clearWebhookSecret` is the one that still refuses, because clearing REWRITES the bag minus a
+    key and proceeding blind would replace the vendor credentials with an empty object.
+  - **Node sources every repo both helpers build** (`selectNodeDocumentsDeps` /
+    `selectNodeTasksDeps`) through `pickRepoSource` and composes the store over the result, so the
+    facade's own tracker/writeback credential closures read the same remote-backed rows the module
+    does. `applyMothershipRemoteRepos` still owns `documentRepository`/`taskRepository` alone,
+    because those are read on every dispatch whether or not a workspace ever connected a source,
+    while the helpers only run when their integration is configured.
+  - **Compatibility break (internal), flagged per the pre-1.0 rule:** the legacy PLAINTEXT
+    `credentials` column fallback is gone. A row written before these tables were encrypted at all
+    is no longer read as JSON and re-encrypted on next write; it now fails to open and the workspace
+    re-connects the source. Keeping it would have meant `/internal/secrets/unseal` answering for a
+    field that is sometimes not an envelope, which is a 500 on the mothership's own row.
+  - Tested in `shared/sealedConnectionStore.test.ts` (seal/open, the batch-open and
+    opens-nothing properties, the throw-don't-empty dispositions, and that `softDelete` needs no
+    key), `packages/server/test/persistenceRpcSurfaces.spec.ts` (round trip + cross-account refusal
+    for every new method, and the `workspaceField` fail-closed cases), and
+    `packages/server/test/secretsDelegation.spec.ts` (both new sources open the right row under the
+    right HKDF domain, the key arity is enforced, and an out-of-scope workspace stays a uniform
+    404).
 
 **Code-registered ORG state: the foundational-services `builtin` tier**
 
@@ -993,8 +1187,8 @@ never remotely invocable (mothership-internal cron).
 | `environmentTestRunRepository`           | ✅ done | whole repo; full self-test still gated on provisioning writes below                                |
 | `environmentConnectionRepository`        | ✅ done | connection + handler mgmt (sealed `secretsCipher`)                                                 |
 | `customManifestTypeRepository`           | ✅ done | full catalog CRUD (no secrets)                                                                     |
-| `environmentRegistryRepository`          | ◑ part  | reads only; provision writes/access-cipher decrypt = secrets-delegation slice                      |
-| `observabilityConnectionRepository`      | ✅ done | settings CRUD (sealed); gate-probe decrypt = secrets-delegation slice                              |
+| `environmentRegistryRepository`          | ◑ part  | reads + provision writes (`insert`/`update`); access cipher opened via `/internal/secrets/*`       |
+| `observabilityConnectionRepository`      | ✅ done | settings CRUD (sealed) + the gate probe (opened via `/internal/secrets/unseal`)                    |
 | `releaseHealthConfigRepository`          | ✅ done | per-block config CRUD                                                                              |
 | `incidentEnrichmentConnectionRepository` | ✅ done | settings CRUD (sealed)                                                                             |
 | `packageRegistryConnectionRepository`    | ✅ done | settings + decrypt-time reads (sealed)                                                             |
@@ -1008,8 +1202,13 @@ never remotely invocable (mothership-internal cron).
 | `fragmentSourceRepository`               | ◑ part  | owner-scoped list + link; id-keyed sync mgmt pending                                               |
 | `accountSkillRepository`                 | ✅ done | whole repo: catalog reads (run path) + the source-keyed sync writes                                |
 | `skillSourceRepository`                  | ✅ done | account list + link + the id-keyed sync mgmt; global `listByRepo` internal                         |
-| `documentRepository`                     | ◑ part  | run-path context reads; refresh `upsert` + mgmt writes pending (see the freshness note below)      |
-| `taskRepository`                         | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
+| `documentRepository`                     | ✅ done | whole repo: run-path context reads + import/link writes + the WS1 role-link surface                |
+| `documentConnectionRepository`           | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)        |
+| `taskRepository`                         | ✅ done | whole repo: run-path context reads + import/link writes + the atomic `claimBlockLink`              |
+| `taskConnectionRepository`               | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)        |
+| `taskSourceSettingsRepository`           | ✅ done | the per-workspace source on/off toggles (no secrets)                                               |
+| `reviewQuestionPostRepository`           | ⬜ todo | engine-written park writeback markers; claim/settle/get pending a scope rule                       |
+| `trackerCommentIngestRepository`         | n/a     | inbound webhook dedupe: written where a delivery ARRIVES, which is never a node                    |
 | `githubInstallationRepository`           | ◑ part  | `getByWorkspace` + `listActiveForAccount` run-path reads; id-keyed / sync writes pending           |
 | `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal            |
 | `branchProjectionRepository`             | ◑ part  | `listByRepo` read; `upsertMany` sync pending                                                       |
@@ -1022,16 +1221,22 @@ never remotely invocable (mothership-internal cron).
 | `emailConnectionRepository`              | ◑ part  | `getByAccount` read (sealed); connect/disconnect admin                                             |
 | `passwordResetTokenRepository`           | ⬜ todo | pre-auth flow (all pending; `deleteExpired` sweeper)                                               |
 
-**Dispatch-time document freshness does not run on a mothership node, and SAYS so.** The linked-context
-refresh (`LinkedDocumentRefreshService`) probes each linked document's source and re-imports what moved,
-so it needs the workspace's document-source CONNECTION — a row sealed with the mothership's
-`ENCRYPTION_KEY`, which by the sealed-secret rule cannot be served over the persistence RPC. The
-connection repository therefore stays db-direct over the node's absent `db` handle and the read always
-fails there. It is reported as its own `credentials_unreadable` gap rather than folded into
-`source_unreachable`: the materialised context file then tells the agent "this deployment cannot read the
-source credentials" instead of claiming Figma is down, and an operator is not sent hunting an incident
-that does not exist. Closing it for real is the secrets-delegation slice (the mothership decrypting on
-the node's behalf), not a routing entry.
+**Dispatch-time document freshness now RUNS on a mothership node, and the shape of the fix is the
+reusable part.** The linked-context refresh (`LinkedDocumentRefreshService`) probes each linked
+document's source and re-imports what moved, so it needs the workspace's document-source CONNECTION.
+That row is sealed with the mothership's `ENCRYPTION_KEY`, which never reaches a laptop, and for a
+long time it could not be served over the persistence RPC either: the repository decrypted INSIDE, so
+a proxied read would have put a plaintext token on the wire and `/internal/secrets/unseal` had no
+sealed FIELD to name. Both doors were shut by the same fact. Giving the row an envelope opened both
+at once, which is why the prerequisite was always stated as "a sealed-blob read FIRST, and only then
+a source-table entry".
+
+`credentials_unreadable` survives as a distinct gap, and is now worth more than it was: it no longer
+means "this deployment structurally cannot read the credentials" on every dispatch of every run, so
+its remaining causes (a corrupt envelope, a drifted key, an unreachable mothership) are real faults
+with real remedies. It stays separate from `source_unreachable` for the original reason: the
+materialised context file must not tell an agent Figma is down when it is not, and an operator must
+not be sent hunting an incident that does not exist.
 
 **Excluded (never remotely invocable: admin-gated, so the token-scopes-accounts-not-roles rule keeps them off):**
 
@@ -1107,11 +1312,12 @@ modes look like success:
   mothership-owned; the repo-write projection-refresh slice is still open.)
 
   > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, real-time
-  > in BOTH directions, notification DELIVERY delegation, and telemetry INGEST (below) are all
-  > IMPLEMENTED. The one remaining bullet that is DESIGN ONLY is PR 4's email half, no
-  > `/internal/email` endpoint exists (a grep finds it only in this doc + ADR 0009). The nine live
-  > `/internal/*` routes today are `POST /internal/persistence`,
-  > `POST /internal/github/installation-token`, `POST /internal/events/publish`,
+  > in BOTH directions, notification DELIVERY delegation, SECRET delegation and telemetry INGEST
+  > (below) are all IMPLEMENTED. The one remaining bullet that is DESIGN ONLY is PR 4's email half,
+  > no `/internal/email` endpoint exists (a grep finds it only in this doc + ADR 0009). The eleven
+  > live `/internal/*` routes today are `POST /internal/persistence`,
+  > `POST /internal/github/installation-token`, `POST /internal/secrets/unseal`,
+  > `POST /internal/secrets/seal`, `POST /internal/events/publish`,
   > `GET /internal/events/subscribe/:workspaceId`, `POST /internal/notifications/deliver`,
   > `POST /internal/telemetry/ingest`, `POST /internal/telemetry/read`,
   > `GET /internal/foundational-services`, and `POST /internal/foundational-services/contracts`.
@@ -1143,6 +1349,12 @@ modes look like success:
   **Residual (later secrets-delegation slice):** delivery of a notification whose Slack connection
   was sealed by a LAPTOP under the LOCAL key: the mothership can't decrypt it, mirroring the
   observability gate-probe residual.
+- **Secrets ✅ landed.** `POST /internal/secrets/{unseal,seal}`: the mothership opens an
+  ORG-owned sealed credential a laptop holds no key for, and seals one the laptop produces, so a
+  mothership-mode node provisions environments and probes release-health monitors for real. The
+  wire names the ROW (never the ciphertext), the source table is CLOSED, and the mothership's
+  `ENCRYPTION_KEY` still never moves. See "Landed so far" for the full shape, including what is
+  deliberately still off.
 - **Email (PR 4: deliberately NOT built; no reachable consumer today).** The design stands
   ( `RemoteEmailSender` → `POST /internal/email/send`, mothership decrypts the account key and sends,
   keys never reach the laptop) but nothing on a mothership-mode node can currently reach the
@@ -1195,9 +1407,11 @@ backend, asserted by `mothership-integration.spec.ts` (green). The three parts o
 1. **Route every direct-db store through the remote surface when `db` is undefined**: via the
    `pickRepoSource(remoteRepos, name, build)` seam (slice 3, extended in slice 4 for the
    `AgentContextBuilder` sub-helper repos, then documents/tasks/environments/fragments/**slack**).
-   STILL TODO: the sub-helper surfaces genuinely off the board-load + run path; the document/task
-   CONNECTION repos (which decrypt inside, so their whole integration module stays off) and
-   environment PROVISION writes. (Telemetry repos are local-first: PR 5 gave them their own
+   STILL TODO: the sub-helper surfaces genuinely off the board-load + run path. The document/task
+   CONNECTION repos are no longer among them: their rows now carry a sealed envelope, so both
+   helpers source every repo they build through `pickRepoSource` and compose the credential STORE
+   over it. Environment PROVISION writes are no longer among them either: the secrets-delegation slice
+   landed them alongside the seal/unseal endpoints they needed. (Telemetry repos are local-first: PR 5 gave them their own
    `node:sqlite` store, layered over the remote registry, instead of the best-effort no-ops they
    used to degrade to.)
 2. **Widen `REMOTE_PERSISTENCE_METHODS`** to the board-load + run methods, each with a correct scope
@@ -1210,16 +1424,18 @@ backend, asserted by `mothership-integration.spec.ts` (green). The three parts o
 3. **Expose those repos in the mothership-side registry** (the dispatcher reflects over it) with
    round-trip + cross-account-scope tests + the fake-mothership integration test (slice 4).
 
-Residual items (provisioned-env secret decryption; best-effort kaizen no-ops; the
-document/task connection integration, blocked on the decrypt-inside connection repos) are NOT on the
-basic board-load + run path. (Subscription activation and the Slack settings surface are no longer
+Residual items (the best-effort kaizen no-ops) are NOT on the basic board-load + run path. The
+document/task connection integration is no longer one: see the document/task slice below. Provisioned-env secret
+decryption is no longer among them: the secrets-delegation slice closed it. (Subscription activation and the Slack settings surface are no longer
 residuals: PR 3 landed them; see "Landed so far".)
 
 - **PR 4: notifications + email + Slack delegation.** Notification/Slack DELIVERY delegation **✅
   landed** (`POST /internal/notifications/deliver` + `RemoteNotificationChannel`: see "Landed so
   far"). Email delegation is deliberately deferred until it has a reachable consumer (see
   "Cross-cutting delegation"). **Remaining:** mothership-side delivery of a laptop-sealed Slack
-  connection (rides the secrets-delegation slice).
+  connection. The secrets-delegation slice has since built the mechanism this needed
+  (`/internal/secrets/{unseal,seal}`); closing it is now a `slack_connection` entry in
+  `SEALED_SECRET_SOURCES` plus threading the delegate into `SlackConnectionService`.
 - **PR 5: telemetry/logs local-first sync.** ✅ **landed, all three halves.** The local-first
   CAPTURE half (the `node:sqlite` telemetry store, the registry composition seam, the spend-ledger
   split, the local prune), the batch sync UP (`POST /internal/telemetry/ingest`, the ports'
@@ -1241,8 +1457,14 @@ Each PR adds a changeset and updates this checklist.
   obligation: only the mothership-served endpoints do.
 - **The mothership `ENCRYPTION_KEY` must never reach the laptop.** Local secrets use a separate local
   key (the one `applyLocalDefaults` already guarantees). A security check asserts this. A connection
-  repo is only remotely exposable if it returns its credential **sealed** (env/observability
-  connections); repos that decrypt INSIDE the repo (document/task connections) stay off.
+  repo is only remotely exposable if it returns its credential **sealed**. A repo that decrypts
+  INSIDE is not a repo to leave off, it is a repo to FIX: the document/task connections were the
+  last two, and giving their rows an envelope admitted them to both the allow-list and the
+  org-secret table in one change. Since the
+  secrets-delegation slice a laptop can USE such a credential without holding the key: it names the
+  ROW over `/internal/secrets/unseal` and the mothership opens it. The key still does not move, and
+  that endpoint's CLOSED source table, not the persistence allow-list, is what bounds the plaintext
+  surface. Widen it deliberately, never as a routing detail.
 - **Raw-repo RPC is powerful: default-deny.** Method allow-list per repo; global/sweeper methods
   AND admin-gated mutations excluded (the RPC bypasses the service-layer `requireAdmin`, and the
   token scopes accounts not roles); every call account-scoped to the token; the scope switch

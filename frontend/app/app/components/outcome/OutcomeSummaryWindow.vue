@@ -19,14 +19,18 @@ import type {
   OutcomeCheckKind,
   OutcomeCheckState,
   OutcomeDisposition,
+  OutcomeSource,
   OutcomeSpecJoin,
   OutcomeVisual,
   RequirementsGap,
+  SourcesGap,
   TestsGap,
   TestsVerdict,
   VisualsGap,
 } from '~/utils/runOutcome'
 import { composeRunOutcome } from '~/utils/runOutcome'
+import { GAP_KEYS } from '~/components/documents/DocumentSyncState.logic'
+import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import { REPRODUCTION_STATUS_KEYS } from '~/utils/reproduction'
 import type { RequirementVerdictStatus, TestConcernSeverity } from '~/types/domain'
 import type { TestEnvironment } from '@cat-factory/contracts'
@@ -35,8 +39,10 @@ import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import type { BadgeColor } from '~/utils/badge'
 
 const board = useBoardStore()
+const documents = useDocumentsStore()
 const execution = useExecutionStore()
 const serviceSpec = useServiceSpecStore()
 const ui = useUiStore()
@@ -100,8 +106,6 @@ const DISPOSITION_KEYS: Record<OutcomeDisposition, string> = {
   not_run: 'outcome.disposition.not_run',
   unknown: 'outcome.disposition.unknown',
 }
-/** The badge palette, named once so every colour map below is checked against it. */
-type BadgeColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
 
 const DISPOSITION_COLOR: Record<OutcomeDisposition, BadgeColor> = {
   merged: 'success',
@@ -127,6 +131,10 @@ const TESTS_GAP_KEYS: Record<TestsGap, string> = {
   run_unavailable: RUN_UNAVAILABLE_KEY,
   no_tester_step: 'outcome.tests.gap.no_tester_step',
   tester_not_reported: 'outcome.tests.gap.tester_not_reported',
+}
+const SOURCES_GAP_KEYS: Record<SourcesGap, string> = {
+  run_unavailable: RUN_UNAVAILABLE_KEY,
+  none_linked: 'outcome.sources.gap.none_linked',
 }
 const VISUALS_GAP_KEYS: Record<VisualsGap, string> = {
   run_unavailable: RUN_UNAVAILABLE_KEY,
@@ -288,6 +296,47 @@ const checkRows = computed(() =>
   })),
 )
 
+/**
+ * What one linked page's row says about how current the copy the agents read was.
+ *
+ * Four outcomes, and none of them may collapse into another: a named revision to check the work
+ * against, a copy nobody could confirm (a warning about the WORK, not about the platform), a body
+ * with no source to trail, and a deployment that runs no freshness check at all. The last two are
+ * the pair a dash would merge, and they are opposite facts about whether anything is missing.
+ */
+function revisionLabel(freshness: OutcomeSource['freshness']): string {
+  if (!freshness) return t('outcome.sources.unchecked')
+  switch (freshness.status) {
+    case 'confirmed':
+      return t('documents.freshness.revision', { version: freshness.version })
+    case 'not-applicable':
+      return t('outcome.sources.noSource')
+    case 'unconfirmed':
+      return t(GAP_KEYS[freshness.reason])
+    default:
+      return exhaustiveFreshness(freshness)
+  }
+}
+
+/** Compile-time totality: a new verdict member fails the build rather than rendering a blank. */
+function exhaustiveFreshness(freshness: never): string {
+  return String(freshness)
+}
+
+/**
+ * The linked pages with their labels resolved, so the exhaustive mapping above is applied once
+ * per row rather than on every re-render, and the template stays a list.
+ */
+const sourceRows = computed(() => {
+  const sources = outcome.value?.sources
+  if (!sources || sources.status !== 'reported') return []
+  return sources.sources.map((source) => ({
+    ...source,
+    icon: documents.descriptorForOrigin(source.origin)?.icon ?? 'i-lucide-file-text',
+    revision: revisionLabel(source.freshness),
+  }))
+})
+
 /** Drill into the full test report (this card is the summary, never a replacement for it). */
 function openTestReport() {
   if (instance.value) ui.openTestEvidence(instance.value.id)
@@ -355,6 +404,49 @@ function openTestReport() {
         />
         <p v-else class="text-[13px] italic leading-relaxed text-slate-500">
           {{ t('outcome.ask.none') }}
+        </p>
+      </section>
+
+      <!-- What the run built FROM, and which revision of it. Directly under the ask, because it
+           is the rest of the brief: the description is what a person wrote, this is what the
+           agents actually read, and every section below is a statement about work done against
+           it. A design that moved mid-run is the reading that changes all of them. -->
+      <section class="mb-5" data-testid="outcome-sources">
+        <h3 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          {{ t('outcome.sources.title') }}
+        </h3>
+        <div v-if="outcome.sources.status === 'reported'" class="space-y-1">
+          <div
+            v-for="source in sourceRows"
+            :key="`${source.origin}:${source.url || source.title}`"
+            class="rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5"
+            data-testid="outcome-source"
+          >
+            <DocumentOriginLink
+              :url="source.url ?? ''"
+              class="flex items-center gap-1.5 text-xs text-slate-300"
+              hover-class="hover:text-white"
+            >
+              <UIcon :name="source.icon" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+              <span class="truncate">{{ source.title }}</span>
+            </DocumentOriginLink>
+            <p class="mt-0.5 text-[11px] text-slate-500" data-testid="outcome-source-revision">
+              {{ source.revision }}
+            </p>
+            <!-- Stated separately from the revision above: the last revision alone says the run
+                 ENDED current, and says nothing about the step that finished before the page
+                 changed under it. -->
+            <p
+              v-if="source.movedDuringRun"
+              class="mt-0.5 text-[11px] text-amber-300"
+              data-testid="outcome-source-moved"
+            >
+              {{ t('outcome.sources.moved') }}
+            </p>
+          </div>
+        </div>
+        <p v-else class="text-[13px] italic leading-relaxed text-slate-500">
+          {{ t(SOURCES_GAP_KEYS[outcome.sources.gap]) }}
         </p>
       </section>
 

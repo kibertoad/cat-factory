@@ -1,5 +1,299 @@
 # @cat-factory/eks
 
+## 0.1.286
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/contracts@0.286.0
+  - @cat-factory/kernel@0.281.0
+  - @cat-factory/integrations@0.153.5
+
+## 0.1.285
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+  - @cat-factory/kernel@0.280.0
+  - @cat-factory/integrations@0.153.4
+
+## 0.1.284
+
+### Patch Changes
+
+- e3fdc15: A typing pass that removes the casts a better type, a generic or a guard could carry.
+
+  New in `@cat-factory/contracts`: `parseStoredProviderConfig(schema, raw, label)`, the one place a
+  native environment backend re-reads its own config off a stored manifest's `providerConfig`. The
+  Kubernetes, Cloudflare and EKS backends used to assert that value; a config written before a schema
+  change (or edited in the database) therefore flowed on as a fake-valid object and misbehaved deep
+  inside a provision instead of being named at the boundary. Those three now THROW on an off-contract
+  stored config where they previously carried on.
+
+  That re-read is split by what the operation USES, which is the difference between a loud refusal
+  and an environment nobody can reclaim. Standing one up parses the whole config; tearing one down
+  parses only the connection (`kubernetesConnectionConfigSchema` / `eksConnectionConfigSchema` /
+  `cloudflareConnectionConfigSchema`), so a `manifestSource`, `url` or `workersSubdomain` that
+  stopped matching the contract still fails a provision and can never strand a live namespace or
+  preview. The fields the reclaim itself reads stay validated: there is no safe default for which
+  cluster to delete from, and none for a GitHub Enterprise API root whose fallback is the public one.
+
+  Behaviour changes worth knowing about:
+
+  - The Worker's bindings are read through `envVar` / `envVars`, which filter by `typeof`. A binding
+    that is not a string (a D1 database, a queue, a Durable Object namespace) now reads as absent
+    where the previous assertion handed it on as a string.
+  - `SlackApiClient.chatPostMessage` takes the rendered `SlackMessageBody` instead of an arbitrary
+    `Record<string, unknown>`. `SlackMessageBody` and `DeployJobSpec` are type aliases rather than
+    interfaces so they keep the implicit index signature their JSON sinks need.
+  - The workspace-RBAC mount tag is read through a shape guard; an unrelated object stored under the
+    same symbol no longer reads as a permission gate.
+
+  - `EksEnvironmentProvider` parses its own superset config. It inherited the Kubernetes parse, and
+    a valibot object drops entries it does not declare, so `region` / `clusterName` / `stsHost` were
+    read off a config that no longer had them: every EKS call was presigning its apiserver token
+    against `sts.undefined.amazonaws.com`.
+  - The Kubernetes engine form narrows a stored `url.source` through `isKubernetesUrlSource`, a guard
+    derived from the contract variant's own members. The discriminant is a closed vocabulary that is
+    nonetheless persisted, so a config naming a source this build does not define now falls back to
+    the form's default rather than reaching an exhaustive `switch` with no branch for it.
+
+  Everything else is type-level only: typed `queryAll` / `queryOne` helpers behind the local
+  `node:sqlite` stores (the row shape is now checked to be one SQLite could produce), a `BadgeColor`
+  derived from `UBadge`'s own prop type so the SPA's chip maps agree with the component, and the
+  Kubernetes engine form building its config as the contract's discriminated union.
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+  - @cat-factory/integrations@0.153.3
+  - @cat-factory/kernel@0.279.3
+
+## 0.1.283
+
+### Patch Changes
+
+- 3036af7: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with
+  (`ai@7.0.58`, `@ai-sdk/*@4.0.36` / `openai-compatible@3.0.27` / `amazon-bedrock@5.0.50`), and the
+  Vue singleton pin plus its `@vue/*` overrides move together to 3.5.41 so the SPA still bundles
+  exactly one Vue.
+
+- Updated dependencies [3036af7]
+  - @cat-factory/integrations@0.153.2
+  - @cat-factory/kernel@0.279.2
+
+## 0.1.282
+
+### Patch Changes
+
+- Updated dependencies [de7caaf]
+  - @cat-factory/contracts@0.283.1
+  - @cat-factory/integrations@0.153.1
+  - @cat-factory/kernel@0.279.1
+
+## 0.1.281
+
+### Patch Changes
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+  - @cat-factory/integrations@0.153.0
+
+## 0.1.280
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+  - @cat-factory/integrations@0.152.8
+
+## 0.1.279
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/kernel@0.277.0
+  - @cat-factory/integrations@0.152.7
+
+## 0.1.278
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+  - @cat-factory/integrations@0.152.6
+
+## 0.1.277
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/integrations@0.152.5
+  - @cat-factory/kernel@0.275.4
+
+## 0.1.276
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/integrations@0.152.4
+  - @cat-factory/kernel@0.275.3
+
+## 0.1.275
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/integrations@0.152.3
+  - @cat-factory/kernel@0.275.2
+
+## 0.1.274
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/integrations@0.152.2
+  - @cat-factory/kernel@0.275.1
+
+## 0.1.273
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/kernel@0.275.0
+  - @cat-factory/integrations@0.152.1
+
+## 0.1.272
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+  - @cat-factory/kernel@0.274.0
+  - @cat-factory/integrations@0.152.0
+
+## 0.1.271
+
+### Patch Changes
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [2544fb3]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/contracts@0.275.0
+  - @cat-factory/integrations@0.151.0
+
+## 0.1.270
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+  - @cat-factory/integrations@0.150.0
+  - @cat-factory/contracts@0.274.0
+
+## 0.1.269
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/kernel@0.271.0
+  - @cat-factory/contracts@0.273.0
+  - @cat-factory/integrations@0.149.0
+
+## 0.1.268
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+  - @cat-factory/contracts@0.272.0
+  - @cat-factory/integrations@0.148.0
+
+## 0.1.267
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/contracts@0.271.0
+  - @cat-factory/kernel@0.269.0
+  - @cat-factory/integrations@0.147.0
+
+## 0.1.266
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+  - @cat-factory/kernel@0.268.0
+  - @cat-factory/integrations@0.146.0
+
+## 0.1.265
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+  - @cat-factory/integrations@0.145.0
+
+## 0.1.264
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+  - @cat-factory/kernel@0.266.0
+  - @cat-factory/integrations@0.144.0
+
+## 0.1.263
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+  - @cat-factory/kernel@0.265.0
+  - @cat-factory/integrations@0.143.1
+
+## 0.1.262
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/contracts@0.266.0
+  - @cat-factory/kernel@0.264.0
+  - @cat-factory/integrations@0.143.0
+
+## 0.1.261
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+  - @cat-factory/kernel@0.263.0
+  - @cat-factory/integrations@0.142.0
+
 ## 0.1.260
 
 ### Patch Changes

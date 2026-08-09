@@ -1,5 +1,12 @@
 # LLM telemetry & agent-context observability
 
+> **Operators read this on the website**:
+> [Observability](https://www.catfactory.ai/operate/observability.html) owns the dashboard, what
+> each capture setting does and how to read a run; retention windows are on
+> [Upgrades & Data Retention](https://www.catfactory.ai/operate/upgrades-and-retention.html). This
+> page is the INTERNAL account: the sinks, the producers, and the rules a new recording path has
+> to keep.
+
 Four sinks live in a dedicated telemetry store, separate from the transactional domain
 (append-heavy, high-volume, short-retention): a required `TELEMETRY_DB` D1 database on Cloudflare
 and a `telemetry` Postgres schema on Node, all pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
@@ -22,7 +29,7 @@ The sinks:
 
 The deployment-level projections (`gate_outcomes`, `platform_run_days`) deliberately live in the
 MAIN store, not here; their rules are in
-[`platform-operator-observability.md`](../../docs/initiatives/platform-operator-observability.md).
+[ADR 0048](./adr/0048-platform-operator-observability.md).
 
 ## Three producers converge on the ONE `LlmObservabilityService`, and a new one must too
 
@@ -281,4 +288,4 @@ the trace-side counterpart of the bounded-dimension rule for metrics: free text 
 name rides an attribute, or a tenant mints unbounded series on the operator's backend by renaming
 things. Deployment-level metrics are the dual, swept per account and opt-in on top of the base
 exporter:
-[`platform-operator-observability.md`](../../docs/initiatives/platform-operator-observability.md).
+[ADR 0048](./adr/0048-platform-operator-observability.md).

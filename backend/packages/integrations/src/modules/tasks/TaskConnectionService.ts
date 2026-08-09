@@ -1,7 +1,8 @@
-import type { Clock } from '@cat-factory/kernel'
-import type { TaskConnectionRecord, TaskConnectionRepository } from '@cat-factory/kernel'
+import type { Clock, Logger } from '@cat-factory/kernel'
+import { describeError, noopLogger } from '@cat-factory/kernel'
+import type { TaskConnectionRecord, TaskConnectionStore } from '@cat-factory/kernel'
 import type { TaskSourceSettingsRepository } from '@cat-factory/kernel'
-import type { GitHubInstallationRepository } from '@cat-factory/kernel'
+import type { GitHubInstallationRepository, VcsProvider } from '@cat-factory/kernel'
 import type { TaskCredentials, TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
 import type {
   TaskConnection,
@@ -26,19 +27,24 @@ import type { LinearTeam } from './linear.logic.js'
 // source's provider, then stores the credential bag; the import path resolves it
 // to authenticate. Credentials are never exposed back to clients — only the safe
 // connection metadata (source, label, timestamp) is.
+//
+// The bag is sealed in the STORE (`createTaskConnectionStore`), not in the repository, so a
+// deployment holding no key for these rows — a mothership-mode node — still files tickets with
+// them, by naming the row over `/internal/secrets/unseal`.
 
 export interface TaskConnectionServiceDependencies {
-  taskConnectionRepository: TaskConnectionRepository
+  taskConnectionStore: TaskConnectionStore
   /** Per-workspace on/off toggle for each source (absent row ⇒ enabled). */
   taskSourceSettingsRepository: TaskSourceSettingsRepository
   registry: TaskSourceRegistry
   workspaceRepository: WorkspaceRepository
   clock: Clock
   /**
-   * Resolves the workspace's installed GitHub App, used to decide whether the
-   * credentialless GitHub Issues source is available (it rides that App). Absent
-   * when the GitHub integration isn't wired, in which case GitHub Issues — if its
-   * provider is even registered — is reported unavailable.
+   * Resolves the workspace's ONE VCS connection, used to decide whether a credentialless
+   * VCS-backed source is available: GitHub Issues rides an installed GitHub App, GitLab Issues
+   * rides a per-workspace PAT connection, and the row's own `provider` says which. Absent when
+   * no VCS integration is wired, in which case those sources, if their providers are registered
+   * at all, are reported unavailable.
    */
   installations?: GitHubInstallationRepository
   /**
@@ -49,27 +55,73 @@ export interface TaskConnectionServiceDependencies {
    * onboarding isn't offered (the manual personal-API-key path still works).
    */
   resolveLinearOAuth?: (accountKey: string) => Promise<LinearOAuthSecret | undefined>
+  /**
+   * Where the paths that DEGRADE report: a connection whose sealed bag would not open, on the
+   * three surfaces that must keep answering anyway (re-connect, the setup check, the webhook
+   * panel). Absent ⇒ `noopLogger`, so the service stays unit-testable standalone.
+   */
+  logger?: Logger
 }
 
 /**
- * A credentialless provider carries no connection to make: there are no credential
- * fields to fill in. Today the only such provider is GitHub Issues, which rides the
- * workspace's installed GitHub App. `connect()` and the import credential resolver
- * use this to skip the connection lookup; it does NOT by itself decide availability
- * (see `listSourceStates`, where the App-presence check is keyed on the GitHub source).
+ * A credentialless provider carries no connection to make: there are no credential fields to
+ * fill in, because it authenticates out-of-band (the two VCS-backed sources ride the workspace's
+ * VCS connection). `connect()` and the import credential resolver use this to skip the
+ * connection lookup; it does NOT by itself decide availability, nor WHICH out-of-band
+ * connection is meant (see {@link ridesVcsConnection}).
  */
 function isCredentialless(provider: TaskSourceProvider): boolean {
   return provider.descriptor.credentialFields.length === 0
 }
 
 /**
- * The credentialless source whose availability is the installed GitHub App's
- * presence. Keyed on the source kind (not just "is credentialless") so a future
- * credentialless source with a different out-of-band auth path is forced to add its
- * own availability branch rather than silently inheriting the App check.
+ * The VCS connection a credentialless source rides, or null for a source that authenticates
+ * some other way. GitHub Issues rides the workspace's installed GitHub App and GitLab Issues
+ * rides its per-workspace GitLab connection; both are rows of the same one-per-workspace
+ * connection table, told apart by the row's `provider`.
+ *
+ * Keyed on the source kind (not just "is credentialless") so a future credentialless source
+ * with a different out-of-band auth path is forced to add its own availability branch rather
+ * than silently inheriting this one. Reading the row's provider (rather than merely its
+ * existence) is what stops the two VCS sources standing in for each other: a workspace
+ * connected to GitLab would otherwise report GitHub Issues as available, and the import
+ * would then resolve an empty App projection.
  */
-function ridesGitHubApp(provider: TaskSourceProvider): boolean {
-  return provider.kind === 'github' && isCredentialless(provider)
+function ridesVcsConnection(provider: TaskSourceProvider): VcsProvider | null {
+  if (!isCredentialless(provider)) return null
+  if (provider.kind === 'github') return 'github'
+  if (provider.kind === 'gitlab') return 'gitlab'
+  return null
+}
+
+/**
+ * How the connection a VCS-backed source rides is described to an operator, per provider.
+ *
+ * Split into the thing it rides and the remedy for its absence because the two messages that
+ * need this say different halves: the setup check has a MISSING connection to explain, while the
+ * connect refusal is explaining that there is nothing to connect HERE (the connection exists, or
+ * will, somewhere else). Composing both from one `Record` is what keeps them naming the same
+ * integration: the earlier single string was written for the setup check and read as "GitHub App"
+ * from the refusal too, which pointed a GitLab operator at an integration their deployment does
+ * not run.
+ */
+interface VcsConnectCopy {
+  /** What the source authenticates through, as a noun phrase. */
+  rides: string
+  /** Why it cannot answer yet and where to fix it, continuing from {@link rides}. */
+  absentRemedy: string
+}
+
+const VCS_CONNECT_COPY: Record<VcsProvider, VcsConnectCopy> = {
+  github: {
+    rides: "this workspace's GitHub App",
+    absentRemedy: "which isn't installed yet. Install it under Integrations → GitHub",
+  },
+  gitlab: {
+    rides: "this workspace's GitLab connection",
+    absentRemedy:
+      "which doesn't exist yet. Connect one with a personal access token under Integrations → GitLab",
+  },
 }
 
 /** A provider that can list Linear teams (only {@link LinearTaskProvider} today). */
@@ -84,7 +136,12 @@ function hasListTeams(
   return typeof (provider as Partial<LinearTeamLister>).listTeams === 'function'
 }
 
-function toConnection(record: TaskConnectionRecord): TaskConnection {
+/** The client-safe projection: everything but the credential bag. */
+function toConnection(record: {
+  source: TaskSourceKind
+  label: string
+  createdAt: number
+}): TaskConnection {
   return {
     source: record.source,
     label: record.label,
@@ -93,14 +150,19 @@ function toConnection(record: TaskConnectionRecord): TaskConnection {
 }
 
 export class TaskConnectionService {
-  constructor(private readonly deps: TaskConnectionServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: TaskConnectionServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   /**
    * Every configured source with the workspace's live state for it (drives the
    * settings + import UI): each source's descriptor plus whether it is available
    * now and whether the workspace has it enabled. Availability is connection
-   * presence for credentialed sources, and the installed GitHub App for the
-   * credentialless GitHub Issues source.
+   * presence for a credentialed source, and a matching VCS connection for a
+   * VCS-backed one (which provider it needs rides along, so the UI can name the
+   * right remedy without a per-source branch of its own).
    */
   async listSourceStates(workspaceId: string): Promise<TaskSourceState[]> {
     const settings = await this.deps.taskSourceSettingsRepository.getByWorkspace(workspaceId)
@@ -108,22 +170,34 @@ export class TaskConnectionService {
     // Resolve availability inputs ONCE up front rather than a per-provider repository read
     // (N+1): the App presence is workspace-wide, and the credentialed connections are one
     // listByWorkspace indexed by source.
-    const hasInstallation = this.deps.installations
-      ? (await this.deps.installations.getByWorkspace(workspaceId)) !== null
-      : false
+    const vcsConnection = this.deps.installations
+      ? await this.deps.installations.getByWorkspace(workspaceId)
+      : null
+    // Summaries: this asks WHICH sources are connected, and opening a bag per source to answer
+    // it would fail the whole settings panel on the first row this deployment cannot open.
     const connectedSources = new Set(
-      (await this.deps.taskConnectionRepository.listByWorkspace(workspaceId)).map((c) => c.source),
+      (await this.deps.taskConnectionStore.listSummaries(workspaceId)).map((c) => c.source),
     )
     const states: TaskSourceState[] = []
     for (const provider of this.deps.registry.list()) {
-      const available = ridesGitHubApp(provider)
-        ? hasInstallation
+      const ridesVcs = ridesVcsConnection(provider)
+      const available = ridesVcs
+        ? vcsConnection?.provider === ridesVcs
         : connectedSources.has(provider.kind)
       states.push({
         ...provider.descriptor,
         available,
+        ridesVcsProvider: ridesVcs,
         // No row ⇒ default enabled, so a source is offered as soon as it's available.
         enabled: enabledBySource.get(provider.kind) ?? true,
+        // Asked of the provider, not of its descriptor: a source with no predicate search cannot
+        // back a recurring intake, and offering it in the schedule form produces a schedule that
+        // saves and then never fires.
+        supportsIntake: typeof provider.searchIssues === 'function',
+        // Asked of the provider too, but DECLARED there rather than derived: the four vendor
+        // grammars share no shape to inspect. Absent ⇒ every predicate bites, which is the
+        // claim a source makes by saying nothing.
+        ignoredIntakePredicates: [...(provider.ignoredIntakePredicates ?? [])],
       })
     }
     return states
@@ -149,23 +223,44 @@ export class TaskConnectionService {
     }
     const label = provider.descriptor.label
 
-    if (ridesGitHubApp(provider)) {
-      const installed =
-        !!this.deps.installations &&
-        (await this.deps.installations.getByWorkspace(workspaceId)) !== null
-      if (!installed) {
+    const ridesVcs = ridesVcsConnection(provider)
+    if (ridesVcs) {
+      const connection = this.deps.installations
+        ? await this.deps.installations.getByWorkspace(workspaceId)
+        : null
+      if (connection?.provider !== ridesVcs) {
         return {
           source,
           ok: false,
           status: 'not_installed',
-          message: `${label} rides this workspace's GitHub App, which isn't installed yet. Install it under Integrations → GitHub, then re-check.`,
+          message: `${label} rides ${VCS_CONNECT_COPY[ridesVcs].rides}, ${VCS_CONNECT_COPY[ridesVcs].absentRemedy}, then re-check.`,
         }
       }
       return this.runProviderDiagnose(provider, { workspaceId, credentials: null }, label)
     }
 
     // Credentialed source (Jira, …): a connection must exist before we can probe.
-    const connection = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    //
+    // The OPEN is inside the check's own error handling rather than in front of it. A setup check
+    // that 500s is the one failure mode this surface may not have: it exists to turn a broken
+    // integration into an actionable sentence, and a bag that will not open is exactly such a
+    // break — reported with its remedy, like every other verdict here.
+    let connection: TaskConnectionRecord | null
+    try {
+      connection = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
+    } catch (error) {
+      this.log.warn('tracker setup check: the stored credentials could not be read', {
+        workspaceId,
+        source,
+        ...describeError(error),
+      })
+      return {
+        source,
+        ok: false,
+        status: 'error',
+        message: `${label} is connected, but this deployment could not read the stored credentials. If it reaches its key service, re-connect ${label} to replace them; otherwise re-check once that connection recovers.`,
+      }
+    }
     if (!connection) {
       return {
         source,
@@ -254,10 +349,16 @@ export class TaskConnectionService {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)
     if (isCredentialless(provider)) {
-      // A credentialless source has no connection to make: it rides the workspace's
-      // installed GitHub App and is toggled via setEnabled, not connected.
+      // A credentialless source has no connection to make: it authenticates out-of-band and is
+      // toggled via setEnabled, not connected. WHERE it authenticates is the provider's own
+      // answer, so the refusal names the integration this source actually rides. A credentialless
+      // source riding neither VCS connection (a deployment-registered one authenticating some
+      // other way) says only what is true: there are no credentials to configure here.
+      const ridesVcs = ridesVcsConnection(provider)
       throw new ValidationError(
-        `The ${source} source has no connection to configure; it uses the workspace's installed GitHub App. Enable or disable it instead.`,
+        ridesVcs
+          ? `The ${source} source has no connection to configure; it rides ${VCS_CONNECT_COPY[ridesVcs].rides}. Enable or disable it instead.`
+          : `The ${source} source has no credentials to configure. Enable or disable it instead.`,
       )
     }
     const normalized = provider.normalizeConnection(credentials)
@@ -286,10 +387,7 @@ export class TaskConnectionService {
    */
   async listLinearTeams(workspaceId: string): Promise<LinearTeam[]> {
     const provider = this.requireProvider('linear')
-    const connection = await this.deps.taskConnectionRepository.getByWorkspace(
-      workspaceId,
-      'linear',
-    )
+    const connection = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, 'linear')
     if (!connection)
       throw new ConflictError(`Workspace '${workspaceId}' is not connected to linear`)
     if (!hasListTeams(provider)) return []
@@ -320,7 +418,18 @@ export class TaskConnectionService {
     credentials: TaskCredentials,
     label: string,
   ): Promise<TaskConnection> {
-    const existing = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    // The stored bag is READ here, not just its timestamp: `preservedPlatformCredentials` below
+    // carries the platform-owned webhook keys across a vendor-credential rotation, and they live
+    // inside the bag.
+    //
+    // But the read must not be able to BLOCK the write, because re-connecting is the documented
+    // remedy for a bag that has gone bad — a connect that refuses on the very row it exists to
+    // replace leaves the workspace with no way out at all. So an unopenable bag costs the
+    // preserved keys and says so, and it is the SEAL a few lines down that keeps that from being
+    // a silent loss on a transient fault: sealing rides the same delegation as opening, so a node
+    // that cannot reach its key service fails the upsert too and nothing is overwritten. What
+    // survives to here is the case whose only remedy IS this call.
+    const existing = await this.openForReconnect(workspaceId, source)
     const record: TaskConnectionRecord = {
       workspaceId,
       source,
@@ -335,20 +444,49 @@ export class TaskConnectionService {
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
       deletedAt: null,
     }
-    await this.deps.taskConnectionRepository.upsert(record)
+    await this.deps.taskConnectionStore.upsert(record)
     return toConnection(record)
+  }
+
+  /**
+   * The existing connection for a re-connect, or null when there is none to carry anything from.
+   *
+   * An unopenable bag answers null rather than throwing, and is REPORTED: the platform-owned
+   * webhook secret inside it cannot be carried across, so the connection lands with none and
+   * `getWebhookState` reports `configured: false` — the operator's own panel states the loss and
+   * offers the mint that repairs it. Losing it loudly is strictly better than the alternative this
+   * replaced, which was refusing the re-connect and leaving the row unopenable forever.
+   */
+  private async openForReconnect(
+    workspaceId: string,
+    source: TaskSourceKind,
+  ): Promise<TaskConnectionRecord | null> {
+    try {
+      return await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
+    } catch (error) {
+      this.log.warn(
+        'tracker re-connect against an unopenable bag: the stored webhook secret is not carried over',
+        { workspaceId, source, ...describeError(error) },
+      )
+      return null
+    }
   }
 
   /** The workspace's current connection for a source, or null if not connected. */
   async getConnection(workspaceId: string, source: TaskSourceKind): Promise<TaskConnection | null> {
-    const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
-    return record ? toConnection(record) : null
+    const summary = await this.summaryFor(workspaceId, source)
+    return summary ? toConnection(summary) : null
   }
 
   /** Every live connection the workspace holds, across sources. */
   async listConnections(workspaceId: string): Promise<TaskConnection[]> {
-    const records = await this.deps.taskConnectionRepository.listByWorkspace(workspaceId)
-    return records.map(toConnection)
+    return (await this.deps.taskConnectionStore.listSummaries(workspaceId)).map(toConnection)
+  }
+
+  /** The stored connection's non-secret half, opening nothing. */
+  private async summaryFor(workspaceId: string, source: TaskSourceKind) {
+    const summaries = await this.deps.taskConnectionStore.listSummaries(workspaceId)
+    return summaries.find((summary) => summary.source === source)
   }
 
   /** Resolve the live connection (with credentials) or throw if not connected. */
@@ -356,7 +494,7 @@ export class TaskConnectionService {
     workspaceId: string,
     source: TaskSourceKind,
   ): Promise<TaskConnectionRecord> {
-    const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    const record = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
     if (!record) {
       throw new ConflictError(`Workspace '${workspaceId}' is not connected to ${source}`)
     }
@@ -384,21 +522,49 @@ export class TaskConnectionService {
     workspaceId: string,
     source: TaskSourceKind,
   ): Promise<TaskConnectionRecord | null> {
-    return this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    return this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
   }
 
-  /** The connection's inbound-webhook state, safe to read back at any time (never the secret). */
+  /**
+   * The connection's inbound-webhook state, safe to read back at any time (never the secret).
+   *
+   * DEGRADES rather than refuses when the bag will not open: this is the read-only panel an
+   * operator opens to find out what is wrong, so failing it replaces an answer with a 503 about
+   * the very thing they came to look at. The gap travels as `credentialsReadable: false`, which
+   * is what keeps the reported `configured: false` from reading as "no secret has been minted" —
+   * the state that would have them mint one over a bag still holding the live secret.
+   */
   async getWebhookState(
     workspaceId: string,
     source: TaskSourceKind,
   ): Promise<TaskSourceWebhookState> {
-    const record = await this.getConnectionRecord(workspaceId, source)
+    const supported = this.deps.registry.get(source)?.webhook != null
+    const deliveryPath = trackerWebhookPath(workspaceId, source)
+    let record: TaskConnectionRecord | null
+    try {
+      record = await this.getConnectionRecord(workspaceId, source)
+    } catch (error) {
+      this.log.warn('tracker webhook state: the stored credentials could not be read', {
+        workspaceId,
+        source,
+        ...describeError(error),
+      })
+      return {
+        source,
+        supported,
+        configured: false,
+        deliveryPath,
+        replyAllow: '',
+        credentialsReadable: false,
+      }
+    }
     return {
       source,
-      supported: this.deps.registry.get(source)?.webhook != null,
+      supported,
       configured: trackerWebhookSecret(record?.credentials) !== '',
-      deliveryPath: trackerWebhookPath(workspaceId, source),
+      deliveryPath,
       replyAllow: record?.credentials?.[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+      credentialsReadable: true,
     }
   }
 
@@ -429,13 +595,15 @@ export class TaskConnectionService {
         ? { [TRACKER_WEBHOOK_REPLY_ALLOW_KEY]: input.replyAllow.trim() }
         : {}),
     }
-    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+    await this.deps.taskConnectionStore.upsert({ ...record, credentials })
     return {
       source,
       supported: true,
       configured: true,
       deliveryPath: trackerWebhookPath(workspaceId, source),
       replyAllow: credentials[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+      // This path OPENED the bag to rotate inside it, so the state it returns is fully known.
+      credentialsReadable: true,
       secret,
     }
   }
@@ -460,13 +628,15 @@ export class TaskConnectionService {
       ...record.credentials,
       [TRACKER_WEBHOOK_REPLY_ALLOW_KEY]: replyAllow.trim(),
     }
-    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+    await this.deps.taskConnectionStore.upsert({ ...record, credentials })
     return {
       source,
       supported: this.deps.registry.get(source)?.webhook != null,
       configured: trackerWebhookSecret(credentials) !== '',
       deliveryPath: trackerWebhookPath(workspaceId, source),
       replyAllow: credentials[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+      // Editing the allow-list rewrites the opened bag, so this state is known too.
+      credentialsReadable: true,
     }
   }
 
@@ -474,21 +644,28 @@ export class TaskConnectionService {
    * Clear the inbound-webhook secret, so deliveries stop being accepted (they 503 at the receiver,
    * which is the honest answer: the operator turned this off). The connection itself is untouched
    * — polling intake and imports keep working exactly as before.
+   *
+   * This one must OPEN the bag, and rightly REFUSES when it cannot: clearing is a rewrite of the
+   * bag minus one key, so proceeding blind would replace the workspace's vendor credentials with
+   * an empty object and take polling intake and imports down with the webhook. The refusal is the
+   * store's typed 503 (`connection_credentials_unreadable`), which names the remedy — and the
+   * operator's actual goal is already met either way, since a receiver that cannot open the bag
+   * cannot verify a delivery against it.
    */
   async clearWebhookSecret(workspaceId: string, source: TaskSourceKind): Promise<void> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    const record = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
     if (!record) return
     const credentials = { ...record.credentials }
     delete credentials[TRACKER_WEBHOOK_SECRET_KEY]
-    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+    await this.deps.taskConnectionStore.upsert({ ...record, credentials })
   }
 
   /** Disconnect a workspace from a source (tombstones the binding). */
   async disconnect(workspaceId: string, source: TaskSourceKind): Promise<void> {
-    const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
-    if (!record) return
-    await this.deps.taskConnectionRepository.softDelete(workspaceId, source, this.deps.clock.now())
+    // Presence, not the bag: removing a connection nobody can open must not itself need the key.
+    if (!(await this.summaryFor(workspaceId, source))) return
+    await this.deps.taskConnectionStore.softDelete(workspaceId, source, this.deps.clock.now())
   }
 }
 
@@ -499,6 +676,11 @@ export interface TaskSourceWebhookState {
   configured: boolean
   deliveryPath: string
   replyAllow: string
+  /**
+   * Whether the sealed bag could be opened to answer this. `false` ⇒ `configured` and `replyAllow`
+   * are their safe defaults rather than observed facts (see `taskSourceWebhookSchema`).
+   */
+  credentialsReadable: boolean
 }
 
 /**

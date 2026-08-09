@@ -10,7 +10,7 @@ import type { ReviewQuestionPost, ReviewQuestionSubject, TaskRecord } from '@cat
 import { PLATFORM_COMMENT_MARKER } from './reviewReplies.logic.js'
 
 // Pure rendering + keying for the headless clarification loop's question writeback (slice 2a
-// of `docs/initiatives/headless-clarification-loop.md`). Kept out of `IssueWritebackService`
+// of `backend/docs/adr/0047-headless-clarification-loop.md`). Kept out of `IssueWritebackService`
 // so the comment body — the one part of the feature a human actually reads — is unit-testable
 // without a tracker, and so slice 2b's reply parser can be written against the SAME rendered
 // ids rather than re-deriving them.

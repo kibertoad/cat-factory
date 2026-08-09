@@ -2,7 +2,7 @@
 -- class, the merger's scores at the decision, what happened, and the reviewer-effort tag a
 -- human left. Per-class rollups over this table are what justify widening a preset's per-class
 -- auto-merge rule. Mirrored on Node by the Drizzle `mergeTrackRecords` pgTable.
--- See docs/initiatives/merge-track-record.md.
+-- See backend/docs/adr/0046-merge-track-record.md.
 --
 -- Row identity is DETERMINISTIC (`mtr_<executionId>`) and inserts are first-write-wins
 -- (`ON CONFLICT(...) DO NOTHING` at the repository), so the durable driver re-resolving a merger

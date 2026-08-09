@@ -203,6 +203,7 @@ export {
   renderLinkedContext,
   initiativePresetSection,
   CONTEXT_DIR,
+  REFERENCE_SCREENSHOT_DIR,
 } from './agents/prompts/standard.js'
 export { toolServersSection } from './agents/prompts/capabilities.js'
 export {
@@ -442,6 +443,7 @@ export {
   EFFORT_REPORT_GUIDANCE,
   FINAL_ANSWER_IN_REPLY,
   FOLLOW_UP_GUIDANCE,
+  FOLLOW_UPS_FILE,
   FRAGMENT_ADHERENCE_GUIDANCE,
   INLINE_PANEL_SURFACE,
   NO_ASSUMED_PRODUCT,

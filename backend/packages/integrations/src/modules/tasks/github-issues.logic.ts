@@ -1,13 +1,11 @@
 import type {
-  BugCandidate,
-  GitHubIssueSearchHit,
   IssueIntakeQuery,
   TaskDependencyLink,
   TaskSearchRepoScope,
   TaskSourceDescriptor,
-  TrackerBoard,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
+import { repoIssueBugCandidateMapper, repoRefsToBoards } from './repo-issues.logic.js'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 
 // GitHub-issues task-source pure logic, kept out of the worker so it is
@@ -306,8 +304,19 @@ function isScopedRepo(id: GitHubIssueExternalId, scope: TaskSearchRepoScope): bo
   )
 }
 
-/** Cap on a candidate's rendered body; the ranking judges actionability, not the full trace. */
-const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
+/**
+ * The provider's `TaskRepoScopeRules` matcher: whether a STORED external id belongs to the
+ * scoped repository. Case-insensitive, because GitHub owner/repo names are, and the two sides
+ * come from different places (the id was minted from user input, the scope from the repo
+ * projection), so the casing is routinely not the same for one repository.
+ *
+ * An id that does not parse is out of scope: the row is stale or hand-edited, and a repository it
+ * cannot name is not this one.
+ */
+export function githubIssueInRepoScope(externalId: string, scope: TaskSearchRepoScope): boolean {
+  const id = parseGitHubIssueExternalId(externalId)
+  return id ? isScopedRepo(id, scope) : false
+}
 
 /**
  * Project a search hit onto a {@link BugCandidate}. GitHub's `/search/issues` response carries
@@ -315,37 +324,13 @@ const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
  * makes — see the optional fields on {@link GitHubIssueSearchHit} for why they may be absent
  * (an adapter projecting another backend onto the GitHub shape).
  *
- * GitHub has no priority field, so `priority` is always null; `type` echoes the issue's own
- * labels-based convention only when the org uses issue types, which the search hit doesn't
- * report — so it stays empty rather than being guessed from a label.
+ * The shape itself is the one every repo-backed source shares; what GitHub supplies is its own
+ * external-id grammar. See {@link repoIssueBugCandidateMapper} for why `priority`/`type` stay empty.
  */
-export function githubHitToBugCandidate(hit: GitHubIssueSearchHit): BugCandidate {
-  return {
-    source: 'github',
-    externalId: githubIssueExternalId(hit),
-    title: hit.title,
-    url: hit.url,
-    status: hit.state,
-    type: '',
-    priority: null,
-    labels: hit.labels ?? [],
-    description: (hit.body ?? '').trim().slice(0, MAX_CANDIDATE_DESCRIPTION_CHARS),
-    createdAt: hit.createdAt ?? '',
-    commentCount: hit.commentCount ?? 0,
-  }
-}
+export const githubHitToBugCandidate = repoIssueBugCandidateMapper('github', githubIssueExternalId)
 
 /**
- * Map an installation's repositories onto hunt boards. A GitHub board scope is the
- * `owner/repo` slug (what `buildGitHubIntakeQuery` puts in `repo:`), so `id` and `key` are the
- * same value; `name` is the bare repo name, which is what a human scans a list of repos by.
+ * Map an installation's repositories onto hunt boards: the shared repo-backed projection, since a
+ * GitHub board scope is the `owner/repo` slug {@link buildGitHubIntakeQuery} puts in `repo:`.
  */
-export function githubReposToBoards(repos: { owner: string; name: string }[]): TrackerBoard[] {
-  return repos
-    .filter((repo) => repo.owner && repo.name)
-    .map((repo) => ({
-      id: `${repo.owner}/${repo.name}`,
-      name: repo.name,
-      key: `${repo.owner}/${repo.name}`,
-    }))
-}
+export const githubReposToBoards = repoRefsToBoards

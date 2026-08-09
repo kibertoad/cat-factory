@@ -7,6 +7,8 @@ import type {
   BlockType,
   TaskTypeMeta,
 } from '~/types/domain'
+import type { BadgeColor } from '~/utils/badge'
+import { isBuiltinGatableKind } from '@cat-factory/contracts'
 
 /** Simple unique id helper (fine for a client-only prototype). */
 export function uid(prefix = 'id'): string {
@@ -35,6 +37,10 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-clipboard-check',
     color: '#f59e0b',
     category: 'review',
+    // Settles the PRODUCT layer before anyone builds, which is every use-case except reviewing
+    // someone else's open pull request: there the requirements are already someone's shipped
+    // decision and nothing here can change them.
+    purposes: ['build', 'document', 'research', 'planning'],
     description:
       'Reviews the collected context (description + linked PRDs/RFCs) for gaps, ambiguities, assumptions and risks before the architect starts.',
     // Opens the dedicated structured review window (answer/dismiss findings → incorporate
@@ -48,6 +54,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-bug',
     color: '#f59e0b',
     category: 'review',
+    // Triages a BUG REPORT for fixability, so it only makes sense where something gets fixed.
+    purposes: ['build'],
     description:
       'Triages a bug report for fixability — raising questions, gaps and assumptions about the report before anyone starts fixing it.',
     // Opens the dedicated structured review window (answer/dismiss findings → incorporate
@@ -65,6 +73,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-search-code',
     color: '#38bdf8',
     category: 'review',
+    // Traces a bug to its root cause in the code: a fixing pipeline's opening move, and nothing
+    // a document, review, spike or plan has any use for.
+    purposes: ['build'],
     description:
       'Read-only, multi-repo codebase investigation that traces the bug to its root cause and decides whether the report is fixable as-is or needs the reporter to clarify (no code changes).',
     resultView: 'generic-structured',
@@ -81,6 +92,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-clipboard-check',
     color: '#6366f1',
     category: 'review',
+    // Reviews an EXISTING open pull request, which is the whole of the review use-case, and is
+    // available to a build pipeline that wants a deep pass over the pull request it just opened.
+    purposes: ['build', 'review'],
     description:
       'Deep, token-bounded review of an open pull request: slices a large diff into cohesive ' +
       'chunks, reviews each, and returns prioritized findings.',
@@ -140,14 +154,16 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     // Authors the service's in-repo specification from the clarified requirements, so it sits
     // beside the design kinds and ahead of the architect that reads what it wrote. Registered on
     // the backend so it also arrives via the workspace manifest, and modelled statically here for
-    // the same reason `pr-reviewer` is: a `pl_bugfix` / `pl_spec` timeline must name the step
-    // before the manifest hydrates. Mirrors the backend `presentation` in `spec-blueprints.ts`.
+    // the same reason `pr-reviewer` is: a `pl_bugfix` timeline must name the step before the
+    // manifest hydrates. Mirrors the backend `presentation` in `spec-blueprints.ts`.
     kind: 'spec-writer',
     tier: 'intermediate',
     label: 'Spec Writer',
     icon: 'i-lucide-clipboard-list',
     color: '#c084fc',
     category: 'design',
+    // Writes the in-repo spec the implementation is then built against.
+    purposes: ['build', 'planning'],
     description:
       "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
   },
@@ -158,18 +174,23 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-drafting-compass',
     color: '#a78bfa',
     category: 'design',
+    // Designs the shape of a CODE change, so it belongs wherever code is planned or written and
+    // nowhere a document is being authored.
+    purposes: ['build', 'research', 'planning'],
     description: 'Designs the shape of the solution and breaks down the work.',
   },
   {
     // Refreshes the service → modules map the board projects. Statically modelled beside its
-    // backend `presentation` for the same reason the Spec Writer is: `pl_blueprint` timelines
-    // render before the manifest hydrates.
+    // backend `presentation` for the same reason the Spec Writer is: the single-kind run behind
+    // the board's "Map service" action renders its timeline before the manifest hydrates.
     kind: 'blueprints',
     tier: 'intermediate',
     label: 'Blueprinter',
     icon: 'i-lucide-map',
     color: '#22d3ee',
     category: 'design',
+    // Decomposes a repository into services and modules on the board.
+    purposes: ['build', 'planning'],
     description: 'Maps the repository into the service → modules blueprint.',
   },
   {
@@ -210,12 +231,14 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     // Provisions the ephemeral environment the tester / human-test / playwright steps read, which
-    // is why it leads the testing group. A palette block for the same reason `disposer` is one:
-    // `assertDeployerBeforeConsumer` REFUSES a run whose chain reaches an env consumer with no
-    // Deployer in front of it on a deployable service, and a hand-built pipeline that hits that
-    // refusal has no reseed to fall back on.
+    // is why it leads the testing group.
+    //
+    // `basic`, and it has to be: a pipeline that reaches an env consumer with no Deployer in
+    // front of it is refused at SAVE (`validatePipelineAuthoring`), and the API Tester it serves
+    // is itself `basic`. Leaving the Deployer out of the basic palette would leave a basic-mode
+    // user composing a pipeline they cannot save and cannot see the fix for.
     kind: 'deployer',
-    tier: 'intermediate',
+    tier: 'basic',
     label: 'Deployer',
     icon: 'i-lucide-cloud-upload',
     color: '#34d399',
@@ -276,8 +299,11 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     // is the point of it: after the automated tester, or after a human has finished with the live
     // URL. Without one, the TTL sweep reclaims environments on a timer long after the run
     // settled, which is a fine backstop and cannot close the run's own teardown proof.
+    //
+    // `basic` for the same reason the Deployer is: a chain that deploys and never reclaims is
+    // refused at save, so the fix has to be reachable wherever the fault can be composed.
     kind: 'disposer',
-    tier: 'intermediate',
+    tier: 'basic',
     label: 'Disposer',
     icon: 'i-lucide-cloud-off',
     color: '#34d399',
@@ -305,6 +331,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-book-open-text',
     color: '#818cf8',
     category: 'docs',
+    // WRITES documentation into the repository, which a pipeline that reviews someone else's
+    // pull request never does.
+    purposes: ['build', 'document'],
     description: 'Produces docs and usage examples.',
   },
   {
@@ -314,6 +343,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-scroll-text',
     color: '#84cc16',
     category: 'docs',
+    // Writes domain-rule docs into the repository (see `documenter`).
+    purposes: ['build', 'document'],
     description:
       'Reads the implementation and writes/updates business-logic & domain-rule docs in the repo, weaving in linked context documents.',
   },
@@ -324,6 +355,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-shield-alert',
     color: '#ef4444',
     category: 'docs',
+    // The review activity that groups under Documentation: it reads a change against the
+    // documented rules and reports violations, writing nothing.
+    purposes: ['build', 'review'],
     description:
       'Reviews a change against the documented domain rules and reports violations, undocumented changes and unexpected drift.',
   },
@@ -832,6 +866,22 @@ export function agentKindMeta(kind: string): AgentArchetype {
 }
 
 /**
+ * Whether the builder may offer a SKIP AXIS (an estimate gate, a run condition) on this kind:
+ * false only where this build KNOWS the answer is no.
+ *
+ * A built-in kind is answered by the shared `BUILTIN_GATABLE_KINDS`. A DEPLOYMENT-registered kind
+ * carries its own `gatable` flag in the agent-kind registry, which the SPA cannot see, so it is
+ * offered rather than withheld — the same direction the pipeline-health advisory takes the
+ * asymmetry, and for the sharper reason: over-offering costs a 422 with an explanatory message at
+ * save, while under-offering silently removes a capability the deployment declared, with no route
+ * to it and nothing on screen to say why.
+ */
+export function mayCarrySkipAxis(kind: string): boolean {
+  const isBuiltin = kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META
+  return isBuiltin ? isBuiltinGatableKind(kind) : true
+}
+
+/**
  * Whether an agent kind is actually known to this build — a built-in palette
  * archetype or companion ({@link AGENT_BY_KIND}), an engine system/gate kind
  * ({@link SYSTEM_AGENT_META}), or a deployment CUSTOM kind projected from the
@@ -990,7 +1040,7 @@ export function blockTypeMeta(type: BlockType): BlockTypeMeta {
 /** Color + iconography for each block status. */
 export const STATUS_META: Record<
   BlockStatus,
-  { label: string; color: string; chip: string; icon: string }
+  { label: string; color: string; chip: BadgeColor; icon: string }
 > = {
   planned: {
     label: 'Planned',

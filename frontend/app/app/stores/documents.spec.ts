@@ -24,6 +24,7 @@ function doc(over: Partial<SourceDocument> = {}): SourceDocument {
     role: null,
     docKind: null,
     syncedAt: 1_000,
+    renderStatus: null,
     ...over,
   }
 }
@@ -152,5 +153,65 @@ describe('documents store: manual refresh', () => {
     // person would have no way to try again.
     expect(store.isRefreshing('figma', 'file1:1-2')).toBe(false)
     expect(store.freshnessFor('figma', 'file1:1-2')).toBeUndefined()
+  })
+})
+
+describe('documents store: the OAuth and design halves of the source list', () => {
+  /** The source listing the probe reads: descriptors PLUS what this deployment can OAuth. */
+  function stubSources(oauthSources: string[]) {
+    stubApi({
+      listDocumentSources: () =>
+        Promise.resolve({
+          sources: [
+            {
+              source: 'figma',
+              label: 'Figma',
+              icon: 'i',
+              credentialFields: [],
+              refLabel: '',
+              refPlaceholder: '',
+              oauth: { scopes: ['file_content:read'] },
+            },
+            {
+              source: 'notion',
+              label: 'Notion',
+              icon: 'i',
+              credentialFields: [],
+              refLabel: '',
+              refPlaceholder: '',
+            },
+          ],
+          oauthSources,
+        }),
+      listDocumentConnections: () =>
+        Promise.resolve({ connections: [{ source: 'figma', label: 'Figma', connectedAt: 1 }] }),
+    })
+  }
+
+  it('offers OAuth where the deployment has a registered app', async () => {
+    stubSources(['figma'])
+    const store = useDocumentsStore()
+    await store.probe()
+    expect(store.canConnectWithOAuth('figma')).toBe(true)
+  })
+
+  it('withholds it where the SOURCE declares an OAuth half but the deployment registered nothing', async () => {
+    // Figma declares the half in both cases; only the registered app decides whether the button
+    // is offered. Folded onto the descriptor, this case would render a "Connect with Figma" that
+    // can only 503.
+    stubSources([])
+    const store = useDocumentsStore()
+    await store.probe()
+    expect(store.descriptorFor('figma')?.oauth).toBeDefined()
+    expect(store.canConnectWithOAuth('figma')).toBe(false)
+  })
+
+  it('lists only CONNECTED design sources, so no affordance opens onto a dead end', async () => {
+    stubSources(['figma'])
+    const store = useDocumentsStore()
+    await store.probe()
+    // Notion is connectable and not a design source; Figma is both connected and a design one.
+    // The classification comes from contracts, so adding a source cannot leave it unclassified.
+    expect(store.connectedDesignSources).toEqual(['figma'])
   })
 })

@@ -1,6 +1,10 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { actNotificationSchema, notificationSchema } from '../notifications.js'
+import {
+  notificationSettingsSchema,
+  updateNotificationSettingsSchema,
+} from '../notification-routing.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -34,4 +38,21 @@ export const dismissNotificationContract = defineApiContract({
   pathResolver: ({ notificationId }) => `/notifications/${notificationId}/dismiss`,
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
+})
+
+// ---- the notification manager (per-workspace channel routing) --------------
+// Which types this board delivers on which channel. Readable by any member (the settings
+// surface renders the resolved state); the write is admin-tier, gated at the controller.
+
+export const getNotificationSettingsContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/notification-settings',
+  responsesByStatusCode: { 200: notificationSettingsSchema, ...errorResponses },
+})
+
+export const updateNotificationSettingsContract = defineApiContract({
+  method: 'put',
+  pathResolver: () => '/notification-settings',
+  requestBodySchema: updateNotificationSettingsSchema,
+  responsesByStatusCode: { 200: notificationSettingsSchema, ...errorResponses },
 })

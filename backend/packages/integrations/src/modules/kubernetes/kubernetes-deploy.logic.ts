@@ -66,8 +66,15 @@ export type DeployUrlSourceSpec =
   | { source: 'gatewayStatus'; gatewayName?: string; scheme?: 'http' | 'https' }
   | { source: 'httpRouteStatus'; httpRouteName?: string; scheme?: 'http' | 'https' }
 
-/** The full deploy-job body (mirrors the harness's `DeployJob`). */
-export interface DeployJobSpec {
+/**
+ * The full deploy-job body (mirrors the harness's `DeployJob`).
+ *
+ * A type alias rather than an `interface` on purpose: the runner-pool port carries a job body
+ * as `Record<string, unknown>` (any job kind's JSON), and only an alias picks up the implicit
+ * index signature that makes it assignable there. As an interface the dispatch site had to
+ * assert through `unknown`, which would have hidden a genuinely non-serializable field.
+ */
+export type DeployJobSpec = {
   jobId: string
   cluster: {
     apiServerUrl: string

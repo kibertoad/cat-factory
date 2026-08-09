@@ -11,11 +11,14 @@ import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { runInputGateSchema } from './input-gate.js'
+import { stepSkipReasonSchema } from './step-conditions.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
 import { foundationalServiceSelectionSchema } from './foundational-services.js'
 import { binaryOutputReportSchema } from './binary-outputs.js'
+import { binaryCandidateStepStateSchema } from './binary-candidates.js'
 import { stepToolServersSchema } from './tool-servers.js'
+import { stepContextDocumentSchema } from './documents.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
@@ -890,11 +893,24 @@ export const pipelineStepSchema = v.object({
    */
   stepOptions: v.optional(v.nullable(stepOptionsSchema)),
   /**
-   * True when this step was skipped at runtime because its `gating` was not satisfied
-   * (the task estimate fell below the threshold). The step's `state` is `done` with no
-   * output; the UI renders it as "skipped (gated)". Absent ⇒ the step ran normally.
+   * True when this step was skipped at runtime rather than run. The step's `state` is `done`
+   * with no output; {@link skipReason} says which axis skipped it. Absent ⇒ the step ran
+   * normally.
    */
   skipped: v.optional(v.boolean()),
+  /**
+   * WHY a {@link skipped} step was skipped, as a machine-readable member the SPA maps to
+   * translated copy (`stepSkipReasonSchema`). Absent on a step that ran, and on a run that
+   * predates this field.
+   *
+   * A reason rather than a prose sentence, for two reasons that both bite. The backend does not
+   * localize prose, so a sentence composed here reaches every reader in English. And the only
+   * place a sentence could have lived is `output`, which is the step's PRODUCT: three separate
+   * aggregations select prior steps on `output` being non-empty and hand the text to a model
+   * (`priorOutputsFor`, the judge's prior-work fold, the doc interview's), so a skip note parked
+   * there is read downstream as the report of a step that never ran.
+   */
+  skipReason: v.optional(stepSkipReasonSchema),
   /**
    * Set `true` on a `spec-writer` step that determined the task is purely technical and
    * produced no business specs (its result's `noBusinessSpecs`). Recorded on the step so
@@ -1014,6 +1030,24 @@ export const pipelineStepSchema = v.object({
    */
   toolServers: v.optional(stepToolServersSchema),
   /**
+   * The linked context documents this dispatch put in front of the agent, each with the
+   * freshness verdict the dispatch reached about it — so "which revision of the design did this
+   * run build against" stays answerable once the run is over. The third member of the
+   * pinned-at-dispatch family beside {@link skillVersions} and {@link toolServers}, and recorded
+   * for the same reason: a later reader cannot re-derive it, because re-probing the source
+   * answers about the revision it is at NOW.
+   *
+   * Rewritten by each resolution that records a dispatch (the same gate `selectedFragmentIds`
+   * passes through), so it always describes the tree the step's last dispatch actually read.
+   *
+   * Absent means no linked document reached this step: a task with no attachments and no
+   * document URL in its description (the overwhelming default), a step whose context was
+   * resolved outside the dispatch builder (the inline requirements review assembles its own),
+   * or a run predating the field. All of them are "nothing was read", so absent and an empty
+   * list would state the same fact and the empty array is not written.
+   */
+  contextDocuments: v.optional(v.array(stepContextDocumentSchema)),
+  /**
    * The workspace agent-prompt revision this step was PINNED to at dispatch — the sibling of
    * {@link skillVersions}, and pinned for the same reason: what a step ran under must be
    * recoverable afterwards, and the prompt log is append-only, so re-reading it later would
@@ -1081,6 +1115,18 @@ export const pipelineStepSchema = v.object({
    * reporting it stored nothing. See {@link binaryOutputReportSchema} for the bookkeeping.
    */
   binaryOutputs: v.optional(binaryOutputReportSchema),
+  /**
+   * Live CANDIDATE-COMPARISON state on a binary-output step whose selection declares a
+   * `comparison`: the candidates the agent generated and staged, the human park while they are
+   * compared side by side, and the resolved choice of which to keep (and under which alternate
+   * ids). Created lazily by the engine when the first phase settles, never at start.
+   *
+   * Deliberately PRESERVED across `resetStepForRerun`, exactly like `forkDecision` and for the
+   * same reason: the second phase of the step is dispatched by re-running it, and the choice it
+   * has to honour is the thing being reset. Absent for every step that never compared.
+   * See {@link binaryCandidateStepStateSchema}.
+   */
+  binaryCandidates: v.optional(v.nullable(binaryCandidateStepStateSchema)),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so
@@ -1306,6 +1352,21 @@ export const executionInstanceSchema = v.object({
    */
   initiatedByRole: v.optional(v.nullable(workspaceRoleSchema)),
   /**
+   * Who the run was started FOR, on the CALLER's side: the `externalIdentity` of the public-API
+   * key that admitted it, as that key's provisioner named it. Absent for every run the public API
+   * did not start, and for one started by a key minted without an identity.
+   *
+   * Pinned at admission for the same reason {@link executionInstanceSchema.entries.initiatedByRole}
+   * is, plus one of its own. A key can be revoked (which is exactly what an integration does when
+   * a person leaves) and revocation must not erase who a finished run was for; re-reading the key
+   * per run would also put a credential lookup on every run projection, including paged ones.
+   *
+   * Provenance only, never an authorization input: it names an identity the platform cannot
+   * resolve and deliberately does not try to. What the run may do is its `initiatedByRole` and
+   * its {@link executionInstanceSchema.entries.mode}.
+   */
+  initiatedByExternalIdentity: v.optional(v.nullable(v.string())),
+  /**
    * Whether this run may land its work ({@link runModeSchema}). Absent on legacy runs ⇒ `live`,
    * which is what they were. Carried forward across retry/restart: a dry run stays a dry run, or
    * the sandbox would be one retry deep.
@@ -1347,9 +1408,10 @@ export const executionInstanceSchema = v.object({
    */
   rev: v.optional(v.number()),
   /**
-   * After-the-fact investigation context — where/what the run's most recent container step
-   * executed on (backend, model, repo) plus the control-plane host. Rides in the `detail` JSON
-   * (see {@link runDiagnosticsSchema}); absent on legacy runs and pure inline pipelines.
+   * After-the-fact investigation context: where/what the run's most recent step dispatched
+   * to (backend, model, repo), how that dispatch ended if it never reached a running job, plus
+   * the control-plane host. Rides in the `detail` JSON (see {@link runDiagnosticsSchema});
+   * absent on legacy runs and on a run that has not dispatched a step yet.
    */
   diagnostics: v.optional(runDiagnosticsSchema),
   /**

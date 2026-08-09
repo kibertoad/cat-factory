@@ -10,7 +10,7 @@ import {
   followUpLoopBudget,
 } from '@cat-factory/orchestration'
 import type { InterviewView } from '@cat-factory/orchestration'
-import { BUILTIN_GATE_KINDS, HUMAN_WAIT_GATE_KINDS } from '@cat-factory/contracts'
+import type { GateRegistry } from '@cat-factory/kernel'
 import type {
   BrainstormSession,
   BrainstormStage,
@@ -529,6 +529,7 @@ export async function buildDecisionList<E extends AppEnv>(
     // as one nobody here can.
     unanswerable: unanswerableWaits(
       execution,
+      container.gateRegistry,
       interview.unwiredGate,
       answeredStepIndexes(decisions),
     ),
@@ -569,12 +570,18 @@ function answeredStepIndexes(decisions: readonly PublicDecision[]): ReadonlySet<
  * a live GATE step is one whose `gate` state exists and whose step is not done, and an unwired
  * interviewer is what {@link liveInterviewDecisions} already resolved and found no controller for.
  *
- * A gate is classified from what a request-time read can honestly establish, and no further:
- * `HUMAN_WAIT_GATE_KINDS` names the shipped gates whose poll has no deadline, and a kind outside
- * `BUILTIN_GATE_KINDS` is one the deployment registered, whose `pollExhaustion` lives on the object
- * its factory builds and is unreadable here. The remaining built-ins are BOUNDED and deliberately
- * absent: `ci` looping through a fixer is the gate doing its job, and listing it would read as a
- * demand for a human nobody has to meet.
+ * A gate is classified from its OWN registration, which is where `pollExhaustion` is declared:
+ * `rearm` is a poll with no deadline, which is the engine's way of saying a person is the gate.
+ * Anything else is BOUNDED and deliberately absent: `ci` looping through a fixer is the gate doing
+ * its job, and listing it would read as a demand for a human nobody has to meet. Shipped and
+ * deployment-registered gates go through the one rule, where this used to name the built-ins from a
+ * hand-kept constant and report every gate a deployment registered as unclassifiable.
+ *
+ * `unclassified_gate` survives that change with a NARROWER meaning, and it is still reachable: a
+ * step whose kind this process has no gate registration for at all. A run outlives a registration
+ * (a deployment retires a gate, or a node one build behind serves a run started by one that is
+ * not), and a kind nothing registers is the one case where the honest answer is still "this
+ * deployment cannot say whether that poll ever ends".
  *
  * Two exclusions keep the list to waits that are actually holding the run, and each was a way for
  * the field to state the opposite of the truth it exists to state:
@@ -587,6 +594,8 @@ function answeredStepIndexes(decisions: readonly PublicDecision[]): ReadonlySet<
  */
 export function unanswerableWaits(
   execution: Pick<ExecutionInstance, 'status' | 'steps'>,
+  /** The app-owned gate registry: the authority for what a spent poll budget means per kind. */
+  gates: GateRegistry,
   unwiredGate: UnwiredInterviewGate | null,
   /**
    * Required rather than defaulted, because it is half of the question: "unanswerable" is a claim
@@ -599,7 +608,8 @@ export function unanswerableWaits(
   const waits: PublicUnanswerableWait[] = []
   execution.steps.forEach((step, stepIndex) => {
     if (!step.gate || step.state === 'done' || answered.has(stepIndex)) return
-    if (HUMAN_WAIT_GATE_KINDS.has(step.agentKind)) {
+    const pollExhaustion = gates.pollExhaustion(step.agentKind)
+    if (pollExhaustion === 'rearm') {
       waits.push({
         reason: 'human_wait_gate',
         stepKind: step.agentKind,
@@ -612,16 +622,16 @@ export function unanswerableWaits(
       })
       return
     }
-    if (!BUILTIN_GATE_KINDS.has(step.agentKind)) {
+    if (pollExhaustion === undefined) {
       waits.push({
         reason: 'unclassified_gate',
         stepKind: step.agentKind,
         stepIndex,
         detail:
-          `The run is on the '${step.agentKind}' gate, which this deployment registered itself. ` +
-          'Whether its poll ever ends is declared where the gate was built and cannot be read ' +
-          'here, so it may be waiting on a person indefinitely. Its answer lives wherever the ' +
-          'deployment surfaced it.',
+          `The run is on the '${step.agentKind}' gate, which this deployment has no registration ` +
+          'for. Whether its poll ever ends was declared wherever the gate used to be registered ' +
+          'and cannot be read here, so it may be waiting on a person indefinitely. Its answer ' +
+          'lives wherever the deployment surfaced it.',
       })
     }
   })
@@ -758,7 +768,9 @@ async function liveForkDecisions<E extends AppEnv>(
   workspaceId: string,
   execution: ExecutionInstance,
 ): Promise<PublicDecision[]> {
-  const fork = await c.get('container').executionService.getForkDecision(workspaceId, execution.id)
+  const fork = await c
+    .get('container')
+    .executionService.decisions.getForkDecision(workspaceId, execution.id)
   return fork && isLiveFork(fork) ? [toForkDecision(fork)] : []
 }
 

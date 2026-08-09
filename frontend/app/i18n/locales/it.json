@@ -377,27 +377,21 @@
         "linearTeamSearchPlaceholder": "Cerca team…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Collega gli issue come contesto",
         "description": "Quando una sorgente e disponibile, puoi importare i suoi issue e allegarli a un'attivita, cosicche gli agenti vedano la descrizione e i commenti dell'issue durante l'implementazione. Questo e indipendente dal tracker di registrazione qui sopra.",
-        "github": {
-          "available": "Si appoggia alla tua GitHub App installata — nessuna credenziale necessaria.",
-          "unavailable": "Installa la GitHub App (Integrazioni → GitHub) per offrire questa sorgente."
-        },
         "checkSetup": "Verifica la configurazione",
-        "install": "Installa",
         "connected": "Connesso.",
-        "jira": {
-          "connectHint": "Connettiti con un account Jira e un token API."
+        "connect": "Connetti",
+        "state": {
+          "ridesConnected": "Usa la connessione {provider} di questo workspace, quindi non richiede credenziali proprie.",
+          "ridesMissing": "Collega {provider} in Integrazioni per offrire questa sorgente.",
+          "notConnected": "Non ancora collegato."
         },
-        "linear": {
-          "connectHint": "Connettiti con una chiave API personale Linear."
-        },
-        "connect": "Connetti"
+        "connectProvider": "Collega {provider}",
+        "none": "Questo deployment non ha sorgenti di attività configurate."
       },
       "writeback": {
         "heading": "Writeback",
@@ -1669,6 +1663,7 @@
       "mergePr": "Unisci PR",
       "chooseApproach": "Scegli approccio",
       "triageFollowUps": "Decidi i follow-up",
+      "chooseCandidates": "Decidi i candidati",
       "elapsedTooltip": "Tempo trascorso su questo passaggio",
       "reviewFindings": "Esamina i rilievi",
       "dryRun": "Prova",
@@ -1948,8 +1943,10 @@
       "decisionRequired": "Decisione richiesta",
       "followUpsParked": "Il Coder ha sollevato follow-up che richiedono una decisione prima che la run possa continuare. Gestisci ogni elemento (crea, rimanda indietro, rispondi o scarta) nella finestra dei follow-up.",
       "forkParked": "Questo passo del Coder attende la scelta di un approccio di implementazione prima di scrivere codice. Scegli un approccio proposto (o inserisci il tuo) nella finestra di decisione.",
+      "candidatesParked": "Questo passo ha generato candidati e attende che qualcuno scelga quali conservare prima di consegnare qualcosa. Confrontali e conserva quelli che vuoi nella finestra dei candidati.",
       "openFollowUps": "Apri i follow-up",
       "chooseApproach": "Scegli approccio",
+      "chooseCandidates": "Scegli i candidati",
       "expandAll": "Espandi tutte le sezioni",
       "collapseAll": "Comprimi tutte le sezioni",
       "copyRawOutput": "Copia l'output grezzo",
@@ -2017,6 +2014,16 @@
           "oauthNotConnected": "Collega questa lavagna al server dalla finestra Infrastruttura. Un deployment senza ENCRYPTION_KEY non ha dove conservare una concessione, quindi un operatore deve impostarla prima.",
           "oauthTokenFailed": "Ricollegalo dalla finestra Infrastruttura, oppure attendi la fine del disservizio del fornitore.",
           "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto."
+        },
+        "observed": {
+          "ready": "avviato",
+          "readyTools": "{count} strumenti",
+          "readyNoTools": "avviato, nessuno strumento",
+          "failed": "non si è avviato",
+          "needsAuth": "richiede autorizzazione",
+          "unknown": "stato non determinato",
+          "notLoaded": "mai caricato",
+          "unattributed": "La CLI dell'agente ha segnalato un server che questo passo non ha collegato: {id}."
         }
       },
       "adherence": {
@@ -2119,6 +2126,8 @@
       "priorDocHint": "Dalla revisione precedente. Usalo come base: modifica la descrizione sopra e reinvia.",
       "bootstrapping": "Bootstrap in corso…",
       "viewRequirements": "Visualizza requisiti",
+      "mapService": "Mappa il servizio",
+      "mapServiceNoRepo": "Collega prima un repository a questo servizio: non c'è ancora nulla da mappare.",
       "reRun": "Riesegui",
       "run": "Esegui",
       "focus": "Metti a fuoco",
@@ -2187,8 +2196,11 @@
           "fs": "Filesystem locale",
           "s3": "Amazon S3 / compatibile S3",
           "r2": "Cloudflare R2",
-          "db": "Database Postgres"
+          "db": "Database Postgres",
+          "custom": "Archivio personalizzato (questo deployment)"
         },
+        "unregisteredStore": "{store} (non registrato in questo deployment)",
+        "unregisteredStoreWarning": "Questo account archivia gli artefatti in «{store}», che questo deployment non registra. Non viene salvato nulla finché non scegli un archivio registrato o non lo registri di nuovo nel codice.",
         "basePath": "Percorso base (predefinito: .file-storage)",
         "region": "Regione (es. us-east-1)",
         "bucket": "Bucket",
@@ -2204,6 +2216,18 @@
         "keysValidation": "Inserire l'access key id e il secret S3",
         "saved": "Archiviazione dei contenuti salvata",
         "saveFailed": "Impossibile salvare l'archiviazione dei contenuti"
+      },
+      "figma": {
+        "title": "App Figma (OAuth)",
+        "description": "Abilita il flusso «Collega con Figma». Senza, gli spazi di lavoro possono comunque collegare Figma incollando un token di accesso personale.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "URL di redirect",
+        "validation": "Inserisci client id, secret e URL di redirect",
+        "saved": "OAuth Figma salvato",
+        "saveFailed": "Impossibile salvare l’OAuth Figma",
+        "cleared": "OAuth Figma cancellato",
+        "clearFailed": "Impossibile cancellare l’OAuth Figma"
       }
     },
     "accountFragments": {
@@ -2489,7 +2513,8 @@
         "shortcuts": "Scorciatoie da tastiera",
         "bugHunt": "Caccia ai bug",
         "toggleUiMode": "Cambia modalità interfaccia",
-        "foundationalServices": "Servizi fondamentali"
+        "foundationalServices": "Servizi fondamentali",
+        "notificationSettings": "Gestisci l'instradamento delle notifiche"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2513,7 +2538,8 @@
         "bugHunt": "bug caccia triage backlog ticket non assegnati",
         "toggleUiMode": "interfaccia modalità base avanzata mostra nascondi",
         "tutorial": "tutorial tour guida aiuto imparare introduzione",
-        "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo"
+        "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo",
+        "notificationSettings": "notifiche email instradamento canali casella"
       }
     },
     "shortcuts": {
@@ -2590,6 +2616,10 @@
         "bugHunt": {
           "label": "Caccia ai bug",
           "description": "Valuta i bug aperti e non assegnati di una bacheca e scegline uno da correggere"
+        },
+        "notificationSettings": {
+          "label": "Notifiche",
+          "description": "Scegli quali eventi arrivano in casella e via email."
         }
       }
     },
@@ -2924,7 +2954,10 @@
       "intake": "Acquisizione issue",
       "intakeHint": "Ogni esecuzione seleziona una issue aperta corrispondente dal tracker e la porta a termine dall'inizio alla fine.",
       "intakeNoSources": "Connetti prima una sorgente di attività per estrarne le issue.",
+      "intakeNoIntakeSources": "Una sorgente di attività è connessa, ma nessuna delle sorgenti connesse può ancora eseguire una ricerca pianificata delle issue.",
       "intakeGithubRepo": "Repository",
+      "intakeGitlabProject": "Progetto",
+      "intakeGitlabProjectHelp": "Il percorso completo del progetto GitLab, sottogruppi inclusi, ad esempio gruppo/sottogruppo/progetto.",
       "intakeBoardId": "ID della board",
       "intakeBoardIdHelp": "La board, il progetto o la coda a cui questo tracker limita l’acquisizione. Il formato è definito dal tracker.",
       "trackerTrigger": "Avvia esecuzioni dai webhook del tracker",
@@ -2936,6 +2969,7 @@
       "intakeLabels": "Etichette",
       "intakeLabelsPlaceholder": "separate da virgole",
       "intakeIssueType": "Tipo di issue",
+      "intakeIssueTypeUnsupported": "{tracker} non ha un tipo di issue che significhi «bug», quindi questa pianificazione non lo applicherà. Restringi la selezione con un’etichetta.",
       "intakeInProgressLabel": "Etichetta in corso",
       "refusalPerTicketRequiresOnDemand": "Una pianificazione attivata dal tracker deve essere su richiesta. Un ciclo a cadenza non porta con sé alcun ticket da assegnare.",
       "refusalPerTicketConflictsWithBugIntake": "Questa pipeline sceglie da sola il proprio problema dalla bacheca, quindi non può essere guidata anche da un ticket in arrivo. Scegli una pipeline senza passaggio di raccolta bug."
@@ -3005,7 +3039,8 @@
       "accessDenied": {
         "title": "Autorizzazione negata",
         "hint": "Non hai accesso al repository che supporta questo servizio."
-      }
+      },
+      "startFromDesignTitle": "Parti da un design"
     },
     "decisionBadge": {
       "decisionNeeded": "Decisione necessaria",
@@ -3039,7 +3074,6 @@
       },
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "Apri {pr} su GitHub",
       "readOutcome": "Esito",
       "readOutcomeHint": "Leggi che cosa è cambiato, con le prove che lo sostengono",
       "review": "Rivedi",
@@ -3053,7 +3087,8 @@
       "module": "Modulo: {name}",
       "buildSteps": "Fasi di build",
       "reviewAndApprove": "Rivedi e approva",
-      "clickToViewStep": "Clicca per vedere i dettagli e l'output della fase"
+      "clickToViewStep": "Clicca per vedere i dettagli e l'output della fase",
+      "openPrLink": "Apri {pr}"
     },
     "dryRunToast": {
       "title": "Prova avviata",
@@ -3142,7 +3177,11 @@
     "attachIssueDisabledConnect": "Connetti prima un issue tracker (Integrazioni)",
     "attachIssueDisabledEnable": "Abilita prima l'integrazione dell'issue tracker",
     "importsOnAdd": "importa all'aggiunta",
-    "unreadable": "Impossibile recuperarlo: {error}"
+    "unreadable": "Impossibile recuperarlo: {error}",
+    "pastedLink": {
+      "offer": "Questa descrizione rimanda a una pagina {source}. Allegarla come contesto?",
+      "attach": "Allega"
+    }
   },
   "providers": {
     "presetMismatch": {
@@ -3369,14 +3408,11 @@
       "loading": "Caricamento…",
       "tabs": {
         "repos": "Repository",
-        "pulls": "Pull request",
         "issues": "Issue"
       },
       "linkedToBoard": "Collegati a questa board",
       "manageRepos": "Gestisci i repository",
-      "manageHint": "Scegli i repository che questa board dovrebbe tracciare. La connessione GitHub è condivisa nell'account, e ogni board collega i propri repository.",
       "loadingRepos": "Caricamento dei repository…",
-      "noAvailableRepos": "L'installazione non può ancora accedere ad alcun repository.",
       "private": "privato",
       "saveSelection": "Salva selezione",
       "noLinkedRepos": "Nessun repository ancora collegato. Usa Gestisci i repository per scegliere quali repository questa board traccia.",
@@ -3386,15 +3422,11 @@
       "fromSha": "Da SHA",
       "commitShaPlaceholder": "sha del commit",
       "createBranch": "Crea branch",
-      "openPr": "Apri PR",
       "repository": "Repository",
       "chooseRepository": "Scegli un repository",
       "prTitle": "Titolo",
       "headBranch": "Branch head",
       "baseBranch": "Branch base",
-      "openPullRequest": "Apri pull request",
-      "noPulls": "Nessuna pull request sincronizzata.",
-      "mergePr": "Effettua il merge della pull request",
       "noIssues": "Nessuna issue sincronizzata.",
       "prState": {
         "open": "aperta",
@@ -3408,9 +3440,7 @@
       "toast": {
         "resync": "Risincronizzazione {status}",
         "reposUpdated": "Repository collegati aggiornati",
-        "branchCreated": "Branch {name} creato",
-        "prOpened": "Pull request aperta",
-        "prMerged": "PR #{number} sottoposta a merge"
+        "branchCreated": "Branch {name} creato"
       },
       "errors": {
         "disconnect": "Impossibile disconnettere",
@@ -3419,7 +3449,6 @@
         "updateRepos": "Impossibile aggiornare i repository",
         "loadBranches": "Impossibile caricare i branch",
         "createBranch": "Impossibile creare il branch",
-        "openPr": "Impossibile aprire la pull request",
         "merge": "Impossibile effettuare il merge"
       }
     },
@@ -3985,16 +4014,27 @@
       },
       "refreshFailed": "Impossibile verificare le modifiche"
     },
+    "renders": {
+      "partial": "Alcuni frame del design non è stato possibile salvarli come immagini.",
+      "failed": "Non è stato possibile recuperare le immagini del design dalla sorgente.",
+      "storage_unavailable": "Le immagini del design non sono state salvate: questa installazione non ha uno spazio di archiviazione per le immagini configurato."
+    },
     "connect": {
       "title": "Collega sorgente",
       "sourceFallback": "Sorgente",
-      "intro": "Collega {source} per importare requisiti, RFC e PRD, poi genera la struttura della board o allegali alle attività come contesto per l'agente.",
+      "intro": "Collega {source} per portare le sue pagine e i suoi design su questa board: importali, espandili in struttura della board oppure allegali a un task come contesto per gli agenti.",
       "disconnect": "Disconnetti",
       "connect": "Collega",
       "update": "Aggiorna connessione",
       "connected": "{source} collegato",
       "disconnected": "{source} disconnesso",
-      "connectFailed": "Impossibile collegare"
+      "connectFailed": "Impossibile collegare",
+      "oauth": {
+        "action": "Collega con {source}",
+        "scopes": "Ti verranno chiesti questi permessi: {scopes}",
+        "fallback": "Preferisci un token? Usa i campi qui sotto.",
+        "failed": "Impossibile avviare l'accesso a {source}"
+      }
     },
     "spawn": {
       "title": "Anteprima struttura",
@@ -4009,7 +4049,15 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} frame | {count} frame",
       "moduleCount": "{count} modulo | {count} moduli",
-      "taskCount": "{count} attività | {count} attività"
+      "taskCount": "{count} attività | {count} attività",
+      "reusedCount": "{count} modulo riutilizzato | {count} moduli riutilizzati",
+      "intoService": "dentro il servizio scelto",
+      "target": {
+        "label": "Aggiungi al servizio",
+        "help": "Un design descrive schermate, non un’architettura: il piano propone quindi lavoro dentro un servizio che esiste già.",
+        "placeholder": "Scegli un servizio",
+        "required": "Scegli il servizio a cui appartiene questo design."
+      }
     },
     "taskDocs": {
       "heading": "Documenti di contesto",
@@ -4042,6 +4090,20 @@
       "remove": "Rimuovi",
       "linkFailed": "Impossibile aggiornare il collegamento del documento",
       "loadFailed": "Impossibile caricare i modelli di documento"
+    },
+    "startFromDesign": {
+      "title": "Parti da un design",
+      "intro": "Incolla il link a un frame o a un intero file. Viene allegato al nuovo task e l’agente ne legge layout, testi, componenti e token.",
+      "noSource": "Nessuna sorgente di design collegata. Un amministratore può collegare Figma o Zeplin dalle integrazioni.",
+      "linkLabel": "Link al design",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Controllo del link…",
+      "trimmed": "Ridotto alla forma supportata di questo link.",
+      "widened": "Il frame {scope} non è leggibile, quindi viene allegato l’intero file.",
+      "unchecked": "Al momento il link non è verificabile. Verrà scaricato alla creazione del task.",
+      "uncheckedAmbiguous": "Il link non è verificabile e sono collegate più sorgenti di design, quindi non si sa a quale appartenga. Riprova.",
+      "rejected": "Nessuna sorgente di design collegata riconosce questo link.",
+      "continue": "Continua"
     }
   },
   "tasks": {
@@ -4138,6 +4200,7 @@
     "boardsFailed": "Impossibile caricare le board: {reason}",
     "issueType": "Tipo di ticket",
     "issueTypeHelp": "Per impostazione predefinita bug. Ignorato dai tracker senza tipi di ticket.",
+    "issueTypeUnsupported": "{tracker} non ha un tipo di issue che significhi «bug», quindi questo filtro non viene applicato. Restringi la scansione con un’etichetta.",
     "labels": "Etichette",
     "labelsHelp": "Separate da virgole. Devono essere tutte presenti.",
     "adoptInto": "Aggiungi il bug scelto a",
@@ -4178,7 +4241,11 @@
     "preview": {
       "stepCount": "{count} step | {count} step",
       "gateCount": "{count} approvazione | {count} approvazioni",
-      "gated": "Approvazione umana dopo questo step"
+      "gated": "Approvazione umana dopo questo step",
+      "conditionalCount": "{count} passaggio condizionale | {count} passaggi condizionali",
+      "conditionEstimate": "Viene eseguito solo se la stima dell'attività supera le soglie di questo passaggio",
+      "conditionFrontend": "Viene eseguito solo se l'attività modifica un servizio frontend",
+      "conditionBackend": "Viene eseguito solo se l'attività modifica un servizio non frontend"
     },
     "picker": {
       "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita.",
@@ -4230,7 +4297,7 @@
       "strategy": "Strategia",
       "rounds": "Giri",
       "purposeLabel": "Scopo",
-      "purposePlaceholder": "Seleziona uno scopo",
+      "purposeUnrecognized": "Non riconosciuto ({purpose})",
       "purposeOption": {
         "build": "Sviluppo",
         "document": "Documentazione",
@@ -4248,6 +4315,10 @@
       "removeParticipant": "Rimuovi partecipante (min 2)",
       "addParticipant": "Aggiungi partecipante",
       "savedPipelines": "Pipeline salvate",
+      "purposeHiddenPipelines": "{count} pipeline salvata nascosta per questo scopo. | {count} pipeline salvate nascoste per questo scopo.",
+      "everyPurposeListed": "Sono elencate le pipeline salvate di ogni scopo.",
+      "listEveryPurpose": "Mostra tutti gli scopi",
+      "narrowToDraftPurpose": "Limita a questo scopo",
       "hideArchived": "Nascondi archiviate",
       "archivedCount": "Archiviate ({count})",
       "allLabels": "Tutte",
@@ -4264,6 +4335,11 @@
         "body": "\"{name}\" verra rimossa. Questa operazione non puo essere annullata."
       },
       "disabledStepTooltip": "Disabilitato, saltato durante l'esecuzione",
+      "condition": {
+        "always": "Viene eseguito su ogni attività: fai clic per renderlo condizionale",
+        "frontend": "Viene eseguito solo sulle attività che modificano un servizio frontend",
+        "backend": "Viene eseguito solo sulle attività che modificano un servizio non frontend"
+      },
       "cancelEdit": "Annulla modifica",
       "clear": "Svuota",
       "update": "Aggiorna pipeline",
@@ -4306,6 +4382,13 @@
       "binaryOutputPlaceholder": "Scegli un servizio di archiviazione",
       "binaryOutputContextPlaceholder": "Facoltativo: servizi che delimitano la generazione",
       "binaryOutputNeedsPick": "Un passo che genera output binari non ha un servizio di archiviazione scelto. Scegline uno prima di salvare.",
+      "envNeedsDeployer": "Un passaggio Tester, di test manuale o Playwright ha bisogno di un Deployer prima di sé. Aggiungine uno, altrimenti la pipeline non verrà salvata (su un servizio che non effettua provisioning non fa nulla).",
+      "envNeedsDisposer": "Un Deployer ha bisogno di un Disposer dopo di sé, che liberi l'ambiente creato. Aggiungine uno, oppure contrassegna il Deployer come tale da mantenere il proprio ambiente oltre l'esecuzione, altrimenti la pipeline non verrà salvata.",
+      "envDisposerNeedsDeployer": "Questo Disposer non ha alcun Deployer prima di sé, quindi non ha nulla da liberare. Aggiungi un Deployer oppure rimuovi il Disposer.",
+      "envConsumerAfterDisposer": "Un passaggio Tester, di test manuale o Playwright viene eseguito dopo che il Disposer ha già liberato l'ambiente, quindi non resterebbe nulla su cui eseguirlo. Sposta il Disposer dopo quel passaggio, oppure aggiungi un altro Deployer prima di esso.",
+      "envRetainedButReclaimed": "Questo Deployer è contrassegnato come tale da mantenere il proprio ambiente oltre l'esecuzione, ma un Disposer successivo libera proprio quell'ambiente. Rimuovi il Disposer, oppure togli il contrassegno di mantenimento dell'ambiente.",
+      "retainEnvironmentSetTooltip": "Liberato al termine dell'esecuzione. Fai clic per lasciare questo ambiente attivo dopo (un'anteprima che i revisori usano a PR aperta); lo spegneranno poi il suo TTL o un operatore.",
+      "retainEnvironmentClearTooltip": "Resta attivo dopo la fine dell'esecuzione. Fai clic per tornare a liberarlo con un passaggio Disposer.",
       "binaryOutputNoStorage": "Nessun servizio nel catalogo di questa board dichiara la capacità {capability}. Registrane uno, oppure aggiungi la capacità al servizio che intendevi, nei servizi fondamentali.",
       "binaryOutputMissing": "Questo servizio di archiviazione non è più nel catalogo; scegline un altro.",
       "binaryOutputNotStorage": "Questo servizio non dichiara più la capacità {capability}, quindi le esecuzioni verranno rifiutate; scegline un altro.",
@@ -4333,7 +4416,51 @@
         "3d-model": "Modelli 3D",
         "3d-scene": "Scene 3D",
         "document": "Documenti"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "Immagine di riferimento",
+        "multi-reference": "Più immagini di riferimento",
+        "instruction-edit": "Modifica da istruzione",
+        "mask-edit": "Modifica con maschera",
+        "negative-prompt": "Prompt negativo",
+        "seed": "Seed fisso",
+        "aspect-ratio": "Proporzioni",
+        "exact-size": "Dimensione esatta",
+        "candidate-batch": "Più candidati per chiamata",
+        "upscale": "Ingrandimento",
+        "transparent-background": "Sfondo trasparente",
+        "tileable": "Ripetibile senza giunzioni"
+      },
+      "binaryCapabilityUnknown": "{capability} (una capacità che questa installazione non definisce)",
+      "binaryCapabilityUnsupported": "Nessuna integrazione selezionata supporta {capabilities}, richiesta dalle opzioni di generazione di questo passo. Rimuovi l’opzione oppure seleziona un’integrazione che dichiari la capacità.",
+      "binaryCapabilityUnverifiable": "Nessuna integrazione selezionata dichiara di supportare {capabilities}, ma una di esse non dichiara alcuna capacità, quindi non è stato possibile verificarlo. Il passo parte comunque; conferma dall’API dell’integrazione.",
+      "binaryReferenceImages": "Immagini di riferimento",
+      "binaryReferenceImagesPlaceholder": "ruolo{'|'}posizione{'|'}servizio, una per riga",
+      "binaryReferenceImagesUnusable": "Non salvate come riferimento: {entries}. Ogni riga deve essere ruolo{'|'}posizione, con ruolo style, subject, composition o base.",
+      "binaryEditMode": "Modifica esistente",
+      "binaryEditModeNone": "Genera nuovo",
+      "binaryEditModeInstruction": "Da un’istruzione",
+      "binaryEditModeMask": "Regione mascherata",
+      "binaryEditInstruction": "Cosa cambiare",
+      "binaryEditInstructionPlaceholder": "es. sostituire il cielo",
+      "binaryNegativePrompt": "Prompt negativo",
+      "binaryNegativePromptPlaceholder": "cosa evitare",
+      "binaryAspectRatio": "Proporzioni",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "Dimensione di output",
+      "binaryOutputSizeWidth": "Larghezza",
+      "binaryOutputSizeHeight": "Altezza",
+      "binaryOutputSizeIncomplete": "Non salvato: una dimensione esatta richiede una larghezza e un'altezza.",
+      "binaryOutputSizeAmbiguous": "Una dimensione di output esatta non si combina con {options}: ognuno indica una seconda volta le dimensioni consegnate. Tieni quello che è il requisito.",
+      "binarySeed": "Seed",
+      "binarySeedPlaceholder": "seed fisso",
+      "binaryTransparent": "Sfondo trasparente",
+      "binaryTileable": "Ripetibile senza giunzioni",
+      "binaryUpscale": "Ingrandisci il risultato",
+      "binaryComparison": "Confronta i candidati prima di consegnare",
+      "binaryPerGenerator": "Candidati per integrazione",
+      "binaryMultiSelect": "Consenti di tenerne più di uno",
+      "binaryComparisonUnreachable": "Questo passo può produrre un solo candidato per soggetto, quindi non ci sarebbe nulla da confrontare e l’unico verrebbe tenuto senza chiedere. Seleziona una seconda integrazione oppure aumenta il numero di candidati per integrazione."
     },
     "progress": {
       "status": {
@@ -4380,9 +4507,20 @@
         "proposing": "Proposta di approcci…",
         "choose": "Scegli un approccio"
       },
+      "binaryCandidates": {
+        "choose": "Scegli un candidato"
+      },
       "elapsedTooltip": "Tempo trascorso su questo passaggio",
       "prReview": {
         "review": "Esamina i rilievi"
+      },
+      "skipped": {
+        "gated": "Saltato: la stima dell’attività è rimasta sotto le soglie di questo passo.",
+        "conditionFrontend": "Saltato: questa attività non modifica alcun servizio frontend, quindi non c’è un’interfaccia da provare.",
+        "conditionBackend": "Saltato: questa attività modifica solo un servizio frontend, quindi non c’è un’API dietro da provare.",
+        "producerSkipped": "Saltato: il passo che revisiona è stato saltato, quindi non c’è nulla da valutare.",
+        "runComplete": "Saltato: l’esecuzione è terminata prima di questo passo, senza altro da fare.",
+        "unknown": "Saltato: questo passo non è stato eseguito."
       }
     },
     "health": {
@@ -5023,13 +5161,21 @@
       "unknownServices": "Ha indicato un servizio che il catalogo non contiene: {ids}. La voce viene conservata come dichiarata; verifica l'identificativo nel catalogo della board. | Ha indicato servizi che il catalogo non contiene: {ids}. Le voci vengono conservate come dichiarate; verifica gli identificativi nel catalogo della board.",
       "targetUnknown": "Il catalogo non contiene più il servizio di archiviazione di questo passo ({id}), quindi nulla di quanto segue ha potuto essere verificato rispetto ad esso. Registralo di nuovo, oppure indirizza il passo a un altro servizio.",
       "undeliveredMediaTypes": "Questo passaggio doveva fornire {formats} e nessun artefatto qui sotto riporta quel formato. | Questo passaggio doveva fornire {formats} e nessun artefatto qui sotto riporta quei formati.",
+      "missized": "1 artefatto è stato consegnato con una dimensione diversa da {width}×{height}. | {count} artefatti sono stati consegnati con una dimensione diversa da {width}×{height}.",
+      "sizeUnreported": "1 artefatto non riporta dimensioni, quindi non è stato possibile verificarne la dimensione. | {count} artefatti non riportano dimensioni, quindi non è stato possibile verificarne le dimensioni.",
       "misdirected": "1 artefatto è finito su un servizio diverso da {target}. | {count} artefatti sono finiti su un servizio diverso da {target}.",
       "invalidEntries": "1 voce dichiarata è stata scartata: non indicava né servizio né posizione. | {count} voci dichiarate sono state scartate: non indicavano né servizio né posizione.",
       "omitted": "È stato dichiarato 1 altro artefatto oltre il limite del rapporto e non compare nell'elenco. | Sono stati dichiarati altri {count} artefatti oltre il limite del rapporto e non compaiono nell'elenco.",
       "unknownGenerators": "Ha indicato un'integrazione generativa che questa installazione non registra: {ids}. La voce viene mantenuta come dichiarata; l'integrazione si registra nel codice dell'installazione, non in questo spazio di lavoro. | Ha indicato integrazioni generative che questa installazione non registra: {ids}. Le loro voci vengono mantenute come dichiarate; le integrazioni si registrano nel codice dell'installazione, non in questo spazio di lavoro.",
       "generatorsUnverified": "Non è stato possibile leggere le integrazioni generative di questa installazione alla chiusura del passaggio, quindi le integrazioni indicate sotto non sono state verificate. Le voci sono conservate come dichiarate."
     },
-    "unknownGeneratorBadge": "Non registrata"
+    "unknownGeneratorBadge": "Non registrata",
+    "missizedBadge": "Dimensione errata",
+    "candidates": {
+      "automatic": "È stato generato {total} candidato e tenuto automaticamente, senza revisione.",
+      "chosen": "Sono stati tenuti {kept} dei {total} candidati generati.",
+      "awaiting": "Sono stati generati {total} candidati e attendono di essere confrontati."
+    }
   },
   "brainstorm": {
     "title": {
@@ -5495,7 +5641,9 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "Non è stato possibile leggere le integrazioni generative di questa installazione in questo momento, quindi l'esecuzione non è partita. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
-        "foundational_builtins_unreachable": "Non è stato possibile leggere i servizi fondamentali integrati di questa installazione in questo momento. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata."
+        "foundational_builtins_unreachable": "Non è stato possibile leggere i servizi fondamentali integrati di questa installazione in questo momento. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
+        "connection_credentials_unreadable": "Non è stato possibile leggere le credenziali memorizzate di questa connessione. Se questa installazione riesce a raggiungere il servizio che ne custodisce la chiave, ricollega la sorgente per sostituirle; altrimenti riprova quando quella connessione sarà ripristinata.",
+        "vcs_capability_unsupported": "Il provider di controllo del codice collegato a questo workspace non offre questa operazione. Non c'è nulla di configurato male e nessuna impostazione può aiutare: non è disponibile per questo provider."
       }
     },
     "action": {
@@ -5557,7 +5705,8 @@
         "ticket_already_linked": "Questo ticket ha già un'attività",
         "document_already_linked": "Documento già allegato",
         "dry_run_not_mergeable": "Una prova non può essere unita",
-        "submission_not_allowed": "Unione non consentita per questa esecuzione"
+        "submission_not_allowed": "Unione non consentita per questa esecuzione",
+        "webhook_limit_reached": "Limite di webhook raggiunto"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -5566,7 +5715,7 @@
         "agent_backend_unconfigured": "Nessun backend runner disponibile per eseguire gli agenti in container. Registra un pool di runner self-hosted oppure abilita Cloudflare Containers nel tuo deployment.",
         "run_not_retryable": "Solo un'esecuzione fallita o conclusa può essere ripetuta. Questa esecuzione è ancora attiva o in uno stato che non consente il nuovo tentativo.",
         "no_pr_to_merge": "Questa esecuzione non ha ancora aperto una pull request, quindi non c'è nulla da unire.",
-        "github_not_connected": "Collega questo workspace a GitHub così gli agenti possono clonare il repository, inviare modifiche e aprire pull request.",
+        "github_not_connected": "Collega questo workspace a un host di repository perché gli agent possano clonare il repository, inviare modifiche e aprire pull request.",
         "bootstrap_not_retryable": "Questo job di bootstrap non può essere ripetuto nello stato attuale (è ancora in esecuzione o già concluso con successo).",
         "bootstrap_reference_missing": "Il repository di riferimento adattato da questo bootstrap non è più raggiungibile. È stato eliminato o l'accesso è stato revocato. Scegli un altro riferimento oppure crea da zero.",
         "preset_unsatisfiable": "Il modello di un passaggio inline non può essere eseguito inline in questo deployment (un modello solo in abbonamento senza supporto inline). Scegli un modello o un preset compatibile con l'esecuzione inline.",
@@ -5595,7 +5744,8 @@
         "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
         "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
         "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà.",
-        "submission_not_allowed": "La politica di unione di questa attività non consente al ruolo che ha avviato l'esecuzione di unire questo tipo di modifica. Un collega il cui ruolo lo consente può farlo, oppure un amministratore può ampliare la politica nel preset di unione."
+        "submission_not_allowed": "La politica di unione di questa attività non consente al ruolo che ha avviato l'esecuzione di unire questo tipo di modifica. Un collega il cui ruolo lo consente può farlo, oppure un amministratore può ampliare la politica nel preset di unione.",
+        "webhook_limit_reached": "Questo spazio di lavoro ha già registrato il numero massimo di webhook in uscita. Rimuovine uno che non ti serve più, poi registra di nuovo questo."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -5700,6 +5850,58 @@
       "body": "Le notifiche Slack si interromperanno finché non ti riconnetti."
     }
   },
+  "notificationSettings": {
+    "panel": {
+      "title": "Notifiche",
+      "intro": "Scegli quali eventi questa bacheca consegna e su quale canale. Ciò che non modifichi usa il valore predefinito.",
+      "inAppNote": "«Nell'app» controlla solo l'avviso in tempo reale. La scheda viene salvata comunque e resta in casella dopo un ricaricamento.",
+      "emailNote": "L'email richiede un mittente collegato all'account (Impostazioni account). Per impostazione predefinita vengono inviati solo gli eventi ad alto impatto.",
+      "otherChannelsNote": "Slack e i webhook in uscita scelgono il proprio elenco di eventi dove è configurata la destinazione.",
+      "openSlack": "Instradamento Slack"
+    },
+    "column": {
+      "event": "Evento",
+      "inApp": "Nell'app",
+      "email": "Email"
+    },
+    "action": {
+      "save": "Salva",
+      "reset": "Ripristina predefiniti"
+    },
+    "toast": {
+      "saved": "Instradamento delle notifiche salvato"
+    },
+    "error": {
+      "load": "Impossibile caricare le impostazioni delle notifiche",
+      "save": "Impossibile salvare le impostazioni delle notifiche"
+    },
+    "unavailable": "Questa installazione non memorizza l'instradamento delle notifiche, quindi ogni evento usa il valore predefinito.",
+    "loadFailed": "Non è stato possibile leggere l'instradamento delle notifiche di questa board, quindi gli interruttori qui sotto non sono la sua configurazione attuale. Riprova prima di modificare qualcosa.",
+    "type": {
+      "merge_review": "Revisione del merge",
+      "pipeline_complete": "Pipeline completata",
+      "ci_failed": "CI non riuscita",
+      "test_failed": "Test non riusciti",
+      "requirement_review": "Revisione dei requisiti",
+      "clarity_review": "Revisione della chiarezza",
+      "release_regression": "Regressione della release",
+      "decision_required": "Decisione necessaria",
+      "human_test_ready": "Pronto per il test umano",
+      "visual_confirmation_ready": "Pronto per la conferma visiva",
+      "human_review": "In attesa di revisione del codice",
+      "followup_pending": "Follow-up da decidere",
+      "fork_decision_pending": "Approccio di implementazione",
+      "judge_review": "Verdetto della revisione",
+      "pr_review_ready": "Rilievi revisione PR",
+      "initiative": "Aggiornamenti dell'iniziativa",
+      "platform_health": "Salute della piattaforma",
+      "infra_unreachable": "Interruzioni dell’infrastruttura",
+      "budget_paused": "Esecuzioni in pausa (budget)",
+      "budget_threshold": "Avviso di budget",
+      "key_drift": "Disallineamento della chiave di cifratura",
+      "merge_tag_request": "Richiesta impegno di revisione"
+    }
+  },
   "docInterview": {
     "title": "Perfeziona il documento",
     "subtitle": "Rispondi alle domande dell'intervistatore per dargli modo di plasmare il documento",
@@ -5755,7 +5957,7 @@
       "suffixFixing": "· il fixer sta gestendo i commenti…",
       "suffixFailing": "· commenti di revisione da gestire",
       "suffixAwaiting": "· in attesa di revisione",
-      "reviewPr": "Rivedi la pull request su GitHub",
+      "reviewPr": "Rivedi la pull request",
       "requestFixHeading": "Richiedi una correzione",
       "requestFixDescription": "Descrivi una modifica che il fixer deve apportare ora sul branch della PR (oltre a eventuali commenti di revisione, che gestisce automaticamente).",
       "requestFixPlaceholder": "es. rinomina l'helper e aggiungi un test unitario per il caso di input vuoto",
@@ -5769,12 +5971,12 @@
     },
     "conflicts": {
       "mergeability": "Possibilità di merge",
-      "viewPr": "Visualizza la pull request su GitHub"
+      "viewPr": "Vedi la pull request"
     },
     "docQuality": {
       "findings": "Problemi del documento",
       "findingsFallback": "Il documento ha superato i controlli strutturali.",
-      "viewPr": "Visualizza la pull request su GitHub"
+      "viewPr": "Vedi la pull request"
     },
     "attemptsHeading": "Tentativi di {helper}",
     "attempt": "Tentativo {number}",
@@ -6176,6 +6378,19 @@
     "history": {
       "heading": "Cronologia (nessun round) | Cronologia ({count} round) | Cronologia ({count} round)",
       "fixRequested": "Correzione richiesta"
+    },
+    "design": {
+      "summary": "Nessun frame proviene dal design collegato. | 1 frame dal design collegato. | {count} frame dal design collegato.",
+      "dropped": "Non ce ne sono altri nascosti. | 1 altro non è mostrato qui. | Altri {count} non sono mostrati qui.",
+      "gapDropped": "Nessuno dei suoi frame è nascosto. | 1 dei suoi frame non è mostrato qui. | {count} dei suoi frame non sono mostrati qui.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "solo una parte dei suoi frame è stata conservata; aggiorna il documento per riprovare.",
+        "failed": "non è stato possibile scaricare i suoi frame nell'ultimo import; aggiorna il documento per riprovare.",
+        "none": "non ha frame da mostrare.",
+        "storage_unavailable": "quando è stato importato non era configurato alcuno spazio per le immagini, quindi non è stato scaricato nulla.",
+        "not_retained": "non ci sono immagini conservate per esso. La sua origine potrebbe non generare frame, oppure è stato importato prima che i frame venissero conservati; un nuovo import chiarisce quale dei due."
+      }
     }
   },
   "outcome": {
@@ -6195,6 +6410,15 @@
     "ask": {
       "title": "Che cosa era stato chiesto",
       "none": "Questa attività non ha una descrizione, quindi non c'è nulla con cui confrontare l'esito."
+    },
+    "sources": {
+      "title": "Costruito a partire da",
+      "unchecked": "Non verificato con la sorgente.",
+      "noSource": "Nessuna pagina di origine con cui confrontare.",
+      "moved": "Questa pagina è cambiata mentre l'esecuzione era in corso, quindi i passi precedenti hanno letto una revisione più vecchia.",
+      "gap": {
+        "none_linked": "Nessuna pagina è arrivata agli agenti di questa esecuzione, che hanno lavorato solo sulla descrizione dell'attività."
+      }
     },
     "gap": {
       "run_unavailable": "L'esecuzione di questa attività non è stata caricata, quindi le prove che ha registrato non possono essere mostrate qui. Non è la stessa cosa di un'esecuzione che non ha registrato nulla."
@@ -6413,6 +6637,7 @@
       },
       "actual": "Effettivo",
       "reference": "Riferimento",
+      "fromLinkedDesign": "· dal design collegato",
       "actualAlt": "{view} (effettivo)",
       "referenceAlt": "{view} (riferimento)",
       "replace": "Sostituisci",
@@ -6672,7 +6897,8 @@
   },
   "palette": {
     "hint": "Clicca su un agente per aggiungerlo alla pipeline.",
-    "customAgents": "Agenti personalizzati"
+    "customAgents": "Agenti personalizzati",
+    "purposeHidden": "{count} agente nascosto per questo scopo. | {count} agenti nascosti per questo scopo."
   },
   "forkDecision": {
     "title": "Scegli un approccio di implementazione",
@@ -6916,7 +7142,33 @@
       },
       "toast": {
         "disconnected": "{provider} disconnesso"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "Pull request",
+          "open": "Apri PR",
+          "openSubmit": "Apri pull request",
+          "merge": "Unisci questa pull request",
+          "none": "Nessuna pull request sincronizzata.",
+          "opened": "Pull request aperta",
+          "mergedToast": "PR #{number} unita",
+          "openFailed": "Impossibile aprire la pull request"
+        },
+        "gitlab": {
+          "tab": "Merge request",
+          "open": "Apri MR",
+          "openSubmit": "Apri merge request",
+          "merge": "Unisci questa merge request",
+          "none": "Nessuna merge request sincronizzata.",
+          "opened": "Merge request aperta",
+          "mergedToast": "MR !{number} unita",
+          "openFailed": "Impossibile aprire la merge request"
+        }
+      },
+      "manageHintApp": "Scegli i repository che questa board deve seguire. L’installazione della App è condivisa nell’account e ogni board collega i propri.",
+      "manageHintToken": "Scegli i repository che questa board deve seguire. L’elenco è ciò che il token collegato raggiunge e ogni board collega i propri.",
+      "noAvailableReposApp": "L’installazione della App non ha ancora accesso ad alcun repository.",
+      "noAvailableReposToken": "Il token collegato non raggiunge ancora alcun repository. Controlla il suo ambito e il tuo accesso."
     },
     "connect": {
       "or": "oppure",
@@ -7024,7 +7276,8 @@
       "library": "La libreria dei frammenti di contesto abilitata su questo deployment",
       "failedRun": "Un’esecuzione fallita",
       "infrastructure": "Un backend di esecuzione collegato a questo workspace",
-      "advancedTier": "La modalità interfaccia avanzata"
+      "advancedTier": "La modalità interfaccia avanzata",
+      "designSource": "Una sorgente di design collegata"
     },
     "overlay": {
       "next": "Avanti",
@@ -7404,6 +7657,36 @@
             "body": "Un progetto che dichiara quali di questi usa riceve i loro contratti completi al passo successivo. Uno che non dichiara nulla non riceve nulla: tenere questo aggiornato è ciò che lo fa funzionare."
           }
         }
+      },
+      "startFromDesign": {
+        "title": "Parti da un design",
+        "description": "Trasforma un frame di design in un task che un agente può realizzare.",
+        "steps": {
+          "intro": {
+            "title": "Lavorare dal design",
+            "body": "Quando il lavoro nasce in uno strumento di design, il frame è il brief. Questo tour ne allega uno a un nuovo task."
+          },
+          "open": {
+            "title": "Parti da un design",
+            "body": "Ogni frame di servizio mostra questo pulsante non appena una sorgente di design è collegata."
+          },
+          "paste": {
+            "title": "Incolla il link",
+            "body": "Copia dal tuo strumento di design il link a un frame o a un intero file e incollalo qui."
+          },
+          "resolved": {
+            "title": "Controlla cosa è stato allegato",
+            "body": "Il link viene ridotto alla forma supportata. Se il frame non è leggibile viene allegato l’intero file, e qui lo si dice."
+          },
+          "continue": {
+            "title": "Prosegui verso il task",
+            "body": "Il design è pronto sul nuovo task. Descrivi il risultato che vuoi e crealo."
+          },
+          "finish": {
+            "title": "Pronto per l’esecuzione",
+            "body": "L’agente legge layout, testi, componenti e token del design, e ogni esecuzione lo riverifica con la sorgente."
+          }
+        }
       }
     },
     "nudge": {
@@ -7419,6 +7702,33 @@
       "unresolved": "Questo strumento non ha restituito un indirizzo per l'area di lavoro corrente.",
       "resolverFailed": "Questo strumento non è riuscito a calcolare il proprio indirizzo. La causa è nella console del browser, per chi gestisce questa installazione.",
       "unsafeUrl": "Questo strumento ha restituito un indirizzo che non è un collegamento web, quindi non è stato aperto."
+    }
+  },
+  "binaryCandidates": {
+    "title": "Candidati generati",
+    "titleWithBlock": "Candidati generati: {title}",
+    "subtitle": "Confronta ciò che ogni integrazione ha prodotto e tieni quello che vuoi",
+    "automatic": "È stato generato un solo candidato, quindi è stato tenuto automaticamente. Nessuno lo ha esaminato.",
+    "unlabelledSubject": "Nessun soggetto dichiarato",
+    "noPreview": "Nessuna anteprima disponibile",
+    "fromGenerator": "Da {generator}",
+    "unattributed": "Nessuna integrazione registrata",
+    "kept": "Tenuto",
+    "keptAs": "Tenuto come {id}",
+    "storeAsPlaceholder": "salva con questo id",
+    "notePlaceholder": "Cosa cambiare al momento del salvataggio (facoltativo)",
+    "missingAlias": "Dai a ogni candidato tenuto un id proprio, altrimenti verrebbero salvati tutti con lo stesso nome.",
+    "duplicateAlias": "Due candidati tenuti condividono un id. Due artefatti in una posizione sono un artefatto.",
+    "keepAction": "Tieni {count}",
+    "warning": {
+      "omitted": "{count} candidati sono stati scartati oltre il limite, quindi questo elenco è un prefisso. ",
+      "invalid": "{count} voci dichiarate erano illeggibili e mancano qui. ",
+      "previews": "{count} link di anteprima sono stati rifiutati, quindi quei candidati appaiono senza immagine."
+    },
+    "noChoice": {
+      "undeclared": "Il passo non ha mai dichiarato i suoi candidati, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",
+      "parseFailed": "La dichiarazione dei candidati del passo non era leggibile, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",
+      "noCandidates": "Il passo non ha preparato alcun candidato, quindi non c’era nulla da confrontare. L’esecuzione è proseguita."
     }
   }
 }

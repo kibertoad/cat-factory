@@ -30,7 +30,8 @@ import type {
   SharedStackEnsureResult,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import type { SecretCipher } from '@cat-factory/kernel'
+import type { OrgSecretCipher, SecretCipher, SecretDelegate } from '@cat-factory/kernel'
+import { createOrgSecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/kernel'
 import {
   assertFound,
@@ -58,6 +59,13 @@ export interface EnvironmentProvisioningServiceDependencies {
   connectionService: EnvironmentConnectionService
   environmentRegistryRepository: EnvironmentRegistryRepository
   secretCipher: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node, where the environment row lives on the mothership and
+   * is sealed under ITS key. This service both READS the access handle (status, teardown, tester
+   * context) and WRITES it, so the delegation has to run in both directions: a handle a laptop
+   * sealed locally is one the mothership's own teardown could never open.
+   */
+  secretDelegate?: SecretDelegate
   idGenerator: IdGenerator
   clock: Clock
   /** URL/host safety policy applied to the URL a provider returns. Defaults to strict. */
@@ -233,7 +241,15 @@ export interface ResolvedEnvironment {
 }
 
 export class EnvironmentProvisioningService {
-  constructor(private readonly deps: EnvironmentProvisioningServiceDependencies) {}
+  /** Seals/opens the environment ciphers, through the mothership when this node holds no org key. */
+  private readonly orgSecrets: OrgSecretCipher
+
+  constructor(private readonly deps: EnvironmentProvisioningServiceDependencies) {
+    this.orgSecrets = createOrgSecretCipher({
+      cipher: deps.secretCipher,
+      ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
+  }
 
   private get urlPolicy(): UrlSafetyPolicy {
     return this.deps.urlPolicy ?? STRICT_URL_SAFETY_POLICY
@@ -762,10 +778,8 @@ export class EnvironmentProvisioningService {
       externalId: provisioned.externalId,
       url: provisioned.url,
       status: provisioned.status,
-      accessCipher: await this.encryptAccess(provisioned.access),
-      provisionFieldsCipher: await this.deps.secretCipher.encrypt(
-        JSON.stringify(provisioned.fields),
-      ),
+      accessCipher: await this.encryptAccess(workspaceId, provisioned.access),
+      provisionFieldsCipher: await this.encryptProvisionFields(workspaceId, provisioned.fields),
       createdAt: now,
       expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, now),
       // A provider that reports `status:'failed'` without throwing still carries its real
@@ -856,7 +870,7 @@ export class EnvironmentProvisioningService {
     // it up), not the workspace-primary — matching the per-type resolution provisioning uses.
     const { manifest, provider, resolveSecret } =
       await this.deps.connectionService.resolveProviderForRecord(record)
-    const provisionFields = await this.decryptFields(record.provisionFieldsCipher)
+    const provisionFields = await this.decryptFields(record)
 
     let provisioned: ProvisionedEnvironment
     try {
@@ -890,7 +904,7 @@ export class EnvironmentProvisioningService {
       url: provisioned.url,
       externalId: provisioned.externalId ?? record.externalId,
       expiresAt: this.resolveExpiry(provisioned, manifest.defaultTtlMs, record.createdAt),
-      accessCipher: await this.encryptAccess(provisioned.access),
+      accessCipher: await this.encryptAccess(record.workspaceId, provisioned.access),
       // Persist the provider's failure reason on a poll-time transition to `failed` (cleared once
       // not failed), mirroring the provisionSync path — WITHOUT this, a reconcile that flips an env
       // to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing)
@@ -957,7 +971,7 @@ export class EnvironmentProvisioningService {
   async getHandleWithAccess(workspaceId: string, id: string): Promise<EnvironmentHandle | null> {
     const record = await this.deps.environmentRegistryRepository.get(workspaceId, id)
     if (!record) return null
-    return recordToHandle(record, await this.decryptAccess(record.accessCipher))
+    return recordToHandle(record, await this.decryptAccess(record))
   }
 
   /**
@@ -976,7 +990,7 @@ export class EnvironmentProvisioningService {
     return {
       url: record.url,
       status: record.status,
-      access: await this.decryptAccess(record.accessCipher),
+      access: await this.decryptAccess(record),
       expiresAt: record.expiresAt,
     }
   }
@@ -1050,9 +1064,23 @@ export class EnvironmentProvisioningService {
     return null
   }
 
-  private async encryptAccess(access: EnvironmentAccessHandle | null): Promise<string | null> {
+  private async encryptAccess(
+    workspaceId: string,
+    access: EnvironmentAccessHandle | null,
+  ): Promise<string | null> {
     if (!access) return null
-    return this.deps.secretCipher.encrypt(JSON.stringify(access))
+    return this.orgSecrets.encryptFor(
+      { source: 'environment_access', workspaceId },
+      JSON.stringify(access),
+    )
+  }
+
+  /** Seal the provider's opaque status/teardown fields, alongside the access handle above. */
+  private async encryptProvisionFields(workspaceId: string, fields: unknown): Promise<string> {
+    return this.orgSecrets.encryptFor(
+      { source: 'environment_provision_fields', workspaceId },
+      JSON.stringify(fields),
+    )
   }
 
   /**
@@ -1180,14 +1208,37 @@ export class EnvironmentProvisioningService {
     }
   }
 
-  private async decryptAccess(cipher: string | null): Promise<EnvironmentAccessHandle | null> {
-    if (!cipher) return null
-    return JSON.parse(await this.deps.secretCipher.decrypt(cipher)) as EnvironmentAccessHandle
+  /**
+   * Open a stored environment's access handle. Takes the RECORD, not the bare envelope, because a
+   * delegated open addresses the ROW: the mothership re-reads it under the node's account scope
+   * rather than decrypting whatever ciphertext it was handed.
+   */
+  private async decryptAccess(
+    record: Pick<EnvironmentRecord, 'workspaceId' | 'id' | 'accessCipher'>,
+  ): Promise<EnvironmentAccessHandle | null> {
+    if (!record.accessCipher) return null
+    const plaintext = await this.orgSecrets.decryptFor(
+      { source: 'environment_access', workspaceId: record.workspaceId, key: [record.id] },
+      record.accessCipher,
+    )
+    return JSON.parse(plaintext) as EnvironmentAccessHandle
   }
 
-  private async decryptFields(cipher: string | null): Promise<Record<string, string>> {
-    if (!cipher) return {}
-    const parsed = JSON.parse(await this.deps.secretCipher.decrypt(cipher))
+  /** Open a stored environment's provision fields: the row-addressed sibling of the above. */
+  private async decryptFields(
+    record: Pick<EnvironmentRecord, 'workspaceId' | 'id' | 'provisionFieldsCipher'>,
+  ): Promise<Record<string, string>> {
+    if (!record.provisionFieldsCipher) return {}
+    const parsed = JSON.parse(
+      await this.orgSecrets.decryptFor(
+        {
+          source: 'environment_provision_fields',
+          workspaceId: record.workspaceId,
+          key: [record.id],
+        },
+        record.provisionFieldsCipher,
+      ),
+    )
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
   }
 }

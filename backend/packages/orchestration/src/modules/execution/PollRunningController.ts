@@ -21,6 +21,7 @@ import {
 import { applyValidationReport } from './validation.logic.js'
 import { applySliceReviews } from './prReviewSlices.logic.js'
 import { applyReproductionReport } from './reproductionProof.logic.js'
+import { applyObservedToolServers } from './toolServers.logic.js'
 import { CONFLICTS_AGENT_KIND } from './ci.logic.js'
 import {
   type ContainerFailureView,
@@ -231,6 +232,11 @@ export class PollRunningController {
     // terminal output, so this is the one thing that makes finished slices survive a review that
     // never gets there, and the only state a manual resume can preserve work from.
     if (applySliceReviews(s, update.sliceReviews)) changed = true
+    // The OBSERVED half of the step's tool-server record: what the agent's CLI reported about the
+    // servers it loaded, beside what the dispatch decided to wire. Folded live rather than only at
+    // the end because a server that failed to start is worth acting on WHILE the run is burning
+    // budget on an agent that was promised its tools.
+    if (applyObservedToolServers(s, update.toolServers)) changed = true
     // The transport reports WHICH backend served the job on the first poll (native host
     // process vs. sandboxed container) — record it in the run diagnostics.
     if (this.deps.recordBackendDiagnostics(target, update.backend)) changed = true
@@ -318,8 +324,7 @@ export class PollRunningController {
     step.jobId = undefined
     step.subtasks = undefined
     if (step.gate) step.gate.phase = 'checking'
-    await this.deps.runStateMachine.casPersist(workspaceId, instance)
-    await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+    await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
     return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
   }
 
@@ -365,8 +370,7 @@ export class PollRunningController {
       // The container vanished and a fresh one is about to boot for the re-dispatch, so the
       // details show it spinning up again rather than a stale "up".
       step.container = { status: 'starting' }
-      await this.deps.runStateMachine.casPersist(workspaceId, instance)
-      await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+      await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
       return { kind: 'continue' }
     }
     // Eviction budget spent — the container is gone for good. Mark it errored and persist so the

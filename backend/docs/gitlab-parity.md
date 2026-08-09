@@ -30,18 +30,23 @@ comparison (not a work log), see [`vcs-providers.md`](./vcs-providers.md).
   usable `owner/repo/url` per hit. The neutral doc-search box degrades to "no results".
 - **Sub-issues** (`listSubIssues`): GitLab has no parent→child issue hierarchy, so the
   optional method is left unimplemented (the caller degrades gracefully).
-- **GitLab is not a TASK SOURCE** (open, tracked separately). The `VcsClient` issue reads
-  (`getIssue` / `searchIssues` / `listIssueComments` / `createIssue`) are all implemented, but
-  no `TaskSourceProvider` sits above them, so a GitLab-tracker shop cannot import an issue onto
-  a block, run a `bug-intake` schedule or a bug hunt against a GitLab project, or receive push
-  intake. That is a different port from everything in the table above and a multi-slice piece of
-  work, so it has its own tracker:
+- **GitLab as a TASK SOURCE: the PULL paths landed, the PUSH and WRITEBACK paths have not.**
+  `GitLabIssuesProvider` imports an issue onto a block, searches one project's issues from the
+  frame linked to it, classifies its own setup, and backs both predicate scans: the recurring
+  `bug-intake` schedule (scoped by a `gitlabProject` board field) and the interactive bug hunt,
+  each reading a whole page of candidates in ONE project-scoped call. Still open: push intake
+  (the `X-Gitlab-Token` webhook adapter) and ticket writeback. One predicate does NOT bite on
+  GitLab: `issueType` is ignored, because GitLab's own type vocabulary (`issue` / `incident` /
+  `test_case` / `task`) has no member meaning "bug" and GitLab shops mark bugs with a label. The
+  provider DECLARES that on `ignoredIntakePredicates`, which rides `TaskSourceState` to the SPA, so
+  both intake forms name the substitution where the operator configures the schedule rather than
+  offering a box whose value is dropped. Tracker:
   [`gitlab-issues-intake.md`](../../docs/initiatives/gitlab-issues-intake.md).
 - **Per-workspace PAT connect (backend + UI landed; engine-routing pending)**: a workspace
   connects GitLab by pasting a PAT in the UI: `POST /workspaces/:ws/gitlab/connection` validates +
   seals it and writes the `github_installations`/`github_repos` projection (a
   `github_installations.access_token` column holds the sealed PAT), so **repo browse / link / sync**
-  run per-workspace through the shared GitHub-shaped surface. A `ProviderRoutingGitHubClient` lets a
+  run per-workspace through the shared GitHub-shaped surface. A `providerRoutingGitHubClient` lets a
   deployment serve GitHub-App and GitLab-PAT workspaces side by side. The SPA renders whichever
   connect surfaces the deployment can serve, read from `GET /workspaces/:ws/vcs/connect-options`
   (slice 2b of the [gitlab-ui-parity](../../docs/initiatives/gitlab-ui-parity.md) initiative). Still

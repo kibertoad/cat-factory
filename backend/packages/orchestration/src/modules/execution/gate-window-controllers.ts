@@ -29,6 +29,7 @@ import { RalphController } from './RalphController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import { ReviewGateController, type ReviewGateControllerDeps } from './ReviewGateController.js'
+import { BinaryCandidateController } from './BinaryCandidateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { InputGateController } from './InputGateController.js'
 import { PrReviewController } from './PrReviewController.js'
@@ -66,6 +67,8 @@ export interface GateWindowControllerDeps {
   environmentTeardown: ExecutionServiceDependencies['environmentTeardown']
   branchUpdater: ExecutionServiceDependencies['branchUpdater']
   resolveBinaryArtifactStore: ExecutionServiceDependencies['resolveBinaryArtifactStore']
+  /** The document corpus the visual-confirmation gate reads a task's linked DESIGNS from. */
+  documentRepository: ExecutionServiceDependencies['documentRepository']
   forkChatService: ExecutionServiceDependencies['forkChatService']
   /** Tracker writeback — the review gate echoes a HEADLESS park's open findings through it. */
   issueWriteback: ExecutionServiceDependencies['issueWriteback']
@@ -96,6 +99,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     environmentTeardown,
     branchUpdater,
     resolveBinaryArtifactStore,
+    documentRepository,
     forkChatService,
     issueWriteback,
     logger,
@@ -174,6 +178,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     contextBuilder,
     notificationService,
     ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
+    ...(documentRepository ? { documentRepository } : {}),
     resolveRiskPolicy,
     stateMachine,
     stepGraph,
@@ -212,6 +217,16 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     clock,
     notificationService,
   })
+  const binaryCandidateController = new BinaryCandidateController({
+    blockRepository,
+    executionRepository,
+    workRunner,
+    stateMachine,
+    stepGraph,
+    idGenerator,
+    clock,
+    notificationService,
+  })
   return {
     testerController,
     ralphController,
@@ -220,6 +235,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     reviewGate,
     forkDecisionController,
     prReviewController,
+    binaryCandidateController,
   }
 }
 

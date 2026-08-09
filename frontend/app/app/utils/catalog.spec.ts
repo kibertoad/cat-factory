@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { PIPELINE_PURPOSES, purposeAllowsAgentCategory } from '@cat-factory/contracts'
 import type { AgentKind, BlockStatus, BlockType } from '~/types/domain'
+import { narrowAgentPalette } from '~/utils/agentPalette'
 import {
   AGENT_ARCHETYPES,
   AGENT_BY_KIND,
@@ -10,6 +12,7 @@ import {
   SYSTEM_AGENT_META,
   agentKindMeta,
   blockTypeMeta,
+  mayCarrySkipAxis,
   uid,
 } from '~/utils/catalog'
 
@@ -83,6 +86,39 @@ describe('catalog', () => {
     // And the everyday delivery loop has to be assemblable without touching the control.
     const basic = AGENT_ARCHETYPES.filter((a) => a.tier === 'basic').map((a) => a.kind)
     expect(basic).toEqual(expect.arrayContaining(['architect', 'coder', 'tester-api']))
+  })
+
+  it('leaves every purpose a palette to build from, and every declaration saveable', () => {
+    // Two properties over the whole grid rather than a pinned count, which every ordinary
+    // addition would break without naming anything.
+    //
+    // A `purposes` declaration only ever HIDES, so the way to get it wrong is to hide too much:
+    // a purpose whose palette reduces to nothing is a dial setting with no way forward, and the
+    // widest tier is where that has to be checked because the tier hint is the way out of a thin
+    // one. And relevance stays a subset of compatibility per KIND, so a declaration can never
+    // offer a step the save gate would then refuse.
+    for (const purpose of PIPELINE_PURPOSES) {
+      const offered = narrowAgentPalette(AGENT_ARCHETYPES, purpose, 'advanced').offered
+      expect(offered.length, `${purpose} offers no agent at all`).toBeGreaterThan(0)
+      for (const a of offered) {
+        expect(
+          !a.category || purposeAllowsAgentCategory(purpose, a.category),
+          `${a.kind} is offered to a ${purpose} pipeline its step could not be saved in`,
+        ).toBe(true)
+      }
+    }
+  })
+
+  it('never declares an EMPTY `purposes` (which reads as no declaration, not as "nowhere")', () => {
+    // `agentPresentationSchema` refuses an empty list at registration, but this catalog is
+    // authored in TypeScript and parsed by nothing, so the same guard has to be asserted for the
+    // half valibot never sees. Left empty, a kind someone meant to offer NOWHERE is offered
+    // everywhere its section is: `purposeSuggestsAgentKind` cannot tell an authored `[]` from a
+    // kind that declared nothing at all.
+    for (const a of [...AGENT_ARCHETYPES, ...Object.values(SYSTEM_AGENT_META)]) {
+      if (!a.purposes) continue
+      expect(a.purposes.length, `${a.kind} declares an empty purposes list`).toBeGreaterThan(0)
+    }
   })
 
   it('never shadows a companion producer as a system kind', () => {
@@ -176,5 +212,28 @@ describe('catalog', () => {
   it('uid produces prefixed, unique-ish ids', () => {
     expect(uid('blk')).toMatch(/^blk_[a-z0-9]+$/)
     expect(uid('blk')).not.toBe(uid('blk'))
+  })
+})
+
+describe('mayCarrySkipAxis', () => {
+  it('refuses the kinds the run structurally needs', () => {
+    // The builder offers a run condition off this predicate, and the engine refuses the same set
+    // (`assertValidRunConditions`). A condition on `merger` would drop the merge on every run
+    // outside its scope while the pipeline still finished reporting success.
+    for (const kind of ['merger', 'coder', 'ci', 'conflicts', 'deployer']) {
+      expect(mayCarrySkipAxis(kind), kind).toBe(false)
+    }
+  })
+
+  it('allows the kinds whose result later steps read as context', () => {
+    for (const kind of ['tester-ui', 'tester-api', 'architect', 'reviewer']) {
+      expect(mayCarrySkipAxis(kind), kind).toBe(true)
+    }
+  })
+
+  it('allows a DEPLOYMENT-registered kind, whose flag this build cannot see', () => {
+    // Over-offering costs a 422 with an explanatory message; under-offering silently removes a
+    // capability the deployment declared, with nothing on screen to say why.
+    expect(mayCarrySkipAxis('org:auditor')).toBe(true)
   })
 })

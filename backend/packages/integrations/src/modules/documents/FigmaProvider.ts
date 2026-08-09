@@ -1,19 +1,29 @@
 import {
   describeError,
+  documentOAuthAccessToken,
   ValidationError,
+  type DesignRender,
   type DocumentContent,
   type DocumentCredentials,
+  type DocumentRenderPlan,
+  type DocumentRenderResult,
   type DocumentSourceProvider,
   type NormalizedConnection,
 } from '@cat-factory/kernel'
 import { renderDesignContext } from './design.logic.js'
-import { FIGMA_API_HOST, FIGMA_DESCRIPTOR } from './figma.logic.js'
+import { FIGMA_API_HOST, FIGMA_DESCRIPTOR, FIGMA_OAUTH, FIGMA_RENDER_HOSTS } from './figma.logic.js'
 import * as figmaLogic from './figma.logic.js'
-import { DocumentHttpError, createHostPinnedFetch, readCappedText } from './http.js'
+import {
+  DocumentHttpError,
+  createHostPinnedFetch,
+  readCappedBytes,
+  readCappedText,
+} from './http.js'
 
-// FigmaProvider: the document-source provider for Figma. It authenticates with a
-// per-workspace personal access token (the `X-Figma-Token` header), fetches a
-// file or a specific frame/node via the REST API, and renders the layout tree,
+// FigmaProvider: the document-source provider for Figma. It authenticates with
+// whichever credential the workspace connected — a personal access token (the
+// `X-Figma-Token` header) or an OAuth grant the platform holds (a `Bearer` token) —
+// fetches a file or a specific frame/node via the REST API, and renders the layout tree,
 // text, components-used and (Enterprise-gated) design tokens to the Markdown the
 // planner + `.cat-context/` materialisation consume. All Figma-specific *pure*
 // logic (ref parsing, the fixed-host SSRF guard, JSON → Markdown) lives in
@@ -45,6 +55,18 @@ const FRAME_DEPTH = figmaLogic.MAX_TREE_DEPTH + 3
 const FRAME_CHUNK = 4
 /** Hard cap on the bytes read off any response body, to protect the isolate. */
 const MAX_RESPONSE_BYTES = 5_000_000
+/**
+ * Hard cap on one rendered PNG. A frame is rasterised at `scale=1`, so a phone screen lands well
+ * under this and a poster-sized artboard is dropped with a stated cause rather than pulled into
+ * the isolate.
+ */
+const MAX_RENDER_BYTES = 3_000_000
+/**
+ * Renders downloaded concurrently. The images come from a signed-URL CDN rather than the rate-
+ * limited API, so a small fan-out is safe; bounded anyway because each holds its bytes in memory
+ * until the caller has stored them.
+ */
+const RENDER_DOWNLOAD_CONCURRENCY = 3
 
 /** Carries the HTTP status so callers can surface a meaningful error. */
 export class FigmaApiError extends Error {
@@ -63,6 +85,16 @@ export class FigmaApiError extends Error {
  * capped-read are the shared documents `http` helpers; only the host/label differ.
  */
 const safeFetch = createHostPinnedFetch({ host: FIGMA_API_HOST, label: 'Figma' })
+
+/**
+ * `fetch` for a rendered image, pinned to Figma's signed-asset hosts. A SEPARATE client from
+ * {@link safeFetch} because the two carry different things: this one sends NO credential (the URL
+ * is already signed) and reaches a host the API token must never be offered to.
+ */
+const safeRenderFetch = createHostPinnedFetch({
+  host: FIGMA_RENDER_HOSTS,
+  label: 'Figma render',
+})
 
 /** The design-system maps Figma returns beside a node tree, on both endpoints. */
 interface FigmaMaps {
@@ -93,6 +125,12 @@ interface FetchedNodes {
   fileName: string
   version: string
   notes: string[]
+  /**
+   * The frames a render pass over this revision would rasterise, resolved from the SAME structural
+   * response the trees came from. Carried out to {@link DocumentContent.renderPlan} so the render
+   * pass need not repeat the read.
+   */
+  renderPlan: DocumentRenderPlan
 }
 
 /**
@@ -165,6 +203,7 @@ function describeFetchCause(error: unknown): string {
 export class FigmaProvider implements DocumentSourceProvider {
   readonly kind = 'figma' as const
   readonly descriptor = FIGMA_DESCRIPTOR
+  readonly oauth = FIGMA_OAUTH
 
   normalizeConnection(input: DocumentCredentials): NormalizedConnection {
     const apiToken = input.apiToken?.trim()
@@ -201,7 +240,7 @@ export class FigmaProvider implements DocumentSourceProvider {
       throw new FigmaApiError(400, `Figma ref is missing a file key: ${externalId}`)
     }
 
-    const { roots, maps, fileName, version, notes } = await this.fetchNodes(
+    const { roots, maps, fileName, version, notes, renderPlan } = await this.fetchNodes(
       credentials,
       fileKey,
       nodeId,
@@ -233,7 +272,143 @@ export class FigmaProvider implements DocumentSourceProvider {
       url: context.url,
       body: renderDesignContext(context),
       version,
+      // The frames this same read already named. `fetchRenders` would otherwise re-issue the very
+      // request that produced them, against the rate-limited API, to relearn ids and names it had
+      // in hand a moment ago.
+      renderPlan,
     }
+  }
+
+  /**
+   * Rasterise the referenced frames and download the PNGs.
+   *
+   * Three hops, and the split matters: a STRUCTURAL read learns which frames to render and what
+   * they are called (the `view` a captured screenshot pairs with), the `/v1/images` endpoint turns
+   * those ids into short-lived signed URLs, and the URLs are downloaded from the asset host with no
+   * credential attached. A frame whose own download fails is counted rather than thrown, so one
+   * oversize artboard costs its own picture and not the other five.
+   *
+   * The first hop is SKIPPED when the caller hands over the plan its own `fetchDocument` produced,
+   * which is the normal path: an import fetches the body and the renders back to back off one
+   * revision, and the structural read is the same request twice against a rate-limited API.
+   */
+  async fetchRenders(
+    credentials: DocumentCredentials,
+    externalId: string,
+    _workspaceId: string | null,
+    plan?: DocumentRenderPlan,
+  ): Promise<DocumentRenderResult> {
+    const { fileKey, nodeId } = figmaLogic.splitFigmaExternalId(externalId)
+    if (!fileKey) {
+      throw new FigmaApiError(400, `Figma ref is missing a file key: ${externalId}`)
+    }
+    const resolved = plan ?? (await this.resolveRenderTargets(credentials, fileKey, nodeId))
+    const targets = resolved.targets
+    // The cap rides every return: frames excluded before the first request are just as absent
+    // from the stored set as ones whose download failed, and only this count says so.
+    if (!targets.length) return { renders: [], failed: 0, capped: resolved.capped, causes: [] }
+
+    const urls = await this.fetchRenderUrls(
+      credentials,
+      fileKey,
+      targets.map((t) => t.id),
+    )
+    const causes = new Set<string>()
+    const renders: DesignRender[] = []
+    let failed = 0
+    // A target the images endpoint answered with no URL never had a picture to download, so it is
+    // counted with the same cause vocabulary rather than silently dropped: "Figma rendered nothing
+    // for this frame" and "the download failed" ask for different things of the person reading it.
+    const pending = targets.filter((target) => {
+      const url = urls.get(target.id)
+      if (url) return true
+      failed += 1
+      causes.add('no render returned')
+      return false
+    })
+    for (let i = 0; i < pending.length; i += RENDER_DOWNLOAD_CONCURRENCY) {
+      const chunk = pending.slice(i, i + RENDER_DOWNLOAD_CONCURRENCY)
+      const settled = await Promise.all(
+        chunk.map(async (target) => {
+          try {
+            return await this.downloadRender(urls.get(target.id)!, target.view)
+          } catch (err) {
+            // silent-catch-ok: REPORTED to the caller as `failed` + this cause, which is the honest
+            // form of it. A single frame's picture may not fail the import that carries the text.
+            return describeFetchCause(err)
+          }
+        }),
+      )
+      for (const result of settled) {
+        if (typeof result === 'string') {
+          failed += 1
+          causes.add(result)
+        } else renders.push(result)
+      }
+    }
+    return { renders, failed, capped: resolved.capped, causes: [...causes].sort() }
+  }
+
+  /**
+   * The frames to rasterise, with their names, for a caller that supplied no plan.
+   *
+   * A node link renders the frame it names; a whole-file link renders the first
+   * {@link figmaLogic.MAX_RENDERS} top-level frames in document order — the same frames, in the
+   * same order, the text import covers, so the pictures and the prose describe the same screens.
+   * This is the FALLBACK: it repeats the structural read `fetchDocument` performs, which is why
+   * the import hands its own plan over instead.
+   */
+  private async resolveRenderTargets(
+    credentials: DocumentCredentials,
+    fileKey: string,
+    nodeId: string | undefined,
+  ): Promise<DocumentRenderPlan> {
+    if (nodeId) {
+      // `depth=1` is the node ALONE: this read wants its name, not its subtree.
+      const res = await this.get<NodesResponse>(
+        credentials,
+        `/files/${encodeURIComponent(fileKey)}/nodes` +
+          `?ids=${encodeURIComponent(nodeId)}&depth=1`,
+      )
+      const node = res.nodes?.[nodeId]?.document
+      return node ? figmaLogic.figmaRenderTargets([node]) : { targets: [], capped: 0 }
+    }
+    const res = await this.get<FileResponse>(
+      credentials,
+      `/files/${encodeURIComponent(fileKey)}?depth=${FILE_DEPTH}`,
+    )
+    return figmaLogic.figmaRenderTargets(figmaLogic.figmaTopLevelFrames(res.document))
+  }
+
+  /** `/v1/images` in ONE call for every target: id → signed URL, absent when Figma rendered none. */
+  private async fetchRenderUrls(
+    credentials: DocumentCredentials,
+    fileKey: string,
+    ids: string[],
+  ): Promise<Map<string, string>> {
+    const res = await this.get<ImagesResponse>(
+      credentials,
+      `/images/${encodeURIComponent(fileKey)}` +
+        `?ids=${encodeURIComponent(ids.join(','))}&format=png&scale=1`,
+    )
+    if (res.err) throw new FigmaApiError(502, `Figma images endpoint reported: ${res.err}`)
+    const out = new Map<string, string>()
+    for (const [id, url] of Object.entries(res.images ?? {})) {
+      if (typeof url === 'string' && url) out.set(id, url)
+    }
+    return out
+  }
+
+  /** Download one signed render. No credential is sent: the URL already carries its own. */
+  private async downloadRender(url: string, view: string): Promise<DesignRender> {
+    const res = await safeRenderFetch(url, {
+      method: 'GET',
+      headers: { accept: 'image/png', 'user-agent': USER_AGENT },
+    })
+    if (!res.ok) throw new FigmaApiError(res.status, `Figma render GET → ${res.status}`)
+    const bytes = await readCappedBytes(res, MAX_RENDER_BYTES, 'Figma render')
+    if (!bytes.byteLength) throw new FigmaApiError(502, 'Figma returned an empty render')
+    return { view, contentType: 'image/png', bytes }
   }
 
   /**
@@ -295,6 +470,9 @@ export class FigmaProvider implements DocumentSourceProvider {
       fileName: res.name ?? fileKey,
       version: fileVersion(res),
       notes: [],
+      // A node link renders the frame it names, and nothing is capped: one frame was asked for and
+      // one is covered.
+      renderPlan: figmaLogic.figmaRenderTargets([entry.document]),
     }
   }
 
@@ -330,6 +508,10 @@ export class FigmaProvider implements DocumentSourceProvider {
       fileName: res.name ?? fileKey,
       version: fileVersion(res),
       notes: [],
+      // Resolved against the WHOLE outline rather than the text pass's own `selected` slice: the
+      // two caps are different numbers, and `capped` has to count frames this file has that no
+      // picture will cover, not frames the text budget happened to keep.
+      renderPlan: figmaLogic.figmaRenderTargets(outline),
     }
     if (!outline.length) return base
 
@@ -463,9 +645,18 @@ export class FigmaProvider implements DocumentSourceProvider {
     }
   }
 
+  /**
+   * Figma names its two credentials in two different headers, so which one the bag carries
+   * decides the header rather than adding a second client. An OAuth grant wins when both are
+   * present: it is the credential the platform can RENEW, and a stale PAT left behind by an
+   * earlier connect must not quietly outrank the grant a person has just made.
+   */
   private headers(credentials: DocumentCredentials): Record<string, string> {
+    const accessToken = documentOAuthAccessToken(credentials)
     return {
-      'x-figma-token': credentials.apiToken ?? '',
+      ...(accessToken
+        ? { authorization: `Bearer ${accessToken}` }
+        : { 'x-figma-token': credentials.apiToken ?? '' }),
       accept: 'application/json',
       'user-agent': USER_AGENT,
     }

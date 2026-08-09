@@ -17,10 +17,18 @@ import { platformAlertSettingsSchema } from './observability.js'
  * Where an account's binary artifacts (UI screenshots + reference designs) are stored.
  * `off` disables storage (the visual-confirmation gate passes through). `fs`/`s3`/`db` are
  * Node/local only (S3 is deliberately not offered on the Worker — the AWS SDK does not belong
- * in the Worker bundle); `r2` is Cloudflare only. Which of these a runtime actually supports
- * is surfaced to the UI via {@link contentStorageCapabilitySchema}.
+ * in the Worker bundle); `r2` is Cloudflare only. `custom` selects a store the DEPLOYMENT
+ * defined in code and registered on the app-owned `BinaryStoreRegistry`, named by
+ * {@link contentStorageCustomConfigSchema}. Which of these a runtime actually supports (and
+ * which custom stores it registers) is surfaced to the UI via
+ * {@link contentStorageCapabilitySchema}.
+ *
+ * The member is `custom` rather than the store's own id so this stays a CLOSED picklist: every
+ * reader of a backend (the UI's label map, the resolver's branch) is exhaustive over it, and a
+ * deployment's store ids are by definition unknown to them. Which store is a second question,
+ * asked of the registry, and answered in the config beside it.
  */
-export const contentStorageBackendSchema = v.picklist(['off', 'fs', 's3', 'r2', 'db'])
+export const contentStorageBackendSchema = v.picklist(['off', 'fs', 's3', 'r2', 'db', 'custom'])
 export type ContentStorageBackend = v.InferOutput<typeof contentStorageBackendSchema>
 
 /** Non-secret S3 connection settings (the access keys live in the sealed secrets blob). */
@@ -42,12 +50,35 @@ export const contentStorageFsConfigSchema = v.object({
 })
 export type ContentStorageFsConfig = v.InferOutput<typeof contentStorageFsConfigSchema>
 
-/** Non-secret content-storage config: which backend + its non-secret connection settings. */
-export const contentStorageConfigSchema = v.object({
-  backend: contentStorageBackendSchema,
-  fs: v.optional(contentStorageFsConfigSchema),
-  s3: v.optional(contentStorageS3ConfigSchema),
+/**
+ * Which DEPLOYMENT-REGISTERED store the `custom` backend means. The id is the one the deployment
+ * registered on its `BinaryStoreRegistry`; the platform knows nothing else about it, because
+ * everything else about a custom store (its client, its credentials, its addressing) lives in
+ * the deployment's own code rather than in per-account settings.
+ */
+export const contentStorageCustomConfigSchema = v.object({
+  storeId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(63)),
 })
+export type ContentStorageCustomConfig = v.InferOutput<typeof contentStorageCustomConfigSchema>
+
+/** Non-secret content-storage config: which backend + its non-secret connection settings. */
+export const contentStorageConfigSchema = v.pipe(
+  v.object({
+    backend: contentStorageBackendSchema,
+    fs: v.optional(contentStorageFsConfigSchema),
+    s3: v.optional(contentStorageS3ConfigSchema),
+    custom: v.optional(contentStorageCustomConfigSchema),
+  }),
+  // Refused at the WRITE boundary rather than resolved to "no storage" at run time: `custom` with
+  // no store named is the one content-storage config that cannot mean anything at all, where a
+  // `s3` selection missing its bucket is still a coherent statement about an account whose
+  // connection settings are half-entered. Saving it would leave an account reading as configured
+  // and storing nothing.
+  v.check(
+    (input) => input.backend !== 'custom' || Boolean(input.custom?.storeId),
+    'Select which registered store the custom content-storage backend means.',
+  ),
+)
 export type ContentStorageConfig = v.InferOutput<typeof contentStorageConfigSchema>
 
 /**
@@ -150,6 +181,22 @@ export const linearOAuthSecretSchema = v.object({
 export type LinearOAuthSecret = v.InferOutput<typeof linearOAuthSecretSchema>
 
 /**
+ * Figma app OAuth credentials (the account's registered Figma app), which turn "connect Figma"
+ * into a designer-doable step instead of "go and mint a personal access token".
+ *
+ * Named per vendor, like the two above, because an OAuth client IS per vendor: it is registered
+ * in Figma's own developer console against a redirect URL Figma holds. The source-agnostic half
+ * of this feature is the provider's `oauth` declaration and the one flow that runs it; only the
+ * client the deployment registered is Figma-shaped.
+ */
+export const figmaOAuthSecretSchema = v.object({
+  clientId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  clientSecret: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  redirectUrl: v.pipe(v.string(), v.trim(), v.url()),
+})
+export type FigmaOAuthSecret = v.InferOutput<typeof figmaOAuthSecretSchema>
+
+/**
  * Web-search upstream keys. Brave wins when its key is set, else SearXNG (url +
  * optional key). Both optional so an account can use either.
  */
@@ -171,6 +218,7 @@ export type S3CredentialsSecret = v.InferOutput<typeof s3CredentialsSecretSchema
 export const accountSettingsSecretsSchema = v.object({
   slackOAuth: v.optional(slackOAuthSecretSchema),
   linearOAuth: v.optional(linearOAuthSecretSchema),
+  figmaOAuth: v.optional(figmaOAuthSecretSchema),
   webSearch: v.optional(webSearchSecretSchema),
   s3: v.optional(s3CredentialsSecretSchema),
 })
@@ -193,6 +241,7 @@ export const updateAccountSettingsSchema = v.object({
     v.object({
       slackOAuth: v.optional(v.nullable(slackOAuthSecretSchema)),
       linearOAuth: v.optional(v.nullable(linearOAuthSecretSchema)),
+      figmaOAuth: v.optional(v.nullable(figmaOAuthSecretSchema)),
       webSearch: v.optional(v.nullable(webSearchSecretSchema)),
       s3: v.optional(v.nullable(s3CredentialsSecretSchema)),
     }),
@@ -210,6 +259,13 @@ export const contentStorageSummarySchema = v.object({
   basePath: v.nullable(v.string()),
   /** Whether S3 access keys are stored (the keys themselves are never returned). */
   s3CredentialsConfigured: v.boolean(),
+  /**
+   * The deployment-registered store id, when the `custom` backend is selected. Carried in the
+   * summary rather than derived from `backend` alone because "custom" names nothing a reader can
+   * check: an account pointed at a store this build no longer registers looks identical to a
+   * working one until the id itself is on screen beside the registered set.
+   */
+  customStoreId: v.nullable(v.string()),
 })
 export type ContentStorageSummary = v.InferOutput<typeof contentStorageSummarySchema>
 
@@ -217,6 +273,7 @@ export type ContentStorageSummary = v.InferOutput<typeof contentStorageSummarySc
 export const accountSettingsSummarySchema = v.object({
   slackOAuthConfigured: v.boolean(),
   linearOAuthConfigured: v.boolean(),
+  figmaOAuthConfigured: v.boolean(),
   webSearch: v.nullable(v.picklist(['brave', 'searxng'])),
   contentStorage: contentStorageSummarySchema,
 })
@@ -230,7 +287,23 @@ export type AccountSettingsSummary = v.InferOutput<typeof accountSettingsSummary
 export const contentStorageCapabilitySchema = v.object({
   supportedBackends: v.array(contentStorageBackendSchema),
   defaultBackend: contentStorageBackendSchema,
+  /**
+   * The stores THIS process registered in code, each selectable as `backend: 'custom'` with its
+   * id. Empty on a deployment that registers none, which is why `custom` appears in
+   * {@link supportedBackends} only when this list does not: a picker entry leading to an empty
+   * list is an invitation to configure something that cannot resolve.
+   */
+  customStores: v.array(
+    v.object({
+      id: v.string(),
+      name: v.string(),
+      summary: v.optional(v.string()),
+    }),
+  ),
 })
+export type ContentStorageCustomStore = v.InferOutput<
+  typeof contentStorageCapabilitySchema
+>['customStores'][number]
 export type ContentStorageCapability = v.InferOutput<typeof contentStorageCapabilitySchema>
 
 /** What `GET /accounts/:id/settings` returns — config + summary + runtime capability, never secrets. */
@@ -255,12 +328,14 @@ export function accountSettingsSummary(
   return {
     slackOAuthConfigured: Boolean(secrets.slackOAuth),
     linearOAuthConfigured: Boolean(secrets.linearOAuth),
+    figmaOAuthConfigured: Boolean(secrets.figmaOAuth),
     webSearch,
     contentStorage: {
       backend: cs?.backend ?? null,
       bucket: cs?.s3?.bucket ?? null,
       basePath: cs?.fs?.basePath ?? null,
       s3CredentialsConfigured: Boolean(secrets.s3),
+      customStoreId: cs?.custom?.storeId ?? null,
     },
   }
 }

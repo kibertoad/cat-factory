@@ -31,6 +31,8 @@ import type {
   GitHubSubIssue,
   ListOptions,
   Paged,
+  ProjectIssueQuery,
+  ProjectIssuePage,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
@@ -49,6 +51,8 @@ export type {
   GitHubSubIssue,
   ListOptions,
   Paged,
+  ProjectIssueQuery,
+  ProjectIssuePage,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
@@ -157,6 +161,17 @@ export interface VcsClient {
     limit?: number,
     order?: 'created-asc',
   ): Promise<GitHubIssueSearchHit[]>
+  /**
+   * Predicate-search ONE project's issues, every predicate pushed into the vendor request.
+   * Optional, and the counterpart of {@link VcsClient.searchIssues} for a vendor whose issue
+   * search carries no repository qualifier of its own: see the `GitHubClient` twin for why
+   * the scope is an argument rather than query text.
+   */
+  searchProjectIssues?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    query: ProjectIssueQuery,
+  ): Promise<ProjectIssuePage>
   /** Code-search files visible to the connection. */
   searchCode(
     connection: VcsConnectionRef,
@@ -289,6 +304,29 @@ export interface VcsClient {
   ): Promise<{ number: number; url: string }>
   /** Close an issue as resolved (idempotent from the caller's view). */
   closeIssue(connection: VcsConnectionRef, ref: VcsRepoRef, number: number): Promise<void>
+  /**
+   * Comment on an ISSUE by its issue number, as distinct from {@link VcsClient.comment}, which
+   * addresses the PR/MR conversation. See the {@link GitHubClient} counterpart for why the two
+   * cannot be one call: on GitLab they are different endpoints over different number spaces, so
+   * routing an issue comment through `comment` posts it onto an unrelated merge request.
+   */
+  commentOnIssue?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    issueNumber: number,
+    body: string,
+  ): Promise<void>
+  /**
+   * Apply a label to an issue, creating it in the project first where the vendor requires that.
+   * The in-progress mark for a provider with no workflow status of its own. Idempotent:
+   * re-applying a present label is not an error. Optional, like the {@link GitHubClient} twin.
+   */
+  applyIssueLabel?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    label: string,
+  ): Promise<void>
   openPullRequest(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,

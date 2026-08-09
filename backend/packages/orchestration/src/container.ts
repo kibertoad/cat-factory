@@ -5,6 +5,7 @@ import type {
   DeploymentDocumentResolver,
   Logger,
   OperationalMetrics,
+  TaskSourceRegistry,
 } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
@@ -80,6 +81,7 @@ import {
   GitHubSyncService,
   WebhookService,
   DocumentConnectionService,
+  DocumentSourceOAuthService,
   DocumentImportService,
   DocumentPlannerService,
   DocumentLinkService,
@@ -113,6 +115,7 @@ import type {
 import type {
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
+  BinaryStoreRegistry,
   FoundationalServiceRegistry,
   GateRegistry,
   JudgeRegistry,
@@ -121,6 +124,7 @@ import type {
   PromptFragmentRegistry,
   PromptFragmentSource,
   TaskTypeRegistry,
+  VcsWebUrls,
 } from '@cat-factory/kernel'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
@@ -151,6 +155,16 @@ export interface GitHubModule {
 /** The document-source integration's services, present only when configured. */
 export interface DocumentsModule {
   connectionService: DocumentConnectionService
+  /**
+   * The one `authorization_code` flow every OAuth-capable source is connected through: which
+   * sources this deployment can run it for, the vendor URL to send an operator to, and the code
+   * exchange the public callback completes.
+   *
+   * Always present, even where no source declares an OAuth half and no client is registered: it
+   * answers "none" for both questions, which is the honest reading and keeps the controller free
+   * of a second capability check on top of the module's own.
+   */
+  oauthService: DocumentSourceOAuthService
   importService: DocumentImportService
   plannerService: DocumentPlannerService
   linkService: DocumentLinkService
@@ -173,6 +187,14 @@ export interface DocumentsModule {
 
 /** The task-source integration's services, present only when configured. */
 export interface TasksModule {
+  /**
+   * The app-owned provider registry the services resolve every source on, exposed so the HTTP
+   * layer can read a source's declared CAPABILITIES before it calls one: today whether a search
+   * has to be scoped to a repository (`provider.repoScope`), which decides what the request
+   * needs to resolve first. It stays the registration authority: a controller reads capability
+   * off it and lets the service refuse an unregistered source, rather than gating on it twice.
+   */
+  registry: TaskSourceRegistry
   connectionService: TaskConnectionService
   importService: TaskImportService
   linkService: TaskLinkService
@@ -365,6 +387,14 @@ export interface CoreSpine {
    */
   binaryGeneratorRegistry: BinaryGeneratorRegistry
   /**
+   * The app-owned registry of the deployment's OWN binary artifact stores (the facade's injected
+   * instance, else the empty default). Re-exposed so the instance a boot resolved is READABLE:
+   * the per-account resolver and the account-settings picker are composed from it in the facade,
+   * and "which stores does this process actually offer" otherwise has no answer short of writing
+   * an artifact and looking at where it landed.
+   */
+  binaryStoreRegistry: BinaryStoreRegistry
+  /**
    * Where a RUN's generative integrations are READ from — this process's own registry above,
    * unless a mothership-mode node injected the remote source. Re-exposed because the HTTP layer
    * needs the SAME answer: the pipeline builder's picker is fed from the workspace snapshot, and
@@ -496,6 +526,12 @@ export interface OptionalCoreModules {
   github?: GitHubModule
   /** Present only when a facade wired the per-workspace VCS PAT connect service (GitLab connect). */
   vcsConnectionService?: VcsPatConnectionService
+  /**
+   * The browser-facing base URL of each provider's configured instance (see CoreDependencies).
+   * Surfaced here so the connect-capability route answers with the SAME host the connection will
+   * carry once bound, rather than re-deriving it from config beside it.
+   */
+  vcsWebUrls?: VcsWebUrls
   /** Present only when the document-source integration is configured (see CoreDependencies). */
   documents?: DocumentsModule
   /** Present only when the task-source integration is configured (see CoreDependencies). */
@@ -641,6 +677,7 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    binaryStoreRegistry,
     promptFragmentRegistry,
     promptFragments,
     binaryGenerators,
@@ -857,6 +894,7 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    binaryStoreRegistry,
     promptFragmentRegistry,
     promptFragments,
     deploymentDocumentResolver: injected.deploymentDocumentResolver,

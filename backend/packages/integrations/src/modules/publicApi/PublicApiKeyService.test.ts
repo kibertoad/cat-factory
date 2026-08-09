@@ -66,15 +66,19 @@ describe('PublicApiKeyService', () => {
     expect(secret).not.toContain(stored.secretHash)
 
     const auth = await service.authenticate(secret)
-    // A key defaults to `write` scope when none is requested. `label`/`createdAt` ride along
-    // because the row is already in hand here — that is what lets `GET /api/v1/me` describe the
-    // calling key without a read of its own.
+    // A key defaults to `write` scope when none is requested. `label`/`createdAt`/
+    // `externalIdentity` ride along because the row is already in hand here — that is what lets
+    // `GET /api/v1/me` describe the calling key without a read of its own, and what lets a run
+    // pin the identity at admission without one either. Asserted EXHAUSTIVELY (`toEqual`, not
+    // `toMatchObject`) on purpose: this shape is what the whole surface reads a key's facts off,
+    // so a field arriving here silently is a field arriving on `/me` and on every run projection.
     expect(auth).toEqual({
       keyId: record.id,
       accountId: 'acc_1',
       workspaceId: 'ws_1',
       scope: 'write',
       label: 'external system',
+      externalIdentity: null,
       createdAt: record.createdAt,
     })
   })

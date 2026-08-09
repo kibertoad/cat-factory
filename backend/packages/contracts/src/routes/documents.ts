@@ -6,6 +6,7 @@ import {
   documentConnectionSchema,
   documentSearchResultSchema,
   documentSourceDescriptorSchema,
+  documentSourceKindSchema,
   importDocumentSchema,
   linkDocumentForKindSchema,
   linkDocumentSchema,
@@ -33,6 +34,21 @@ const sourceParams = singleStringParam('source')
 // Response wrappers that exist only inline in the controller today.
 const documentSourcesViewSchema = v.object({
   sources: v.array(documentSourceDescriptorSchema),
+  /**
+   * The sources whose OAuth connect this DEPLOYMENT can actually run right now: a source
+   * declaring an `oauth` descriptor half AND holding a registered client in the account's
+   * deployment settings.
+   *
+   * Separate from the descriptor because it answers a different question, and the two disagree
+   * in the ordinary case: Figma declares the half in code, and a deployment that has registered
+   * no Figma app still connects by personal access token. Folding availability onto the
+   * descriptor would render a "Connect with Figma" button that can only 503.
+   */
+  oauthSources: v.array(documentSourceKindSchema),
+})
+const documentOAuthUrlViewSchema = v.object({
+  /** The vendor authorization URL to send the operator's browser to. */
+  url: v.string(),
 })
 const documentConnectionsViewSchema = v.object({
   connections: v.array(documentConnectionSchema),
@@ -43,7 +59,15 @@ const documentSearchResultsViewSchema = v.object({
 })
 const spawnDocumentResultSchema = v.object({
   plan: documentBoardPlanSchema,
-  result: v.object({ frames: v.number(), modules: v.number(), tasks: v.number() }),
+  result: v.object({
+    frames: v.number(),
+    modules: v.number(),
+    tasks: v.number(),
+    // Planned modules whose tasks went into a module the target frame already had. Its own count
+    // rather than part of `modules`, so a spawn that reused every one of them cannot report
+    // "0 modules" against a preview that showed three.
+    reusedModules: v.number(),
+  }),
 })
 
 export const listDocumentSourcesContract = defineApiContract({
@@ -64,6 +88,17 @@ export const connectDocumentSourceContract = defineApiContract({
   pathResolver: ({ source }) => `/document-sources/${source}/connect`,
   requestBodySchema: connectDocumentSourceSchema,
   responsesByStatusCode: { 201: documentConnectionSchema, ...errorResponses },
+})
+
+// Begin an `authorization_code` connect: returns the vendor authorization URL to send the
+// operator to. GET because it writes nothing durable — the in-flight request is signed into the
+// `state` parameter the vendor hands back, so an abandoned consent screen leaves no row behind.
+// Admin-tier for the same reason `connect` is: completing it stores a workspace credential.
+export const documentSourceOAuthUrlContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: sourceParams,
+  pathResolver: ({ source }) => `/document-sources/${source}/oauth/install-url`,
+  responsesByStatusCode: { 200: documentOAuthUrlViewSchema, ...errorResponses },
 })
 
 export const disconnectDocumentSourceContract = defineApiContract({

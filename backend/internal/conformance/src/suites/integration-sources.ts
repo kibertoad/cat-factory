@@ -731,6 +731,7 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
         linkedBlockId: null,
         role: null,
         docKind: null,
+        renderStatus: null,
         syncedAt: 1_000,
         deletedAt: null,
       })
@@ -811,6 +812,7 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
         linkedBlockId: null,
         role: null,
         docKind: null,
+        renderStatus: null,
         syncedAt: 2_000,
         deletedAt: null,
       })
@@ -850,6 +852,7 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
         linkedBlockId: null,
         role: null,
         docKind: null,
+        renderStatus: null,
         syncedAt: 3_000,
         deletedAt: null,
       }
@@ -1131,6 +1134,7 @@ function registerDocumentFreshnessTests(harness: ConformanceHarness): void {
         linkedBlockId: null,
         role: null,
         docKind: null,
+        renderStatus: null,
         syncedAt: 4_000,
         deletedAt: null,
       }
@@ -1150,6 +1154,52 @@ function registerDocumentFreshnessTests(harness: ConformanceHarness): void {
       expect((await repo.listByBlock(ws, 'task_fresh'))[0]?.sourceVersion).toBe('2317456')
       const batched = await repo.listByRefs(ws, [{ source: 'figma', externalId: 'file1:1-2' }])
       expect(batched[0]?.sourceVersion).toBe('2317456')
+    })
+
+    it('round-trips what became of a document’s renders, keeping NULL distinct from “none”', async () => {
+      // The one field that says whether a design's PICTURES were retained, and every way of not
+      // retaining them renders as the same absence of images. NULL is "the question does not apply"
+      // (a prose source, an upload, a row predating renders); `none` is "the source offered none";
+      // `storage_unavailable` is "this deployment keeps no images". A facade that read one back as
+      // another would send an operator to configure storage they already have, or leave one who
+      // has none believing their design simply had no frames.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      const repo = app.documentRepository()
+      const base = {
+        workspaceId: ws,
+        source: 'figma' as const,
+        title: 'Checkout flow',
+        url: 'https://figma.com/design/file1',
+        excerpt: 'Checkout',
+        body: '## Checkout',
+        contentHash: 'h',
+        sourceVersion: 'v1',
+        linkedBlockId: null,
+        role: null,
+        docKind: null,
+        syncedAt: 4_000,
+        deletedAt: null,
+      }
+      await repo.upsert({ ...base, externalId: 'r1', renderStatus: 'stored' })
+      await repo.upsert({ ...base, externalId: 'r2', renderStatus: 'storage_unavailable' })
+      await repo.upsert({ ...base, externalId: 'r3', renderStatus: null })
+
+      expect((await repo.get(ws, 'figma', 'r1'))?.renderStatus).toBe('stored')
+      expect((await repo.get(ws, 'figma', 'r2'))?.renderStatus).toBe('storage_unavailable')
+      expect((await repo.get(ws, 'figma', 'r3'))?.renderStatus).toBeNull()
+
+      // A re-import that retains fewer frames than last time moves it, and a deployment that has
+      // since configured storage moves off `storage_unavailable` on the same one write.
+      await repo.upsert({ ...base, externalId: 'r2', renderStatus: 'partial' })
+      expect((await repo.get(ws, 'figma', 'r2'))?.renderStatus).toBe('partial')
+
+      // It rides the batch + block-scoped reads a dispatch actually uses, not just the point read.
+      await repo.linkBlock(ws, 'figma', 'r1', 'task_render')
+      expect((await repo.listByBlock(ws, 'task_render'))[0]?.renderStatus).toBe('stored')
+      const batched = await repo.listByRefs(ws, [{ source: 'figma', externalId: 'r1' }])
+      expect(batched[0]?.renderStatus).toBe('stored')
     })
 
     it('re-confirms one stored document on demand, and NAMES the gap when it cannot', async () => {
@@ -1173,6 +1223,7 @@ function registerDocumentFreshnessTests(harness: ConformanceHarness): void {
         linkedBlockId: null,
         role: null,
         docKind: null,
+        renderStatus: null,
         syncedAt: 4_000,
         deletedAt: null,
       })

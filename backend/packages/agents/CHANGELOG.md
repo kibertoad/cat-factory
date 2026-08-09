@@ -1,5 +1,514 @@
 # @cat-factory/agents
 
+## 0.123.0
+
+### Minor Changes
+
+- 4715b74: Let a binary-output step require an exact output size, gated by a capability that can refuse it.
+
+  `BinaryGenerationOptions` could state an aspect RATIO and not a SIZE, so for the deliverables where
+  the pixel dimensions are the requirement rather than a refinement of it (an inventory icon, a sprite
+  an engine slices, a texture an atlas packs) the most load-bearing fact about the artifact was the one
+  thing a step could not declare. It reached the agent as prose, and a step holding only a bucketed API
+  was admitted, generated at the nearest bucket, downscaled, and stored something every other check
+  passes and the consumer never uses.
+
+  `generation.outputSize` (`{ width, height }`) states it, gated by a new `exact-size` capability. The
+  existing `aspect-ratio` member is narrowed to what it can honestly carry: a ratio, or a fixed set of
+  size buckets. **A deployment registering an integration that takes a width and a height (Flux, Retro
+  Diffusion) must now declare `exact-size` beside `aspect-ratio`** to keep serving size-requiring
+  steps. The vocabulary is flat by design, so neither member implies the other, and the cost of missing
+  the declaration is a refusal that names the capability rather than a silent mis-render.
+
+  The platform deliberately does not gain a per-integration size table (it would go stale here while
+  the vendor changed it there, and it is the `resolutionRange` discriminator the design record already
+  refused), and it states no policy about resizing after generation. It checks that an integration can
+  be ASKED for a size, states the target in the brief, and requires that any substitution be reported.
+
+  `outputSize` is mutually exclusive with `aspectRatio` and `upscale`, refused at pipeline save: each
+  states the delivered dimensions a second time and can disagree, and resolving that by precedence
+  would leave the choice to the agent writing the vendor call. The pipeline builder raises the same
+  refusal against the step being edited, so the conflict is reported where the fix is deleting one of
+  two visible fields.
+
+  The size covers what is measured in pixels (images and video), so a step generating an icon and its
+  pickup sound states one size and means it about the icon.
+
+  The read-back closes the loop, because admission checks only what an integration can be asked for: a
+  declared artifact may carry `dimensions`, which the step's result window renders per artifact and
+  counts against the requirement, keeping artifacts that reported no dimensions on their own line
+  rather than letting an unmeasured one read as a delivered one.
+
+- 8c1d8a6: Narrow the built-in pipeline catalog, and make a step conditional on what the change touches.
+
+  A pipeline step can now carry a RUN CONDITION beside its estimate gate (`stepOptions[i].condition`),
+  declaring the service scope it applies to. Every build rung carries BOTH testers: the browser pass
+  runs where the change touches a frontend service, the API pass where it touches anything else. Run
+  admission drops the condition-excluded steps before its gates, so a preset carrying `tester-ui` is
+  not refused on a backend service.
+
+  A condition is a SKIP AXIS, so it is held to the two structural rules an estimate gate is held to
+  (`assertValidRunConditions`, mirrored in the SPA's health advisory and in what the builder offers):
+  the step's kind must be one that may be absent from a run, and it may not also carry a human
+  approval gate. Without that, a condition on `merger` dropped the merge on every run outside its
+  scope while the pipeline still finished reporting success.
+
+  A skipped step now records WHY as a machine-readable `skipReason` (`gated` / `condition` /
+  `producer_skipped` / `run_complete`) that the SPA renders as translated copy, and its `output` stays
+  empty. The
+  reason used to be an English sentence written into `output`, which three separate aggregations
+  select on to build a model's view of the prior steps — so a condition-skipped tester's note was
+  handed to `merger` and `ci-fixer` as if it were the tester's report.
+
+  Five presets are withdrawn (`pl_frontend`, `pl_tech_debt`, `pl_blueprint`, `pl_spec`,
+  `pl_environment_analysis`) and one is added: `pl_complex` ("Complex build"), which settles the
+  requirements and researches the problem before the standard loop. `pl_code_comments` stays as an
+  INTERNAL pipeline: the documentation-refresh preset spawns onto it, so it resolves for a run while
+  being withheld from every listing. Withheld from `pipelineCatalogVersions` too, which the health
+  advisory reads as "the built-ins that exist" — an internal entry there is reported as newly
+  available on every board forever, with no reseed able to clear it. `pipelineCatalogNames` still
+  spans the whole catalog, so a task PINNED to an internal pipeline is named (and started) rather
+  than silently falling through to a full build.
+
+  Running ONE agent against a block is now a first-class action (`POST
+/workspaces/:ws/blocks/:id/agent-kind-executions`, `ExecutionService.startAgentKind`) rather than
+  something that needed a single-step preset. It backs the post-bootstrap service mapping, a new
+  "Map service" action on the service frame, and the environment wizard's deep analysis.
+
+  BREAKING (internal): a workspace seeded before this change holds rows for the five withdrawn
+  presets; the pipeline-health advisory offers their removal, naming a replacement where one exists.
+  Anything naming `BLUEPRINT_PIPELINE_ID` / `TECH_DEBT_PIPELINE_ID` should use `BLUEPRINT_AGENT_KIND`
+  with `startAgentKind`, or name a build rung directly.
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/contracts@0.286.0
+  - @cat-factory/kernel@0.281.0
+  - @cat-factory/prompt-fragments@1.0.38
+
+## 0.122.0
+
+### Minor Changes
+
+- afe1250: Binary generation: provider capability traits, per-step generation options, and side-by-side
+  candidate comparison.
+
+  A registered generative integration now declares `capabilities` (reference images, masked or
+  instruction editing, negative prompt, seed, aspect ratio, batching, upscaling, transparent
+  background, seamless tiling), and a binary-output step declares the generation options each of
+  those unlocks. An option nothing selected supports refuses the run at admission with
+  `binary_output_generator_invalid` / `capability_unsupported`; an option nothing has DECLARED either
+  way is admitted and stated as unverifiable, so every integration registered before this axis
+  existed keeps working unchanged.
+
+  A step may also declare a `comparison`: it generates a candidate per subject from every selected
+  integration, parks, and a human keeps one (or several under distinct ids) before the step re-runs
+  to deliver exactly those.
+
+  Internal shape change: the engine's park-window verbs moved from sixteen `ExecutionService`
+  delegates onto one `executionService.decisions` surface.
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+  - @cat-factory/kernel@0.280.0
+  - @cat-factory/prompt-fragments@1.0.37
+
+## 0.121.4
+
+### Patch Changes
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+  - @cat-factory/kernel@0.279.3
+  - @cat-factory/prompt-fragments@1.0.36
+
+## 0.121.3
+
+### Patch Changes
+
+- 3036af7: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with
+  (`ai@7.0.58`, `@ai-sdk/*@4.0.36` / `openai-compatible@3.0.27` / `amazon-bedrock@5.0.50`), and the
+  Vue singleton pin plus its `@vue/*` overrides move together to 3.5.41 so the SPA still bundles
+  exactly one Vue.
+
+- Updated dependencies [3036af7]
+  - @cat-factory/kernel@0.279.2
+  - @cat-factory/prompt-fragments@1.0.35
+
+## 0.121.2
+
+### Patch Changes
+
+- Updated dependencies [de7caaf]
+  - @cat-factory/contracts@0.283.1
+  - @cat-factory/kernel@0.279.1
+  - @cat-factory/prompt-fragments@1.0.34
+
+## 0.121.1
+
+### Patch Changes
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+  - @cat-factory/prompt-fragments@1.0.33
+
+## 0.121.0
+
+### Minor Changes
+
+- 6ad1d8b: Let the pipeline builder's purpose dial narrow the palette per agent KIND, not per section
+
+  The dial filtered on the palette's display CATEGORY, so it could only ever remove whole sections
+  and a kind whose section survived stayed offered however plainly it contradicted the purpose. A
+  `review` pipeline reviews an existing pull request and opens none, yet it was offered the two
+  agents that WRITE documentation into the repo, because `docs` had to stay for the Domain Rules
+  Reviewer; a `planning` pipeline was offered the bug triage and PR-review kinds; and `document` and
+  `research` had identical rows, so moving the dial between those two settings narrowed nothing at
+  all.
+
+  `AgentPresentation` gains an optional `purposes`, and `purposeSuggestsAgentKind` is what the
+  palette now filters on. The two narrowings INTERSECT: a declaration may only hide more, never buy
+  a kind back into a purpose its section is not offered to, which is what keeps palette relevance
+  inside what the save gate will accept whatever a deployment declares. Declaring nothing is the
+  normal case and behaves exactly as before, so a registered kind that says nothing is as visible as
+  it was; a declared list naming only purposes the reader cannot name is read as no declaration
+  rather than as excluding everything.
+
+  The built-ins that belong to one use-case now say so (the document-authoring family, the bug
+  triage and PR-review kinds, the spec/blueprint/architecture kinds, the initiative breakdown), which
+  is a visible narrowing of what the palette offers at every purpose, `build` included: the six
+  document-authoring kinds belong to `document` alone and the initiative breakdown to `planning`
+  alone, so a build pipeline stops being offered them as well. Nothing changes
+  about what an existing pipeline may CONTAIN or save: `purposeAllowsAgentCategory` is untouched, so
+  a stored pipeline stays editable in the builder it was built in.
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+  - @cat-factory/prompt-fragments@1.0.32
+
+## 0.120.2
+
+### Patch Changes
+
+- a596b9c: Refuse a pipeline whose environment lifecycle does not add up when it is saved: a tester /
+  acceptance / human-test step with no live environment to run against (nothing provisioned one, or
+  the `disposer` reclaimed it first), a `deployer` that neither reclaims nor declares that its
+  environment outlives the run, or a `disposer` with nothing standing to reclaim. The rule is
+  enforced at pipeline create and update only, so a stored pipeline authored before it keeps running;
+  the builder shows the same faults inline off the one shared rule in `@cat-factory/contracts`, and
+  the run door now reads that same rule for the two faults that would genuinely dead-end a run,
+  rather than re-deriving the ordering beside it.
+
+  An environment that is MEANT to outlive its run stays expressible: the deployer step declares it
+  (`stepOptions.retainEnvironment`), which is also what lets the PR verification report render the
+  teardown leg as `retained` instead of a `pending` reclaim that is never coming. That adds one enum
+  value to the report's `teardown` field on `/api/v1` (spec 1.35.0, additive).
+
+  Every built-in preset that deploys now ends with a terminal `disposer` (`pl_build`, `pl_simple`,
+  `pl_full`, `pl_visual`, `pl_frontend`, `pl_tech_debt`), each with a version bump so seeded
+  workspaces are offered the reseed.
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/kernel@0.277.0
+  - @cat-factory/prompt-fragments@1.0.31
+
+## 0.120.1
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+  - @cat-factory/prompt-fragments@1.0.30
+
+## 0.120.0
+
+### Minor Changes
+
+- faddbf5: Public API (`/api/v1`, spec 1.34.0): serve a service's in-repo specification. Additive.
+
+  One new operation, `GET /api/v1/services/:serviceId/spec` at `read` scope: the prescriptive
+  requirement tree stored under `spec/` in the service's repository (modules → feature groups →
+  requirement items, each with its MoSCoW priority, its `aspirational`/`established` state and its
+  Given/When/Then acceptance criteria, plus the domain rules scoped to each group), the Gherkin
+  rendered from the same tree, and the branch and commit both were read at.
+
+  It closes a join, not just a gap. The requirement ids on `GET /api/v1/runs/:runId/report` and
+  `.../outcome` were already a key onto a document no headless caller could fetch, so an
+  outcome-reviewing integration could read what a run scored and not what it scored against. Fetch the
+  spec once per service and a run's outcome per run, and criterion → evidence is a map lookup outside
+  the platform.
+
+  **The read has several outcomes and the endpoint keeps them apart.** The reader behind it is total (a
+  flaky repository read degrades rather than throwing), and the app's own requirements window folds an
+  unreadable repository into the same empty state as a repository with no spec, which is right for a
+  window and wrong for an integrator: folded here it would report every service as requirement-free
+  for the duration of a VCS incident. So the response carries a three-valued `anchor` rather than a
+  boolean: `absent` (no spec on the default branch) is the only value that means the service declares
+  nothing, and `unparsed` says the anchor file is there and corrupt, which is a repository somebody
+  has to fix rather than a service with nothing to say. An unreadable repository is a `503` with
+  `reason: "spec_read_failed"`; a branch that would not resolve is a `503` with
+  `reason: "spec_ref_unresolved"` (a renamed, transferred or deleted repository, a stale default
+  branch and a lost installation all answer 404 exactly as an absent file does, so an empty read with
+  an unresolved ref is refused rather than served as a confident "no requirements"); an unwired or
+  unconnected VCS integration is a `503` with `reason: "vcs_not_configured"`; a service frame with no
+  linked repository is the same `422` that starting a run on it gets; and a spec that read PARTIALLY
+  is served, with `issues` naming every file that did not survive and how many items a salvaged group
+  lost.
+
+  **Every axis of the response is bounded and every bound is reported**, including the two that grow
+  outside the spec's control: the Gherkin is capped across all files as well as within each one, and
+  `issues` (which grows with FAILURE rather than with the spec) is capped too, so a rate-limit window
+  part-way through a large walk cannot make the report of a degraded read the largest thing in the
+  response. A `dropped` of `null` on an issue row means content was lost there and no count describes
+  it, which is the honest answer for a shard whose `requirements` is not a list at all: those
+  requirements are unreadable, so the rebuilt group is served as damaged rather than as one that
+  legitimately declares nothing.
+
+  **Two commitments a consumer should read.** `SpecDoc` and everything under it (`SpecModule`,
+  `RequirementGroup`, `RequirementItem`, `AcceptanceCriterion`, `DomainRule`) are served as the SAME
+  shapes the app consumes rather than a re-projection, deliberately, so one artifact cannot be
+  described two ways. From this version they are part of the stable `/api/v1` surface rather than
+  internals. And the `spec/` tree is anchored at the repository ROOT, so two services carved out of
+  one monorepo share one spec and this endpoint answers both alike; `provenance` names the repository
+  and commit rather than a subdirectory, because a subdirectory would imply a scoping the read does
+  not apply.
+
+  There is deliberately no write side: the spec's write path is a reviewed commit, and `state` is
+  promoted only by an observed test pass.
+
+  Internal, not `/api/v1`: `readServiceSpec` now returns a `diagnostics` field on `ServiceSpecView`
+  (`anchor` plus per-file `issues`), so every caller can separate an absent spec from an unread one.
+  The field is optional, so a view assembled by hand keeps type-checking, and `EMPTY_SERVICE_SPEC_VIEW`
+  carries none. The reader also gained a total READ BUDGET: the tree's size is set by somebody else's
+  repository, so one call could previously become an unbounded number of provider round trips, past
+  the Cloudflare subrequest ceiling and into the installation's shared rate limit. A walk that stops
+  early says so (`unread`), and the run-evidence loader no longer memoises a failed read as the run's
+  answer, which had pinned one flaky read onto every later settlement.
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/kernel@0.275.4
+  - @cat-factory/prompt-fragments@1.0.29
+
+## 0.119.3
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/kernel@0.275.3
+  - @cat-factory/prompt-fragments@1.0.28
+
+## 0.119.2
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/kernel@0.275.2
+  - @cat-factory/prompt-fragments@1.0.27
+
+## 0.119.1
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/kernel@0.275.1
+  - @cat-factory/prompt-fragments@1.0.26
+
+## 0.119.0
+
+### Minor Changes
+
+- dfa4a8e: Hand a run's reference designs to the container that captures against them.
+
+  `.cat-context/reference-screenshots/` has been in the UI-tester prompt since the visual-confirmation
+  gate landed, and nothing wrote it. So a designer whose task links a Figma frame got a gate gallery
+  built from that frame while the tester itself worked blind, naming views of its own that then had to
+  be matched to design frames named by somebody else.
+
+  A dispatch of a kind declaring the `ui` image now resolves the task's reference set (its designs'
+  retained frames plus the images a person uploaded against it) and the harness downloads them into the
+  checkout before the agent's first turn, with each file's view name stated in the prompt.
+
+  The bytes do not ride the job body. A design frame is a full-page PNG and a job body is JSON that
+  crosses every transport and is persisted with the dispatch, so only a manifest of ids and file names
+  travels; the harness fetches the images from a new `GET ${proxyBaseUrl}/artifacts/reference/:id` on
+  the same container session token the run already holds for the LLM proxy. That route is the mirror of
+  the screenshot ingest route beside it and is bounded the same way, plus one more: it serves
+  `kind:'reference'` only, so it cannot become a way for one container to read another run's captures.
+
+  Two things a reviewer should look at. The reference SET now has two readers (the gate and a dispatch)
+  and therefore one module: derived twice, the two would eventually disagree about a view name, which
+  is exactly the join the gate performs. And the FILE NAMES are chosen by the engine, not the harness,
+  because the name is how the agent learns the view name: a sanitiser change in an image a deployment
+  has not rolled out yet would otherwise rename every view a run reports.
+
+  The set is CAPPED by the engine, which is also what carries the dropped view names to the agent. A
+  task's references are unbounded (a block may hold a hundred uploads beside a design's frames) while
+  the download pass is budgeted well under the inactivity watchdog, so the ceiling is a decision the
+  platform states rather than an accident of transfer speed. It drops design frames before uploads,
+  mirroring the precedence that already lets an upload override a frame, and every dropped view is
+  named in the prompt: capped and simply absent look identical on disk otherwise. The delivery is
+  idempotent over the checkout, so the repair rounds of a coding flow re-cost a stat rather than a
+  transfer and cannot report a view an earlier round delivered as missing, and the per-image ceiling
+  now bounds the transfer (declared length, then a counted stream) instead of only the write.
+
+  Runner image bump: harness `src/**` changed, so deployments must move to the newly pinned tag. A
+  deployment on an older image simply receives no references, exactly as before this change.
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/kernel@0.275.0
+  - @cat-factory/prompt-fragments@1.0.25
+
+## 0.118.1
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+  - @cat-factory/kernel@0.274.0
+  - @cat-factory/prompt-fragments@1.0.24
+
+## 0.118.0
+
+### Minor Changes
+
+- 2544fb3: Pin the harness contract that two packages' comments claimed but nothing enforced.
+
+  `safeDirSegment` plus the `owner__name` join, and the four sentinel paths, exist once in the
+  executor harness and once in the backend, computed independently because the harness image can
+  depend on no workspace package. A new conformity suite asserts the pairs, in the style of the
+  existing `host-markdown` one. The backend half now lives in one module (`agents/harnessContract.ts`)
+  and `.cat-follow-ups.jsonl` gets the named constant its three siblings already had.
+
+  The suite is `test/**`-only, so it ships with no runner-image bump.
+
+### Patch Changes
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/contracts@0.275.0
+  - @cat-factory/prompt-fragments@1.0.23
+
+## 0.117.12
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+  - @cat-factory/contracts@0.274.0
+  - @cat-factory/prompt-fragments@1.0.22
+
+## 0.117.11
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/kernel@0.271.0
+  - @cat-factory/contracts@0.273.0
+  - @cat-factory/prompt-fragments@1.0.21
+
+## 0.117.10
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+  - @cat-factory/contracts@0.272.0
+  - @cat-factory/prompt-fragments@1.0.20
+
+## 0.117.9
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/contracts@0.271.0
+  - @cat-factory/kernel@0.269.0
+  - @cat-factory/prompt-fragments@1.0.19
+
+## 0.117.8
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+  - @cat-factory/kernel@0.268.0
+  - @cat-factory/prompt-fragments@1.0.18
+
+## 0.117.7
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+  - @cat-factory/prompt-fragments@1.0.17
+
+## 0.117.6
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+  - @cat-factory/kernel@0.266.0
+  - @cat-factory/prompt-fragments@1.0.16
+
+## 0.117.5
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+  - @cat-factory/kernel@0.265.0
+  - @cat-factory/prompt-fragments@1.0.15
+
+## 0.117.4
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/contracts@0.266.0
+  - @cat-factory/kernel@0.264.0
+  - @cat-factory/prompt-fragments@1.0.14
+
+## 0.117.3
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+  - @cat-factory/kernel@0.263.0
+  - @cat-factory/prompt-fragments@1.0.13
+
 ## 0.117.2
 
 ### Patch Changes

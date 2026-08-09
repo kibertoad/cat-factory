@@ -4,6 +4,7 @@ import {
   type PipelineSchedule,
   type WorkspaceSnapshot,
   PipelineRegistry,
+  offeredPipelines,
   seedPipelines,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -19,6 +20,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
   describe('public API (break down an initiative)', () => {
     registerPublicApiTests(harness)
     registerPublicApiScopeTests(harness)
+    registerPublicNotificationTests(harness)
   })
   registerPipelineCatalogTests(harness)
 
@@ -172,7 +174,7 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
 
     // A non-public pipeline id is refused; a revoked key no longer authenticates.
     expect(
-      (await call('POST', '/api/v1/jobs', { pipelineId: 'pl_blueprint', input: 'x' }, auth)).status,
+      (await call('POST', '/api/v1/jobs', { pipelineId: 'pl_simple', input: 'x' }, auth)).status,
     ).toBe(400)
     expect(
       (await call('DELETE', `/workspaces/${wsId}/public-api-keys/${created.body.key.id}`)).status,
@@ -397,7 +399,175 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
     expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(404)
   })
 
-  it('serves the notification inbox (list / dismiss / act), scope-gated + workspace-scoped', async () => {
+  it('serves the workspace usage + budget read to a read-scoped key', async () => {
+    const { call, createOrgWorkspace } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'usage',
+      scope: 'read',
+    })
+    const auth = { authorization: `Bearer ${minted.body.secret}` }
+
+    const usage = await call<{
+      periodStart: number
+      currency: string
+      budget: {
+        inputTokens: number
+        outputTokens: number
+        costSpent: number
+        costLimit: number
+        exceeded: boolean
+      }
+      rows: { billing: string; model: string; calls: number }[]
+    }>('GET', '/api/v1/usage', undefined, auth)
+    expect(usage.status).toBe(200)
+    // The period is the current calendar month (UTC) and the currency is the deployment's,
+    // both resolved by the facade's own pricing wiring — what conformance proves is that BOTH
+    // facades serve the same resolved shape, not a particular number.
+    expect(usage.body.currency).toBeTruthy()
+    expect(usage.body.periodStart).toBeGreaterThan(0)
+    // A workspace that has spent nothing this period reports a real zero against a real
+    // configured limit, and is NOT paused. `rows` is empty for the same reason — there is no
+    // usage to group, which is distinct from a sink the deployment doesn't retain.
+    expect(usage.body.budget.inputTokens).toBe(0)
+    expect(usage.body.budget.outputTokens).toBe(0)
+    expect(usage.body.budget.costSpent).toBe(0)
+    expect(usage.body.budget.costLimit).toBeGreaterThan(0)
+    expect(usage.body.budget.exceeded).toBe(false)
+    expect(usage.body.rows).toEqual([])
+
+    // Read is the whole scope story — the aggregate names no resource ids — but a key is
+    // still required, and an unauthenticated caller learns nothing.
+    expect((await call('GET', '/api/v1/usage')).status).toBe(401)
+  })
+
+  it('slices the same money by repository and ticket, off whichever store the window routes to', async () => {
+    const { call, createOrgWorkspace } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'spend',
+      scope: 'read',
+    })
+    const auth = { authorization: `Bearer ${minted.body.secret}` }
+
+    type Spend = {
+      dimension: string
+      window: string
+      generatedAt: number
+      since: number
+      currency: string
+      source: string
+      rolledUpThrough: number | null
+      truncated: boolean
+      totals: { calls: number; meteredCost: number; subscriptionCost: number }
+      rows: { key: string; label: string | null; meteredCost: number }[]
+    }
+
+    // The LIVE half: the short windows scan the ledger, and nothing in that path can be behind,
+    // so claiming a coverage boundary would invite a reader to believe the numbers were bounded
+    // by one. The TCO axes are what this endpoint exists for, so both are driven here.
+    for (const dimension of ['repo', 'ticket', 'run'] as const) {
+      const live = await call<Spend>(
+        'GET',
+        `/api/v1/usage/spend?dimension=${dimension}&window=24h`,
+        undefined,
+        auth,
+      )
+      expect(live.status).toBe(200)
+      expect(live.body.dimension).toBe(dimension)
+      expect(live.body.source).toBe('ledger')
+      expect(live.body.rolledUpThrough).toBeNull()
+      expect(live.body.currency).toBeTruthy()
+      // A board that has spent nothing reports real zeros against a real window, and the window
+      // it reports is the SNAPPED one every number was computed over.
+      expect(live.body.rows).toEqual([])
+      expect(live.body.totals).toMatchObject({ calls: 0, meteredCost: 0, subscriptionCost: 0 })
+      expect(live.body.since).toBeLessThan(live.body.generatedAt)
+      // An empty breakdown is COMPLETE, not capped. The two read identically without this
+      // field, which is the whole reason it is on the wire.
+      expect(live.body.truncated).toBe(false)
+    }
+
+    // The DURABLE half: the long windows read the rollup on both facades, and a deployment whose
+    // sweep has never run says so with `rolledUpThrough: null` rather than presenting an empty
+    // quarter as a quiet one.
+    const durable = await call<Spend>(
+      'GET',
+      '/api/v1/usage/spend?dimension=repo&window=90d',
+      undefined,
+      auth,
+    )
+    expect(durable.status).toBe(200)
+    expect(durable.body.source).toBe('daily-rollup')
+    expect(durable.body.window).toBe('90d')
+
+    // The window defaults to the widest LIVE one, so a caller that states nothing gets
+    // millisecond-exact numbers rather than a rollup that may be a sweep behind.
+    const defaulted = await call<Spend>(
+      'GET',
+      '/api/v1/usage/spend?dimension=model',
+      undefined,
+      auth,
+    )
+    expect(defaulted.body.window).toBe('7d')
+    expect(defaulted.body.source).toBe('ledger')
+
+    // The vocabularies are closed on both axes, and a dimension this surface deliberately does
+    // not publish (`workspace`, which every key already addresses) is refused rather than served.
+    expect(
+      (await call('GET', '/api/v1/usage/spend?dimension=workspace', undefined, auth)).status,
+    ).toBe(400)
+    expect((await call('GET', '/api/v1/usage/spend', undefined, auth)).status).toBe(400)
+    expect(
+      (await call('GET', '/api/v1/usage/spend?dimension=repo&window=1y', undefined, auth)).status,
+    ).toBe(400)
+    expect((await call('GET', '/api/v1/usage/spend?dimension=repo')).status).toBe(401)
+
+    // The row cap is a real bound with a real ceiling, refused at both ends rather than clamped:
+    // a caller that asked for 5000 rows and silently got 500 would read the answer as complete.
+    for (const limit of ['0', '501', 'all', '1e3']) {
+      expect(
+        (await call('GET', `/api/v1/usage/spend?dimension=run&limit=${limit}`, undefined, auth))
+          .status,
+        `limit=${limit} must be refused`,
+      ).toBe(400)
+    }
+    expect(
+      (await call('GET', '/api/v1/usage/spend?dimension=run&limit=1', undefined, auth)).status,
+    ).toBe(200)
+  })
+}
+
+/**
+ * The built-in pipeline catalog's lifecycle: versioned reseed, retire-and-replace, and the
+ * two refusals (a built-in the catalog still ships, one a recurring schedule points at).
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+/**
+ * The notification INBOX the public API serves: list, dismiss, act, and the one card whose
+ * actionability is decided by the request rather than by its type.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerPublicNotificationTests(harness: ConformanceHarness): void {
+  /**
+   * The arrangement both notification cases share: an org board (the only kind a public-API key
+   * can be minted for), a key at each rung, and a seeder for OPEN cards.
+   *
+   * Seeded directly rather than raised by a run: the engine raises these mid-run, and driving one
+   * would point the test at the run machinery instead of the public routes. A seeded card is a
+   * `merge_review` with a null `blockId`, so `act` admits the type (it has an automated merge
+   * side-effect) while the null block short-circuits the merge itself, and the card settles
+   * `acted` with no real block/run/PR behind it.
+   */
+  async function notificationFixture() {
     const app = harness.makeApp()
     const { call, createOrgWorkspace } = app
     const { workspace } = await createOrgWorkspace({ seed: true })
@@ -411,16 +581,10 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
       expect(res.status).toBe(201)
       return { authorization: `Bearer ${res.body.secret}` }
     }
-    const readAuth = await mint('read')
-    const writeAuth = await mint('write')
-    const adminAuth = await mint('admin')
-
-    // Seed OPEN notifications directly (the engine raises these mid-run; seeding the
-    // persisted rows keeps the test targeted at the public routes, not the run machinery).
-    // The actionable cards are `merge_review` with a null `blockId`: `act` admits the type
-    // (it has an automated merge side-effect) but the null block short-circuits the merge, so
-    // the card settles `acted` without needing a real block/run/PR.
-    const seed = (id: string, type: 'merge_review' | 'requirement_review' = 'merge_review') =>
+    const seed = (
+      id: string,
+      type: 'merge_review' | 'requirement_review' | 'merge_tag_request' = 'merge_review',
+    ) =>
       app.notificationRepository().upsert(wsId, {
         id,
         type,
@@ -434,6 +598,22 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
         createdAt: 1,
         resolvedAt: null,
       })
+
+    return {
+      app,
+      call,
+      createOrgWorkspace,
+      wsId,
+      seed,
+      readAuth: await mint('read'),
+      writeAuth: await mint('write'),
+      adminAuth: await mint('admin'),
+    }
+  }
+
+  it('serves the notification inbox (list / dismiss / act), scope-gated + workspace-scoped', async () => {
+    const { call, createOrgWorkspace, seed, readAuth, writeAuth, adminAuth } =
+      await notificationFixture()
     await seed('ntf_dismiss')
     await seed('ntf_act')
 
@@ -492,7 +672,7 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
 
     // `act` refuses an informational card (no automated action) with 409, even for an admin
     // key — it must be dismissed, not acted — while `dismiss` resolves it normally.
-    const actInfo = await call<{ error: { code: string } }>(
+    const actInfo = await call<{ error: { code: string; details?: { reason?: string } } }>(
       'POST',
       '/api/v1/notifications/ntf_info/act',
       undefined,
@@ -500,6 +680,10 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
     )
     expect(actInfo.status).toBe(409)
     expect(actInfo.body.error.code).toBe('notification_not_actionable')
+    // The REASON, not just the status: "this card can never be acted on headlessly" and "this
+    // one is a field away from working" need different fixes, and the shared 409 code cannot
+    // tell a caller which it hit.
+    expect(actInfo.body.error.details?.reason).toBe('no_automated_action')
     const dismissInfo = await call<{ status: string }>(
       'POST',
       '/api/v1/notifications/ntf_info/dismiss',
@@ -544,58 +728,51 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
     ).toBe(404)
   })
 
-  it('serves the workspace usage + budget read to a read-scoped key', async () => {
-    const { call, createOrgWorkspace } = harness.makeApp()
-    const { workspace } = await createOrgWorkspace({ seed: true })
-    const wsId = workspace.id
+  it('acts on a merge_tag_request only when the request carries a tag', async () => {
+    // The one card whose actionability is decided by the REQUEST rather than by its type.
+    // Recording the effort a human spent IS its entire side-effect, so acting on one with
+    // nothing to record would flip the nudge to `acted` and write nothing: the reminder gone
+    // and the evidence it asked for never collected.
+    const { call, seed, adminAuth, writeAuth } = await notificationFixture()
+    await seed('ntf_tag', 'merge_tag_request')
 
-    const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
-      label: 'usage',
-      scope: 'read',
-    })
-    const auth = { authorization: `Bearer ${minted.body.secret}` }
+    const bare = await call<{ error: { code: string; details?: { reason?: string } } }>(
+      'POST',
+      '/api/v1/notifications/ntf_tag/act',
+      undefined,
+      adminAuth,
+    )
+    expect(bare.status).toBe(409)
+    expect(bare.body.error.code).toBe('notification_not_actionable')
+    // Its OWN reason: this card is one field away from working, where an informational card can
+    // never be acted on headlessly at all. The shared 409 code cannot tell a caller which it hit.
+    expect(bare.body.error.details?.reason).toBe('review_effort_required')
 
-    const usage = await call<{
-      periodStart: number
-      currency: string
-      budget: {
-        inputTokens: number
-        outputTokens: number
-        costSpent: number
-        costLimit: number
-        exceeded: boolean
-      }
-      rows: { billing: string; model: string; calls: number }[]
-    }>('GET', '/api/v1/usage', undefined, auth)
-    expect(usage.status).toBe(200)
-    // The period is the current calendar month (UTC) and the currency is the deployment's,
-    // both resolved by the facade's own pricing wiring — what conformance proves is that BOTH
-    // facades serve the same resolved shape, not a particular number.
-    expect(usage.body.currency).toBeTruthy()
-    expect(usage.body.periodStart).toBeGreaterThan(0)
-    // A workspace that has spent nothing this period reports a real zero against a real
-    // configured limit, and is NOT paused. `rows` is empty for the same reason — there is no
-    // usage to group, which is distinct from a sink the deployment doesn't retain.
-    expect(usage.body.budget.inputTokens).toBe(0)
-    expect(usage.body.budget.outputTokens).toBe(0)
-    expect(usage.body.budget.costSpent).toBe(0)
-    expect(usage.body.budget.costLimit).toBeGreaterThan(0)
-    expect(usage.body.budget.exceeded).toBe(false)
-    expect(usage.body.rows).toEqual([])
+    // Dismissing is always available as the way to wave it off without recording anything.
+    await seed('ntf_tag_waved', 'merge_tag_request')
+    const waved = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_tag_waved/dismiss',
+      undefined,
+      writeAuth,
+    )
+    expect(waved.status).toBe(200)
+    expect(waved.body.status).toBe('dismissed')
 
-    // Read is the whole scope story — the aggregate names no resource ids — but a key is
-    // still required, and an unauthenticated caller learns nothing.
-    expect((await call('GET', '/api/v1/usage')).status).toBe(401)
+    // Supply a tag and the same card resolves. This row carries no record id, so nothing is
+    // written; what this asserts is ADMISSION, which is what the request decides. The tag
+    // actually landing on a record is the merge-track-record suite's own case.
+    const tagged = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_tag/act',
+      { reviewEffort: 'minor' },
+      adminAuth,
+    )
+    expect(tagged.status).toBe(200)
+    expect(tagged.body.status).toBe('acted')
   })
 }
 
-/**
- * The built-in pipeline catalog's lifecycle: versioned reseed, retire-and-replace, and the
- * two refusals (a built-in the catalog still ships, one a recurring schedule points at).
- *
- * Registered from the suite above; split out purely to keep each function within the
- * per-function line budget. Every test is unchanged.
- */
 function registerPipelineCatalogTests(harness: ConformanceHarness): void {
   describe('pipeline versioning + reseed', () => {
     it('ships catalog versions on the snapshot and reseeds a built-in, preserving organization', async () => {
@@ -604,12 +781,23 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
 
       // The snapshot advertises the current built-in catalog versions, keyed by id, so the
-      // SPA can flag a stale persisted copy and offer a reseed.
+      // SPA can flag a stale persisted copy and offer a reseed. OFFERED entries only: the SPA
+      // reads these keys as "the built-ins that exist" and derives its new-built-ins advisory as
+      // that set minus the rows it can see, and it can never see an INTERNAL one — so an internal
+      // id here is reported as new on every board forever, with no reseed able to clear it.
+      const catalog = seedPipelines()
       const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
       const expectedVersions = Object.fromEntries(
-        seedPipelines().map((p) => [p.id, p.version ?? 0]),
+        offeredPipelines(catalog, catalog).map((p) => [p.id, p.version ?? 0]),
       )
       expect(snap.body.pipelineCatalogVersions).toEqual(expectedVersions)
+      // Derived from the catalog rather than pinned to a count, and asserted as the two structural
+      // properties that matter: an internal entry is withheld from the map the advisory reads, and
+      // still NAMED in the display dictionary, because a task pinned to one has a card to render.
+      for (const internal of catalog.filter((p) => p.internal)) {
+        expect(snap.body.pipelineCatalogVersions).not.toHaveProperty(internal.id)
+        expect(snap.body.pipelineCatalogNames?.[internal.id]).toBe(internal.name)
+      }
       // A seeded built-in carries its version, persisted + round-tripped through the store.
       const seededFull = snap.body.pipelines.find((p) => p.id === 'pl_full')!
       expect(seededFull.version).toBe(expectedVersions.pl_full)
@@ -644,6 +832,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const custom = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Custom',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const res = await call('POST', `/workspaces/${wsId}/pipelines/${custom.body.id}/reseed`)
@@ -660,6 +849,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       live.register({
         id: 'pl_org_flow',
         name: 'Org flow',
+        purpose: 'build',
         agentKinds: ['coder', 'reviewer'],
         builtin: true,
         version: 1,
@@ -726,6 +916,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Nightly custom',
+        purpose: 'build',
         agentKinds: ['coder', 'reviewer'],
       })
       const schedule = await app.call<PipelineSchedule>(
@@ -769,26 +960,32 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
 
       const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Toggles',
+        purpose: 'build',
         // The prose description rides the same symmetric-persistence contract (its own
         // `description` column on both stores) and must round-trip identically.
         description: 'A custom pipeline for the toggles test.',
-        agentKinds: ['task-estimator', 'coder', 'tester-api'],
+        // The Deployer / Disposer pair rides along because the Tester needs the environment
+        // lifecycle spelled out (`validatePipelineAuthoring`); every parallel array below is
+        // index-aligned with THIS list, so the QC config sits on the Tester at index 3.
+        agentKinds: ['task-estimator', 'coder', 'deployer', 'tester-api', 'disposer'],
         // Coder opts out of the Follow-up companion; the Tester's QC companion is gated on the
         // task estimate (an estimator runs earlier, so the gate is valid).
-        followUps: [null, false, null],
+        followUps: [null, false, null, null, null],
         testerQuality: [
           null,
           null,
+          null,
           { enabled: true, gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' } },
+          null,
         ],
         // A per-step options bag opting one step out of auto-recommendation — the extensible
         // seam that must round-trip through the single `step_options` column on both stores.
-        stepOptions: [null, { autoRecommend: false }, null],
+        stepOptions: [null, { autoRecommend: false }, null, null, null],
       })
       expect(created.status).toBe(201)
       expect(created.body.description).toBe('A custom pipeline for the toggles test.')
       expect(created.body.followUps?.[1]).toBe(false)
-      expect(created.body.testerQuality?.[2]).toEqual({
+      expect(created.body.testerQuality?.[3]).toEqual({
         enabled: true,
         gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
       })
@@ -799,7 +996,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
       expect(stored.description).toBe('A custom pipeline for the toggles test.')
       expect(stored.followUps?.[1]).toBe(false)
-      expect(stored.testerQuality?.[2]).toEqual({
+      expect(stored.testerQuality?.[3]).toEqual({
         enabled: true,
         gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
       })
@@ -823,6 +1020,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       }
       const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Gated',
+        purpose: 'build',
         agentKinds: ['coder', 'ci', 'merger'],
         gates: [true, false, false],
         stepOptions: [{ gateConfig }, { gateConfig: { fields: { maxAttempts: 3 } } }, null],
@@ -848,6 +1046,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
 
       const ungated = await call('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Policy without a gate',
+        purpose: 'build',
         agentKinds: ['coder', 'merger'],
         stepOptions: [{ gateConfig: { approvers: { roles: ['admin'] } } }, null],
       })
@@ -855,6 +1054,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
 
       const unreachableQuorum = await call('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Quorum nobody can reach',
+        purpose: 'build',
         agentKinds: ['coder', 'merger'],
         gates: [true, false],
         stepOptions: [
@@ -866,6 +1066,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
 
       const undeclaredParameter = await call('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Parameter no gate declares',
+        purpose: 'build',
         agentKinds: ['coder', 'ci', 'merger'],
         stepOptions: [null, { gateConfig: { fields: { nosuchknob: 3 } } }, null],
       })
@@ -981,6 +1182,7 @@ function registerBoardPlanningTests(harness: ConformanceHarness): void {
 
       const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Code only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       // Cap the auth service at one concurrently-running task.

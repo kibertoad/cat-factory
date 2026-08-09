@@ -8,7 +8,7 @@
 
 import { InitiativeLoopService } from '../modules/initiative/InitiativeLoopService.js'
 import type { InitiativeService } from '../modules/initiative/InitiativeService.js'
-import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
+import { BLUEPRINT_AGENT_KIND } from '@cat-factory/kernel'
 import {
   createBootstrapModule,
   createGitHubModule,
@@ -69,11 +69,13 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
     : undefined
   modules.build('github', () => createGitHubModule(dependencies, caches, externalMergeObserver))
   modules.build('runners', () => createRunnersModule(dependencies))
-  // After a bootstrap succeeds, map the new repo into a blueprint + the board by
-  // starting the blueprint-only pipeline against the service frame.
+  // After a bootstrap succeeds, map the new repo into a blueprint + the board by running the
+  // mapping agent against the service frame — a SINGLE-KIND run, not a pipeline: there is one
+  // step, and the preset that used to wrap it sat in the task picker beside the build presets
+  // offering something nobody picks (see the `pl_blueprint` tombstone).
   modules.build('bootstrap', () =>
     createBootstrapModule(dependencies, executionEventPublisher, (ws, blockId) =>
-      executionService.start(ws, blockId, BLUEPRINT_PIPELINE_ID).then(() => undefined),
+      executionService.startAgentKind(ws, blockId, BLUEPRINT_AGENT_KIND).then(() => undefined),
     ),
   )
   modules.build('tracker', () => createTrackerModule(dependencies))
@@ -119,6 +121,7 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
   modules.build('agentContextObservability', () => dependencies.agentContextObservability)
   modules.build('searchQueryObservability', () => dependencies.searchQueryObservability)
   modules.build('vcsConnectionService', () => dependencies.vcsConnectionService)
+  modules.build('vcsWebUrls', () => dependencies.vcsWebUrls)
   modules.build('accountSettings', () =>
     dependencies.accountSettings ? { service: dependencies.accountSettings } : undefined,
   )

@@ -16,7 +16,7 @@ import type { AgentArchetype, AgentKind, AgentKindVariant, CustomAgentKind } fro
 
 /**
  * The agent palette catalog (slice 2 of the modular-vue adoption —
- * docs/initiatives/modular-vue-adoption.md).
+ * backend/docs/adr/0049-modular-vue-adoption.md).
  *
  * Reactive union of three sources, none of which mutates the frozen built-in
  * {@link AGENT_BY_KIND} const any more:

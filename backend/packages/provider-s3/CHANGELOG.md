@@ -1,5 +1,199 @@
 # @cat-factory/provider-s3
 
+## 0.2.355
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/kernel@0.281.0
+
+## 0.2.354
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/kernel@0.280.0
+
+## 0.2.353
+
+### Patch Changes
+
+- @cat-factory/kernel@0.279.3
+
+## 0.2.352
+
+### Patch Changes
+
+- 3036af7: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with
+  (`ai@7.0.58`, `@ai-sdk/*@4.0.36` / `openai-compatible@3.0.27` / `amazon-bedrock@5.0.50`), and the
+  Vue singleton pin plus its `@vue/*` overrides move together to 3.5.41 so the SPA still bundles
+  exactly one Vue.
+
+- Updated dependencies [3036af7]
+  - @cat-factory/kernel@0.279.2
+
+## 0.2.351
+
+### Patch Changes
+
+- @cat-factory/kernel@0.279.1
+
+## 0.2.350
+
+### Patch Changes
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+
+## 0.2.349
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/kernel@0.278.0
+
+## 0.2.348
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/kernel@0.277.0
+
+## 0.2.347
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/kernel@0.276.0
+
+## 0.2.346
+
+### Patch Changes
+
+- @cat-factory/kernel@0.275.4
+
+## 0.2.345
+
+### Patch Changes
+
+- @cat-factory/kernel@0.275.3
+
+## 0.2.344
+
+### Patch Changes
+
+- @cat-factory/kernel@0.275.2
+
+## 0.2.343
+
+### Patch Changes
+
+- @cat-factory/kernel@0.275.1
+
+## 0.2.342
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/kernel@0.275.0
+
+## 0.2.341
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/kernel@0.274.0
+
+## 0.2.340
+
+### Patch Changes
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+  - @cat-factory/kernel@0.273.0
+
+## 0.2.339
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+
+## 0.2.338
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+  - @cat-factory/kernel@0.271.0
+
+## 0.2.337
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+
+## 0.2.336
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/kernel@0.269.0
+
+## 0.2.335
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/kernel@0.268.0
+
+## 0.2.334
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/kernel@0.267.0
+
+## 0.2.333
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/kernel@0.266.0
+
+## 0.2.332
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/kernel@0.265.0
+
+## 0.2.331
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/kernel@0.264.0
+
+## 0.2.330
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/kernel@0.263.0
+
 ## 0.2.329
 
 ### Patch Changes

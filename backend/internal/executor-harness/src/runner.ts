@@ -3,13 +3,16 @@ import type { FollowUpLine } from './follow-ups.js'
 import type { ValidationReport } from './validation-checks.js'
 import type { ReproductionReport } from './reproduction-proof.js'
 import type { SliceReview } from './subagents.js'
+import type { ObservedMcpServer } from './agent-capabilities.js'
 import type { HarnessCallMetric, TodoProgress, ToolSpan } from './pi.js'
 import { log, type Logger } from './logger.js'
+import { ToolSilenceWatchdog, type ToolProgressWindow } from './tool-silence.js'
 import {
   type FailureCause,
   failureCauseOf,
   inactivityAbortMessage,
   maxDurationAbortMessage,
+  toolSilenceAbortMessage,
 } from './failure.js'
 
 /** Non-secret correlation fields a job carries on every log line (jobId, repo, branch, …). */
@@ -31,6 +34,22 @@ export interface RunOptions {
   onProgress?: (progress: TodoProgress) => void
   /** Receives one compact {@link ToolSpan} per completed tool call (observability). */
   onSpan?: (span: ToolSpan) => void
+  /**
+   * Opens the tool-silence window (stuck-run audit F13) for ONE agent stream, returning the
+   * handle that stream beats on every completed tool call and closes when it ends.
+   *
+   * Called by the agent-CLI runners themselves rather than by the phase marker, because the
+   * window is only meaningful while something able to RESET it is running and only the runner
+   * knows whether its CLI reports completed tool calls at all. A caller that runs no tool loop
+   * (the inline one-shot completion) simply does not forward this, which is a statement, not an
+   * omission: the run stays bounded by the inactivity and max-duration watchdogs, and a window
+   * nothing could ever beat would only be able to expire.
+   *
+   * Absent ⇒ no window is opened and this watchdog is silent for that work. It fails toward NOT
+   * killing on purpose: this audit exists as much to stop recovery machinery ending healthy runs
+   * as to bound wedged ones, and the wall-clock cap is underneath either way.
+   */
+  beginToolWindow?: () => ToolProgressWindow
   /** Receives the forward-looking follow-up / question items the Coder streamed since the last poll. */
   onFollowUp?: (items: FollowUpLine[]) => void
   /**
@@ -56,6 +75,15 @@ export interface RunOptions {
    * already persisted. Absent for a job that dispatched no subagents.
    */
   onSliceReviews?: (reviews: SliceReview[]) => void
+  /**
+   * Receives what the agent's CLI reported about the tool servers (MCP) it loaded, once it
+   * announces its resolved session. Latest-wins (NOT a drain buffer) for the same reason as
+   * {@link onValidationReport}, with an extra one of its own: the CLI announces the set ONCE,
+   * near the start of the run, so a drain buffer would hand it to whichever poll happened to
+   * land next and lose it entirely if that poll response were dropped — on the single fact this
+   * whole channel exists to carry. Absent for a job that wired no tool servers.
+   */
+  onToolServers?: (observed: ObservedMcpServer[]) => void
   /**
    * Receives each per-call telemetry row the moment the agent's CLI stream yields it, so a
    * run's model calls reach `llm_call_metrics` WHILE it runs rather than only in its terminal
@@ -224,6 +252,18 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
    * from. Absent for a job that dispatched no subagents.
    */
   sliceReviews?: SliceReview[]
+  /**
+   * What the agent's CLI reported about the tool servers (MCP) wired for this job when it started
+   * up: per server, the status the CLI gave it and how many tools it contributed. A whole-value
+   * latest publish like {@link validationReport}, not drain-on-read — the CLI announces this once
+   * and every later poll re-reports the same set, so no poll can be the one that loses it.
+   *
+   * The complement of what the BACKEND recorded at dispatch, and the only source for the half it
+   * cannot see: the dispatch record says why the platform withheld a tool, this says a wired
+   * server failed to start anyway. Absent for a job that wired none, and for a harness whose CLI
+   * reports nothing — which is why it is absent rather than empty (see `ObservedMcpServer`).
+   */
+  toolServers?: ObservedMcpServer[]
 }
 
 interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
@@ -259,6 +299,20 @@ export interface RunnerLimits {
    * progress, which counts as activity). Set to 0 to disable.
    */
   coldStartMs: number
+  /**
+   * Stuck-run audit F13: force-fail the job if a running agent stream completes no tool call for
+   * this long. The gap the other two watchdogs structurally cannot see — a model that keeps
+   * talking (or thinking out loud) resets the inactivity timer on every chunk while completing
+   * nothing, so the only remaining bound was the full wall-clock cap and the engine's
+   * ~70-minute poll budget behind it.
+   *
+   * Armed only for as long as a stream that REPORTS completed tool calls is running (see
+   * {@link RunOptions.beginToolWindow}), so the activity-silent stretches — clone, dependency
+   * install, push, a validation loop's check commands — are outside it by construction: they
+   * legitimately complete no tool calls, and they are bounded by their own per-command timeouts.
+   * Set to 0 to disable.
+   */
+  toolSilenceMs: number
 }
 
 function intEnv(value: string | undefined, fallback: number): number {
@@ -274,21 +328,46 @@ function intEnvAllowZero(value: string | undefined, fallback: number): number {
 }
 
 export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLimits {
+  const maxDurationMs = intEnv(env.JOB_MAX_DURATION_MS, 60 * 60_000)
+  const inactivityMs = intEnv(env.JOB_INACTIVITY_MS, 10 * 60_000)
   return {
     // 60 minutes: generous headroom for serious multi-file coding tasks while
     // still bounding a runaway container.
-    maxDurationMs: intEnv(env.JOB_MAX_DURATION_MS, 60 * 60_000),
+    maxDurationMs,
     // 10 minutes of zero output is treated as hung (a single long LLM/tool call
     // is far shorter; Pi streams events as it works). The per-git command ceiling
     // (`GIT_TIMEOUT_MS` in git.ts) is DERIVED from this value — a fixed margin below
     // it — so a slow clone/push (which emits no activity events) always times out
     // with git's own clear reason rather than this watchdog's "likely hung" message,
     // for any configured window. See the invariant note in git.ts.
-    inactivityMs: intEnv(env.JOB_INACTIVITY_MS, 10 * 60_000),
+    inactivityMs,
     // 2 minutes: comfortably longer than a warm agent's time-to-first-token yet far
     // under the 10-minute inactivity kill, so a truly output-less start is flagged early.
     coldStartMs: intEnvAllowZero(env.JOB_COLD_START_MS, 2 * 60_000),
+    toolSilenceMs: intEnvAllowZero(
+      env.JOB_TOOL_SILENCE_MS,
+      toolSilenceDefault(maxDurationMs, inactivityMs),
+    ),
   }
+}
+
+/**
+ * The tool-silence window when the operator has not set one: HALF the configured wall-clock cap,
+ * DERIVED rather than a constant so lowering `JOB_MAX_DURATION_MS` tightens it too (a fixed
+ * 30 minutes would sit past the whole budget of a deployment that runs 20-minute jobs, i.e. be
+ * silently disabled).
+ *
+ * Floored at the inactivity window so the default never races the gone-quiet diagnostic more
+ * often than it has to. The floor is a sizing choice, NOT the thing that keeps the two watchdogs
+ * apart: they anchor on different events (the last completed tool call vs the last byte of
+ * output), so the tool-silence anchor is always the earlier of the two and equal windows would
+ * still have it firing first. What actually keeps this watchdog off a hang is the expiry test in
+ * {@link ToolSilenceWatchdog}, which fires only when output arrived DURING the window that
+ * elapsed — and which also holds for an operator who sets `JOB_TOOL_SILENCE_MS` below
+ * `JOB_INACTIVITY_MS`, where no default-side clamp applies at all.
+ */
+function toolSilenceDefault(maxDurationMs: number, inactivityMs: number): number {
+  return Math.max(Math.round(maxDurationMs / 2), inactivityMs)
 }
 
 function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobView<TResult> {
@@ -453,7 +532,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
 
   private async drive(entry: JobEntry<TResult>, job: TJob): Promise<void> {
     const controller = new AbortController()
-    let killReason: 'inactivity' | 'max-duration' | undefined
+    let killReason: 'inactivity' | 'max-duration' | 'no-tool-progress' | undefined
 
     const jobLog = log.child({ jobId: entry.id, ...this.describe(job) })
 
@@ -497,6 +576,21 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
     // that never got going at all.
     let lastActivityAt: number | undefined
 
+    // Stuck-run audit F13: the third watchdog, and the only one that can see a model which keeps
+    // TALKING while completing nothing — its output resets the inactivity timer on every chunk,
+    // and it is nowhere near the wall-clock cap. It is armed by the agent stream itself rather
+    // than by the phase marker (see `RunOptions.beginToolWindow`) and reads `lastActivityAt` at
+    // expiry, which is what keeps the gone-quiet case with the inactivity watchdog that owns it.
+    const toolSilence = new ToolSilenceWatchdog({
+      windowMs: this.limits.toolSilenceMs,
+      lastActivityAt: () => lastActivityAt,
+      onExpired: () => {
+        // First watchdog to fire wins the reason (see `resetInactivity` above).
+        killReason ??= 'no-tool-progress'
+        controller.abort(new Error('no tool progress'))
+      },
+    })
+
     // ADR 0026 D4: a one-shot cold-start watchdog. If the job produces no activity within
     // `coldStartMs`, record a structured diagnostic (a likely onboarding/auth wedge) so it
     // is legible early — it does NOT abort the run (the inactivity watchdog still owns
@@ -534,6 +628,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
           entry.spanBuffer.push(span)
           lastTool = { name: span.tool, at: span.endedAt }
         },
+        beginToolWindow: () => toolSilence.open(),
         onFollowUp: (items) => {
           entry.followUpBuffer.push(...items)
         },
@@ -542,6 +637,9 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         },
         onSliceReviews: (reviews) => {
           entry.sliceReviews = reviews
+        },
+        onToolServers: (observed) => {
+          entry.toolServers = observed
         },
         onReproductionProof: (report) => {
           entry.reproductionReport = report
@@ -605,6 +703,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       clearTimeout(inactivity)
       clearTimeout(cap)
       clearTimeout(coldStart)
+      toolSilence.stop()
       entry.abort = undefined
       entry.heartbeatAt = Date.now()
     }
@@ -654,6 +753,19 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         ),
       }
     }
+    if (ctx.killReason === 'no-tool-progress') {
+      return {
+        // The breadcrumb carries the last completed tool, which is the whole diagnostic here:
+        // it names what the agent was doing when it stopped doing anything.
+        message: redactSecrets(
+          `${toolSilenceAbortMessage(this.limits.toolSilenceMs)} (${breadcrumb})`,
+        ),
+        cause: 'no-tool-progress',
+        detail: redactSecrets(
+          `Phase timings: ${phaseBreakdown || '(none)'}. ${breadcrumb}.${cold}`,
+        ),
+      }
+    }
     const raw = ctx.error instanceof Error ? ctx.error.message : String(ctx.error)
     // A thrown error tagged with a structured cause (a git op / an upstream API call) keeps
     // it; an untagged throw is a generic agent failure.
@@ -674,7 +786,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
  */
 interface FailureContext {
   /** Which watchdog killed it; unset when the run threw on its own. */
-  killReason: 'inactivity' | 'max-duration' | undefined
+  killReason: 'inactivity' | 'max-duration' | 'no-tool-progress' | undefined
   error: unknown
   /** The phase the job was IN when it failed (captured before the `failed` transition). */
   phase: string

@@ -2,12 +2,14 @@ import type {
   BlockRepository,
   Notification,
   NotificationChannel,
+  NotificationDeliveryReason,
   SecretCipher,
   SlackConnectionRepository,
   SlackMemberMappingRepository,
   SlackSettingsRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import { isAlertingDelivery } from '@cat-factory/kernel'
 import { SlackApiClient } from './SlackApiClient.js'
 import {
   defaultSlackSettings,
@@ -25,6 +27,11 @@ import {
 // @cat-factory/integrations and serves BOTH runtime facades. Delivery is
 // best-effort: any failure is swallowed so it can never break the state
 // transition that raised the notification (the row is already persisted).
+//
+// An ALERT transport, like email: it POSTS a message, and a chat post cannot be
+// unsaid. So it delivers on the RAISED edge alone (`isAlertingDelivery`). Before
+// that split existed it re-posted the same "Decision needed" card to the route on
+// every resolve, dismissal and escalation, announcing a decision after it was made.
 //
 // On deliver: resolve the workspace's account → its Slack connection (decrypt the
 // bot token), read the workspace's routing, bail unless the notification's type
@@ -61,7 +68,14 @@ export class SlackNotificationChannel implements NotificationChannel {
     this.slack = deps.slackClient ?? new SlackApiClient()
   }
 
-  async deliver(workspaceId: string, notification: Notification): Promise<void> {
+  async deliver(
+    workspaceId: string,
+    notification: Notification,
+    reason: NotificationDeliveryReason,
+  ): Promise<void> {
+    // Before any read or decrypt: a settled/refreshed card must cost neither a post nor a
+    // bot-token decryption.
+    if (!isAlertingDelivery(reason)) return
     try {
       await this.post(workspaceId, notification)
     } catch (error) {
@@ -100,7 +114,7 @@ export class SlackNotificationChannel implements NotificationChannel {
       : []
     const token = await this.deps.secretCipher.decrypt(connection.tokenCipher)
     const message = renderNotificationMessage(notification, channel, mentions)
-    await this.slack.chatPostMessage(token, message as unknown as Record<string, unknown>)
+    await this.slack.chatPostMessage(token, message)
   }
 
   /**

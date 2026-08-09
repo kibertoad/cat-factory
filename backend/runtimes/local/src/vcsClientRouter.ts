@@ -10,13 +10,16 @@ import { noVcsCredentialError } from './github.js'
 // handed at build time. So the object has to be the stable one and the routing has to be inside
 // it.
 //
-// It is a `Proxy` rather than a hand-written delegate on purpose. `GitHubClient` is a 40-method
+// It is a `Proxy` rather than a hand-written delegate on purpose. `GitHubClient` is a 53-method
 // port that keeps growing, and a delegate that has to be edited for each addition fails SILENTLY
 // when it isn't: the method resolves on neither client and a caller gets `undefined is not a
 // function` on whichever path first uses it. Forwarding reflectively cannot drift.
-// (`ProviderRoutingGitHubClient` in @cat-factory/server IS that hand-written delegate, and its
-// routing key — an installation row's immutable stored provider — is a different question from
-// this one, so it is not the seam to reuse here.)
+//
+// `providerRoutingGitHubClient` in @cat-factory/server is the other router built on that same
+// reasoning, and the two stay separate because they route on different QUESTIONS: this one picks
+// the client from the deployment's current credential, per call, and that one picks it from an
+// installation row's immutable stored provider. Neither key can answer the other's question, so
+// there is one seam per key rather than one seam taking both.
 
 /**
  * Property names the no-client branch must answer `undefined` for rather than with a refusing

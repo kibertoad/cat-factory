@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  * The {@code PutNotificationWebhook} wire model.
  * @param alertEvents May be absent entirely.
  * @param enabled May be absent entirely.
+ * @param name May be absent entirely. Length 1..100.
  * @param runEvents May be absent entirely.
  * @param secret May be absent entirely. Length 16..200.
  * @param types May be absent entirely.
@@ -25,6 +26,9 @@ public record PutNotificationWebhook(
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("enabled") @Nullable Boolean enabled,
+
+    /** May be absent entirely. Length 1..100. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("name") @Nullable String name,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("runEvents") @Nullable List<NotificationWebhookRunEvent> runEvents,
@@ -53,6 +57,7 @@ public record PutNotificationWebhook(
     public static final class Builder {
         private @Nullable List<NotificationWebhookAlertEvent> alertEvents;
         private @Nullable Boolean enabled;
+        private @Nullable String name;
         private @Nullable List<NotificationWebhookRunEvent> runEvents;
         private @Nullable String secret;
         private @Nullable List<NotificationType> types;
@@ -67,6 +72,12 @@ public record PutNotificationWebhook(
         /** Set {@code enabled}. */
         public Builder enabled(@Nullable Boolean enabled) {
             this.enabled = enabled;
+            return this;
+        }
+
+        /** Set {@code name}. */
+        public Builder name(@Nullable String name) {
+            this.name = name;
             return this;
         }
 
@@ -96,7 +107,7 @@ public record PutNotificationWebhook(
 
         /** Build the {@link PutNotificationWebhook}. */
         public PutNotificationWebhook build() {
-            return new PutNotificationWebhook(alertEvents, enabled, runEvents, secret, types, url);
+            return new PutNotificationWebhook(alertEvents, enabled, name, runEvents, secret, types, url);
         }
     }
 }

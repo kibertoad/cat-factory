@@ -16,6 +16,13 @@ const props = defineProps<{
   referenceId: string | null | undefined
   blobs: ArtifactBlobs
   busy?: boolean
+  /**
+   * Where the reference came from, when the caller knows. A frame rendered from a linked design
+   * and a mock a person attached are different claims about what "the reference" is, so the
+   * caption says which; absent leaves the plain label, which is what an unattributed reference
+   * honestly is.
+   */
+  referenceOrigin?: 'upload' | 'design' | null
 }>()
 
 const emit = defineEmits<{
@@ -196,6 +203,9 @@ function onRefInput(e: Event) {
       <figure class="space-y-1">
         <figcaption class="text-[10px] uppercase tracking-wide text-slate-500">
           {{ t('media.compare.reference') }}
+          <span v-if="referenceOrigin === 'design'" class="text-amber-300/80">
+            {{ t('media.compare.fromLinkedDesign') }}
+          </span>
         </figcaption>
         <button
           v-if="refUrl"

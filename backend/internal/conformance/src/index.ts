@@ -42,6 +42,7 @@ export {
   type ToolServerDispatchContainer,
 } from './tool-servers-probe.js'
 export { makeIncorporatedReview, makeReadyReviewWithOpenItem } from './requirements-fixtures.js'
+export { seedLegacyPipeline } from './legacyPipeline.js'
 export { makeIncorporatedClarityReview, makeReadyClarityReview } from './clarity-fixtures.js'
 export {
   defineConformanceSuite,
@@ -91,6 +92,7 @@ export {
   type PlatformMetricsSeedRun,
 } from './platform-metrics-suite.js'
 export { defineGateOutcomeSuite, type GateOutcomeSeed } from './gate-outcome-suite.js'
+export { defineNotificationSettingsSuite } from './notification-settings-suite.js'
 export {
   defineReportsSuite,
   type ReportsSeed,

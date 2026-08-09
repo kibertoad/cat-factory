@@ -470,6 +470,9 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Investigates the topic, prior art and linked context, producing a research brief before a document is drafted.',
       category: 'docs',
+      // The document-authoring family: every one of these exists to produce or polish an in-repo
+      // document, so the palette offers them to a `document` pipeline and nowhere else.
+      purposes: ['document'],
       tier: 'intermediate',
     },
   },
@@ -486,6 +489,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Turns the brief and research into a kind-appropriate document outline for human review before drafting.',
       category: 'docs',
+      purposes: ['document'],
       tier: 'intermediate',
     },
   },
@@ -504,6 +508,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Converses with the requester to refine a document’s scope, audience and structure before drafting, synthesizing a refined authoring brief.',
       category: 'docs',
+      purposes: ['document'],
       tier: 'advanced',
       // Opens the dedicated interactive-interview window (answer / continue / proceed) via the
       // universal result-view seam, not the generic prose panel.
@@ -526,6 +531,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Writes the document as in-repo Markdown following the approved outline, and opens a pull request.',
       category: 'docs',
+      purposes: ['document'],
       tier: 'basic',
     },
   },
@@ -545,6 +551,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Final editorial pass over the drafted document — clarity, consistency, formatting and reviewer feedback.',
       category: 'docs',
+      purposes: ['document'],
       tier: 'intermediate',
     },
   },
@@ -565,6 +572,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Addresses the document-quality gate’s structural findings on the drafted document and pushes the fix.',
       category: 'docs',
+      purposes: ['document'],
       tier: 'intermediate',
     },
   },

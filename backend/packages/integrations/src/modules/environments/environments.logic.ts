@@ -19,10 +19,14 @@ import { assertSafePublicUrl } from '../shared/url-guard.js'
 // coercion. Keeping these pure makes the generic provider deterministic and
 // testable without a live management API.
 
-/** The agent kind that triggers deterministic provisioning. */
-export const DEPLOYER_AGENT_KIND = 'deployer'
-/** The agent kind that triggers deterministic RECLAIM — the deployer's counterpart. */
-export const DISPOSER_AGENT_KIND = 'disposer'
+/**
+ * The agent kind that triggers deterministic provisioning, and its counterpart that triggers the
+ * deterministic RECLAIM. Re-exported from `@cat-factory/contracts` rather than restated: the
+ * pipeline builder and the save boundary both reason about the pair (a Deployer without a
+ * Disposer leaves the environment to the TTL sweep), and the SPA has to name the same two kinds.
+ */
+export { DEPLOYER_AGENT_KIND, DISPOSER_AGENT_KIND } from '@cat-factory/contracts'
+import { DEPLOYER_AGENT_KIND, DISPOSER_AGENT_KIND } from '@cat-factory/contracts'
 /** Board category for environment blocks (a deployer pipeline typically runs here). */
 export const ENVIRONMENT_BLOCK_TYPE = 'environment'
 

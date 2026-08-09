@@ -20,6 +20,15 @@ import {
   toolCallResult,
   toolCallStart,
 } from './tool-trajectory.js'
+import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
+import {
+  PI_MAX_OUTPUT_TOKENS,
+  PiRunReducer,
+  isObject,
+  type PiRunStats,
+  type RunDiagnostics,
+} from './pi-reduction.js'
+import { NO_TOOL_WINDOW, type ToolProgressWindow } from './tool-silence.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
 // proxy via a custom provider in ~/.pi/agent/models.json, authenticated with the
@@ -27,17 +36,13 @@ import {
 // ever lives in the image or in Pi's config on disk.
 
 /**
- * Per-completion output-token ceiling Pi requests (its model-entry `maxTokens`).
- * Generous on purpose: a reasoning model (e.g. GLM-5.2) spends tokens on its
- * `<think>` trace before the answer + tool calls, so a tight cap truncates it
- * mid-reasoning and the agent never commits edits. It is a ceiling, not a target
- * — unused output tokens are not billed and Workers AI clamps the request to the
- * model's real max — so erring high is safe. Raised to 32k after a spec-writer run
- * truncated an intermediate tool call at the old 16k cap; the document itself
- * stopped well under it, so this is headroom for larger specs/diffs, with
- * {@link runDiagnostics} flagging the rare case where even 32k is not enough.
+ * How much of Pi's raw stdout/stderr the run holds for diagnostics. Every consumer takes a tail
+ * of it (2 KB for the last-resort summary, 1.5 KB for a stderr quote, 500 B for a crash detail),
+ * so this is generous headroom over the largest of them rather than a number anything depends
+ * on. What it replaces is retaining the WHOLE of a chatty run's output to slice 2 KB off the end
+ * (stuck-run audit F6).
  */
-export const PI_MAX_OUTPUT_TOKENS = 32_768
+const OUTPUT_TAIL_CHARS = 64 * 1024
 
 /**
  * Longest phase label the backend keeps. Mirrors kernel's `MAX_PHASE_CHARS`; see
@@ -213,6 +218,13 @@ export async function writeAgentsContext(
      * every turn) pointing at files that don't exist. Absent/false ⇒ the note is omitted.
      */
     hasBlueprints?: boolean
+    /**
+     * The reference-design block composed by `referenceScreenshotGuidance`: which files the run
+     * was handed and which it could not fetch. Composed by the caller (it is the only side that
+     * knows what actually landed on disk) and appended verbatim. Absent/'' ⇒ nothing is said,
+     * which is the normal case: only a capturing kind is sent references at all.
+     */
+    referenceGuidance?: string
   } = {},
 ): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')
@@ -241,9 +253,13 @@ export async function writeAgentsContext(
   // (see the note above `writeAgentsContext`): it comes solely from the backend `spec-aware`
   // trait, so a spec-aware run no longer carries it twice.
   const blueprint = opts.hasBlueprints ? BLUEPRINT_GUIDANCE : ''
+  // The reference designs the harness downloaded for a capturing kind, listed with their view
+  // names (and the ones that could not be fetched). Last, beside the linked-context list it is the
+  // sibling of: both point the agent at files already on disk.
+  const references = opts.referenceGuidance ?? ''
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${blueprint}${TODO_GUIDANCE}${monorepo}${multiRepo}${webTools}${context}`,
+    `${systemPrompt}${blueprint}${TODO_GUIDANCE}${monorepo}${multiRepo}${webTools}${context}${references}`,
     'utf8',
   )
 }
@@ -307,9 +323,22 @@ export async function materializeContextFiles(
   const dir = join(cwd, CONTEXT_DIR)
   await mkdir(dir, { recursive: true })
   for (const f of files) await writeFile(join(dir, f.path), f.content, 'utf8')
-  // The exclude pattern has no leading slash, so it matches `.cat-context/` at any depth
-  // — covering the monorepo case where cwd is a service subdirectory below the repo root.
-  // Walk up to find the repo's `.git` (best-effort; a from-scratch scaffold has none).
+  await excludeContextDir(cwd)
+}
+
+/**
+ * Add the LOCAL git exclude entry for {@link CONTEXT_DIR}, so nothing the harness materialises
+ * there can be committed into the agent's PR by a `git add -A`.
+ *
+ * The exclude pattern has no leading slash, so it matches `.cat-context/` at any depth, covering
+ * the monorepo case where cwd is a service subdirectory below the repo root. Best-effort: a
+ * scaffold-from-scratch checkout has no `.git` yet, and the files then simply stay untracked.
+ *
+ * One helper rather than a copy per materialiser: every writer into that directory owes the same
+ * exclude, and a new one that forgot it would leak the platform's own files into a customer's
+ * repository with nothing failing.
+ */
+export async function excludeContextDir(cwd: string): Promise<void> {
   const gitRoot = await findGitRoot(cwd)
   if (!gitRoot) return
   try {
@@ -351,13 +380,7 @@ export async function materializeSkillResources(
       await writeFile(dest, r.content, 'utf8')
     }
   }
-  const gitRoot = await findGitRoot(cwd)
-  if (!gitRoot) return
-  try {
-    await appendFile(join(gitRoot, '.git', 'info', 'exclude'), `\n${CONTEXT_DIR}/\n`, 'utf8')
-  } catch {
-    // No writable .git/info; the files simply stay untracked.
-  }
+  await excludeContextDir(cwd)
 }
 
 /** Walk up from `dir` (bounded) to the directory containing a `.git` folder, or null. */
@@ -540,43 +563,6 @@ export interface ToolSpan {
   /** Characters the cap dropped from {@link args} / {@link result}; 0 when nothing was cut. */
   argsDropped: number
   resultDropped: number
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-/**
- * What the agent actually did this run, independent of any file changes. Used to
- * tell a genuine no-op (the agent never reached the model / never acted) apart
- * from a real run, so a bootstrap that produced nothing is failed rather than
- * pushed as an empty repo. `toolCalls === 0 && assistantChars === 0` is the
- * signature of a run where Pi never made a successful model call.
- */
-export interface PiRunStats {
-  /** Tool calls the assistant emitted across the transcript (0 ⇒ it never acted). */
-  toolCalls: number
-  /** Total characters of assistant text (0 ⇒ the model produced nothing). */
-  assistantChars: number
-}
-
-/**
- * Output-quality signals lifted from the agent's transcript, so the harness can fail
- * LOUDLY on a malformed run instead of silently handing a half-baked artifact to the
- * structured-output repair (which would manufacture a doc from garbage — the trap
- * behind the spec-writer ⇄ companion rework loop). Two distinct invalid states, both
- * seen in production from `kimi-k2.7-code`:
- *  - a completion that hit the output ceiling (its answer/tool call was cut off), and
- *  - a FINAL turn that carried no text at all (an empty `content: []` despite spending
- *    output tokens), so there is no answer to parse.
- */
-export interface RunDiagnostics {
-  /** Some completion ended at the output-token ceiling — its content was cut off. */
-  truncated: boolean
-  /** The agent's FINAL completion hit the ceiling: its ANSWER (not a mid-run step) was cut off. */
-  finalTruncated: boolean
-  /** The agent's final turn carried no text content (e.g. an empty `content: []`). */
-  finalAnswerEmpty: boolean
 }
 
 /**
@@ -886,6 +872,12 @@ export function runPi(opts: {
    */
   onSpan?: (span: ToolSpan) => void
   /**
+   * Opens this stream's tool-silence window (see `RunOptions.beginToolWindow`), closed when Pi
+   * exits. Pi reports every completed tool call, so the window it opens is one this run can
+   * always beat; a caller that passes nothing leaves the watchdog silent for the run.
+   */
+  beginToolWindow?: () => ToolProgressWindow
+  /**
    * Called with every parsed Pi `--mode json` event, in stream order — the raw
    * observability seam over the run. Used by offline tooling (the smoketest
    * harness) to capture the full prompt/response/tool-call transcript for
@@ -928,15 +920,25 @@ export function runPi(opts: {
     // 'close'/'error' handlers below own the actual failure reporting.
     child.stdin.on('error', () => {})
     child.stdin.end(opts.userPrompt)
-    let stdout = ''
-    let stderr = ''
+    // The close-of-run answers (summary, stats, diagnostics, terminal error), FOLDED as the
+    // records stream instead of re-parsing the whole of stdout two more times at close: those
+    // passes were O(entire output) on the event loop the watchdog timers and the poll endpoints
+    // share, at exactly the moment the job is settling (stuck-run audit F6). Folding rather than
+    // retaining the parsed records is the other half of that bound — it is what makes this not a
+    // second copy of the run, which an unbounded array of parsed objects would have been.
+    const reduction = new PiRunReducer()
+    // This stream's tool-silence window: Pi reports every completed tool call, so each one below
+    // beats it. Closed on BOTH terminal paths (`error` and `close`) — a window outliving the
+    // process it watches would expire against a run that is already over.
+    const toolWindow = opts.beginToolWindow?.() ?? NO_TOOL_WINDOW
+    // Raw output kept ONLY to quote on a failure, so a bounded tail is the whole requirement —
+    // the longest slice anyone takes below is 2 KB.
+    const stdout = new BoundedTail(OUTPUT_TAIL_CHARS)
+    const stderr = new BoundedTail(OUTPUT_TAIL_CHARS)
     let aborted = false
     // Set when the no-progress guard kills Pi; carries the diagnostic the run
     // fails with (distinct from an external watchdog abort).
     let guardReason: string | undefined
-    // Pi's json mode is strict LF-framed JSONL; buffer partial lines across
-    // chunks so we only ever parse complete records for progress + the guard.
-    let lineBuffer = ''
     // Counters for silent losses, warned ONCE at close (not per-line, to avoid log
     // spam): `{`-leading lines that failed to JSON.parse, and observer-callback throws.
     let malformedLines = 0
@@ -961,14 +963,14 @@ export function runPi(opts: {
     // and the no-progress guard; the `close` handler turns it into a rejection.
     const killChild = (): void => killChildProcess(child)
 
-    // Parse each complete JSONL record once, feeding both the todo-progress
-    // emitter and the no-progress guard. A tripped guard kills Pi with a
-    // diagnostic the run then fails on.
-    // `runGuard` is false only for the at-close flush of a final unterminated line: the
-    // process has already exited, so feeding that record to the no-progress guard could trip
-    // it and turn a clean (code 0) exit into a spurious "no progress" rejection. The flush
-    // still recovers the record's progress/span signal; only the kill decision is skipped.
-    const processLine = (line: string, runGuard = true): void => {
+    // Parse each complete JSONL record once, retaining it for the close-of-run reductions and
+    // feeding the todo-progress emitter and the no-progress guard. A tripped guard kills Pi
+    // with a diagnostic the run then fails on.
+    // `final` marks the at-close flush of a final unterminated line: the process has already
+    // exited, so feeding that record to the no-progress guard could trip it and turn a clean
+    // (code 0) exit into a spurious "no progress" rejection. The flush still recovers the
+    // record's progress/span signal; only the kill decision is skipped.
+    const processLine = (line: string, final: boolean): void => {
       if (!line.startsWith('{')) return
       let event: Record<string, unknown>
       try {
@@ -979,6 +981,7 @@ export function runPi(opts: {
         malformedLines++
         return
       }
+      reduction.observe(event)
       if (opts.onEvent) {
         try {
           opts.onEvent(event)
@@ -991,11 +994,15 @@ export function runPi(opts: {
         const progress = parseTodoProgress(event)
         if (progress) opts.onProgress(progress)
       }
+      // A completed tool call is the progress the tool-silence watchdog measures. Detected
+      // OUTSIDE the span branch below: the trajectory is an observability opt-in, and a watchdog
+      // that only ran when someone wanted spans would be armed against a stream it could not see.
+      const signal = toolCallSignal(event)
+      if (signal?.name) toolWindow.toolCompleted()
       if (opts.onSpan) {
         const start = toolCallStart(event)
         if (start) tools.started(start.id, start.name, start.args)
-        const signal = toolCallSignal(event)
-        if (signal && signal.name) {
+        if (signal?.name) {
           const call = tools.finished(
             readToolCallId(event),
             signal.name,
@@ -1010,7 +1017,7 @@ export function runPi(opts: {
           }
         }
       }
-      if (runGuard && !guardReason && !aborted) {
+      if (!final && !guardReason && !aborted) {
         const reason = guard.observe(event)
         if (reason) {
           guardReason = reason
@@ -1019,16 +1026,9 @@ export function runPi(opts: {
       }
     }
 
-    const consumeStdout = (text: string): void => {
-      lineBuffer += text
-      let nl = lineBuffer.indexOf('\n')
-      while (nl !== -1) {
-        const line = lineBuffer.slice(0, nl).trim()
-        lineBuffer = lineBuffer.slice(nl + 1)
-        nl = lineBuffer.indexOf('\n')
-        processLine(line)
-      }
-    }
+    // Pi's json mode is strict LF-framed JSONL; the reader buffers partial records across
+    // chunks (bounded — see `JsonlLineReader`) so we only ever parse complete ones.
+    const reader = new JsonlLineReader(processLine)
 
     // When the watchdog aborts, terminate Pi: the `close` handler then rejects
     // with the abort reason.
@@ -1041,9 +1041,9 @@ export function runPi(opts: {
     const onChunk = (chunk: Buffer, sink: 'out' | 'err'): void => {
       const text = chunk.toString()
       if (sink === 'out') {
-        stdout += text
-        consumeStdout(text)
-      } else stderr += text
+        stdout.push(text)
+        reader.push(text)
+      } else stderr.push(text)
       // Any output means progress: reset the inactivity watchdog.
       opts.onActivity?.()
     }
@@ -1051,61 +1051,106 @@ export function runPi(opts: {
     child.stderr.on('data', (chunk: Buffer) => onChunk(chunk, 'err'))
     child.on('error', (error) => {
       opts.signal?.removeEventListener('abort', onAbort)
+      toolWindow.close()
       reject(error)
     })
     child.on('close', (code) => {
       opts.signal?.removeEventListener('abort', onAbort)
+      toolWindow.close()
       // Flush a final record that arrived without a trailing newline: Pi usually LF-frames
       // every line, but a clean exit can leave the last event (often `agent_end`) unterminated
       // in the buffer, so without this its progress/span/guard signal would be silently lost.
-      if (lineBuffer.trim()) {
-        processLine(lineBuffer.trim(), false)
-        lineBuffer = ''
-      }
+      reader.flush()
       // Surface any silent stream losses ONCE (counts, not per-line), so a corrupted JSONL
-      // stream or a throwing observer is diagnosable rather than invisible.
-      if (malformedLines > 0 || observerErrors > 0) {
-        log.warn('pi: skipped malformed JSONL lines / observer errors', {
+      // stream, an oversized record the reader refused to buffer, or a throwing observer is
+      // diagnosable rather than invisible.
+      if (malformedLines > 0 || observerErrors > 0 || reader.droppedLines > 0) {
+        log.warn('pi: skipped malformed/oversized JSONL lines or observer errors', {
           malformedLines,
+          oversizedLines: reader.droppedLines,
           observerErrors,
         })
       }
-      if (guardReason) {
-        const tail = redactSecrets(stderr.trim()).slice(-700)
-        reject(new Error(tail ? `${guardReason} Agent stderr: ${tail}` : guardReason))
-      } else if (aborted) {
-        reject(
-          new Error(
-            opts.signal?.reason instanceof Error ? opts.signal.reason.message : 'pi aborted',
-          ),
-        )
-      } else if (code === 0) {
-        const tail = redactSecrets(stderr.trim()).slice(-1500)
-        // Pi can exit 0 even when the agent run ended in a hard error (e.g. every
-        // model call failed and its retries were exhausted): the process completed,
-        // but the agent did not. Exit code alone then reads as success, and a run
-        // that RESUMED a branch with prior commits would even open a PR off work this
-        // pass never produced. Inspect the terminal transcript and fail loudly so the
-        // step is marked failed instead of masking a total failure as green.
-        const runError = terminalRunError(stdout)
-        if (runError) {
-          const scrubbed = redactSecrets(runError).slice(0, 1000)
-          const detail = tail ? `${scrubbed} Agent stderr: ${tail}` : scrubbed
-          reject(piRunFailure(detail, runError))
-        } else {
-          resolve({ ...summarizePiRun(stdout), ...(tail ? { stderrTail: tail } : {}) })
-        }
-      } else {
-        // A non-zero exit is the OTHER way a proxy refusal can surface (Pi crashing rather
-        // than exiting 0 after exhausting retries), so classify it here too — otherwise a
-        // 401/402/429 that happens to crash Pi would read as a generic agent failure. Redact
-        // the transcript slice before it becomes the detail: unlike the exit-0 path above, the
-        // raw `stderr`/`stdout` here was previously interpolated unscrubbed.
-        const raw = (stderr || stdout).slice(-500)
-        reject(piRunFailure(`pi exited with code ${code}: ${redactSecrets(raw)}`, raw))
-      }
+      const settled = settlePiRun({
+        code,
+        reduction,
+        droppedLines: reader.droppedLines,
+        aborted,
+        stdoutTail: stdout.toString(),
+        stderrTail: stderr.toString(),
+        ...(guardReason ? { guardReason } : {}),
+        ...(opts.signal?.reason instanceof Error
+          ? { abortReason: opts.signal.reason.message }
+          : {}),
+      })
+      if (settled.ok) resolve(settled.outcome)
+      else reject(settled.error)
     })
   })
+}
+
+/**
+ * Turn an EXITED Pi process into the run's outcome or its failure. Split out of {@link runPi} for
+ * the per-function budget, and pure so the dispositions can be reasoned about (and tested) without
+ * spawning anything: everything it needs is already reduced by the time the process closes.
+ *
+ * The four dispositions, in the order they win: the no-progress guard's own kill, the external
+ * watchdog's abort, a crash, and a clean exit — which is where the run is CERTIFIED, below.
+ */
+function settlePiRun(args: {
+  code: number | null
+  reduction: PiRunReducer
+  /** Records the framing reader refused to buffer; see the certification note below. */
+  droppedLines: number
+  aborted: boolean
+  guardReason?: string
+  abortReason?: string
+  stdoutTail: string
+  stderrTail: string
+}): { ok: true; outcome: PiRunOutcome } | { ok: false; error: Error } {
+  const { code, reduction, droppedLines, aborted, guardReason, stdoutTail, stderrTail } = args
+  const fail = (error: Error): { ok: false; error: Error } => ({ ok: false, error })
+  if (guardReason) {
+    const guardTail = redactSecrets(stderrTail.trim()).slice(-700)
+    return fail(new Error(guardTail ? `${guardReason} Agent stderr: ${guardTail}` : guardReason))
+  }
+  if (aborted) return fail(new Error(args.abortReason ?? 'pi aborted'))
+  if (code !== 0) {
+    // A non-zero exit is the OTHER way a proxy refusal can surface (Pi crashing rather than
+    // exiting 0 after exhausting retries), so classify it here too — otherwise a 401/402/429 that
+    // happens to crash Pi would read as a generic agent failure. Redact the transcript slice
+    // before it becomes the detail: unlike the exit-0 path below, this was previously
+    // interpolated unscrubbed.
+    const raw = (stderrTail || stdoutTail).slice(-500)
+    return fail(piRunFailure(`pi exited with code ${code}: ${redactSecrets(raw)}`, raw))
+  }
+  const tail = redactSecrets(stderrTail.trim()).slice(-1500)
+  // Pi can exit 0 even when the agent run ended in a hard error (e.g. every model call failed and
+  // its retries were exhausted): the process completed, but the agent did not. Exit code alone
+  // then reads as success, and a run that RESUMED a branch with prior commits would even open a
+  // PR off work this pass never produced.
+  const runError = reduction.terminalError()
+  if (runError) {
+    const scrubbed = redactSecrets(runError).slice(0, 1000)
+    return fail(piRunFailure(tail ? `${scrubbed} Agent stderr: ${tail}` : scrubbed, runError))
+  }
+  if (!reduction.sawTerminalRecord && droppedLines > 0) {
+    // The check above answered "no terminal failure" from having seen no terminal record AT ALL,
+    // and the reader dropped at least one oversized one — so the record that decides this
+    // question is exactly the record most likely to have been dropped (`agent_end` carries the
+    // run's whole transcript). Resolving here would report a hard-failed run as a success, which
+    // is the case that check exists to prevent, so refuse to certify it instead.
+    // `no-usable-output` because that is literally what happened: the run finished and its
+    // terminal report never reached us.
+    const detail =
+      `pi exited 0 but its terminal record was dropped for exceeding the JSONL line cap ` +
+      `(${droppedLines} oversized record(s)), so the run's outcome is unknown`
+    return fail(new HarnessFailure('no-usable-output', tail ? `${detail}. ${tail}` : detail))
+  }
+  return {
+    ok: true,
+    outcome: { ...reduction.reduce(stdoutTail), ...(tail ? { stderrTail: tail } : {}) },
+  }
 }
 
 /**
@@ -1119,51 +1164,6 @@ export function runPi(opts: {
 function piRunFailure(detail: string, sourceText: string): Error {
   const remedy = classifyLlmUpstreamError(sourceText)
   return remedy ? new HarnessFailure('llm-upstream', `${detail}\n${remedy}`) : new Error(detail)
-}
-
-/** Parse Pi's LF-framed JSONL stdout into its event records, skipping noise. */
-function parsePiEvents(stdout: string): Record<string, unknown>[] {
-  const events: Record<string, unknown>[] = []
-  for (const raw of stdout.split('\n')) {
-    const line = raw.trim()
-    if (!line.startsWith('{')) continue
-    try {
-      events.push(JSON.parse(line) as Record<string, unknown>)
-    } catch {
-      // Not a JSON event line; skip.
-    }
-  }
-  return events
-}
-
-/**
- * The terminal-failure message when Pi's run ended in a hard error (the model was
- * unreachable / refused, and Pi exhausted its auto-retries), else undefined. Only
- * the FINAL outcome counts: a mid-run hiccup the agent recovered from leaves a clean
- * terminal `agent_end`, so it returns undefined. Scans from the end and decides on
- * the first terminal signal it meets — the trailing `auto_retry_end` (its `success`
- * flag) or the last `agent_end` (its `stopReason`). Pure so it is unit-testable over
- * a fixed event sequence.
- */
-export function terminalRunError(stdout: string): string | undefined {
-  const events = parsePiEvents(stdout)
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]!
-    if (e.type === 'auto_retry_end') {
-      if (e.success === false) {
-        return typeof e.finalError === 'string'
-          ? e.finalError
-          : 'the agent failed after exhausting its retries'
-      }
-      return undefined
-    }
-    if (e.type === 'agent_end') {
-      return e.stopReason === 'error' && typeof e.errorMessage === 'string'
-        ? e.errorMessage
-        : undefined
-    }
-  }
-  return undefined
 }
 
 /**
@@ -1210,191 +1210,4 @@ export function classifyLlmUpstreamError(finalError: string): string | undefined
     )
   }
   return undefined
-}
-
-/**
- * Pi's assistant summary plus {@link PiRunStats}, derived from one pass over its
- * output — the canonical close-of-run signal the harness uses both to report the
- * answer and to detect a no-op run (the agent never acted).
- */
-export function summarizePiRun(stdout: string): PiRunOutcome {
-  const events = parsePiEvents(stdout)
-  return {
-    summary: summaryFromEvents(events, stdout),
-    stats: statsFromEvents(events),
-    diagnostics: diagnosticsFromEvents(events),
-  }
-}
-
-/**
- * Output-quality signals over the canonical `agent_end` transcript: whether any
- * completion hit the output ceiling (its content was cut off), whether the FINAL
- * completion did, and whether that final turn carried no text at all. Pure so it is
- * unit-testable over a fixed event sequence. Defaults to all-false when there is no
- * terminal transcript (a no-op run is already caught by {@link agentNeverActed}).
- *
- * `cap` is the per-completion ceiling Pi requested ({@link PI_MAX_OUTPUT_TOKENS});
- * truncation is detected by an assistant message whose `usage.output` reached it,
- * which is reliable even when the model reports a non-`length` stop reason (Workers
- * AI labelled a cut-off tool call `tool_calls`, not `length`).
- */
-export function diagnosticsFromEvents(
-  events: Record<string, unknown>[],
-  cap: number = PI_MAX_OUTPUT_TOKENS,
-): RunDiagnostics {
-  let messages: unknown[] | undefined
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]!
-    if (e.type === 'agent_end' && Array.isArray(e.messages)) {
-      messages = e.messages as unknown[]
-      break
-    }
-  }
-  if (!messages) return { truncated: false, finalTruncated: false, finalAnswerEmpty: false }
-  const assistants = messages.filter(
-    (m): m is Record<string, unknown> => isObject(m) && m.role === 'assistant',
-  )
-  const truncated = assistants.some((m) => assistantOutputTokens(m) >= cap)
-  const last = assistants.at(-1)
-  return {
-    truncated,
-    finalTruncated: last ? assistantOutputTokens(last) >= cap : false,
-    finalAnswerEmpty: last ? messageText(last) === '' : false,
-  }
-}
-
-/** `usage.output` (completion tokens) reported on a Pi assistant message, or 0. */
-function assistantOutputTokens(message: Record<string, unknown>): number {
-  const usage = message.usage
-  if (!isObject(usage)) return 0
-  const output = usage.output
-  return typeof output === 'number' ? output : 0
-}
-
-/** {@link RunDiagnostics} over Pi's raw `--mode json` stdout (see {@link diagnosticsFromEvents}). */
-export function runDiagnostics(stdout: string, cap: number = PI_MAX_OUTPUT_TOKENS): RunDiagnostics {
-  return diagnosticsFromEvents(parsePiEvents(stdout), cap)
-}
-
-/**
- * Count what the agent actually did. Prefers the canonical `agent_end`
- * transcript (assistant `toolCall` parts + text); falls back to the streamed
- * `tool_execution_end` / `message_end` events when no terminal transcript was
- * emitted, so a no-op is never mistaken for a real run because of a schema tweak.
- */
-function statsFromEvents(events: Record<string, unknown>[]): PiRunStats {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]!
-    if (e.type === 'agent_end' && Array.isArray(e.messages)) {
-      return statsFromMessages(e.messages as unknown[])
-    }
-  }
-  let toolCalls = 0
-  let toolResults = 0
-  let assistantChars = 0
-  for (const e of events) {
-    if (e.type === 'tool_execution_end') {
-      toolCalls++
-    } else if (e.type === 'message_end' && isObject(e.message)) {
-      const m = e.message
-      if (m.role === 'assistant') assistantChars += messageText(m).length
-      else if (m.role === 'toolResult') toolResults++
-    }
-  }
-  // The same call can surface as both a `tool_execution_end` and a toolResult
-  // `message_end`; prefer the former and only fall back to toolResult counts.
-  return { toolCalls: toolCalls || toolResults, assistantChars }
-}
-
-/** {@link PiRunStats} from a transcript: assistant `toolCall` parts + text length. */
-function statsFromMessages(messages: unknown[]): PiRunStats {
-  let toolCalls = 0
-  let assistantChars = 0
-  for (const m of messages) {
-    if (!isObject(m) || m.role !== 'assistant') continue
-    const content = m.content
-    if (typeof content === 'string') {
-      assistantChars += content.trim().length
-    } else if (Array.isArray(content)) {
-      for (const part of content) {
-        if (!isObject(part)) continue
-        if (part.type === 'toolCall') toolCalls++
-        else if (typeof part.text === 'string') assistantChars += part.text.length
-      }
-    }
-  }
-  return { toolCalls, assistantChars }
-}
-
-/**
- * Extract the assistant's final summary from Pi's JSON-lines output. Pi emits a
- * terminal `agent_end` event whose `messages` is the full transcript, so the
- * last assistant message there is the canonical answer. Falls back to scanning
- * `message_end` events, then to a raw tail, so a schema tweak never loses output.
- */
-export function parsePiOutput(stdout: string): string {
-  return summaryFromEvents(parsePiEvents(stdout), stdout)
-}
-
-/** Shared summary extraction over already-parsed events (see {@link parsePiOutput}). */
-function summaryFromEvents(events: Record<string, unknown>[], stdout: string): string {
-  // Preferred: the final transcript from the last agent_end event.
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]!
-    if (e.type === 'agent_end' && Array.isArray(e.messages)) {
-      const text = lastAssistantText(e.messages as unknown[])
-      if (text) return text
-    }
-  }
-
-  // Fallback: assistant text accumulated from message_end events.
-  const parts: string[] = []
-  for (const e of events) {
-    if (
-      e.type === 'message_end' &&
-      typeof e.message === 'object' &&
-      e.message !== null &&
-      (e.message as { role?: unknown }).role === 'assistant'
-    ) {
-      const text = messageText(e.message)
-      if (text) parts.push(text)
-    }
-  }
-  const joined = parts.join('\n').trim()
-  if (joined) return joined
-
-  // Nothing structured matched — return a trimmed tail of the raw output.
-  return stdout.trim().slice(-2000)
-}
-
-/** The text of the last assistant message in a transcript, or '' if none. */
-function lastAssistantText(messages: unknown[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]
-    if (typeof m === 'object' && m !== null && (m as { role?: unknown }).role === 'assistant') {
-      const text = messageText(m)
-      if (text) return text
-    }
-  }
-  return ''
-}
-
-/** Join the text parts of a Pi message whose content is a string or parts array. */
-function messageText(message: unknown): string {
-  if (typeof message !== 'object' || message === null) return ''
-  const content = (message as { content?: unknown }).content
-  if (typeof content === 'string') return content.trim()
-  if (Array.isArray(content)) {
-    return content
-      .map((part) =>
-        typeof part === 'object' &&
-        part !== null &&
-        typeof (part as { text?: unknown }).text === 'string'
-          ? (part as { text: string }).text
-          : '',
-      )
-      .join('')
-      .trim()
-  }
-  return ''
 }

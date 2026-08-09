@@ -74,6 +74,11 @@ export async function resolveBinaryOutputContext(
         input.workspaceId,
         input.step.stepOptions?.binaryOutput,
         input.binaryGeneratorSource,
+        // Which PASS of a comparison step this is, read off the step because that is the only
+        // thing the durable dispatch path carries. A brief built without it would ask a
+        // delivering pass to start the comparison over, with the human's decision already
+        // recorded and about to be ignored.
+        input.step.binaryCandidates,
       ),
     { workspaceId: input.workspaceId, agentKind: input.agentKind },
   )

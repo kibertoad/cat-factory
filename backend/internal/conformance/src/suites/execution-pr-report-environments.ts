@@ -1,7 +1,8 @@
-import type { EnvironmentProvider, Pipeline, PullRequestRef } from '@cat-factory/kernel'
+import type { EnvironmentProvider, PullRequestRef } from '@cat-factory/kernel'
 import { parsePrVerificationReport } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { FakePrReportPublisher } from '../FakePrReportPublisher.js'
+import { seedLegacyPipeline } from '../legacyPipeline.js'
 import type { ConformanceHarness } from '../harness.js'
 
 // Execution-engine conformance: the PR verification report's TEST ENVIRONMENT LIFECYCLE proof:
@@ -108,12 +109,16 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
           })
           expect(registered.status).toBe(201)
 
-          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          // No disposer: the environment has to OUTLIVE the run, so the teardown leg is closed
+          // out of band below. That shape is refused at save, so it is seeded as stored state.
+          const pipelineId = await seedLegacyPipeline(app, wsId, {
+            id: 'pl_deploy_test',
             name: 'Deploy + test',
+            purpose: 'build',
             agentKinds: ['deployer', 'tester-api'],
           })
           await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-            pipelineId: pipeline.body.id,
+            pipelineId,
           })
           const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
           expect(exec.status).toBe('done')
@@ -190,12 +195,16 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
           })
           expect(registered.status).toBe(201)
 
-          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          // Deploy-only, with no disposer: this run's environment is torn down by the explicit
+          // call below, which is the edge under test. Refused at save, so seeded as stored state.
+          const pipelineId = await seedLegacyPipeline(app, wsId, {
+            id: 'pl_deploy_only',
             name: 'Deploy only',
+            purpose: 'build',
             agentKinds: ['deployer'],
           })
           await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-            pipelineId: pipeline.body.id,
+            pipelineId,
           })
           const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
           expect(exec.status).toBe('done')
@@ -246,12 +255,16 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
           })
           expect(registered.status).toBe(201)
 
-          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          // Deploy-only, with no disposer: this run's environment is torn down by the explicit
+          // call below, which is the edge under test. Refused at save, so seeded as stored state.
+          const pipelineId = await seedLegacyPipeline(app, wsId, {
+            id: 'pl_deploy_only',
             name: 'Deploy only',
+            purpose: 'build',
             agentKinds: ['deployer'],
           })
           await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-            pipelineId: pipeline.body.id,
+            pipelineId,
           })
           const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
           expect(exec.status).toBe('done')
@@ -301,12 +314,15 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
-        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        // A chain with NO deployer is the subject here, so it is seeded rather than composed.
+        const pipelineId = await seedLegacyPipeline(app, wsId, {
+          id: 'pl_test_only',
           name: 'Test only',
+          purpose: 'build',
           agentKinds: ['tester-api'],
         })
         await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
-          pipelineId: pipeline.body.id,
+          pipelineId,
         })
         const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('done')

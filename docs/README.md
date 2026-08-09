@@ -4,6 +4,36 @@ Repo-wide documentation. Backend-specific reference lives next to the backend in
 [`backend/docs/`](../backend/docs); the design records it accumulates are in
 [`backend/docs/adr/`](../backend/docs/adr).
 
+## Where does a new doc go?
+
+**Ownership follows the READER, not the topic.** Before adding a page here, decide which of two
+surfaces it belongs to:
+
+- **[catfactory.ai](https://www.catfactory.ai/)** (repo:
+  [kibertoad/cat-factory-website](https://github.com/kibertoad/cat-factory-website)) is for anyone
+  who acts WITHOUT cloning this repo: deployers, operators, workspace users, and integrators
+  building on the public API, the SDKs, MCP or manifests. The test: can the reader act on the page
+  with no checkout?
+- **This repository** is for anyone changing the code: flow docs, ADRs, initiative trackers,
+  `AGENTS.md` maps, package `README`s, and this repository's own process. The test: is the doc
+  updated in the same PR as the code it describes?
+
+Where a topic serves both, split it by DEPTH and never by copy: the website page owns the
+user-facing account, and the doc here keeps the internal design plus a link. Two parallel full
+accounts is the failure mode this rule exists to end, so a doc here that needs user-level context
+links the website section rather than restating it.
+
+Four kinds of doc stay in this repo whatever their audience: a package `README` that ships in a
+published tarball (it has to be self-contained), generated reference such as
+[`openapi.json`](./openapi.json), GitHub-native files like `CONTRIBUTING.md`, and **a doc a CI guard
+reads** ([`environment-variables.md`](./environment-variables.md) is the worked case: the guard's
+value is that it fires in the PR that adds the variable, so the doc has to live in that PR's repo).
+
+The full model, its named exceptions and the findings behind them:
+[ADR 0051](../backend/docs/adr/0051-documentation-repo-website-split.md).
+
+## The split inside this directory
+
 The split that matters first is by AUDIENCE: everything under
 [`internal/`](./internal) is about developing THIS repository (its release
 process, its CI tooling, its own cleanup backlog) and describes nothing a
@@ -17,12 +47,15 @@ one for another is the usual way to be misled:
 Describes how the platform behaves **today**, and is updated by the change that
 would otherwise outdate it.
 
-- [`glossary.md`](./glossary.md): vocabulary and naming map. Block vs task vs
+- [`glossary.md`](./glossary.md): the code-level naming map. Block vs task vs
   card, directory ⇄ package names, runner/executor/transport, and where gates,
-  agent kinds and migration parity live. Read this first if a term is ambiguous.
+  agent kinds and migration parity live. Read this first if a term is ambiguous;
+  the PRODUCT vocabulary is the website's
+  [Glossary](https://www.catfactory.ai/reference/glossary.html).
 - [`environment-variables.md`](./environment-variables.md): every configuration
   variable, and which names are reserved so they can never be resolved into an
-  agent process.
+  agent process. The canonical list, read by `scripts/check-reserved-env-keys.mjs`
+  and rendered onto the website by its `scripts/sync-env-vars.mjs`.
 - [`execution-state-machine.md`](./execution-state-machine.md): the run
   lifecycle, its states and transitions, and why it is not XState.
 - [`benchmarks/`](./benchmarks): agent benchmark runs and candidate models.

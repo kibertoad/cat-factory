@@ -43,6 +43,9 @@
     // package out of the build the day that dependency changes.
     { "path": "../sdk/mcp/tsconfig.build.json" },
     // The gatekeeper bindings over that same surface, for the same reason again.
-    { "path": "../sdk/gatekeeper/tsconfig.build.json" }
+    { "path": "../sdk/gatekeeper/tsconfig.build.json" },
+    // The Gatekeeper Worker machinery a deployment installs. It is reachable through the bindings
+    // above only in the other direction, so without its own reference it would never be built.
+    { "path": "../sdk/gatekeeper-worker/tsconfig.build.json" }
   ]
 }

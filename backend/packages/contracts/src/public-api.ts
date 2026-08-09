@@ -88,12 +88,58 @@ export const publicJobResultSchema = v.object({
 })
 export type PublicJobResult = v.InferOutput<typeof publicJobResultSchema>
 
+/**
+ * Who a run was started FOR, as the provisioner of the starting key named it
+ * (`externalIdentity` on the key resource). `null` is a real and common state: a run started from
+ * the app, by a schedule, or by a key minted with no identity has none, and the platform never
+ * guesses one.
+ *
+ * PINNED onto the run when it is admitted, never resolved from the key at read time. Three things
+ * follow, and each of them is why: the value survives its key being revoked (which is what an
+ * integration does when a person leaves, precisely when the mapping is still wanted); reading a
+ * run costs no key lookup, so a page of runs is not a page of key reads; and a run keeps naming
+ * the identity that STARTED it rather than whatever a re-minted key says today.
+ *
+ * **Not every key sees every run's identity**, so `null` alone would be ambiguous and this field
+ * never travels without {@link publicRunExternalIdentityWithheldSchema}. See that field for the
+ * rule and why it is a rule at all.
+ */
+export const publicRunExternalIdentitySchema = v.nullable(v.string())
+
+/**
+ * Whether this run HAS an identity that the reading key may not see, which is the one thing a
+ * bare `null` cannot say.
+ *
+ * The rule the flag reports: **a key that carries an `externalIdentity` of its own sees the
+ * identity only on the runs started for THAT identity; a key with none sees every run's.** A key
+ * bearing an identity is one person's credential, and this feature exists for the deployment that
+ * mints exactly that, one per person. Echoing the pinned value to all of them would hand every
+ * person's key the roster of everyone else, and the value is routinely an email. A key with no
+ * identity is the provisioner itself (or one minted in the app by a workspace member who can
+ * already read the board), which is the caller the mapping was built for.
+ *
+ * Decided from the two values already in hand, the run's pin and the calling key's own, so the
+ * rule costs the projection no lookup and a page of runs stays a page of runs.
+ *
+ * `true` means WITHHELD, never "none": a run nobody named still answers `false`, and so does a run
+ * whose identity you are being shown. Absent and withheld render the same only if a surface lets
+ * them, and a caller that read a withheld run as an unattributed one would conclude the platform
+ * lost an attribution it is in fact holding. Your own key's identity is on `GET /api/v1/me`, which
+ * is what makes the rule checkable rather than merely stated.
+ */
+export const publicRunExternalIdentityWithheldSchema = v.boolean()
+
 /** A public job resource — the external view of a headless pipeline run. */
 export const publicJobSchema = v.object({
   jobId: v.string(),
   status: publicJobStatusSchema,
   pipelineId: v.string(),
   createdAt: v.number(),
+  /** Who this run was started for ({@link publicRunExternalIdentitySchema}). */
+  externalIdentity: publicRunExternalIdentitySchema,
+  /** Whether an identity exists on this run that your key may not read
+   *  ({@link publicRunExternalIdentityWithheldSchema}). */
+  externalIdentityWithheld: publicRunExternalIdentityWithheldSchema,
   /** Present once the run reaches `succeeded`; null while running or on failure. */
   result: v.nullable(publicJobResultSchema),
   /** Present when `status` is `failed`; null otherwise. */
@@ -195,6 +241,22 @@ export const publicTaskSchema = v.object({
   runId: v.nullable(v.string()),
   /** The web URL of the PR the run opened, once one exists; null otherwise. */
   pullRequestUrl: v.nullable(v.string()),
+  /**
+   * Task ids this task WAITS FOR: it cannot start until every one of them is `done`, and the
+   * engine's start gate refuses it until they are.
+   *
+   * Served so a caller that declared an ordering can read back what the board holds, which is what
+   * makes `POST /api/v1/tasks/{taskId}/dependencies` verifiable rather than fire-and-forget. Empty
+   * for a task nothing blocks, which is the normal state.
+   */
+  dependsOn: v.array(v.string()),
+  /**
+   * Whether merging this task's pull request STARTS the tasks that depend on it.
+   *
+   * The other half of an ordering, and the one that makes a declared chain run itself: without it a
+   * dependent is merely refused until its blocker lands, and something has to notice and start it.
+   */
+  autoStartDependents: v.boolean(),
 })
 export type PublicTask = v.InferOutput<typeof publicTaskSchema>
 
@@ -443,6 +505,17 @@ export const updatePublicTaskSchema = v.object({
    * run does not review; send the description you want alongside the new target to resolve it.
    */
   fields: v.optional(descriptorFieldValuesSchema),
+  /**
+   * Whether merging this task's pull request STARTS the tasks that depend on it (the toggle
+   * {@link publicTaskSchema} reports).
+   *
+   * Here rather than on the create call because it is a property of the ORDERING, and an ordering
+   * is declared after both ends exist: a caller filing a batch of related tasks creates them all,
+   * links them with `POST /api/v1/tasks/{taskId}/dependencies`, and then decides which blockers
+   * pull their dependents along. Offering it at creation would ask for the answer at the one moment
+   * the caller cannot have it.
+   */
+  autoStartDependents: v.optional(v.boolean()),
 })
 export type UpdatePublicTaskInput = v.InferOutput<typeof updatePublicTaskSchema>
 
@@ -472,6 +545,53 @@ export const publicRunStepSchema = v.object({
   subtasks: v.nullable(
     v.object({ completed: v.number(), inProgress: v.number(), total: v.number() }),
   ),
+  /**
+   * The step's prose output (the agent's final reply), or null while it has produced none.
+   *
+   * This is what a board task running an INLINE-only pipeline delivers, and until it was served
+   * here the API could not read it: `publicJob` carries a `result` because a headless job is a
+   * one-step inline run, while a board run's deliverable had to be inferred from the pull request
+   * the pipeline opened. A pipeline that opens none (a research pass, an estimate, a written
+   * assessment) produced a result readable only in the app.
+   *
+   * Served WHOLE by the POINT READ (`GET /api/v1/tasks/{taskId}/run`), which is deliberate:
+   * `publicJobResult.output` already serves the same class of content whole, and two surfaces that
+   * disagree about the same fact are worse than a large response. The size is a step's own output
+   * budget, not a log tail (`GET /api/v1/debug/runs/:runId` is where raw diagnostics live, and it
+   * reports `outputChars` for exactly this reason).
+   *
+   * The SSE stream is the one place it is not, and {@link publicRunStepSchema} `truncated` says so
+   * per step. See that field for why.
+   */
+  output: v.nullable(v.string()),
+  /**
+   * The step's STRUCTURED result (`step.custom`), when the agent produced one; null otherwise.
+   *
+   * The counterpart of {@link publicJobResultSchema}'s `data`, and the same rule applies: what a
+   * step puts here is decided by its agent kind, so it is `unknown` on the wire rather than a
+   * shape this contract would have to keep in step with every kind a deployment registers.
+   *
+   * Null and an empty object are DIFFERENT facts: null means the step produced no structured
+   * result at all, which is the normal state for an agent whose deliverable is its prose.
+   */
+  data: v.nullable(v.unknown()),
+  /**
+   * True when THIS PROJECTION reduced the step's deliverable for size: {@link output} is clipped
+   * to a leading preview and {@link data} is withheld as null. Absent/false ⇒ both are whole.
+   *
+   * Set only on the SSE stream (`GET /api/v1/tasks/{taskId}/events`), never on a point read. The
+   * stream re-sends the WHOLE run on every change, so carrying every step's output in every frame
+   * is quadratic in the run's own length: a late frame repeats every output produced so far, and a
+   * long pipeline turns a progress channel into a repeated bulk transfer. The platform already
+   * settles this trade the same way for the run's own `detail` JSON, which is re-serialized on
+   * every step-progress write and clips a recorded output with a `truncated` flag for it.
+   *
+   * A caller that needs the whole deliverable reads `GET /api/v1/tasks/{taskId}/run`, which serves
+   * it and every step's `data` untouched. The flag exists so a clipped preview can never be
+   * mistaken for the output itself: an absent tail and a step that wrote nothing more are
+   * different facts, and only the flag distinguishes them.
+   */
+  truncated: v.optional(v.boolean()),
 })
 export type PublicRunStep = v.InferOutput<typeof publicRunStepSchema>
 
@@ -489,6 +609,11 @@ export const publicRunSchema = v.object({
   /** Index of the step the run is currently on. */
   currentStep: v.number(),
   steps: v.array(publicRunStepSchema),
+  /** Who this run was started for ({@link publicRunExternalIdentitySchema}). */
+  externalIdentity: publicRunExternalIdentitySchema,
+  /** Whether an identity exists on this run that your key may not read
+   *  ({@link publicRunExternalIdentityWithheldSchema}). */
+  externalIdentityWithheld: publicRunExternalIdentityWithheldSchema,
   /** The PR the run opened, once one exists; null otherwise. */
   pullRequest: v.nullable(v.object({ url: v.string(), branch: v.nullable(v.string()) })),
   /** Present when `status` is `failed` (the failure kind + message); null otherwise. */
@@ -648,6 +773,13 @@ export const publicIdentitySchema = v.object({
   scope: publicApiScopeSchema,
   /** The label the key was minted with, so a caller can log which credential it is running as. */
   label: v.string(),
+  /**
+   * Who this key acts for, as whoever provisioned it named them; `null` when it was minted with
+   * no identity. Answered from the key on THIS request, so a provisioning integration that
+   * hands a credential to a subsystem can have that subsystem discover which identity it holds
+   * rather than being told twice.
+   */
+  externalIdentity: v.nullable(v.string()),
   /** When the key was minted (epoch ms). */
   createdAt: v.number(),
 })

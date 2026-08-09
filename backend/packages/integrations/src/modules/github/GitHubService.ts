@@ -16,7 +16,7 @@ import type {
   MergePullRequestInput,
   OpenPullRequestInput,
 } from '@cat-factory/kernel'
-import { assertFound } from '@cat-factory/kernel'
+import { assertFound, VcsCapabilityUnsupportedError } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // GitHubService: the read/write facade the API controller uses. Reads are served
@@ -130,32 +130,48 @@ export class GitHubService {
     if (!probe) return { capability: 'unavailable', repos: [], omittedRepos: 0 }
 
     const all = await this.deps.repoProjectionRepository.list(workspaceId)
+    // A provider-routing client advertises the union of what its backing clients implement, so
+    // `probe` being present does NOT mean the workspace's own provider can answer: it may route
+    // to a client that omits it (GitLab has no branch-protection API). That is the same FACT this
+    // method's `capability: 'unavailable'` already states, so the first such refusal reports it
+    // rather than failing the request. A workspace has exactly one VCS installation, so every row
+    // here routes to the same provider and one refusal settles the whole report.
+    //
+    // Scoped to this ONE cause on purpose: any other probe failure still belongs to its own row,
+    // where `getBranchProtection` reports it per repo. Swallowing more here would let a rate limit
+    // or a revoked token read as "your provider doesn't offer this".
     const max = options.maxRepos ?? DEFAULT_PROTECTION_PROBE_LIMIT
     const probed = all.slice(0, max)
     // `pMap` preserves INPUT order, which the surface depends on: a row must not move because
     // its probe happened to be slow.
-    const repos = await pMap(
-      probed,
-      async (repo) => {
-        // The projection can carry no default branch (a repo linked before its first sync). The
-        // probe then reports `branch_not_found` against this guess, which is the honest answer —
-        // an omitted row would read as one fewer repository to check.
-        const defaultBranch = repo.defaultBranch ?? 'main'
-        return {
-          repoGithubId: repo.githubId,
-          owner: repo.owner,
-          name: repo.name,
-          defaultBranch,
-          protection: await probe.call(
-            this.deps.githubClient,
-            repo.installationId,
-            { owner: repo.owner, repo: repo.name },
+    let repos: BranchProtectionReport['repos']
+    try {
+      repos = await pMap(
+        probed,
+        async (repo) => {
+          // The projection can carry no default branch (a repo linked before its first sync). The
+          // probe then reports `branch_not_found` against this guess, which is the honest answer:
+          // an omitted row would read as one fewer repository to check.
+          const defaultBranch = repo.defaultBranch ?? 'main'
+          return {
+            repoGithubId: repo.githubId,
+            owner: repo.owner,
+            name: repo.name,
             defaultBranch,
-          ),
-        }
-      },
-      { concurrency: options.concurrency ?? PROTECTION_PROBE_CONCURRENCY },
-    )
+            protection: await probe.call(
+              this.deps.githubClient,
+              repo.installationId,
+              { owner: repo.owner, repo: repo.name },
+              defaultBranch,
+            ),
+          }
+        },
+        { concurrency: options.concurrency ?? PROTECTION_PROBE_CONCURRENCY },
+      )
+    } catch (error) {
+      if (!(error instanceof VcsCapabilityUnsupportedError)) throw error
+      return { capability: 'unavailable', repos: [], omittedRepos: 0 }
+    }
     // A cap that silently truncated would read as "these are all your repositories", which on a
     // security report is the same failure as reporting an unprobed repo as protected.
     return { capability: 'ok', repos, omittedRepos: all.length - probed.length }

@@ -29,6 +29,7 @@ function attached(over: Partial<DocumentRecord> = {}): DocumentRecord {
     linkedBlockId: 'blk_1',
     role: null,
     docKind: null,
+    renderStatus: null,
     syncedAt: 0,
     deletedAt: null,
     ...over,

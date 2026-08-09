@@ -1,4 +1,4 @@
-import type { PipelineStep } from '@cat-factory/kernel'
+import type { PipelineStep, StepContextDocument } from '@cat-factory/kernel'
 
 /**
  * The step fields the context builder REWRITES from each resolution, behind one seam that owns the
@@ -28,6 +28,23 @@ export interface StepObservations {
   fragmentIds(ids: string[] | undefined): void
   /** Whether this resolution could READ the service frame's validation configuration. */
   validationConfigUnreadable(unreadable: boolean): void
+  /**
+   * The linked documents this resolution put in front of the agent, with the freshness verdict
+   * it reached about each. Takes the resolved context docs and keeps only the identity + the
+   * verdict: the bodies are already in the documents table, and what no later reader can recover
+   * is which REVISION this dispatch read.
+   */
+  contextDocuments(docs: readonly ContextDocument[]): void
+}
+
+/** The shape {@link StepObservations.contextDocuments} reads off a resolved context doc. */
+interface ContextDocument {
+  /** The source's own id, which is what keys a document across the dispatches that read it. */
+  externalId: string
+  title: string
+  url: string
+  origin: StepContextDocument['origin']
+  freshness?: StepContextDocument['freshness']
 }
 
 /**
@@ -52,6 +69,24 @@ export function stepObservations(
       if (!records) return
       if (unreadable) step.validationConfigUnreadable = true
       else delete step.validationConfigUnreadable
+    },
+    contextDocuments(docs) {
+      if (!records) return
+      // Nothing read and an empty list state the same fact, so the empty array is not written:
+      // most tasks carry no linked document at all, and an empty entry on every step of every
+      // run would be pure weight in the stored instance. What absent must NOT be confused with
+      // is a document read with no VERDICT — that one is a present entry with no `freshness`.
+      if (!docs.length) {
+        delete step.contextDocuments
+        return
+      }
+      step.contextDocuments = docs.map((doc) => ({
+        externalId: doc.externalId,
+        title: doc.title,
+        url: doc.url,
+        origin: doc.origin,
+        ...(doc.freshness ? { freshness: doc.freshness } : {}),
+      }))
     },
   }
 }

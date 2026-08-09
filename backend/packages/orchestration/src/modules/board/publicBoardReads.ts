@@ -1,5 +1,11 @@
-import type { AddTaskInput, BlockEditAuthority } from '@cat-factory/contracts'
-import type { Block, BlockRepository, BlockStatus } from '@cat-factory/kernel'
+import type { AddTaskInput, BlockEditAuthority, GitHubRepo } from '@cat-factory/contracts'
+import type {
+  Block,
+  BlockRepository,
+  BlockStatus,
+  RepoProjectionRepository,
+  ServiceRepository,
+} from '@cat-factory/kernel'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { serviceOf } from './board.logic.js'
 
@@ -14,8 +20,38 @@ import { serviceOf } from './board.logic.js'
 // BLOCK id (`serviceId` in the wire contract) and always exclude the headless `internal` anchors,
 // exactly as the board snapshot does.
 
+/** A repository the workspace can back a service with, and the service already backing it. */
+export interface PublicRepoOption {
+  repo: GitHubRepo
+  /**
+   * The frame block id of the WHOLE-REPO service this repository already backs ON THIS BOARD, or
+   * null.
+   *
+   * Null for a monorepo even when its subdirectories back services, because a monorepo can back
+   * more: the field answers "is this choice already spent", and for a monorepo it never is.
+   */
+  serviceBlockId: string | null
+  /**
+   * True when the repository already backs a whole-repo service homed on ANOTHER board of the
+   * account, so nothing on a workspace-scoped surface can name it.
+   *
+   * The third state the pair `serviceBlockId: string` / `serviceBlockId: null` cannot express, and
+   * the one a caller most needs: the choice IS spent (the create refuses it, since the frame it
+   * would answer with is one this key could neither list nor file a task under), but there is no
+   * id here that would address the service. Reporting it as a plain `null` said the opposite of
+   * both facts, and steered a caller straight into the refusal.
+   */
+  linkedElsewhere: boolean
+}
+
 export interface PublicBoardReadsDeps {
   blockRepository: BlockRepository
+  /** The workspace's projected repositories; absent ⇒ no VCS integration wired on this facade. */
+  repoProjectionRepository?: RepoProjectionRepository
+  /** The account-owned services frames map onto; absent ⇒ nothing can report a repo's service. */
+  serviceRepository?: ServiceRepository
+  /** The workspace's owning account, for the account-scoped service dedupe the create applies. */
+  accountOf(workspaceId: string): Promise<string | null | undefined>
   /** Throws when the workspace does not exist; bound from the owning service. */
   requireWorkspace(workspaceId: string): Promise<unknown>
   /** The normal task-creation path, reused verbatim so placement + task-type validation applies. */
@@ -36,6 +72,64 @@ export class PublicBoardReads {
     await this.deps.requireWorkspace(workspaceId)
     const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
     return blocks.filter((b) => b.level === 'frame' && !b.internal && !b.archived)
+  }
+
+  /**
+   * The repositories this workspace can back a service with, each paired with the service that
+   * already backs it.
+   *
+   * The discovery read behind headless service creation: the create takes a provider repo id, and
+   * before this nothing on the external surface served one, so the one act of board setup a
+   * deployment could not perform without a browser was also the one it could not even DESCRIBE.
+   *
+   * Three reads, all batched, never per-repo: the projection list, the workspace's frames, and ONE
+   * account-scoped service list. The pairing is then an in-memory index: a `getByRepo`
+   * per repository would be the N+1 this codebase bans, and on a workspace with a hundred
+   * repositories it is a hundred queries to render one picker.
+   *
+   * The service read is ACCOUNT-scoped rather than scoped to this board's frames, because that is
+   * the population the CREATE dedupes against (`findAccountWholeRepoService`). Asking only about
+   * this board's own frames answers "no service backs this repository" for one the create will
+   * refuse, and the two have to agree: a discovery read whose whole job is to say what a caller
+   * may ask for cannot be reading a narrower table than the endpoint that decides.
+   *
+   * An unwired VCS integration answers an EMPTY list rather than throwing: this is a discovery
+   * read, and "you have connected no repositories" and "this deployment has no VCS integration" are
+   * the same instruction to the caller, connect one before creating a repo-backed service. The
+   * CREATE is where the distinction bites, and it refuses there with the reason.
+   */
+  async listRepoOptions(workspaceId: string): Promise<PublicRepoOption[]> {
+    await this.deps.requireWorkspace(workspaceId)
+    if (!this.deps.repoProjectionRepository) return []
+    const repos = await this.deps.repoProjectionRepository.list(workspaceId)
+    if (repos.length === 0) return []
+    const frames = (await this.deps.blockRepository.listByWorkspace(workspaceId)).filter(
+      (block) => block.level === 'frame' && !block.internal && !block.archived,
+    )
+    const services = this.deps.serviceRepository
+      ? await this.deps.serviceRepository.listByAccount(
+          (await this.deps.accountOf(workspaceId)) ?? null,
+        )
+      : []
+    // Whole-repo services only (no `directory`), which is exactly what `serviceBlockId` claims.
+    const byRepo = new Map(
+      services
+        .filter((service) => service.repoGithubId != null && !service.directory)
+        .map((service) => [service.repoGithubId as number, service.frameBlockId]),
+    )
+    const visibleFrames = new Set(frames.map((frame) => frame.id))
+    return repos.map((repo) => {
+      const frameBlockId = byRepo.get(repo.githubId)
+      // A service homed on another board (one this board merely mounts, or does not mount at all)
+      // is not a frame of THIS workspace, so its id is withheld: it would name a block this key
+      // cannot read. `linkedElsewhere` is what stops that withholding reading as "available".
+      const homedHere = frameBlockId !== undefined && visibleFrames.has(frameBlockId)
+      return {
+        repo,
+        serviceBlockId: homedHere ? frameBlockId : null,
+        linkedElsewhere: frameBlockId !== undefined && !homedHere,
+      }
+    })
   }
 
   /**
@@ -81,6 +175,23 @@ export class PublicBoardReads {
   }
 
   /**
+   * ONE visible service frame the workspace owns, or null when the id names no such thing (absent,
+   * another workspace's, a headless `internal` anchor, a non-frame block, or archived).
+   *
+   * The point read behind every per-service endpoint that is not a task list: a caller naming a
+   * service has to be refused on exactly the population {@link listServiceTasksPage} and
+   * {@link listServices} report, or a `serviceId` this key can see in one place answers a 404 in
+   * another. Its own method rather than a `listServices().find()` at the call site, because that
+   * would read the whole board to answer a keyed question.
+   */
+  async getService(workspaceId: string, serviceId: string): Promise<Block | null> {
+    await this.deps.requireWorkspace(workspaceId)
+    const frame = await this.deps.blockRepository.get(workspaceId, serviceId)
+    if (!frame || frame.level !== 'frame' || frame.internal || frame.archived) return null
+    return frame
+  }
+
+  /**
    * Fetch a board task + its enclosing service frame, scoped to the workspace. Returns null when
    * no such task exists in the workspace, it is not a `task`-level block, it is a headless
    * `internal` anchor, or it has no resolvable enclosing service frame — so the caller (and any
@@ -122,9 +233,7 @@ export class PublicBoardReads {
     serviceId: string,
     opts: { limit: number; afterId?: string; status?: BlockStatus },
   ): Promise<{ tasks: Block[]; hasMore: boolean } | null> {
-    await this.deps.requireWorkspace(workspaceId)
-    const frame = await this.deps.blockRepository.get(workspaceId, serviceId)
-    if (!frame || frame.level !== 'frame' || frame.internal || frame.archived) return null
+    if (!(await this.getService(workspaceId, serviceId))) return null
     const rows = await this.deps.blockRepository.listServiceTasks(workspaceId, serviceId, {
       ...opts,
       limit: opts.limit + 1,

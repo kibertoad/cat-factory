@@ -384,7 +384,10 @@
       "intake": "Issue intake",
       "intakeHint": "Each run picks one matching open issue from the tracker and works it end to end.",
       "intakeNoSources": "Connect a task source first to pull issues from it.",
+      "intakeNoIntakeSources": "A task source is connected, but none of the connected sources can run a scheduled issue search yet.",
       "intakeGithubRepo": "Repository",
+      "intakeGitlabProject": "Project",
+      "intakeGitlabProjectHelp": "The GitLab project's full path, including any subgroups, e.g. group/sub/project.",
       "intakeBoardId": "Board id",
       "intakeBoardIdHelp": "The board, project or queue this tracker scopes intake to. Its format is defined by the tracker.",
       "trackerTrigger": "Start runs from tracker webhooks",
@@ -396,6 +399,7 @@
       "intakeLabels": "Labels",
       "intakeLabelsPlaceholder": "comma-separated",
       "intakeIssueType": "Issue type",
+      "intakeIssueTypeUnsupported": "{tracker} has no issue type that means \"bug\", so this schedule will not apply it. Narrow the pickup with a label instead.",
       "intakeInProgressLabel": "In-progress label",
       "refusalPerTicketRequiresOnDemand": "A tracker-triggered schedule must be on-demand. A cadence tick carries no ticket to dispatch.",
       "refusalPerTicketConflictsWithBugIntake": "This pipeline picks its own issue from the board, so it cannot also be driven by a pushed ticket. Choose a pipeline without a bug-intake step."
@@ -477,7 +481,8 @@
       "accessDenied": {
         "title": "Permission denied",
         "hint": "You don't have access to the repository backing this service."
-      }
+      },
+      "startFromDesignTitle": "Start from a design"
     },
     "decisionBadge": {
       "decisionNeeded": "Decision needed",
@@ -511,7 +516,6 @@
       },
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "Open {pr} on GitHub",
       "readOutcome": "Outcome",
       "readOutcomeHint": "Read what changed, with the evidence behind it",
       "review": "Review",
@@ -525,7 +529,8 @@
       "module": "Module: {name}",
       "buildSteps": "Build steps",
       "reviewAndApprove": "Review & approve",
-      "clickToViewStep": "Click to view step details & output"
+      "clickToViewStep": "Click to view step details & output",
+      "openPrLink": "Open {pr}"
     },
     "dryRunToast": {
       "title": "Dry run started",
@@ -617,7 +622,11 @@
     "attachIssueDisabledConnect": "Connect an issue tracker first (Integrations)",
     "attachIssueDisabledEnable": "Enable the issue-tracker integration first",
     "importsOnAdd": "imports on add",
-    "unreadable": "Could not be fetched: {error}"
+    "unreadable": "Could not be fetched: {error}",
+    "pastedLink": {
+      "offer": "This description links a {source} page. Attach it as context?",
+      "attach": "Attach"
+    }
   },
   "errors": {
     "generic": {
@@ -648,7 +657,9 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "This deployment's generative integrations could not be read just now, so the run was not started. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
-        "foundational_builtins_unreachable": "This deployment's built-in foundational services could not be read just now. Nothing is misconfigured and no change is needed: try again once the connection recovers."
+        "foundational_builtins_unreachable": "This deployment's built-in foundational services could not be read just now. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
+        "connection_credentials_unreadable": "The stored credentials for this connection could not be read. If this deployment can reach the service holding its key, re-connect the source to replace them; otherwise try again once that connection recovers.",
+        "vcs_capability_unsupported": "The source-control provider connected to this workspace does not offer this operation. Nothing is misconfigured and setting something up will not help: it is unavailable for this provider."
       }
     },
     "action": {
@@ -716,7 +727,8 @@
         "ticket_already_linked": "This issue already has a task",
         "document_already_linked": "Document already attached",
         "dry_run_not_mergeable": "Dry run cannot be merged",
-        "submission_not_allowed": "Merge not allowed for this run"
+        "submission_not_allowed": "Merge not allowed for this run",
+        "webhook_limit_reached": "Webhook limit reached"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -725,7 +737,7 @@
         "agent_backend_unconfigured": "No runner backend is available to run container agents. Register a self-hosted runner pool, or enable Cloudflare Containers in your deployment.",
         "run_not_retryable": "Only a failed or finished run can be retried. This run is still active or in a state that can't be retried.",
         "no_pr_to_merge": "This run hasn't opened a pull request yet, so there is nothing to merge.",
-        "github_not_connected": "Connect this workspace to GitHub so agents can clone the repository, push changes, and open pull requests.",
+        "github_not_connected": "Connect this workspace to a repository host so agents can clone the repository, push changes, and open pull requests.",
         "bootstrap_not_retryable": "This bootstrap job can't be retried in its current state (it is still running or already finished successfully).",
         "bootstrap_reference_missing": "The reference repository this bootstrap adapts is no longer reachable. It was deleted or its access was revoked. Pick another reference, or scaffold from scratch.",
         "preset_unsatisfiable": "An inline step's model can't run inline on this deployment (a subscription-only model with no inline support). Pick an inline-capable model or preset.",
@@ -757,7 +769,8 @@
         "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first.",
         "document_already_linked": "That document is attached to another task. Detach it there first, or attach a separate copy.",
         "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge.",
-        "submission_not_allowed": "This task's merge policy doesn't let the role that started this run merge this kind of change. Somebody whose role may merge it can do so, or an admin can widen the policy in the merge preset."
+        "submission_not_allowed": "This task's merge policy doesn't let the role that started this run merge this kind of change. Somebody whose role may merge it can do so, or an admin can widen the policy in the merge preset.",
+        "webhook_limit_reached": "This workspace already has the maximum number of outbound webhooks registered. Remove one you no longer need, then register this again."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -1248,6 +1261,7 @@
       "mergePr": "Merge PR",
       "chooseApproach": "Choose approach",
       "triageFollowUps": "Decide follow-ups",
+      "chooseCandidates": "Decide candidates",
       "elapsedTooltip": "Elapsed time on this step",
       "reviewFindings": "Review findings",
       "dryRun": "Dry run",
@@ -1531,8 +1545,10 @@
       "decisionRequired": "Decision required",
       "followUpsParked": "The Coder surfaced follow-up items that need a decision before the run can continue. Triage each item (file, send back, answer, or dismiss) in the follow-ups window.",
       "forkParked": "This Coder step is waiting for an implementation approach to be chosen before any code is written. Pick a proposed approach (or enter your own) in the fork-decision window.",
+      "candidatesParked": "This step generated candidates and is waiting for someone to choose which ones to keep before it delivers anything. Compare them and keep what you want in the candidates window.",
       "openFollowUps": "Open follow-ups",
       "chooseApproach": "Choose approach",
+      "chooseCandidates": "Choose candidates",
       "expandAll": "Expand all sections",
       "collapseAll": "Collapse all sections",
       "copyRawOutput": "Copy raw output",
@@ -1600,6 +1616,16 @@
           "oauthNotConnected": "Connect this board to it from the Infrastructure window. A deployment with no ENCRYPTION_KEY has nowhere to keep a grant, so an operator has to set that first.",
           "oauthTokenFailed": "Reconnect it from the Infrastructure window, or wait out the vendor's outage.",
           "overBudget": "Trim what the agent declares, so one run can carry all of it."
+        },
+        "observed": {
+          "ready": "started",
+          "readyTools": "{count} tools",
+          "readyNoTools": "started, no tools",
+          "failed": "failed to start",
+          "needsAuth": "needs authorization",
+          "unknown": "state unresolved",
+          "notLoaded": "never loaded",
+          "unattributed": "The agent CLI reported a server this step did not wire: {id}."
         }
       },
       "adherence": {
@@ -1706,6 +1732,8 @@
       "priorDocHint": "From the previous review. Use it as a base: edit the description above and resubmit.",
       "bootstrapping": "Bootstrapping…",
       "viewRequirements": "View Requirements",
+      "mapService": "Map service",
+      "mapServiceNoRepo": "Link a repository to this service first — there is nothing to map yet.",
       "reRun": "Re-run",
       "run": "Run",
       "focus": "Focus",
@@ -2171,8 +2199,11 @@
           "fs": "Local filesystem",
           "s3": "Amazon S3 / S3-compatible",
           "r2": "Cloudflare R2",
-          "db": "Postgres database"
+          "db": "Postgres database",
+          "custom": "Custom store (this deployment)"
         },
+        "unregisteredStore": "{store} (not registered on this deployment)",
+        "unregisteredStoreWarning": "This account stores artifacts in “{store}”, which this deployment does not register. Nothing is being stored until you pick a registered store or the store is registered again in code.",
         "basePath": "Base path (default: .file-storage)",
         "region": "Region (e.g. us-east-1)",
         "bucket": "Bucket",
@@ -2188,6 +2219,18 @@
         "keysValidation": "Enter the S3 access key id and secret",
         "saved": "Content storage saved",
         "saveFailed": "Could not save content storage"
+      },
+      "figma": {
+        "title": "Figma app (OAuth)",
+        "description": "Enables the \"Connect with Figma\" flow. Without it, workspaces can still connect Figma by pasting a personal access token.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "Redirect URL",
+        "validation": "Enter the client id, secret and redirect URL",
+        "saved": "Figma OAuth saved",
+        "saveFailed": "Could not save Figma OAuth",
+        "cleared": "Figma OAuth cleared",
+        "clearFailed": "Could not clear Figma OAuth"
       }
     },
     "accountFragments": {
@@ -2473,7 +2516,8 @@
         "shortcuts": "Keyboard shortcuts",
         "bugHunt": "Bug hunt",
         "toggleUiMode": "Switch interface mode",
-        "foundationalServices": "Foundational services"
+        "foundationalServices": "Foundational services",
+        "notificationSettings": "Manage notification routing"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2497,7 +2541,8 @@
         "bugHunt": "bug hunt triage backlog issue tracker unassigned",
         "toggleUiMode": "interface mode basic advanced simple expert show hide",
         "tutorial": "tutorial onboarding tour guide help learn basics",
-        "foundationalServices": "shared capability platform service api contract openapi catalog"
+        "foundationalServices": "shared capability platform service api contract openapi catalog",
+        "notificationSettings": "notifications email routing channels inbox"
       }
     },
     "shortcuts": {
@@ -2574,6 +2619,10 @@
         "bugHunt": {
           "label": "Bug hunt",
           "description": "Rate a board's open, unassigned bugs and pick one to fix"
+        },
+        "notificationSettings": {
+          "label": "Notifications",
+          "description": "Choose which events reach the inbox and email."
         }
       }
     },
@@ -3076,27 +3125,21 @@
         "linearTeamSearchPlaceholder": "Search teams…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Link issues as context",
         "description": "When a source is offered you can import its issues and attach them to a task, so agents see the issue description and comments while implementing. This is independent of the filing tracker above.",
-        "github": {
-          "available": "Rides your installed GitHub App — no credentials needed.",
-          "unavailable": "Install the GitHub App (Integrations → GitHub) to offer this source."
-        },
         "checkSetup": "Check setup",
-        "install": "Install",
         "connected": "Connected.",
-        "jira": {
-          "connectHint": "Connect with a Jira account and API token."
+        "connect": "Connect",
+        "state": {
+          "ridesConnected": "Rides this workspace's {provider} connection, so it needs no credentials of its own.",
+          "ridesMissing": "Connect {provider} under Integrations to offer this source.",
+          "notConnected": "Not connected yet."
         },
-        "linear": {
-          "connectHint": "Connect with a Linear personal API key."
-        },
-        "connect": "Connect"
+        "connectProvider": "Connect {provider}",
+        "none": "This deployment has no task sources configured."
       },
       "writeback": {
         "heading": "Writeback",
@@ -4230,14 +4273,11 @@
       "loading": "Loading…",
       "tabs": {
         "repos": "Repositories",
-        "pulls": "Pull requests",
         "issues": "Issues"
       },
       "linkedToBoard": "Linked to this board",
       "manageRepos": "Manage repos",
-      "manageHint": "Pick the repositories this board should track. The GitHub connection is shared across the account, and each board links its own repos.",
       "loadingRepos": "Loading repositories…",
-      "noAvailableRepos": "The installation can't access any repositories yet.",
       "private": "private",
       "saveSelection": "Save selection",
       "noLinkedRepos": "No repositories linked yet. Use Manage repos to pick which repositories this board tracks.",
@@ -4247,15 +4287,11 @@
       "fromSha": "From SHA",
       "commitShaPlaceholder": "commit sha",
       "createBranch": "Create branch",
-      "openPr": "Open PR",
       "repository": "Repository",
       "chooseRepository": "Choose a repository",
       "prTitle": "Title",
       "headBranch": "Head branch",
       "baseBranch": "Base branch",
-      "openPullRequest": "Open pull request",
-      "noPulls": "No pull requests synced.",
-      "mergePr": "Merge pull request",
       "noIssues": "No issues synced.",
       "prState": {
         "open": "open",
@@ -4269,9 +4305,7 @@
       "toast": {
         "resync": "Resync {status}",
         "reposUpdated": "Linked repositories updated",
-        "branchCreated": "Branch {name} created",
-        "prOpened": "Pull request opened",
-        "prMerged": "PR #{number} merged"
+        "branchCreated": "Branch {name} created"
       },
       "errors": {
         "disconnect": "Could not disconnect",
@@ -4280,7 +4314,6 @@
         "updateRepos": "Could not update repositories",
         "loadBranches": "Could not load branches",
         "createBranch": "Could not create branch",
-        "openPr": "Could not open pull request",
         "merge": "Could not merge"
       }
     },
@@ -4413,6 +4446,58 @@
       "body": "Slack notifications will stop until you reconnect."
     }
   },
+  "notificationSettings": {
+    "panel": {
+      "title": "Notifications",
+      "intro": "Choose which events this board delivers, and on which channel. Anything left untouched uses the shipped default.",
+      "inAppNote": "In-app controls the live push. The card is saved either way, so it is still in your inbox after a reload.",
+      "emailNote": "Email needs a sender connected for the account (Account settings). By default only high-impact events are mailed.",
+      "otherChannelsNote": "Slack and outbound webhooks pick their own event list where their destination is configured.",
+      "openSlack": "Slack routing"
+    },
+    "column": {
+      "event": "Event",
+      "inApp": "In-app",
+      "email": "Email"
+    },
+    "action": {
+      "save": "Save",
+      "reset": "Restore defaults"
+    },
+    "toast": {
+      "saved": "Notification routing saved"
+    },
+    "error": {
+      "load": "Could not load notification settings",
+      "save": "Could not save notification settings"
+    },
+    "unavailable": "This deployment stores no notification routing, so every event uses the shipped default.",
+    "loadFailed": "Could not read this board's notification routing, so the switches below are not its current settings. Retry before changing anything.",
+    "type": {
+      "merge_review": "Merge review",
+      "pipeline_complete": "Pipeline complete",
+      "ci_failed": "CI failed",
+      "test_failed": "Tests failed",
+      "requirement_review": "Requirement review",
+      "clarity_review": "Clarity review",
+      "release_regression": "Release regression",
+      "decision_required": "Decision needed",
+      "human_test_ready": "Ready for human testing",
+      "visual_confirmation_ready": "Ready for visual confirmation",
+      "human_review": "Awaiting code review",
+      "followup_pending": "Follow-ups to decide",
+      "fork_decision_pending": "Implementation approach",
+      "judge_review": "Review verdict",
+      "pr_review_ready": "PR review findings",
+      "initiative": "Initiative updates",
+      "platform_health": "Platform health",
+      "infra_unreachable": "Infrastructure outages",
+      "budget_paused": "Runs paused (budget)",
+      "budget_threshold": "Budget warning",
+      "key_drift": "Encryption-key drift",
+      "merge_tag_request": "Review-effort tag requested"
+    }
+  },
   "docInterview": {
     "title": "Refine the document",
     "subtitle": "Answer the interviewer's questions so it can shape the document",
@@ -4505,16 +4590,27 @@
       },
       "refreshFailed": "Could not check for changes"
     },
+    "renders": {
+      "partial": "Some design frames could not be saved as images.",
+      "failed": "The design images could not be retrieved from the source.",
+      "storage_unavailable": "Design images were not saved: this deployment has no image storage configured."
+    },
     "connect": {
       "title": "Connect source",
       "sourceFallback": "Source",
-      "intro": "Connect {source} to import requirements, RFCs and PRDs, then spawn board structure or attach them to tasks as agent context.",
+      "intro": "Connect {source} to bring its pages and designs onto this board: import one, expand it into board structure, or attach it to a task as agent context.",
       "disconnect": "Disconnect",
       "connect": "Connect",
       "update": "Update connection",
       "connected": "{source} connected",
       "disconnected": "{source} disconnected",
-      "connectFailed": "Could not connect"
+      "connectFailed": "Could not connect",
+      "oauth": {
+        "action": "Connect with {source}",
+        "scopes": "You will be asked to grant: {scopes}",
+        "fallback": "Prefer a token? Use the fields below instead.",
+        "failed": "Could not start the {source} sign-in"
+      }
     },
     "spawn": {
       "title": "Preview structure",
@@ -4529,7 +4625,15 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} frame | {count} frames",
       "moduleCount": "{count} module | {count} modules",
-      "taskCount": "{count} task | {count} tasks"
+      "taskCount": "{count} task | {count} tasks",
+      "reusedCount": "{count} module reused | {count} modules reused",
+      "intoService": "inside the selected service",
+      "target": {
+        "label": "Add to service",
+        "help": "A design describes screens, not an architecture, so the plan proposes work inside a service that already exists.",
+        "placeholder": "Pick a service",
+        "required": "Pick the service this design belongs to."
+      }
     },
     "taskDocs": {
       "heading": "Context documents",
@@ -4562,6 +4666,20 @@
       "remove": "Remove",
       "linkFailed": "Couldn't update the document link",
       "loadFailed": "Couldn't load document templates"
+    },
+    "startFromDesign": {
+      "title": "Start from a design",
+      "intro": "Paste a link to a frame or a whole file. It is attached to the new task, and the agent reads its layout, text, components and tokens.",
+      "noSource": "No design source is connected yet. An admin can connect Figma or Zeplin from Integrations.",
+      "linkLabel": "Design link",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Checking the link…",
+      "trimmed": "Trimmed to the supported form of this link.",
+      "widened": "The frame {scope} could not be read, so the whole file is attached instead.",
+      "unchecked": "The link could not be checked right now. It is fetched when the task is created.",
+      "uncheckedAmbiguous": "The link could not be checked, and more than one design source is connected, so which one it belongs to is unknown. Try again.",
+      "rejected": "No connected design source recognises this link.",
+      "continue": "Continue"
     }
   },
   "tasks": {
@@ -4661,6 +4779,7 @@
     "boardsFailed": "Boards could not be loaded: {reason}",
     "issueType": "Issue type",
     "issueTypeHelp": "Defaults to bug. Ignored by trackers with no issue types.",
+    "issueTypeUnsupported": "{tracker} has no issue type that means \"bug\", so this filter is not applied. Narrow the scan with a label instead.",
     "labels": "Labels",
     "labelsHelp": "Comma separated. All of them must be present.",
     "adoptInto": "Add the picked bug to",
@@ -4704,7 +4823,11 @@
     "preview": {
       "stepCount": "{count} step | {count} steps",
       "gateCount": "{count} approval gate | {count} approval gates",
-      "gated": "Human approval gate after this step"
+      "gated": "Human approval gate after this step",
+      "conditionalCount": "{count} conditional step | {count} conditional steps",
+      "conditionEstimate": "Runs only when the task estimate clears this step's thresholds",
+      "conditionFrontend": "Runs only when the task changes a frontend service",
+      "conditionBackend": "Runs only when the task changes a non-frontend service"
     },
     "picker": {
       "noneHint": "No default pipeline. You choose one when you run the task.",
@@ -4756,7 +4879,10 @@
       "strategy": "Strategy",
       "rounds": "Rounds",
       "purposeLabel": "Purpose",
-      "purposePlaceholder": "Select a purpose",
+      "purposeUnrecognized": "Unrecognized ({purpose})",
+      "@purposeUnrecognized": {
+        "description": "Shown on the pipeline-purpose control when the pipeline carries a purpose this build has no label for (a member added by a newer build, or one since retired). The raw stored value is quoted back so it can be recognised and re-picked."
+      },
       "purposeOption": {
         "build": "Build",
         "document": "Documentation",
@@ -4774,6 +4900,13 @@
       "removeParticipant": "Remove participant (min 2)",
       "addParticipant": "Add participant",
       "savedPipelines": "Saved pipelines",
+      "purposeHiddenPipelines": "{count} saved pipeline hidden for this purpose. | {count} saved pipelines hidden for this purpose.",
+      "everyPurposeListed": "Listing saved pipelines for every purpose.",
+      "listEveryPurpose": "Show every purpose",
+      "narrowToDraftPurpose": "Narrow to this purpose",
+      "@purposeHiddenPipelines": {
+        "description": "Shown above the saved-pipeline list in the pipeline builder: how many saved pipelines are not listed because they were built for a different purpose than the one being edited."
+      },
       "hideArchived": "Hide archived",
       "archivedCount": "Archived ({count})",
       "allLabels": "All",
@@ -4790,6 +4923,11 @@
         "body": "\"{name}\" will be removed. This can't be undone."
       },
       "disabledStepTooltip": "Disabled, skipped at run",
+      "condition": {
+        "always": "Runs on every task — click to make it conditional",
+        "frontend": "Runs only on tasks that change a frontend service",
+        "backend": "Runs only on tasks that change a non-frontend service"
+      },
       "cancelEdit": "Cancel edit",
       "clear": "Clear",
       "update": "Update pipeline",
@@ -4832,6 +4970,13 @@
       "binaryOutputPlaceholder": "Pick a storage service",
       "binaryOutputContextPlaceholder": "Optional: services that scope the generation",
       "binaryOutputNeedsPick": "A step that generates binary outputs has no storage service selected. Pick one before saving.",
+      "envNeedsDeployer": "A Tester, human-test or Playwright step needs a Deployer before it. Add one or the pipeline won't save (it is a no-op on a service that provisions nothing).",
+      "envNeedsDisposer": "A Deployer needs a Disposer after it to reclaim the environment it stands up. Add one, or mark the Deployer as keeping its environment past the run, otherwise the pipeline won't save.",
+      "envDisposerNeedsDeployer": "This Disposer has no Deployer before it, so there is nothing for it to reclaim. Add a Deployer, or remove the Disposer.",
+      "envConsumerAfterDisposer": "A Tester, human-test or Playwright step runs after the Disposer has already reclaimed the environment, so nothing would be left to run against. Move the Disposer below that step, or add another Deployer before it.",
+      "envRetainedButReclaimed": "This Deployer is marked as keeping its environment past the run, but a Disposer after it reclaims exactly that environment. Remove the Disposer, or clear the keep-environment setting.",
+      "retainEnvironmentSetTooltip": "Reclaimed at the end of the run. Click to keep this environment running afterwards (a preview reviewers use once the PR is open); its TTL or an operator then takes it down.",
+      "retainEnvironmentClearTooltip": "Kept running after the run ends. Click to go back to reclaiming it with a Disposer step.",
       "binaryOutputNoStorage": "No service in this board's catalog declares the {capability} capability. Register one, or add the capability to the service you meant, under foundational services.",
       "binaryOutputMissing": "This storage service is no longer in the catalog; pick another.",
       "binaryOutputNotStorage": "This service no longer declares the {capability} capability, so runs will be refused; pick another.",
@@ -4861,7 +5006,51 @@
         "3d-model": "3D models",
         "3d-scene": "3D scenes",
         "document": "Documents"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "Reference image",
+        "multi-reference": "Several reference images",
+        "instruction-edit": "Editing from an instruction",
+        "mask-edit": "Masked editing",
+        "negative-prompt": "Negative prompt",
+        "seed": "Fixed seed",
+        "aspect-ratio": "Aspect ratio",
+        "exact-size": "Exact size",
+        "candidate-batch": "Several candidates per call",
+        "upscale": "Upscaling",
+        "transparent-background": "Transparent background",
+        "tileable": "Seamless tiling"
+      },
+      "binaryCapabilityUnknown": "{capability} (a capability this deployment does not define)",
+      "binaryCapabilityUnsupported": "No selected integration supports {capabilities}, which this step's generation options ask for. Remove the option, or select an integration that declares the capability.",
+      "binaryCapabilityUnverifiable": "No selected integration declares support for {capabilities}, but one of them declares no capabilities at all, so this could not be checked. The step still starts; confirm it from the integration’s API.",
+      "binaryReferenceImages": "Reference images",
+      "binaryReferenceImagesPlaceholder": "role{'|'}location{'|'}service, one per line",
+      "binaryReferenceImagesUnusable": "Not stored as references: {entries}. Each line must be role{'|'}location, where role is style, subject, composition or base.",
+      "binaryEditMode": "Edit existing",
+      "binaryEditModeNone": "Generate new",
+      "binaryEditModeInstruction": "From an instruction",
+      "binaryEditModeMask": "Masked region",
+      "binaryEditInstruction": "What to change",
+      "binaryEditInstructionPlaceholder": "e.g. replace the sky",
+      "binaryNegativePrompt": "Negative prompt",
+      "binaryNegativePromptPlaceholder": "what to keep out",
+      "binaryAspectRatio": "Aspect ratio",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "Output size",
+      "binaryOutputSizeWidth": "Width",
+      "binaryOutputSizeHeight": "Height",
+      "binaryOutputSizeIncomplete": "Not saved: an exact size needs both a width and a height.",
+      "binaryOutputSizeAmbiguous": "An exact output size cannot be combined with {options}: each states the delivered dimensions a second time. Keep whichever one is the requirement.",
+      "binarySeed": "Seed",
+      "binarySeedPlaceholder": "fixed seed",
+      "binaryTransparent": "Transparent background",
+      "binaryTileable": "Seamless tiling",
+      "binaryUpscale": "Upscale the result",
+      "binaryComparison": "Compare candidates before delivering",
+      "binaryPerGenerator": "Candidates per integration",
+      "binaryMultiSelect": "Allow keeping more than one",
+      "binaryComparisonUnreachable": "This step can only produce one candidate per subject, so nothing would be compared and the only one would be kept without asking. Select a second integration, or raise the candidates-per-integration count."
     },
     "progress": {
       "status": {
@@ -4908,9 +5097,20 @@
         "proposing": "Proposing approaches…",
         "choose": "Choose an approach"
       },
+      "binaryCandidates": {
+        "choose": "Choose candidates"
+      },
       "elapsedTooltip": "Elapsed time on this step",
       "prReview": {
         "review": "Review findings"
+      },
+      "skipped": {
+        "gated": "Skipped: the task estimate was below this step’s thresholds.",
+        "conditionFrontend": "Skipped: this task changes no frontend service, so there is no UI to exercise.",
+        "conditionBackend": "Skipped: this task changes only a frontend service, so there is no API behind it to exercise.",
+        "producerSkipped": "Skipped: the step it reviews was skipped, so there is nothing to grade.",
+        "runComplete": "Skipped: the run finished before this step, with nothing left to do.",
+        "unknown": "Skipped: this step did not run."
       }
     },
     "health": {
@@ -5090,7 +5290,11 @@
   },
   "palette": {
     "hint": "Click an agent to append it to the pipeline.",
-    "customAgents": "Custom agents"
+    "customAgents": "Custom agents",
+    "purposeHidden": "{count} agent hidden for this purpose. | {count} agents hidden for this purpose.",
+    "@purposeHidden": {
+      "description": "Shown under the pipeline-purpose control in the agent palette: how many agents are not offered because they are irrelevant to the pipeline's purpose (e.g. a coder in a documentation pipeline)."
+    }
   },
   "gates": {
     "subtitle": {
@@ -5122,7 +5326,7 @@
       "suffixFixing": "· fixer addressing comments…",
       "suffixFailing": "· review comments to address",
       "suffixAwaiting": "· awaiting review",
-      "reviewPr": "Review pull request on GitHub",
+      "reviewPr": "Review pull request",
       "requestFixHeading": "Request a fix",
       "requestFixDescription": "Describe a change for the fixer to make on the PR branch now (in addition to any review comments, which it addresses automatically).",
       "requestFixPlaceholder": "e.g. rename the helper and add a unit test for the empty-input case",
@@ -5136,12 +5340,12 @@
     },
     "conflicts": {
       "mergeability": "Mergeability",
-      "viewPr": "View pull request on GitHub"
+      "viewPr": "View pull request"
     },
     "docQuality": {
       "findings": "Document issues",
       "findingsFallback": "The document passed the structural checks.",
-      "viewPr": "View pull request on GitHub"
+      "viewPr": "View pull request"
     },
     "attemptsHeading": "{helper} attempts",
     "attempt": "Attempt {number}",
@@ -5889,6 +6093,19 @@
     "history": {
       "heading": "History (no rounds) | History ({count} round) | History ({count} rounds)",
       "fixRequested": "Fix requested"
+    },
+    "design": {
+      "summary": "No frames came from the linked design. | 1 frame from the linked design. | {count} frames from the linked design.",
+      "dropped": "No others are hidden. | 1 more is not shown here. | {count} more are not shown here.",
+      "gapDropped": "None of its frames are hidden. | 1 of its frames is not shown here. | {count} of its frames are not shown here.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "only part of its frames were retained; refresh the document to try again.",
+        "failed": "its frames could not be downloaded at the last import; refresh the document to retry.",
+        "none": "it has no frames to show.",
+        "storage_unavailable": "no image storage was configured when it was imported, so nothing was downloaded.",
+        "not_retained": "no images are held for it. Its source may not render frames, or it was imported before frames were kept; re-importing tells the two apart."
+      }
     }
   },
   "outcome": {
@@ -5908,6 +6125,15 @@
     "ask": {
       "title": "What was asked",
       "none": "This task carries no description, so there is nothing here to compare the result against."
+    },
+    "sources": {
+      "title": "Built from",
+      "unchecked": "Not checked against the source.",
+      "noSource": "No source page to compare against.",
+      "moved": "This page changed while the run was in flight, so earlier steps read an older revision.",
+      "gap": {
+        "none_linked": "No page reached this run's agents, so they worked from the task description alone."
+      }
     },
     "gap": {
       "run_unavailable": "This task's run was not loaded, so none of the evidence it recorded can be shown here. That is not the same as a run that recorded nothing."
@@ -6132,6 +6358,7 @@
       },
       "actual": "Actual",
       "reference": "Reference",
+      "fromLinkedDesign": "· from the linked design",
       "actualAlt": "{view} (actual)",
       "referenceAlt": "{view} (reference)",
       "replace": "Replace",
@@ -6461,13 +6688,21 @@
       "unknownServices": "Named a service the catalog does not contain: {ids}. The entry is kept as claimed; check the id against the workspace catalog. | Named services the catalog does not contain: {ids}. Their entries are kept as claimed; check the ids against the workspace catalog.",
       "targetUnknown": "The catalog no longer contains this step's own storage service ({id}), so nothing below could be checked against it. Register it again, or point the step at another service.",
       "undeliveredMediaTypes": "This step was set to deliver {formats}, and no artifact below reports that format. | This step was set to deliver {formats}, and no artifact below reports those formats.",
+      "missized": "1 artifact was delivered at a size other than {width}×{height}. | {count} artifacts were delivered at a size other than {width}×{height}.",
+      "sizeUnreported": "1 artifact reports no dimensions, so its size could not be checked. | {count} artifacts report no dimensions, so their sizes could not be checked.",
       "misdirected": "1 artifact went to a service other than {target}. | {count} artifacts went to a service other than {target}.",
       "invalidEntries": "1 declared entry was dropped: it named no service and location. | {count} declared entries were dropped: they named no service and location.",
       "omitted": "1 more artifact was declared beyond the report's limit and is not listed. | {count} more artifacts were declared beyond the report's limit and are not listed.",
       "unknownGenerators": "Named a generative integration this deployment does not register: {ids}. The entry is kept as claimed; the integration is registered in the deployment's code, not in this workspace. | Named generative integrations this deployment does not register: {ids}. Their entries are kept as claimed; integrations are registered in the deployment's code, not in this workspace.",
       "generatorsUnverified": "This deployment's generative integrations could not be read when the step settled, so the integrations named below were not checked against them. The entries are kept as claimed."
     },
-    "unknownGeneratorBadge": "Not registered"
+    "unknownGeneratorBadge": "Not registered",
+    "missizedBadge": "Wrong size",
+    "candidates": {
+      "automatic": "{total} candidate was generated and kept automatically, without review.",
+      "chosen": "{kept} of {total} generated candidates were kept.",
+      "awaiting": "{total} candidates were generated and are waiting to be compared."
+    }
   },
   "sandbox": {
     "title": "Sandbox: prompt and model testing",
@@ -7153,7 +7388,33 @@
       },
       "toast": {
         "disconnected": "{provider} disconnected"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "Pull requests",
+          "open": "Open PR",
+          "openSubmit": "Open pull request",
+          "merge": "Merge this pull request",
+          "none": "No pull requests synced.",
+          "opened": "Pull request opened",
+          "mergedToast": "PR #{number} merged",
+          "openFailed": "Could not open pull request"
+        },
+        "gitlab": {
+          "tab": "Merge requests",
+          "open": "Open MR",
+          "openSubmit": "Open merge request",
+          "merge": "Merge this merge request",
+          "none": "No merge requests synced.",
+          "opened": "Merge request opened",
+          "mergedToast": "MR !{number} merged",
+          "openFailed": "Could not open merge request"
+        }
+      },
+      "manageHintApp": "Pick the repositories this board should track. The App installation is shared across the account, and each board links its own repositories.",
+      "manageHintToken": "Pick the repositories this board should track. The list is what the connected token can reach, and each board links its own repositories.",
+      "noAvailableReposApp": "The App installation can’t access any repositories yet.",
+      "noAvailableReposToken": "The connected token can’t reach any repositories yet. Check its scope and your access to them."
     },
     "connect": {
       "or": "or",
@@ -7270,7 +7531,8 @@
       "library": "The context fragment library enabled on this deployment",
       "failedRun": "A run that failed",
       "infrastructure": "An execution backend connected to this workspace",
-      "advancedTier": "The advanced interface mode"
+      "advancedTier": "The advanced interface mode",
+      "designSource": "A connected design source"
     },
     "overlay": {
       "next": "Next",
@@ -7659,6 +7921,36 @@
             "body": "A design that declares which of these it uses gets their full contracts in the next step. One that declares nothing gets nothing, so keeping this current is what makes it work."
           }
         }
+      },
+      "startFromDesign": {
+        "title": "Start from a design",
+        "description": "Turn a design frame into a task an agent can build.",
+        "steps": {
+          "intro": {
+            "title": "Work from the design",
+            "body": "When the work starts in a design tool, the frame is the brief. This tour attaches one to a new task."
+          },
+          "open": {
+            "title": "Start from a design",
+            "body": "Every service frame carries this button once a design source is connected."
+          },
+          "paste": {
+            "title": "Paste the link",
+            "body": "Copy the link to a frame or a whole file from your design tool and paste it here."
+          },
+          "resolved": {
+            "title": "Check what was attached",
+            "body": "The link is trimmed to its supported form. If the frame itself could not be read, the whole file is attached instead and it says so here."
+          },
+          "continue": {
+            "title": "Carry on to the task",
+            "body": "The design is staged on the new task. Describe the outcome you want and create it."
+          },
+          "finish": {
+            "title": "Ready to run",
+            "body": "The agent reads the design's layout, text, components and tokens, and every run re-checks it against the source."
+          }
+        }
       }
     },
     "nudge": {
@@ -7674,6 +7966,33 @@
       "unresolved": "This tool did not return an address for the current workspace.",
       "resolverFailed": "This tool failed while working out its address. The cause is in the browser console, for whoever maintains this deployment.",
       "unsafeUrl": "This tool returned an address that is not a web link, so it was not opened."
+    }
+  },
+  "binaryCandidates": {
+    "title": "Generated candidates",
+    "titleWithBlock": "Generated candidates: {title}",
+    "subtitle": "Compare what each integration produced, and keep what you want",
+    "automatic": "Only one candidate was generated, so it was kept automatically. Nobody reviewed it.",
+    "unlabelledSubject": "No subject declared",
+    "noPreview": "No preview available",
+    "fromGenerator": "From {generator}",
+    "unattributed": "No integration recorded",
+    "kept": "Kept",
+    "keptAs": "Kept as {id}",
+    "storeAsPlaceholder": "store under this id",
+    "notePlaceholder": "Anything to change when storing these (optional)",
+    "missingAlias": "Give each kept candidate its own id, or they would all be stored under the same name.",
+    "duplicateAlias": "Two kept candidates share an id. Two artifacts at one location is one artifact.",
+    "keepAction": "Keep {count}",
+    "warning": {
+      "omitted": "{count} candidates were dropped past the cap, so this list is a prefix. ",
+      "invalid": "{count} declared entries were unreadable and are missing here. ",
+      "previews": "{count} preview links were refused, so those candidates render without an image."
+    },
+    "noChoice": {
+      "undeclared": "The step never declared its candidates, so there was nothing to compare. The run continued.",
+      "parseFailed": "The step’s candidate declaration could not be read, so there was nothing to compare. The run continued.",
+      "noCandidates": "The step staged no candidates, so there was nothing to compare. The run continued."
     }
   }
 }

@@ -1,4 +1,5 @@
 import {
+  createTaskWritebackContext,
   describeError,
   type Logger,
   noopLogger,
@@ -14,90 +15,70 @@ import {
   type ReviewQuestionPost,
   type ReviewQuestionPostOutcome,
   type ReviewQuestionPostRepository,
-  type TaskConnectionRepository,
+  type TaskConnectionStore,
+  type TaskCredentials,
   type TaskRecord,
   type TaskRepository,
   type TaskSourceKind,
+  type TaskSourceProvider,
+  type TaskSourceWritebackAdapter,
+  type TaskWritebackContext,
   type ReviewReplyAck,
   type TrackerSettingsRepository,
   trackerWebhookSecret,
 } from '@cat-factory/kernel'
 import { issueRefFor, renderReviewQuestionsComment } from './reviewQuestions.logic.js'
 import { renderReviewReplyAck } from './reviewReplies.logic.js'
-import {
-  buildJiraCommentPayload,
-  pickTransitionByCategory,
-} from '../tracker/jira.writeback.logic.js'
-import {
-  LINEAR_COMMENT_CREATE_MUTATION,
-  LINEAR_ISSUE_ID_QUERY,
-  LINEAR_ISSUE_RESOLVE_LOOKUP_QUERY,
-  LINEAR_ISSUE_UPDATE_MUTATION,
-  buildLinearCommentVariables,
-  buildLinearStateUpdateVariables,
-  pickStateIdByType,
-} from '../tracker/linear.writeback.logic.js'
-import type {
-  FetchLike,
-  JiraConnection,
-  LinearConnection,
-} from '../tracker/TicketTrackerService.js'
-import { linearAuthFromCredentials, postLinearGraphql } from '../shared/linear.client.js'
-import { toBase64 } from '../tracker/base64.js'
+import { MapTaskSourceRegistry } from '../tasks/tasks.logic.js'
 
-// IssueWritebackService: the runtime-neutral `IssueWritebackProvider`. As a task's
-// PR progresses the execution engine calls it to write back to the task's linked
-// tracker issue(s): comment when the PR opens, and comment + close as resolved when
-// the PR merges. It resolves the workspace's writeback settings (with the per-task
-// override on the block), finds the linked issues via the task projection, and
-// dispatches per source. GitHub auth/installation resolution differs per runtime so
-// it is injected as seams (the facade parses `owner/repo#number` and resolves the
-// installation); the Jira HTTP + ADF logic stays here (identical across runtimes).
+// IssueWritebackService: the runtime-neutral `IssueWritebackProvider`. As a task's PR progresses
+// the execution engine calls it to write back to the task's linked tracker issue(s): comment when
+// the PR opens, comment + resolve when it merges, claim an issue the recurring intake picked up,
+// echo a parked review's open questions, and acknowledge a reply that answered them.
 //
-// Every action is best-effort: each issue's writeback is wrapped so one failure
-// never blocks the others, and the engine already calls these fire-and-forget.
-
-const USER_AGENT = 'cat-factory'
+// It owns the SHARED half of every one of those: the workspace's writeback settings (with the
+// per-task override on the block), the linked-issue lookup, the per-issue failure isolation, and
+// the parked-review idempotency marker. It owns NONE of the vendor half. Each source's provider
+// declares a `TaskSourceWritebackAdapter` and this service dispatches through the registry, which
+// is what makes the writeback a property of the SOURCE rather than of this file: the
+// `if (source === 'github' | 'jira' | 'linear')` chain it replaced meant GitLab Issues shipped
+// with full intake and no writeback at all, and a deployment-registered source could not have one
+// however it was wired.
+//
+// Every action is best-effort: each issue's writeback is isolated so one failure never blocks the
+// others, and the engine calls these fire-and-forget. Best-effort is not silent, though. An
+// unwired source, an unreadable connection and a capability the vendor lacks are three different
+// facts, and each is reported with the remedy it needs.
 
 export interface IssueWritebackServiceDependencies {
   trackerSettingsRepository: TrackerSettingsRepository
   taskRepository: TaskRepository
   /**
-   * Post a comment on a GitHub issue identified by its `owner/repo#number` external
-   * id. The facade resolves the workspace's installation + repo ref and calls
-   * `GitHubClient.comment`. Absent → GitHub writeback passes through.
+   * The task sources this deployment wires, BY REFERENCE: the same array the tasks module builds
+   * its registry from, so a source registered once is written back to without a second wiring
+   * decision (and a deployment's own source gets the whole loop for free).
    *
-   * MUST THROW when it cannot deliver — an unparseable external id, or a workspace whose
-   * installation is gone. Returning normally is the seam's promise that the comment landed. The
-   * fire-and-forget hooks swallow the throw as they always have, but the parked-review writeback
-   * depends on it: a facade that silently returned on an unresolved target would have its marker
-   * recorded `posted` for a comment nobody ever received, permanently suppressing the retry that
-   * reconnecting the installation should produce.
+   * Absent or empty ⇒ every writeback passes through, which is the honest reading of a deployment
+   * with no tracker integration at all.
    */
-  commentOnGitHubIssue?: (workspaceId: string, externalId: string, body: string) => Promise<void>
+  taskSourceProviders?: readonly TaskSourceProvider[]
   /**
-   * Close a GitHub issue (as completed) identified by its `owner/repo#number`
-   * external id. Absent → GitHub close passes through.
+   * The per-`(workspace, source)` tracker connection, read for two things: the credential bag a
+   * writeback adapter authenticates with, and whether an inbound webhook secret has been minted,
+   * which is what decides if a reply typed on the ticket can ever reach the run
+   * (`backend/docs/adr/0032-tracker-webhook-intake.md` fails closed without one).
+   *
+   * A question comment that leads with `@cat-factory answer …` on a connection with no secret is
+   * advice that silently does nothing, and it is the reporter — the one person who came in through
+   * the ticket — who follows it. So the copy asks before it promises. Absent ⇒ the ticket channel
+   * is reported UNWIRED and every adapter is handed an empty bag, which is the honest reading: a
+   * facade that cannot open a connection cannot offer the channel or authenticate as the tenant.
+   *
+   * Only the per-workspace half is visible from here. The other half is the facade's own
+   * `trackerCommentIngestRepository`, which both runtimes wire unconditionally and the tracker
+   * webhook conformance suite proves end to end.
    */
-  closeGitHubIssue?: (workspaceId: string, externalId: string) => Promise<void>
-  /**
-   * Apply a label to a GitHub issue (creating the label if absent) identified by
-   * its `owner/repo#number` external id — the intake pickup's in-progress mark
-   * (GitHub has no native workflow status). Absent → the mark passes through.
-   */
-  labelGitHubIssue?: (workspaceId: string, externalId: string, label: string) => Promise<void>
-  /**
-   * Resolve the workspace's Jira credentials, or null when Jira isn't configured.
-   * Reuses the same seam as `TicketTrackerService`. Absent → Jira writeback passes through.
-   */
-  resolveJiraConnection?: (workspaceId: string) => Promise<JiraConnection | null>
-  /**
-   * Resolve the workspace's Linear credentials, or null when Linear isn't configured.
-   * Reuses the same seam as `TicketTrackerService`. Absent → Linear writeback passes through.
-   */
-  resolveLinearConnection?: (workspaceId: string) => Promise<LinearConnection | null>
-  /** HTTP transport for the Jira/Linear calls (each runtime exposes a global `fetch`). */
-  fetchImpl?: FetchLike
+  taskConnectionStore?: TaskConnectionStore
   /**
    * Idempotency markers for the parked-review question writeback. Absent → the writeback
    * passes through entirely, because posting without a marker would re-post the same
@@ -105,42 +86,49 @@ export interface IssueWritebackServiceDependencies {
    */
   reviewQuestionPostRepository?: ReviewQuestionPostRepository
   /**
-   * The per-`(workspace, source)` tracker connection, read for ONE thing here: whether an inbound
-   * webhook secret has been minted, which is what decides if a reply typed on the ticket can ever
-   * reach the run (`backend/docs/adr/0032-tracker-webhook-intake.md` fails closed without one).
-   *
-   * A question comment that leads with `@cat-factory answer …` on a connection with no secret is
-   * advice that silently does nothing, and it is the reporter — the one person who came in through
-   * the ticket — who follows it. So the copy asks before it promises. Absent ⇒ the ticket channel
-   * is reported UNWIRED, which is the honest reading: a facade that cannot establish the fact
-   * cannot offer the channel.
-   *
-   * Only the per-workspace half is visible from here. The other half is the facade's own
-   * `trackerCommentIngestRepository`, which both runtimes wire unconditionally and the tracker
-   * webhook conformance suite proves end to end.
-   */
-  taskConnectionRepository?: TaskConnectionRepository
-  /**
    * Wall clock for the marker rows and their abandonment window. The facade's shared `Clock`,
    * like every other service here; defaults to the real clock so a test can pin time without
    * every construction site having to.
    */
   clock?: Clock
   /**
-   * Where the two swallowed paths below report: a marker that could not be settled, and a
-   * per-issue writeback that threw inside the fan-out. Absent ⇒ `noopLogger`.
+   * Where every degraded path reports: an unwired source, an unreadable connection, a marker that
+   * could not be settled, a per-issue writeback that threw inside the fan-out. Absent ⇒
+   * `noopLogger`.
    */
   logger?: Logger
 }
 
-/** The GitHub in-progress label applied on pickup when the schedule doesn't name one. */
-export const DEFAULT_IN_PROGRESS_LABEL = 'in-progress'
+/**
+ * What this deployment can do for one source right now, resolved ONCE per distinct source across
+ * a block's linked issues rather than per issue: every leg of it belongs to `(workspace, source)`,
+ * and a block linked to three issues on one tracker would otherwise pay three decrypting reads
+ * for one answer.
+ */
+type ResolvedSource =
+  /**
+   * A writeback adapter plus the batch context every call for this source shares: one
+   * `TaskWritebackContext`, so an adapter's workspace-invariant reads are paid for once across a
+   * block's linked issues rather than once per call (see the port's `once`).
+   */
+  | {
+      status: 'ready'
+      adapter: TaskSourceWritebackAdapter
+      ctx: TaskWritebackContext
+      ticketReplies: boolean
+    }
+  /** No provider registered for this source, or one without the writeback capability. */
+  | { status: 'unwired' }
+  /** The stored connection would not open, so nothing at all was learned about this source. */
+  | { status: 'unreadable' }
 
 export class IssueWritebackService implements IssueWritebackProvider {
   private readonly log: Logger
+  private readonly sources: MapTaskSourceRegistry
 
   constructor(private readonly deps: IssueWritebackServiceDependencies) {
     this.log = (deps.logger ?? noopLogger).child({ service: 'issueWriteback' })
+    this.sources = new MapTaskSourceRegistry([...(deps.taskSourceProviders ?? [])])
   }
 
   async onPullRequestOpened(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void> {
@@ -152,12 +140,13 @@ export class IssueWritebackService implements IssueWritebackProvider {
     if (!enabled) return
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return
+    const resolved = await this.resolveSources(workspaceId, issues)
     const body = `🔧 A pull request was opened for this issue: ${pr.url}`
     await this.forEachIssue(
       { label: 'writeback.onPullRequestOpened', workspaceId },
       issues,
       async (issue) => {
-        await this.comment(workspaceId, issue, body)
+        await this.comment(workspaceId, resolved, issue, body)
       },
     )
   }
@@ -171,13 +160,14 @@ export class IssueWritebackService implements IssueWritebackProvider {
     if (!enabled) return
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return
+    const resolved = await this.resolveSources(workspaceId, issues)
     const body = `✅ The pull request was merged and this issue is resolved: ${pr.url}`
     await this.forEachIssue(
       { label: 'writeback.onPullRequestMerged', workspaceId },
       issues,
       async (issue) => {
-        await this.comment(workspaceId, issue, body)
-        await this.resolve(workspaceId, issue)
+        await this.comment(workspaceId, resolved, issue, body)
+        await this.applyState(workspaceId, resolved, issue, 'resolve', {})
       },
     )
   }
@@ -192,6 +182,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     // (see the port doc). Still best-effort per issue, like every hook here.
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, blockId)
     if (issues.length === 0) return
+    const resolved = await this.resolveSources(workspaceId, issues)
     const body = info.runUrl
       ? `🤖 Taken by cat-factory — this issue is being worked autonomously: ${info.runUrl}`
       : '🤖 Taken by cat-factory — this issue is being worked autonomously.'
@@ -199,8 +190,14 @@ export class IssueWritebackService implements IssueWritebackProvider {
       { label: 'writeback.onIssuePickedUp', workspaceId },
       issues,
       async (issue) => {
-        await this.comment(workspaceId, issue, body)
-        await this.markInProgress(workspaceId, issue, info.inProgressLabel)
+        await this.comment(workspaceId, resolved, issue, body)
+        await this.applyState(
+          workspaceId,
+          resolved,
+          issue,
+          'markInProgress',
+          info.inProgressLabel ? { label: info.inProgressLabel } : {},
+        )
       },
     )
   }
@@ -231,11 +228,10 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return empty
 
-    // Which of these issues can be REPLIED to, resolved once per distinct source rather than per
-    // issue: the answer is a property of the `(workspace, source)` connection, and several issues
-    // on one block routinely share one. Two bodies at most, so the render is memoised on the same
-    // boolean instead of being recomputed alongside it.
-    const repliesBySource = await this.resolveTicketReplyChannels(workspaceId, issues)
+    // Which of these issues can be REPLIED to rides the same per-source resolution the comment
+    // transport does, so the two cannot disagree about a connection. Two bodies at most, so the
+    // render is memoised on the same boolean instead of being recomputed alongside it.
+    const resolved = await this.resolveSources(workspaceId, issues)
     const bodies = new Map<boolean, string>()
     const bodyFor = (ticketReplies: boolean): string => {
       const cached = bodies.get(ticketReplies)
@@ -280,7 +276,8 @@ export class IssueWritebackService implements IssueWritebackProvider {
         outcome.skipped += 1
         continue
       }
-      const ticketReplies = repliesBySource.get(issue.source) ?? false
+      const source = resolved.get(issue.source)
+      const ticketReplies = source?.status === 'ready' && source.ticketReplies
       if (!ticketReplies) {
         // Said once per claimed post (the marker bounds it), because the remedy is the operator's
         // and the symptom otherwise reaches nobody: the reporter is being asked a question they
@@ -302,8 +299,8 @@ export class IssueWritebackService implements IssueWritebackProvider {
         // outcome this whole marker exists to prevent. A hung transport is instead cut off by
         // the driver's own step limit, and the claim's abandonment window (above) makes that
         // row re-claimable — self-healing without ever inventing a duplicate.
-        const delivered = await this.comment(workspaceId, issue, bodyFor(ticketReplies))
-        if (!delivered) throw new Error(`No ${issue.source} comment transport is wired`)
+        const delivered = await this.comment(workspaceId, resolved, issue, bodyFor(ticketReplies))
+        if (!delivered) throw new Error(`No ${issue.source} writeback is wired`)
         await markers.settle(key, { status: 'posted' }, now())
         outcome.posted += 1
       } catch (e) {
@@ -333,44 +330,6 @@ export class IssueWritebackService implements IssueWritebackProvider {
   }
 
   /**
-   * Whether a reply typed on a ticket reaches the run, per DISTINCT source across the block's
-   * linked issues.
-   *
-   * One connection read per distinct source, indexed into a `Map`, rather than one per issue: the
-   * fact belongs to `(workspace, source)`, and a block linked to three issues on one tracker would
-   * otherwise pay three decrypting reads for one answer.
-   *
-   * An unreadable connection resolves to `false` and is REPORTED, never guessed at: the failure
-   * mode of guessing `true` is a reporter told to reply where nothing listens, which is the exact
-   * thing this resolution exists to prevent.
-   */
-  private async resolveTicketReplyChannels(
-    workspaceId: string,
-    issues: readonly Pick<TaskRecord, 'source'>[],
-  ): Promise<Map<TaskSourceKind, boolean>> {
-    const wired = new Map<TaskSourceKind, boolean>()
-    const connections = this.deps.taskConnectionRepository
-    if (!connections) return wired
-    const sources = [...new Set(issues.map((issue) => issue.source))]
-    await Promise.all(
-      sources.map(async (source) => {
-        try {
-          const connection = await connections.getByWorkspace(workspaceId, source)
-          wired.set(source, trackerWebhookSecret(connection?.credentials) !== '')
-        } catch (error) {
-          this.log.warn('tracker connection unreadable; offering the API answer path only', {
-            workspaceId,
-            source,
-            ...describeError(error),
-          })
-          wired.set(source, false)
-        }
-      }),
-    )
-    return wired
-  }
-
-  /**
    * Acknowledge a ticket reply on the very issue it arrived on.
    *
    * Deliberately NOT marker-gated, unlike {@link postReviewQuestions}: an ack is the terminal
@@ -387,7 +346,114 @@ export class IssueWritebackService implements IssueWritebackProvider {
     issue: { source: TaskSourceKind; externalId: string },
     ack: ReviewReplyAck,
   ): Promise<void> {
-    await this.comment(workspaceId, issue, renderReviewReplyAck(ack))
+    const resolved = await this.resolveSources(workspaceId, [issue])
+    await this.comment(workspaceId, resolved, issue, renderReviewReplyAck(ack))
+  }
+
+  /**
+   * What this deployment can do for each source the given issues sit on: the registered
+   * provider's writeback adapter, the batch context carrying the workspace's credential bag for
+   * it, and whether a reply typed on one of its tickets reaches the run.
+   *
+   * ONE connection read for the whole set, indexed by source.
+   *
+   * What an unreadable row costs is the ADAPTER's own declaration (`authenticates`), never a guess
+   * from the empty bag it leaves behind. A `stored-connection` adapter resolves to `unreadable`
+   * and is REPORTED: writing back with a bag that would not open authenticates as nobody, and the
+   * vendor's rejection would name the wrong fault. An `out-of-band` adapter (GitHub Issues rides
+   * the workspace's App, GitLab Issues its VCS connection) never needed the row to post, so it
+   * stays READY and loses only what the row actually carried: the reply channel, which is
+   * WITHHELD rather than assumed, because telling a reporter to reply where nothing listens is
+   * the exact thing this resolution exists to prevent.
+   *
+   * Both verdicts are scoped to the SOURCE they were learned about. A block's issues can span
+   * trackers, and a corrupt Linear envelope is no evidence at all about the workspace's Jira
+   * connection, so a batch-wide failure would take a working channel away from a healthy ticket.
+   */
+  private async resolveSources(
+    workspaceId: string,
+    issues: readonly Pick<TaskRecord, 'source'>[],
+  ): Promise<Map<TaskSourceKind, ResolvedSource>> {
+    const sources = [...new Set(issues.map((issue) => issue.source))]
+    const out = new Map<TaskSourceKind, ResolvedSource>()
+    /** The adapter for a source, or `undefined` when nothing is registered to write back with. */
+    const adapterFor = (source: TaskSourceKind) => this.sources.get(source)?.writeback
+    const ready = (
+      adapter: TaskSourceWritebackAdapter,
+      credentials: TaskCredentials,
+      ticketReplies: boolean,
+    ): ResolvedSource => ({
+      status: 'ready',
+      adapter,
+      ctx: createTaskWritebackContext({ workspaceId, credentials }),
+      ticketReplies,
+    })
+    /**
+     * A source that HAS no stored connection: no row, or no store wired at all. Every adapter
+     * stays ready with an empty bag, because absence is the adapter's own question to answer. A
+     * credentialless one is unaffected, and one that needs credentials throws from the call with
+     * a message naming the missing connection, which beats this file guessing that fault from
+     * outside (see the port doc on `TaskWritebackContext.credentials`).
+     *
+     * A row that FAILED to open is the opposite case and is handled below: something exists and
+     * could not be read, so an adapter that needs it must not be asked to try.
+     */
+    for (const source of sources) {
+      const adapter = adapterFor(source)
+      out.set(source, adapter ? ready(adapter, {}, false) : { status: 'unwired' })
+    }
+
+    const connections = this.deps.taskConnectionStore
+    if (!connections) return out
+    let opened: Awaited<ReturnType<typeof connections.listBySources>>
+    try {
+      opened = await connections.listBySources(workspaceId, sources)
+    } catch (error) {
+      // The stored-row READ itself failed, before any source was opened, so nothing was learned
+      // about any of them.
+      this.markUnreadable(out, workspaceId, sources, error)
+      return out
+    }
+    for (const result of opened) {
+      if (result.status === 'unreadable') {
+        this.markUnreadable(out, workspaceId, [result.source], result.cause)
+        continue
+      }
+      const adapter = adapterFor(result.source)
+      if (!adapter) continue
+      const credentials = result.connection.credentials
+      out.set(result.source, ready(adapter, credentials, trackerWebhookSecret(credentials) !== ''))
+    }
+    return out
+  }
+
+  /**
+   * Record a connection that would not open, costing each source only what it actually costs.
+   *
+   * An adapter that authenticates WITH the bag is lost until the connection is repaired, so it
+   * resolves to `unreadable` and every call for it fails loudly. An `out-of-band` one keeps its
+   * whole writeback (it authenticates from `workspaceId` and only ever read this row for the
+   * inbound secret) and loses just the reply channel, which the seeded entry already withholds.
+   * Reading the failure as one fact for every source is what would let a rotated
+   * `TASKS_ENCRYPTION_KEY` silence GitHub's PR notices, and the two log lines say which happened
+   * because an operator acts on them differently.
+   */
+  private markUnreadable(
+    out: Map<TaskSourceKind, ResolvedSource>,
+    workspaceId: string,
+    sources: readonly TaskSourceKind[],
+    cause: unknown,
+  ): void {
+    for (const source of sources) {
+      const outOfBand = this.sources.get(source)?.writeback?.authenticates === 'out-of-band'
+      if (!outOfBand) out.set(source, { status: 'unreadable' })
+      this.log.warn(
+        outOfBand
+          ? 'tracker connection unreadable; the writeback still posts but can offer no ticket reply channel'
+          : 'tracker connection unreadable; writeback cannot authenticate',
+        { workspaceId, source, ...describeError(cause) },
+      )
+    }
   }
 
   /**
@@ -413,211 +479,81 @@ export class IssueWritebackService implements IssueWritebackProvider {
   }
 
   /**
-   * Post a comment on one linked issue. Returns whether this deployment has a transport for that
-   * issue's source at all; a wired transport that cannot deliver THROWS (see the seam docs), so
-   * `true` means the comment landed. The fire-and-forget hooks ignore both signals, but the
-   * parked-review writeback distinguishes them: an unwired source is a permanent no-op to retry
-   * once someone wires it, a throw is a failure to retry on the next replay, and neither may be
-   * recorded as `posted`.
+   * Post a comment on one linked issue. Returns whether this deployment has a writeback for that
+   * issue's source at all; an adapter that cannot deliver THROWS (see the port), so `true` means
+   * the comment landed. The fire-and-forget hooks ignore both signals, but the parked-review
+   * writeback distinguishes them: an unwired source is a permanent no-op to retry once someone
+   * wires it, a throw is a failure to retry on the next replay, and neither may be recorded as
+   * `posted`.
    */
   private async comment(
     workspaceId: string,
+    resolved: Map<TaskSourceKind, ResolvedSource>,
     // Narrowed to the natural key rather than the whole record: the ticket-reply ack addresses the
     // issue the comment ARRIVED on, which it knows as `(source, externalId)` off the delivery and
     // has no reason to re-read from the projection.
     issue: Pick<TaskRecord, 'source' | 'externalId'>,
     body: string,
   ): Promise<boolean> {
-    if (issue.source === 'github') {
-      if (!this.deps.commentOnGitHubIssue) return false
-      await this.deps.commentOnGitHubIssue(workspaceId, issue.externalId, body)
-      return true
-    }
-    if (issue.source === 'jira') {
-      if (!this.deps.resolveJiraConnection || !this.deps.fetchImpl) return false
-      await this.jiraRequest(workspaceId, `issue/${encodeURIComponent(issue.externalId)}/comment`, {
-        method: 'POST',
-        body: buildJiraCommentPayload(body),
-      })
-      return true
-    }
-    if (issue.source === 'linear') {
-      if (!this.deps.resolveLinearConnection || !this.deps.fetchImpl) return false
-      await this.commentLinear(workspaceId, issue.externalId, body)
-      return true
-    }
-    return false
-  }
-
-  private async resolve(workspaceId: string, issue: TaskRecord): Promise<void> {
-    if (issue.source === 'github') {
-      await this.deps.closeGitHubIssue?.(workspaceId, issue.externalId)
-      return
-    }
-    if (issue.source === 'jira') {
-      await this.transitionJira(workspaceId, issue.externalId, 'done')
-      return
-    }
-    if (issue.source === 'linear') {
-      await this.transitionLinear(workspaceId, issue.externalId, 'completed')
-    }
-  }
-
-  /**
-   * Mark a picked-up issue in-progress: the vendor's in-progress workflow
-   * transition (Jira's `indeterminate` status category / Linear's `started`
-   * state), or the in-progress label for GitHub, which has no native status.
-   */
-  private async markInProgress(
-    workspaceId: string,
-    issue: TaskRecord,
-    inProgressLabel: string | undefined,
-  ): Promise<void> {
-    if (issue.source === 'github') {
-      await this.deps.labelGitHubIssue?.(
+    const source = resolved.get(issue.source)
+    if (source?.status !== 'ready') {
+      // An unreadable connection is a FAILURE to retry, not an absent capability: the source is
+      // wired and the row exists, it just could not be opened this time.
+      if (source?.status === 'unreadable') {
+        throw new Error(`The ${issue.source} connection for this workspace could not be opened`)
+      }
+      this.log.warn('no writeback is wired for this source; the comment was not posted', {
         workspaceId,
-        issue.externalId,
-        inProgressLabel ?? DEFAULT_IN_PROGRESS_LABEL,
-      )
+        source: issue.source,
+        externalId: issue.externalId,
+        remedy: `register a ${issue.source} task-source provider declaring a writeback adapter`,
+      })
+      return false
+    }
+    await source.adapter.comment(source.ctx, issue.externalId, body)
+    return true
+  }
+
+  /**
+   * Apply the issue's state change for a hook: `resolve` on merge, `markInProgress` on pickup.
+   *
+   * Both are OPTIONAL on the adapter, and an omitted one is reported rather than passed over in
+   * silence. A tracker whose vendor has no such notion is a real answer an operator may need (the
+   * merge comment landed and the issue stayed open, and only this line says why), and it must not
+   * read like the write simply succeeded.
+   */
+  private async applyState(
+    workspaceId: string,
+    resolved: Map<TaskSourceKind, ResolvedSource>,
+    issue: TaskRecord,
+    action: 'resolve' | 'markInProgress',
+    mark: { label?: string },
+  ): Promise<void> {
+    const source = resolved.get(issue.source)
+    // An unwired or unreadable source has already been reported by the comment that preceded
+    // every call site, so this stays quiet rather than logging the same fact twice.
+    if (source?.status !== 'ready') return
+    const ctx = source.ctx
+    if (action === 'resolve') {
+      if (!source.adapter.resolve) {
+        this.log.warn('this source cannot resolve an issue; it was commented on but left open', {
+          workspaceId,
+          source: issue.source,
+          externalId: issue.externalId,
+        })
+        return
+      }
+      await source.adapter.resolve(ctx, issue.externalId)
       return
     }
-    if (issue.source === 'jira') {
-      await this.transitionJira(workspaceId, issue.externalId, 'indeterminate')
+    if (!source.adapter.markInProgress) {
+      this.log.warn('this source cannot mark an issue in progress; the pickup is comment-only', {
+        workspaceId,
+        source: issue.source,
+        externalId: issue.externalId,
+      })
       return
     }
-    if (issue.source === 'linear') {
-      await this.transitionLinear(workspaceId, issue.externalId, 'started')
-    }
-  }
-
-  /**
-   * Comment on a Linear issue: resolve its UUID by identifier, then `commentCreate`.
-   * On merge this runs before {@link resolveLinear}, so the issue is looked up twice
-   * (here for the UUID, there for the UUID + the team's workflow states). That second
-   * lookup is unavoidable — only it carries the states needed to pick the resolved
-   * state — and the duplicated read is one cheap `issue(id:){id}` call, so the seam is
-   * kept uniform with the GitHub/Jira comment/resolve split rather than special-cased.
-   */
-  private async commentLinear(
-    workspaceId: string,
-    identifier: string,
-    body: string,
-  ): Promise<void> {
-    const lookup = (await this.linearRequest(workspaceId, LINEAR_ISSUE_ID_QUERY, {
-      id: identifier,
-    })) as { issue?: { id?: string } } | null
-    const issueId = lookup?.issue?.id
-    if (!issueId) return
-    await this.linearRequest(
-      workspaceId,
-      LINEAR_COMMENT_CREATE_MUTATION,
-      buildLinearCommentVariables(issueId, body),
-    )
-  }
-
-  /**
-   * Transition a Linear issue: look up its UUID + team states, pick the target
-   * state (`completed` on resolve, `started` on pickup), then `issueUpdate`.
-   */
-  private async transitionLinear(
-    workspaceId: string,
-    identifier: string,
-    stateType: 'completed' | 'started',
-  ): Promise<void> {
-    const lookup = (await this.linearRequest(workspaceId, LINEAR_ISSUE_RESOLVE_LOOKUP_QUERY, {
-      id: identifier,
-    })) as { issue?: { id?: string; team?: { states?: { nodes?: unknown[] } } } } | null
-    const issueId = lookup?.issue?.id
-    const stateId = pickStateIdByType(
-      (lookup?.issue?.team?.states?.nodes ?? []) as Parameters<typeof pickStateIdByType>[0],
-      stateType,
-    )
-    if (!issueId || !stateId) return
-    await this.linearRequest(
-      workspaceId,
-      LINEAR_ISSUE_UPDATE_MUTATION,
-      buildLinearStateUpdateVariables(issueId, stateId),
-    )
-  }
-
-  /**
-   * Issue a Linear GraphQL request for the workspace's connection. Returns the
-   * validated `data` (or null when Linear isn't configured). Throws on a GraphQL /
-   * HTTP error so the per-issue isolation in {@link forEachIssue} reports and swallows it.
-   */
-  private async linearRequest(
-    workspaceId: string,
-    document: string,
-    variables: Record<string, unknown>,
-  ): Promise<unknown> {
-    const { resolveLinearConnection, fetchImpl } = this.deps
-    if (!resolveLinearConnection || !fetchImpl) return null
-    const connection = await resolveLinearConnection(workspaceId)
-    if (!connection?.token && !connection?.apiKey) return null
-    return postLinearGraphql<unknown>(
-      fetchImpl,
-      linearAuthFromCredentials(connection),
-      document,
-      variables,
-    )
-  }
-
-  /**
-   * Transition a Jira issue into a standard status category: `done` on resolve,
-   * `indeterminate` (In Progress) on pickup. Lists the issue's available
-   * transitions and fires the first one landing in the category.
-   */
-  private async transitionJira(
-    workspaceId: string,
-    key: string,
-    category: 'indeterminate' | 'done',
-  ): Promise<void> {
-    const path = `issue/${encodeURIComponent(key)}/transitions`
-    const list = (await this.jiraRequest(workspaceId, path, { method: 'GET' })) as {
-      transitions?: Parameters<typeof pickTransitionByCategory>[0]
-    } | null
-    const transition = pickTransitionByCategory(list?.transitions ?? [], category)
-    if (!transition?.id) return
-    await this.jiraRequest(workspaceId, path, {
-      method: 'POST',
-      body: { transition: { id: transition.id } },
-    })
-  }
-
-  /**
-   * Issue a Jira REST v3 request for the workspace's connection. Returns the parsed
-   * JSON body (or null on an empty/204 response). Throws on a non-OK status so the
-   * per-issue isolation in {@link forEachIssue} reports and swallows it.
-   */
-  private async jiraRequest(
-    workspaceId: string,
-    path: string,
-    init: { method: string; body?: unknown },
-  ): Promise<unknown> {
-    const { resolveJiraConnection, fetchImpl } = this.deps
-    if (!resolveJiraConnection || !fetchImpl) return null
-    const connection = await resolveJiraConnection(workspaceId)
-    if (!connection?.baseUrl || !connection.accountEmail || !connection.apiToken) return null
-    const base = connection.baseUrl.replace(/\/+$/, '')
-    const url = `${base}/rest/api/3/${path}`
-    const auth = toBase64(`${connection.accountEmail}:${connection.apiToken}`)
-    const res = await fetchImpl(url, {
-      method: init.method,
-      headers: {
-        authorization: `Basic ${auth}`,
-        accept: 'application/json',
-        'content-type': 'application/json',
-        'user-agent': USER_AGENT,
-      },
-      // Omit the body entirely for a bodyless (GET) request: the real `fetch` throws
-      // for ANY non-null body on a GET — including an empty string — which the
-      // per-issue catch would silently swallow, leaving Jira issues never resolved.
-      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new Error(`Jira ${init.method} ${url} → ${res.status}: ${text.slice(0, 300)}`)
-    }
-    return res.json().catch(() => null)
+    await source.adapter.markInProgress(ctx, issue.externalId, mark)
   }
 }

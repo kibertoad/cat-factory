@@ -4,6 +4,7 @@ import { companionForProducer } from '~/utils/catalog'
 import type { PipelinesContext } from './context'
 import { createPipelineGateConfigActions } from './draftGateConfig'
 import { createPipelineStepConfigActions } from './draftStepConfig'
+import { createPipelineStepOptionActions } from './draftStepOptions'
 
 /**
  * The pipeline-builder draft's STRUCTURE: inserting/removing/reordering steps, the companion
@@ -165,7 +166,7 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
     draftTesterQuality.value = []
     draftStepOptions.value = []
     draftLabels.value = []
-    draftPurpose.value = null
+    draftPurpose.value = 'build'
     draftName.value = 'New pipeline'
     draftDescription.value = ''
     editingId.value = null
@@ -185,7 +186,7 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
     )
     draftStepOptions.value = pipeline.agentKinds.map((_, i) => pipeline.stepOptions?.[i] ?? null)
     draftLabels.value = [...(pipeline.labels ?? [])]
-    draftPurpose.value = pipeline.purpose ?? null
+    draftPurpose.value = pipeline.purpose
     draftName.value = pipeline.name
     draftDescription.value = pipeline.description ?? ''
     editingId.value = pipeline.id
@@ -193,6 +194,7 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
 
   return {
     ...createPipelineStepConfigActions(ctx),
+    ...createPipelineStepOptionActions(ctx),
     ...createPipelineGateConfigActions(ctx),
     addToDraft,
     removeFromDraft,

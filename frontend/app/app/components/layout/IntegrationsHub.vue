@@ -150,6 +150,16 @@ const groups = computed<IntegrationGroup[]>(() => {
       onClick: () => go(ui.openSlack),
     })
   }
+  // The notification manager is always listed: it configures the channels every deployment has
+  // (the in-app inbox, and email once an account connects a sender), so unlike the integrations
+  // around it there is no connection to probe before it is useful.
+  comms.push({
+    key: 'notificationSettings',
+    icon: 'i-lucide-bell',
+    label: t('layout.integrationsHub.items.notificationSettings.label'),
+    description: t('layout.integrationsHub.items.notificationSettings.description'),
+    onClick: () => go(ui.openNotificationSettings),
+  })
   if (comms.length)
     out.push({ title: t('layout.integrationsHub.groups.communication'), items: comms })
 

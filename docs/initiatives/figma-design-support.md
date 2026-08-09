@@ -20,7 +20,8 @@ surfaces and the RBAC gates, plus the committed slices that close the gaps.
 
 ### 1. The designer persona cannot use the feature at all
 
-**The authorization half is closed** (Track A slice 1); the discoverability half below is not.
+**Closed by Track A.** The survey finding is kept below because the entry points and the copy are
+only legible against the four-surface detour they replaced.
 
 Every document-source route rode one admin gate: `documentSourceController` mounted
 `requireWorkspacePermission('integrations.manage')` on `*`, and `integrations.manage` is held by
@@ -53,8 +54,8 @@ Two fidelity holes in what the agent reads:
 
 ### 3. Context is frozen at import time
 
-**Closed on the RUN path by Track C slice 1 and on the SPA by slice 2**; what remains is naming
-the revision a FINISHED run built against (the split-out item below).
+**Closed**: on the RUN path by Track C slice 1, on the SPA by slice 2, and on the RECORD by
+slice 3, which is what makes the revision a finished run built against answerable afterwards.
 
 `probeVersion` was implemented on every provider and had exactly one caller: the fragment-library
 body cache (`FragmentLibraryService.resolveDocumentBody`). Nothing on the run path re-probed or
@@ -64,6 +65,13 @@ every later run the old markdown, silently. For prose documents that is an annoy
 design under active iteration it meant the agent routinely built the previous revision.
 
 ### 4. Pixels exist upstream and reach nobody
+
+**Closed on the RETENTION half by Track D slice 1** (an import downloads the frames and keeps them
+as `reference` artifacts), on the GATE half by slice 2 (a linked design populates the
+actual-vs-reference gallery itself), and on the CHECKOUT half by slice 3 (a capturing run reads the
+frames off disk under `.cat-context/reference-screenshots/`). What remains is the pixels the MODEL
+sees: multimodal delivery. The survey finding is kept below because it is what those slices are
+measured against.
 
 The provider asks Figma for a rendered PNG URL, stores the URL as a `### References` line, and
 never downloads the bytes (`fetchPreviewUrl`); the `design.context` fragment then explicitly
@@ -105,11 +113,11 @@ high-confidence; zero frontend unit or e2e coverage of any document surface.
 
 ## Tracks and checklists
 
-Tracks A, B and C are independent and each is worth landing alone. D's later slices build on its
-first; E consumes D's artifact bridge. F is optional scope, committed only through its first
-(registration) slice. Ordering inside a track is the intended slice order.
+Tracks A, B and C are DONE. D's later slices build on its first; E consumes D's artifact bridge. F
+is optional scope, committed only through its first (registration) slice. Ordering inside a track
+is the intended slice order.
 
-### Track A: designer access and the start-from-design flow
+### Track A: designer access and the start-from-design flow (DONE)
 
 The RBAC split follows the existing controller convention (ADR 0025), and the first slice settled
 which shape it takes: the admin permission is mounted on the controller's own PATH PATTERNS and the
@@ -127,25 +135,53 @@ not integration management, so it sits at the `member` tier; managing credential
       template tag decides what every doc run in the board writes from, which is the
       fragment-library blast radius that keeps such config admin-tier, and no designer flow needs
       it. `defineWorkspaceRbacSuite` asserts both halves plus the viewer floor.
-- [ ] **Figma OAuth connect.** Add `authorization_code` connect for the Figma document source
-      beside the PAT field (the descriptor grows an optional OAuth half; PAT remains for
-      deployments that prefer it). This is what makes "connect Figma" a designer-doable step.
-      Model: the MCP OAuth grant flow that landed in mcp-maturation slice 7.
-- [ ] **Start-from-design entry on the board.** A frame-header affordance (basic tier) that takes
-      a pasted Figma/design URL and does import + link + open-task in one step, and an Add-task
-      description paste that offers the same when a connected provider claims the URL with a
-      host-PINNED `parseRef` (Figma, Zeplin; never the host-blind prose parsers). The existing
-      info-log drop stays for unclaimed or unconnected URLs.
-- [ ] **Design-aware, target-aware plan.** A second plan prompt for design-origin documents:
-      given an existing frontend service frame, propose tasks (one per frame/flow) rather than a
-      whole architecture, unblocking the documented `frameId` spawn limitation for the design
-      case (`document-sources.md`, "The SPA never sends frameId"). The SPA spawn preview gains
-      the target-frame variant for design documents only.
-- [ ] **Designer-framed surface copy + tour.** Connect/import/picker copy that names design
-      sources and the designer's job to be done (today everything says requirements/RFC/PRD), a
-      `start-from-design` tutorial tour, and locale parity for every new key.
+- [x] **Figma OAuth connect.** `authorization_code` connect beside the PAT field, offered when the
+      SOURCE declares an `oauth` half AND the deployment has registered an app (`figmaOAuth`, beside
+      the Slack and Linear clients). Four things this had to get right. The provider DECLARES four
+      constants and nothing else, so the second OAuth-capable source adds a declaration rather than
+      a second copy of the flow; the credential bag is PLATFORM-owned, so a provider's whole share
+      of the lifecycle is noticing a token in the bag it was handed (and preferring it over a PAT an
+      earlier connect left behind, which would otherwise outlive the rotation it was replaced by).
+      Declaring is not offering, so the source listing answers "what this SOURCE supports" and "what
+      this DEPLOYMENT can run" as two fields: folded together, a board with no registered app renders
+      a button that can only 503. And ONE public callback serves every source, because a deployment
+      registers one redirect URL per vendor app, so the source rides the signed `state` and a state
+      minted by any other flow under the same secret (which mints no `source`) is REFUSED there.
+      Renewal sits on the one seam every read resolves a credential through
+      (`resolveConnection`/`resolveConnections`) and answers null rather than throwing, so a grant
+      that cannot be renewed costs the reader a source call it reports as an outage, never the read;
+      it is unguarded against a lost race, which is only safe while the supported endpoints leave the
+      refresh token unrotated.
+- [x] **Start-from-design entry on the board.** A frame-header affordance (basic tier, shown once a
+      design source is connected) that resolves a pasted design URL and hands it to the add-task
+      form as staged context, plus an Add-task description paste that offers the same. Both ask only
+      HOST-PINNED sources: a host-blind prose parser claims a SHAPE, so asking Notion about a Figma
+      link whose file key carries a UUID-shaped run gets a confident yes and stages the design into
+      Notion's key space. The paste is resolved BEFORE anything is created and a WIDENED reference
+      is stated separately from a trimmed one, because for a designer the widening from one frame to
+      the whole file IS the defect. Nothing is imported here: the form's own pre-create resolve does
+      the fetch, so an unreachable page stays a correction the author can still make. An UNCHECKED
+      paste (the pre-flight itself failed) stays stageable only where ONE design source is connected,
+      which is the only case with nothing to guess. The existing info-log drop stays for unclaimed or
+      unconnected URLs.
+- [x] **Design-aware, target-aware plan.** `plan(record, target?)` asks two different questions with
+      two different ANSWER SHAPES, rather than one prompt with a hint. A targeted response proposing
+      `frames` is REFUSED rather than re-read as modules: a model proposing services where one
+      already exists has made a mistake, and re-reading it would launder that onto the board. The
+      fallback matches the shape of the request (a targeted plan degrades to the targeted heading
+      parser, never to a board-wide plan nobody asked for), and under a target the outline shifts up
+      a level, h1 being consumed by the frame it names. The plan carries `targetFrameId`, which is
+      what makes the preview honest and the `frameId` spawn safe to send: flattening a board-wide
+      plan into a frame discarded the titles and types the preview rendered, while a plan authored
+      FOR the target has nothing to discard. Design documents REQUIRE a target in the SPA, because a
+      design describes screens and the architecture question produces a service per Figma page.
+- [x] **Designer-framed surface copy + tour.** Connect copy that names designs rather than only
+      requirements/RFCs/PRDs, the `start-from-design` tour (in the LAUNCH arc rather than the
+      catalogue-only half, gated on a design source being CONNECTED rather than on permission to
+      connect one, which is the admin's job and not the designer's), and locale parity across all
+      ten catalogs.
 
-### Track B: context fidelity
+### Track B: context fidelity (DONE)
 
 All rendering changes land in the source-neutral `DesignContext` model (new optional block
 sections and token fields), never as Figma-only renderer branches; Zeplin maps what it has,
@@ -204,7 +240,7 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       corpus never resolves at all, since that rejection is already the wave's own failure and
       answering it twice would surface a run refusal as a fragment error naming the wrong thing.
 
-### Track C: freshness
+### Track C: freshness (DONE)
 
 - [x] **Dispatch-time refresh.** ([#1754](https://github.com/kibertoad/cat-factory/pull/1754))
       `LinkedDocumentRefreshService` behind the kernel `LinkedDocumentRefresher` port, on the
@@ -288,15 +324,33 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       `DocumentSourceKind` rather than the wide origin: a 200 carrying `not-applicable` would
       leave a caller unable to tell "this document has no source" from "the check ran and found
       nothing to compare", which is the distinction the whole vocabulary exists to keep.
-- [ ] **Name the revision a run BUILT against.** The verdict is computed per dispatch and
-      rendered into the agent's context, and nothing persists it, so "this run built from the old
-      rev" is unanswerable once the run is over. It needs a per-step record at dispatch (the
-      `recordDispatchAttribution` archetype: the poll path rebuilds the handle from the step
-      alone and cannot re-derive what dispatch resolved), folded onto the outcome surface and the
-      PR verification report, which composes only from state already in memory and may not
-      re-probe. Split out of the slice above because the persistence question is the whole job
-      and answering it badly (re-probing at compose time) would make the report disagree with the
-      run it describes.
+- [x] **Name the revision a run BUILT against.**
+      ([#1807](https://github.com/kibertoad/cat-factory/pull/1807))
+      `step.contextDocuments` records each linked document a dispatch put in front of its agent
+      with the verdict that dispatch reached, written through the `StepObservations` seam that
+      already gates `selectedFragmentIds` and `validationConfigUnreadable`. That seam, not a new
+      call at each dispatch site, is what made the record correct: `buildContext` has two callers
+      that resolve a full context and start NO job (the over-budget exemption probe, and a
+      re-attach to a job a replayed dispatch already started), and a source that recovered between
+      the shipped dispatch and the replay would otherwise overwrite the revision the agent actually
+      read with the one it never saw.
+      **A moved revision is derived, not recorded.** The last verdict is what a row carries, since
+      that is the state the run ended on, and it alone says the run ended CURRENT while saying
+      nothing about the coder step that finished before the designer's edit. So both readers
+      compute `movedDuringRun` from the distinct revisions the run's own steps recorded, and state
+      it beside the revision rather than folded into it. The PR report's new `Context sources`
+      section leads with that call-out for the same reason the requirement table leads with its
+      regression count: it changes how every section below it reads.
+      Absent and empty are NOT split here, deliberately, against the usual rule: a step that read
+      no document and a task that linked none are the same fact ("nothing was read"), and most
+      tasks link nothing, so an empty array on every step of every run would be weight that states
+      nothing. What absent must not be confused with is a document read with NO verdict, and that
+      one is a present entry with no `freshness`: nobody asked, versus asked and could not tell.
+      The report shape steps to `PR_VERIFICATION_REPORT_VERSION` 9, the outcome to
+      `RUN_OUTCOME_VERSION` 2, and the API to 1.27.0, all additive.
+      A row is keyed by the document's SOURCE identity, never by anything it displays: an `upload`
+      carries no URL, so a key falling back to the title would fold two same-titled uploads into
+      one row and read their differing revisions as a page that moved mid-run.
 
 ### Track D: pixels
 
@@ -304,17 +358,140 @@ The bridge is the binary-artifact store that visual confirmation already reads
 (`kind:'reference'`), so the first two slices need no harness change and close a documented
 visual-confirmation leftover. Multimodal delivery is the long pole and is deliberately LAST.
 
-- [ ] **Download renders at import.** For a node link, fetch the node's PNG bytes server-side
-      (size-capped, best-effort); for a whole-file link, the first N top frames. Store through
-      the workspace's binary-artifact store as `kind:'reference'` artifacts keyed to the
-      document; re-import replaces them. Where no artifact store is wired the import proceeds
-      textually and the document row says renders were not retained ("absent" and "zero" must not
-      render the same).
-- [ ] **Feed the visual-confirmation gate.** Auto-pair a block's design-origin reference
-      artifacts into the gate gallery beside the hand-uploaded ones, and write them into
-      `.cat-context/reference-screenshots/` via the reference pre-op the handover doc already
-      names as unwired (its "What's left" item 3). A designer linking a Figma frame then gets
-      screenshot-vs-design comparison with zero manual uploads.
+- [x] **Download renders at import.** The kernel `DocumentSourceProvider.fetchRenders` port, called
+      by the import that WRITES a body, storing `kind:'reference'` artifacts keyed to the document
+      (`binary_artifacts.document_source` / `document_external_id`, D1 0087 ⇄ Drizzle) and pruning the
+      previous set first, so a design's pictures are never a mix of two revisions.
+      **A separate port method rather than a field on `fetchDocument`, which is the decision the
+      plan above missed.** The freshness ladder re-fetches the TEXT on every dispatch whose probe
+      finds a moved version, and a design file's version moves on any edit anywhere in it, so most
+      of those re-fetches write nothing but a token; carrying the images on the same call would put
+      megabytes of PNGs on the critical path of a dispatch that had no reason to spend them. The
+      render pass is therefore gated on the write that actually changes a body, and a token-only
+      write carries the previous status forward untouched.
+      **The status is `documents.render_status`, a five-member vocabulary plus NULL**, because
+      every way of ending up with no images renders as the same absence and each asks for a
+      different fix: `storage_unavailable` (configure storage, and the download is not even
+      attempted), `failed` / `partial` (retry the source), `none` (the design had no frames),
+      `stored`. NULL is the fourth state and the commonest, meaning the question does not apply.
+      It is derived from what was RETAINED rather than downloaded, so a store that rejects half the
+      bytes reads as `partial` exactly like a source that rendered half the frames: claiming
+      `stored` over an artifact that never landed is the one answer that sends a reader to the
+      wrong place. The SPA states the three that name a fix and stays silent on the other two.
+      **A CAP is retention too**, so `DocumentRenderResult.capped` counts the frames a provider
+      declined to rasterise and pushes the row to `partial`; reported as nothing, six pictures of a
+      twenty-frame file land as `stored` and the design reads as having six screens. It is kept
+      apart from `failed` because a retry fixes one and never the other.
+      **`storage_unavailable` is a DEPLOYMENT fact, so an account-settings read that FAILED is
+      `failed` instead**: naming an unconfigured capability sends an operator to change a setting
+      that is already right, and the status then rides forward untouched through every token-only
+      re-import, outliving the outage.
+      **The order is prune-then-FETCH**, not prune-then-store: the reverse leaves the new body
+      beside the previous revision's pictures, and a `failed` row over a full set of frames reads
+      to everyone as a transient blip rather than as a document illustrating a screen that no
+      longer exists. A `view` must also name ONE screen (it is the pairing key), so a frame name
+      repeated across pages qualifies EVERY occurrence with its id, including the first: leaving
+      the first bare hands that view to whichever frame the file lists first, and re-ordering a
+      page would silently re-point a stored view at a different screen.
+      **The renders are exempt from the age-based artifact retention sweep**
+      (`listOlderThan`/`deleteOlderThan` skip a row carrying a document ref, D1 ⇄ Drizzle with a
+      conformance assertion). Age fits run debris, produced once and never referenced again; a
+      document's renders are a projection of a live row, replaced by the next body-changing import
+      and by nothing else. Swept on a clock they would vanish while the row still said `stored`,
+      with nothing to re-download them, since an unedited design is never re-imported.
+      **The structural read is done ONCE.** `fetchDocument` already learns the frame ids and names
+      a render pass needs, so it carries them out as `DocumentContent.renderPlan` and `fetchRenders`
+      takes the plan rather than re-issuing the same request against the rate-limited API. The plan
+      is a HINT: a provider handed none discovers the frames itself, which is what keeps the two
+      port methods independent.
+      Two smaller traps. The signed asset URL arrives inside a response BODY, which is the shape an
+      SSRF comes in, so the download is host-pinned to Figma's own asset hosts and carries NO
+      credential (the signature is the auth, and a bucket host has no business holding the
+      workspace's token); the shared host-pinned fetch grew a fixed host SET for it, still a
+      constant and still not a per-connection value. And the artifact is keyed by the DOCUMENT's
+      source identity rather than by the block: an import runs before the document is attached to
+      anything, the attachment can move later, and a hand-uploaded reference on the same block must
+      survive a re-import that replaces the design's own frames.
+- [x] **Feed the visual-confirmation GATE.** A task's linked designs have their retained frames
+      folded into the gate gallery beside the hand-uploaded ones, so a designer linking a Figma
+      frame gets screenshot-vs-design comparison with zero manual uploads.
+      **Split from the container half below**, which the plan above carried in the same bullet and
+      which is a different KIND of change: writing `.cat-context/reference-screenshots/` means real
+      PNG bytes in a subdirectory of the job's context, and an `InjectedContextFile` is UTF-8 text
+      by type while the harness flattens a context file's path to a bare name. That is an
+      image-bumping harness slice; this one is backend-only and ships the designer-visible half now.
+      Six things it had to get right. **An EXPLICITLY CHOSEN reference outranks a design frame for
+      the same view**: an upload is a deliberate act against this one task and survives every
+      re-import, while a design render is a projection the next body-changing import replaces
+      wholesale, so the design fold runs first, the uploads assign over it, and a view whose
+      reference the CAPTURE named is skipped (the fold cannot tell which choice it would overwrite,
+      and the container half will have the tester naming the design files it was handed). **A view
+      name TWO designs both claim is
+      qualified on both sides**, the same rule Track D slice 1 applied within one file, because
+      leaving the first bare hands the plain name to whichever design is listed first and
+      re-ordering the links would then silently re-point a reviewed view at a different screen (the
+      cost, that neither qualified name pairs with a capture called plain "Checkout", is the honest
+      one: nothing knows which design that capture is of). **A pair says WHERE its reference came
+      from**, and says nothing when the CAPTURE named its own reference, since a reference the gate
+      did not source is one whose provenance it can only guess at. And **`designReferences` is
+      present whenever a design is linked**, even when everything worked, because "no design is
+      attached" and "one is attached and gave nothing" are different facts and the second needs a
+      per-design reason: `partial` / `failed` / `none` / `storage_unavailable` / `not_retained`,
+      each naming a different fix, derived from what the store actually HOLDS rather than from
+      `render_status` alone (any status CLAIMING retention over an empty shelf, `stored` and
+      `partial` alike, is exactly the case a reviewer must not read as a design that is merely
+      short). **The 12-view ceiling is SHARED round-robin and what it cuts is named per design**,
+      because spending it in read order lets the design linked longest ago fill the gallery while
+      one linked this morning contributes nothing, which reads to a reviewer as a design with no
+      frames; each short design carries its own `dropped` beside its `reason`, the two being
+      independent. And **a gallery ROW is not a captured screenshot**: a reference-only row makes a
+      pair too, so every consumer that asks "did this run capture anything" asks
+      `countCapturedViews` in contracts rather than reading `pairs.length`, or a run that captured
+      nothing loses its warning, reports a verified gallery of blanks in the run outcome, and
+      summons reviewers to screenshots that are not there. That warning is `degradedReason`, kept
+      apart from `designReferences` because it gates the approve button behind an acknowledgement:
+      a design that gave fewer frames than it has is not a degraded review BASIS, since references
+      have always been optional.
+      The reads are LIVE at gather time (one batched `listByDocuments`, never a read per design),
+      so **recapture** picks up a design linked while the gate is parked, exactly as it already
+      does for an upload.
+- [x] **Write the references INTO the container.** `.cat-context/reference-screenshots/`, which the
+      UI-tester prompt has always named and nothing wrote (the handover doc's "What's left" item 3).
+      A dispatch of a kind declaring the `ui` image resolves the task's reference set onto
+      `AgentRunContext.referenceScreenshots`, the job body carries it, and the harness downloads the
+      images into the checkout before the agent's first turn.
+      **The bytes do not ride the job body, which is the decision the plan above skipped.** The plan
+      called for "a binary context-file channel", and widening `InjectedContextFile` past UTF-8 would
+      have put megabytes of PNG into JSON that crosses every transport and is persisted with the
+      dispatch. What travels is a MANIFEST of ids and file names, and the harness fetches the bytes
+      back through `GET ${proxyBaseUrl}/artifacts/reference/:id` on the SAME container session token
+      the run already holds for the LLM proxy: the mirror image of the screenshot ingest route beside
+      it, so no new credential and no publicly reachable URL. That route serves `kind:'reference'`
+      only, within the token's own workspace, because a route that also served `screenshot` would
+      turn one compromised container into a reader of every capture on the board.
+      **The reference SET is now read by TWO callers, so it moved into one module.** The gate pairs
+      captures against it and a dispatch hands it to the container, and the view name is exactly the
+      join the gate performs: derived twice, the two halves would disagree about a name and the
+      pairing would come apart with both looking correct on their own. `block-reference-set.ts`
+      answers "which artifact is the reference for each view" once, uploads outranking design frames
+      as they always did.
+      **The file NAME is the engine's answer, not the container's**, because the name is how the
+      agent learns the view name: derived in the harness, a sanitiser change in an image a deployment
+      has not rolled out yet would silently rename every view a run reports. Two views that slug to
+      one name are SUFFIXED rather than deduped, since dropping one hands the agent a directory
+      quietly missing a screen it was asked to compare, and the extension follows the stored content
+      type rather than assuming PNG.
+      **A reference that could not be fetched is NAMED to the agent.** On disk an absent file and a
+      screen the design does not have are the same thing, so a miss is listed beside the files with
+      its cause and the agent is told to capture that view anyway, under the same name. The whole
+      pass is best-effort and time-bounded well under `JOB_INACTIVITY_MS`: downloading is
+      activity-silent, and a wedged blob backend must cost the run its references, never the run.
+      **An empty set sends no manifest.** "This kind captures nothing" (absent) and "the task has no
+      reference" (an empty array) stay different facts on the context, but neither may produce an
+      empty directory in the checkout, which reads to the agent as designs that gave nothing.
+      Image-bumping slice: `@cat-factory/executor-harness` and the pinned tags move together, and the
+      directory joins `HARNESS_SENTINEL_PATHS` so the two independent copies of its name are pinned
+      byte-for-byte by the harness contract suite.
 - [ ] **Multimodal delivery to agents.** Hand the stored render to image-capable harness/model
       pairs as an image content part (job body + proxy + prompt assembly; the OpenAI-shape
       `image_url` translation already exists on the Workers AI upstream with no producer).
@@ -371,10 +548,10 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       form still open rather than a toast over a task that already exists without its context.
       Model: [`document-sources.md`](../../backend/docs/document-sources.md).
 - [ ] **Coverage for the designer path.** An e2e spec for attach-document-to-task and one for the
-      start-from-design flow once Track A lands (live-push assertions per the e2e rules). The
-      `stores/documents.ts` half started with Track C slice 2, which added the store's first
-      specs (the refresh reconcile, the verdict map, the in-flight flag); the connect / import /
-      link actions are still unspecced.
+      start-from-design flow (live-push assertions per the e2e rules). The `stores/documents.ts`
+      half started with Track C slice 2, which added the store's first specs (the refresh
+      reconcile, the verdict map, the in-flight flag); Track A added the OAuth-availability and
+      design-source projections. The connect / import / link actions are still unspecced.
 
 ## Gotchas the survey surfaced (read before building)
 
@@ -410,6 +587,11 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
 - **Anything the harness writes is per-job state.** Reference renders materialised for a job
   (Track D) go under the job's own context dir, never HOME, and the slice that changes the
   harness is an image bump with the pinned-tag rollout recipe.
+- **A render is fetched on the write, not on the probe.** `fetchRenders` is a SEPARATE port method
+  from `fetchDocument`, and the split is a cost decision rather than a tidiness one: the freshness
+  ladder re-fetches the text whenever a version moves, which for a whole-file source is any edit
+  anywhere in the file. Anything new that rides the import path has to answer the same question:
+  does it belong to the BODY (refresh it only when the body changed) or to the probe.
 - **A refusal already guards this corpus.** Linked-context delivery is load-bearing
   (`context_document_unreadable` / `context_documents_over_budget` refusals): richer Figma
   renders (Track B) enlarge bodies, so watch the ~256 KB corpus budget; the caps must state what

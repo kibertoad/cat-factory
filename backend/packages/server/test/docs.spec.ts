@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { DOCS } from '../src/config/docs.js'
+import { DOCS, SITE_DOCS } from '../src/config/docs.js'
 import { ENV_HELP } from '../src/config/problems.js'
 
 // These remedies embed a GitHub blob link on `main`. The prefix-shape guard in
@@ -13,6 +13,8 @@ import { ENV_HELP } from '../src/config/problems.js'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const BLOB_PREFIX = 'https://github.com/kibertoad/cat-factory/blob/main/'
+const SITE_PREFIX = 'https://www.catfactory.ai/'
+const SITE_URLS = new Set<string>(Object.values(SITE_DOCS))
 
 /** Split a repo-doc blob URL into its repo-relative path and optional `#anchor`. */
 function parseDocUrl(url: string): { path: string; anchor?: string } {
@@ -52,8 +54,20 @@ describe('doc URLs referenced by error remedies', () => {
     }
   })
 
-  it('every ENV_HELP docsUrl resolves to an existing file and heading anchor', () => {
+  // A remedy whose INSTRUCTION the website now owns points at catfactory.ai instead (the
+  // documentation revamp's rule: ownership follows the reader, and an operator setting a variable
+  // needs no checkout). This repository cannot resolve a site page, and deliberately does not try:
+  // the website repo's weekly `check-repo-links.mjs` resolves both directions against two real
+  // checkouts. What IS checkable here is that such a URL came from the `SITE_DOCS` registry rather
+  // than being written inline at the call site, which is what keeps it in that guard's view.
+  it('every ENV_HELP docsUrl resolves to an existing file and heading anchor, or is a SITE_DOCS entry', () => {
     for (const [key, help] of Object.entries(ENV_HELP)) {
+      if (help.docsUrl.startsWith(SITE_PREFIX)) {
+        expect(SITE_URLS, `${key} → ${help.docsUrl} is not a SITE_DOCS entry`).toContain(
+          help.docsUrl,
+        )
+        continue
+      }
       const { path, anchor } = parseDocUrl(help.docsUrl)
       expect(existsSync(resolve(REPO_ROOT, path)), `${key} → ${path} is missing`).toBe(true)
       if (anchor) {

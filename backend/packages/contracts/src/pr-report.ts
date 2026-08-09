@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
 import { judgeDispositionSchema, judgeFindingSchema, judgeModelPinSchema } from './judge.js'
+import { documentFreshnessSchema, documentOriginSchema } from './documents.js'
 import { requirementPrioritySchema, requirementStateSchema } from './spec.js'
 import { reproductionStatusSchema } from './reproduction.js'
 import { requirementVerdictStatusSchema, testEnvironmentSchema } from './testing.js'
@@ -39,7 +40,7 @@ import { vcsProviderSchema } from './routes/auth.js'
  * (see the header), so a bump means "there is more here than there was", and a consumer written
  * against an older number keeps reading the fields it knows.
  */
-export const PR_VERIFICATION_REPORT_VERSION = 8
+export const PR_VERIFICATION_REPORT_VERSION = 9
 
 /**
  * How much of one captured command log the report carries, per command.
@@ -517,6 +518,13 @@ export type PrReportEnvironmentEvidence = v.InferOutput<typeof prReportEnvironme
  *                       and distinct from `pending` because the platform did do its part; see
  *                       {@link teardownConfirmationSchema} for which of the causes applies.
  *  - `pending`        — at least one is still standing (the run may still be using it).
+ *  - `retained`       — at least one is still standing AND the pipeline's deployer step DECLARED
+ *                       that its environments outlive the run
+ *                       ({@link StepOptions.retainEnvironment}), so no reclaim is coming from this
+ *                       run and the TTL sweep or an operator owns it from here. Distinct from
+ *                       `pending`, which says a teardown is still expected: a reviewer reading
+ *                       `pending` on a preview environment waits for something that never happens,
+ *                       and an operator reading it goes looking for the failure that isn't there.
  *  - `failed`         — an environment's latest teardown attempt FAILED, so it is still standing
  *                       for a reason someone has to act on.
  *  - `not_applicable` — nothing was ever provisioned.
@@ -525,12 +533,22 @@ export const prReportEnvironmentsSchema = v.object({
   status: prReportSectionStatusSchema,
   note: v.optional(v.nullable(v.string())),
   entries: v.array(prReportEnvironmentSchema),
-  teardown: v.picklist(['confirmed', 'unconfirmed', 'pending', 'failed', 'not_applicable']),
+  teardown: v.picklist([
+    'confirmed',
+    'unconfirmed',
+    'pending',
+    'retained',
+    'failed',
+    'not_applicable',
+  ]),
   timeline: prReportEnvironmentTimelineSchema,
   evidence: prReportEnvironmentEvidenceSchema,
   /**
    * The composed verdict over the three legs:
-   *  - `complete`:       up, observed, and reclaimed.
+   *  - `complete`:       up, observed, and reclaimed — or, where the deployer declared the
+   *                        environment outlives the run, up, observed and deliberately kept. It
+   *                        means the run did everything it undertook to do, NOT that nothing is
+   *                        left standing; {@link teardown} is where that is stated.
    *  - `incomplete`:     at least one leg is missing; {@link gaps} names which.
    *  - `not_applicable`: no environment was ever meant to stand up (no deployer step, or every
    *                       frame is infraless), so there is nothing to prove.
@@ -642,6 +660,59 @@ export const prReportJudgesSchema = v.object({
   verdicts: v.array(prReportJudgeSchema),
 })
 export type PrReportJudges = v.InferOutput<typeof prReportJudgesSchema>
+
+/**
+ * One linked document the run's agents built from, and what the platform could prove about how
+ * CURRENT the copy they read was.
+ *
+ * Every other section of this report answers "what did the run produce, and what checked it".
+ * This one answers the question underneath all of them: what was the run working FROM. A design
+ * under active iteration is where it bites, because a reviewer looking at a frontend PR has no
+ * way to tell an implementation that misreads the design from one that faithfully implements a
+ * revision the designer has since moved past. Those need opposite reactions and, without this,
+ * arrive looking identical.
+ *
+ * Composed from what each dispatch RECORDED (`step.contextDocuments`), never from a fresh probe:
+ * the source has moved on by compose time, so a re-probe would answer about a revision no agent
+ * on this run ever read, and the report would disagree with the run it describes.
+ */
+export const prReportContextDocumentSchema = v.object({
+  title: v.string(),
+  /** The document's canonical URL, so a reviewer can open the revision themselves. */
+  url: v.nullable(v.string()),
+  /** Which source it came from (`figma`, `notion`, an `upload`, …). */
+  origin: documentOriginSchema,
+  /**
+   * The verdict recorded by the LAST dispatch that read this document, which is the state the
+   * run ended on. Absent means the deployment ran no freshness check at all, which is NOT the
+   * same as an `unconfirmed` verdict: nobody asked, versus asked and could not tell.
+   */
+  freshness: v.optional(documentFreshnessSchema),
+  /**
+   * True when the run's own steps recorded more than one distinct revision of this document:
+   * the source moved WHILE the run was in flight, so its earlier steps built against something
+   * its later ones did not.
+   *
+   * Computed in code from the recorded verdicts, never asserted by a model, and reported
+   * separately from the final revision because the two carry opposite reassurance: the last
+   * revision alone says the run ended current, and says nothing about the coder step that
+   * finished before the design changed under it.
+   */
+  movedDuringRun: v.boolean(),
+})
+export type PrReportContextDocument = v.InferOutput<typeof prReportContextDocumentSchema>
+
+/**
+ * The documents the run built from. `absent` when no step recorded one, which covers the
+ * ordinary task carrying no attachment and no document link in its description.
+ */
+export const prReportContextSchema = v.object({
+  status: prReportSectionStatusSchema,
+  /** Says why the section is empty when `status` is `absent`. */
+  note: v.optional(v.nullable(v.string())),
+  documents: v.array(prReportContextDocumentSchema),
+})
+export type PrReportContext = v.InferOutput<typeof prReportContextSchema>
 
 /**
  * One spec requirement joined to what the Tester observed about it — the report's
@@ -812,6 +883,8 @@ export const prVerificationReportSchema = v.object({
    */
   scope: v.optional(prReportScopeSchema),
   run: prReportRunSchema,
+  /** What the run built FROM: the linked documents its agents read, at which revision. */
+  context: prReportContextSchema,
   ci: prReportCiSchema,
   /** The platform's OWN run of the service's check commands against the pushed tree. */
   validation: prReportValidationSchema,

@@ -671,9 +671,13 @@ describe('environment-connection management surface (workspace-scoped)', () => {
     },
     { repo: 'customManifestTypeRepository', method: 'listByWorkspace', args: [], echoes: true },
     { repo: 'customManifestTypeRepository', method: 'remove', args: ['helm-app'] },
-    // The read BOTH delivery paths make — and the one the run-lifecycle sink makes on a run's
-    // terminal emit, where an un-routed method would surface only as a webhook that never fires.
+    // The reads every delivery path makes on a run's TERMINAL emit, where an un-routed method
+    // surfaces only as a webhook that silently never fires (delivery is best-effort, so the
+    // refusal is swallowed by design). `list` is the hot one now that a workspace can register
+    // several endpoints: all three sinks call it per delivery, so it carries the same round-trip
+    // and cross-account-refusal cover as the `get` it replaced on those paths.
     { repo: 'notificationWebhookRepository', method: 'get', args: [], echoes: true },
+    { repo: 'notificationWebhookRepository', method: 'list', args: [], echoes: true },
     { repo: 'notificationWebhookRepository', method: 'delete', args: [] },
   ]
 
@@ -1240,4 +1244,119 @@ describe('service board-composition read surface (blockList-scoped)', () => {
   it('allows listByFrameBlocks with an empty list (no block to scope)', async () => {
     await expect(remoteRegistry().serviceRepository!.listByFrameBlocks!([])).resolves.toBeDefined()
   })
+})
+
+describe('document / task integration surface (workspace-scoped)', () => {
+  // The half of both integrations that used to be mothership-internal: the import/link WRITE path,
+  // the role-link management surface, the per-workspace source toggle, and the source CONNECTIONS.
+  //
+  // The connections are the load-bearing entry. They were not pending for want of a scope rule —
+  // the repository decrypted INSIDE, so proxying `getByWorkspace` would have put a plaintext Jira
+  // token on the wire, and no `/internal/secrets/unseal` entry could name them either (a
+  // decrypt-inside repository exposes no sealed field to address). The row now carries its
+  // `credentialsCipher`, which is what these assertions ride on: only ciphertext crosses, exactly
+  // as it does for the environment / observability / Slack / runner-pool connections.
+  const WORKSPACE_METHODS: Array<{
+    repo: string
+    method: string
+    args: unknown[]
+    echoes?: boolean
+  }> = [
+    // Documents: the batched context read, the whole-workspace list, and the link writes. The
+    // batched `linkBlockMany`/`detachBlocks` ride with `linkBlock` because they are the same
+    // write — a task created with a list of documents, and the block-delete cascade that undoes it.
+    { repo: 'documentRepository', method: 'listByRefs', args: [[]], echoes: true },
+    { repo: 'documentRepository', method: 'listByWorkspace', args: [], echoes: true },
+    { repo: 'documentRepository', method: 'linkBlock', args: ['notion', 'ext_1', 'blk_1'] },
+    { repo: 'documentRepository', method: 'linkBlockMany', args: [[], 'blk_1'] },
+    { repo: 'documentRepository', method: 'detachBlocks', args: [['blk_1']] },
+    // The WS1 role links, whose run-path read halves were already remote.
+    { repo: 'documentRepository', method: 'getRoleLink', args: ['template', 'prd'], echoes: true },
+    {
+      repo: 'documentRepository',
+      method: 'listRoleLinks',
+      args: ['exemplar', 'prd'],
+      echoes: true,
+    },
+    { repo: 'documentRepository', method: 'listRoleLinksByWorkspace', args: [], echoes: true },
+    { repo: 'documentRepository', method: 'setRole', args: ['notion', 'ext_1', 'template', 'prd'] },
+    { repo: 'documentRepository', method: 'clearRole', args: ['notion', 'ext_1'] },
+    { repo: 'documentRepository', method: 'clearRoleForKind', args: ['template', 'prd'] },
+    {
+      repo: 'documentConnectionRepository',
+      method: 'getByWorkspace',
+      args: ['figma'],
+      echoes: true,
+    },
+    { repo: 'documentConnectionRepository', method: 'listByWorkspace', args: [], echoes: true },
+    { repo: 'documentConnectionRepository', method: 'softDelete', args: ['figma', 1] },
+    // Tasks: the import + link writes. `claimBlockLink` is the atomic one-task-per-ticket claim,
+    // which only means anything alongside the `upsert` that imports the issue it claims.
+    { repo: 'taskRepository', method: 'listByRefs', args: [[]], echoes: true },
+    { repo: 'taskRepository', method: 'listByWorkspace', args: [], echoes: true },
+    { repo: 'taskRepository', method: 'linkBlock', args: ['jira', 'KEY-1', 'blk_1'] },
+    { repo: 'taskRepository', method: 'claimBlockLink', args: ['jira', 'KEY-1', 'blk_1'] },
+    { repo: 'taskRepository', method: 'unlinkAllFromBlock', args: ['blk_1'] },
+    { repo: 'taskRepository', method: 'unlinkAllFromBlocks', args: [['blk_1']] },
+    { repo: 'taskConnectionRepository', method: 'getByWorkspace', args: ['jira'], echoes: true },
+    { repo: 'taskConnectionRepository', method: 'listByWorkspace', args: [], echoes: true },
+    { repo: 'taskConnectionRepository', method: 'softDelete', args: ['jira', 1] },
+    { repo: 'taskSourceSettingsRepository', method: 'getByWorkspace', args: [], echoes: true },
+    { repo: 'taskSourceSettingsRepository', method: 'get', args: ['jira'], echoes: true },
+  ]
+
+  for (const { repo, method, args, echoes } of WORKSPACE_METHODS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      if (echoes) {
+        const echoed = Array.isArray(result) ? result[0] : result
+        expect(echoed).toMatchObject({ ws: 'ws_in' })
+      } else {
+        expect(result).toBeUndefined()
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  // The record-based writes bind on the record's `workspaceId` FIELD (`workspaceField`), so an
+  // imported document, a filed issue, a connection or a source toggle can only ever land in an
+  // in-scope workspace, and a missing/non-object arg fails closed before any repo write.
+  const UPSERTS = [
+    'documentRepository',
+    'documentConnectionRepository',
+    'taskRepository',
+    'taskConnectionRepository',
+    'taskSourceSettingsRepository',
+  ]
+
+  for (const repo of UPSERTS) {
+    it(`forwards ${repo}.upsert when the record targets an in-scope workspace`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ workspaceId: 'ws_in' }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.upsert when the record targets an out-of-scope workspace (404)`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ workspaceId: 'ws_out' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    for (const [label, arg] of [
+      ['no workspaceId field', {}],
+      ['null', null],
+      ['a non-record primitive', 'not-a-record'],
+    ] as const) {
+      it(`rejects ${repo}.upsert when the arg is ${label} (404, fail-closed)`, async () => {
+        await expect(remoteRegistry()[repo]!.upsert!(arg)).rejects.toMatchObject({
+          code: 'not_found',
+        })
+      })
+    }
+  }
 })

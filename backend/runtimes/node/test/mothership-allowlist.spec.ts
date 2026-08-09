@@ -47,8 +47,15 @@ import {
   DrizzleAccountSkillRepository,
   DrizzleSkillSourceRepository,
 } from '../src/repositories/skills.js'
-import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
-import { DrizzleNotificationWebhookRepository } from '../src/repositories/drizzle/settings.js'
+import {
+  DrizzleNotificationRepository,
+  DrizzleNotificationSettingsRepository,
+} from '../src/repositories/notifications.js'
+import {
+  DrizzleNotificationWebhookRepository,
+  DrizzleReviewQuestionPostRepository,
+  DrizzleTrackerCommentIngestRepository,
+} from '../src/repositories/drizzle/settings.js'
 import {
   DrizzleSlackConnectionRepository,
   DrizzleSlackMemberMappingRepository,
@@ -78,12 +85,17 @@ import { DrizzleUserRepoAccessRepository } from '../src/repositories/userRepoAcc
 // coverage-independent backstop: it reflects EVERY public method of EVERY Drizzle repository and
 // requires each to be CLASSIFIED exactly once — either it is in the server-side allow-list
 // (`REMOTE_PERSISTENCE_METHODS`, i.e. remotely callable), or it is in `NON_REMOTE` with an explicit
-// reason (telemetry / local-sqlite / admin-gated / sweeper / pending / helper).
+// reason (telemetry / local-sqlite / admin-gated / sweeper / pending / inbound / helper).
 //
 // So adding a new Drizzle repository or method WITHOUT a deliberate decision fails this test: the
 // author must either allow-list it (proxy it to the mothership) or record why it stays off the
 // machine API. That is the "you forgot to proxy it" guarantee, independent of whether any
 // behavioural test happens to call the new method.
+//
+// The guarantee has one edge the assertions cannot reach on their own: a repository absent from the
+// reflection below is invisible to ALL of it, so `nonCore` is the load-bearing half. Two marker
+// stores sat outside it until the sealed-connection work went looking, which is why the classes are
+// listed rather than the classifications.
 // ---------------------------------------------------------------------------
 
 type Reason =
@@ -107,6 +119,11 @@ type Reason =
   // A non-port implementation helper that is public on the prototype but never called via the
   // repository registry (row mappers, credential decoders, etc.).
   | 'helper'
+  // State of an INBOUND delivery path, written only where the delivery ARRIVES. A webhook reaches
+  // whichever deployment holds the public URL, which in mothership mode is the mothership; a
+  // laptop receives none, so it has nothing to dedupe and never reads these rows. Permanent (the
+  // node cannot be the receiver), not a backlog state.
+  | 'inbound'
 
 // Every repository method that is NOT in the allow-list, with the reason it stays off the machine
 // API. Keep in sync with the reflected surface — a NEW method missing from BOTH this map and the
@@ -389,11 +406,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // the workspace-delete purge (listByWorkspace/deleteByWorkspace, driven server-side by
   // `WorkspaceService.delete`). The blob BYTES never cross the machine API — they live in the
   // per-account backend.
+  // `documentScope`/`agedScope` are private query-scope predicates (the document reclaim's filter
+  // and the age sweep's), not port methods.
   binaryArtifactMetadataStore: {
     listOlderThan: 'sweeper',
     deleteOlderThan: 'sweeper',
     listByWorkspace: 'sweeper',
     deleteByWorkspace: 'sweeper',
+    documentScope: 'helper',
+    agedScope: 'helper',
   },
   // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
   // `upsert` were already remotely callable — so the whole model-preset repo is remote.
@@ -540,32 +561,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `secretsCipher` blob (sealed/decrypted in the service under the LOCAL key), so no plaintext
   // crosses the machine API — the same precedent as the observability / environment connections.
   runnerPoolConnectionRepository: {},
-  documentRepository: {
-    upsert: 'pending',
-    listByWorkspace: 'pending',
-    linkBlock: 'pending',
-    // The batched siblings of the link write above, and the block-delete cascade's detach. They
-    // join `linkBlock` on the same surface rather than opening a new gap: all three are the
-    // document-link WRITE path, which is mothership-internal until the documents management
-    // slice proxies it. (`listByRefs`, the batched READ they pair with, IS allow-listed — the
-    // point read `get` already was.)
-    linkBlockMany: 'pending',
-    detachBlocks: 'pending',
-    // WS1 role-link management surface (controller-driven, not the agent run path — the run-path
-    // reads `getRoleLink`/`listRoleLinks` ARE allow-listed). Mothership-internal until a slice
-    // proxies the documents management surface.
-    listRoleLinksByWorkspace: 'pending',
-    setRole: 'pending',
-    clearRole: 'pending',
-    clearRoleForKind: 'pending',
-  },
+  // The whole documents surface is now remote: the run-path context reads, the import/link WRITE
+  // path and its batched siblings, and the WS1 role-link management surface.
+  documentRepository: {},
+  // The workspace's document-source connections. Previously ALL pending, and not for want of a
+  // scope rule: the repository decrypted INSIDE, so a proxied read would have put a plaintext
+  // Figma/Confluence token on the wire. The row now carries its bag SEALED and the node opens it
+  // over `/internal/secrets/unseal` (`document_source_connection`), which is the same shape the
+  // environment / observability / Slack / runner-pool connections already used.
   documentConnectionRepository: {
-    decodeCredentials: 'helper',
     rowToRecord: 'helper',
-    getByWorkspace: 'pending',
-    listByWorkspace: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
   },
   // `get`/`insert`/`update` are now allow-listed (the repair retry/stop run-control surface);
   // `listByWorkspace` was already remote (the run-path list). The whole repo is now remote.
@@ -576,23 +581,25 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // branch) is served by mothership GitHub token delegation
   // (`/internal/github/installation-token`), so the old "needs GitHub which mothership does
   // not proxy" blocker is gone; the remaining gate on a FULL mothership-mode self-test is
-  // the provisioning writes (`environmentRegistryRepository.insert`/`update`, the
-  // secrets-delegation slice below). `listStale` is the stale-run cron sweeper's
-  // cross-workspace read (mirrors `agentRunRepository.listStale`) — mothership-internal.
+  // the provisioning writes, now remote (`environmentRegistryRepository.insert`/`update`).
+  // `listStale` is the stale-run cron sweeper's cross-workspace read (mirrors
+  // `agentRunRepository.listStale`): mothership-internal.
   environmentTestRunRepository: { listStale: 'sweeper' },
   // The whole environment-connection management surface is now remote (the connection +
   // per-type infra-handler settings panels: list/connect/disconnect/register-handler). Its
-  // secrets ride a SEALED `secretsCipher` blob (sealed/decrypted in the service under the LOCAL
-  // key), so no plaintext credential crosses the machine API. Provisioning WRITES
-  // (`environmentRegistryRepository.insert`/`update`) stay off — the later secrets-delegation slice.
+  // secrets ride a SEALED `secretsCipher` blob, so no plaintext credential crosses the machine
+  // API; the bundle is OPENED on the node by the mothership over `/internal/secrets/unseal`
+  // (the secrets-delegation slice), which is also what made the provisioning WRITES below safe.
   environmentConnectionRepository: {},
   environmentRegistryRepository: {
-    insert: 'pending',
-    update: 'pending',
+    // `insert`/`update`/`softDelete` are now allow-listed (REMOTE_PERSISTENCE_METHODS): the
+    // provisioning write path and its tombstone. Safe because the row's
+    // `accessCipher`/`provisionFieldsCipher` are sealed BY THE MOTHERSHIP over
+    // `/internal/secrets/seal`, so a laptop-provisioned environment stays readable by the org
+    // (and reclaimable by the mothership's own teardown).
     // listByWorkspace is now allow-listed (REMOTE_PERSISTENCE_METHODS) — the frontend UI-test
     // gate's batch env read + the environments list endpoint. Classified there, not here.
     listExpired: 'sweeper',
-    softDelete: 'pending',
   },
   environmentUserHandlerRepository: {
     listByUserWorkspace: 'local',
@@ -658,6 +665,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     listOpenByType: 'sweeper',
     listLatestByType: 'sweeper',
   },
+  // The notification manager's routing row: workspace-keyed, secret-free, and edited from a
+  // settings surface — the same bucket as `slackSettingsRepository` below, and fully remote so a
+  // mothership-mode node's delivery gate reads the row the mothership's settings API wrote.
+  notificationSettingsRepository: {},
   // The Slack management surface is now remote (the settings panels' connect/disconnect/route/map):
   // `slackConnectionRepository` get/upsert/softDelete (sealed `tokenCipher` — no plaintext crosses
   // the machine API), and the secret-free settings + member-mapping repos. `getByTeam` is the GLOBAL
@@ -667,38 +678,38 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   slackConnectionRepository: { getByTeam: 'sweeper' },
   slackSettingsRepository: {},
   slackMemberMappingRepository: {},
-  taskRepository: {
-    upsert: 'pending',
-    listByWorkspace: 'pending',
-    linkBlock: 'pending',
-    // The conditional form of `linkBlock`: the atomic claim that holds one-task-per-ticket when
-    // two filings of an issue race. It migrates WITH `linkBlock` rather than ahead of it, because
-    // proxying a claim on its own buys a mothership node nothing: the filing that takes it also
-    // imports the issue through `upsert`, which is `pending` one line up, so the surface only
-    // works remotely once the slice moves as a whole.
-    claimBlockLink: 'pending',
-    // The recurring intake's replace-link write — fires on the (mothership-owned) recurring
-    // run path, not from the SPA; stays mothership-internal like the other task writes.
-    unlinkAllFromBlock: 'pending',
-    // The block-delete cascade's batched detach: the same write as `unlinkAllFromBlock` one line
-    // up, keyed by a SET of doomed blocks. It joins that method's existing gap rather than opening
-    // a new one: every task-link write on this repo is `pending`, and the cascade only reaches a
-    // mothership node once the slice moves as a whole.
-    unlinkAllFromBlocks: 'pending',
-  },
+  // The whole tasks surface is now remote: the run-path context reads, the import/link writes and
+  // the atomic `claimBlockLink` that holds one-task-per-ticket, plus both unlink forms.
+  taskRepository: {},
+  // The tracker connections, on the same sealed-row argument as their document-source sibling
+  // above (`task_source_connection`).
   taskConnectionRepository: {
-    decodeCredentials: 'helper',
     rowToRecord: 'helper',
-    getByWorkspace: 'pending',
-    listByWorkspace: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
   },
   taskSourceSettingsRepository: {
     rowToRecord: 'helper',
-    getByWorkspace: 'pending',
+  },
+  // The tracker writeback's idempotency marker for a parked review's question comments. The ENGINE
+  // writes it, so a mothership-mode node genuinely reaches it (unlike its ingest sibling below) and
+  // it is already routed through `pickRepoSource` — but the methods are not allow-listed yet, so a
+  // claim answers `unknown_method` and `postReviewQuestions` degrades to "someone else holds the
+  // claim", loudly. A real backlog item: allow-listing it needs a scope rule keyed on the marker's
+  // own workspace plus conformance coverage of the claim/settle race.
+  reviewQuestionPostRepository: {
+    where: 'helper',
+    claim: 'pending',
+    settle: 'pending',
     get: 'pending',
-    upsert: 'pending',
+  },
+  // The INBOUND half of the same idea: dedupe for tracker comments arriving by webhook. It rides
+  // `'inbound'` rather than `'pending'` because there is nothing to complete — a delivery reaches
+  // the deployment holding the public URL, which is the mothership, and a laptop that receives no
+  // delivery has nothing to claim. `where` is a private predicate helper, not a port method.
+  trackerCommentIngestRepository: {
+    where: 'helper',
+    claim: 'inbound',
+    settle: 'inbound',
+    get: 'inbound',
   },
   // The whole custom-manifest-type catalog is now remote (the environments management panel's
   // infra-configurator reads/edits it — no secrets, just manifest metadata).
@@ -868,12 +879,15 @@ function reflectAllRepositories(): Record<string, string[]> {
     skillSourceRepository: DrizzleSkillSourceRepository,
     notificationRepository: DrizzleNotificationRepository,
     notificationWebhookRepository: DrizzleNotificationWebhookRepository,
+    notificationSettingsRepository: DrizzleNotificationSettingsRepository,
     slackConnectionRepository: DrizzleSlackConnectionRepository,
     slackSettingsRepository: DrizzleSlackSettingsRepository,
     slackMemberMappingRepository: DrizzleSlackMemberMappingRepository,
     taskRepository: DrizzleTaskRepository,
     taskConnectionRepository: DrizzleTaskConnectionRepository,
     taskSourceSettingsRepository: DrizzleTaskSourceSettingsRepository,
+    reviewQuestionPostRepository: DrizzleReviewQuestionPostRepository,
+    trackerCommentIngestRepository: DrizzleTrackerCommentIngestRepository,
     providerApiKeyRepository: DrizzleProviderApiKeyRepository,
     providerModelCatalogRepository: DrizzleProviderModelCatalogRepository,
     providerSubscriptionTokenRepository: DrizzleProviderSubscriptionTokenRepository,

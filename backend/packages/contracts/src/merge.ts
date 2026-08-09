@@ -50,7 +50,7 @@ export const REQUIREMENT_CONCERN_RANK: Record<RequirementConcernLevel, number> =
 // change, which leaves a workspace unable to express "auto-merge dependency bumps
 // and docs, always review schema changes". A preset therefore also carries an
 // optional rule per {@link ChangeClass}, resolved against the run's deterministic,
-// path-derived classification. See `docs/initiatives/merge-track-record.md`.
+// path-derived classification. See `backend/docs/adr/0046-merge-track-record.md`.
 // ---------------------------------------------------------------------------
 
 /**

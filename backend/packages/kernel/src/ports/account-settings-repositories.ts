@@ -8,6 +8,7 @@
 import type {
   AccountSettingsConfig,
   ContentStorageConfig,
+  FigmaOAuthSecret,
   LinearOAuthSecret,
   S3CredentialsSecret,
   SlackOAuthSecret,
@@ -62,6 +63,8 @@ export interface ResolvedAccountSettings {
   config: AccountSettingsConfig
   slackOAuth?: SlackOAuthSecret
   linearOAuth?: LinearOAuthSecret
+  /** The deployment's registered Figma app, which turns document-source OAuth connect on. */
+  figmaOAuth?: FigmaOAuthSecret
   webSearch?: WebSearchSecret
   /** Non-secret content-storage config (backend selection + connection settings). */
   contentStorage?: ContentStorageConfig

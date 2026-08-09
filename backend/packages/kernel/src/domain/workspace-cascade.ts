@@ -78,6 +78,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'merge_threshold_presets',
   'merge_track_records',
   'model_presets',
+  'notification_settings',
   'notification_webhooks',
   'notifications',
   'observability_connections',

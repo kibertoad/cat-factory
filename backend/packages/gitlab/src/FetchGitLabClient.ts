@@ -20,6 +20,8 @@ import type {
   ListOptions,
   Logger,
   Paged,
+  ProjectIssueQuery,
+  ProjectIssuePage,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
@@ -432,6 +434,76 @@ export class FetchGitLabClient implements VcsClient {
     return hits.slice(0, limit)
   }
 
+  /**
+   * Predicate-search ONE project's issues through `GET /projects/:id/issues`, which is the
+   * endpoint that actually carries a scope: the global `/search?scope=issues` backing
+   * {@link FetchGitLabClient.searchIssues} has no project qualifier, so a caller that must
+   * confine its hits to one project cannot express that as search text (it would be matched
+   * as prose against every issue the token can read).
+   *
+   * Every predicate is a request PARAMETER GitLab evaluates, and the response carries the
+   * body, labels, creation time, comment count and assignee, so a candidate listing is one
+   * call rather than one call per candidate. `owner` / `repo` are read back off each issue's
+   * own `web_url` rather than echoed from the ref, so a hit reported under a subgroup path
+   * round-trips as the path GitLab itself uses.
+   *
+   * ONE page, unlike the `paginate` reads around it: the caller is walking pages itself (to get
+   * past a run of already-worked issues), so following `Link` here would fetch the whole board
+   * on every step of that walk. What it does carry out is GitLab's own answer to "is there
+   * another page", which is the fact a caller cannot re-derive: a short page proves nothing on
+   * an instance whose `max_page_size` is below the requested `per_page`.
+   */
+  async searchProjectIssues(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    query: ProjectIssueQuery,
+  ): Promise<ProjectIssuePage> {
+    const params = new URLSearchParams({
+      per_page: String(Math.min(Math.max(query.limit, 1), 100)),
+    })
+    if (query.page && query.page > 1) params.set('page', String(query.page))
+    if (query.text) params.set('search', query.text)
+    // GitLab searches title AND description by default; `in=title` is how it narrows, which is
+    // what an intake title-fragment predicate asks for.
+    if (query.text && query.textIn === 'title') params.set('in', 'title')
+    if (query.openOnly) params.set('state', 'opened')
+    // GitLab takes the label set as one comma-joined value, matched as AND.
+    if (query.labels?.length) params.set('labels', query.labels.join(','))
+    // `assignee_id=None` is GitLab's unassigned filter (the literal string, not an id).
+    if (query.unassignedOnly) params.set('assignee_id', 'None')
+    if (query.order === 'created-asc') {
+      params.set('order_by', 'created_at')
+      params.set('sort', 'asc')
+    }
+    const { json, next } = await this.request(`/projects/${projectPath(ref)}/issues?${params}`, {
+      connection,
+    })
+    const items = (Array.isArray(json) ? json : []) as GlProjectIssuePayload[]
+    const hits: GitHubIssueSearchHit[] = []
+    for (const item of items) {
+      const parts = parseProjectWebUrl(item.web_url ?? '')
+      if (!parts) continue
+      hits.push({
+        owner: parts.owner,
+        repo: parts.repo,
+        number: item.iid ?? 0,
+        title: item.title ?? '(untitled)',
+        state: item.state === 'opened' ? 'open' : 'closed',
+        url: item.web_url ?? '',
+        body: item.description ?? '',
+        labels: (item.labels ?? [])
+          .map((l) => (typeof l === 'string' ? l : (l?.name ?? '')))
+          .filter(Boolean),
+        createdAt: item.created_at ?? '',
+        commentCount: item.user_notes_count ?? 0,
+        assignee: item.assignee?.username ?? null,
+      })
+    }
+    // Two ways there is more: GitLab said so, or it filled the page past what the caller asked
+    // for and the slice below is dropping the tail. Either one makes the next page real.
+    return { hits: hits.slice(0, query.limit), hasMore: !!next || hits.length > query.limit }
+  }
+
   async searchCode(): Promise<GitHubCodeSearchHit[]> {
     // GitLab blob (code) search needs the instance's Advanced Search (Elasticsearch) and
     // does not return a usable `owner/repo/url` per hit on the basic API. The neutral
@@ -697,10 +769,9 @@ export class FetchGitLabClient implements VcsClient {
     body: string,
   ): Promise<void> {
     const { iid, discussionId } = parseThreadId(threadId)
-    const params = new URLSearchParams({ body })
     await this.request(
-      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}/notes?${params.toString()}`,
-      { connection, method: 'POST' },
+      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}/notes`,
+      { connection, method: 'POST', body: { body } },
     )
   }
 
@@ -711,12 +782,21 @@ export class FetchGitLabClient implements VcsClient {
   ): Promise<void> {
     const { iid, discussionId } = parseThreadId(threadId)
     await this.request(
-      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}?resolved=true`,
-      { connection, method: 'PUT' },
+      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}`,
+      { connection, method: 'PUT', body: { resolved: true } },
     )
   }
 
   // ---- writes -------------------------------------------------------------
+  //
+  // Every write sends its parameters as a JSON BODY, never in the query string, even where the
+  // value is short. GitLab accepts both, so the query form works until a caller passes something
+  // long: a note body is capped at 30,000 characters and percent-encodes to several times that,
+  // which blows past the ~8KB request line most GitLab deployments sit behind (nginx's default
+  // `large_client_header_buffers`) and comes back 414. That failure is worse than loud, because
+  // it is SIZE-dependent: the short notices land, so the endpoint reads as working right up to
+  // the parked-review question echo, the one write that is always long. Keeping the rule uniform
+  // is what stops the next write being added in the shape that fails.
 
   async createBranch(
     connection: VcsConnectionRef,
@@ -724,10 +804,10 @@ export class FetchGitLabClient implements VcsClient {
     name: string,
     fromSha: string,
   ): Promise<void> {
-    const params = new URLSearchParams({ branch: name, ref: fromSha })
-    await this.request(`/projects/${projectPath(ref)}/repository/branches?${params.toString()}`, {
+    await this.request(`/projects/${projectPath(ref)}/repository/branches`, {
       connection,
       method: 'POST',
+      body: { branch: name, ref: fromSha },
     })
   }
 
@@ -777,19 +857,57 @@ export class FetchGitLabClient implements VcsClient {
     ref: VcsRepoRef,
     input: { title: string; body: string },
   ): Promise<{ number: number; url: string }> {
-    const params = new URLSearchParams({ title: input.title, description: input.body })
-    const { json } = await this.request(
-      `/projects/${projectPath(ref)}/issues?${params.toString()}`,
-      { connection, method: 'POST' },
-    )
+    const { json } = await this.request(`/projects/${projectPath(ref)}/issues`, {
+      connection,
+      method: 'POST',
+      body: { title: input.title, description: input.body },
+    })
     const issue = (json ?? {}) as { iid?: number; web_url?: string }
     return { number: issue.iid ?? 0, url: issue.web_url ?? '' }
   }
 
   async closeIssue(connection: VcsConnectionRef, ref: VcsRepoRef, number: number): Promise<void> {
-    await this.request(`/projects/${projectPath(ref)}/issues/${number}?state_event=close`, {
+    await this.request(`/projects/${projectPath(ref)}/issues/${number}`, {
       connection,
       method: 'PUT',
+      body: { state_event: 'close' },
+    })
+  }
+
+  /**
+   * Comment on an ISSUE, which on GitLab is a different endpoint from {@link comment} (merge
+   * request notes) over a different `iid` space. See the port doc for why they cannot be one
+   * call. Both are "notes"; only the noteable differs.
+   */
+  async commentOnIssue(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    issueNumber: number,
+    body: string,
+  ): Promise<void> {
+    await this.request(`/projects/${projectPath(ref)}/issues/${issueNumber}/notes`, {
+      connection,
+      method: 'POST',
+      body: { body },
+    })
+  }
+
+  /**
+   * Apply a label to an issue. `add_labels` is additive server-side (unlike `labels`, which
+   * REPLACES the whole set), so an existing label survives the call and re-applying one is a
+   * no-op. GitLab also creates a project label on first use, so there is no create-then-attach
+   * pair to mirror the GitHub client's.
+   */
+  async applyIssueLabel(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    label: string,
+  ): Promise<void> {
+    await this.request(`/projects/${projectPath(ref)}/issues/${number}`, {
+      connection,
+      method: 'PUT',
+      body: { add_labels: label },
     })
   }
 
@@ -1033,11 +1151,11 @@ export class FetchGitLabClient implements VcsClient {
     // GitLab issues and MRs have SEPARATE iid spaces and distinct notes endpoints, so the
     // neutral `comment(number)` is ambiguous. The platform uses `comment` for PR/MR
     // conversation (the gates), so route to merge-request notes.
-    const params = new URLSearchParams({ body })
-    await this.request(
-      `/projects/${projectPath(ref)}/merge_requests/${issueOrPrNumber}/notes?${params.toString()}`,
-      { connection, method: 'POST' },
-    )
+    await this.request(`/projects/${projectPath(ref)}/merge_requests/${issueOrPrNumber}/notes`, {
+      connection,
+      method: 'POST',
+      body: { body },
+    })
   }
 
   // ---- internals ----------------------------------------------------------
@@ -1215,6 +1333,22 @@ function parseThreadId(threadId: string): { iid: number; discussionId: string } 
   const idx = threadId.indexOf(':')
   if (idx < 0) return { iid: 0, discussionId: threadId }
   return { iid: Number(threadId.slice(0, idx)) || 0, discussionId: threadId.slice(idx + 1) }
+}
+
+/**
+ * One entry of `GET /projects/:id/issues` — the richer per-issue payload the project-scoped
+ * search reads, beside the leaner {@link GlIssuePayload} the projection mapper takes.
+ */
+interface GlProjectIssuePayload {
+  iid?: number
+  title?: string
+  state?: string
+  web_url?: string
+  description?: string
+  labels?: Array<string | { name?: string }>
+  created_at?: string
+  user_notes_count?: number
+  assignee?: { username?: string } | null
 }
 
 /** A merge-request detail object — the fields the review + rebase reads consume. */

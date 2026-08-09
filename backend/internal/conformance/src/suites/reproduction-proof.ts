@@ -34,6 +34,7 @@ export function defineReproductionProofConformance(harness: ConformanceHarness):
       (
         await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Reproduce & fix',
+          purpose: 'build',
           agentKinds: ['repro-test', 'coder'],
         })
       ).body
@@ -169,6 +170,7 @@ export function defineReproductionProofConformance(harness: ConformanceHarness):
       const pipeline = (
         await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build only',
+          purpose: 'build',
           agentKinds: ['coder'],
         })
       ).body

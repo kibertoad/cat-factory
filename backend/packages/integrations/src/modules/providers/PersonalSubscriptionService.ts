@@ -41,6 +41,14 @@ export const DEFAULT_ACTIVATION_TTL_MS = 12 * 60 * 60 * 1000
 /** Surface "renew your subscription" once it expires within this horizon (~7 days). */
 export const DEFAULT_RENEW_WARNING_MS = 7 * 24 * 60 * 60 * 1000
 
+/**
+ * HKDF domain tag for the SYSTEM layer sealing a personal subscription (the password-derived
+ * layer is separate, keyed by `PersonalSecretCipher`). Both facades build their
+ * `WebCryptoSecretCipher` from this constant: the tag derives the key, so a facade spelling it
+ * differently seals credentials its sibling cannot unseal.
+ */
+export const PERSONAL_SUBSCRIPTIONS_CIPHER_INFO = 'cat-factory:personal-subscriptions'
+
 export interface PersonalSubscriptionServiceDependencies {
   personalSubscriptionRepository: PersonalSubscriptionRepository
   subscriptionActivationRepository: SubscriptionActivationRepository

@@ -95,6 +95,11 @@ export type {
   BinaryOutputArtifact,
   BinaryOutputConfig,
   BinaryOutputReport,
+  // The candidate-comparison set on a step whose selection declares a `comparison`: the staged
+  // candidates, the live park state, and the human's keep/discard decision.
+  BinaryCandidate,
+  BinaryCandidateChoice,
+  BinaryCandidateStepState,
   TesterStepState,
   HumanTestEnvironment,
   RunEnvironment,
@@ -104,6 +109,10 @@ export type {
   HumanTestStepState,
   VisualConfirmStepState,
   VisualConfirmPair,
+  VisualConfirmReferenceOrigin,
+  VisualConfirmDesignGap,
+  VisualConfirmDesignGapReason,
+  VisualConfirmDesignReferences,
   VisualConfirmRound,
   ExecutionInstance,
   // The historical frontend name for a per-block review comment is the contract's

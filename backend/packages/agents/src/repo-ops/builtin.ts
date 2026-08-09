@@ -441,6 +441,18 @@ export const specPromotionPostOp: RepoOp = async (ctx) => {
       log.debug('spec promotion skipped: the repo carries no spec/ tree', { metCount: met.size })
       return
     }
+    // A walk that stopped at its read budget yields a SMALLER tree, so a requirement in the tail
+    // is promoted by nobody and the run reads as a tester that had nothing to promote. Safe (the
+    // baseline diff below is taken from this same read, so nothing unread can be rewritten or
+    // deleted) but not free, and the whole point of the levels here is that a DROPPED promotion
+    // is never silent.
+    const unread = view.diagnostics?.issues.find((issue) => issue.kind === 'unread')
+    if (unread) {
+      log.warn('spec promotion may be incomplete: the spec read stopped at its budget', {
+        metCount: met.size,
+        unreadFiles: unread.dropped,
+      })
+    }
 
     // Materialised BEFORE the in-place promotion below, so it captures the tree exactly as the
     // read reconstructed it. A committed group shard that differs from this lost something on

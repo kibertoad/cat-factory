@@ -121,6 +121,12 @@ export const PLATFORM_RESERVED_ENV_PREFIXES: readonly string[] = [
  * the real key on a developer's laptop while passing a case-sensitive check.
  */
 export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = [
+  // An exact name, not an `ADVANCE_` family, for the reason `MCP_OAUTH_REDIRECT_URL` below is:
+  // reserving a prefix is only free where the platform OWNS the namespace, and this one owns a
+  // single variable in it. A family here would newly refuse credential keys a deployment may
+  // already have registered (`ADVANCE_API_TOKEN` for a vendor called Advance), which is a
+  // capability taken away from a live integration to protect one name.
+  'ADVANCE_TIMEOUT',
   'ANTHROPIC_API_KEY',
   'APP_BASE_URL',
   'AUDIT_EVENT_RETENTION_DAYS',
@@ -138,9 +144,14 @@ export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = [
   // nobody names a credential after a redirect URL, and it is refused loudly at boot if anyone does.
   'MCP_OAUTH_REDIRECT_URL',
   'MOONSHOT_API_KEY',
+  // Exact names rather than a `NOTIFICATION_` / `PROVISIONING_` family, for the same reason as
+  // `ADVANCE_TIMEOUT`: each family holds one platform variable, and reserving the whole namespace
+  // would newly refuse credential keys a deployment may already have registered under it.
+  'NOTIFICATION_RETENTION_DAYS',
   'OPENAI_API_KEY',
   'PLATFORM_RUN_DAY_RETENTION_DAYS',
   'PORT',
+  'PROVISIONING_LOG_RETENTION_DAYS',
   'PUBLIC_URL',
   'QWEN_API_KEY',
   'REALTIME_NODE_ID',

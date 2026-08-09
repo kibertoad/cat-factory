@@ -9,7 +9,7 @@ import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
   makeResolveRepoFilesForCoords,
   makeResolveRunRepoContext,
-  ProviderRoutingGitHubClient,
+  providerRoutingGitHubClient,
   logger,
 } from '@cat-factory/server'
 import { buildGitLabEngineClient } from '@cat-factory/gitlab'
@@ -79,7 +79,7 @@ export function selectGitHubDeps(
     // still work, so wire them from the single-token GitLab engine client. When per-workspace connect
     // is enabled, ALSO wire the `github` module (browse/link/sync) with the per-workspace connect
     // client + the connect service, so a GitLab user connects and manages repos through the UI.
-    if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+    if (config.gitlab.enabled && env.GITLAB_TOKEN) {
       const engineClient = buildGitLabEngineClient({
         token: env.GITLAB_TOKEN,
         apiBase: config.gitlab.apiBase,
@@ -131,7 +131,7 @@ export function selectGitHubDeps(
   // the GitHub-issue/docs consumers keep the raw App `githubClient` (they must not gain the
   // GitLab fallback, per CLAUDE.md's VCS rule).
   const moduleClient: GitHubClient = gitlabConnectClient
-    ? new ProviderRoutingGitHubClient({
+    ? providerRoutingGitHubClient({
         installations: githubInstallationRepository,
         github: githubClient,
         gitlab: gitlabConnectClient,

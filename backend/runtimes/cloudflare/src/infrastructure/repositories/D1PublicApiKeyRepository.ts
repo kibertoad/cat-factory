@@ -11,6 +11,7 @@ interface PublicApiKeyRow {
   secret_hash: string
   created_by_user_id: string | null
   created_by_key_id: string | null
+  external_identity: string | null
   created_at: number
   last_used_at: number | null
   revoked_at: number | null
@@ -26,13 +27,14 @@ function rowToRecord(row: PublicApiKeyRow): PublicApiKeyRecord {
     secretHash: row.secret_hash,
     createdByUserId: row.created_by_user_id,
     createdByKeyId: row.created_by_key_id,
+    externalIdentity: row.external_identity,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
   }
 }
 
-/** D1-backed store of the inbound public-API keys (migrations 0034 + 0053 + 0054 + 0081). */
+/** D1-backed store of the inbound public-API keys (migrations 0034 + 0053 + 0054 + 0081 + 0086). */
 export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
   private readonly db: D1Database
 
@@ -44,8 +46,8 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
     await this.db
       .prepare(
         `INSERT INTO public_api_keys
-          (id, account_id, workspace_id, label, scope, secret_hash, created_by_user_id, created_by_key_id, created_at, last_used_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, account_id, workspace_id, label, scope, secret_hash, created_by_user_id, created_by_key_id, external_identity, created_at, last_used_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -56,6 +58,7 @@ export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
         record.secretHash,
         record.createdByUserId,
         record.createdByKeyId,
+        record.externalIdentity,
         record.createdAt,
         record.lastUsedAt,
         record.revokedAt,

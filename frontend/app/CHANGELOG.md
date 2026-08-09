@@ -1,5 +1,986 @@
 # @cat-factory/app
 
+## 0.258.0
+
+### Minor Changes
+
+- 4715b74: Let a binary-output step require an exact output size, gated by a capability that can refuse it.
+
+  `BinaryGenerationOptions` could state an aspect RATIO and not a SIZE, so for the deliverables where
+  the pixel dimensions are the requirement rather than a refinement of it (an inventory icon, a sprite
+  an engine slices, a texture an atlas packs) the most load-bearing fact about the artifact was the one
+  thing a step could not declare. It reached the agent as prose, and a step holding only a bucketed API
+  was admitted, generated at the nearest bucket, downscaled, and stored something every other check
+  passes and the consumer never uses.
+
+  `generation.outputSize` (`{ width, height }`) states it, gated by a new `exact-size` capability. The
+  existing `aspect-ratio` member is narrowed to what it can honestly carry: a ratio, or a fixed set of
+  size buckets. **A deployment registering an integration that takes a width and a height (Flux, Retro
+  Diffusion) must now declare `exact-size` beside `aspect-ratio`** to keep serving size-requiring
+  steps. The vocabulary is flat by design, so neither member implies the other, and the cost of missing
+  the declaration is a refusal that names the capability rather than a silent mis-render.
+
+  The platform deliberately does not gain a per-integration size table (it would go stale here while
+  the vendor changed it there, and it is the `resolutionRange` discriminator the design record already
+  refused), and it states no policy about resizing after generation. It checks that an integration can
+  be ASKED for a size, states the target in the brief, and requires that any substitution be reported.
+
+  `outputSize` is mutually exclusive with `aspectRatio` and `upscale`, refused at pipeline save: each
+  states the delivered dimensions a second time and can disagree, and resolving that by precedence
+  would leave the choice to the agent writing the vendor call. The pipeline builder raises the same
+  refusal against the step being edited, so the conflict is reported where the fix is deleting one of
+  two visible fields.
+
+  The size covers what is measured in pixels (images and video), so a step generating an icon and its
+  pickup sound states one size and means it about the icon.
+
+  The read-back closes the loop, because admission checks only what an integration can be asked for: a
+  declared artifact may carry `dimensions`, which the step's result window renders per artifact and
+  counts against the requirement, keeping artifacts that reported no dimensions on their own line
+  rather than letting an unmeasured one read as a delivered one.
+
+- 8c1d8a6: Narrow the built-in pipeline catalog, and make a step conditional on what the change touches.
+
+  A pipeline step can now carry a RUN CONDITION beside its estimate gate (`stepOptions[i].condition`),
+  declaring the service scope it applies to. Every build rung carries BOTH testers: the browser pass
+  runs where the change touches a frontend service, the API pass where it touches anything else. Run
+  admission drops the condition-excluded steps before its gates, so a preset carrying `tester-ui` is
+  not refused on a backend service.
+
+  A condition is a SKIP AXIS, so it is held to the two structural rules an estimate gate is held to
+  (`assertValidRunConditions`, mirrored in the SPA's health advisory and in what the builder offers):
+  the step's kind must be one that may be absent from a run, and it may not also carry a human
+  approval gate. Without that, a condition on `merger` dropped the merge on every run outside its
+  scope while the pipeline still finished reporting success.
+
+  A skipped step now records WHY as a machine-readable `skipReason` (`gated` / `condition` /
+  `producer_skipped` / `run_complete`) that the SPA renders as translated copy, and its `output` stays
+  empty. The
+  reason used to be an English sentence written into `output`, which three separate aggregations
+  select on to build a model's view of the prior steps — so a condition-skipped tester's note was
+  handed to `merger` and `ci-fixer` as if it were the tester's report.
+
+  Five presets are withdrawn (`pl_frontend`, `pl_tech_debt`, `pl_blueprint`, `pl_spec`,
+  `pl_environment_analysis`) and one is added: `pl_complex` ("Complex build"), which settles the
+  requirements and researches the problem before the standard loop. `pl_code_comments` stays as an
+  INTERNAL pipeline: the documentation-refresh preset spawns onto it, so it resolves for a run while
+  being withheld from every listing. Withheld from `pipelineCatalogVersions` too, which the health
+  advisory reads as "the built-ins that exist" — an internal entry there is reported as newly
+  available on every board forever, with no reseed able to clear it. `pipelineCatalogNames` still
+  spans the whole catalog, so a task PINNED to an internal pipeline is named (and started) rather
+  than silently falling through to a full build.
+
+  Running ONE agent against a block is now a first-class action (`POST
+/workspaces/:ws/blocks/:id/agent-kind-executions`, `ExecutionService.startAgentKind`) rather than
+  something that needed a single-step preset. It backs the post-bootstrap service mapping, a new
+  "Map service" action on the service frame, and the environment wizard's deep analysis.
+
+  BREAKING (internal): a workspace seeded before this change holds rows for the five withdrawn
+  presets; the pipeline-health advisory offers their removal, naming a replacement where one exists.
+  Anything naming `BLUEPRINT_PIPELINE_ID` / `TECH_DEBT_PIPELINE_ID` should use `BLUEPRINT_AGENT_KIND`
+  with `startAgentKind`, or name a build rung directly.
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/contracts@0.286.0
+
+## 0.257.0
+
+### Minor Changes
+
+- afe1250: Binary generation: provider capability traits, per-step generation options, and side-by-side
+  candidate comparison.
+
+  A registered generative integration now declares `capabilities` (reference images, masked or
+  instruction editing, negative prompt, seed, aspect ratio, batching, upscaling, transparent
+  background, seamless tiling), and a binary-output step declares the generation options each of
+  those unlocks. An option nothing selected supports refuses the run at admission with
+  `binary_output_generator_invalid` / `capability_unsupported`; an option nothing has DECLARED either
+  way is admitted and stated as unverifiable, so every integration registered before this axis
+  existed keeps working unchanged.
+
+  A step may also declare a `comparison`: it generates a candidate per subject from every selected
+  integration, parks, and a human keeps one (or several under distinct ids) before the step re-runs
+  to deliver exactly those.
+
+  Internal shape change: the engine's park-window verbs moved from sixteen `ExecutionService`
+  delegates onto one `executionService.decisions` surface.
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+
+## 0.256.3
+
+### Patch Changes
+
+- e3fdc15: A typing pass that removes the casts a better type, a generic or a guard could carry.
+
+  New in `@cat-factory/contracts`: `parseStoredProviderConfig(schema, raw, label)`, the one place a
+  native environment backend re-reads its own config off a stored manifest's `providerConfig`. The
+  Kubernetes, Cloudflare and EKS backends used to assert that value; a config written before a schema
+  change (or edited in the database) therefore flowed on as a fake-valid object and misbehaved deep
+  inside a provision instead of being named at the boundary. Those three now THROW on an off-contract
+  stored config where they previously carried on.
+
+  That re-read is split by what the operation USES, which is the difference between a loud refusal
+  and an environment nobody can reclaim. Standing one up parses the whole config; tearing one down
+  parses only the connection (`kubernetesConnectionConfigSchema` / `eksConnectionConfigSchema` /
+  `cloudflareConnectionConfigSchema`), so a `manifestSource`, `url` or `workersSubdomain` that
+  stopped matching the contract still fails a provision and can never strand a live namespace or
+  preview. The fields the reclaim itself reads stay validated: there is no safe default for which
+  cluster to delete from, and none for a GitHub Enterprise API root whose fallback is the public one.
+
+  Behaviour changes worth knowing about:
+
+  - The Worker's bindings are read through `envVar` / `envVars`, which filter by `typeof`. A binding
+    that is not a string (a D1 database, a queue, a Durable Object namespace) now reads as absent
+    where the previous assertion handed it on as a string.
+  - `SlackApiClient.chatPostMessage` takes the rendered `SlackMessageBody` instead of an arbitrary
+    `Record<string, unknown>`. `SlackMessageBody` and `DeployJobSpec` are type aliases rather than
+    interfaces so they keep the implicit index signature their JSON sinks need.
+  - The workspace-RBAC mount tag is read through a shape guard; an unrelated object stored under the
+    same symbol no longer reads as a permission gate.
+
+  - `EksEnvironmentProvider` parses its own superset config. It inherited the Kubernetes parse, and
+    a valibot object drops entries it does not declare, so `region` / `clusterName` / `stsHost` were
+    read off a config that no longer had them: every EKS call was presigning its apiserver token
+    against `sts.undefined.amazonaws.com`.
+  - The Kubernetes engine form narrows a stored `url.source` through `isKubernetesUrlSource`, a guard
+    derived from the contract variant's own members. The discriminant is a closed vocabulary that is
+    nonetheless persisted, so a config naming a source this build does not define now falls back to
+    the form's default rather than reaching an exhaustive `switch` with no branch for it.
+
+  Everything else is type-level only: typed `queryAll` / `queryOne` helpers behind the local
+  `node:sqlite` stores (the row shape is now checked to be one SQLite could produce), a `BadgeColor`
+  derived from `UBadge`'s own prop type so the SPA's chip maps agree with the component, and the
+  Kubernetes engine form building its config as the contract's discriminated union.
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+
+## 0.256.2
+
+### Patch Changes
+
+- 3036af7: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with
+  (`ai@7.0.58`, `@ai-sdk/*@4.0.36` / `openai-compatible@3.0.27` / `amazon-bedrock@5.0.50`), and the
+  Vue singleton pin plus its `@vue/*` overrides move together to 3.5.41 so the SPA still bundles
+  exactly one Vue.
+
+## 0.256.1
+
+### Patch Changes
+
+- Updated dependencies [de7caaf]
+  - @cat-factory/contracts@0.283.1
+
+## 0.256.0
+
+### Minor Changes
+
+- 6ad1d8b: Let the pipeline builder's purpose dial narrow the palette per agent KIND, not per section
+
+  The dial filtered on the palette's display CATEGORY, so it could only ever remove whole sections
+  and a kind whose section survived stayed offered however plainly it contradicted the purpose. A
+  `review` pipeline reviews an existing pull request and opens none, yet it was offered the two
+  agents that WRITE documentation into the repo, because `docs` had to stay for the Domain Rules
+  Reviewer; a `planning` pipeline was offered the bug triage and PR-review kinds; and `document` and
+  `research` had identical rows, so moving the dial between those two settings narrowed nothing at
+  all.
+
+  `AgentPresentation` gains an optional `purposes`, and `purposeSuggestsAgentKind` is what the
+  palette now filters on. The two narrowings INTERSECT: a declaration may only hide more, never buy
+  a kind back into a purpose its section is not offered to, which is what keeps palette relevance
+  inside what the save gate will accept whatever a deployment declares. Declaring nothing is the
+  normal case and behaves exactly as before, so a registered kind that says nothing is as visible as
+  it was; a declared list naming only purposes the reader cannot name is read as no declaration
+  rather than as excluding everything.
+
+  The built-ins that belong to one use-case now say so (the document-authoring family, the bug
+  triage and PR-review kinds, the spec/blueprint/architecture kinds, the initiative breakdown), which
+  is a visible narrowing of what the palette offers at every purpose, `build` included: the six
+  document-authoring kinds belong to `document` alone and the initiative breakdown to `planning`
+  alone, so a build pipeline stops being offered them as well. Nothing changes
+  about what an existing pipeline may CONTAIN or save: `purposeAllowsAgentCategory` is untouched, so
+  a stored pipeline stays editable in the builder it was built in.
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+
+## 0.255.1
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+
+## 0.255.0
+
+### Minor Changes
+
+- 2585b2f: Narrow the pipeline builder's saved-pipeline library on the purpose being edited, and make a
+  pipeline's purpose mandatory
+
+  The purpose dial narrowed the agent palette beside it and gated the save, but the library in the
+  third column listed the whole workspace catalog whatever the draft was for. `pipelineMatchesPurpose`
+  is the membership predicate, applied through `narrowPipelineLibrary` alongside the label and archive
+  filters. Each of those dials now counts what relaxing IT alone would reveal, so the "Archived (n)"
+  toggle no longer promises rows the current purpose is hiding either way, and the purpose hint is
+  itself the control that lists every purpose again: the draft's purpose is an authoring field that is
+  saved, so browsing past it may not require editing it.
+
+  Breaking change (internal surfaces, pre-1.0). `Pipeline.purpose` is now REQUIRED, which is what lets
+  those four narrowings drop their private policies for the pipelines that skipped it:
+
+  - `POST /workspaces/:ws/pipelines` requires `purpose`; `PATCH` still treats it as an optional patch
+    field. Not part of `/api/v1`, so no published SDK or external integration is affected.
+  - `PipelineRegistry.register` requires it at compile time, so a deployment's own pipeline can no
+    longer land unclassified and fall silently out of a narrowed picker. Same for the built-in seed
+    catalog, where it was previously only asserted in a test.
+  - A row persisted before the field was mandatory still reads: the shared `rowToPipeline` resolves an
+    empty column to `build`, which is byte-for-byte the behaviour such a row already had. A stored
+    classifier this build cannot NAME passes through untouched instead, and every narrowing predicate
+    reads it default-open, because "never set" and "a member this build has no name for" are different
+    facts that must not render the same.
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+
+## 0.254.3
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+
+## 0.254.2
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+
+## 0.254.1
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+
+## 0.254.0
+
+### Minor Changes
+
+- c44e9d7: Pipeline builder: the purpose selector moves onto the palette's control row, beside the agent tier,
+  and narrows the catalog per purpose.
+
+  The two dials that decide what the palette offers now sit together above it, each stating what it is
+  holding back ("n hidden for this purpose" / "n hidden at this tier"). The purpose is still saved on
+  the pipeline, so nothing about the stored shape changes.
+
+  The filtering behind it splits into two predicates in `@cat-factory/contracts`.
+  `purposeSuggestsAgentCategory` is new and is what the palette OFFERS: a review pipeline reviews an
+  existing pull request, so the design kinds go; a planning pipeline writes no repo documentation and
+  opens no pull request, so the documentation and gate kinds go. `purposeAllowsAgentCategory` keeps its
+  current meaning and is what the builder will SAVE, so a stored pipeline never becomes unsaveable in
+  the editor it was built in because the relevance table gained an opinion it did not have when that
+  pipeline was built. Relevance is a subset of compatibility, asserted over the whole grid.
+
+  Both vocabularies are closed but persisted, so `@cat-factory/contracts` also gains the
+  schema-derived `isPipelinePurpose` and `isAgentCategory` guards. A `Pipeline.purpose` or a
+  registered kind's `presentation.category` outlives the build that wrote it, and both predicates now
+  narrow through them before indexing their table: an unrecognised value means this build has nothing
+  to narrow by, which is what an absent one already meant. The purpose control names such a value
+  instead of rendering a blank label.
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+
+## 0.253.2
+
+### Patch Changes
+
+- 79a873c: Stop the toaster's safe-area rule from slicing the first option off every dropdown.
+
+  The inspector's pickers (service connections, and every other menu in the SPA) drew their first
+  option half outside the popover's top edge. The cause is not in any of those components: `main.css`
+  carried `[data-slot='viewport'] { bottom: calc(1rem + env(safe-area-inset-bottom)) }`, written to
+  keep the toaster clear of a phone's home indicator. Nuxt UI names the scroll region of eleven
+  components `viewport`, and the item list of every menu one (Select, SelectMenu, InputMenu,
+  CommandPalette, DropdownMenu, ContextMenu, NavigationMenu) is `position: relative`, so that rule
+  offset all of them a rem upward while the popover box stayed put.
+
+  The toaster's viewport now carries an `app-toaster` marker class from `app.config.ts` and both
+  app-level toaster rules hang on that instead, so nothing app-side names a `data-slot` value the
+  component library shares. A new e2e spec opens a picker and asserts no option is drawn above its
+  own popover: this class of defect needs the assembled product to be visible at all, since a
+  component unit test renders without the app stylesheet and with no layout engine.
+
+## 0.253.1
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+
+## 0.253.0
+
+### Minor Changes
+
+- a62bcf8: Deliver notifications by email, and add the notification manager that decides which events go to
+  which channel.
+
+  The `EmailSender` port, its SendGrid/Resend adapters and the per-account connection have been live
+  for a while and were used only for invitations. A new `EmailNotificationChannel` puts them behind
+  the same `NotificationChannel` port the in-app and Slack transports implement, so the engine call
+  sites that raise notifications are untouched. It resolves recipients from the SAME rules
+  `resolveWorkspaceAccess` applies (account membership is the prerequisite, an account admin always
+  qualifies, a `workspace_members` row counts only for a still-current account member), reads them in
+  three batched queries rather than a point-read per person, and isolates each send so one bad address
+  cannot cost every other recipient their notification. An account with no sender connected produces
+  zero attempts and zero warnings.
+
+  The manager (`notification_settings`, one row per workspace, D1 ⇄ Drizzle with a conformance suite)
+  stores per-type, per-channel OVERRIDES over the shipped defaults, and one service answers both the
+  settings API and the delivery gate so the toggle a human sees cannot say something the engine does
+  not do. **By default email carries only the high-impact events**: the ones where something is
+  stopped until a human acts (`merge_review`, `decision_required`, `ci_failed`, `test_failed`,
+  `release_regression`) or the deployment itself is degraded (`platform_health`, `infra_unreachable`,
+  `budget_paused`, `key_drift`). The per-step review parks are deliberately off by default — several
+  arrive on nearly every task, and mailing them is the firehose that gets a sender's domain filtered.
+
+  Only the channels whose delivery is a plain yes/no are routed here: the in-app push and email.
+  Slack and the outbound webhooks answer "which types" where their DESTINATION is declared (a Slack
+  route's channel, a webhook endpoint's own `types` filter), so a second switch would be a place to
+  look that does not decide. The settings panel says so and links to the Slack routing.
+
+  Delivery now carries WHICH lifecycle edge it reports (`NotificationDeliveryReason`: `raised` /
+  `refreshed` / `settled`), because the service re-delivers a card on every transition it makes and
+  the transports split hard on what that means. A STATE transport (the in-app push, the outbound
+  webhook) takes every edge, so a board holding an open card sees it settle instead of rendering an
+  already-made decision as still actionable. An ALERT transport (email, Slack) takes the `raised` edge
+  alone: a mailbox and a chat channel cannot render a correction, so a second "Decision needed" after
+  the decision was made is simply false. This also corrects Slack, which re-posted on every resolve
+  and dismissal before the edge existed, and it is why the escalation sweep's loop over a workspace's
+  overdue cards now performs no routing or audience reads at all. **The edge is a required parameter
+  and rides the mothership delegation wire**, where it is refused rather than defaulted: the persisted
+  row cannot supply it (a raise and an escalation are both `open`), so a node one build behind fails
+  loudly instead of mailing the org about decisions already made.
+
+  Two more behaviours to watch for when reviewing. The in-app push is gated too, but only on the raise:
+  muting a type stops the live toast, while the card is still persisted, still in the inbox on the next
+  snapshot, and still pushed when it settles. And a settings read that FAILS falls back to the shipped
+  default and logs, rather than defaulting to deliver-everything (a mailshot) or deliver-nothing (the
+  parked run nobody hears about). In the settings panel the same distinction is explicit: a deployment
+  with no routing store and a read that broke are separate states, and only the first renders the
+  shipped defaults, because saving is a full replace and a grid built from defaults would otherwise
+  overwrite overrides nobody had seen.
+
+- fe8ca56: Let a deployment define its own binary artifact stores in code. Implement the kernel
+  `BinaryBlobBackend` port, register it on the new app-owned `BinaryStoreRegistry`, and pass the
+  registry to `start()` / `startLocal()` / `createWorker({ overrides })`: each registered store then
+  appears in the account-settings storage picker beside the platform's `fs` / `db` / `s3` / `r2`
+  backends, and the per-account resolver builds it when an account selects it. The registered id is
+  stamped onto every artifact row, an account naming a store this build does not register resolves to
+  no storage and is named in the log and the settings panel, and the retention sweeps reclaim through
+  a custom store like any built-in one.
+
+  On the Worker the registry is held PROCESS-WIDE rather than on the app, alongside the model-provider
+  and capability-credential registrations and for the same reason: that runtime builds a container per
+  entry point, and the entry points that write and reclaim artifacts (the durable driver, the queue
+  consumers, the retention cron) take no overrides. A store must be registered on every process that
+  handles its bytes, which in mothership mode means the nodes that write them AND the mothership that
+  sweeps them; a mothership-mode node now says so at boot.
+
+  Internal break: `ContentStorageCapability` gains a required `customStores` and `ContentStorageSummary`
+  a required `customStoreId`, so a facade or test building either literal must add them (the compile
+  error is the point). `BinaryArtifactStorageKind` is now open at the type level, since a registered
+  store's id is a legitimate value of the `storage` column.
+
+### Patch Changes
+
+- 2544fb3: Make the provider-routing VCS client reflective, so it can no longer under-report the port.
+
+  `ProviderRoutingGitHubClient` was a hand-written delegate over a 53-method port, 20 of whose
+  methods are optional. It implemented the 33 required ones and 18 of the optional ones were
+  simply absent, which typechecks precisely because they are optional. `providerRoutingGitHubClient`
+  replaces it with a `Proxy` (the shape `runtimes/local/src/vcsClientRouter.ts` already documents),
+  so the surface it presents is the union of what its backing clients implement.
+
+  Behaviour change, in a deployment running BOTH a GitHub App and GitLab connect: the branch
+  protection preflight now answers for real on GitHub installations, where it previously reported
+  `capability: 'unavailable'` for the whole workspace. A call landing on a provider whose client
+  does not implement the method refuses with the new `VcsCapabilityUnsupportedError` rather than
+  `undefined is not a function`; `GitHubService.checkDefaultBranchProtection` absorbs it and keeps
+  reporting `unavailable`, which is exactly the fact it already models.
+
+  Reflecting means deciding what counts as a member, and the first answer was too generous:
+  membership was tested with `Reflect.has`, which walks into `Object.prototype`, so `toString`,
+  `valueOf`, `constructor` and the rest were answered with installation-routing functions. Coercing
+  the client to a string called `toString()` with no arguments, which routed on `undefined` as the
+  installation id and returned a promise where a primitive was required, so a template literal or a
+  logger touching the client threw `TypeError: Cannot convert object to primitive value` with an
+  unawaited repository read rejecting behind it. Membership now stops at `Object.prototype` and
+  anything that is not a port member is answered by the proxy target, so those names behave as they
+  do on any object while an unimplemented optional method still reads as absent.
+
+  `VcsCapabilityUnsupportedError`'s reason joins the shared `UNAVAILABLE_REASONS` vocabulary and
+  gains translated SPA copy. Without it the refusal rendered as the generic 503 wording, "this
+  deployment has not configured the capability", which is the misattribution the class exists to
+  prevent: no operator wiring changes what a provider does not offer. Its sibling
+  `vcs_client_unconfigured` deliberately stays on the generic copy, because that one IS a wiring gap.
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+  - @cat-factory/contracts@0.275.0
+
+## 0.252.0
+
+### Minor Changes
+
+- 882b94f: Feed the visual-confirmation gate from the designs a task links. The frames an import retained for
+  a linked Figma/Zeplin document now populate the gate's actual-vs-reference gallery on their own, so
+  a designer who linked a frame gets screenshot-vs-design comparison with no manual upload at all.
+
+  A reference that was explicitly chosen for a view still wins: an upload is a deliberate act against
+  that one task and survives every re-import, while a design render is a projection the next
+  body-changing import replaces wholesale. So an upload assigns over the fold, and a view whose
+  reference the capture itself named is left alone. Each pair now says which of the two it is showing,
+  and says nothing when the capture named its own, because a reference the gate did not source is one
+  whose provenance it can only guess at.
+
+  A view name two designs both claim is qualified with its design on BOTH sides rather than just the
+  second, the same rule the Figma import applies to a frame name repeated across pages: leaving the
+  first bare would hand the plain name to whichever design is listed first, and re-ordering the links
+  would then silently re-point a reviewed view at a different screen.
+
+  The gate also states what the linked designs contributed whenever a design is attached, including
+  when everything worked, so "no design is linked" stays distinguishable from "one is and it gave
+  nothing". The latter carries a per-design reason, since retaining part of a design, failing to
+  download it, having no frames at all, and having had nowhere to store them each ask for a different
+  fix. That verdict is derived from what the artifact store actually holds rather than from the
+  recorded render status alone, so any status claiming retention over an empty shelf reports the
+  absence rather than describing a gallery that is not there. The gallery's ceiling on design views is
+  shared round-robin across the linked designs instead of being spent in read order, and each design
+  that loses frames to it is named, so a design the ceiling shut out cannot read as one with no
+  frames.
+
+  Gathering the pairs no longer confuses a gallery ROW with a captured screenshot. A reference-only row
+  (a design frame, an uploaded mock) makes a pair too, so a run that captured nothing had been losing
+  the warning that gates the gate's approve button behind an acknowledgement, reporting a verified
+  gallery of blanks in its run outcome, and summoning reviewers to screenshots that were not there. The
+  rule now lives once in `@cat-factory/contracts` and all three ask it.
+
+  `BinaryArtifactStore` grows a batched `listByDocuments`, mirrored D1 ⇄ Drizzle with a conformance
+  assertion and allow-listed for mothership mode, so a task linking several designs still costs the
+  driver path one read.
+
+### Patch Changes
+
+- Updated dependencies [882b94f]
+  - @cat-factory/contracts@0.274.0
+
+## 0.251.0
+
+### Minor Changes
+
+- 6e07961: Retain a design document's rendered frames when it is imported. A Figma import now downloads the
+  PNGs (the linked frame, or the first six top-level frames of a whole file) and stores them as
+  `reference` binary artifacts keyed to the document, on the same shelf the visual-confirmation gate
+  already reads from; a re-import that changes the body replaces the previous set wholesale. The
+  download is host-pinned to Figma's signed-asset hosts and carries no credential.
+
+  Renders ride a new `DocumentSourceProvider.fetchRenders` port rather than `fetchDocument`, and only
+  run on an import that actually writes a body: a design file's version moves on any edit anywhere in
+  it, so the dispatch-time freshness ladder re-fetches the text far more often than the pictures
+  change.
+
+  A new `documents.render_status` records what became of them (`stored` / `partial` / `none` /
+  `failed` / `storage_unavailable`, or null where the question does not apply), because every way of
+  ending up with no images is otherwise the same absence. It is derived from what was RETAINED, and
+  counts the frames a provider's own cap excluded as unillustrated, so a six-picture pass over a
+  twenty-frame file reads as `partial` rather than as a complete design with six screens. A
+  deployment with no image storage configured imports the design textually and says so rather than
+  downloading bytes it cannot keep; a settings read that FAILS is `failed`, not
+  `storage_unavailable`, since telling an operator to configure storage they already have sends them
+  to fix the wrong thing.
+
+  A document's renders are exempt from the age-based artifact retention sweep. Age is the right
+  lifetime for run debris and the wrong one for a projection of a live row: renders are replaced by
+  the next import that changes the body and by nothing else, and an unedited design is never
+  re-imported, so a clock-based sweep would leave the row claiming `stored` over an empty set with
+  nothing to re-download them.
+
+  Internal break: `binary_artifacts` rows and `documents` rows written before this change carry no
+  document keying and no render status. Both self-heal on the next import; nothing needs a backfill.
+  `BinaryArtifactMetadataStore.deleteByDocument` is replaced by `deleteByIds`: every id-scoped
+  reclaim now names the rows whose bytes it has already removed, so a concurrent import's fresh row
+  cannot be deleted out from under its blob.
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/contracts@0.273.0
+
+## 0.250.0
+
+### Minor Changes
+
+- 70745b6: Link repositories, merge/pull requests and issues to the instance a workspace is actually
+  connected to. A VCS connection (and each connect option) now carries `webUrl`, the browser-facing
+  host derived from the provider's configured API base, and the SPA builds every repo link from it
+  in the provider's own shape instead of hand-building `https://github.com/...`. A deployment whose
+  API base does not name a host withholds those links rather than pointing at the provider's public
+  instance. The source-control panel's pull-request vocabulary is provider-keyed, so a GitLab
+  workspace sees merge requests.
+
+  `AppConfig.gitlab` is now always present, shaped like its GitHub sibling: `apiBase` is the address
+  of the instance a deployment talks to, and `enabled` alone carries the `GITLAB_TOKEN` opt-in for
+  the single-token engine connection. Gating the whole config on that token had made the address
+  unreadable on a deployment reaching GitLab any other way, so local mode's `GITLAB_PAT` shape got
+  no links at all.
+
+  Internal breaks, so a SPA build and a backend must be deployed together: `webUrl` is required on
+  the connection and connect-option shapes, and `AppConfig.gitlab` is no longer optional.
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/contracts@0.272.0
+
+## 0.249.0
+
+### Minor Changes
+
+- 55310f6: Close the review findings on the start-from-design work, two of which made shipped features
+  unreachable.
+
+  **The document-source OAuth callback was default-denied.** `/documents` was not in the session
+  gate's public allowlist, so Figma's browser redirect was refused before the callback could exchange
+  its code: a vendor navigation carries no `Authorization` header, so the receiver was not gated but
+  unreachable, and the whole OAuth connect worked only under `AUTH_DEV_OPEN`. The same omission was
+  already live for the Linear callback at `/tasks`, which is why the fix is not another string in the
+  list: the provider-facing receivers are now one exported list beside the workspace controllers, and
+  a test derives both sides and refuses a mount that is missing from the allowlist. This class of bug
+  reads correctly at the mount, at the handler, and in review, and shows up only against the live
+  vendor on a redirect nobody can retry.
+
+  **A grant with no stated expiry was treated as expired at the epoch.** `Number('')` is `0`, not
+  `NaN`, so the guard meant to skip a credential bag that recorded no deadline never fired. Every
+  resolution of a personal-access-token connection logged a permanent-outage warning, and every
+  resolution of an OAuth grant whose token response omitted `expires_in` spent a refresh round trip
+  and a write, on a path that runs for each step of every run.
+
+  **A targeted spawn duplicated the modules it was told to reuse.** The targeted planner is shown the
+  frame's existing module names and asked to reuse them; the write then created a new module per
+  planned module regardless, so a plan that obeyed the instruction produced a second "Checkout" beside
+  the first. The reuse is now computed rather than requested, matched case- and whitespace-insensitively
+  because the thing being asked is a language model. A reused module is reported separately from a
+  created one: folding them together would claim a write that did not happen, and dropping the count
+  would report "0 modules" against a preview that showed three.
+
+  Also: two stale-response races (the spawn preview's re-plan when the target frame is switched
+  mid-request, and the pasted-link offer in the task form, where accepting a superseded offer attached
+  a document no longer named in the description); a blur that swallowed the first click on
+  **Continue** in the start-from-design modal, because clicking the button re-resolved the link and
+  disabled the button before mouseup; and the OAuth spec/descriptor pairing a comment claimed was
+  asserted, which is now actually asserted at registration, in both directions and over the scopes,
+  since a half-declared source is silently either unreachable or a dead button.
+
+- 55310f6: Make a linked design something a designer can actually start work from.
+
+  Figma has been a document source for a while, and none of it was reachable by the person it exists
+  for. Connecting meant minting a personal access token by hand. Attaching a design meant finding the
+  Integrations hub, importing the page there, going back to the board, adding a task, and attaching
+  it. Nothing on the board or the task form said "start from a design" at all, and every string on
+  the way through said requirements, RFC or PRD. Expanding a design into board structure was worse
+  than absent: the planner asks what architecture a document describes, which for a design is a
+  service per Figma page.
+
+  Four things close that.
+
+  **OAuth connect.** A source can now declare an `authorization_code` half, and one shared flow runs
+  it. The provider contributes four constants (two endpoints, a refresh endpoint or null, the scopes)
+  and nothing else: no fetch, no token parsing, no credential mapping, so the second source to gain
+  OAuth adds a declaration rather than a second copy of the flow. The credential bag is
+  platform-owned, which is what keeps the token lifecycle out of every provider — a provider's whole
+  share of it is noticing an access token in the bag it was handed. Declaring an OAuth half is
+  deliberately NOT the same as offering one: running it needs an app the deployment registered, so
+  the source listing answers "what this source supports" and "what this deployment can run" as two
+  separate fields. Folded into one, a board with no registered Figma app would render a "Connect with
+  Figma" button that can only 503.
+
+  **A start-from-design entry on the board.** A frame-header button, and an offer on any Add-task
+  description that links a page. Both ask only host-pinned sources, which is the safety property
+  rather than an optimisation: a host-blind parser claims a shape, so asking Notion about a Figma
+  link whose file key carries a UUID-shaped run gets a confident yes and stages the design into
+  Notion's key space. The paste is resolved before anything is created, and a reference the parser
+  had to WIDEN (Figma's own Copy link emits an unreadable id for any component instance, so the
+  parser falls back to the whole file) says so on its own line, apart from the ordinary trim: "I
+  attached this frame" and "I attached the entire design" otherwise render identically, and for a
+  designer that widening is the defect.
+
+  **Target-aware planning.** `plan` now asks one of two questions, with two different answer shapes:
+  what architecture a document describes, or what work it implies inside a service that already
+  exists. A targeted response that proposes frames is refused rather than re-read as modules, because
+  a model proposing services where one exists has made a mistake and re-reading it would launder that
+  onto the board. This is also what makes the `frameId` spawn safe to offer: flattening a board-wide
+  plan into a frame discarded the frame titles and types the preview rendered, so the spawn produced
+  something other than what was approved, while a plan authored for the target carries one frame that
+  IS the target. Design documents require a target for the reason above.
+
+  **Copy and a tour.** Connect copy that names designs, and a `start-from-design` tour in the launch
+  arc rather than the catalogue-only half, gated on a design source being connected rather than on
+  permission to connect one — that is the admin's job, and gating on it would withhold the tour from
+  exactly the persona it is written for.
+
+  Two compatibility notes. `DocumentBoardPlan` gains a required `targetFrameId`, and the OAuth
+  install URL is admin-tier even though it only reads: what it hands back is the first half of a
+  credential write, completed through a public callback where no tier can be checked.
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/contracts@0.271.0
+
+## 0.248.0
+
+### Minor Changes
+
+- 17687a1: Let a headless provisioner say who a key acts for, and carry that onto the runs the key starts
+
+  `POST /api/v1/keys` accepts an optional `externalIdentity`: an opaque string naming who, on the
+  CALLER's side, the key acts for. An integration that mints one key per person (the Cloudflare OS
+  gatekeeper of `docs/initiatives/cloudflare-os-gatekeeper.md` is the motivating consumer) could
+  already get real per-user attribution, but only by keeping its own keyId-to-person table and
+  joining it against every run it read. The field removes that table: the identity is echoed on the
+  key resource, on `GET /api/v1/me`, and on both run projections (`publicRun`, `publicJob`) as the
+  identity the run was started for.
+
+  It is opaque in the strongest sense: stored verbatim, never parsed, never resolved against a user,
+  never an authorization input. What a key may do is still its `scope`; what a run may do is still
+  its pinned role and mode. Bounded at 200 characters and refused if it carries control characters,
+  because it is echoed onto surfaces that later render it.
+
+  The run's copy is PINNED at admission rather than resolved from the key on read, which is the
+  decision worth reviewing. Revoking a per-user key is exactly what an integration does when someone
+  leaves, and that must not erase who a finished run was for; pinning also keeps a page of runs from
+  becoming a page of credential reads, and matches what the run already does with `initiatedByRole`
+  and `mode`. It rides `agent_runs.detail` through the shared mappers, so a retry carries it forward
+  (same work, same requester, whoever pressed retry) and the conformance case asserts it survives
+  both the store round-trip and the key's revocation on each facade.
+
+  A run's identity is not readable by every key. A key that carries an `externalIdentity` of its own
+  sees the value only on the runs started for that identity; a key with none (the provisioner, or
+  one a member minted in the app) sees every run's. Without the rule, the one-key-per-person
+  deployment this feature is built for would hand each person's key the roster of everyone else, and
+  the value is routinely an email. The run projections carry `externalIdentityWithheld` beside the
+  value so a withholding is STATED: `null` already means "this run names nobody", and reporting a
+  mapping the platform holds as one it never had is the failure the flag exists to prevent.
+
+  Two smaller calls: the identity is never inherited from the provisioning key, since a provisioner
+  mints for many identities and naming itself would attribute every run to the integration; and the
+  field is offered on the headless mint only, because the session-authed create already records
+  `createdByUserId`, an account the platform can resolve.
+
+  The validation splits along what can be PUBLISHED. The shipped `pattern` refuses the C0 controls,
+  DEL and the C1 controls, spelled with `\xHH` escapes because that is the one syntax ECMA-262, RE2,
+  PCRE, Python and Java all read: the `\uHHHH` spelling this started with is a parse error in RE2 and
+  PCRE, so it would have broken the Go client outright rather than rejected a value. U+2028 and
+  U+2029 have no portable spelling at all and are refused off the schema, which makes the published
+  pattern a necessary condition rather than a sufficient one.
+
+  Additive on the public surface: one optional request field, one nullable field plus its
+  withheld flag on the run projections, `null` being the correct answer for every key and run that
+  predates it. New nullable `external_identity` column on both stores (D1 0086, Drizzle). OpenAPI
+  `info.version` goes to 1.30.0 (1.29.0 was published by the dispatch-diagnostics change while this
+  branch was in flight).
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+
+## 0.247.0
+
+### Minor Changes
+
+- f0154ce: Let a GitLab-only deployment run the recurring bug-intake schedule and the interactive bug hunt.
+
+  The GitLab task source could import an issue you pointed at and search the project a service frame
+  was linked to, but neither of the two paths that PICK work by predicate: the recurring `bug-intake`
+  schedule and the bug hunt. So a shop running GitLab for both code and issues could have its agents
+  work in its repositories and still had to connect a second tracker to schedule anything.
+
+  `GitLabIssuesProvider` now implements `searchIssues`, `listBoards` and `listBugCandidates`, all
+  three riding the project-scoped issue read the earlier slice added: the scope is an ARGUMENT of the
+  request rather than a qualifier in a query string, and GitLab returns the description, labels, age
+  and note count in the same response, so a whole hunt scan is one call per page and never a
+  per-candidate fetch. A schedule scopes itself with a new `gitlabProject` board field (its own leg,
+  because a GitLab namespace nests and `owner/name` cannot express it) which the recurring-pipeline
+  modal now renders.
+
+  Two provider differences are stated rather than smoothed over. GitLab's issue search covers the
+  description as well as the title, so a title-fragment predicate now rides a new `textIn: 'title'`
+  narrowing: without it a schedule configured on a fragment would have started a pipeline on an issue
+  that merely mentions it in its body. And `issueType` is ignored, as it already is on Linear:
+  GitLab's own type vocabulary is `issue` / `incident` / `test_case` / `task`, which has no member
+  meaning "bug", and `bug` is exactly what intake defaults the predicate to, so a GitLab intake
+  narrows to bugs through a label instead.
+
+  This also fixes a live mis-routing the previous slice opened: the bug hunt mapped a caller's board
+  id onto the leg its provider reads with an `if`-chain that fell through to the opaque
+  deployment-registered leg, so every GitLab hunt handed its project path to a field no built-in
+  provider reads and reported an empty board. It is now an exhaustive record over the built-in
+  vocabulary, so a fifth built-in source fails to compile until it names its leg.
+
+  A predicate a source cannot evaluate is now declared rather than dropped in silence. GitLab and
+  Linear both ignore `issueType`, and both intake forms rendered the field anyway, so an operator
+  configuring a schedule saw a filter that was never applied: on an unattended `bug-intake` schedule,
+  whose default is `bug`, that starts the bugfix pipeline on whatever is oldest and open. A provider
+  now states its gaps on `TaskSourceProvider.ignoredIntakePredicates`, `TaskSourceState` carries them
+  to the SPA, and the recurring-schedule and bug-hunt modals replace the field with what to narrow
+  with instead. `intakePredicateSupport.test.ts` keeps a declaration honest by compiling each source's
+  query with and without each predicate, so the answer is read off the compiler rather than restated
+  beside it.
+
+  Two GitLab-specific corrections ride along. The intake walk now pages on GitLab's own
+  `Link: rel="next"` (carried out on the new `ProjectIssuePage`) instead of treating a short page as
+  the last one: `max_page_size` is an instance setting an administrator can lower below the overscan
+  size, and on such an instance every page is short, so the walk stopped after page 1 and reported a
+  board it never finished as exhausted. And a walk whose workspace has no GitLab connection now
+  refuses instead of returning an empty list, which the intake step renders as the cause of a
+  no-pickup fire rather than as "no matching open issues".
+
+  `ProjectIssuePage` replaces the bare hit array `VcsClient.searchProjectIssues` /
+  `GitHubClient.searchProjectIssues` returned. Both are internal ports with one implementation.
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+  - @cat-factory/contracts@0.269.0
+
+## 0.246.0
+
+### Minor Changes
+
+- eaab22a: Register several NAMED outbound webhooks per workspace, instead of one that each integration overwrites
+
+  `/api/v1/notification-webhook` was one endpoint per workspace, which made a second integration's
+  enrolment a destructive act: registering it replaced whatever was already there, and the only symptom
+  was that the previous receiver went quiet. `GET /api/v1/notification-webhooks` plus
+  `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId` are the additive fix. The singular routes
+  keep working unchanged and now address the reserved id `default`, which appears in the collection
+  like any other entry, so the two surfaces are two views of one store rather than two stores.
+
+  The endpoint id is CALLER-CHOSEN and `PUT` is idempotent by it. That is what the motivating consumer
+  needs (a credential-holding front-end, the Cloudflare OS gatekeeper of
+  `docs/initiatives/cloudflare-os-gatekeeper.md`): a Worker booting cold writes its own well-known id
+  and is enrolled, whether or not it has ever run, with no id table of its own and no
+  create-or-discover round trip it might be racing a second instance on. A server-minted id would have
+  pushed exactly that state back onto the caller.
+
+  Each endpoint carries its own sealed signing secret and its own three filters, and every rule the
+  singular routes enforce holds identically: the `admin` floor, keep-on-omit in every field, the
+  write-only secret, the SSRF guard at the write boundary and per redirect hop. Deliveries FAN OUT to
+  every subscribed endpoint, concurrently but BOUNDED at six in flight, isolated per endpoint, and
+  sharing ONE wall-clock budget. All three are deliberate: the caller awaits the fan-out on a run's
+  terminal path, so serial delivery would make enrolling a second integration a latency cost on every
+  run; six is the Workers ceiling on simultaneous connections, past which a `fetch` queues invisibly
+  while the delivery's clock runs, so an unbounded fan-out reports failures it never attempted; and a
+  shared failure path would let one permanently broken receiver mask every sibling's health. An
+  endpoint the budget never reached is reported as not attempted rather than as a delivery failure.
+  `deliveryId` is unchanged and carries no endpoint segment, because each receiver only ever sees its
+  own copy.
+
+  Watch for two things in review. `notification_webhooks` is re-keyed to `(workspace_id, id)` on both
+  stores, and neither generator produces a migration that survives existing rows: the D1 side is the
+  usual SQLite rebuild, and drizzle-kit's in-place `ALTER` adds `name` as `NOT NULL` with no default,
+  so both are hand-healed (add nullable, backfill to `default` / `Default`, then constrain). And the
+  per-workspace cap of 10 is a 409 `webhook_limit_reached` that bounds only what CREATES an endpoint,
+  since disabling and deleting are the actions an operator at the cap needs. The cap is enforced in
+  the STORE, because counting in the service and writing a statement later admits two racing
+  enrolments, which is the access pattern this exists for: D1 gets it from one conditional upsert,
+  Postgres from a transaction-scoped advisory lock per workspace.
+
+  Additive on the public surface throughout: four new operations, and two new response fields (`id`,
+  `name`) on a projection consumers already tolerate unknown members of. OpenAPI `info.version` goes to
+  1.25.0 and all four SDK clients, the MCP facade and the gatekeeper bindings pick the operations up
+  from the same generation pass.
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+
+## 0.245.0
+
+### Minor Changes
+
+- 74ea2bc: Record which revision of a linked design a run actually built against.
+
+  The dispatch-time freshness check already computed the verdict and rendered it into the agent's
+  context, where it did its job and vanished with the container. So "did this run build from the
+  revision the designer is looking at" was answerable only while the run was live, and only by
+  re-probing the source, which by then answers about the revision it is at NOW. On a design under
+  active iteration that is exactly the wrong answer: a reviewer cannot tell an implementation that
+  MISREAD the design from one that faithfully implemented a revision the designer has since moved
+  past, and the two need opposite reactions.
+
+  Each dispatch now records the documents it put in front of its agent, with the verdict it reached
+  about each, on `step.contextDocuments`. The PR verification report gains a `Context sources`
+  section composed from those records, and the in-app run outcome card gains the matching "Built
+  from" list; both reduce the same records the same way, so the page a person reads and the report
+  a reviewer reads cannot disagree.
+
+  The write goes through the existing `StepObservations` seam rather than a call at each dispatch
+  site, which is what makes it correct: `buildContext` has two callers that resolve a full context
+  and start no job (the over-budget exemption probe, and a re-attach to a job a replayed dispatch
+  already started), so a source that recovered in between would otherwise overwrite the revision the
+  shipped job actually read with one it never saw.
+
+  A moved revision is DERIVED, not recorded. A row carries the last verdict, since that is the state
+  the run ended on, and that alone says the run ended current while saying nothing about the coder
+  step that finished before the edit landed. So both readers compute `movedDuringRun` from the
+  distinct revisions the run's own steps recorded and state it beside the revision rather than folded
+  into it.
+
+  Additive on the public surface: `PR_VERIFICATION_REPORT_VERSION` steps to 9, `RUN_OUTCOME_VERSION`
+  to 2, and the API to 1.27.0. `GET /api/v1/runs/:runId/outcome` grows a `sources` section beside the
+  existing ones and `GET /api/v1/runs/:runId/report` a `context` one; every section a consumer
+  already reads is byte-for-byte unchanged, and the four SDKs plus the MCP facade are regenerated
+  from the spec.
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+
+## 0.244.0
+
+### Minor Changes
+
+- 1c8df4a: Record what the agent's CLI said about the tool servers it loaded, beside what the dispatch decided
+
+  A step's tool-server record has answered one question since it landed: what the platform wired for
+  the agent, and what it withheld and why. It cannot answer the other one. A server that passes every
+  check, resolves its credential, survives the budget and reaches the container can still fail to come
+  up there: a vendor endpoint that 500s, a pinned `npx` package that no longer resolves, a token the
+  vendor revoked between dispatch and launch. In every one of those the prompt promises the agent a
+  tool that never exists, and the only evidence was the agent mentioning it in prose, if it noticed.
+
+  The claude-code CLI announces its resolved session before its first model call, naming the MCP
+  servers it loaded with a status each, plus the flat list of tools it will expose. The harness reads
+  that one event and publishes it on the job view; the engine folds it onto the same
+  `step.toolServers` record the dispatch wrote, and the step detail renders it on the existing chips.
+  Both halves are kept, never merged into one status: the platform withholding a tool and the CLI
+  failing to start one are different faults for different people.
+
+  The distinctions this is built out of are the whole point, because each one reads as a healthy
+  server if it collapses:
+
+  - **Not observed is not "nothing was loaded."** Codex's CLI publishes no such report, nor does any
+    image older than this one, nor a runner pool whose manifest does not map the field. All of them
+    leave the record's observed half ABSENT, and the surface then says nothing at all rather than
+    accusing every wired server on every deployment one release behind.
+  - **Started-with-no-tools is not started.** A server that connects and exposes nothing reaches the
+    agent exactly like one that was never wired, and every other signal about it says healthy, so a
+    zero tool count gets its own sentence and an uncounted one stays absent.
+  - **A status this build cannot map is not a fault.** The CLI's status words are a third party's
+    vocabulary; an unrecognised one records as `unknown` and is rendered neutrally, because painting
+    it red would send an operator to debug a working integration each time a CLI adds a word.
+
+  Nothing branches on an observation: this is evidence for a person, not a control signal.
+  Correspondingly it rides all three poll dispositions rather than just the live one — a job short
+  enough to settle between two polls is never seen running, and a job that fails is the one whose
+  post-mortem needs this most.
+
+  Runner-pool operators who proxy the executor-harness verbatim gain
+  `response.toolServersPath` on the manifest; leaving it unset costs the diagnostic and never
+  produces a false one. Ships with runner image 1.95.0.
+
+  On the public surface this is one additive optional field, `observed` on a step's `toolServers` in
+  `GET /api/v1/debug/runs/:runId` (spec `1.24.0`), so a consumer written against the previous version
+  parses everything it already knew. The one rule it has to carry across is the first distinction
+  above: an absent `observed` is "no observation was made", never "the CLI loaded nothing".
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/contracts@0.266.0
+
+## 0.243.0
+
+### Minor Changes
+
+- 6637bbd: Add GitLab Issues as a task source: import, search and setup check.
+
+  `gitlab` joins `BUILTIN_TASK_SOURCE_KINDS`, so a shop that runs GitLab for both code and issues can
+  link an issue onto a board block as agent context instead of connecting a second vendor beside its
+  repositories. `GitLabIssuesProvider` stores no credentials of its own: it reads through the
+  workspace's existing GitLab connection, the same credentialless shape GitHub Issues has. The
+  recurring `bug-intake` schedule, the bug hunt, push intake and ticket writeback are the remaining
+  slices ([`docs/initiatives/gitlab-issues-intake.md`](./docs/initiatives/gitlab-issues-intake.md)).
+
+  The public-API `TaskSourceKind` enum gains a member (OpenAPI 1.25.0, SDKs regenerated). Additive on
+  a closed vocabulary the clients already tolerate unknown members of, so a consumer built against
+  1.24.0 keeps parsing every response it understood.
+
+  Four internal shapes changed, none externally consumed:
+
+  - `VcsClient` / `GitHubClient` gain an optional `searchProjectIssues(connection, ref, query)`.
+    GitLab's global issue search accepts no project qualifier, so a repo scope cannot be expressed as
+    query text there the way GitHub's `repo:` does; the scope is an argument instead, and the
+    predicates ride a `ProjectIssueQuery` the vendor evaluates.
+  - `TaskSourceProvider.fetchTask` takes `workspaceId`. A GitLab PAT connection is keyed on the
+    workspace, not on the account owning the project, so without it the provider could only scan
+    every connection on the deployment for one able to read the id.
+  - `TaskSourceProvider` gains an optional `repoScope`, whose PRESENCE declares the source
+    repo-backed. One member rather than a flag beside a matcher, because the same fact decides two
+    things that must agree: that the source's search is handed a resolved repository, and that the
+    workspace's imported rows narrow to one.
+  - `TaskSourceState` gains `supportsIntake` and `ridesVcsProvider`, both derived from the registered
+    provider: whether it implements the predicate search a schedule fires, and which VCS connection
+    it authenticates through (so the settings panel can name the right remedy for an unavailable
+    source instead of inferring one).
+
+  Two live bugs are fixed on the way. A workspace connected to GitLab reported **GitHub Issues** as
+  available (availability keyed on a connection EXISTING rather than on its provider, and both live in
+  one row per workspace), so the source looked connected and its import resolved an empty projection.
+  And the recurring-schedule form offered every connected source regardless of whether its provider
+  could search on a schedule, which saved a schedule that could never fire.
+
+  Three surfaces that hard-coded `github` are now asked of the registry, which is what makes a
+  FOURTH source work rather than merely exist: the search route resolves a repo scope for any source
+  declaring `repoScope` (a repo-backed source refuses a null one, so GitLab search was 422ing on
+  every query), the imported-issue list narrows every repo-backed source's rows to the service's own
+  repository, and the issue-tracker settings panel renders one card per registered source instead of
+  one hard-coded card per built-in.
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+
 ## 0.242.2
 
 ### Patch Changes

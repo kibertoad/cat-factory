@@ -14,6 +14,7 @@ import {
   NotionProvider,
   EMAIL_CIPHER_INFO,
   createEmailSender,
+  createDocumentConnectionStore,
   TicketTrackerService,
   AuditService,
 } from '@cat-factory/integrations'
@@ -38,6 +39,7 @@ import {
   logger,
   operationalMetrics,
   resolveUrlSafetyPolicy,
+  resolveVcsWebUrls,
   resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
@@ -150,6 +152,8 @@ export interface NodeCoreDepsBundle {
   executionEventPublisher: NodeRealtimeDepsResult['executionEventPublisher']
   agentExecutor: NodeRealtimeDepsResult['agentExecutor']
   notificationChannel: NodeRealtimeDepsResult['notificationChannel']
+  /** The notification manager's store, built beside the channels it routes. */
+  notificationSettingsRepository: NodeRealtimeDepsResult['notificationSettingsRepository']
   /** The run-lifecycle half of the same registered endpoint (absent ⇒ no webhook configured). */
   runLifecycleSink: RunLifecycleSink | undefined
   releaseHealthDeps: NodeAccountDepsResult['releaseHealthDeps']
@@ -194,6 +198,11 @@ export function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDe
     auditLogReader: audit,
     ...buildNodeStoreDeps(bundle),
     ...buildNodeServiceDeps(bundle),
+    // Mothership-mode SECRET DELEGATION, wired at the TOP level for the same reason the logger is:
+    // it is not one integration's concern. Every service holding an ORG-owned sealed row composes
+    // it with its own cipher, so a facade that forgot it would run each of them against a key the
+    // org never sealed with, which fails at PROBE/PROVISION time, not at boot.
+    ...(bundle.options.secretDelegate ? { secretDelegate: bundle.options.secretDelegate } : {}),
   }
 }
 
@@ -250,17 +259,17 @@ function selectNodeObservabilityDeps(args: {
 }
 
 /**
- * The first half of the dependency literal: the app-owned registries, every persisted
- * repository the engine reads, and the module fragments that carry their own stores
- * (release-health / incident-enrichment / package-registry / tasks).
+ * The app-owned REGISTRIES, as one mixin: the extension seams a deployment registers onto, plus
+ * the mothership `*Source` reads that stand in for a registry when the node is one build behind
+ * the deployment that registered the entry.
+ *
+ * Its own selector (the `selectNodeObservabilityDeps` shape) because "which seams this deployment
+ * offers" is a different question from "which stores the engine reads", and keeping the two in one
+ * literal is what pushed it over the function-size budget. A new registry joins THIS list.
  */
-function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
+function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
   const {
-    config,
     options,
-    db,
-    repos,
-    sourced,
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,
@@ -270,27 +279,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     stepResolverRegistry,
     initiativePresetRegistry,
     providerRegistry,
-    modelProviderResolver,
-    agentContextObservability,
-    searchQueryObservability,
-    resolveTestSecretRefs,
-    resolveValidationChecks,
-    tasks,
-    fileGitHubIssue,
-    releaseHealthDeps,
-    packageRegistryDeps,
-    incidentEnrichmentDeps,
-    accountSettings,
-    resolveBinaryArtifactStore,
   } = bundle
   return {
-    ...releaseHealthDeps,
-    ...incidentEnrichmentDeps,
-    ...packageRegistryDeps,
-    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
-    // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
-    ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
-    resolveValidationChecks,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -320,11 +310,14 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     // …and where that tier is READ from when it is not the registry above (mothership mode).
     foundationalBuiltinSource: options.foundationalBuiltinSource,
-    // The app-owned registry of the deployment's GENERATIVE BINARY INTEGRATIONS (what a
-    // binary-generating step produces WITH, as the catalog above is where its output GOES);
-    // createCore threads it into the execution service and re-exposes it on Core for boot-time
-    // validation.
+    // Two app-owned binary registries, siblings and not the same thing: the GENERATIVE
+    // INTEGRATIONS a binary-generating step produces WITH (the catalog above is where that output
+    // GOES), and the deployment's own artifact STORES, where a screenshot's bytes land. createCore
+    // threads the first into the execution service; the second is read by the per-account store
+    // resolver in `buildNodeAccountDeps`. Both are re-exposed on Core, for boot validation and to
+    // make a boot's offered set readable.
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    binaryStoreRegistry: options.binaryStoreRegistry,
     // …and where those integrations are READ from when it is not the registry above (mothership
     // mode), for the same reason its foundational sibling exists.
     binaryGeneratorSource: options.binaryGeneratorSource,
@@ -342,6 +335,43 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
     // per-service provisioning picker.
     customManifestTypeRegistry,
+  }
+}
+
+/**
+ * The first half of the dependency literal: every persisted repository the engine reads, the
+ * app-owned registries ({@link selectNodeRegistryDeps}), and the module fragments that carry their
+ * own stores (release-health / incident-enrichment / package-registry / tasks).
+ */
+function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
+  const {
+    config,
+    options,
+    db,
+    repos,
+    sourced,
+    modelProviderResolver,
+    agentContextObservability,
+    searchQueryObservability,
+    resolveTestSecretRefs,
+    resolveValidationChecks,
+    tasks,
+    releaseHealthDeps,
+    packageRegistryDeps,
+    incidentEnrichmentDeps,
+    accountSettings,
+    resolveBinaryArtifactStore,
+    notificationSettingsRepository,
+  } = bundle
+  return {
+    ...releaseHealthDeps,
+    ...incidentEnrichmentDeps,
+    ...packageRegistryDeps,
+    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
+    // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
+    ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
+    resolveValidationChecks,
+    ...selectNodeRegistryDeps(bundle),
     ...(accountSettings ? { accountSettings } : {}),
     // Resolves the per-account binary-artifact store (screenshots) for the visual-confirmation
     // gate; resolving to null (no storage configured) ⇒ the gate passes through.
@@ -466,6 +496,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
       'notificationRepository',
       (d) => new DrizzleNotificationRepository(d),
     ),
+    // The manager's store — the SAME instance the routed channels were built over.
+    notificationSettingsRepository,
     ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
     // files the tech-debt pipeline's issue by resolving the *workspace's* connected
@@ -473,33 +505,41 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // Jira tickets from the per-workspace encrypted connection store — both per-tenant.
     pipelineScheduleRepository: repos.pipelineScheduleRepository,
     trackerSettingsRepository: repos.trackerSettingsRepository,
-    ticketTrackerProvider: new TicketTrackerService({
-      trackerSettingsRepository: repos.trackerSettingsRepository,
-      fetchImpl: fetch,
-      ...(fileGitHubIssue ? { fileGitHubIssue } : {}),
-      ...(tasks.taskConnectionRepository
-        ? {
-            resolveJiraConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
-                workspaceId,
-                'jira',
-              )
-              const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
-              if (!baseUrl || !accountEmail || !apiToken) return null
-              return { baseUrl, accountEmail, apiToken }
-            },
-            resolveLinearConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
-                workspaceId,
-                'linear',
-              )
-              const { apiKey, token } = connection?.credentials ?? {}
-              return apiKey || token ? { apiKey, token } : null
-            },
-          }
-        : {}),
-    }),
+    ticketTrackerProvider: buildTicketTrackerProvider(bundle),
   }
+}
+
+/**
+ * The workspace's ticket tracker: GitHub issues through the workspace's App installation, Jira and
+ * Linear from the per-workspace encrypted connection store, all per-tenant.
+ *
+ * Its own function because the two credential resolvers are the bulk of it and neither belongs to
+ * the dependency literal's shape: pulling them out keeps that literal readable as the list of
+ * bindings it is.
+ */
+function buildTicketTrackerProvider(bundle: NodeCoreDepsBundle): TicketTrackerService {
+  const { repos, tasks, fileGitHubIssue } = bundle
+  const store = tasks.taskConnectionStore
+  return new TicketTrackerService({
+    trackerSettingsRepository: repos.trackerSettingsRepository,
+    fetchImpl: fetch,
+    ...(fileGitHubIssue ? { fileGitHubIssue } : {}),
+    ...(store
+      ? {
+          resolveJiraConnection: async (workspaceId) => {
+            const connection = await store.getByWorkspace(workspaceId, 'jira')
+            const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
+            if (!baseUrl || !accountEmail || !apiToken) return null
+            return { baseUrl, accountEmail, apiToken }
+          },
+          resolveLinearConnection: async (workspaceId) => {
+            const connection = await store.getByWorkspace(workspaceId, 'linear')
+            const { apiKey, token } = connection?.credentials ?? {}
+            return apiKey || token ? { apiKey, token } : null
+          },
+        }
+      : {}),
+  })
 }
 
 /**
@@ -556,6 +596,10 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // the LLM proxy on. The verification report builds direct links to captured artifacts' bytes
     // from it; unset ⇒ the report lists artifact ids with no link, never a link to nowhere.
     apiBaseUrl: env.PUBLIC_URL?.trim() || undefined,
+    // The browser-facing host of each provider's configured instance, stamped onto every VCS
+    // connection + connect option so the SPA links to the instance a workspace is bound to.
+    // Derived by the shared resolver both facades call, so they cannot name different hosts.
+    vcsWebUrls: resolveVcsWebUrls(config),
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.
@@ -640,7 +684,14 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // Document sources (Confluence / Notion / GitHub docs): wired from the shared
     // integration providers exactly like the Worker, so a workspace can connect a
     // source and import requirement/PRD/RFC pages as agent context.
-    ...selectNodeDocumentsDeps(config, db, githubClient, githubInstallationRepository),
+    ...selectNodeDocumentsDeps(
+      config,
+      db,
+      githubClient,
+      githubInstallationRepository,
+      sourced,
+      options.secretDelegate,
+    ),
     // Ephemeral environments (opt-in): a workspace registers its own environment
     // management API; the tester provisions/destroys per-run environments from it. A
     // trusted in-house adapter can replace the default HTTP provider via the seam.
@@ -828,6 +879,8 @@ function selectNodeDocumentsDeps(
   db: DrizzleDb,
   githubClient: GitHubClient | undefined,
   installations: GitHubInstallationRepository,
+  sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T,
+  secretDelegate: CoreDependencies['secretDelegate'],
 ): Partial<CoreDependencies> {
   // The DEPLOYMENT's own document credentials, read from this process's environment (never from a
   // tenant's stored connection) so a code-registered prompt fragment may name a living standard.
@@ -848,16 +901,27 @@ function selectNodeDocumentsDeps(
     providers.push(new GitHubDocsProvider({ githubClient, installations, logger }))
   }
   if (providers.length === 0) return deploymentDocuments
+  // Both repos ride the `pickRepoSource` seam: their rows are org state, and since the connection
+  // row now carries its credential bag SEALED (opened below, or by the mothership when this node
+  // holds no key), the whole integration is serveable over the persistence RPC.
+  const documentConnectionRepository = sourced(
+    'documentConnectionRepository',
+    (d) => new DrizzleDocumentConnectionRepository(d),
+  )
   return {
     ...deploymentDocuments,
     documentSourceProviders: providers,
-    documentConnectionRepository: new DrizzleDocumentConnectionRepository(
-      db,
-      new WebCryptoSecretCipher({
+    documentConnectionRepository,
+    documentConnectionStore: createDocumentConnectionStore({
+      documentConnectionRepository,
+      // Source credentials are sealed at rest under a documents-scoped HKDF info, keyed by the
+      // shared ENCRYPTION_KEY.
+      secretCipher: new WebCryptoSecretCipher({
         masterKeyBase64: config.documents.encryptionKey,
         info: 'cat-factory:documents',
       }),
-    ),
+      ...(secretDelegate ? { secretDelegate } : {}),
+    }),
     documentRepository: new DrizzleDocumentRepository(db),
     ...(config.documents.planner === 'llm'
       ? { documentPlannerModel: config.agents.routing.default.ref }

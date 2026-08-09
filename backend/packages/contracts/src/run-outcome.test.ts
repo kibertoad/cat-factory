@@ -428,6 +428,67 @@ describe('composeRunOutcome: visuals, checks and disposition', () => {
     })
   })
 
+  it('reports an absence when the gate’s rows are all reference, never a verified gallery', () => {
+    // A task linking a design (or carrying an uploaded mock) gets a gate row per reference view
+    // whether or not anything was captured against it. Counting rows would report this run's
+    // visuals as verified and render a gallery whose every `artifactId` is null.
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step({
+          agentKind: 'visual-confirmation',
+          visualConfirm: {
+            phase: 'awaiting_human',
+            attempts: 0,
+            maxAttempts: 2,
+            pairs: [
+              { view: 'Checkout', actualArtifactId: null, referenceArtifactId: 'art_frame' },
+              { view: 'Confirm', actualArtifactId: null, referenceArtifactId: 'art_frame2' },
+            ],
+            degradedReason: 'No UI screenshots were captured for this task.',
+          },
+        } as Partial<PipelineStep>),
+      ]),
+    })
+
+    expect(outcome.visuals).toEqual({
+      status: 'absent',
+      gap: 'none_captured',
+      detail: 'No UI screenshots were captured for this task.',
+    })
+  })
+
+  it('keeps the reference-only rows once ANY view was captured', () => {
+    // The opposite case: one real capture makes the gallery evidence, and the unpaired reference
+    // rows beside it are part of what the human was shown.
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step({
+          agentKind: 'visual-confirmation',
+          visualConfirm: {
+            phase: 'approved',
+            attempts: 0,
+            maxAttempts: 2,
+            pairs: [
+              { view: 'Checkout', actualArtifactId: 'art_a', referenceArtifactId: 'art_frame' },
+              { view: 'Confirm', actualArtifactId: null, referenceArtifactId: 'art_frame2' },
+            ],
+          },
+        } as Partial<PipelineStep>),
+      ]),
+    })
+
+    expect(outcome.visuals).toMatchObject({
+      status: 'reported',
+      source: 'visual_confirm',
+      views: [
+        { view: 'Checkout', artifactId: 'art_a', referenceArtifactId: 'art_frame' },
+        { view: 'Confirm', artifactId: null, referenceArtifactId: 'art_frame2' },
+      ],
+    })
+  })
+
   it('lists only the checks that actually recorded a verdict', () => {
     const outcome = composeRunOutcome({
       block: block(),
@@ -542,6 +603,102 @@ describe('composeRunOutcome: visuals, checks and disposition', () => {
       'needs_attention',
       'in_flight',
     ])
+  })
+})
+
+describe('composeRunOutcome: what the run was built FROM', () => {
+  const figma = (version: string) => ({
+    externalId: 'f1',
+    title: 'Checkout flow',
+    url: 'https://figma.com/design/f1',
+    origin: 'figma' as const,
+    freshness: { status: 'confirmed' as const, version, change: 'unchanged' as const },
+  })
+
+  it('says no page was linked rather than showing an empty list', () => {
+    const outcome = composeRunOutcome({ block: block(), instance: run([step()]) })
+    expect(outcome.sources).toEqual({ status: 'absent', gap: 'none_linked' })
+  })
+
+  it('reduces a page read by several dispatches to one row, keeping the last verdict', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step({ contextDocuments: [figma('v1')] }),
+        step({ agentKind: 'merger', contextDocuments: [figma('v1')] }),
+      ]),
+    })
+    const { externalId: _externalId, ...shown } = figma('v1')
+    expect(outcome.sources.status === 'reported' && outcome.sources.sources).toEqual([
+      { ...shown, movedDuringRun: false },
+    ])
+  })
+
+  it('flags a page whose revision moved between two of the run’s own dispatches', () => {
+    // The last revision alone reads as a run that built entirely against v2. The coder step
+    // finished before the designer's edit, and that is the whole reason this flag exists.
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step({ contextDocuments: [figma('v1')] }),
+        step({ agentKind: 'merger', contextDocuments: [figma('v2')] }),
+      ]),
+    })
+    const rows = outcome.sources.status === 'reported' ? outcome.sources.sources : []
+    expect(rows[0]).toMatchObject({ movedDuringRun: true, freshness: { version: 'v2' } })
+  })
+
+  it('keeps a page nobody checked apart from one that was checked and could not be confirmed', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step({
+          contextDocuments: [
+            { externalId: 'prd', title: 'PRD', url: 'https://notion.so/prd', origin: 'notion' },
+            {
+              externalId: 'f2',
+              title: 'Design',
+              url: 'https://figma.com/design/f2',
+              origin: 'figma',
+              freshness: { status: 'unconfirmed', reason: 'source_unreachable' },
+            },
+          ],
+        }),
+      ]),
+    })
+    const rows = outcome.sources.status === 'reported' ? outcome.sources.sources : []
+    expect(rows[0]?.freshness).toBeNull()
+    expect(rows[1]?.freshness).toMatchObject({ status: 'unconfirmed' })
+  })
+
+  it('keeps two same-titled uploads apart instead of reading them as one page that moved', () => {
+    // An upload carries no URL, so title is the only thing a row SHOWS that could key it. Keying
+    // on it would fold these into one row whose two revisions read as a design edited mid-run,
+    // which is the single loudest thing this section says.
+    const upload = (externalId: string, version: string) => ({
+      externalId,
+      title: 'Wireframes.pdf',
+      url: '',
+      origin: 'upload' as const,
+      freshness: { status: 'confirmed' as const, version, change: 'unchanged' as const },
+    })
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([step({ contextDocuments: [upload('doc_a', 'v1'), upload('doc_b', 'v2')] })]),
+    })
+    const rows = outcome.sources.status === 'reported' ? outcome.sources.sources : []
+    expect(rows).toHaveLength(2)
+    expect(rows.every((row) => !row.movedDuringRun)).toBe(true)
+    // The URL an upload has no source for is null, never the empty string it is stored as.
+    expect(rows.every((row) => row.url === null)).toBe(true)
+  })
+
+  it('reports the unresolved run rather than blaming the task for linking nothing', () => {
+    const outcome = composeRunOutcome({
+      block: block({ executionId: 'exe_gone' }),
+      instance: null,
+    })
+    expect(outcome.sources).toEqual({ status: 'absent', gap: 'run_unavailable' })
   })
 })
 

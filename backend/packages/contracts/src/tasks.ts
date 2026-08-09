@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { credentialFieldSchema } from './documents.js'
 import { namespacedIdSchema } from './primitives.js'
+import { vcsProviderSchema } from './routes/auth.js'
 
 // ---------------------------------------------------------------------------
 // Task-source integration wire contracts. A workspace can connect to one or
@@ -18,7 +19,15 @@ import { namespacedIdSchema } from './primitives.js'
 // ---------------------------------------------------------------------------
 
 /** The task sources this build ships. A deployment registers its own beside them (see below). */
-export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear'] as const
+export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear', 'gitlab'] as const
+
+/**
+ * One of the sources this build ships, as a type. Its use is a `Record<BuiltinTaskSourceKind, …>`
+ * where a caller must state something for EVERY built-in and a deployment-registered source is
+ * handled separately: a fifth built-in then fails to compile until it has an answer, where an
+ * `if`-chain over the same ids would silently fall through to whatever the last branch returns.
+ */
+export type BuiltinTaskSourceKind = (typeof BUILTIN_TASK_SOURCE_KINDS)[number]
 
 /**
  * A BUILT-IN task source OR a CONSUMER-namespaced one ({@link namespacedIdSchema},
@@ -86,6 +95,18 @@ export const taskSourceWebhookSchema = v.object({
    * and the wrong one for a public repo.
    */
   replyAllow: v.string(),
+  /**
+   * Whether the connection's sealed credential bag could be OPENED to answer this.
+   *
+   * `false` ⇒ `configured` and `replyAllow` are UNKNOWN rather than empty, and are reported at
+   * their safe defaults. The distinction has to be on the wire because the two states demand
+   * opposite actions from an operator: an unconfigured connection wants a secret minted, while an
+   * unreadable one wants the deployment's reach to its key service fixed (or the source
+   * re-connected) — and minting against the second silently discards whatever the bag still holds.
+   * A read-only panel is also the wrong place to fail: this endpoint is where someone lands to
+   * find out what is wrong, so it states the gap instead of 503ing about it.
+   */
+  credentialsReadable: v.boolean(),
 })
 export type TaskSourceWebhook = v.InferOutput<typeof taskSourceWebhookSchema>
 
@@ -161,6 +182,21 @@ export const taskSourceDescriptorSchema = v.object({
 })
 export type TaskSourceDescriptor = v.InferOutput<typeof taskSourceDescriptorSchema>
 
+/**
+ * The narrowing predicates an issue-intake query (the recurring `bug-intake` schedule and the
+ * interactive bug hunt share one vocabulary) can carry, as the closed set a source states its
+ * gaps against. The kernel port owns the query shape; this picklist is the member list, here
+ * because the SPA renders one form field per predicate and has to agree with the backend about
+ * which of them a given source will actually apply.
+ */
+export const issueIntakePredicateSchema = v.picklist([
+  'titleFragment',
+  'labels',
+  'issueType',
+  'unassignedOnly',
+])
+export type IssueIntakePredicate = v.InferOutput<typeof issueIntakePredicateSchema>
+
 /** A Linear team, offered in the ticket-filing team picker. */
 export const linearTeamSchema = v.object({
   id: v.string(),
@@ -173,14 +209,50 @@ export type LinearTeam = v.InferOutput<typeof linearTeamSchema>
  * A source's descriptor plus the workspace's live state for it: whether it is
  * usable right now (`available`) and whether the workspace offers it (`enabled`,
  * the per-workspace toggle, default true). A credentialed source (Jira) is
- * `available` once connected; GitHub Issues is `available` once the workspace's
- * GitHub App is installed (it rides that App, so there is nothing to connect).
+ * `available` once connected; a VCS-backed one (GitHub Issues, GitLab Issues) is
+ * `available` once the workspace's VCS connection is that source's provider (it
+ * rides that connection, so there is nothing to connect on the source itself).
  * `available && enabled` is what makes a source offered for import.
  */
 export const taskSourceStateSchema = v.object({
   ...taskSourceDescriptorSchema.entries,
   available: v.boolean(),
   enabled: v.boolean(),
+  /**
+   * The VCS provider whose workspace connection this source authenticates through, or `null`
+   * for a source that carries its own credentials.
+   *
+   * On the wire because the REMEDY for an unavailable source is not derivable from
+   * `available: false` plus an empty `credentialFields`: "connect Jira" opens this source's own
+   * credential form, while "the GitLab connection is missing" points at an entirely different
+   * settings surface, and pointing at the wrong one is a worse failure than saying nothing. It
+   * is DERIVED from the registered provider for the same reason `supportsIntake` is: a
+   * descriptor field declaring it would drift from the availability rule it is supposed to
+   * explain.
+   */
+  ridesVcsProvider: v.nullable(vcsProviderSchema),
+  /**
+   * Whether this source can back a recurring `bug-intake` schedule, i.e. whether its provider
+   * implements the predicate search intake runs. DERIVED from the provider rather than declared
+   * on the descriptor beside it, because the answer is a fact about the registered
+   * implementation and a declared one drifts from it silently.
+   *
+   * It is on the STATE rather than the descriptor for the same reason `available` is: a source
+   * the schedule form offers but cannot search is not a source with a missing field, it is a
+   * schedule that can never fire, and the form has to know which before it renders a picker.
+   */
+  supportsIntake: v.boolean(),
+  /**
+   * The intake predicates this source's provider will NOT apply, because its vendor cannot
+   * express them. Empty for a source that applies all of them.
+   *
+   * On the wire because the form offering a predicate is the only place the gap is meetable: a
+   * dropped predicate leaves a schedule that saves, fires, and picks up the wrong issue, and the
+   * SPA cannot infer which those are from the source id without restating the backend's compiler
+   * (the exact split `binaryFormatCoverage` exists to avoid). So the field is rendered with the
+   * substitution stated on it rather than silently misleading.
+   */
+  ignoredIntakePredicates: v.array(issueIntakePredicateSchema),
 })
 export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
 

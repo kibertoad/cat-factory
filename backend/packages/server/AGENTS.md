@@ -24,7 +24,14 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   so there is no second projection to disagree with it) plus the run's captured artifacts and their
   BYTES, the one route on this surface that is hand-mounted because an image response cannot be a
   contract; its run-scoped reads take `decisions/scope.ts`'s NARROWER rule, because one path prefix
-  carries one authorization model), `PublicKeyController` (HEADLESS key provisioning at `admin`
+  carries one authorization model), `PublicMergeEvidenceController` (the merge-EVIDENCE loop: a run's
+  merge decision with its backend-derived change class and the merger's scores, the workspace's
+  per-class rollups, and the reviewer-effort TAG a landed pull request earned; the tag at `write`,
+  not the `admin` that `act` needs, since tagging merges nothing), `PublicSpendController` (the
+  `read`-scoped **spend analytics** read at `/api/v1/usage/spend`: one dimension of
+  `ReportsService` over a window, scoped to the key's own account AND board, so the
+  cost-attribution axes the panel serves account-wide (repository, ticket, run) are reachable
+  headlessly without the cross-workspace view the admin gate exists for), `PublicKeyController` (HEADLESS key provisioning at `admin`
   scope, delegating to the same `PublicApiKeyService` the session panel calls; the mintable rungs
   are derived from the gate, so a key minted here can never mint another),
   `PublicMcpController` (the
@@ -46,12 +53,18 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   read as such inlined between route registrations: `ticketLinkage.ts` (file a task FROM a tracker
   ticket: resolve and refuse before the block exists, claim after) and `documentAttachment.ts`
   (attach the requirements documents a task is built against, imported from a connected source or
-  uploaded whole, with the task rolled back if an attachment does not land). `taskTypeFields.ts`
+  uploaded whole, with the task rolled back if an attachment does not land). `keyProjection.ts` holds the ONE
+  record-to-wire projection of a public-API key, shared by the session-authed management routes and
+  the headless provisioning ones (they had a copy each, which is how a field lands on one surface
+  and silently not the other), and `runIdentityVisibility.ts` decides who may read the
+  `externalIdentity` a run was pinned with: an identity-bearing key sees only its own runs', and a
+  withheld one is FLAGGED rather than blanked, since `null` already means "this run names nobody".
+  `taskTypeFields.ts`
   serves the task-type CATALOG and maps a caller's `fields` bag onto the internal shape at both
   doors; the PATCH half MERGES over what the task already carries where creation takes the bag
   whole, because the surface never serves that bag back, so a replacing patch would ask a caller
   to restate values it cannot read. See
-  `docs/initiatives/headless-clarification-loop.md`,
+  [ADR 0047](../../docs/adr/0047-headless-clarification-loop.md),
   `backend/docs/adr/0030-public-api-surface.md` and
   `backend/docs/adr/0043-public-decision-surface.md`.
 - `modules/toolServers/`: the tool-server (MCP) **operability** surface, `secrets.manage`-gated
@@ -67,13 +80,20 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   gated mount: it is a third-party browser navigation, so it is mounted at the app ROOT and gates
   itself on the sealed state, the user who started the flow, and a re-loaded `secrets.manage`.
   See `backend/docs/mcp-tool-servers.md`.
-- `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the three PUBLIC, session-gate-bypassing
+- `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
   shared body-limit + signature-rejection logging. Each verifies over the RAW body before parsing,
   acks fast, and hands off through a `gateways` seam. The tracker one is the odd shape: its
   workspace rides the PATH (a tracker delivery has no installation id to resolve one from) and its
   secret is per CONNECTION rather than per deployment. See
   `backend/docs/adr/0032-tracker-webhook-intake.md`.
+  These and the vendor OAuth callbacks (`/slack`, `/tasks` for Linear, `/documents` for every
+  OAuth-capable document source) are ONE list, `app.ts`'s `PROVIDER_CALLBACK_CONTROLLERS`, and
+  every mount in it MUST also appear in `authGate.ts`'s `PUBLIC_PREFIXES`. That pairing is the
+  point of the list: a receiver missing from the allowlist is not gated but UNREACHABLE, since its
+  caller has no session to present, and it fails only against the live vendor, on a redirect or a
+  delivery nobody can retry. `http/publicPrefixes.test.ts` pins the two together, deriving both
+  sides, after the omission shipped twice.
 - `agents/`: the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,
   `ContainerAgentExecutor`, `RunnerJobClient`, `ContainerRepoBootstrapper`, `ModelRouter`.
   Two collaborators split out of the executor to keep it inside its (ratcheting-down) size
@@ -104,6 +124,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `registry.mapStructuredResult(kind)` lookup — both switches went when the built-ins became
   registrations. What still lives in `agents/prompts.ts` is what is NOT about a kind: the tester
   infra spec (derived per run from the frame's profile and what the run provisioned) and the PR body.
+  `agents/harnessContract.ts` is the BACKEND half of the filesystem contract with the executor
+  harness (the sibling checkout directory's name, the four sentinel paths). The harness image can
+  depend on no workspace package, so both halves are computed independently and pinned against each
+  other by the harness's own `harness-contract.conformity.test.ts`.
   `agents/providerCapabilities.ts` resolves what a workspace (+ its account + the user) has
   configured into kernel's `ProviderCapabilities`, the one join point the model catalog and the
   pipeline-start guard share; `agents/bedrock.ts` parses `BEDROCK_MODELS` for it and is the ONLY
@@ -183,6 +207,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `child`-bound fields folded in and behind the same level gate. Patterns and rules:
   [`backend/docs/logging.md`](../../docs/logging.md).
 - `persistence/mappers.ts`: the dialect-agnostic row↔domain mappers shared by **both** stores.
+- `persistence/binaryArtifactStore.ts`: per-ACCOUNT binary-artifact store resolution, composing the
+  runtime's metadata store with the backend an account selected. Both facades' factories serve only
+  the platform's own backends; a store the DEPLOYMENT registered is resolved here, so custom stores
+  work identically on every runtime with neither facade knowing about them
+  ([`custom-binary-stores.md`](../../docs/custom-binary-stores.md)).
 - `test/coverageScan.ts` + the `*.coverage.spec.ts` beside it: the guards for the rules a
   typecheck cannot hold, where a field must stay OPTIONAL because one caller is entitled to the
   default (`initiatedByRole`, `intakeOrigin`). Each classifies every call site and fails on a new
@@ -192,12 +221,18 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades: see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +
   `modules/persistence/` (the repository RPC + GitHub installation-token delegation),
+  `secrets/sealedSecretSources.ts` + `persistence/secretDelegation.ts` +
+  `modules/persistence/SecretDelegationController.ts` (SECRET delegation: the mothership opens,
+  and seals, an ORG credential a node holds no key for. The one machine surface answering with a
+  PLAINTEXT credential, which is why the request names a ROW rather than an envelope and the
+  readable sources are a CLOSED table),
   `events/machineEvents.ts` + `events/machineSubscribe.ts` +
   `modules/events/EventsRelayController.ts` (real-time in BOTH directions; the upstream publish
   and the node's inbound per-workspace subscription, whose handshake is handed to the SAME
   `gateways.realtime.upgrade` seam the browser stream uses), and `notifications/machineNotifications.ts` +
   `modules/notifications/NotificationRelayController.ts` (notification delivery through the org's
-  external transports), and `telemetry/machineTelemetry.ts` +
+  external transports; the ROUTED half — the notification manager, the per-channel gate and the
+  email transport — is built once for both facades in `notifications/notificationDelivery.ts`), and `telemetry/machineTelemetry.ts` +
   `modules/telemetry/TelemetryIngestController.ts` (the batch upload of a finished run's
   local-first telemetry; its own endpoint precisely because per-row remote writes are what the
   local-first bucket exists to prevent) beside `telemetry/machineTelemetryRead.ts` +
@@ -229,6 +264,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
     resource and must not learn failure modes separately), `viewerTokenReads.ts` (the CALLER-token
     repo reads behind the personal-PAT picker; mints, caches and rate-limit-accounts nothing), and
     `githubHttpHelpers.ts` (`GitHubApiError` + the shared request constants).
+  - `github/ProviderRoutingGitHubClient.ts` fronts the `github` module in a deployment running BOTH
+    a GitHub App and GitLab PAT connect, dispatching each installation-keyed call by the
+    connection's stored provider. Reflective (a `Proxy`) rather than a hand-written delegate,
+    because 20 of the port's 53 methods are OPTIONAL: a delegate that omits one still typechecks
+    and reports a capability the deployment HAS as absent. See its header for what that cost.
   - `github/runInitiatorToken.ts` is the ONE answer to "does this run act with its initiator's own
     token, or the deployment credential?": asked by `PatPreferringAppRegistry` (the engine client)
     and by both facades' container-dispatch mints, so an opted-out workspace cannot be honoured on

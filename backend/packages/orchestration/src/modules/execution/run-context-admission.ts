@@ -92,6 +92,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     skillResolver: deps.skillResolver,
     foundationalServiceResolver: deps.foundationalServiceResolver,
     binaryGeneratorSource: deps.binaryGeneratorSource,
+    resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore,
     logger: deps.logger,
   })
   // The run-admission preflights (the shared start/retry/restart `assert*` gate family).

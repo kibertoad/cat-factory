@@ -34,13 +34,20 @@ export function vcsConnectController(): Hono<AppEnv> {
     // The GitHub App connect needs BOTH the App configured and the module built: `enabled` is
     // the deployment gate, and a GitLab-only deployment still builds the module (with the GitLab
     // client), so neither check alone implies an installable App.
+    // The host each option would bind to rides the option, because the surfaces that need it
+    // render before anything is connected (the PAT box's "create a token" link, bootstrap's
+    // "create a repository" button) and so have no connection to read it off. Same value the
+    // connection carries once bound: both come from `CoreDependencies.vcsWebUrls`.
+    const webUrls = container.vcsWebUrls ?? {}
     if (container.config.github.enabled && container.github) {
-      options.push({ provider: 'github', method: 'app' })
+      options.push({ provider: 'github', method: 'app', webUrl: webUrls.github ?? null })
     }
     // The per-workspace PAT connect is wired iff the facade built a connect service; it names
     // the provider it serves, so this stays neutral as further PAT providers register.
     const vcs = container.vcsConnectionService
-    if (vcs) options.push({ provider: vcs.provider, method: 'pat' })
+    if (vcs) {
+      options.push({ provider: vcs.provider, method: 'pat', webUrl: webUrls[vcs.provider] ?? null })
+    }
     return c.json({ options }, 200)
   })
 

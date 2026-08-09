@@ -1,5 +1,349 @@
 # @cat-factory/gitlab
 
+## 0.19.5
+
+### Patch Changes
+
+- Updated dependencies [4715b74]
+- Updated dependencies [8c1d8a6]
+  - @cat-factory/contracts@0.286.0
+  - @cat-factory/kernel@0.281.0
+
+## 0.19.4
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+  - @cat-factory/kernel@0.280.0
+
+## 0.19.3
+
+### Patch Changes
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+  - @cat-factory/kernel@0.279.3
+
+## 0.19.2
+
+### Patch Changes
+
+- Updated dependencies [3036af7]
+  - @cat-factory/kernel@0.279.2
+
+## 0.19.1
+
+### Patch Changes
+
+- Updated dependencies [de7caaf]
+  - @cat-factory/contracts@0.283.1
+  - @cat-factory/kernel@0.279.1
+
+## 0.19.0
+
+### Minor Changes
+
+- f0e1c45: Issue writeback is a `TaskSourceProvider` capability, and GitLab Issues accept webhooks
+
+  The engine's writeback (a comment when the PR opens, comment + resolve on merge, the intake
+  pickup claim, a parked review's questions and the acknowledgement of a reply) dispatched on a
+  hard-coded `github | jira | linear` chain inside one service. GitLab Issues, a shipped task
+  source, therefore had full intake and no way to answer it, and a tracker a deployment registers
+  could not have one however it was wired. Providers now declare `writeback`, the outbound mirror
+  of the existing `webhook` capability, and the service dispatches through the registry.
+
+  `GitLabIssuesProvider` also gains the inbound half: GitLab echoes a shared secret in
+  `x-gitlab-token` rather than signing the body, so its adapter compares that in constant time and
+  still fails closed on an empty secret. Board equality is now the source's own rule
+  (`TaskSourceProvider.sameBoard`), because GitLab project paths are case-sensitive where every
+  other board id folds.
+
+  A writeback adapter declares where it gets its authority (`authenticates`), which decides what an
+  unreadable tracker connection costs. Jira and Linear post with the stored bag, so a row that will
+  not open takes their writeback with it. GitHub Issues and GitLab Issues authenticate through the
+  workspace's VCS installation and read that row only for the inbound reply secret, so they keep
+  posting and lose just the reply grammar, which is withheld rather than promised.
+
+  Two internal breaks, per the pre-1.0 policy. The facades' `commentOnGitHubIssue` /
+  `closeGitHubIssue` / `labelGitHubIssue` writeback seams are gone (the source resolves its own
+  installation now), and a writeback for a workspace with no stored connection REFUSES where the
+  Jira and Linear legs used to return quietly: that silent return let the parked-review echo record
+  its idempotency marker for a comment the tracker never received.
+
+### Patch Changes
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+
+## 0.18.15
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+
+## 0.18.14
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/kernel@0.277.0
+
+## 0.18.13
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+
+## 0.18.12
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/kernel@0.275.4
+
+## 0.18.11
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/kernel@0.275.3
+
+## 0.18.10
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/kernel@0.275.2
+
+## 0.18.9
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/kernel@0.275.1
+
+## 0.18.8
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/kernel@0.275.0
+
+## 0.18.7
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+  - @cat-factory/kernel@0.274.0
+
+## 0.18.6
+
+### Patch Changes
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/contracts@0.275.0
+
+## 0.18.5
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+  - @cat-factory/contracts@0.274.0
+
+## 0.18.4
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/kernel@0.271.0
+  - @cat-factory/contracts@0.273.0
+
+## 0.18.3
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+  - @cat-factory/contracts@0.272.0
+
+## 0.18.2
+
+### Patch Changes
+
+- Updated dependencies [55310f6]
+- Updated dependencies [55310f6]
+  - @cat-factory/contracts@0.271.0
+  - @cat-factory/kernel@0.269.0
+
+## 0.18.1
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+  - @cat-factory/kernel@0.268.0
+
+## 0.18.0
+
+### Minor Changes
+
+- f0154ce: Let a GitLab-only deployment run the recurring bug-intake schedule and the interactive bug hunt.
+
+  The GitLab task source could import an issue you pointed at and search the project a service frame
+  was linked to, but neither of the two paths that PICK work by predicate: the recurring `bug-intake`
+  schedule and the bug hunt. So a shop running GitLab for both code and issues could have its agents
+  work in its repositories and still had to connect a second tracker to schedule anything.
+
+  `GitLabIssuesProvider` now implements `searchIssues`, `listBoards` and `listBugCandidates`, all
+  three riding the project-scoped issue read the earlier slice added: the scope is an ARGUMENT of the
+  request rather than a qualifier in a query string, and GitLab returns the description, labels, age
+  and note count in the same response, so a whole hunt scan is one call per page and never a
+  per-candidate fetch. A schedule scopes itself with a new `gitlabProject` board field (its own leg,
+  because a GitLab namespace nests and `owner/name` cannot express it) which the recurring-pipeline
+  modal now renders.
+
+  Two provider differences are stated rather than smoothed over. GitLab's issue search covers the
+  description as well as the title, so a title-fragment predicate now rides a new `textIn: 'title'`
+  narrowing: without it a schedule configured on a fragment would have started a pipeline on an issue
+  that merely mentions it in its body. And `issueType` is ignored, as it already is on Linear:
+  GitLab's own type vocabulary is `issue` / `incident` / `test_case` / `task`, which has no member
+  meaning "bug", and `bug` is exactly what intake defaults the predicate to, so a GitLab intake
+  narrows to bugs through a label instead.
+
+  This also fixes a live mis-routing the previous slice opened: the bug hunt mapped a caller's board
+  id onto the leg its provider reads with an `if`-chain that fell through to the opaque
+  deployment-registered leg, so every GitLab hunt handed its project path to a field no built-in
+  provider reads and reported an empty board. It is now an exhaustive record over the built-in
+  vocabulary, so a fifth built-in source fails to compile until it names its leg.
+
+  A predicate a source cannot evaluate is now declared rather than dropped in silence. GitLab and
+  Linear both ignore `issueType`, and both intake forms rendered the field anyway, so an operator
+  configuring a schedule saw a filter that was never applied: on an unattended `bug-intake` schedule,
+  whose default is `bug`, that starts the bugfix pipeline on whatever is oldest and open. A provider
+  now states its gaps on `TaskSourceProvider.ignoredIntakePredicates`, `TaskSourceState` carries them
+  to the SPA, and the recurring-schedule and bug-hunt modals replace the field with what to narrow
+  with instead. `intakePredicateSupport.test.ts` keeps a declaration honest by compiling each source's
+  query with and without each predicate, so the answer is read off the compiler rather than restated
+  beside it.
+
+  Two GitLab-specific corrections ride along. The intake walk now pages on GitLab's own
+  `Link: rel="next"` (carried out on the new `ProjectIssuePage`) instead of treating a short page as
+  the last one: `max_page_size` is an instance setting an administrator can lower below the overscan
+  size, and on such an instance every page is short, so the walk stopped after page 1 and reported a
+  board it never finished as exhausted. And a walk whose workspace has no GitLab connection now
+  refuses instead of returning an empty list, which the intake step renders as the cause of a
+  no-pickup fire rather than as "no matching open issues".
+
+  `ProjectIssuePage` replaces the bare hit array `VcsClient.searchProjectIssues` /
+  `GitHubClient.searchProjectIssues` returned. Both are internal ports with one implementation.
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+
+## 0.17.3
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+  - @cat-factory/kernel@0.266.0
+
+## 0.17.2
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+  - @cat-factory/kernel@0.265.0
+
+## 0.17.1
+
+### Patch Changes
+
+- Updated dependencies [1c8df4a]
+  - @cat-factory/contracts@0.266.0
+  - @cat-factory/kernel@0.264.0
+
+## 0.17.0
+
+### Minor Changes
+
+- 6637bbd: Add GitLab Issues as a task source: import, search and setup check.
+
+  `gitlab` joins `BUILTIN_TASK_SOURCE_KINDS`, so a shop that runs GitLab for both code and issues can
+  link an issue onto a board block as agent context instead of connecting a second vendor beside its
+  repositories. `GitLabIssuesProvider` stores no credentials of its own: it reads through the
+  workspace's existing GitLab connection, the same credentialless shape GitHub Issues has. The
+  recurring `bug-intake` schedule, the bug hunt, push intake and ticket writeback are the remaining
+  slices ([`docs/initiatives/gitlab-issues-intake.md`](./docs/initiatives/gitlab-issues-intake.md)).
+
+  The public-API `TaskSourceKind` enum gains a member (OpenAPI 1.25.0, SDKs regenerated). Additive on
+  a closed vocabulary the clients already tolerate unknown members of, so a consumer built against
+  1.24.0 keeps parsing every response it understood.
+
+  Four internal shapes changed, none externally consumed:
+
+  - `VcsClient` / `GitHubClient` gain an optional `searchProjectIssues(connection, ref, query)`.
+    GitLab's global issue search accepts no project qualifier, so a repo scope cannot be expressed as
+    query text there the way GitHub's `repo:` does; the scope is an argument instead, and the
+    predicates ride a `ProjectIssueQuery` the vendor evaluates.
+  - `TaskSourceProvider.fetchTask` takes `workspaceId`. A GitLab PAT connection is keyed on the
+    workspace, not on the account owning the project, so without it the provider could only scan
+    every connection on the deployment for one able to read the id.
+  - `TaskSourceProvider` gains an optional `repoScope`, whose PRESENCE declares the source
+    repo-backed. One member rather than a flag beside a matcher, because the same fact decides two
+    things that must agree: that the source's search is handed a resolved repository, and that the
+    workspace's imported rows narrow to one.
+  - `TaskSourceState` gains `supportsIntake` and `ridesVcsProvider`, both derived from the registered
+    provider: whether it implements the predicate search a schedule fires, and which VCS connection
+    it authenticates through (so the settings panel can name the right remedy for an unavailable
+    source instead of inferring one).
+
+  Two live bugs are fixed on the way. A workspace connected to GitLab reported **GitHub Issues** as
+  available (availability keyed on a connection EXISTING rather than on its provider, and both live in
+  one row per workspace), so the source looked connected and its import resolved an empty projection.
+  And the recurring-schedule form offered every connected source regardless of whether its provider
+  could search on a schedule, which saved a schedule that could never fire.
+
+  Three surfaces that hard-coded `github` are now asked of the registry, which is what makes a
+  FOURTH source work rather than merely exist: the search route resolves a repo scope for any source
+  declaring `repoScope` (a repo-backed source refuses a null one, so GitLab search was 422ing on
+  every query), the imported-issue list narrows every repo-backed source's rows to the service's own
+  repository, and the issue-tracker settings panel renders one card per registered source instead of
+  one hard-coded card per built-in.
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+  - @cat-factory/kernel@0.263.0
+
 ## 0.16.19
 
 ### Patch Changes

@@ -275,16 +275,54 @@ function buildBoardConfigRepos() {
       upsert: async () => undefined,
       remove: async () => undefined,
     },
-    // The agent-context run-path reads: a block's linked docs/tasks + provisioned environment.
+    // The agent-context run-path reads (a block's linked docs/tasks) plus the rest of both
+    // integrations: the import/link write path, the role-link surface, and the source
+    // CONNECTIONS, whose rows carry their credential bag SEALED so only ciphertext crosses.
     documentRepository: {
       listByBlock: async (ws: string) => [{ ws }],
       get: async (ws: string) => ({ ws }),
       getByUrl: async (ws: string) => ({ ws }),
+      listByRefs: async (ws: string) => [{ ws }],
+      getRoleLink: async (ws: string) => ({ ws }),
+      listRoleLinks: async (ws: string) => [{ ws }],
+      listRoleLinksByWorkspace: async (ws: string) => [{ ws }],
+      listByWorkspace: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
+      linkBlock: async () => undefined,
+      linkBlockMany: async () => undefined,
+      detachBlocks: async () => undefined,
+      setRole: async () => undefined,
+      clearRole: async () => undefined,
+      clearRoleForKind: async () => undefined,
+    },
+    documentConnectionRepository: {
+      getByWorkspace: async (ws: string) => ({ ws }),
+      listByWorkspace: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
     },
     taskRepository: {
       listByBlock: async (ws: string) => [{ ws }],
       get: async (ws: string) => ({ ws }),
       getByUrl: async (ws: string) => ({ ws }),
+      listByRefs: async (ws: string) => [{ ws }],
+      listByWorkspace: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
+      linkBlock: async () => undefined,
+      claimBlockLink: async () => undefined,
+      unlinkAllFromBlock: async () => undefined,
+      unlinkAllFromBlocks: async () => undefined,
+    },
+    taskConnectionRepository: {
+      getByWorkspace: async (ws: string) => ({ ws }),
+      listByWorkspace: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+    },
+    taskSourceSettingsRepository: {
+      getByWorkspace: async (ws: string) => [{ ws }],
+      get: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
     },
     environmentRegistryRepository: {
       getByBlock: async (ws: string) => ({ ws }),
@@ -313,14 +351,15 @@ function buildBoardConfigRepos() {
       upsert: async () => undefined,
       remove: async () => undefined,
     },
-    // The workspace's outbound webhook endpoint. `get`/`delete` echo their workspaceId (arg0);
-    // the record-based `put` binds on the record's `workspaceId` FIELD. The signing secret comes
-    // back SEALED, so nothing decrypted crosses the machine API.
     gateOutcomeRepository: {
       record: async () => undefined,
     },
+    // The workspace's outbound webhook endpoints. `get`/`list`/`delete` take the workspaceId as
+    // arg0; the record-based `put` binds on the record's `workspaceId` FIELD. The signing secret
+    // comes back SEALED, so nothing decrypted crosses the machine API.
     notificationWebhookRepository: {
       get: async (ws: string) => ({ ws }),
+      list: async (ws: string) => [{ ws }],
       put: async () => undefined,
       delete: async () => undefined,
     },

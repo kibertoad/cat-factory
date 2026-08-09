@@ -14,6 +14,7 @@ import type {
 } from '~/types/domain'
 import { isConnectableSource } from '@cat-factory/contracts'
 import { useDocumentFreshness } from '~/composables/useDocumentFreshness'
+import { useDocumentSourceConnect } from '~/composables/useDocumentSourceConnect'
 import { useSourceIntegration } from '~/composables/useSourceIntegration'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -32,6 +33,10 @@ export const useDocumentsStore = defineStore('documents', () => {
   const api = useApi()
   const workspace = useWorkspaceStore()
 
+  // What this DEPLOYMENT can OAuth, reported beside the descriptors and read through
+  // `useDocumentSourceConnect`, which owns why that is a separate fact from the descriptor's own.
+  const oauthSources = ref<DocumentSourceKind[]>([])
+
   // Shared opt-in / probe / connections lifecycle (see `useSourceIntegration`).
   const integration = useSourceIntegration<
     DocumentSourceKind,
@@ -41,15 +46,31 @@ export const useDocumentsStore = defineStore('documents', () => {
     enabled: () => !!workspace.workspaceId,
     workspaceId: () => workspace.workspaceId,
     fetch: async () => {
-      const [{ sources }, { connections }] = await Promise.all([
+      const [{ sources, oauthSources: oauth }, { connections }] = await Promise.all([
         api.listDocumentSources(workspace.requireId()),
         api.listDocumentConnections(workspace.requireId()),
       ])
+      oauthSources.value = oauth
       return { sources, connections }
     },
   })
   const { available, sources, connections, connectedSources, anyConnected } = integration
   const { descriptorFor, connectionFor, isConnected, probe, ensureProbed } = integration
+
+  // Connecting a source, and what this board may connect it WITH, in its own collaborator: the
+  // question grew several parts when OAuth landed, and none of the store's other concerns (the
+  // imported documents, their freshness, the doc-kind role links) read any of them.
+  const { canConnectWithOAuth, connectedDesignSources, connect, disconnect, beginOAuthConnect } =
+    useDocumentSourceConnect({
+      workspaceId: () => workspace.requireId(),
+      oauthSources,
+      connectedSources,
+      onConnected: (conn) => {
+        integration.upsertConnection(conn)
+        available.value = true
+      },
+      onDisconnected: (source) => integration.removeConnection(source),
+    })
 
   const { items: documents, upsert: upsertDoc } = useUpsertList<SourceDocument>({
     key: (d) => `${d.source}:${d.externalId}`,
@@ -74,19 +95,6 @@ export const useDocumentsStore = defineStore('documents', () => {
   /** Imported documents currently attached to a given block. */
   function docsForBlock(blockId: string): SourceDocument[] {
     return documents.value.filter((d) => d.linkedBlockId === blockId)
-  }
-
-  /** Connect the workspace to a source with its credential bag. */
-  async function connect(source: DocumentSourceKind, credentials: Record<string, string>) {
-    const conn = await api.connectDocumentSource(workspace.requireId(), source, credentials)
-    integration.upsertConnection(conn)
-    available.value = true
-  }
-
-  /** Disconnect the workspace from a source. */
-  async function disconnect(source: DocumentSourceKind) {
-    await api.disconnectDocumentSource(workspace.requireId(), source)
-    integration.removeConnection(source)
   }
 
   /** Load the imported documents for the workspace (across sources). */
@@ -125,20 +133,36 @@ export const useDocumentsStore = defineStore('documents', () => {
     return results
   }
 
-  /** Preview the board structure a page would expand into (no writes). */
-  function plan(source: DocumentSourceKind, externalId: string): Promise<DocumentBoardPlan> {
-    return api.planDocument(workspace.requireId(), source, externalId)
+  /**
+   * Preview the board structure a page would expand into (no writes).
+   *
+   * With `frameId` the preview is TARGET-AWARE: the planner is told which service the work goes
+   * inside and proposes its modules and tasks instead of an architecture.
+   */
+  function plan(
+    source: DocumentSourceKind,
+    externalId: string,
+    frameId?: string,
+  ): Promise<DocumentBoardPlan> {
+    return api.planDocument(workspace.requireId(), source, {
+      externalId,
+      ...(frameId ? { frameId } : {}),
+    })
   }
 
   /**
-   * Apply a page's structure to the board as new top-level frames, then refresh the
-   * board snapshot. The endpoint also accepts a `frameId` that flattens the planned
-   * frames into an existing service; the SPA deliberately never sends one, because the
-   * planner is target-blind and that path discards the frame titles/types the preview
-   * shows. Scoping a spawn to a service needs a target-aware plan first.
+   * Apply a page's structure to the board, then refresh the board snapshot.
+   *
+   * `frameId` must be the SAME frame the preview was planned for. The endpoint re-plans against
+   * it, so a targeted preview and its write agree; sending a frame the preview did not use would
+   * flatten a board-wide plan into it and discard the frame titles and types the user approved,
+   * which is why this was board-level only until target-aware planning existed.
    */
-  async function spawn(source: DocumentSourceKind, externalId: string) {
-    const { result } = await api.spawnDocument(workspace.requireId(), source, { externalId })
+  async function spawn(source: DocumentSourceKind, externalId: string, frameId?: string) {
+    const { result } = await api.spawnDocument(workspace.requireId(), source, {
+      externalId,
+      ...(frameId ? { frameId } : {}),
+    })
     await workspace.refresh()
     return result
   }
@@ -218,6 +242,10 @@ export const useDocumentsStore = defineStore('documents', () => {
   return {
     available,
     sources,
+    oauthSources,
+    canConnectWithOAuth,
+    connectedDesignSources,
+    beginOAuthConnect,
     connections,
     documents,
     loading,

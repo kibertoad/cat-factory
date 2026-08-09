@@ -42,15 +42,34 @@ it only reaches the logger the Worker writes through while both imports resolve 
   executor, the inline/sandbox composite and the consensus wrap), `container-notification-deps.ts`
   (how this facade DELIVERS a notification: the Slack transport, the outbound
   notification-webhook feature, and the composition of everything that is not the in-app push;
-  keep symmetric with Node's own) and `container-vcs-identity.ts`
-  (the multi-App GitHub registry + the repo-target resolvers several siblings share). The
+  keep symmetric with Node's own), `container-vcs-identity.ts`
+  (the multi-App GitHub registry + the repo-target resolvers several siblings share) and
+  `tasks-deps.ts` (the task-source registry: Jira, Linear, and the two VCS-backed issue sources,
+  each fed its own provider's client). The
   executor and vcs-identity modules never import the root back (what they need from it arrives
   through `WorkerExecutorDeps`), so the module graph stays one-way.
 - `ai/`, `gateways/`, `github/`: the CF gateway impls (realtime, GitHub, LLM upstream) + the
   container agent-executor **wiring** (same class names as `@cat-factory/server`'s `agents/`;
   those are the shared abstraction, these are the runtime wiring; see `docs/glossary.md`).
 - `durable-objects/`, `workflows/`, `containers/`, `runners/`: durable execution + real-time
-  - per-run-container machinery. `CacheGenerationDirectory` is the cache-coherency
+  - per-run-container machinery. `containers/stopCause.ts` is what a per-run container records
+    about its OWN stop for the transport to read after that job's poll 404s, and it carries two
+    independent halves: the churn `cause` (rollout / idle) decides the recovery BUDGET, while the
+    `exit` state decides the failure DETAIL and is recorded for every stop, cause or not. The
+    second exists because this runtime can hand the Worker no log tail at all (container stdout
+    goes to the deployment's Workers logs), so an exit code is the whole post-mortem an OOM-killed
+    agent gets. One stop explains exactly one eviction (the record is CLAIMED, not deleted, so a
+    replayed durable poll re-reads it), and both hooks that see a stop MERGE onto it, since
+    `onError` knows the churn and `onStop` knows the exit code and they fire in either order.
+    Three rules keep that honest, each guarding a way the two halves lie about each other. The
+    merge is bounded to ONE stop (`STOP_MERGE_WINDOW_MS`): records are not reliably cleared
+    between stops, and merging onto a stale one back-dates the new observation out of its own
+    attribution window. A stop the container ASKED for (its idle reclaim, its shutdown RPC)
+    records no exit at all, because that code is its own signal echoed back, escalating to
+    SIGKILL 137 on a slow exit. And a named cause is passed to `describeContainerExit`, so the
+    detail reports the mechanics of a stop already accounted for rather than offering
+    "out-of-memory kill" as a second cause of death under a reclaim verdict.
+  - `CacheGenerationDirectory` is the cache-coherency
     directory (per-group generation counters); its Worker-side client, the module-scope
     app-cache bag (one per ISOLATE, profile picked by the `CACHE_GENERATIONS` binding) and
     the `ctx.waitUntil` adopter for loader background work live in `appCachesHost.ts` +
