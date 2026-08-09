@@ -1,5 +1,10 @@
 # Reports: design
 
+> Reading the reports is on the website
+> ([Observability](https://www.catfactory.ai/operate/observability.html)). This page is the
+> design record: what the windows read, why long windows read a rollup, and the decisions that
+> shaped the wire shape.
+
 **Status:** Implemented (see the "Landed code" map at the end).
 **Scope:** account-scoped, admin-gated, read-only. One table: the durable cost-attribution
 rollup the long windows read (added after the first cut; see "Durable cost attribution").

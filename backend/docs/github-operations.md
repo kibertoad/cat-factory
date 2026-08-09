@@ -1,5 +1,12 @@
 # GitHub Integration: Operations Runbook
 
+> **The operator-facing setup steps are on the website**
+> ([GitHub App](https://www.catfactory.ai/deploy/github-app.html)), and the hardening that goes
+> with them is on
+> [Security Model & Hardening](https://www.catfactory.ai/reference/security-model.html). What
+> stays here is the runbook for someone with the repo open: the token plumbing, the failure
+> signatures, and the recovery steps.
+
 How to create the GitHub App, configure the worker, and troubleshoot. For the
 design see [github-integration.md](./github-integration.md) and
 [adr/0001-github-app-integration.md](./adr/0001-github-app-integration.md).

@@ -47,7 +47,7 @@ describe('describeWebhookSignatureRejection', () => {
       })
       expect(msg).toContain('GITLAB_WEBHOOK_SECRET is unset')
       expect(msg).toContain("'Secret token'")
-      expect(msg).toContain('vcs-providers.md#setup')
+      expect(msg).toContain('vcs-support-matrix.html#setting-each-one-up')
     })
 
     it('flags a missing token header', () => {

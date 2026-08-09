@@ -144,9 +144,14 @@ export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = [
   // nobody names a credential after a redirect URL, and it is refused loudly at boot if anyone does.
   'MCP_OAUTH_REDIRECT_URL',
   'MOONSHOT_API_KEY',
+  // Exact names rather than a `NOTIFICATION_` / `PROVISIONING_` family, for the same reason as
+  // `ADVANCE_TIMEOUT`: each family holds one platform variable, and reserving the whole namespace
+  // would newly refuse credential keys a deployment may already have registered under it.
+  'NOTIFICATION_RETENTION_DAYS',
   'OPENAI_API_KEY',
   'PLATFORM_RUN_DAY_RETENTION_DAYS',
   'PORT',
+  'PROVISIONING_LOG_RETENTION_DAYS',
   'PUBLIC_URL',
   'QWEN_API_KEY',
   'REALTIME_NODE_ID',

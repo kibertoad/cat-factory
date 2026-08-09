@@ -492,6 +492,16 @@ jobs:
       - name: Guard shipped documentation links
         run: node scripts/check-shipped-doc-links.mjs
 
+      # Requires every doc URL built in code to resolve to a file AND a heading. Three modules build
+      # them (server, kernel, agents: each sits below the last and cannot import it) and they land in
+      # operator-facing error messages, so the reader who follows a stale one is already mid-failure.
+      # Nothing else can see the coupling: reducing `vcs-providers.md` deleted the `## Setup` the
+      # GitLab webhook-rejection warning deep-linked, and the unit test asserting that message
+      # contains `vcs-providers.md#setup` passed throughout, because it only knew about the string.
+      # Its fixtures run in the `node --test` step above. Pure node, no install, no network.
+      - name: Guard documentation anchors
+        run: node scripts/check-doc-anchors.mjs
+
       # Requires `pnpm test:quick` to exclude exactly the packages the `test-units` lane below
       # excludes. The two deny-lists are the same fact written twice, and `running-tests.md` sells
       # the script as "the same set CI runs", which is the only evidence that set really needs no

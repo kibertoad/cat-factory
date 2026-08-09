@@ -3,6 +3,13 @@
 A single lookup for the vocabulary and naming traps that otherwise take grepping to resolve.
 When code and docs use different words for the same thing, this is the reconciliation.
 
+> **This is the CODE-LEVEL map**: directory ⇄ package names, which layer calls one entity by which
+> word, where a cross-cutting concept's implementation lives. The PRODUCT vocabulary (what a user
+> means by a block, a gate, a preset) is the website's
+> [Glossary](https://www.catfactory.ai/reference/glossary.html). A term whose whole content is "what
+> this word means to someone using the product" belongs there; a term here earns its place by
+> resolving an ambiguity you can only hit with the source open.
+
 ## Domain nouns: the unit of work
 
 The canonical domain entity is a **`Block`**. The same underlying thing is called three names
