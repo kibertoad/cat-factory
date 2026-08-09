@@ -1,10 +1,10 @@
 import * as v from 'valibot'
+import { environmentAuthSchemeSchema, environmentRequestTemplateSchema } from './environments.js'
 import {
-  environmentAuthSchemeSchema,
-  environmentRequestTemplateSchema,
+  customBackendKindSchema,
+  eksClusterFieldsSchema,
   environmentSecretRefSchema,
-} from './environments.js'
-import { customBackendKindSchema, eksClusterFieldsSchema } from './primitives.js'
+} from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Self-hosted runner-pool wire contracts ("bring your own infra").

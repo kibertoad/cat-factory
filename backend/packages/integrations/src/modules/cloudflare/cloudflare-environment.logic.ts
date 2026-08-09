@@ -2,10 +2,12 @@ import {
   CLOUDFLARE_DEFAULT_ENVIRONMENT_NAME_TEMPLATE,
   CLOUDFLARE_DEFAULT_WORKER_NAME_TEMPLATE,
   CLOUDFLARE_ENV_TOKEN_SECRET_KEY,
+  cloudflareConnectionConfigSchema,
   cloudflareEnvironmentConfigSchema,
   parseStoredProviderConfig,
 } from '@cat-factory/contracts'
 import type {
+  CloudflareConnectionConfig,
   CloudflareEnvironmentConfig,
   EnvironmentManifest,
   EnvironmentStatus,
@@ -77,8 +79,29 @@ export function cloudflareConfigToManifest(
   }
 }
 
+/**
+ * Read only what it takes to REACH the VCS API off the stored manifest, for the reclaim path.
+ *
+ * The counterpart of {@link parseKubernetesEnvConnection}, and the same reason: teardown posts
+ * one `inactive` deployment status, so a `workersSubdomain` or name template that stopped
+ * matching the contract must not be what leaves a preview nobody can mark inactive. An absent
+ * `providerConfig.cloudflare` reads as an empty connection rather than a refusal, because every
+ * field this shape carries has a documented default.
+ */
+export function parseCloudflareEnvConnection(
+  manifest: EnvironmentManifest,
+): CloudflareConnectionConfig {
+  const raw = manifest.providerConfig?.[PROVIDER_CONFIG_KEY]
+  if (!raw || typeof raw !== 'object') return {}
+  return parseStoredProviderConfig(
+    cloudflareConnectionConfigSchema,
+    raw,
+    'Cloudflare environment manifest',
+  )
+}
+
 /** The VCS API root for a config, without a trailing slash. */
-export function vcsApiBase(config: CloudflareEnvironmentConfig): string {
+export function vcsApiBase(config: CloudflareConnectionConfig): string {
   return (config.apiBaseUrl?.trim() || DEFAULT_VCS_API_BASE).replace(/\/+$/, '')
 }
 

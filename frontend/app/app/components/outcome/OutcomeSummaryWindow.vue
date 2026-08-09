@@ -106,7 +106,6 @@ const DISPOSITION_KEYS: Record<OutcomeDisposition, string> = {
   not_run: 'outcome.disposition.not_run',
   unknown: 'outcome.disposition.unknown',
 }
-/** The badge palette, named once so every colour map below is checked against it. */
 
 const DISPOSITION_COLOR: Record<OutcomeDisposition, BadgeColor> = {
   merged: 'success',

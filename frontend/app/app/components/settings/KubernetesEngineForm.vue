@@ -14,6 +14,7 @@ import type {
   InfraEngine,
   InfraHandlerConfig,
 } from '@cat-factory/contracts'
+import { isKubernetesUrlSource } from '@cat-factory/contracts'
 import type { K3sSetupPrefill } from '~/stores/ui'
 
 // The kube branch of the discriminated handler config this form produces (the `local-k3s` /
@@ -114,15 +115,22 @@ watch(
     form.imageTemplate = k.imageTemplate ?? ''
     // Each url field is read off the ONE variant that carries it, so a field belonging to a
     // different `source` cannot silently populate the form.
-    const url = k.url
-    form.urlSource = url.source
-    form.hostTemplate = url.source === 'ingressTemplate' ? url.hostTemplate : ''
-    form.ingressName = url.source === 'ingressStatus' ? (url.ingressName ?? '') : ''
-    form.serviceName = url.source === 'serviceStatus' ? url.serviceName : ''
-    form.servicePort = url.source === 'serviceStatus' && url.port != null ? String(url.port) : ''
-    form.gatewayName = url.source === 'gatewayStatus' ? (url.gatewayName ?? '') : ''
-    form.httpRouteName = url.source === 'httpRouteStatus' ? (url.httpRouteName ?? '') : ''
-    form.urlScheme = url.scheme ?? 'default'
+    //
+    // Typed as present with an on-union `source`, read as neither: both were true when the
+    // connect form admitted this config, and the value has been through storage since — which is
+    // exactly why the backend re-parses a stored `providerConfig` rather than asserting it, and
+    // this form is where an operator REPAIRS one that drifted. An unrecognised source falls back
+    // to the form's default, because `buildUrl` has no branch to build a config out of one.
+    const url: KubeUrlSource | undefined = k.url
+    const source = url?.source
+    form.urlSource = isKubernetesUrlSource(source) ? source : 'ingressTemplate'
+    form.hostTemplate = url?.source === 'ingressTemplate' ? url.hostTemplate : ''
+    form.ingressName = url?.source === 'ingressStatus' ? (url.ingressName ?? '') : ''
+    form.serviceName = url?.source === 'serviceStatus' ? url.serviceName : ''
+    form.servicePort = url?.source === 'serviceStatus' && url.port != null ? String(url.port) : ''
+    form.gatewayName = url?.source === 'gatewayStatus' ? (url.gatewayName ?? '') : ''
+    form.httpRouteName = url?.source === 'httpRouteStatus' ? (url.httpRouteName ?? '') : ''
+    form.urlScheme = url?.scheme ?? 'default'
   },
   { immediate: true },
 )
@@ -260,7 +268,25 @@ function buildUrl(): KubeUrlSource {
       const httpRouteName = form.httpRouteName.trim()
       return { source: 'httpRouteStatus', ...(httpRouteName ? { httpRouteName } : {}), ...scheme }
     }
+    default:
+      return refuseUnknownUrlSource(form.urlSource)
   }
+}
+
+/**
+ * A `source` outside the contract union, which the switch above therefore cannot build.
+ *
+ * The parameter is `never`, so this keeps BOTH properties at once: a source added to the contract
+ * without a case above still fails the typecheck (the argument stops being `never`), while a value
+ * the union never had is refused at runtime instead of falling off the end of the switch. That end
+ * is what the `default` exists to close: it returned `undefined`, which `buildPayload` then sent as
+ * the config's `url` for the backend to reject as a missing block.
+ *
+ * Deliberately NOT mapped onto a current source. Nothing here knows which one was meant, and a
+ * guess would silently rewrite the operator's URL derivation to something they never picked.
+ */
+function refuseUnknownUrlSource(source: never): never {
+  throw new Error(`Unsupported Kubernetes URL source '${String(source)}'`)
 }
 
 function buildPayload(): KubeHandlerPayload {

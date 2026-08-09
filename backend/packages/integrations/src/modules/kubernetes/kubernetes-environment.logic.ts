@@ -1,10 +1,15 @@
 import type {
   EnvironmentManifest,
+  KubernetesConnectionConfig,
   KubernetesEnvironmentConfig,
   KubernetesProvisionConfig,
   KubernetesUrlSource,
 } from '@cat-factory/kernel'
-import { kubernetesProvisionConfigSchema, parseStoredProviderConfig } from '@cat-factory/contracts'
+import {
+  kubernetesConnectionConfigSchema,
+  kubernetesProvisionConfigSchema,
+  parseStoredProviderConfig,
+} from '@cat-factory/contracts'
 import { parseAllDocuments } from 'yaml'
 import { apiBase, k8sName, labelValue } from './kubernetes.logic.js'
 
@@ -73,6 +78,29 @@ export function parseKubernetesEnvConfig(manifest: EnvironmentManifest): Kuberne
   )
 }
 
+/**
+ * Read only what it takes to REACH the apiserver off the stored manifest, for the reclaim path.
+ *
+ * The distinction from {@link parseKubernetesEnvConfig} is the whole point (see
+ * {@link kubernetesConnectionConfigSchema}): standing an environment up needs the manifests, the
+ * URL derivation and the templates, and a stored config that stopped matching any of them should
+ * fail loudly before it provisions something wrong. Tearing one down needs the apiserver URL and
+ * its TLS settings and nothing else — so validating the rest there would turn a config-schema
+ * drift into a namespace that can never be deleted, which is the one failure mode worse than
+ * acting on a partly-stale config.
+ */
+export function parseKubernetesEnvConnection(
+  manifest: EnvironmentManifest,
+): KubernetesConnectionConfig {
+  const raw = manifest.providerConfig
+  if (!raw) throw new Error('Kubernetes environment manifest is missing its providerConfig')
+  return parseStoredProviderConfig(
+    kubernetesConnectionConfigSchema,
+    raw,
+    'Kubernetes environment manifest',
+  )
+}
+
 /** Build the stored manifest that carries a Kubernetes env config in its providerConfig. */
 export function kubernetesConfigToManifest(
   config: KubernetesEnvironmentConfig,
@@ -133,8 +161,11 @@ export function resolveNamespace(
   return k8sName(suffix, ENV_NAMESPACE_PREFIX, 63, 'env')
 }
 
-/** The cluster-scoped Namespace collection/object URL. */
-export function namespaceUrl(config: KubernetesEnvironmentConfig, name?: string): string {
+/**
+ * The cluster-scoped Namespace collection/object URL. Typed against the CONNECTION rather than
+ * the full config, because the teardown path builds it from a config parsed as one.
+ */
+export function namespaceUrl(config: KubernetesConnectionConfig, name?: string): string {
   const base = `${apiBase(config)}/api/v1/namespaces`
   return name ? `${base}/${encodeURIComponent(name)}` : base
 }

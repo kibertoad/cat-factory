@@ -457,3 +457,16 @@ export const sizeSchema = v.object({
   h: v.pipe(v.number(), v.minValue(1)),
 })
 export type Size = v.InferOutput<typeof sizeSchema>
+
+/**
+ * A reference to a credential by logical key. Resolves against the workspace's
+ * encrypted secret bundle (supplied at registration), not an env var.
+ *
+ * A primitive rather than an environments-only shape: the environment manifest, the runner-pool
+ * config and the Kubernetes backend's secret injections all reference credentials the same way,
+ * and holding it here is what lets those modules import it without importing each other.
+ */
+export const environmentSecretRefSchema = v.object({
+  key: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_.-]+$/), v.minLength(1), v.maxLength(64)),
+})
+export type EnvironmentSecretRef = v.InferOutput<typeof environmentSecretRefSchema>
