@@ -1548,6 +1548,8 @@
       "priorDocHint": "Issu de la revue précédente. Utilisez-le comme base : modifiez la description ci-dessus et resoumettez.",
       "bootstrapping": "Initialisation…",
       "viewRequirements": "Voir les exigences",
+      "mapService": "Cartographier le service",
+      "mapServiceNoRepo": "Liez d'abord un dépôt à ce service : il n'y a encore rien à cartographier.",
       "reRun": "Relancer",
       "run": "Exécuter",
       "focus": "Cibler",
@@ -4603,7 +4605,11 @@
     "preview": {
       "stepCount": "{count} étape | {count} étapes",
       "gateCount": "{count} validation | {count} validations",
-      "gated": "Validation humaine après cette étape"
+      "gated": "Validation humaine après cette étape",
+      "conditionalCount": "{count} étape conditionnelle | {count} étapes conditionnelles",
+      "conditionEstimate": "S'exécute uniquement si l'estimation de la tâche dépasse les seuils de cette étape",
+      "conditionFrontend": "S'exécute uniquement si la tâche modifie un service frontend",
+      "conditionBackend": "S'exécute uniquement si la tâche modifie un service non frontend"
     },
     "picker": {
       "noneHint": "Aucun pipeline par défaut. Vous en choisissez un au lancement de la tâche.",
@@ -4689,6 +4695,11 @@
       "edit": "Modifier ce pipeline",
       "delete": "Supprimer ce pipeline",
       "disabledStepTooltip": "Désactivée, ignorée à l'exécution",
+      "condition": {
+        "always": "S'exécute pour chaque tâche — cliquez pour le rendre conditionnel",
+        "frontend": "S'exécute uniquement pour les tâches qui modifient un service frontend",
+        "backend": "S'exécute uniquement pour les tâches qui modifient un service non frontend"
+      },
       "cancelEdit": "Annuler la modification",
       "clear": "Effacer",
       "update": "Mettre à jour le pipeline",
@@ -4778,6 +4789,7 @@
         "negative-prompt": "Prompt négatif",
         "seed": "Graine fixe",
         "aspect-ratio": "Format d’image",
+        "exact-size": "Taille exacte",
         "candidate-batch": "Plusieurs candidats par appel",
         "upscale": "Agrandissement",
         "transparent-background": "Fond transparent",
@@ -4799,6 +4811,11 @@
       "binaryNegativePromptPlaceholder": "ce qu’il faut éviter",
       "binaryAspectRatio": "Format d’image",
       "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "Taille de sortie",
+      "binaryOutputSizeWidth": "Largeur",
+      "binaryOutputSizeHeight": "Hauteur",
+      "binaryOutputSizeIncomplete": "Non enregistré : une taille exacte demande une largeur et une hauteur.",
+      "binaryOutputSizeAmbiguous": "Une taille de sortie exacte ne se combine pas avec {options} : chacun énonce une seconde fois les dimensions livrées. Gardez celui qui est l’exigence.",
       "binarySeed": "Graine",
       "binarySeedPlaceholder": "graine fixe",
       "binaryTransparent": "Fond transparent",
@@ -4860,6 +4877,14 @@
       "elapsedTooltip": "Temps écoulé sur cette étape",
       "prReview": {
         "review": "Examiner les remarques"
+      },
+      "skipped": {
+        "gated": "Étape ignorée : l’estimation de la tâche est restée sous les seuils de cette étape.",
+        "conditionFrontend": "Étape ignorée : cette tâche ne modifie aucun service frontend, il n’y a donc pas d’interface à tester.",
+        "conditionBackend": "Étape ignorée : cette tâche ne modifie qu’un service frontend, il n’y a donc pas d’API derrière à tester.",
+        "producerSkipped": "Étape ignorée : l’étape qu’elle relit a été ignorée, il n’y a rien à évaluer.",
+        "runComplete": "Étape ignorée : l’exécution s’est terminée avant elle, sans rien à faire.",
+        "unknown": "Étape ignorée : elle n’a pas été exécutée."
       }
     },
     "health": {
@@ -6303,6 +6328,8 @@
       "unknownServices": "A nommé un service absent du catalogue : {ids}. L'entrée est conservée telle que déclarée ; vérifiez l'identifiant dans le catalogue du tableau. | A nommé des services absents du catalogue : {ids}. Leurs entrées sont conservées telles que déclarées ; vérifiez les identifiants dans le catalogue du tableau.",
       "targetUnknown": "Le catalogue ne contient plus le service de stockage propre à cette étape ({id}), donc rien ci-dessous n'a pu être vérifié par rapport à lui. Enregistrez-le de nouveau, ou orientez l'étape vers un autre service.",
       "undeliveredMediaTypes": "Cette étape devait livrer {formats}, et aucun artefact ci-dessous ne signale ce format. | Cette étape devait livrer {formats}, et aucun artefact ci-dessous ne signale ces formats.",
+      "missized": "1 artefact a été livré dans une taille autre que {width}×{height}. | {count} artefacts ont été livrés dans une taille autre que {width}×{height}.",
+      "sizeUnreported": "1 artefact ne signale aucune dimension, sa taille n’a donc pas pu être vérifiée. | {count} artefacts ne signalent aucune dimension, leurs tailles n’ont donc pas pu être vérifiées.",
       "misdirected": "1 artefact est allé vers un service autre que {target}. | {count} artefacts sont allés vers un service autre que {target}.",
       "invalidEntries": "1 entrée déclarée a été écartée : elle ne nommait ni service ni emplacement. | {count} entrées déclarées ont été écartées : elles ne nommaient ni service ni emplacement.",
       "omitted": "1 artefact supplémentaire a été déclaré au-delà de la limite du rapport et n'est pas listé. | {count} artefacts supplémentaires ont été déclarés au-delà de la limite du rapport et ne sont pas listés.",
@@ -6310,6 +6337,7 @@
       "generatorsUnverified": "Les intégrations génératives de ce déploiement n'ont pas pu être lues à la clôture de l'étape, les intégrations citées ci-dessous n'ont donc pas été vérifiées. Les entrées sont conservées telles que déclarées."
     },
     "unknownGeneratorBadge": "Non enregistrée",
+    "missizedBadge": "Mauvaise taille",
     "candidates": {
       "automatic": "{total} candidat a été généré et conservé automatiquement, sans examen.",
       "chosen": "{kept} des {total} candidats générés ont été conservés.",

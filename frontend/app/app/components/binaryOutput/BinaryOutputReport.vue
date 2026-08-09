@@ -186,6 +186,22 @@ const state = computed(() => {
           </UBadge>
           <span v-if="row.entity">{{ row.entity }}</span>
           <span v-if="row.contentType" class="font-mono">{{ row.contentType }}</span>
+          <!-- What was actually DELIVERED, beside the media type it was delivered as. Rendered
+               whenever the artifact reported it, not only on a step that asked for a size: it is
+               a recorded fact about the asset, and it is the one the counted warning below is
+               made of. Without it that warning gives a number and no way to tell WHICH. -->
+          <span v-if="row.dimensions" class="font-mono" data-testid="binary-output-dimensions"
+            >{{ row.dimensions.width }}×{{ row.dimensions.height }}</span
+          >
+          <UBadge
+            v-if="row.missized"
+            color="warning"
+            variant="subtle"
+            size="sm"
+            data-testid="binary-output-missized-badge"
+          >
+            {{ t('binaryOutput.missizedBadge') }}
+          </UBadge>
         </div>
         <p v-if="row.description" class="mt-1 text-[11px] leading-relaxed text-slate-400">
           {{ row.description }}
@@ -257,6 +273,32 @@ const state = computed(() => {
               count: view.undeliveredMediaTypes.length,
             },
             view.undeliveredMediaTypes.length,
+          )
+        }}
+      </li>
+      <!-- The same judgement one axis over, on the requirement whose whole point is the delivered
+           pixels. The two size lines stay apart because an artifact that reported no dimensions
+           is not one that came back wrong: only the first can be fixed by asking the step to
+           report, and only the second is evidence the asset is unusable. -->
+      <li v-if="view.missized && view.requiredSize" data-testid="binary-output-missized">
+        {{
+          t(
+            'binaryOutput.warning.missized',
+            {
+              count: view.missized,
+              width: view.requiredSize.width,
+              height: view.requiredSize.height,
+            },
+            view.missized,
+          )
+        }}
+      </li>
+      <li v-if="view.sizeUnreported" data-testid="binary-output-size-unreported">
+        {{
+          t(
+            'binaryOutput.warning.sizeUnreported',
+            { count: view.sizeUnreported },
+            view.sizeUnreported,
           )
         }}
       </li>

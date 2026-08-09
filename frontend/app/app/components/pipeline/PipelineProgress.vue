@@ -12,6 +12,7 @@ import {
   containerPhaseLabel,
   dedicatedParkView,
   REDIRECT_PARK_PRESENTATION,
+  stepSkipReasonKey,
 } from '~/utils/pipelineRender'
 import { prReviewPhase } from '~/utils/prReviewProgress'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
@@ -557,6 +558,18 @@ const ITEM_ICON: Record<string, string> = {
           <p v-if="s.output" class="mt-2 flex items-center gap-1 text-[11px] text-slate-500">
             <UIcon name="i-lucide-book-open-text" class="h-3 w-3 shrink-0" />
             {{ t('pipeline.progress.clickToRead') }}
+          </p>
+
+          <!-- Why a skipped step did not run. A skipped step finishes `done` with no output, so
+               without this line it is indistinguishable from one that ran and said nothing —
+               which reads as a tester that silently did its job. -->
+          <p
+            v-if="stepSkipReasonKey(s)"
+            class="mt-2 flex items-center gap-1 text-[11px] text-slate-500"
+            data-testid="step-skip-reason"
+          >
+            <UIcon name="i-lucide-skip-forward" class="h-3 w-3 shrink-0" />
+            {{ t(stepSkipReasonKey(s)!) }}
           </p>
 
           <!-- Conditionally-run companion (today the Tester's fixer): a distinct

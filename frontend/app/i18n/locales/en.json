@@ -1666,6 +1666,8 @@
       "priorDocHint": "From the previous review. Use it as a base: edit the description above and resubmit.",
       "bootstrapping": "Bootstrapping…",
       "viewRequirements": "View Requirements",
+      "mapService": "Map service",
+      "mapServiceNoRepo": "Link a repository to this service first — there is nothing to map yet.",
       "reRun": "Re-run",
       "run": "Run",
       "focus": "Focus",
@@ -4746,7 +4748,11 @@
     "preview": {
       "stepCount": "{count} step | {count} steps",
       "gateCount": "{count} approval gate | {count} approval gates",
-      "gated": "Human approval gate after this step"
+      "gated": "Human approval gate after this step",
+      "conditionalCount": "{count} conditional step | {count} conditional steps",
+      "conditionEstimate": "Runs only when the task estimate clears this step's thresholds",
+      "conditionFrontend": "Runs only when the task changes a frontend service",
+      "conditionBackend": "Runs only when the task changes a non-frontend service"
     },
     "picker": {
       "noneHint": "No default pipeline. You choose one when you run the task.",
@@ -4842,6 +4848,11 @@
         "body": "\"{name}\" will be removed. This can't be undone."
       },
       "disabledStepTooltip": "Disabled, skipped at run",
+      "condition": {
+        "always": "Runs on every task — click to make it conditional",
+        "frontend": "Runs only on tasks that change a frontend service",
+        "backend": "Runs only on tasks that change a non-frontend service"
+      },
       "cancelEdit": "Cancel edit",
       "clear": "Clear",
       "update": "Update pipeline",
@@ -4929,6 +4940,7 @@
         "negative-prompt": "Negative prompt",
         "seed": "Fixed seed",
         "aspect-ratio": "Aspect ratio",
+        "exact-size": "Exact size",
         "candidate-batch": "Several candidates per call",
         "upscale": "Upscaling",
         "transparent-background": "Transparent background",
@@ -4950,6 +4962,11 @@
       "binaryNegativePromptPlaceholder": "what to keep out",
       "binaryAspectRatio": "Aspect ratio",
       "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "Output size",
+      "binaryOutputSizeWidth": "Width",
+      "binaryOutputSizeHeight": "Height",
+      "binaryOutputSizeIncomplete": "Not saved: an exact size needs both a width and a height.",
+      "binaryOutputSizeAmbiguous": "An exact output size cannot be combined with {options}: each states the delivered dimensions a second time. Keep whichever one is the requirement.",
       "binarySeed": "Seed",
       "binarySeedPlaceholder": "fixed seed",
       "binaryTransparent": "Transparent background",
@@ -5011,6 +5028,14 @@
       "elapsedTooltip": "Elapsed time on this step",
       "prReview": {
         "review": "Review findings"
+      },
+      "skipped": {
+        "gated": "Skipped: the task estimate was below this step’s thresholds.",
+        "conditionFrontend": "Skipped: this task changes no frontend service, so there is no UI to exercise.",
+        "conditionBackend": "Skipped: this task changes only a frontend service, so there is no API behind it to exercise.",
+        "producerSkipped": "Skipped: the step it reviews was skipped, so there is nothing to grade.",
+        "runComplete": "Skipped: the run finished before this step, with nothing left to do.",
+        "unknown": "Skipped: this step did not run."
       }
     },
     "health": {
@@ -6588,6 +6613,8 @@
       "unknownServices": "Named a service the catalog does not contain: {ids}. The entry is kept as claimed; check the id against the workspace catalog. | Named services the catalog does not contain: {ids}. Their entries are kept as claimed; check the ids against the workspace catalog.",
       "targetUnknown": "The catalog no longer contains this step's own storage service ({id}), so nothing below could be checked against it. Register it again, or point the step at another service.",
       "undeliveredMediaTypes": "This step was set to deliver {formats}, and no artifact below reports that format. | This step was set to deliver {formats}, and no artifact below reports those formats.",
+      "missized": "1 artifact was delivered at a size other than {width}×{height}. | {count} artifacts were delivered at a size other than {width}×{height}.",
+      "sizeUnreported": "1 artifact reports no dimensions, so its size could not be checked. | {count} artifacts report no dimensions, so their sizes could not be checked.",
       "misdirected": "1 artifact went to a service other than {target}. | {count} artifacts went to a service other than {target}.",
       "invalidEntries": "1 declared entry was dropped: it named no service and location. | {count} declared entries were dropped: they named no service and location.",
       "omitted": "1 more artifact was declared beyond the report's limit and is not listed. | {count} more artifacts were declared beyond the report's limit and are not listed.",
@@ -6595,6 +6622,7 @@
       "generatorsUnverified": "This deployment's generative integrations could not be read when the step settled, so the integrations named below were not checked against them. The entries are kept as claimed."
     },
     "unknownGeneratorBadge": "Not registered",
+    "missizedBadge": "Wrong size",
     "candidates": {
       "automatic": "{total} candidate was generated and kept automatically, without review.",
       "chosen": "{kept} of {total} generated candidates were kept.",

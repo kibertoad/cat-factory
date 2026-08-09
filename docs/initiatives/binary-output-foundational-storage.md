@@ -754,6 +754,67 @@ A per-vendor knob nobody else has (`prompt_upsampling`, `safety_tolerance`, a sa
 in that integration's `guidance`, where a sentence can say what it means, rather than becoming a
 field every other integration ignores.
 
+### The size axis, and why one member could not carry it
+
+`aspect-ratio` shipped meaning "an explicit aspect ratio OR output size", and that disjunction was
+the bug. The four image APIs a deployment is likely to register split cleanly in two: Flux and Retro
+Diffusion take a width and a height, Nano Banana takes one of four `image_size` buckets and Grok
+Imagine a `resolution` of `1k` or `2k`. Under one member all four declare the same thing, so a step
+whose deliverable is a 96x96 inventory icon is admitted holding only the bucketed one. It then
+generates a 1K image and downsamples, which on a small sprite is not a worse render of the same
+asset, and nothing reports it: the modality is covered, the format is covered, the upload succeeded,
+and the deliverable is wrong in the one dimension the inventory actually specified.
+
+So `exact-size` is its own member, unlocking `generation.outputSize` (`{ width, height }`). It clears
+the membership bar the section above sets, on the ground that DECIDES: an endpoint either accepts
+pixel dimensions or it does not, which is a fact about the request shape rather than an opinion about
+the art, so `covered` / `uncovered` is computable and a refusal is a fact. That is the same property
+that got `mediaTypes` its admission rule and that `style` / `resolutionRange` / `intendedUse` could
+not supply.
+
+Four rulings bound it, and each is the reason a nearby version was refused:
+
+- **The vocabulary stays FLAT: `exact-size` does not IMPLY `aspect-ratio`.** An API taking width and
+  height honours any ratio, so it declares both, exactly as a multi-reference API declares
+  `reference-image` beside `multi-reference`. An implication table is an ordering over a picklist
+  that every future member then has to be placed in, bought to save a deployment one word in its own
+  registration, and the cost of forgetting that word is a refusal that NAMES the missing capability.
+- **The platform states no per-integration size table.** Flux caps at 4 MP and wants multiples of 32;
+  Retro Diffusion's range moves with the style. A table of that is the refused `resolutionRange`
+  wearing a new name, and it would go stale in this repo while the vendor changed it in theirs. This
+  axis answers only "can it be handed dimensions at all"; the limits stay in `guidance`.
+- **A size is stated ONCE.** `outputSize` is mutually exclusive with `aspectRatio` and `upscale`,
+  refused structurally at save (`assertUnambiguousOutputSize`), because each of those states the
+  delivered dimensions a second time and can disagree. Resolving it by precedence instead would hand
+  the leftover decision to the agent writing the vendor call, which is the same party the
+  every-format-required rule keeps it away from. WHICH options conflict is contracts'
+  `conflictingOutputSizeOptions`, not a rule stated twice: the builder offers all three controls
+  together, so it has to raise the same refusal (`output_size_ambiguous`) where the fix is deleting
+  one of two visible fields, and a rule with a home on only one side is one the two sides drift on.
+- **No resize POLICY, at any layer.** The platform has no view of whether a downscale is acceptable
+  for a given asset, so the brief states the target and requires that a substitution be REPORTED and
+  the delivered size declared. What it never says is what to do instead, and it makes no claim about
+  what the CONSUMER of the artifacts does with a substituted one: that is a fact about a game, a
+  storefront or a print run, none of which the platform can see.
+- **A size covers what is MEASURED in pixels**, which is contracts' `modalityCarriesPixelDimensions`
+  (`image` and `video`; not audio, 3D or documents). A step generating an icon and its pickup sound
+  states one size and means it about the icon, so the brief scopes it and the report judges only the
+  covered artifacts. An artifact the platform could not CLASSIFY stays covered: absent is not "not an
+  image", and excluding it would turn an unreadable content type into a silent pass on the one axis
+  the requirement exists to check.
+
+**The read-back closes it, and admission alone would not have.** The capability gate checks what a
+selected integration can be ASKED for; the complaint that motivated the axis is a DELIVERY fact. So a
+declared artifact carries optional `dimensions`, and `BinaryOutputView` derives `missized` against
+the step's own `outputSize` (and renders the reported dimensions on the row beside it, so a counted
+failure names which artifact), the same judgement `undeliveredMediaTypes` makes one axis over and from
+the same kind of self-report (the platform never holds the bytes; `contentType` has always been the
+agent's own claim on the same terms). `sizeUnreported` counts the unmeasured artifacts SEPARATELY,
+because an artifact that stated no dimensions and one that came back wrong are the same value and
+opposite facts. A malformed `dimensions` drops the measurement and KEEPS the entry: the identity
+fields are what make a record findable, and losing a stored artifact over an optional observation
+would be the reporting loss this feature exists to prevent.
+
 ## Side-by-side candidates: the choice the platform CAN make visible
 
 The section above states the overlap and ranks nothing, on the ground that the platform has no

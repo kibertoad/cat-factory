@@ -40,6 +40,7 @@ import {
 } from '@cat-factory/kernel'
 import { buildStepApproval } from './stepApproval.js'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
+import type { StepSkipReason } from '@cat-factory/contracts'
 import { applyContainerRunning, applySubtaskProgress, pollHandleFor } from './step-fold.logic.js'
 import { applyObservedToolServers } from './toolServers.logic.js'
 import { FORK_PROPOSER_KIND } from '@cat-factory/agents'
@@ -759,19 +760,31 @@ export class RunDispatcher {
   }
 
   /**
-   * Finish a gated step that was skipped (its estimate gate was not satisfied) and either
-   * complete the run or advance to the next step — the deterministic finish/advance tail
-   * of {@link recordStepResult}, minus all the agent-result handling (no LLM ran, so there
-   * is no usage / decision / PR / artifact / approval / resolver to process). The step is
-   * marked `skipped` with empty output so the UI renders "skipped (gated)".
+   * Finish a gated step that was skipped (its estimate gate or its run condition was not
+   * satisfied) and either complete the run or advance to the next step — the deterministic
+   * finish/advance tail of {@link recordStepResult}, minus all the agent-result handling (no LLM
+   * ran, so there is no usage / decision / PR / artifact / approval / resolver to process). The
+   * step is marked `skipped` so the UI renders "skipped (gated)".
+   *
+   * `reason` states WHICH AXIS skipped it, because the three are not equally recoverable from the
+   * pipeline by a reader: an estimate gate is visible on the step itself (the thresholds are right
+   * there beside it), while a run condition is a fact about the TASK and a producer cascade is a
+   * fact about ANOTHER step, so an unexplained skip reads as a tester that silently did nothing.
+   * The SPA turns the member into translated copy; nothing composes a sentence here.
+   *
+   * `output` stays EMPTY for every skip, and that is load-bearing rather than incidental: the step
+   * produced nothing, and three aggregations select prior steps on `output` being non-empty and
+   * hand the text to a model, so anything parked there is read downstream as this step's report.
    */
   async skipGatedStep(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
+    reason: StepSkipReason,
   ): Promise<AdvanceResult> {
     step.skipped = true
+    step.skipReason = reason
     step.output = ''
     step.progress = 1
     step.subtasks = undefined

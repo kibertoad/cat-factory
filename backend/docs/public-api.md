@@ -487,8 +487,11 @@ ways a pipeline parks:
 
 Any of them needs a `decide`-scope key (`403 pipeline_requires_decide_scope`; the refusal names this
 surface's exit, `POST /tasks/:taskId/stop`). Note that this covers the shipped **Adaptive build**
-preset, which carries a risk-gated `human-review`: a `write`-only key cannot start it. The
-unconditional presets (`Standard build`, `Simple build`) never park and stay `write`-startable.
+preset, which carries a risk-gated `human-review`, and **Complex build**, whose leading
+requirements review parks for a human by design: a `write`-only key cannot start either. **Standard
+build** and **Simple build** never park and stay `write`-startable — their conditional tester steps
+do not change that, since a run condition only ever SKIPS a step, and a skipped step parks for
+nobody.
 
 What the rule does **not** see: a park raised dynamically mid-run (an agent-raised decision, a judge
 `park`), and follow-up triage. A deployment's own unbounded-wait gate used to be a third blind spot

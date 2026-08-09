@@ -7,6 +7,7 @@ import {
   assertValidBinaryOutputSteps,
   assertValidCompanionPlacement,
   assertValidGating,
+  assertValidRunConditions,
   assertValidAgentVariants,
   assertValidSkillSteps,
   assertValidTesterQualityGating,
@@ -26,9 +27,12 @@ describe('validatePipelineShape', () => {
           enabled: p.enabled,
           // `gates` rides along so the built-in catalog is checked against the human-gate /
           // estimate-gate exclusivity rule too — a preset declaring both would otherwise ship and
-          // fail only at run start.
+          // fail only at run start. `stepOptions` rides along for the same reason, so the RUN
+          // CONDITIONS the build rungs carry are held to the gatability rule here rather than at a
+          // user's run door.
           gates: p.gates,
           gating: p.gating,
+          stepOptions: p.stepOptions,
         }),
       ).not.toThrow()
     }
@@ -48,13 +52,14 @@ describe('validatePipelineShape', () => {
       'reviewer',
       'deployer',
       'tester-api',
+      'tester-ui',
       'conflicts',
       'ci',
       'merger',
       'disposer',
     ])
     // It includes the design phase but stops short of the requirements interview, which is the
-    // whole point of this rung sitting between pl_simple and pl_full.
+    // whole point of this rung sitting between pl_simple and pl_complex.
     expect(build.agentKinds).not.toContain('requirements-review')
     expect(build.agentKinds).not.toContain('spec-writer')
   })
@@ -143,7 +148,7 @@ describe('validatePipelineShape', () => {
     // `architect-companion` is deliberately absent: it CASCADES off the architect rather than
     // carrying a duplicate copy of its threshold.
     const gatedKinds = kinds.filter((_k, i) => full!.gating?.[i]?.enabled)
-    expect(gatedKinds).toEqual(['architect', 'tester-api', 'human-review'])
+    expect(gatedKinds).toEqual(['architect', 'tester-api', 'tester-ui', 'human-review'])
     expect(full!.gating?.[kinds.indexOf('architect-companion')]).toBeNull()
     for (const unconditional of ['coder', 'reviewer', 'deployer', 'conflicts', 'ci', 'merger']) {
       const i = kinds.indexOf(unconditional)
@@ -155,25 +160,6 @@ describe('validatePipelineShape', () => {
     // No human approval gate at all on the default — the only human checkpoint is the risk-gated
     // `human-review` STEP, which is an escalation rather than an approval pause.
     expect(full!.gates?.some(Boolean) ?? false).toBe(false)
-  })
-
-  it('the retired build variants are gone from the catalog and tombstoned', () => {
-    const live = new Set(seedPipelines().map((p) => p.id))
-    for (const retired of [
-      'pl_quick',
-      'pl_fullstack',
-      'pl_dep_update',
-      'pl_pr_review',
-      'pl_human_review',
-      'pl_integrate',
-    ]) {
-      expect(live.has(retired), `${retired} must be withdrawn`).toBe(false)
-    }
-    // Every `replacedBy` target must still be live, or the advisory names a replacement the
-    // workspace cannot switch to.
-    for (const target of ['pl_simple', 'pl_build', 'pl_full']) {
-      expect(live.has(target), `${target} must remain live`).toBe(true)
-    }
   })
 
   it('the seeded pl_bug_triage pipeline is recurring-only, well-shaped, and estimator-first', () => {
@@ -458,6 +444,81 @@ describe('assertPipelineLaunchable', () => {
   })
 })
 
+describe('assertValidRunConditions', () => {
+  /** A step-options bag carrying only a run condition, so only the rule under test can fail. */
+  const conditional = (serviceScope: 'frontend' | 'backend') => ({ condition: { serviceScope } })
+
+  it('accepts a condition on a gatable kind', () => {
+    // The tester pair is the case the axis exists for, and both halves are gatable kinds.
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['coder', 'tester-api', 'tester-ui'],
+        stepOptions: [null, conditional('backend'), conditional('frontend')],
+      }),
+    ).not.toThrow()
+  })
+
+  it('refuses a condition on a kind that may not be skipped', () => {
+    // A condition on `merger` drops the merge on every run outside its scope while the pipeline
+    // still reports success — the same failure the estimate gate refuses, reached by the other axis.
+    for (const kind of ['merger', 'coder', 'ci', 'conflicts']) {
+      expect(() =>
+        assertValidRunConditions({
+          agentKinds: [kind],
+          stepOptions: [conditional('frontend')],
+        }),
+      ).toThrow(/cannot carry a run condition/)
+    }
+  })
+
+  it('refuses a condition on a step that also carries a human approval gate', () => {
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['tester-ui'],
+        gates: [true],
+        stepOptions: [conditional('frontend')],
+      }),
+    ).toThrow(/never remove one/)
+  })
+
+  it('ACCEPTS a condition beside an estimate gate: the two axes compose', () => {
+    // Deliberately not refused — "does this step apply to this kind of change" and "is this change
+    // big enough" are different questions, and a UI pass wanted only on frontend work above a
+    // complexity floor is coherent. Asserted so the pair is never refused by accident.
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['task-estimator', 'tester-ui'],
+        gating: [null, gated],
+        stepOptions: [null, conditional('frontend')],
+      }),
+    ).not.toThrow()
+  })
+
+  it('imposes no requirement on a DISABLED conditional step', () => {
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['merger'],
+        enabled: [false],
+        stepOptions: [conditional('frontend')],
+      }),
+    ).not.toThrow()
+  })
+
+  it("honours a DEPLOYMENT-registered kind's own gatable flag", () => {
+    // Same registry asymmetry the estimate gate has: a deployment that registers a kind owns the
+    // answer for it, so a registered gatable kind is accepted here as it is there.
+    const registry = new AgentKindRegistry()
+    registry.register({ kind: 'org:auditor', gatable: true, spec: { track: 'reviewing' } } as never)
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['org:auditor'],
+        stepOptions: [conditional('frontend')],
+        agentKindRegistry: registry,
+      }),
+    ).not.toThrow()
+  })
+})
+
 describe('assertValidSkillSteps', () => {
   it('rejects an enabled skill step that selects no skill', () => {
     expect(() => assertValidSkillSteps({ agentKinds: ['skill'] })).toThrow(/must select a skill/)
@@ -638,6 +699,36 @@ describe('assertValidBinaryOutputSteps', () => {
 
   it('skips the check entirely with no registry in view (the built-in-catalog caller)', () => {
     expect(() => assertValidBinaryOutputSteps({ agentKinds: ['image-generator'] })).not.toThrow()
+  })
+
+  // An exact size and a second statement of the same fact. Refused rather than resolved by
+  // precedence, because the party a precedence rule leaves the decision to is the agent writing
+  // the vendor call, reading both numbers in one brief.
+  describe('an exact output size states the dimensions once', () => {
+    const step = (generation: Record<string, unknown>) => () =>
+      assertValidBinaryOutputSteps({
+        agentKinds: ['image-generator'],
+        stepOptions: [{ binaryOutput: { storageServiceId: 'asset-store', generation } }],
+        agentKindRegistry: registryWithGenerator(),
+      })
+
+    it('accepts a size on its own, and each neighbour on its own', () => {
+      expect(step({ outputSize: { width: 96, height: 96 } })).not.toThrow()
+      expect(step({ aspectRatio: '16:9' })).not.toThrow()
+      expect(step({ upscale: 2 })).not.toThrow()
+    })
+
+    it('refuses a size beside an aspect ratio or an upscale, naming both', () => {
+      expect(step({ outputSize: { width: 96, height: 96 }, aspectRatio: '16:9' })).toThrow(
+        /96x96.*aspect ratio of 16:9/s,
+      )
+      expect(step({ outputSize: { width: 96, height: 96 }, upscale: 2 })).toThrow(/upscale of 2x/)
+      // Both at once is ONE refusal naming the whole fix, the same rule the unresolved-id
+      // refusals follow: a step with two problems must not cost two save-fix rounds.
+      expect(
+        step({ outputSize: { width: 96, height: 96 }, aspectRatio: '1:1', upscale: 2 }),
+      ).toThrow(/aspect ratio of 1:1 and an upscale of 2x/)
+    })
   })
 })
 

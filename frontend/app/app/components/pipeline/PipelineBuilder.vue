@@ -12,11 +12,20 @@ import BinaryOutputStepPicker from '~/components/pipeline/BinaryOutputStepPicker
 import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
 import { showOverrideField } from '~/utils/uiMode'
 import { narrowPipelineLibrary } from '~/utils/pipelineLibrary'
+import { CONDITION_MARKERS, stepConditionsAt } from '~/utils/pipeline'
+
+/** The cycle button's icon per state — the two condition markers, plus the unconditional one. */
+const CONDITION_ICONS = {
+  always: 'i-lucide-infinity',
+  frontend: CONDITION_MARKERS.frontend.icon,
+  backend: CONDITION_MARKERS.backend.icon,
+} as const
 import {
   agentKindMeta,
   companionForProducer,
   isConsensusEligibleKind,
   isTesterKind,
+  mayCarrySkipAxis,
 } from '~/utils/catalog'
 import type { ConsensusStrategy } from '~/types/consensus'
 
@@ -610,6 +619,31 @@ async function clone(p: Pipeline) {
                         : t('pipeline.builder.disableTooltip')
                     "
                     @click="toggleEnabled(unit)"
+                  />
+                  <!-- Run condition: restrict this step to tasks that change a frontend
+                     service, or to tasks that change anything else. Cycles through the three
+                     states (see `cycleDraftStepCondition`). Shown in BOTH interface tiers, and
+                     not behind `showOverrideField`: cloning a built-in carries the tester pair's
+                     conditions in, so a control that hid them by default would leave a basic-mode
+                     editor saving a step whose "when does this run" they were never shown.
+
+                     Offered only where the step MAY be skipped at all. A condition is a skip axis,
+                     so the engine holds it to the same gatability rule as an estimate gate
+                     (`assertValidRunConditions`) — without this the builder invited a condition on
+                     `merger` and answered the save with a 422. -->
+                  <UButton
+                    v-if="mayCarrySkipAxis(unit.kind)"
+                    :icon="CONDITION_ICONS[pipelines.draftStepCondition(unit.index) ?? 'always']"
+                    :color="pipelines.draftStepCondition(unit.index) ? 'info' : 'neutral'"
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      t(
+                        `pipeline.builder.condition.${pipelines.draftStepCondition(unit.index) ?? 'always'}`,
+                      )
+                    "
+                    data-testid="pipeline-step-condition"
+                    @click="pipelines.cycleDraftStepCondition(unit.index)"
                   />
                   <!-- Approval gate: pause after this step so a human reviews (and
                      can edit) its proposal before the next step runs. -->
@@ -1308,6 +1342,16 @@ async function clone(p: Pipeline) {
                     i + 1
                   }}</span>
                   <AgentKindIcon :kind="k" show-label />
+                  <!-- A step that does not run on every task says so HERE, in the library, because
+                       this list is what a reader compares two pipelines by: a preset whose testers
+                       are conditional and one whose testers always run look identical otherwise. -->
+                  <UIcon
+                    v-for="c in stepConditionsAt(p, i)"
+                    :key="c"
+                    :name="CONDITION_MARKERS[c].icon"
+                    class="h-3 w-3 shrink-0 text-sky-400"
+                    :title="t(CONDITION_MARKERS[c].key)"
+                  />
                 </li>
               </ol>
             </li>
