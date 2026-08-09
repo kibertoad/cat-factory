@@ -24,7 +24,8 @@ approval gate. Without that, a condition on `merger` dropped the merge on every 
 scope while the pipeline still finished reporting success.
 
 A skipped step now records WHY as a machine-readable `skipReason` (`gated` / `condition` /
-`producer_skipped`) that the SPA renders as translated copy, and its `output` stays empty. The
+`producer_skipped` / `run_complete`) that the SPA renders as translated copy, and its `output` stays
+empty. The
 reason used to be an English sentence written into `output`, which three separate aggregations
 select on to build a model's view of the prior steps — so a condition-skipped tester's note was
 handed to `merger` and `ci-fixer` as if it were the tester's report.

@@ -4877,6 +4877,7 @@
         "conditionFrontend": "Omitido: esta tarea no modifica ningún servicio de frontend, así que no hay interfaz que probar.",
         "conditionBackend": "Omitido: esta tarea solo modifica un servicio de frontend, así que no hay API detrás que probar.",
         "producerSkipped": "Omitido: el paso que revisa fue omitido, así que no hay nada que evaluar.",
+        "runComplete": "Omitido: la ejecución terminó antes de este paso y no quedaba nada que hacer.",
         "unknown": "Omitido: este paso no se ejecutó."
       }
     },

@@ -108,12 +108,20 @@ export function resolveRunServiceScope(
  *  - `producer_skipped` — a COMPANION whose producer was itself skipped, so there is nothing for
  *                   it to grade. Distinct from `gated` because the fix is different: the reader
  *                   has to look at the producer, not at this step's own thresholds.
+ *  - `run_complete` — an earlier step ENDED the run (a `bug-intake` fire that found nothing to
+ *                   adopt), so everything after it was closed out untouched. Nothing about THIS
+ *                   step decided it, which is why it cannot borrow any of the three above.
  *
  * PERSISTED and CLOSED, so retiring a member does not remove it from stored runs: read it with
  * {@link isStepSkipReason} and render an unrecognised value as "skipped" rather than crashing or
  * guessing onto a current member.
  */
-export const stepSkipReasonSchema = v.picklist(['gated', 'condition', 'producer_skipped'])
+export const stepSkipReasonSchema = v.picklist([
+  'gated',
+  'condition',
+  'producer_skipped',
+  'run_complete',
+])
 export type StepSkipReason = v.InferOutput<typeof stepSkipReasonSchema>
 
 /**

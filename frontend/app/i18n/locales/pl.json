@@ -4877,6 +4877,7 @@
         "conditionFrontend": "Pominięto: to zadanie nie zmienia żadnej usługi frontendowej, więc nie ma interfejsu do sprawdzenia.",
         "conditionBackend": "Pominięto: to zadanie zmienia tylko usługę frontendową, więc nie ma za nią API do sprawdzenia.",
         "producerSkipped": "Pominięto: krok, który ocenia, został pominięty, więc nie ma czego oceniać.",
+        "runComplete": "Pominięto: przebieg zakończył się przed tym krokiem, nie było nic do zrobienia.",
         "unknown": "Pominięto: ten krok nie został wykonany."
       }
     },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { binaryCandidateStatusSchema } from '@cat-factory/contracts'
+import { binaryCandidateStatusSchema, stepSkipReasonSchema } from '@cat-factory/contracts'
 import type { ExecutionInstance, PipelineStep } from '~/types/execution'
 import { missingI18nKeys } from '../../test/i18nKeys'
 import { REDIRECT_PARK_PRESENTATION, dedicatedParkView, stepSkipReasonKey } from './pipelineRender'
@@ -204,13 +204,28 @@ describe('stepSkipReasonKey', () => {
   })
 
   it('every reason it can name has copy in the catalog', () => {
-    const keys = [
-      'gated',
-      'conditionFrontend',
-      'conditionBackend',
-      'producerSkipped',
-      'unknown',
-    ].map((k) => `pipeline.progress.skipped.${k}`)
-    expect(missingI18nKeys(keys)).toEqual([])
+    // Derived from the vocabulary the engine writes rather than a hand-listed set, so a member
+    // added to the picklist is covered here the day it lands instead of falling outside a stale
+    // literal list. The `condition` member fans out into two keys (one per service scope).
+    const keys = stepSkipReasonSchema.options.flatMap((reason) =>
+      reason === 'condition'
+        ? [
+            stepSkipReasonKey(
+              skipped({
+                skipReason: reason,
+                stepOptions: { condition: { serviceScope: 'frontend' } },
+              } as unknown as Partial<PipelineStep>),
+            )!,
+            stepSkipReasonKey(
+              skipped({
+                skipReason: reason,
+                stepOptions: { condition: { serviceScope: 'backend' } },
+              } as unknown as Partial<PipelineStep>),
+            )!,
+          ]
+        : [stepSkipReasonKey(skipped({ skipReason: reason }))!],
+    )
+    expect(keys).toHaveLength(stepSkipReasonSchema.options.length + 1)
+    expect(missingI18nKeys([...keys, 'pipeline.progress.skipped.unknown'])).toEqual([])
   })
 })

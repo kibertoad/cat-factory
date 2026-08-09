@@ -5028,6 +5028,7 @@
         "conditionFrontend": "Skipped: this task changes no frontend service, so there is no UI to exercise.",
         "conditionBackend": "Skipped: this task changes only a frontend service, so there is no API behind it to exercise.",
         "producerSkipped": "Skipped: the step it reviews was skipped, so there is nothing to grade.",
+        "runComplete": "Skipped: the run finished before this step, with nothing left to do.",
         "unknown": "Skipped: this step did not run."
       }
     },

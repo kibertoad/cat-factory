@@ -288,6 +288,8 @@ export function stepSkipReasonKey(step: PipelineStep): string | null {
       return 'pipeline.progress.skipped.gated'
     case 'producer_skipped':
       return 'pipeline.progress.skipped.producerSkipped'
+    case 'run_complete':
+      return 'pipeline.progress.skipped.runComplete'
     case 'condition':
       return step.stepOptions?.condition?.serviceScope === 'frontend'
         ? 'pipeline.progress.skipped.conditionFrontend'

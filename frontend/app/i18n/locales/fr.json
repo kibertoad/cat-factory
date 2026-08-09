@@ -4877,6 +4877,7 @@
         "conditionFrontend": "Étape ignorée : cette tâche ne modifie aucun service frontend, il n’y a donc pas d’interface à tester.",
         "conditionBackend": "Étape ignorée : cette tâche ne modifie qu’un service frontend, il n’y a donc pas d’API derrière à tester.",
         "producerSkipped": "Étape ignorée : l’étape qu’elle relit a été ignorée, il n’y a rien à évaluer.",
+        "runComplete": "Étape ignorée : l’exécution s’est terminée avant elle, sans rien à faire.",
         "unknown": "Étape ignorée : elle n’a pas été exécutée."
       }
     },
