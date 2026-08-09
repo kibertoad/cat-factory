@@ -1,5 +1,62 @@
 # @cat-factory/kernel
 
+## 0.285.0
+
+### Minor Changes
+
+- 22b2459: Make each design-picture delivery site state the channel it actually has.
+
+  The shipped delivery decision derived its channel from whether the resolved ref named a harness,
+  which is not the same question and is wrong on exactly the surfaces that cannot carry a picture at
+  all. Delivery now takes a `DesignImageCarrier` the dispatch site declares: `files` plus the harness
+  for a container dispatch, `message` for an inline call that composes its own request.
+
+  Two surfaces refuse under their own reason instead of promising something. The AMBIENT INLINE path
+  (a deployment serving a subscription ref by driving the developer's CLI as a host subprocess) named
+  a harness whose container dispatch opens image files, so it claimed `.cat-context/design-renders/`
+  on a call with no checkout and a prompt flattened to text. A CONSENSUS PANEL resolved no verdict at
+  all, so its participants heard neither that pictures existed nor that they were withheld; it now
+  states the ceiling exactly as it already does for the tool servers it cannot reach.
+
+  Three more corrections to the same slice. The runner-image capability handshake never fired for
+  `designImages`, because "the body carries this capability" was a populated-ARRAY test and the design
+  manifest is an object, so an image predating the field ignored it while the prompt named a directory
+  nothing wrote; carrying is now a per-capability predicate. The omission notice no longer attributes
+  transfer losses to a ceiling nor sizes that ceiling from the DELIVERED count. And the LLM proxy's
+  Workers AI output cap measures the payload it forwards rather than the image-redacted copy kept for
+  telemetry, which would under-reserve context-window room by the size of every attached picture.
+
+- 2428b6b: Attribute a cross-service run's pull request to every involved service frame whose changes ride
+  it, not just the first.
+
+  The multi-repo fan-out checks out one repo per REPO, so several involved services living in one
+  monorepo already shared a checkout, a work branch and a single pull request. Only the RECORD was
+  singular, which left every frame but the first looking like a service the run had opened no pull
+  request for. The attribution is now a set (`frameIds`) from the dispatch through the harness echo
+  to `block.peerPullRequests`, the merge order, and the verification report. The own-service report
+  carries it too, naming the involved services co-located in the task's own repo: those open no pull
+  request of their own, so that report is the only place their change is reported. A peer checkout
+  also stops inheriting one co-located service's `serviceDirectory`: it is whole-repo, as the primary
+  already was, so the services that resolved second are reachable.
+
+  A recorded peer pull request is now ADDRESSED by its repo rather than by its frames, which is what
+  a checkout is identified by, and one the platform cannot resolve is named to the merger instead of
+  being dropped from the combined diff it scores.
+
+  Internal break: `peerPullRequestSchema.frameId`, `allPullRequests`, `MergePrEntry.frameId`,
+  `PrReportTarget.frameId` and the harness `peerRepos`/`peerPullRequests` wire fields are replaced
+  by `frameIds`. Peer PRs recorded on a block before this ship lose their frame attribution (the
+  pull requests themselves are untouched). Public `/api/v1` is additive only: `PrReportScope` gains
+  `frameIds` and keeps `frameId` as its head (surface version 1.40.0). `frameId` is no longer always
+  null on an own-service report: it names a co-located involved service when there is one.
+
+  The runner image moves to `cat-factory-executor:1.109.0`.
+
+### Patch Changes
+
+- Updated dependencies [2428b6b]
+  - @cat-factory/contracts@0.291.0
+
 ## 0.284.0
 
 ### Minor Changes
