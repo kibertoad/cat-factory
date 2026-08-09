@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { GatekeeperEnv } from '../src/env.js'
+import { OS_EXPORTS } from '../src/os/exports.js'
 import { createGatekeeperWorker } from '../src/worker.js'
 import { FIXTURE_POLICY } from './fixture-policy.js'
 
@@ -43,19 +44,35 @@ function configured(): PartialEnv {
   return env
 }
 
-async function health(env: PartialEnv): Promise<Response> {
+/**
+ * A Worker whose entry module carries the four exports the Cloudflare OS object model resolves.
+ *
+ * The second half of "is this deployment wired": the bindings say whether it can talk to the
+ * paired deployment, and these say whether a workspace can discover and install it. Both are
+ * things an operator can half-finish, and only one of them has a request path of its own.
+ */
+function exported(): Record<string, () => unknown> {
+  return Object.fromEntries(Object.values(OS_EXPORTS).map((name) => [name, () => ({})]))
+}
+
+async function health(
+  env: PartialEnv,
+  exports: Record<string, unknown> = exported(),
+): Promise<Response> {
   const worker = createGatekeeperWorker({ policy: FIXTURE_POLICY })
   const response = await worker.fetch?.(
     new Request(`${ORIGIN}/health`),
     env as GatekeeperEnv,
-    {} as ExecutionContext,
+    {
+      exports,
+    } as unknown as ExecutionContext,
   )
   if (response === undefined) throw new Error('the Worker returned no response')
   return response
 }
 
 describe('GET /health', () => {
-  it('is green only when every binding is set', async () => {
+  it('is green only when every binding is set and the object model is exported', async () => {
     const response = await health(configured())
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ ok: true })
@@ -93,6 +110,23 @@ describe('GET /health', () => {
       .message
     expect(message).toContain('PUBLIC_URL (set it as a var in wrangler.toml)')
     expect(message).toContain('WEBHOOK_SECRET (put it with `wrangler secret put WEBHOOK_SECRET`')
+  })
+
+  // A perfectly bound Worker whose entry module is three lines short is undiscoverable, and that
+  // failure has no request path of its own: a workspace simply never finishes installing it, which
+  // is not a call anyone monitors.
+  it('refuses when the object model is not exported, naming every missing export', async () => {
+    const exports = exported()
+    delete exports[OS_EXPORTS.account]
+    delete exports[OS_EXPORTS.resource]
+
+    const response = await health(configured(), exports)
+    expect(response.status).toBe(503)
+    const body = (await response.json()) as { error: { reason: string; message: string } }
+    expect(body.error.reason).toBe('not_configured')
+    expect(body.error.message).toContain(OS_EXPORTS.account)
+    expect(body.error.message).toContain(OS_EXPORTS.resource)
+    expect(body.error.message).not.toContain(OS_EXPORTS.vendor)
   })
 
   // A secret named as something to write in wrangler.toml is how an admin key reaches a

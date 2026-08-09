@@ -10,16 +10,16 @@ deployment that has never heard of Cloudflare OS is byte-for-byte unchanged by i
 Like its neighbours under `deploy/`, this is a **template you copy**, not a service you install.
 What you copy is deliberately small:
 
-| File                                             | What it is                                                                       |
-| ------------------------------------------------ | -------------------------------------------------------------------------------- |
-| [`src/policy.config.ts`](./src/policy.config.ts) | **Your deployment's governance decision.** The one file that is really yours.    |
-| [`wrangler.toml`](./wrangler.toml)               | The bindings: two origins, the webhook id, the Durable Object, the hourly cron.  |
-| [`src/index.ts`](./src/index.ts)                 | Three lines of wiring: your policy, the factory, the re-exported Durable Object. |
-| [`test/policy.test.ts`](./test/policy.test.ts)   | What your tiers grant, compiled against the live operation table.                |
+| File                                             | What it is                                                                               |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| [`src/policy.config.ts`](./src/policy.config.ts) | **Your deployment's governance decision.** The one file that is really yours.            |
+| [`wrangler.toml`](./wrangler.toml)               | The bindings: two origins, the webhook id, the Durable Objects, the hourly cron.         |
+| [`src/index.ts`](./src/index.ts)                 | The wiring: your policy through each factory, under the names the object model resolves. |
+| [`test/policy.test.ts`](./test/policy.test.ts)   | What your tiers grant, compiled against the live operation table.                        |
 
-Everything else, the Cap'n Web capability surface, the per-actor key broker, the delivery receiver
-and its verifier, the approval inbox and the answerer for each of the platform's thirteen park
-kinds, is the published
+Everything else, the capability surface, the Cloudflare OS object model in front of it, the
+per-actor key broker, the delivery receiver and its verifier, the approval inbox and the answerer
+for each of the platform's thirteen park kinds, is the published
 [`@cat-factory/gatekeeper-worker`](../../sdk/gatekeeper-worker), which this template installs as an
 ordinary dependency. That split is the point: upgrading the machinery is a version bump rather than
 a merge against files you have edited, and what a reviewer sees in your repository is your policy
@@ -27,7 +27,7 @@ rather than a fork of somebody else's Worker. What the machinery does, in full, 
 [its README](../../sdk/gatekeeper-worker/README.md).
 
 The short version of what you do with this template: **configure** the deployment (three vars and
-the Durable Object binding in `wrangler.toml`; the three credentials through
+the Durable Object bindings in `wrangler.toml`; the three credentials through
 `wrangler secret put`, never in a file this repository carries), and **customize** the policy in
 `src/policy.config.ts`, together with `test/policy.test.ts`, which pins what that policy grants
 and is meant to move with it. Nothing else in the template is meant to be edited.
@@ -46,7 +46,7 @@ file, which is the point of the split.
 | `STATE`                | Durable Object | A namespace bound to `GatekeeperState`: cards, dedupe log, minted keys.       |
 | `PROVISIONING_KEY`     | secret         | An `admin` cat-factory API key. Mints per-actor keys; nothing else.           |
 | `WEBHOOK_SECRET`       | secret         | 16-200 chars. Registered with the endpoint and verified on every delivery.    |
-| `OS_SHARED_TOKEN`      | secret         | The bearer your Cloudflare OS deployment presents on every RPC call.          |
+| `OS_SHARED_TOKEN`      | secret         | The bearer a non-Cloudflare-OS caller presents on the HTTP routes.            |
 
 ```sh
 cd deploy/gatekeeper
@@ -73,6 +73,34 @@ The Worker serves five routes:
 `/rpc` is bearer-gated even though the intended path is a Worker service binding, which never
 traverses the internet: a Worker with a route attached is reachable by anyone who finds it, and a
 capability surface whose only defence is obscurity is not one.
+
+## Connect a Cloudflare OS workspace
+
+A Cloudflare OS deployment discovers this Worker through a service binding whose name carries the
+`GATEKEEPER_` prefix it scans for, targeting the `GatekeeperVendor` entrypoint:
+
+```toml
+[[services]]
+binding = "GATEKEEPER_CAT_FACTORY"
+service = "cat-factory-gatekeeper"
+entrypoint = "GatekeeperVendor"
+```
+
+Holding that binding is the authorization on this path: it is configuration only that deployment's
+operator can write, and the call never leaves Cloudflare's network. `OS_SHARED_TOKEN` gates the HTTP
+routes only, which is where a caller that is not a Cloudflare OS comes in.
+
+Two things on this side have to be true, and `GET /health` checks both:
+
+- **`src/index.ts` exports all four names the object model resolves** (`GatekeeperVendor`,
+  `CatFactoryAccount`, `CatFactoryResource`, `CatFactoryVerifier`). They are resolved by name at
+  runtime, so a renamed export is a Worker a workspace can never finish installing.
+- **Your policy names an `autoProvisionedTier`.** A workspace mints one account per user with no
+  identity attached, by design, so no account can ever match a `grants` entry. Naming a tier there
+  is what turns discovery on. It is deliberately not `defaultTier`: sharing one knob would mean
+  turning discovery on also handed a capability to every unrostered caller on `/rpc`. To raise one
+  account above the tier, read its id from the account's description in the workspace and grant that
+  id directly.
 
 ## Write the policy
 

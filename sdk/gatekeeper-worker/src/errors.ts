@@ -38,6 +38,16 @@ export type GatekeeperReason =
   | 'malformed_decision'
   /** A minted credential was refused upstream and re-minting it was refused too. */
   | 'credential_rejected'
+  /** The workspace decided against a submitted action, so it was never performed. */
+  | 'action_rejected'
+  /** A decision named an action id this resource is not holding: already settled, or not ours. */
+  | 'unknown_action'
+  /** The URL the workspace asked for is not one this Gatekeeper serves. */
+  | 'no_such_resource'
+  /** Sharing an observation onward was refused, which is this Gatekeeper's default. */
+  | 'sharing_refused'
+  /** The deployment's entry module does not export something the OS object model needs. */
+  | 'missing_export'
 
 /** A refusal the caller (or the OS deployment operating it) acts on. */
 export class GatekeeperError extends Error {

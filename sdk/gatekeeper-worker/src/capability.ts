@@ -46,11 +46,52 @@ const RESERVED_METHODS = [
   'runs_watched',
 ] as const
 
+/**
+ * The governance a session's calls pass through, when the door it arrived by has one.
+ *
+ * This is the ONE seam the Cloudflare OS approval queue is threaded onto, and it is one seam
+ * because `invoke` below is one closure: every granted operation, and every reserved method that
+ * reads platform data, funnels through it. A door with no governance passes `undefined` and gets
+ * byte-for-byte the prior behaviour, which is what keeps the `/rpc` surface a promise this package
+ * can go on making.
+ *
+ * The tier policy is the FLOOR underneath it, never a substitute for it: an operation policy never
+ * granted is absent from the object, so governance is only ever asked about calls that exist.
+ */
+export interface SessionGovernance {
+  /**
+   * Authorize a read. Called with the result already in hand, which the contract explicitly
+   * allows, so the description can name what was actually read. Throws to refuse.
+   */
+  observe(binding: GatekeeperBinding, args: Record<string, unknown>): Promise<void>
+  /**
+   * Authorize a read served from this Gatekeeper's own durable projection of delivered data.
+   *
+   * Separate from {@link observe} because there is no binding behind it, not because it is a
+   * lesser read: the cards and run states came from the paired deployment over the webhook, so
+   * showing them is an observation of that deployment.
+   */
+  observeLocal(title: string, detail: string): Promise<void>
+  /**
+   * Submit a side effect and perform it only if it is approved.
+   *
+   * `perform` is the real call, invoked at most once and only after approval; a refusal throws
+   * instead of returning, so a refused action cannot read as a call that returned nothing.
+   */
+  act<T>(
+    binding: GatekeeperBinding,
+    args: Record<string, unknown>,
+    perform: () => Promise<T>,
+  ): Promise<T>
+}
+
 export interface SessionDependencies {
   actor: Actor
   tier: CompiledTier
   keys: KeyBroker
   state: DurableObjectStub<GatekeeperState>
+  /** Present on the OS entrypoint path; absent on `/rpc`, which governs by tier alone. */
+  governance?: SessionGovernance
 }
 
 /** What `tier()` answers: enough for an OS Gadget to render who the caller is acting as. */
@@ -127,10 +168,34 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
         `Tier '${tier.name}' does not grant '${name}'.`,
       )
     }
-    const result = await deps.keys.run(deps.actor, tier.keyScope, (client) =>
-      binding.invoke(client, args),
-    )
-    return applyMask(result, tier.mask)
+    const perform = async () =>
+      await deps.keys.run(deps.actor, tier.keyScope, (client) => binding.invoke(client, args))
+
+    const governance = deps.governance
+    if (governance === undefined) return applyMask(await perform(), tier.mask)
+
+    // A read runs first and is authorized before its result is handed back, which is what the
+    // contract asks for and why the order is not the obvious one: an authorizer that has to decide
+    // before the fetch can only describe the REQUEST, and the interesting question is usually about
+    // what came back. A refusal throws, so nothing reaches the caller either way.
+    if (binding.readOnly) {
+      const result = await perform()
+      await governance.observe(binding, args)
+      return applyMask(result, tier.mask)
+    }
+    return applyMask(await governance.act(binding, args, perform), tier.mask)
+  }
+
+  /**
+   * Authorize a read this Gatekeeper serves from its OWN durable projection.
+   *
+   * The cards and the run states were delivered by the platform, so serving them is an observation
+   * of the paired deployment exactly as a live read is; that the bytes are local is an
+   * implementation detail of how they arrived. Governing them keeps "everything the session shows
+   * you passed the authorizer" true, which is the property the OS is relying on.
+   */
+  const observeLocal = async (title: string, detail: string): Promise<void> => {
+    await deps.governance?.observeLocal(title, detail)
   }
 
   class Capability extends RpcTarget {}
@@ -156,12 +221,28 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
   // from "this deployment does not have it" reports the wrong one to whoever has to fix it.
   proto.withheld = () => tier.withheld
 
-  proto.approvals_list = (): Promise<ApprovalCard[]> => deps.state.listCards()
+  proto.approvals_list = async (): Promise<ApprovalCard[]> => {
+    const cards = await deps.state.listCards()
+    await observeLocal(
+      'List the open approval cards',
+      `${cards.length} card(s) the paired deployment raised and delivered to this Gatekeeper.`,
+    )
+    return cards
+  }
 
   // The lifecycle projection the `run.*` subscription feeds. Without it those deliveries would be
   // verified, deduped and dropped, and a status Gadget would be back to polling `tasks_get_run`
   // for a transition the platform already pushed.
-  proto.runs_watched = (): Promise<RunState[]> => deps.state.listRunStates()
+  proto.runs_watched = async (): Promise<RunState[]> => {
+    // Annotated rather than inferred: the Durable Object stub's serialization type narrows a
+    // `Record<string, unknown>` field to `never`, so the inferred result carries no `length`.
+    const runs: RunState[] = await deps.state.listRunStates()
+    await observeLocal(
+      'List the watched runs',
+      `${runs.length} run(s) the paired deployment has pushed lifecycle events for.`,
+    )
+    return runs
+  }
 
   proto.approvals_inspect = async (cardId: string): Promise<CardInspection> => {
     const card = await deps.state.getCard(cardId)
@@ -172,6 +253,10 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
           'workspace, or predate this Gatekeeper.',
       )
     }
+    await observeLocal(
+      `Inspect approval card ${cardId}`,
+      `The card raised for run ${card.runId}: ${card.title}`,
+    )
     const list = (await invoke('decisions_list', { runId: card.runId })) as DecisionListShape
     const parks = pendingParks(list).map((park) => ({
       kind: park.kind,

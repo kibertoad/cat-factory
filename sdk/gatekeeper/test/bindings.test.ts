@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   GATEKEEPER_BINDINGS,
   PUBLIC_API_SCOPE_LADDER,
+  SESSION_METHOD_SIGNATURES,
   TELEMETRY_BINDINGS,
   bindingByName,
   bindingsWithinScope,
+  renderSessionTypes,
   resolveConsequence,
   scopeSatisfies,
 } from '../src/index.js'
@@ -254,5 +256,58 @@ describe('the generated table', () => {
       // a tier author reading this list would be governing something already out of reach.
       if (binding.telemetrySink) expect(binding.minScope).toBe('read')
     }
+  })
+})
+
+describe('the session type declarations', () => {
+  // The relation the emitter cannot state about itself: the two generated artifacts describe the
+  // same surface. A regenerate-and-diff check passes an emitter whose bug is consistent in both
+  // halves, and a table with no signature for a binding is a session method that silently vanishes.
+  it('carries exactly one signature per binding', () => {
+    expect(SESSION_METHOD_SIGNATURES.map((signature) => signature.name).sort()).toEqual(
+      GATEKEEPER_BINDINGS.map((binding) => binding.name).sort(),
+    )
+  })
+
+  it.each(SESSION_METHOD_SIGNATURES.map((signature) => [signature.name, signature] as const))(
+    '%s declares the arguments its own binding reads',
+    (name, signature) => {
+      const binding = bindingByName(name)
+      expect(binding).toBeDefined()
+      // A path parameter is required by construction (a path with a hole in it is not a route), so
+      // it must be declared and must not be optional. Getting this backwards would hand a caller a
+      // type saying an argument is optional and a runtime that throws without it.
+      for (const param of binding!.pathParams) {
+        expect(signature.signature).toContain(`${param}: string`)
+      }
+      for (const param of binding!.queryParams) {
+        expect(signature.signature).toContain(`${param.name}${param.required ? '' : '?'}:`)
+      }
+      // Matched as a whole field name: `debug_get_llm_call` takes query parameters called
+      // `bodyChars` and `bodyOffset`, so a substring test would report a request body on a GET.
+      expect(/\bbody\??:/.test(signature.signature)).toBe(binding!.hasBody)
+    },
+  )
+
+  it('renders only what was asked for, in the order it was asked for', () => {
+    const rendered = renderSessionTypes({
+      interfaceName: 'TestSession',
+      bindings: ['tasks_create', 'services_list'],
+      extraMembers: ['  reserved(): Promise<void>\n'],
+    })
+
+    expect(rendered).toContain('export interface TestSession {')
+    expect(rendered).toContain('reserved(): Promise<void>')
+    expect(rendered.indexOf('tasks_create(')).toBeLessThan(rendered.indexOf('services_list('))
+    expect(rendered).not.toContain('tasks_start(')
+  })
+
+  // Skipping silently is the failure worth refusing: to an agent reading the types, a method that
+  // was dropped is indistinguishable from an operation this deployment does not serve, and the two
+  // need opposite fixes (upgrade the package / change the policy).
+  it('refuses a name it has no signature for rather than dropping it', () => {
+    expect(() =>
+      renderSessionTypes({ interfaceName: 'TestSession', bindings: ['no_such_operation'] }),
+    ).toThrow(/No session signature for binding 'no_such_operation'/)
   })
 })

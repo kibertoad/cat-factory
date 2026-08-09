@@ -12,6 +12,7 @@
 export {
   compilePolicy,
   describeBinding,
+  tierForAccount,
   tierForActor,
   type CompiledPolicy,
   type CompiledTier,

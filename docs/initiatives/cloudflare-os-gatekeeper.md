@@ -1,10 +1,18 @@
 # Cloudflare OS Gatekeeper integration
 
-Status: in progress. Slices 1 to 4 and 6 have landed, and slice 5's first leg with them.
+Status: in progress. Slices 1 to 4, 6, 7 and 8 have landed, and slice 5's first leg with them.
 Cloudflare OS published its source on 2026-08-04, and the 2026-08-09 review against it (below)
 unblocked slice 5's second leg and opened slices 7 to 10, the protocol-alignment work. Cloudflare
 OS support is the goal of this initiative; the matured integration surface the alignment forces is
 the side product, not the other way round.
+
+**Slices 7 and 8 landed TOGETHER, and the sequencing is worth recording** because the tracker had
+them apart. Separately, neither is shippable: the object model without a session is a vendor a
+workspace can discover and never use (`getGatekeeperClassFor` is where the model turns into
+something), and a session without the queue violates the contract's central requirement in the one
+place the published spec leaves no room ("there is no mode in which it's OK to skip the check").
+Landing 7 alone would have meant shipping one of those two and fixing it in the next slice, so the
+smallest honest increment is both. Slices 9 and 10 are unaffected and stay open.
 
 ## Goal and rationale
 
@@ -319,12 +327,12 @@ disagreement the hermetic suite structurally cannot see.
   in `deploy/gatekeeper` is the one the smoketest itself gives: the harness that boots a backend
   should be the one that owns the boot, and the template an operator copies should not carry a
   Postgres-shaped devDependency.
-- **Against a real Cloudflare OS (open, unblocked, sequenced after slice 7).** Manual/nightly,
+- **Against a real Cloudflare OS (open, and no longer blocked by anything but the job).**
+  Manual/nightly,
   opt-in behind a `GATEKEEPER_OS_REF` pointing at a partner commit, allowed to go red without
   blocking anyone. Do not fold it into the PR lane on the grounds that it passed a few times. The
-  partner ref it was blocked on now exists; what stands ahead of it is slice 7, because the OS
-  discovers gatekeepers only through service bindings this Worker does not yet export an
-  entrypoint for. Details and sequencing: slice 10.
+  partner ref it was blocked on now exists, and slice 7 has landed the `GatekeeperVendor`
+  entrypoint a service binding targets. Details: slice 10.
 
 #### What the live leg is, and the four decisions in it
 
@@ -366,14 +374,15 @@ recovers from its revocation, forwards the everyday loop, and answers a run that
   lane on precisely the changes that would break it. The line stops there rather than reaching the
   repositories, which conformance already covers cross-runtime and this suite adds nothing to.
 
+**Slice 7 has now landed, so the only thing standing in front of this leg is the job itself.**
+
 **What blocked the second leg, and what changed**: it needed a ref to pin, and
 `cloudflare/cloudflare-os` (public since 2026-08-04) provides one: the repo boots reproducibly
 through its own `run-dev-server.js` and pins the entrypoint contract a service binding targets.
 The opt-in shape stays as agreed (`GATEKEEPER_OS_REF`, nightly, `continue-on-error`), and the job's
 value is still that a red run means something, so pin a partner commit, never track their main.
-What stands ahead of it now is our own slice 7: the OS reaches a gatekeeper over a `GATEKEEPER_*`
-service binding to a `GatekeeperVendor` entrypoint, and this Worker serves only `/rpc` over HTTP,
-so there is nothing for the binding to target yet.
+What stood ahead of it was our own slice 7, which has landed: the binding now has a
+`GatekeeperVendor` entrypoint to target.
 
 ### 6. Base and template: `@cat-factory/gatekeeper-worker` (landed)
 
@@ -505,49 +514,99 @@ to get both is to refuse any change that only makes sense for one caller:
   map at the edge. Carrying two names for one thing is how the next reader concludes they are
   two things.
 
-### 7. The OS-facing entrypoint (a facade, not a fork)
+### 7. The OS-facing entrypoint (landed, with slice 8)
 
-Export the official object model from `@cat-factory/gatekeeper-worker`, in front of the machinery
-that exists:
+The official object model exported from `@cat-factory/gatekeeper-worker`, in front of the machinery
+that already existed: `GatekeeperVendor` (a named `WorkerEntrypoint`) → `CatFactoryAccount` →
+`CatFactoryResource` (a Durable Object) → the session. Four exports the deployment's entry module
+names, resolved at runtime as `ctx.exports.<Name>`, with `/health` asking about all four in one pass
+because a perfectly bound Worker whose entry module is three lines short is undiscoverable and that
+failure has no request path of its own.
 
-- **`GatekeeperVendor` as a named `WorkerEntrypoint` export**, so a `GATEKEEPER_CAT_FACTORY`
-  service binding discovers this Worker the way the OS scans for one. On this path authorization
-  is capability-based (the binding is the credential); `OS_SHARED_TOKEN` remains only on the
-  HTTP routes.
-- **`describe()`, `getSupportedResources()` and `getTypeScriptTypes()` are PROJECTIONS of the
-  bindings table**, emitted by the same generation chain (`pnpm gen:sdk` renders the `.d.ts` the
-  types method serves), never hand-written beside it.
-- **What a "resource" is needs a decision before code.** The natural candidate is the paired
-  workspace (one DO per pairing is what `STATE` already keys on), named by a URLPattern over the
-  deployment origin. Decide it in the slice's first PR and record it here; the reference
-  implementations key everything downstream on it.
-- **Identity maps onto the `createAccount()` escape hatch**: the OS asks the vendor for an
-  account rather than running OAuth, and our per-actor keys with `externalIdentity` stay the
-  substance behind it. The facade's account object carries the actor id the way the official
-  ones carry `ctx.props`, so `connect({ actorId })` keeps working on `/rpc` unchanged.
+**A resource is the PAIRED CAT-FACTORY WORKSPACE, named by a URLPattern over the deployment
+origin** (`<CAT_FACTORY_BASE_URL>/*`). It follows from the credential rather than being a modelling
+preference: this Worker holds one provisioning key, a cat-factory key is scoped to one workspace,
+and `STATE` already keys on the deployment origin for the same reason. So one Gatekeeper serves one
+resource, and two workspaces take two Gatekeepers, which is also the only arrangement in which their
+credentials sit in different secret stores. A URL the pattern does not match is a refusal that says
+this, rather than a bind that silently succeeds against the wrong workspace.
 
-### 8. The approval queue
+Four more decisions worth carrying forward:
 
-The deep slice, and the one with the clearest seam: `buildCapability` funnels every operation
-through ONE `invoke` closure, so threading the queue is a change in one place, not forty.
+- **Identity on this door is STRONGER than on `/rpc`, and it forced a second policy knob.**
+  `createAccount()` "takes no arguments, so it carries no user identity" (the spec's own words), so
+  the account id is one we MINT and the workspace's persistence of the stub is what makes it stable
+  and per-user. That is better than `connect({ actorId })`, which trusts a string. But it means a
+  `grants` map keyed on an identity an operator typed can never match an account, so the policy
+  gained `autoProvisionedTier`, which does NOT inherit from `defaultTier`. Inheriting would widen
+  silently in whichever direction the deployment did not mean: a roster deployment would hand a tier
+  to every account the workspace mints, or turning on discovery would quietly give every unrostered
+  `/rpc` caller one. `grants` is still consulted first, by the account's own id, which is the one
+  affordance for raising a single account (surfaced as `AccountDescription.uniqueName`).
+- **The types are composed PER TIER, not shipped whole.** `pnpm gen:sdk` emits one method signature
+  per operation (`sdk/gatekeeper/src/session-types.generated.ts`) and `renderSessionTypes` composes
+  the granted subset. A `.d.ts` naming the full surface would promise methods the object does not
+  have, which is the same lie the hand-curated allow-list the table replaced used to tell.
+  Composition THROWS on a name it has no signature for: a silently dropped method reads to an agent
+  exactly like an operation the deployment does not serve, and the two need opposite fixes. Results
+  are `unknown` and say so, because inlining the model tree would put a second copy of it in every
+  Worker bundle, free to disagree with the OpenAPI document it came from.
+- **The verifier is a FOURTH export, not the account.** `getVerifier()` hands a stub to another
+  vendor's gatekeeper, and the account object carries `revoke()` and the resource classes. An
+  identity token has to carry no authority, so it is its own entrypoint with one method.
+- **A resource's BEHAVIOUR lives in `ResourceCore`, not in the Durable Object.** workerd will only
+  construct a DO from a real `DurableObjectState`, and the props-imbued class handed to the
+  workspace is opaque by design, so a suite reaching this only through the object could assert
+  little more than that a class came back. The DO is the shell that supplies `ctx.props` and holds
+  one core for its lifetime, which is what the action ledger needs.
 
-- **Reads authorize before returning**: `authorizeObservation(description)` ahead of handing
-  back the result. The spec explicitly allows calling it after the upstream fetch, so the
-  description can name real data.
-- **Writes submit and WAIT: `awaitDecision: true` is the honest stopgap.** The spec allows a
-  gatekeeper that does not simulate to suspend the agent's turn instead, and that is
-  byte-for-byte our current synchronous behaviour with governance added, so it is the organic
-  first step. Simulation (provisional ids, staged-action overlay on reads, `revertAction`) is a
-  LATER slice if the run/task domain ever wants it; do not build it speculatively.
-- **`ActionDescription` is derived, not authored**: `resolveConsequence` supplies
-  destructive/idempotent, the binding name is the stable `actionKind` tag, and
-  `getAutoApprovableActions()` is a filter over the same table. The consequence metadata the
-  bindings carry was built for exactly this consumer.
-- **The tier policy stays the FLOOR.** An operation policy never granted remains absent from the
-  session; the queue governs what IS granted. The OS approving a method that does not exist is
-  not a conflict, because the method does not exist.
-- **The inbox keeps its direction.** Cards and `runs_watched` are the platform's parks flowing
-  OS-ward and are untouched by this slice; slice 9 decides how they ride the official channel.
+### 8. The approval queue (landed, with slice 7)
+
+Threaded onto the ONE `invoke` closure in `buildCapability`, through an optional `SessionGovernance`
+on `SessionDependencies`. A door with no governance passes nothing and gets byte-for-byte the prior
+behaviour, which is what keeps `/rpc` the promise this package goes on making.
+
+- **Reads run, then authorize, then return.** The spec allows calling `authorizeObservation` after
+  the upstream fetch, and that is the useful order: an authorizer that must decide first can only
+  describe the request. A refusal throws, so nothing reaches the caller either way. Reads served
+  from our own DO projection (`approvals_list`, `runs_watched`, a card lookup) are authorized too:
+  they are observations of the paired deployment, and that the bytes are local is an implementation
+  detail of how they arrived.
+- **Writes are submitted and PERFORMED ONLY on `applyAction`.** `submitAction` returns when the
+  action is queued, not when it is decided, so the effect is registered unperformed against a
+  sequential id and the awaiting call is resolved by the decision. Ids are per RESOURCE OBJECT, not
+  per session, because that is what the workspace calls back on. The ledger is in MEMORY on purpose:
+  the awaiting caller is a suspended RPC into that object, so nothing can be evicted underneath it,
+  and persisting would only let a later apply perform a write whose result nobody reads. An entry is
+  removed BEFORE its effect runs, so a redelivered decision is a refusal rather than a second write.
+- **`ActionDescription` is derived, not authored**, and three fields are fixed with reasons:
+  `implementsRevert: false` (a started run or a merged PR is not ours to undo, and the flag exists
+  so the UI does not offer an undo that would not work), `awaitDecision: true` (we do not simulate,
+  so the spec's alternative is to suspend the agent's turn), and `autoApprovable` from
+  `resolveConsequence`. **`getAutoApprovableActions()` is empty today and that is the honest
+  answer**: the surface annotates a consequence only where the stakes are real money or a merged
+  PR, so every other mutation is unannotated and reads as destructive. Filling the catalog would
+  mean inverting that default here, which is exactly the misreading `resolveConsequence` exists to
+  stop. The test asserts the RELATION between the catalog and what a submitted action would stamp,
+  so a pinned `[]` cannot outlive its meaning.
+- **The argument bag reaches a human, so it is FENCED.** The description is Markdown shown to an
+  approver and the arguments are agent-authored: the fence is sized one tick longer than the longest
+  backtick run in the payload, the repo's own rule for captured output crossing a rendered surface.
+- **The tier policy stays the FLOOR.** An operation policy never granted is absent from the session,
+  so the queue only ever governs calls that exist.
+- **Simulation is NOT built.** Provisional ids, a staged-action overlay on reads and a real
+  `revertAction` are a later slice if the run/task domain ever wants them. `revertAction` answers
+  with what a person has to do themselves rather than throwing, because the caller is the workspace
+  UI on behalf of someone who wants their change undone.
+- **`addObserver` REFUSES, which is slice 9's stated safe default arriving early.** It cost one
+  method and a share blocked loudly beats an observation leaked quietly. `removeObserver` is the
+  idempotent no-op the contract asks for. The eventual rule still belongs to slice 9.
+
+**Rejected: transcribing the partner's types as a dependency.** The protocol shapes are transcribed
+into `src/os/protocol.ts` rather than imported, because depending on the partner workspace would
+make their release cadence this package's build, which the initiative's own CI rule refuses. The
+transcription is partial on purpose (it carries what this Worker implements or is handed) and can
+fall behind; the answer to that is slice 10's nightly leg, not a dependency.
 
 ### 9. Hooks, sharing, and the session contract's small print
 
@@ -568,17 +627,18 @@ through ONE `invoke` closure, so threading the queue is a change in one place, n
 
 ### 10. The live leg, and the MCP-bridge probe
 
-- **Land slice 5's second leg once slice 7 gives the binding a target**: nightly, opt-in behind
-  `GATEKEEPER_OS_REF`, `continue-on-error`, booting the partner repo through its own
-  `run-dev-server.js` with `GATEKEEPER_CAT_FACTORY` bound to our Worker.
+- **Land slice 5's second leg**, now unblocked: slice 7 gave the binding its target. Nightly,
+  opt-in behind `GATEKEEPER_OS_REF`, `continue-on-error`, booting the partner repo through its own
+  `run-dev-server.js` with `GATEKEEPER_CAT_FACTORY` bound to our Worker. It is also what keeps the
+  transcribed protocol types in `src/os/protocol.ts` honest, which is the one thing no hermetic
+  suite here can check.
 - **Probe the official MCP bridge first, and record the outcome either way.** `gatekeeper-mcp` /
   `gatekeeper-mcp-portal` can front our existing hosted MCP endpoint (`ALL /api/v1/mcp`) today,
-  which would put cat-factory in an OS workspace before slice 7 lands and exercise the
-  platform's side of the loop cheaply. It is a PROBE, not the destination: the bridge cannot
-  carry per-actor key minting, `withheld()`'s four reasons, the tier floor or the approvals
-  inbox, which are the reasons this Worker exists. Do not let a working bridge demo mute slices
-  7 to 9; do record what the probe teaches about the approval UX before slice 8 hard-codes
-  assumptions.
+  which would exercise the platform's side of the loop cheaply. It is a PROBE, not the destination: the bridge cannot
+  carry per-actor key minting, `withheld()`'s four reasons, the tier floor or the approvals inbox,
+  which are the reasons this Worker exists. Slices 7 and 8 have since landed, so what a probe is
+  still worth is a second reading of the approval UX against one that already exists; do not let a
+  working bridge demo mute slice 9.
 
 ## Checklist
 
@@ -592,14 +652,15 @@ through ONE `invoke` closure, so threading the queue is a change in one place, n
 - [ ] Slice 5: the two legs the scripted origin cannot cover
   - [x] Against a real `/api/v1`: `sdk/gatekeeper-worker/test/live` + the smoketest's
         `--only=gatekeeper` phase, in the non-blocking Gatekeeper lane
-  - [ ] Against a real Cloudflare OS: unblocked by the published repo, sequenced after slice 7
-        (see slice 10)
+  - [ ] Against a real Cloudflare OS: unblocked by the published repo, and no longer blocked by
+        slice 7 either, which has landed the entrypoint the binding targets (see slice 10)
 - [x] Slice 6: base/template split (`@cat-factory/gatekeeper-worker` published, `deploy/gatekeeper`
       down to its policy, bindings and wiring)
-- [ ] Slice 7: the OS-facing entrypoint (`GatekeeperVendor` facade, generated
-      describe/resources/types, the resource decision, identity via `createAccount()`)
-- [ ] Slice 8: the approval queue (observations authorized, actions submitted with
-      `awaitDecision`, `ActionDescription` derived from the table, tier floor kept)
+- [x] Slice 7: the OS-facing entrypoint (`GatekeeperVendor` facade, generated
+      describe/resources/types, the resource decision, identity via `createAccount()` plus the
+      `autoProvisionedTier` knob it forced)
+- [x] Slice 8: the approval queue (observations authorized, actions submitted and performed only on
+      `applyAction`, `ActionDescription` derived from the table, tier floor kept)
 - [ ] Slice 9: hooks and sharing governance (cards and run events over `bindHook`,
       `addObserver` refusal default, stub lifecycle, runtime validation)
 - [ ] Slice 10: the live leg (`GATEKEEPER_OS_REF`, after slice 7) and the MCP-bridge probe,
@@ -626,14 +687,17 @@ here:
       what order to update the secret and re-enrol in, and what happens to deliveries signed
       with the old secret while the two disagree. Needs verifying against the enrolment and
       verification code before it can be written down honestly.
-- [ ] **The Cap'n Web framing in the Gatekeeper docs is wrong on one point.** The published
-      source reaches gatekeepers over native service-binding RPC to the `GatekeeperVendor`
-      entrypoint; Cap'n Web is the browser-to-backend and gadget-side protocol (shared
-      semantics, different wire). `sdk/gatekeeper-worker/README.md` ("any agent runtime speaking
-      Cap'n Web", "the Cap'n Web endpoint the OS deployment talks to") and this tracker's
-      slice-4 prose present `/rpc` as the OS's own path; after slice 7 it is the non-OS door.
-      Correct both when slice 7 lands rather than before, so the docs never describe a surface
-      that does not exist yet.
+- [x] **The Cap'n Web framing in the Gatekeeper docs was wrong on one point.** Corrected with
+      slice 7, which is when `/rpc` actually became the non-OS door: both READMEs now state the two
+      doors and how each is authorized, and `docs/glossary.md` carries the three pairs of words this
+      Worker routinely confuses (the two doors, the two approval DIRECTIONS, the two default tiers).
+- [ ] **An account maps to a person only inside the workspace.** A minted account id is what rides
+      `externalIdentity` onto every key and therefore onto every run, which is exactly the mapping
+      slice 3 built, except that the id names nobody outside the OS deployment that holds the stub.
+      `AccountDescription.uniqueName` surfaces it so an operator can read it, and that is the whole
+      of the affordance today. Closing this properly wants the workspace's own management UI
+      (`startAppUi` / `startResourceConfigurator`), which is slice 9 territory at the earliest, and
+      is worth doing only once someone has to do the mapping in anger.
 
 ## Gotchas the pilot surfaced
 

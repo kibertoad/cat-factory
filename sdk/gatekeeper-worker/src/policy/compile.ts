@@ -48,6 +48,25 @@ export interface TierPolicy {
 export interface GatekeeperPolicy {
   /** The tier an actor with no explicit grant is given. Name `null` to refuse unknown actors. */
   defaultTier: string | null
+  /**
+   * The tier an AUTO-PROVISIONED account gets: the Cloudflare OS entrypoint's own default.
+   *
+   * A second knob rather than a reuse of `defaultTier`, because the two doors establish identity
+   * differently and an operator's answer about one is not their answer about the other.
+   * `defaultTier` is about a person the OS names on a `connect({ actorId })` call, so a deployment
+   * can keep a roster and refuse strangers. An account minted through `createAccount()` has no name
+   * to put on a roster: the contract's auto-provisioning flow carries no identity by design, so
+   * `grants` can never match one and every such account falls to this.
+   *
+   * Absent or `null` REFUSES, and it does not inherit from `defaultTier`. Inheriting would widen
+   * silently in whichever direction the deployment did not mean: a roster deployment would hand a
+   * tier to every account the workspace mints, or turning on OS discovery would quietly give every
+   * unrostered `/rpc` caller one. Naming a tier here is what turns Cloudflare OS discovery on.
+   *
+   * An account still resolves through `grants` first, so an operator who wants ONE account raised
+   * reads its id off the account's own `describe()` (`uniqueName`) and grants that id directly.
+   */
+  autoProvisionedTier?: string | null
   tiers: Record<string, TierPolicy>
   /** OS user identity (whatever the OS authenticates) to tier name. */
   grants: Record<string, string>
@@ -85,6 +104,7 @@ export interface CompiledTier {
 /** The policy, resolved once and read per request. */
 export interface CompiledPolicy {
   defaultTier: string | null
+  autoProvisionedTier: string | null
   tiers: ReadonlyMap<string, CompiledTier>
   grants: ReadonlyMap<string, string>
 }
@@ -220,11 +240,17 @@ export function compilePolicy(policy: GatekeeperPolicy): CompiledPolicy {
     tiers.set(name, compileTier(name, tier))
   }
 
-  if (policy.defaultTier !== null && !tiers.has(policy.defaultTier)) {
-    throw new PolicyError(
-      `defaultTier is '${policy.defaultTier}', which is not one of the declared tiers ` +
-        `(${[...tiers.keys()].join(', ')}).`,
-    )
+  const autoProvisionedTier = policy.autoProvisionedTier ?? null
+  for (const [field, named] of [
+    ['defaultTier', policy.defaultTier],
+    ['autoProvisionedTier', autoProvisionedTier],
+  ] as const) {
+    if (named !== null && !tiers.has(named)) {
+      throw new PolicyError(
+        `${field} is '${named}', which is not one of the declared tiers ` +
+          `(${[...tiers.keys()].join(', ')}).`,
+      )
+    }
   }
   for (const [actor, tierName] of Object.entries(policy.grants)) {
     if (!tiers.has(tierName)) {
@@ -234,7 +260,12 @@ export function compilePolicy(policy: GatekeeperPolicy): CompiledPolicy {
     }
   }
 
-  return { defaultTier: policy.defaultTier, tiers, grants: new Map(Object.entries(policy.grants)) }
+  return {
+    defaultTier: policy.defaultTier,
+    autoProvisionedTier,
+    tiers,
+    grants: new Map(Object.entries(policy.grants)),
+  }
 }
 
 /**
@@ -246,6 +277,19 @@ export function compilePolicy(policy: GatekeeperPolicy): CompiledPolicy {
  */
 export function tierForActor(policy: CompiledPolicy, actorId: string): CompiledTier | null {
   const name = policy.grants.get(actorId) ?? policy.defaultTier
+  if (name === null) return null
+  return policy.tiers.get(name) ?? null
+}
+
+/**
+ * The tier an auto-provisioned Cloudflare OS account holds, or a refusal.
+ *
+ * `grants` is consulted FIRST and by the account's own minted id, which is the whole affordance an
+ * operator has for raising one account above the rest: nothing else about such an account is
+ * nameable, because nothing about it was named when it was created.
+ */
+export function tierForAccount(policy: CompiledPolicy, accountId: string): CompiledTier | null {
+  const name = policy.grants.get(accountId) ?? policy.autoProvisionedTier
   if (name === null) return null
   return policy.tiers.get(name) ?? null
 }
