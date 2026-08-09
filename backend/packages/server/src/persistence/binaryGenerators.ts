@@ -87,7 +87,15 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
     // entitled to the field its type promises, so the fill happens once here rather than as a
     // `?? []` at each of them. A missed call site turns the degradation into a `TypeError` in a
     // dispatch brief or a board snapshot rather than reporting it.
-    return body.generators.map((view) => ({ ...view, capabilities: view.capabilities ?? [] }))
+    //
+    // `credentials` is filled the same way and refused the other way (see `isGeneratorView`): an
+    // ABSENT list is an integration that authenticates with nothing, while the RETIRED singular
+    // spelling is a mothership this node cannot read a credential declaration off.
+    return body.generators.map((view) => ({
+      ...view,
+      capabilities: view.capabilities ?? [],
+      credentials: view.credentials ?? [],
+    }))
   }
 
   async documentsFor(ids: string[]): Promise<Map<string, ApiContractDocument[]>> {
@@ -175,9 +183,19 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
  * older mothership, and the same one that lets every integration registered before the axis
  * existed keep running. A capabilities key that is PRESENT and not an array is a wrong shape like
  * any other, so it is refused here rather than quietly flattened into "declared none".
+ *
+ * `credentials` is the case where an absent key and an OLDER key are opposite facts, so the two
+ * are separated. An integration that authenticates with nothing genuinely emits no list, and that
+ * is why absence is admitted and filled with `[]` above. But a mothership predating the list
+ * emits the RETIRED singular `credential` instead, and reading that reply as "declares none"
+ * would tell the agent to call a metered vendor API unauthenticated and report the 401 as the
+ * endpoint's fault: a silent wrong answer produced by a version skew, which is the one thing this
+ * client exists to make loud. So the retired key is refused as the unreadable reply it is, and
+ * the operator gets the same `binary_generators_unreachable` refusal an older mothership's 404
+ * already produces, naming the field.
  */
-type ServedGeneratorView = Omit<BinaryGeneratorView, 'capabilities'> &
-  Partial<Pick<BinaryGeneratorView, 'capabilities'>>
+type ServedGeneratorView = Omit<BinaryGeneratorView, 'capabilities' | 'credentials'> &
+  Partial<Pick<BinaryGeneratorView, 'capabilities' | 'credentials'>>
 
 function isGeneratorView(value: unknown): value is ServedGeneratorView {
   if (!value || typeof value !== 'object') return false
@@ -186,7 +204,9 @@ function isGeneratorView(value: unknown): value is ServedGeneratorView {
     typeof view.id === 'string' &&
     Array.isArray(view.modalities) &&
     Array.isArray(view.mediaTypes) &&
-    (view.capabilities === undefined || Array.isArray(view.capabilities))
+    (view.capabilities === undefined || Array.isArray(view.capabilities)) &&
+    (view.credentials === undefined || Array.isArray(view.credentials)) &&
+    !('credential' in view)
   )
 }
 

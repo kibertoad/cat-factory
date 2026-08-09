@@ -107,17 +107,21 @@ export async function collectDeclaredCapabilityCredentials(
     'read generative integrations for the credential checklist',
     () => input.binaryGenerators.views(),
   )
+  // Every credential the integration declares, one checklist row each. An integration that
+  // authenticates with a PAIR (an API key and the secret it is Basic-joined with) asks the
+  // operator for the two values its vendor's console actually issues, under the two names it
+  // issues them under, and each is stored and rotated on its own.
   for (const view of views ?? []) {
-    const credential = view.credential
-    if (!credential) continue
-    push({
-      subject: 'binary-generator',
-      id: view.id,
-      label: view.name,
-      key: credential.key,
-      ...(credential.usage ? { usage: credential.usage } : {}),
-      required: credential.required !== false,
-    })
+    for (const credential of view.credentials) {
+      push({
+        subject: 'binary-generator',
+        id: view.id,
+        label: view.name,
+        key: credential.key,
+        ...(credential.usage ? { usage: credential.usage } : {}),
+        required: credential.required !== false,
+      })
+    }
   }
   return { declared, incomplete: views === undefined }
 }

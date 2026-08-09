@@ -35,7 +35,7 @@ const DEFINITION: BinaryGeneratorDefinition = {
   modalities: ['image'],
   mediaTypes: ['image/png'],
   endpoint: 'https://api.retrodiffusion.test',
-  credential: { key: 'RD_TOKEN', usage: 'X-RD-Token: <value>' },
+  credentials: [{ key: 'RD_TOKEN', usage: 'X-RD-Token: <value>' }],
   contracts: [{ contractId: 'api', format: 'openapi', title: 'Inference API', body: OPENAPI }],
 }
 
@@ -88,13 +88,32 @@ describe('mothership-mode generative binary integrations', () => {
     expect(views[0]!.contracts[0]).not.toHaveProperty('body')
   })
 
-  it('carries the credential KEY NAME, which is what a node resolves a value for', async () => {
+  it('carries every credential KEY NAME, which is what a node resolves values for', async () => {
     // The one field here that the workspace snapshot deliberately withholds from a viewer. The
-    // node needs it (it resolves the key against its own environment onto the job body); nothing
+    // node needs it (it resolves each key against its own environment onto the job body); nothing
     // secret crosses, because a declaration is a name and never a value.
     const source = await node(mothership())
     const views = await source.views()
-    expect(views[0]!.credential).toEqual({ key: 'RD_TOKEN', usage: 'X-RD-Token: <value>' })
+    expect(views[0]!.credentials).toEqual([{ key: 'RD_TOKEN', usage: 'X-RD-Token: <value>' }])
+  })
+
+  it('carries a PAIR across the machine API as two declarations', async () => {
+    const source = await node(
+      mothership([
+        {
+          ...DEFINITION,
+          credentials: [
+            { key: 'SCENARIO_API_KEY', usage: 'the HTTP Basic username' },
+            { key: 'SCENARIO_API_SECRET', usage: 'the HTTP Basic password' },
+          ],
+        },
+      ]),
+    )
+    const views = await source.views()
+    expect(views[0]!.credentials.map((credential) => credential.key)).toEqual([
+      'SCENARIO_API_KEY',
+      'SCENARIO_API_SECRET',
+    ])
   })
 
   it('serves the FULL documents on the lazy read, batched over the selection', async () => {
@@ -266,6 +285,40 @@ describe('mothership-mode generative binary integrations', () => {
         )) as unknown as typeof fetch,
     })
     await expect(source.views()).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'binary_generators_unreachable', field: 'generators' },
+    })
+  })
+
+  it('fills an ABSENT `credentials` with none, and THROWS on the RETIRED singular spelling', async () => {
+    // The two look alike on the wire and are opposite facts. A mothership on this build serves no
+    // list for an integration that authenticates with nothing, so absence is filled with `[]`.
+    // A mothership one build BEHIND serves the retired `credential` object instead, and reading
+    // that as "declares none" would tell the agent to call a metered vendor API unauthenticated
+    // and report the 401 as the endpoint's fault: a silent wrong answer produced by a version
+    // skew, which is the one disposition this client exists to make loud.
+    const served = (generator: Record<string, unknown>) =>
+      new HttpBinaryGeneratorSource({
+        baseUrl: 'https://mothership.test',
+        token: 'tok',
+        fetchImpl: (() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ generators: [generator] }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+          )) as unknown as typeof fetch,
+      })
+    const open = await served({ id: 'retro', modalities: ['image'], mediaTypes: [] }).views()
+    expect(open[0]!.credentials).toEqual([])
+    await expect(
+      served({
+        id: 'retro',
+        modalities: ['image'],
+        mediaTypes: [],
+        credential: { key: 'RD_TOKEN' },
+      }).views(),
+    ).rejects.toMatchObject({
       code: 'unavailable',
       details: { reason: 'binary_generators_unreachable', field: 'generators' },
     })

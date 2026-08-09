@@ -38,13 +38,17 @@ const slug = v.pipe(
 )
 
 /**
- * A credential a generative integration needs, declared by NAME only — never a value.
+ * ONE credential a generative integration needs, declared by NAME only, never a value.
  *
  * The value is resolved per dispatch through the facade-wired `ToolSecretResolver` port (the
  * same port a tool server's credentials go through) and written straight onto the job body,
  * where the harness injects it into THIS JOB's agent environment. It never reaches
  * `AgentRunContext`, a prompt, or the telemetry snapshot — only the key NAME does, because the
  * agent has to know which variable to read.
+ *
+ * An integration declares a LIST of these ({@link binaryGeneratorDefinitionSchema}'s
+ * `credentials`), because a credential is not always one string: see that field for what a
+ * single one could not express.
  */
 export const binaryGeneratorCredentialSchema = v.object({
   /**
@@ -96,9 +100,16 @@ export const binaryGeneratorCredentialSchema = v.object({
     ),
   ),
   /**
-   * How the integration expects the credential to be presented (`X-RD-Token: <value>`,
-   * `Authorization: Bearer <value>`). Folded into the brief verbatim: the agent writes the
-   * request itself, and a key with no stated header is a key it has to guess the use of.
+   * How the integration expects THIS value to be presented (`X-RD-Token: <value>`,
+   * `Authorization: Bearer <value>`, `the HTTP Basic username`). Folded into the brief verbatim:
+   * the agent writes the request itself, and a key with no stated header is a key it has to guess
+   * the use of.
+   *
+   * PROSE, and deliberately not an auth-scheme enum. Every scheme a vendor has ever shipped fits
+   * in a sentence, while an enum covers the ones enumerated on the day it was written: the first
+   * signed request or rotating timestamp needs a member nobody can add without a platform release,
+   * and the platform would gain a fact it then has to act on for a call it does not make. It also
+   * has to say which HALF of a pair this is, which is a sentence rather than a scheme.
    */
   usage: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
   /**
@@ -110,6 +121,33 @@ export const binaryGeneratorCredentialSchema = v.object({
   required: v.optional(v.boolean()),
 })
 export type BinaryGeneratorCredential = v.InferOutput<typeof binaryGeneratorCredentialSchema>
+
+/**
+ * The variable a credential is INJECTED as: its own {@link BinaryGeneratorCredential.envName}, or
+ * its lookup key. The one identity every layer downstream keys on, so it is derived here rather
+ * than re-spelled at each of them.
+ */
+export function binaryGeneratorCredentialEnvName(credential: BinaryGeneratorCredential): string {
+  return credential.envName ?? credential.key
+}
+
+/**
+ * The credentials of one integration, each of which must land in a DISTINCT variable.
+ *
+ * Two entries injected under one name is not a redundant declaration, it is a silent one: both
+ * are resolved, one overwrites the other in the job body, and the agent authenticates with
+ * whichever won. Refused at registration so the deployment learns at boot.
+ *
+ * Compared case-INSENSITIVELY, the same rule the reserved-key floor applies and for the same
+ * reason: environment lookup is case-insensitive on Windows, so `ACME_KEY` and `acme_key` are one
+ * variable on a developer's laptop and two in the declaration.
+ */
+function credentialsInjectDistinctVariables(credentials: BinaryGeneratorCredential[]): boolean {
+  const names = credentials.map((credential) =>
+    binaryGeneratorCredentialEnvName(credential).toUpperCase(),
+  )
+  return new Set(names).size === names.length
+}
 
 /**
  * A generative binary integration a deployment registers in code.
@@ -169,7 +207,34 @@ export const binaryGeneratorDefinitionSchema = v.object({
    * deployment puts the knowledge that would otherwise be discovered once per run.
    */
   guidance: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(20_000))),
-  credential: v.optional(binaryGeneratorCredentialSchema),
+  /**
+   * The credentials the integration authenticates with, each declared by name. Absent or empty
+   * means it is called unauthenticated.
+   *
+   * A LIST rather than one credential, because a credential is not always one string and the
+   * shapes that need two are ordinary rather than exotic: HTTP Basic over an API key and an API
+   * secret (Twilio, Mailgun and a long tail of REST APIs), an access key paired with its secret,
+   * a key that only works alongside an account or region id. Colon-joining such a pair into one
+   * variable works, and costs three things worth more than the field it saves: the operator
+   * checklist asks for one value where the vendor's console shows two, the halves can no longer
+   * be rotated independently, and a value assembled wrongly arrives as a 401 that is
+   * indistinguishable from a wrong key, which is a failure an operator debugs against the vendor
+   * rather than against the declaration.
+   *
+   * What it deliberately does NOT carry is an auth SCHEME. The agent writes the request here, not
+   * the platform, so a scheme would be a fact the platform stores and never acts on;
+   * {@link BinaryGeneratorCredential.usage} says how each value is presented, in prose that
+   * covers every scheme including the ones no enum anticipated.
+   */
+  credentials: v.optional(
+    v.pipe(
+      v.array(binaryGeneratorCredentialSchema),
+      v.check(
+        credentialsInjectDistinctVariables,
+        'each credential must be injected under a distinct environment variable',
+      ),
+    ),
+  ),
   /**
    * The integration's API contract documents, in the same formats the foundational catalog
    * accepts. Injected as `.cat-context/` files beside the brief, so the agent calls the

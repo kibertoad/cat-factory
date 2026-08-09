@@ -121,7 +121,7 @@ binaryGenerators.register({
   mediaTypes: ['image/png'],
   endpoint: 'https://api.retrodiffusion.ai/v1',
   guidance: 'Inference is synchronous; the response carries base64 images in `base64_images`.',
-  credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token request header' },
+  credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token request header' }],
   contracts: [{ contractId: 'api', format: 'openapi', title: 'Inference API', body: OPENAPI }],
 })
 ```
@@ -248,15 +248,15 @@ storage id is fixed in the workspace catalog by whoever runs the board, an integ
 in the deployment's own build, and one reason would send half the readers to the wrong place. It
 also runs with NO catalog seam wired, since the registry needs no I/O.
 
-### The credential: declared by name, delivered per job, never to a prompt
+### The credentials: declared by name, delivered per job, never to a prompt
 
 This is the one place the feature's original "credentials reach the agent through the existing
 seams" answer did not hold. A tool server's credential works because the platform configures the
 client; an image API is called by the agent's OWN code, so the value has to be in that job's
 environment or the integration is decorative.
 
-So a definition declares the credential BY NAME and the value takes the same route a tool server's
-does, one channel over:
+So a definition declares its credentials BY NAME and the values take the same route a tool
+server's does, one channel over:
 
 1. the ENGINE resolves the selection onto `AgentRunContext.binaryGenerators`: ids, content types
    and the credential's KEY NAME, all non-secret, which is why the agent-context snapshot may
@@ -272,16 +272,40 @@ because two registries mint these ids and nothing stops them colliding: a deploy
 `retro-diffusion` tool server AND a `retro-diffusion` integration would otherwise hand each the
 other's secret from a per-workspace store.
 
+**A credential is a LIST, because it is not always one string.** HTTP Basic over an API key and
+an API secret is the ordinary shape (Twilio, Mailgun and a long tail of REST APIs), as is an
+access key paired with its secret or a key that only works alongside an account id. Colon-joining
+such a pair into one variable works and costs three things: the operator checklist asks a board
+for one value the vendor's console never issues, the halves can no longer be rotated
+independently, and a value assembled wrongly arrives as a 401 that is indistinguishable from a
+wrong key, which is a failure an operator debugs against the vendor rather than against the
+declaration. Two declarations cost a field and buy back all three.
+
+What the list deliberately does NOT carry is an auth SCHEME (`basic` | `bearer` | `header`) with
+the platform assembling the request. The agent writes that request, so a scheme would be a fact
+the platform stores and never acts on, and the first vendor with a signed request or a rotating
+timestamp would need a member nobody can add without a platform release. Each credential's `usage`
+is prose for exactly that reason: prose covers every scheme, including saying which half of a pair
+a value is.
+
+Two rules follow from the list and neither is optional. Each credential must land in a DISTINCT
+environment variable, refused at registration (case-insensitively, since environment lookup is on
+Windows), because two entries injected under one name is not a redundant declaration but a silent
+one: both resolve, one overwrites the other, and the agent authenticates with whichever won. And
+the brief states the missing-value disposition JOINTLY: told per variable that a missing one means
+"do not call", an agent holding a key whose secret did not resolve has been told something true
+about each half and nothing about the request it is about to write.
+
 **An unresolvable credential is not a failed dispatch.** The brief states, per integration, that
 an unset variable means the platform could not provide the key and the integration must not be
-called, and the agent can SEE the variable, so a second declaration from the executor could only
+called, and the agent can SEE the variables, so a second declaration from the executor could only
 agree with the environment or contradict it. A run that generates what it can and NAMES the gap
 beats one that refuses to start over the most ordinary misconfiguration there is.
 
 ### The brief leads with generation
 
 `renderBinaryOutputBrief` is now three sections in the order the work happens: **Generation**
-(each integration's content types, formats, endpoint, notes, credential variable and contract
+(each integration's content types, formats, endpoint, notes, credential variables and contract
 file), **Scope**, **Storage**. What makes the artifacts is the decision an agent cannot recover
 from later, and a generator that reads only the top of the file must still get it right. Every gap
 is stated rather than omitted (an id the deployment no longer registers, a content type nothing
@@ -347,6 +371,15 @@ The answer is the third one: **fail admission with the outage's own code.** The 
 is re-thrown rather than re-mapped, so the caller gets a 503-shaped, retryable refusal carrying
 `binary_generators_unreachable`, never `binary_output_generator_invalid`. It is the "absent ≠
 zero" rule applied for the first time to a DECISION surface rather than an enrichment one.
+
+A build SKEW between the two processes ends at the same refusal, and that placement is the point.
+A mothership one build behind serves an integration's credential under the retired singular
+spelling, and a node that read the absent list as "declares none" would tell the agent to call a
+metered vendor API unauthenticated and report the 401 as the endpoint's fault: a silent wrong
+answer with a version skew behind it. So the retired key is refused as the unreadable reply it is,
+and the operator gets the outage refusal that names the field rather than a run that quietly
+degraded. Absence of the list is still admitted and filled with none, because an integration that
+authenticates with nothing genuinely serves no list.
 
 The two BEST-EFFORT readers keep their own dispositions, and both are safe because each already
 defines its own absence: the dispatch brief injects nothing, which the trait guidance already
@@ -692,8 +725,8 @@ The picker's generative half needed one thing the other two did not: the integra
 deployment's CODE, so there is no catalog read to filter. They ride the workspace snapshot as
 `binaryGenerators`: the same route `CustomAgentKind.binaryOutput` takes, and for the same reason
 (the snapshot carries the deployment-registered facts the SPA branches on). The projection is
-IDENTITY ONLY (id, name, summary, modalities, mediaTypes) and deliberately omits the credential's
-KEY NAME: the picker has no use for it, and a workspace viewer has no business learning which
+IDENTITY ONLY (id, name, summary, modalities, mediaTypes) and deliberately omits the credentials'
+KEY NAMES: the picker has no use for it, and a workspace viewer has no business learning which
 environment variables the deployment sets.
 
 ## Capability traits: what an integration can be ASKED FOR

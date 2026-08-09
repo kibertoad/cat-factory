@@ -39,7 +39,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     id: 'retro-diffusion',
     label: 'Retro Diffusion',
     modalities: ['image' as const],
-    credentialKey: 'RD_TOKEN',
+    credentials: [{ key: 'RD_TOKEN' }],
   }
 
   it('resolves each declared credential into a job-body env pair', async () => {
@@ -54,6 +54,79 @@ describe('resolveBinaryGeneratorSecrets', () => {
     // The subject is what keeps a per-workspace resolver from confusing a generative integration
     // with a tool server of the same id.
     expect(subjects).toEqual([{ kind: 'binary-generator', id: 'retro-diffusion' }])
+  })
+
+  it('resolves a PAIR into two env pairs, in ONE call for the integration', async () => {
+    // An integration that authenticates with an API key and its Basic-joined secret declares two
+    // credentials, and they are asked for together: the port takes a list precisely so a
+    // per-workspace sealed store is asked once, and a call per credential inside a loop over the
+    // list is the N+1 that shape exists to prevent.
+    const { resolver, subjects } = recordingResolver({
+      SCENARIO_API_KEY: 'k',
+      SCENARIO_API_SECRET: 's',
+    })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          {
+            ...retro,
+            credentials: [{ key: 'SCENARIO_API_KEY' }, { key: 'SCENARIO_API_SECRET' }],
+          },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([
+      { key: 'SCENARIO_API_KEY', value: 'k' },
+      { key: 'SCENARIO_API_SECRET', value: 's' },
+    ])
+    expect(subjects).toHaveLength(1)
+  })
+
+  it('lets one half of a pair fail on its own, leaving the JOINT rule to the brief', async () => {
+    // Each value stands or falls by itself here, because only the agent can see what arrived and
+    // the brief already tells it that a pair with a missing half must not be sent at all.
+    // Collapsing the list on one failure would add a second way for a credential to disappear
+    // without changing what any agent does.
+    const logger = createRecordingLogger()
+    const { resolver } = recordingResolver({ SCENARIO_API_KEY: 'k' })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          {
+            ...retro,
+            credentials: [{ key: 'SCENARIO_API_KEY' }, { key: 'SCENARIO_API_SECRET' }],
+          },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger,
+      }),
+    ).toEqual([{ key: 'SCENARIO_API_KEY', value: 'k' }])
+    const warned = logger.lines.filter((line) => line.level === 'warn')
+    expect(warned).toHaveLength(1)
+    expect(warned[0]?.fields?.credentialKey).toBe('SCENARIO_API_SECRET')
+  })
+
+  it('holds every credential in a list to the name floors, not just the first', async () => {
+    // A floor that read only the head of the list would leave the second half as the way around
+    // it, which is the whole reason both checks sit here rather than in a facade's resolver.
+    const { resolver, subjects } = recordingResolver({ ACME_KEY: 'k', ENCRYPTION_KEY: 'master' })
+    const logger = createRecordingLogger()
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          { ...retro, credentials: [{ key: 'ACME_KEY' }, { key: 'ENCRYPTION_KEY' }] },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger,
+      }),
+    ).toEqual([{ key: 'ACME_KEY', value: 'k' }])
+    expect(subjects).toHaveLength(1)
+    const warned = logger.lines.filter((line) => line.level === 'warn')
+    expect(warned).toHaveLength(1)
+    expect(warned[0]?.fields?.credentialKey).toBe('ENCRYPTION_KEY')
   })
 
   it('degrades an unresolvable credential to an absence, never a failed dispatch', async () => {
@@ -76,7 +149,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
   })
 
   it('reports an unresolved OPTIONAL credential below warn, so it is not crying wolf', async () => {
-    // `credentialRequired: false` is a state the deployment DECLARED as normal — the endpoint
+    // `required: false` is a state the deployment DECLARED as normal — the endpoint
     // works unauthenticated, and the brief tells the agent to call it anyway. Reporting that at
     // the same severity as a required key that failed to resolve would train an operator to
     // ignore the one that actually costs a step its integration.
@@ -84,7 +157,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const { resolver } = recordingResolver({})
     expect(
       await resolveBinaryGeneratorSecrets({
-        context: context([{ ...retro, credentialRequired: false }]),
+        context: context([{ ...retro, credentials: [{ key: 'RD_TOKEN', required: false }] }]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
         logger,
@@ -114,8 +187,18 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const secrets = await resolveBinaryGeneratorSecrets({
       context: context([
         retro,
-        { id: 'studio-music', label: 'Studio', modalities: ['audio'], credentialKey: 'STUDIO_KEY' },
-        { id: 'reel-video', label: 'Reel', modalities: ['video'], credentialKey: 'REEL_KEY' },
+        {
+          id: 'studio-music',
+          label: 'Studio',
+          modalities: ['audio'],
+          credentials: [{ key: 'STUDIO_KEY' }],
+        },
+        {
+          id: 'reel-video',
+          label: 'Reel',
+          modalities: ['video'],
+          credentials: [{ key: 'REEL_KEY' }],
+        },
       ]),
       workspaceId: 'ws1',
       resolveToolSecrets: resolver,
@@ -149,7 +232,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
           id: 'retro-music',
           label: 'Retro Music',
           modalities: ['audio'],
-          credentialKey: 'RD_TOKEN',
+          credentials: [{ key: 'RD_TOKEN' }],
         },
       ]),
       workspaceId: 'ws1',
@@ -193,7 +276,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const { resolver, subjects } = recordingResolver({ ENCRYPTION_KEY: 'master-key' })
     const logger = createRecordingLogger()
     const secrets = await resolveBinaryGeneratorSecrets({
-      context: context([{ ...retro, credentialKey: 'ENCRYPTION_KEY' }]),
+      context: context([{ ...retro, credentials: [{ key: 'ENCRYPTION_KEY' }] }]),
       workspaceId: 'ws1',
       resolveToolSecrets: resolver,
       logger,
@@ -211,7 +294,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const { resolver, subjects } = recordingResolver({ harness_shared_secret: 'shh' })
     expect(
       await resolveBinaryGeneratorSecrets({
-        context: context([{ ...retro, credentialKey: 'harness_shared_secret' }]),
+        context: context([{ ...retro, credentials: [{ key: 'harness_shared_secret' }] }]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
       }),
@@ -222,12 +305,15 @@ describe('resolveBinaryGeneratorSecrets', () => {
   // A credential has two names, and only the lookup one is a boundary. See
   // `contracts/src/reserved-env-keys.ts` for why keeping them apart is what makes both rules
   // affordable.
-  it('looks the value up under `credentialKey` and injects it under `credentialEnvName`', async () => {
+  it('looks the value up under `key` and injects it under `envName`', async () => {
     const { resolver } = recordingResolver({ ACME_IMAGE_TOKEN: 'tok' })
     expect(
       await resolveBinaryGeneratorSecrets({
         context: context([
-          { ...retro, credentialKey: 'ACME_IMAGE_TOKEN', credentialEnvName: 'GITHUB_MODELS_KEY' },
+          {
+            ...retro,
+            credentials: [{ key: 'ACME_IMAGE_TOKEN', envName: 'GITHUB_MODELS_KEY' }],
+          },
         ]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
@@ -242,8 +328,8 @@ describe('resolveBinaryGeneratorSecrets', () => {
     expect(
       await resolveBinaryGeneratorSecrets({
         context: context([
-          { ...retro, id: 'one', credentialKey: 'FIRST_KEY', credentialEnvName: 'VENDOR_KEY' },
-          { ...retro, id: 'two', credentialKey: 'SECOND_KEY', credentialEnvName: 'VENDOR_KEY' },
+          { ...retro, id: 'one', credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
+          { ...retro, id: 'two', credentials: [{ key: 'SECOND_KEY', envName: 'VENDOR_KEY' }] },
         ]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
@@ -257,7 +343,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     expect(
       await resolveBinaryGeneratorSecrets({
         context: context([
-          { ...retro, credentialKey: 'ACME_IMAGE_TOKEN', credentialEnvName: 'NODE_OPTIONS' },
+          { ...retro, credentials: [{ key: 'ACME_IMAGE_TOKEN', envName: 'NODE_OPTIONS' }] },
         ]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,

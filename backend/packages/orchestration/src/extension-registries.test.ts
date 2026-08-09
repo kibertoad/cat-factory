@@ -1248,7 +1248,7 @@ describe('generative binary integration registry validation', () => {
     modalities: ['image' as const],
     mediaTypes: ['image/png'],
     endpoint: 'https://api.retrodiffusion.ai/v1',
-    credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token header' },
+    credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token header' }],
   }
 
   it('passes a well-formed registration', () => {
@@ -1258,7 +1258,7 @@ describe('generative binary integration registry validation', () => {
   it('fails boot on a credential key that is not a usable environment variable name', () => {
     // The failure it replaces: the harness drops the malformed name at parse and the integration
     // 401s mid-run, naming nothing that points back at the registration.
-    const problems = problemsFor([{ ...valid, credential: { key: 'x-rd-token' } }])
+    const problems = problemsFor([{ ...valid, credentials: [{ key: 'x-rd-token' }] }])
     expect(problems[0]?.message).toContain('environment variable name')
   })
 
@@ -1266,11 +1266,29 @@ describe('generative binary integration registry validation', () => {
     // A definition names both the key it wants and the endpoint that key is sent to, so this is a
     // registration that booted clean and shipped the deployment's master sealing key to a third
     // party. Enforced by the credential SCHEMA, so it reaches boot through the same parse.
-    const problems = problemsFor([{ ...valid, credential: { key: 'ENCRYPTION_KEY' } }])
+    const problems = problemsFor([{ ...valid, credentials: [{ key: 'ENCRYPTION_KEY' }] }])
     expect(problems[0]?.code).toBe('binary_generator_invalid')
     expect(problems[0]?.message).toContain('the platform')
     // Case-insensitively, because `process.env` lookup is on Windows.
-    expect(problemsFor([{ ...valid, credential: { key: 'encryption_key' } }])).toHaveLength(1)
+    expect(problemsFor([{ ...valid, credentials: [{ key: 'encryption_key' }] }])).toHaveLength(1)
+  })
+
+  it('fails boot when two credentials would land in ONE environment variable', () => {
+    // Not a redundant declaration but a silent one: both are resolved, one overwrites the other
+    // in the job body, and the agent authenticates with whichever won. Case-insensitively,
+    // because environment lookup is on Windows, where the two spellings are one variable.
+    const collided = problemsFor([
+      { ...valid, credentials: [{ key: 'RD_KEY' }, { key: 'RD_SECRET', envName: 'RD_KEY' }] },
+    ])
+    expect(collided[0]?.code).toBe('binary_generator_invalid')
+    expect(collided[0]?.message).toContain('distinct environment variable')
+    expect(
+      problemsFor([{ ...valid, credentials: [{ key: 'RD_KEY' }, { key: 'rd_key' }] }]),
+    ).toHaveLength(1)
+    // The shape this rule exists to admit: two names, two values, one integration.
+    expect(
+      problemsFor([{ ...valid, credentials: [{ key: 'RD_KEY' }, { key: 'RD_SECRET' }] }]),
+    ).toEqual([])
   })
 
   it('fails boot on a cleartext endpoint off loopback, because the credential rides it', () => {

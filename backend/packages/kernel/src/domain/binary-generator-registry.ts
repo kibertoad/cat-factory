@@ -59,7 +59,18 @@ export interface BinaryGeneratorView {
   capabilities: BinaryGeneratorCapability[]
   endpoint?: string
   guidance?: string
-  credential?: BinaryGeneratorCredential
+  /**
+   * The credentials the integration authenticates with, as DECLARATIONS (a lookup name, how to
+   * present the value, whether it is required). EMPTY means none is declared, which the brief
+   * states as "call it unauthenticated" rather than as a gap.
+   *
+   * A list because a credential is not always one string: HTTP Basic over a key and a secret is
+   * two facts, and one variable holding both makes the operator checklist ask for a value no
+   * vendor console shows. Projected as a required array for the reason {@link mediaTypes} and
+   * {@link capabilities} are: every reader is then entitled to the field its type promises, and
+   * an absent one cannot reach a `.map()` as a TypeError.
+   */
+  credentials: BinaryGeneratorCredential[]
   contracts: ApiContractSummary[]
 }
 
@@ -143,7 +154,7 @@ export class BinaryGeneratorRegistry {
         capabilities: [...(definition.capabilities ?? [])],
         ...(definition.endpoint ? { endpoint: definition.endpoint } : {}),
         ...(definition.guidance ? { guidance: definition.guidance } : {}),
-        ...(definition.credential ? { credential: definition.credential } : {}),
+        credentials: [...(definition.credentials ?? [])],
         contracts: summarized.map((c) => c.summary),
       })
       documents.set(

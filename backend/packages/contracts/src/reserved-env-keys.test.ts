@@ -101,7 +101,7 @@ describe('the generative-integration credential schema', () => {
     summary: 'Generates images',
     description: '',
     modalities: ['image'],
-    credential: { key },
+    credentials: [{ key }],
   })
 
   it('refuses a reserved key at REGISTRATION, so a deployment learns at boot', () => {
@@ -120,7 +120,7 @@ describe('the generative-integration credential schema', () => {
     expect(
       binaryGeneratorDefinitionIssues({
         ...definition('ACME_IMAGE_API_KEY'),
-        credential: { key: 'ACME_IMAGE_API_KEY', envName: 'GITHUB_MODELS_TOKEN' },
+        credentials: [{ key: 'ACME_IMAGE_API_KEY', envName: 'GITHUB_MODELS_TOKEN' }],
       }),
     ).toEqual([])
   })
@@ -128,9 +128,33 @@ describe('the generative-integration credential schema', () => {
   it('refuses a TOOLCHAIN injection name, which would reconfigure the agent’s process', () => {
     const issues = binaryGeneratorDefinitionIssues({
       ...definition('ACME_IMAGE_API_KEY'),
-      credential: { key: 'ACME_IMAGE_API_KEY', envName: 'PATH' },
+      credentials: [{ key: 'ACME_IMAGE_API_KEY', envName: 'PATH' }],
     })
     expect(issues).toHaveLength(1)
     expect(issues[0]).toContain('toolchain environment variable')
+  })
+
+  it('holds EVERY credential in the list to the floor, not just the first', () => {
+    // The list is what an integration authenticating with a PAIR declares, and a rule that only
+    // read `[0]` would leave the second half as the way around a floor whose whole job is to keep
+    // the deployment's own configuration out of an agent process.
+    const issues = binaryGeneratorDefinitionIssues({
+      ...definition('ACME_IMAGE_API_KEY'),
+      credentials: [{ key: 'ACME_IMAGE_API_KEY' }, { key: 'ENCRYPTION_KEY' }],
+    })
+    expect(issues).toHaveLength(1)
+    expect(issues[0]).toContain(reservedEnvKeyMessage('ENCRYPTION_KEY'))
+  })
+
+  it('accepts the PAIR this list exists for: two names, two values, one integration', () => {
+    expect(
+      binaryGeneratorDefinitionIssues({
+        ...definition('SCENARIO_API_KEY'),
+        credentials: [
+          { key: 'SCENARIO_API_KEY', usage: 'the HTTP Basic username' },
+          { key: 'SCENARIO_API_SECRET', usage: 'the HTTP Basic password' },
+        ],
+      }),
+    ).toEqual([])
   })
 })

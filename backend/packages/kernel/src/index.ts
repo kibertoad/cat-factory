@@ -388,6 +388,7 @@ export {
 export {
   type BinaryGeneratorSelectionIssue,
   type ResolvedBinaryGenerator,
+  type ResolvedBinaryGeneratorCredential,
   type ResolvedBinaryGeneratorSelection,
   binaryGeneratorSelectionIssues,
   describeCapability,

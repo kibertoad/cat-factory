@@ -24,7 +24,7 @@ function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGenerato
     mediaTypes: ['image/png'],
     capabilities: [],
     endpoint: 'https://api.retrodiffusion.ai/v1',
-    credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token request header' },
+    credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token request header' }],
     contracts: [],
     ...overrides,
   }
@@ -36,7 +36,7 @@ const music = generator({
   summary: 'Instrumental music generation.',
   modalities: ['audio'],
   mediaTypes: ['audio/mpeg'],
-  credential: { key: 'STUDIO_KEY' },
+  credentials: [{ key: 'STUDIO_KEY' }],
 })
 
 describe('BinaryGeneratorRegistry', () => {
@@ -347,12 +347,68 @@ describe('renderBinaryGeneratorSection', () => {
     const section = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(
         { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [generator({ credential: { key: 'ACME_RD_TOKEN', envName: 'GITHUB_MODELS_TOKEN' } })],
+        [generator({ credentials: [{ key: 'ACME_RD_TOKEN', envName: 'GITHUB_MODELS_TOKEN' }] })],
       ),
       requestedModalities: [],
     }).join('\n')
     expect(section).toContain('`GITHUB_MODELS_TOKEN`')
     expect(section).not.toContain('ACME_RD_TOKEN')
+  })
+
+  it('names EVERY variable of a paired credential, and states the disposition JOINTLY', () => {
+    // The case one credential could not express: HTTP Basic over an API key and its secret. Told
+    // per variable that a missing one means "do not call", an agent holding the key without the
+    // secret has been told something true about each half and nothing about the request it is
+    // about to write, and the plausible reading (send what arrived) costs the run a 401 it will
+    // read as a wrong key.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [
+              { key: 'SCENARIO_API_KEY', usage: 'the HTTP Basic username' },
+              { key: 'SCENARIO_API_SECRET', usage: 'the HTTP Basic password' },
+            ],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`SCENARIO_API_KEY`')
+    expect(section).toContain('the HTTP Basic username')
+    expect(section).toContain('`SCENARIO_API_SECRET`')
+    expect(section).toContain('the HTTP Basic password')
+    expect(section).toContain('parts of ONE credential')
+    // ONE sentence covering both, not one per variable.
+    expect(section).toContain('If `SCENARIO_API_KEY` and `SCENARIO_API_SECRET` are unset or empty')
+    expect(section).toContain('do not call `retro-diffusion` at all')
+  })
+
+  it('keeps a REQUIRED and an OPTIONAL half of one credential apart', () => {
+    // Collapsing them would produce the wrong instruction in both directions: "do not call" over
+    // a value the deployment declared as skippable, or "call anyway" over the one that
+    // authenticates the request.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [
+              { key: 'ACME_KEY' },
+              { key: 'ACME_ACCOUNT_ID', usage: 'the X-Account header', required: false },
+            ],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('If `ACME_KEY` is unset or empty')
+    expect(section).toContain('`ACME_ACCOUNT_ID` is OPTIONAL')
+    // …and the optional half's remedy is the call MINUS that value, never an unauthenticated one:
+    // the required half is still required.
+    expect(section).not.toContain('unauthenticated as its contract describes')
+    expect(section).toContain('with the value above and without it')
   })
 
   it('tells an OPTIONAL credential’s agent to call the integration anyway when it is unset', () => {
@@ -362,7 +418,7 @@ describe('renderBinaryGeneratorSection', () => {
     const section = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(
         { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [generator({ credential: { key: 'RD_TOKEN', required: false } })],
+        [generator({ credentials: [{ key: 'RD_TOKEN', required: false }] })],
       ),
       requestedModalities: [],
     }).join('\n')
@@ -597,13 +653,13 @@ describe('dispatchBinaryGenerators', () => {
         id: 'retro-diffusion',
         label: 'Retro Diffusion',
         modalities: ['image'],
-        credentialKey: 'RD_TOKEN',
+        credentials: [{ key: 'RD_TOKEN' }],
       },
       {
         id: 'studio-music',
         label: 'Studio Music',
         modalities: ['audio'],
-        credentialKey: 'STUDIO_KEY',
+        credentials: [{ key: 'STUDIO_KEY' }],
       },
     ])
     // An unresolved id contributes nothing here: it is the BRIEF that says what to do about one,

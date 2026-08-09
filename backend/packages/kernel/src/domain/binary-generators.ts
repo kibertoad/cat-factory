@@ -2,6 +2,7 @@ import {
   binaryCapabilityCoverage,
   binaryCapabilityProviders,
   binaryFormatCoverage,
+  binaryGeneratorCredentialEnvName,
   binaryModalityOverlaps,
   requiredBinaryCapabilities,
 } from '@cat-factory/contracts'
@@ -58,25 +59,37 @@ export interface ResolvedBinaryGenerator {
   // would put a copy on the wire that nothing reads and that a future reader could believe was
   // authoritative.
   /**
-   * The credential's LOOKUP key, which is what the executor asks the resolver for. Absent means
-   * none is declared.
+   * The credentials this integration authenticates with, in declaration order. Absent means none
+   * is declared, and the executor asks the resolver for nothing.
    *
-   * This is NOT necessarily what the agent reads: {@link credentialEnvName} is, and the brief
-   * names that one. The two are separate because the lookup key is held to the platform's
-   * reserved-variable floor while the injected name is not, so an integration whose client reads
-   * a vendor's documented name can keep it.
+   * A LIST because an integration can need more than one value to make a single call: HTTP Basic
+   * over an API key and an API secret is the ordinary case, and folding both into one variable
+   * would make the operator checklist ask for a string the vendor never issues.
    */
-  credentialKey?: string
+  credentials?: ResolvedBinaryGeneratorCredential[]
+}
+
+/** One credential on the dispatch projection: names only, never a value. */
+export interface ResolvedBinaryGeneratorCredential {
   /**
-   * The environment variable the credential is delivered as, when it differs from
-   * {@link credentialKey}. Absent means the lookup key is also the variable.
+   * The credential's LOOKUP key, which is what the executor asks the resolver for.
+   *
+   * This is NOT necessarily what the agent reads: {@link envName} is, and the brief names that
+   * one. The two are separate because the lookup key is held to the platform's reserved-variable
+   * floor while the injected name is not, so an integration whose client reads a vendor's
+   * documented name can keep it.
+   */
+  key: string
+  /**
+   * The environment variable the value is delivered as, when it differs from {@link key}. Absent
+   * means the lookup key is also the variable.
    *
    * Carried on the projection rather than re-derived, because the executor rebuilds a dispatch
    * from the context alone and has neither the registry nor the step to look the definition up in.
    */
-  credentialEnvName?: string
-  /** Whether a missing credential means the integration must not be called (defaults true). */
-  credentialRequired?: boolean
+  envName?: string
+  /** Whether a missing value means the integration must not be called (defaults true). */
+  required?: boolean
 }
 
 /** Project a resolved selection into what the dispatch carries. Unresolved ids contribute
@@ -89,9 +102,17 @@ export function dispatchBinaryGenerators(
     id: generator.id,
     label: generator.name,
     modalities: [...generator.modalities],
-    ...(generator.credential ? { credentialKey: generator.credential.key } : {}),
-    ...(generator.credential?.envName ? { credentialEnvName: generator.credential.envName } : {}),
-    ...(generator.credential?.required === false ? { credentialRequired: false } : {}),
+    // Omitted rather than sent as `[]`, so the projection carries a credential field only for an
+    // integration that has one. Every consumer already treats absence as "nothing to resolve".
+    ...(generator.credentials.length > 0
+      ? {
+          credentials: generator.credentials.map((credential) => ({
+            key: credential.key,
+            ...(credential.envName ? { envName: credential.envName } : {}),
+            ...(credential.required === false ? { required: false } : {}),
+          })),
+        }
+      : {}),
   }))
 }
 
@@ -626,44 +647,70 @@ function requirementLines(
 }
 
 /**
- * What the agent is told about an integration's credential — including that it may not be there.
+ * What the agent is told about an integration's credentials, including that they may not be
+ * there.
  *
- * THREE cases, not two, because `required` is a real declaration and collapsing it changes what
- * the agent does. A REQUIRED credential that did not arrive means the integration must not be
+ * THREE dispositions, not two, because `required` is a real declaration and collapsing it changes
+ * what the agent does. A REQUIRED credential that did not arrive means the integration must not be
  * called; an OPTIONAL one (declared for an endpoint that genuinely works unauthenticated) means
  * exactly the opposite — call it anyway. Telling an optional integration's agent "do not call it
  * at all" would strand a working endpoint on the most ordinary misconfiguration there is, which
  * is the failure `required: false` exists to prevent.
+ *
+ * With more than one value the same disposition is stated JOINTLY, and that sentence is the whole
+ * reason a pair is two declarations rather than one colon-joined string. Told per variable that a
+ * missing one means "do not call", an agent holding an API key whose secret did not resolve has
+ * been told something true about each half and nothing about the request it is about to write,
+ * and the plausible reading (send what arrived) costs the run a 401 it will read as a wrong key.
  */
 function credentialLines(generator: BinaryGeneratorView): string[] {
-  const credential = generator.credential
-  if (!credential) {
+  if (generator.credentials.length === 0) {
     return [
       `No credential is configured for \`${generator.id}\`: call it unauthenticated as its contract describes, and report a rejection rather than inventing a key.`,
     ]
   }
-  const usage = credential.usage
-    ? ` Send it as ${credential.usage}.`
-    : ' Its API contract states how to present it.'
   // The INJECTION name, never the lookup key. They differ whenever a definition had to keep a
   // vendor's documented variable name while looking the value up under one of its own, and naming
   // the lookup key here would tell the agent to read a variable that is never set: an integration
   // reported as unavailable on every run, with the brief itself as the reason nobody could see it.
-  const envName = credential.envName ?? credential.key
-  const provided = `The credential for \`${generator.id}\` is provided to your process as the environment variable \`${envName}\`.${usage} Read it from the environment, and never echo it, log it, commit it, or put it in your reply.`
+  //
   // `required` defaults to TRUE: an integration whose declaration says nothing is authenticated,
   // which is the safe reading. Being wrong that way costs a reported gap, while being wrong the
   // other way burns the run on a call that 401s.
-  if (credential.required === false) {
-    return [
-      provided,
-      `\`${envName}\` is OPTIONAL for \`${generator.id}\`: if it is unset or empty, still call the integration, unauthenticated as its contract describes. Report a rejection rather than inventing a key.`,
-    ]
+  const credentials = generator.credentials.map((credential) => ({
+    envName: binaryGeneratorCredentialEnvName(credential),
+    usage: credential.usage,
+    required: credential.required !== false,
+  }))
+  const [only] = credentials
+  const lines =
+    credentials.length === 1 && only
+      ? [
+          `The credential for \`${generator.id}\` is provided to your process as the environment variable \`${only.envName}\`.${only.usage ? ` Send it as ${only.usage}.` : ' Its API contract states how to present it.'} Read it from the environment, and never echo it, log it, commit it, or put it in your reply.`,
+        ]
+      : [
+          `\`${generator.id}\` takes ${credentials.length} credential values, each provided to your process as its own environment variable. Read them from the environment, and never echo them, log them, commit them, or put them in your reply.`,
+          '',
+          ...credentials.map(
+            (credential) =>
+              `- \`${credential.envName}\`: ${credential.usage ? `send it as ${credential.usage}` : 'its API contract states how to present it'}.`,
+          ),
+          '',
+          'They are parts of ONE credential, not alternatives: a request carrying some of them is not partly authenticated, it is refused. Assemble them exactly as stated above, and never improvise a value for one you were not given.',
+        ]
+  const required = credentials.filter((credential) => credential.required).map((c) => c.envName)
+  const optional = credentials.filter((credential) => !credential.required).map((c) => c.envName)
+  if (required.length > 0) {
+    lines.push(
+      `If ${joinIds(required)} ${required.length === 1 ? 'is' : 'are'} unset or empty, the platform could NOT provide ${required.length === 1 ? 'the credential' : 'that part of the credential'}: do not call \`${generator.id}\` at all, and report that its credential was unavailable. An empty variable is not an empty key.`,
+    )
   }
-  return [
-    provided,
-    `If \`${envName}\` is unset or empty, the platform could NOT provide the credential: do not call \`${generator.id}\` at all, and report that its credential was unavailable. An empty variable is not an empty key.`,
-  ]
+  if (optional.length > 0) {
+    lines.push(
+      `${joinIds(optional)} ${optional.length === 1 ? 'is' : 'are'} OPTIONAL for \`${generator.id}\`: if ${optional.length === 1 ? 'it is' : 'they are'} unset or empty, still call the integration, ${required.length === 0 ? 'unauthenticated as its contract describes' : `with the ${required.length === 1 ? 'value' : 'values'} above and without ${optional.length === 1 ? 'it' : 'them'}`}. Report a rejection rather than inventing a key.`,
+    )
+  }
+  return lines
 }
 
 /** Where an integration's API contract was injected, or the explicit statement that none exists. */

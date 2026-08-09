@@ -57,13 +57,56 @@ describe('collectDeclaredCapabilityCredentials', () => {
     const result = await collectDeclaredCapabilityCredentials({
       agentKindRegistry: registryWithServer(),
       binaryGenerators: generators([
-        { id: 'meshy', name: 'Meshy', credential: { key: 'MESHY_API_KEY', usage: 'Bearer' } },
+        {
+          id: 'meshy',
+          name: 'Meshy',
+          credentials: [{ key: 'MESHY_API_KEY', usage: 'Bearer' }],
+        },
       ]),
     })
     expect(result.incomplete).toBe(false)
     expect(result.declared.map((entry) => entry.key).sort()).toEqual([
       'ISSUE_TOKEN',
       'MESHY_API_KEY',
+    ])
+  })
+
+  it('gives a PAIRED integration one checklist row per value, under the vendor’s own names', async () => {
+    // The reason a credential is a list. Colon-joining a key and its secret into one variable
+    // makes this surface ask a board for one value the vendor's console never issues, and ties
+    // the two halves to a single rotation.
+    const result = await collectDeclaredCapabilityCredentials({
+      agentKindRegistry: new AgentKindRegistry(),
+      binaryGenerators: generators([
+        {
+          id: 'scenario',
+          name: 'Scenario',
+          credentials: [
+            { key: 'SCENARIO_API_KEY', usage: 'the HTTP Basic username' },
+            { key: 'SCENARIO_API_SECRET', usage: 'the HTTP Basic password', required: false },
+          ],
+        },
+      ]),
+    })
+    expect(result.declared).toEqual([
+      {
+        subject: 'binary-generator',
+        id: 'scenario',
+        label: 'Scenario',
+        key: 'SCENARIO_API_KEY',
+        usage: 'the HTTP Basic username',
+        required: true,
+      },
+      {
+        subject: 'binary-generator',
+        id: 'scenario',
+        label: 'Scenario',
+        key: 'SCENARIO_API_SECRET',
+        usage: 'the HTTP Basic password',
+        // Each half carries its own disposition: the checklist marks one optional without
+        // understating what the other's absence costs.
+        required: false,
+      },
     ])
   })
 
