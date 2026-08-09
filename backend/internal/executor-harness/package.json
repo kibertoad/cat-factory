@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/executor-harness",
-  "version": "1.104.0",
+  "version": "1.105.0",
   "description": "Container payload: a thin TypeScript wrapper that runs the Pi coding agent against a cloned repo and opens a PR. Runs in the Cloudflare Container (and, in local native mode, as a host process); carries no secrets.",
   "repository": {
     "type": "git",
@@ -39,8 +39,8 @@
     "@cat-factory/server": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@hono/node-server": "^2.1.0",
-    "@types/node": "^26.1.2",
-    "hono": "^4.13.0",
+    "@types/node": "^26.2.0",
+    "hono": "^4.13.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.10"
   }
