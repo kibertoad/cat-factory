@@ -3,7 +3,7 @@
 // The sixth thing rendered from the one IR, and like the MCP facade it is not a client: it emits
 // a POLICY-ANNOTATED OPERATION TABLE for credential-holding front-ends (the Cloudflare OS
 // Gatekeeper pattern: a Worker that owns the API key and exposes typed capabilities to agents;
-// see `docs/initiatives/cloudflare-os-gatekeeper.md`). Each entry carries what such a front-end
+// see `backend/docs/adr/0052-cloudflare-os-gatekeeper.md`). Each entry carries what such a front-end
 // needs to enforce and audit a call without hand-curating anything: the key-scope floor the route
 // enforces (`minScope`, from the spec's `x-min-scope`), whether the call mutates, how the result
 // comes back (value / stream / binary), the consequence hints shared with the MCP table, and an

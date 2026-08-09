@@ -106,7 +106,7 @@ outside integrator would.
 
 So "the bindings" are data, "the worker" is machinery, and "the template" is the one file an
 operator really writes (`policy.config.ts`). Docs: each package's README; design record:
-`docs/initiatives/cloudflare-os-gatekeeper.md`.
+`backend/docs/adr/0052-cloudflare-os-gatekeeper.md`.
 
 Four more pairs of words are routinely confused inside that Worker, and each pair is two things:
 
