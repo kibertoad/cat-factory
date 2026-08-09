@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest'
 // registration, which is precisely the bug this whole shape exists to prevent.
 //
 // See backend/docs/adr/0047-headless-clarification-loop.md (D3) and
-// docs/initiatives/cloudflare-os-gatekeeper.md (slice 2).
+// backend/docs/adr/0052-cloudflare-os-gatekeeper.md.
 
 /** A complete record, so each case states only the fields it is about. */
 function record(overrides: Partial<NotificationWebhookRecord> = {}): NotificationWebhookRecord {

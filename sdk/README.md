@@ -28,8 +28,8 @@ differently. See [its README](./mcp/README.md).
 
 Also beside them, [`sdk/gatekeeper`](./gatekeeper) (`@cat-factory/gatekeeper-bindings`) rides the
 same generator as a **policy-annotated operation table** for credential-holding front-ends (the
-Cloudflare OS Gatekeeper pattern; tracker:
-`docs/initiatives/cloudflare-os-gatekeeper.md`): per-operation key-scope floors (from the spec's
+Cloudflare OS Gatekeeper pattern; design record:
+`backend/docs/adr/0052-cloudflare-os-gatekeeper.md`): per-operation key-scope floors (from the spec's
 `x-min-scope`, ranked against the ladder it publishes as `x-public-api-scopes`), mutation and
 transport metadata, and invoke thunks over the TypeScript client using the MCP facade's argument
 convention. It emits a second file beside the table, `session-types.generated.ts`: one TypeScript

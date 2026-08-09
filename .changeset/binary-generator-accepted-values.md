@@ -26,6 +26,14 @@ someone audits an endpoint, and an advisory firing there would ride nearly every
 aspect ratio. A stated set containing the value is covered; a value on no stated set with some
 declarer silent is UNVERIFIABLE and reported; a value every declarer enumerated away is refused.
 
+**This supersedes a rule the previous release stated**, and the two are worth reading in order. That
+release said a capability "says the request can CARRY a value, never which values are accepted", and
+put an endpoint offering a closed list of exact `WxH` sizes on `aspect-ratio` rather than
+`exact-size`. The first half survives and is now the boundary between the two fields; the second half
+is reversed below. What changed is not the principle but a fact about where staleness cuts: a
+declared set that is too narrow refuses by name, which is visible and one word to fix, while the
+behaviour it replaces is silent and delivers the wrong asset.
+
 **`exact-size` changes meaning, and this is the part to look at.** It used to mean ARBITRARY
 dimensions, which forced an endpoint whose `size` parameter offers a closed list of `WxH` values to
 declare `aspect-ratio` instead: a size-taking API classified as shape-taking, with a step needing

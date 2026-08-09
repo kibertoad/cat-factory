@@ -176,3 +176,9 @@ __pycache__/
 # bare `reports/`, which would swallow any future committed report directory.
 .stryker-tmp/
 **/reports/mutation/
+
+# The Cloudflare OS checkout the nightly Gatekeeper OS leg boots, and the report it grades.
+# `GATEKEEPER_OS_REF` pins which commit; the clone lands inside this root because wrangler's test
+# harness boots both Workers under one.
+.cloudflare-os/
+sdk/gatekeeper-worker/os-leg-report.json

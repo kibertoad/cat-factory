@@ -18,6 +18,22 @@
 // constructs: the OS reaches a bound Worker's entrypoint over native RPC and calls methods by
 // name, so what has to match is the SHAPE. These interfaces exist to make our shape a compile-time
 // claim rather than a hope.
+//
+// Where this file is NARROWER than the published one, and deliberately. A reader diffing the two
+// finds three, and each is a stronger true statement about what we do rather than a shape that has
+// fallen behind, so none of them is drift to fix:
+//
+//   - `HookInitiator.startHook` is published as handing back a full `ApprovalQueue`. We take it as
+//     an `ObservationAuthorizer`, because a delivery is a read and this Worker registers no action
+//     from one.
+//   - `rejectAction` and `revertAction` are published as unions including a `restart` flag, which a
+//     gatekeeper that SIMULATES an action needs in order to say the session cannot be rolled back.
+//     We do not simulate, so ours cannot ask for one.
+//   - `ensureResources` is published as `{url?: string}`, the URL a grant flow would continue at.
+//     This vendor's single resource comes with the account, so ours is always empty.
+//
+// The nightly leg is what keeps the rest honest, and it is the ONLY thing that can: a shape that
+// drifted still compiles here and fails there.
 
 /** An image the workspace renders beside a vendor, an account or a resource. */
 export interface AvatarImage {

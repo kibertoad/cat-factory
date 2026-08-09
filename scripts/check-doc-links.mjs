@@ -23,6 +23,10 @@ const SKIP_DIRS = new Set([
   '.output',
   'coverage',
   '.turbo',
+  // The Cloudflare OS checkout the nightly Gatekeeper leg boots (`GATEKEEPER_OS_DIR`). It lands
+  // inside this root because wrangler's test harness boots both Workers under one, and it is
+  // somebody else's tree: its links are theirs to keep working.
+  '.cloudflare-os',
 ])
 
 function* walk(dir) {

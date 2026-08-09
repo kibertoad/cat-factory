@@ -91,7 +91,7 @@ aggregate names no resource ids and carries no per-user dimension.
 > its family. What changed is only the KEY. One endpoint per workspace made a second integration's
 > enrolment destructive: registering it overwrote whatever was there, and the only symptom was that
 > the previous receiver went quiet. See
-> [`cloudflare-os-gatekeeper.md`](../../../docs/initiatives/cloudflare-os-gatekeeper.md), slice 2.
+> [ADR 0052](./0052-cloudflare-os-gatekeeper.md).
 
 The workspace already registers ONE outbound HTTPS endpoint (`notification_webhooks`,
 sealed signing secret, SSRF-guarded, retried) to receive its notification cards. Run-lifecycle

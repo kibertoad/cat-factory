@@ -1,5 +1,14 @@
 # @cat-factory/example-custom-agent
 
+## 0.4.70
+
+### Patch Changes
+
+- Updated dependencies [e3cf16a]
+  - @cat-factory/kernel@0.282.0
+  - @cat-factory/agents@0.123.4
+  - @cat-factory/prompt-fragments@1.0.42
+
 ## 0.4.69
 
 ### Patch Changes
