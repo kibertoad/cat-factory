@@ -2575,6 +2575,45 @@
       }
     }
   },
+  "mcpAuthorize": {
+    "title": "¿Conectar {client}?",
+    "subtitle": "Dice ser {client}, y esta instalación lo devolverá a {origin}.",
+    "workspace": {
+      "label": "Tablero en el que podrá actuar"
+    },
+    "scopeLabel": "Lo que podrá hacer",
+    "scopeHint": "Cada nivel incluye los anteriores.",
+    "scope": {
+      "read": {
+        "label": "Solo lectura",
+        "description": "Ver servicios, tareas, pipelines y ejecuciones."
+      },
+      "write": {
+        "label": "Lectura y escritura",
+        "description": "Además, crear e iniciar tareas."
+      },
+      "decide": {
+        "label": "Lectura, escritura y decisión",
+        "description": "Además, responder a las preguntas que espera una ejecución detenida."
+      },
+      "admin": {
+        "label": "Acceso completo",
+        "description": "Además, eliminar tareas y actuar sobre notificaciones, lo que puede fusionar un pull request."
+      }
+    },
+    "requestedScope": "{client} solicitó {scope}. Elige esa opción arriba solo si de verdad quieres concederla.",
+    "approve": "Conectar",
+    "deny": "Cancelar",
+    "back": "Volver a la aplicación",
+    "noWorkspaces": "Todavía no tienes ningún tablero al que conectarlo.",
+    "revokeHint": "Esto emite una clave de API que puedes revocar cuando quieras desde los ajustes del tablero.",
+    "error": {
+      "title": "No se pudo establecer esta conexión",
+      "noRequest": "Esta página se abrió sin una solicitud de autorización. Inicia la conexión desde tu host MCP.",
+      "expired": "Esta solicitud de autorización no es válida o ha caducado. Vuelve a iniciar la conexión desde tu host MCP.",
+      "failed": "No se pudo registrar la decisión. Vuelve a iniciar la conexión desde tu host MCP."
+    }
+  },
   "settings": {
     "modelConfiguration": {
       "title": "Configuración de modelos",

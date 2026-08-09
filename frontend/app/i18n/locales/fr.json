@@ -2575,6 +2575,45 @@
       }
     }
   },
+  "mcpAuthorize": {
+    "title": "Connecter {client} ?",
+    "subtitle": "Il se présente comme {client}, et ce déploiement le renverra vers {origin}.",
+    "workspace": {
+      "label": "Tableau sur lequel il pourra agir"
+    },
+    "scopeLabel": "Ce qu'il pourra faire",
+    "scopeHint": "Chaque niveau inclut les précédents.",
+    "scope": {
+      "read": {
+        "label": "Lecture seule",
+        "description": "Voir les services, les tâches, les pipelines et les exécutions."
+      },
+      "write": {
+        "label": "Lecture et écriture",
+        "description": "Et aussi créer et lancer des tâches."
+      },
+      "decide": {
+        "label": "Lecture, écriture et décision",
+        "description": "Et aussi répondre aux questions qu'attend une exécution en pause."
+      },
+      "admin": {
+        "label": "Accès complet",
+        "description": "Et aussi supprimer des tâches et agir sur les notifications, ce qui peut fusionner une pull request."
+      }
+    },
+    "requestedScope": "{client} a demandé {scope}. Ne choisissez cette option ci-dessus que si vous voulez vraiment l'accorder.",
+    "approve": "Connecter",
+    "deny": "Annuler",
+    "back": "Retour à l'application",
+    "noWorkspaces": "Vous n'avez encore aucun tableau auquel le connecter.",
+    "revokeHint": "Cela émet une clé d'API que vous pouvez révoquer à tout moment depuis les réglages du tableau.",
+    "error": {
+      "title": "Cette connexion n'a pas pu être établie",
+      "noRequest": "Cette page a été ouverte sans demande d'autorisation. Lancez la connexion depuis votre hôte MCP.",
+      "expired": "Cette demande d'autorisation est invalide ou a expiré. Relancez la connexion depuis votre hôte MCP.",
+      "failed": "La décision n'a pas pu être enregistrée. Relancez la connexion depuis votre hôte MCP."
+    }
+  },
   "settings": {
     "modelConfiguration": {
       "title": "Configuration des modèles",

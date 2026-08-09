@@ -1,4 +1,43 @@
 {
+  "mcpAuthorize": {
+    "title": "{client} verbinden?",
+    "subtitle": "Die Anwendung gibt an, {client} zu sein, und diese Installation leitet sie zurück an {origin}.",
+    "workspace": {
+      "label": "Board, auf dem sie handeln darf"
+    },
+    "scopeLabel": "Was sie tun darf",
+    "scopeHint": "Jede Stufe schließt die darüberliegenden ein.",
+    "scope": {
+      "read": {
+        "label": "Nur lesen",
+        "description": "Services, Aufgaben, Pipelines und Läufe ansehen."
+      },
+      "write": {
+        "label": "Lesen und schreiben",
+        "description": "Zusätzlich Aufgaben anlegen und starten."
+      },
+      "decide": {
+        "label": "Lesen, schreiben und entscheiden",
+        "description": "Zusätzlich die Fragen beantworten, auf die ein pausierter Lauf wartet."
+      },
+      "admin": {
+        "label": "Voller Zugriff",
+        "description": "Zusätzlich Aufgaben löschen und auf Benachrichtigungen reagieren, was einen Pull Request zusammenführen kann."
+      }
+    },
+    "requestedScope": "{client} hat {scope} angefragt. Wählen Sie das oben nur, wenn Sie es wirklich gewähren möchten.",
+    "approve": "Verbinden",
+    "deny": "Abbrechen",
+    "back": "Zurück zur App",
+    "noWorkspaces": "Sie haben noch kein Board, mit dem sich das verbinden ließe.",
+    "revokeHint": "Dabei wird ein API-Schlüssel ausgestellt, den Sie jederzeit in den Board-Einstellungen widerrufen können.",
+    "error": {
+      "title": "Diese Verbindung konnte nicht eingerichtet werden",
+      "noRequest": "Diese Seite wurde ohne Autorisierungsanfrage geöffnet. Starten Sie die Verbindung in Ihrem MCP-Host.",
+      "expired": "Diese Autorisierungsanfrage ist ungültig oder abgelaufen. Starten Sie die Verbindung in Ihrem MCP-Host erneut.",
+      "failed": "Die Entscheidung konnte nicht gespeichert werden. Starten Sie die Verbindung in Ihrem MCP-Host erneut."
+    }
+  },
   "settings": {
     "modelConfiguration": {
       "title": "Modellkonfiguration",

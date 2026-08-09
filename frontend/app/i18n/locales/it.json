@@ -1,4 +1,43 @@
 {
+  "mcpAuthorize": {
+    "title": "Collegare {client}?",
+    "subtitle": "Dichiara di essere {client}, e questa installazione lo rimanderà a {origin}.",
+    "workspace": {
+      "label": "Bacheca su cui potrà agire"
+    },
+    "scopeLabel": "Cosa potrà fare",
+    "scopeHint": "Ogni livello include quelli precedenti.",
+    "scope": {
+      "read": {
+        "label": "Sola lettura",
+        "description": "Vedere servizi, attività, pipeline ed esecuzioni."
+      },
+      "write": {
+        "label": "Lettura e scrittura",
+        "description": "Inoltre creare e avviare attività."
+      },
+      "decide": {
+        "label": "Lettura, scrittura e decisione",
+        "description": "Inoltre rispondere alle domande su cui un'esecuzione è in attesa."
+      },
+      "admin": {
+        "label": "Accesso completo",
+        "description": "Inoltre eliminare attività e agire sulle notifiche, il che può unire una pull request."
+      }
+    },
+    "requestedScope": "{client} ha richiesto {scope}. Seleziona quell'opzione qui sopra solo se intendi davvero concederla.",
+    "approve": "Collega",
+    "deny": "Annulla",
+    "back": "Torna all'app",
+    "noWorkspaces": "Non hai ancora una bacheca a cui collegarlo.",
+    "revokeHint": "Questo emette una chiave API che puoi revocare in qualsiasi momento dalle impostazioni della bacheca.",
+    "error": {
+      "title": "Non è stato possibile creare questo collegamento",
+      "noRequest": "Questa pagina è stata aperta senza una richiesta di autorizzazione. Avvia il collegamento dal tuo host MCP.",
+      "expired": "Questa richiesta di autorizzazione non è valida o è scaduta. Riavvia il collegamento dal tuo host MCP.",
+      "failed": "Non è stato possibile registrare la decisione. Riavvia il collegamento dal tuo host MCP."
+    }
+  },
   "settings": {
     "modelConfiguration": {
       "title": "Configurazione del modello",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CORS_ALLOWED_HEADERS,
+  corsOriginFor,
   corsReflectsWhenUnset,
   parseAllowedOrigins,
   resolveCorsOrigin,
@@ -84,5 +85,54 @@ describe('corsReflectsWhenUnset', () => {
     for (const nonDev of ['', undefined, 'production', 'prod', 'staging', 'PROD', 'unknown']) {
       expect(corsReflectsWhenUnset(nonDev), String(nonDev)).toBe(false)
     }
+  })
+})
+
+describe('corsOriginFor', () => {
+  // The credential-free MCP discovery and authorization paths answer ANY browser origin, and the
+  // rule lives in the shared CORS layer rather than on a handler because the browser asks first: a
+  // `POST /oauth/register` carrying JSON is preflighted, and a preflight is answered before any
+  // route runs. That is the shape a per-handler header had, and it read as working, because
+  // discovery is a plain GET nobody preflights.
+
+  it('answers any origin on the paths a host reaches before it has a credential', () => {
+    // Production settings: an allowlist naming somebody else, and no reflection.
+    const denied = ['https://a.example', false] as const
+    for (const path of [
+      '/.well-known/oauth-protected-resource',
+      '/.well-known/oauth-protected-resource/api/v1/mcp',
+      '/.well-known/oauth-authorization-server',
+      '/oauth/register',
+      '/oauth/token',
+      '/oauth/authorize',
+    ]) {
+      expect(corsOriginFor(path, 'https://claude.ai', ...denied), path).toBe('https://claude.ai')
+    }
+  })
+
+  it('leaves every other path on the deployment allowlist', () => {
+    // Including the surfaces a host reaches AFTER it has one: the exemption is about having no
+    // credential yet, so it ends where the credential begins.
+    expect(corsOriginFor('/api/v1/mcp', 'https://claude.ai', 'https://a.example', false)).toBeNull()
+    expect(
+      corsOriginFor('/workspaces/ws_1', 'https://evil.example', 'https://a.example'),
+    ).toBeNull()
+    expect(corsOriginFor('/api/v1/runs', 'https://a.example', 'https://a.example')).toBe(
+      'https://a.example',
+    )
+  })
+
+  it('does not treat a path that merely starts with the same letters as public', () => {
+    // Prefix matching is on SEGMENTS: `/oauthorized` is not `/oauth`, and a sibling route mounted
+    // later must not inherit the exemption by spelling.
+    expect(corsOriginFor('/oauthorized', 'https://evil.example', 'https://a.example')).toBeNull()
+    expect(
+      corsOriginFor('/.well-known-other', 'https://evil.example', 'https://a.example'),
+    ).toBeNull()
+  })
+
+  it('omits the header for a caller with no Origin at all', () => {
+    // A non-browser client (every server-side host) is not a CORS case, on a public path or not.
+    expect(corsOriginFor('/oauth/token', undefined, 'https://a.example')).toBeNull()
   })
 })

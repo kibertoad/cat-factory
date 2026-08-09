@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import type { AuthUser } from '~/types/domain'
+import { postSignInUrl } from '~/utils/postSignIn'
 
 /**
  * Shared reactive state + injected dependencies the auth-store sign-in factory closes over.
@@ -24,9 +25,20 @@ export interface AuthSessionContext {
 export function createAuthSessionActions(ctx: AuthSessionContext) {
   const { api, apiBase, token, user, autoLoginProvider } = ctx
 
-  /** Build a post-login redirect back to the current page, with an optional invite. */
+  /**
+   * Build a post-login redirect back to the current page, with an optional invite.
+   *
+   * "The current page" includes its QUERY STRING, through the same `postSignInUrl` the credential
+   * forms reload to, so the round-trip through an identity provider lands where the person started
+   * rather than one level up. A flow that carries its whole subject there (`/mcp-authorize?request=`)
+   * otherwise comes back from the IdP to a page that no longer knows what it was asked, and this is
+   * the path an SSO deployment takes for EVERY sign-in, not an unusual one.
+   *
+   * The `invite` is dropped from the returned-to URL by that helper and named as its own parameter
+   * here, which is the same token travelling as itself rather than twice.
+   */
   function redirectTarget(invite?: string): string {
-    const here = window.location.origin + window.location.pathname
+    const here = window.location.origin + postSignInUrl(window.location)
     const params = new URLSearchParams({ redirect: here })
     if (invite) params.set('invite', invite)
     return params.toString()

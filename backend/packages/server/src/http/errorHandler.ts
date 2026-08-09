@@ -24,6 +24,30 @@ const STATUS_BY_CODE: Record<DomainError['code'], ContentfulStatusCode> = {
 }
 
 /**
+ * The `WWW-Authenticate` header a refusal carries, on the routes that set a challenge.
+ *
+ * The envelope is unchanged; this is the HEADER half of the same refusal, and it exists because
+ * some protocols make the 401 itself the entry point to discovery. An MCP host that gets a bare 401
+ * has been told only that its credential is wrong: the deployment's protected-resource metadata is
+ * served, correct and unreachable, because nothing pointed at it. RFC 6750 §3 is where a client
+ * looks, so that is where the pointer goes.
+ *
+ * The 401 alone, deliberately. RFC 6750 also defines an `insufficient_scope` challenge on a 403,
+ * and the surface that sets one today cannot produce that refusal: the hosted MCP endpoint gates on
+ * `read`, the floor of an inclusive ladder, so every key that authenticates satisfies it and a
+ * scope refusal comes from the individual `/api/v1` route the tools reach afterwards. A branch for
+ * it here would be unreachable code that reads like protection.
+ */
+function authenticateHeader<E extends AppEnv>(
+  c: Context<E>,
+  error: DomainError,
+): Record<string, string> | undefined {
+  const challenge = c.get('bearerChallenge')
+  if (!challenge || error.code !== 'unauthorized') return undefined
+  return { 'www-authenticate': challenge }
+}
+
+/**
  * Maps domain errors to HTTP responses; anything else is a 500.
  *
  * Every envelope carries the request's `requestId` when `mountRequestLogging` is mounted, so a
@@ -72,6 +96,7 @@ export function handleError<E extends AppEnv>(error: unknown, c: Context<E>): Re
         },
       },
       STATUS_BY_CODE[error.code],
+      authenticateHeader(c, error),
     )
   }
   // Unexpected fault: log it through the REQUEST-scoped logger (so the line carries the same

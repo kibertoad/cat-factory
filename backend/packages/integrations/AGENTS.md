@@ -55,6 +55,13 @@ prerequisites are configured.
   calls, hand-rolled on `fetch` so it bundles into a Worker). Separate from `capabilityCredentials/`
   on purpose: a grant expires, is rewritten by the dispatch path, and belongs to a person's vendor
   account, none of which a typed credential's shape can hold. See `backend/docs/mcp-tool-servers.md`.
+- `mcpAuthServer/`: the mirror image, this deployment as the AUTHORIZATION SERVER for its own
+  hosted MCP endpoint. `McpAuthorizationServer.ts` is the whole flow (dynamic registration, the
+  consent hand-off, the code exchange that mints a public-API key) and persists NOTHING: the client
+  id, the in-flight request and the code are each sealed into the value the other party carries.
+  `metadataDocuments.ts` holds the RFC 9728/8414 documents plus the 401 challenge, and lives here
+  rather than in the controller so `mcpAuthorizationInterop.test.ts` can drive the CONSUMING walk
+  next door over them. See `backend/docs/mcp-authorization.md`.
 - `testSecrets/`: sealed per-service test credentials; `validation/`: per-service PRE-PR
   validation checks (the commands the harness runs before a PR opens; frame-chain resolved) plus
   the DEPENDENCY PREPOPULATION install on the same row (run before the agent's first turn, and

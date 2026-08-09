@@ -274,6 +274,12 @@ facts belong here, each because it is a place a change could quietly remove a fl
 
 ## OAuth: the four decisions that are not obvious
 
+> This section is the CONSUMING half: this platform as a client of a vendor's OAuth-protected MCP
+> server. The mirror image, this deployment as the authorization server for its own hosted endpoint,
+> is [`mcp-authorization.md`](./mcp-authorization.md). The two share no code because they share no
+> problem, and the one thing they do share is asserted between them: the consuming discovery walk is
+> driven over the serving documents in `mcpAuthorizationInterop.test.ts`.
+
 Declaring an OAuth server, the two grants, endpoint discovery, what a deployment configures and what
 a board sees are on the site's
 [OAuth-protected servers](https://www.catfactory.ai/extend/tool-servers.html#oauth-protected-servers). Four

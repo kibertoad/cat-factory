@@ -166,7 +166,7 @@ dump and never uses the word MCP).
       public API in the same slice, so provisioning stops being SPA-only. This supersedes ADR
       0029's "no per-workspace tool-server UI" non-goal, already half-stale since the credential
       store landed and now further so, since slice 4 gave the SPA a read-only tool-server surface; the ADR's consequences section is updated in the same PR.
-- [ ] **7. OAuth, both directions.** The CONSUMING half has landed; the SERVING half has not.
+- [x] **7. OAuth, both directions.** Both halves have landed.
       **Consuming (done):** `McpOAuthConfig` on a remote (`http`) declaration, with both the
       `authorization_code` grant (a `secrets.manage` holder presses Connect, PKCE, refresh) and the
       `client_credentials` grant (no browser, no UI, for an internal or partner server on a
@@ -179,13 +179,21 @@ dump and never uses the word MCP).
       Connect / Reconnect / Disconnect. It did NOT wait for slice 6 (see the criticality note the
       2026-08-05 review left), and did not need it: the grant is per workspace already, because the
       credential half always was. Its decisions and the gotchas it surfaced are below.
-      **Serving (open):** the MCP authorization spec on the hosted endpoint, so a host connects
-      without a long-lived key in plaintext config. Two parts, not one (2026-08-09): the
-      protected-resource metadata route, AND the `WWW-Authenticate: Bearer resource_metadata="…"`
-      header on the endpoint's 401, which today carries no headers at all
-      (`handleError` maps the class alone) and is the spec's entry point to the whole discovery
-      chain. Dynamic client registration as scoped. It needs slice 3's endpoint, which exists, so
-      nothing blocks it.
+      **Serving (done):** the MCP authorization spec on the hosted endpoint, so a host connects
+      without a long-lived key in plaintext config. Both parts the 2026-08-09 audit named are in:
+      the protected-resource metadata route (at BOTH well-known paths) and the
+      `WWW-Authenticate: Bearer resource_metadata="…"` header on the endpoint's 401, which
+      `handleError` now renders from a challenge the route sets on the context. Beyond them, the
+      thing those two point AT: this deployment as its own authorization server, with RFC 8414
+      metadata, RFC 7591 dynamic client registration, a browser hand-off to a consent screen in the
+      SPA, and a token endpoint that mints an ordinary public-API key from what a human approved.
+      Dynamic registration IS performed here, the opposite of the consuming side's decision, and the
+      asymmetry is the point: a registration confers nothing until a `secrets.manage` holder picks a
+      board and a scope, so it is exactly as revocable as it is powerful. Nothing is persisted (the
+      client id, the authorization request and the code are each SEALED into the value the other
+      party carries), so it costs no table and no migration on either runtime. Its decisions and the
+      gotchas it surfaced are below; the design doc is
+      [`mcp-authorization.md`](../../backend/docs/mcp-authorization.md).
 - [ ] **8. Adoption loudness and `stdio` operability.** (2026-08-05 review) Two small items that
       decide whether a deployment learns its ceiling at boot or from a run. A boot warning when NO
       harness the deployment can resolve serves ANY registered server (a Pi-only deployment
@@ -242,8 +250,8 @@ carries it; "done" means that slice has landed.
 | Tool servers asserted nowhere cross-runtime                                       | Slice 5 (done)                |
 | No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 6                       |
 | Capability credentials absent from the public API                                 | Slice 6                       |
-| No OAuth for remote tool servers                                                  | Slice 7 (consuming half done) |
-| No MCP authorization on the serving side                                          | Slice 7                       |
+| No OAuth for remote tool servers                                                  | Slice 7 (done)                |
+| No MCP authorization on the serving side                                          | Slice 7 (done)                |
 | `http` conflates streamable HTTP and SSE; fixtures use `/sse` URLs                | Not pursued (below)           |
 | No composed tools / auto-pagination in the MCP server                             | Not pursued (below)           |
 | Declared `additionalProperties: false` not enforced locally                       | Not pursued (below)           |
@@ -255,16 +263,16 @@ carries it; "done" means that slice has landed.
 
 From the 2026-08-05 external-servers review (dispositions follow the same vocabulary):
 
-| Finding (2026-08-05)                                                           | Disposition                   |
-| ------------------------------------------------------------------------------ | ----------------------------- |
-| Blind run (stale runner image) is the likeliest adopter failure; land it first | Slice 5 (handshake done)      |
-| OAuth is THE external-vendor gap; intermediate deployment-level flow is viable | Slice 7 (consuming half done) |
-| No boot signal when no resolvable harness serves any registered server         | Slice 8                       |
-| `stdio`: per-run `npx` cold start, no pre-run verification, no warm-up story   | Slice 8 (docs half done)      |
-| Consuming-side docs buried in `custom-agents.md`; no single authority doc      | Done (`mcp-tool-servers.md`)  |
-| `security-model.md` silent on MCP tool RESULTS as an untrusted-input source    | Done (same change)            |
-| Silent last-write-wins on a re-registered tool-server id                       | Not pursued (below)           |
-| `TOOL_SERVER_BUDGET` is a fixed constant with no deployment knob               | Not pursued (below)           |
+| Finding (2026-08-05)                                                           | Disposition                  |
+| ------------------------------------------------------------------------------ | ---------------------------- |
+| Blind run (stale runner image) is the likeliest adopter failure; land it first | Slice 5 (handshake done)     |
+| OAuth is THE external-vendor gap; intermediate deployment-level flow is viable | Slice 7 (done)               |
+| No boot signal when no resolvable harness serves any registered server         | Slice 8                      |
+| `stdio`: per-run `npx` cold start, no pre-run verification, no warm-up story   | Slice 8 (docs half done)     |
+| Consuming-side docs buried in `custom-agents.md`; no single authority doc      | Done (`mcp-tool-servers.md`) |
+| `security-model.md` silent on MCP tool RESULTS as an untrusted-input source    | Done (same change)           |
+| Silent last-write-wins on a re-registered tool-server id                       | Not pursued (below)          |
+| `TOOL_SERVER_BUDGET` is a fixed constant with no deployment knob               | Not pursued (below)          |
 
 From the 2026-08-09 code audit (both sides verified against this tracker; every landed slice held):
 
@@ -274,7 +282,7 @@ From the 2026-08-09 code audit (both sides verified against this tracker; every 
 | Its `http` mirror, a credential naming no header, left open by the first pass | Done (boot error, this PR)  |
 | No dispatch or probe mirror of the boot refusal, so mothership skew slips it  | Done (this PR)              |
 | Consensus-diverted step gets no tool servers and is told nothing              | Slice 9 (done)              |
-| Serving OAuth also needs the 401 `WWW-Authenticate` entry point               | Slice 7 (scope extended)    |
+| Serving OAuth also needs the 401 `WWW-Authenticate` entry point               | Slice 7 (done)              |
 | `public-api.md` promised JSON-RPC batching the 2025-06-18 revision removed    | Done (reworded, this PR)    |
 | No bound on the hosted endpoint's legacy batch fan-out                        | Not pursued (below)         |
 | `sdk/mcp` README: root-import mounting example, 8-of-16 group table           | Done (this PR)              |
@@ -744,6 +752,76 @@ pnpm gen:sdk` behind it (`unusable_secret` was 1.37.0, `consensus_panel` 1.38.0)
   inside one expiry window against a rotating AS), and the fix is not obvious: CAS order does not
   reveal exchange order, so "keep the newer refresh" cannot be decided locally. Recorded so the
   next `oauth_token_failed` investigation checks for it rather than re-discovering it.
+
+## Slice 7 (serving): its five decisions
+
+- **The deployment is its OWN authorization server, rather than delegating to one it names.** The
+  obvious alternative is a config variable naming the operator's IdP and validating its JWTs, and it
+  dies on one question the protocol cannot answer: WHICH BOARD. A public-API key is scoped to a
+  workspace, an IdP token carries a person, and nothing in a general-purpose identity provider knows
+  which of that person's boards an MCP host should reach. Every workable variant of the delegating
+  design ends in an operator inventing a claim mapping. Being the AS puts the question where it can
+  be answered: a human picks the board on a consent screen. A deployment fronted by an IdP still
+  signs its user in through that IdP, at that screen, which is the layer where the IdP's answer is
+  actually about a person.
+- **What it ISSUES is an ordinary public-API key.** No second token format, no change to
+  `publicApiAuth`, no new bearer parse on the surface the tools reach, and revocation is the button
+  that already exists in the key panel. The whole serving half fits in one service and one
+  controller because of this one choice. Its cost is stated rather than hidden: keys do not expire,
+  so `expires_in` is omitted (RFC 6749 makes it optional exactly so a server can say this) and NO
+  refresh grant is advertised, because a refresh could only mint duplicates. Giving keys a real
+  expiry is what would make a refresh grant honest, and it needs an `expiresAt` column on both
+  runtimes.
+- **Nothing is persisted: the client id, the authorization request and the code are each SEALED into
+  the value the other party carries.** The same trick, and the same justification, as the consuming
+  side's in-flight request one slice earlier: a table would cost a migration on both runtimes, a
+  repository pair, a mothership routing decision, and a sweeper for the rows behind every consent
+  screen anyone abandoned. It buys two residual gaps, both recorded rather than papered over: no
+  single-use enforcement on the code (PKCE is what makes that survivable, and the TTL is 60 seconds)
+  and no revocation of a registration (which confers nothing until a human approves a board).
+- **Dynamic client registration IS performed, the opposite of the consuming side's decision.** There,
+  a client minted at runtime would be deployment state with no operator-visible identity at the
+  vendor: nobody could find, rotate or revoke it from either side. Here the registration is a name
+  and a redirect list that grant nothing at all until a `secrets.manage` holder approves a specific
+  board and scope, and what they approve is a key they can see. Without it the hosts this feature
+  exists for (claude.ai, the IDE clients) cannot connect: they register themselves or they do not
+  connect, and none of them has a console at someone else's deployment.
+- **The serving documents are asserted with the CONSUMING client, not with hand-written
+  expectations.** `metadataDocuments.ts` sits in `@cat-factory/integrations` beside the discovery
+  walk so `mcpAuthorizationInterop.test.ts` can drive that walk over both this deployment's documents
+  and Figma's real ones (recorded verbatim from `mcp.figma.com`). A hand-written expectation agrees
+  with whatever was written beside it; a client that already works against a shipping vendor does
+  not. The Figma fixture earns its place twice over: it is also the only regression test the
+  consuming walk has against a real, shipping, OAuth-protected MCP server.
+
+## Gotchas slice 7 (serving) surfaced
+
+- **The challenge cannot ride the thrown error, and it cannot ride the route's own response
+  either.** The refusal is raised deep inside shared key-authentication code that has no business
+  knowing which surface it is protecting, and the route knows its challenge BEFORE it knows whether
+  it will refuse. So the route sets it on the context and `handleError` renders it, which also keeps
+  the one-producer rule intact. Setting the header unconditionally on the route's own responses
+  would have put a challenge on every 200.
+- **`WWW-Authenticate` is invisible to a browser client unless it is EXPOSED.** The header was on
+  the wire and unreadable to precisely the client that cannot connect without it, which reads as a
+  deployment that does not support OAuth. One entry in `CORS_EXPOSED_HEADERS`.
+- **Two well-known paths, because clients disagree about which one exists.** RFC 9728 inserts the
+  resource path; several shipped clients ask for the bare one. Figma answers both, which is where
+  the decision came from. There is one protected resource here, so there is no second document
+  either path could mean.
+- **An unregistered `redirect_uri` must be refused ON THE PAGE.** The reflex is to report every
+  authorization error by redirecting to the client, and for that one error it would BE the open
+  redirect the registration check exists to prevent: a URL on this deployment's origin that forwards
+  a browser anywhere with attacker-chosen text on the end. Every OTHER refusal at that endpoint is
+  the client's to hear about, on its own registered address.
+- **A DENIAL must not require the approval permission.** The first cut gated the whole decision
+  route on `secrets.manage`, which left a person who cannot approve unable to answer at all, so the
+  host waits out its timeout and its user goes looking for a fault in the deployment.
+- **The 403 half of the challenge was unreachable code.** RFC 6750 also defines an
+  `insufficient_scope` challenge, and the hosted endpoint gates on `read`, the floor of an inclusive
+  ladder, so it cannot produce that refusal: a scope refusal comes from the `/api/v1` route a tool
+  reaches afterwards. It was written, then removed, because a branch that reads like protection and
+  never runs is worse than its absence.
 
 ## Slice 4's five decisions
 

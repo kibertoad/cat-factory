@@ -361,6 +361,14 @@ What to know about it:
   proportion to its length rather than to the one HTTP call it arrived as; the per-tool result
   ceiling and the key's scope still apply to each entry. Send one call per `POST`: the acceptance
   is the transport's backwards compatibility, not a promise this section makes.
+- **A host can also connect over OAUTH, and get a key it never had to be given.** The endpoint
+  answers an unauthenticated call with a `WWW-Authenticate` challenge naming its protected-resource
+  metadata, and this deployment is its own authorization server: a host registers itself, a person
+  approves a board and a scope on a consent screen, and the host is issued an ordinary public-API
+  key it can be revoked from the same panel as any other. Everything above applies unchanged, since
+  what it holds afterwards is a key. Connecting one is the website's
+  [Connecting a host over OAuth](https://www.catfactory.ai/extend/mcp-server.html#connecting-a-host-over-oauth);
+  the design and its traps are [`mcp-authorization.md`](./mcp-authorization.md).
 - **The endpoint is public surface** under the stability contract above, from its first release. It
   is deliberately NOT in [`docs/openapi.json`](../../docs/openapi.json): a JSON-RPC endpoint has no
   operation shape to describe, and describing it would mint an SDK method in four languages for a
