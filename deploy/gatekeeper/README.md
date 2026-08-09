@@ -90,7 +90,14 @@ Holding that binding is the authorization on this path: it is configuration only
 operator can write, and the call never leaves Cloudflare's network. `OS_SHARED_TOKEN` gates the HTTP
 routes only, which is where a caller that is not a Cloudflare OS comes in.
 
-Two things on this side have to be true, and `GET /health` reports on both under `os`:
+**`wrangler.toml` must keep the `allow_irrevocable_stub_storage` compatibility flag**, which the
+template carries. `createAccount()` hands the workspace a stub it PERSISTS, and workerd refuses to
+store a stub whose target Worker has not opted in, so without the flag a perfectly bound Gatekeeper
+is discovered and then fails on the first account anyone connects. It is not something `/health` can
+report: a Worker cannot read its own compatibility flags, and the nightly OS leg is what checks it.
+A `/rpc`-only deployment pays nothing for it.
+
+Two more things on this side have to be true, and `GET /health` reports on both under `os`:
 
 - **`src/index.ts` exports all four names the object model resolves** (`GatekeeperVendor`,
   `CatFactoryAccount`, `CatFactoryResource`, `CatFactoryVerifier`). They are resolved by name at
@@ -238,9 +245,9 @@ runtime. Keep this suite when you copy the template and edit it alongside your t
 
 The machinery's own suite (real `workerd`, real Durable Object, real Cap'n Web, a scripted
 cat-factory origin) lives with the machinery, in
-[`sdk/gatekeeper-worker`](../../sdk/gatekeeper-worker). The initiative tracker
-([`docs/initiatives/cloudflare-os-gatekeeper.md`](../../docs/initiatives/cloudflare-os-gatekeeper.md))
-says what that deliberately does not cover.
+[`sdk/gatekeeper-worker`](../../sdk/gatekeeper-worker). The design record
+([ADR 0052](../../backend/docs/adr/0052-cloudflare-os-gatekeeper.md)) says what that deliberately
+does not cover, and what the nightly leg against a real Cloudflare OS covers instead.
 
 ## Custody, and what it does not promise
 
@@ -267,7 +274,7 @@ does inside cat-factory is governed by cat-factory's own merge policy and approv
   helpers policy is compiled against.
 - [`backend/docs/public-api.md`](../../backend/docs/public-api.md): the API this rides (keys,
   scopes, webhooks, endpoint semantics).
-- [`docs/initiatives/cloudflare-os-gatekeeper.md`](../../docs/initiatives/cloudflare-os-gatekeeper.md):
-  the design record, slice by slice, and the gotchas the pilot surfaced.
+- [ADR 0052](../../backend/docs/adr/0052-cloudflare-os-gatekeeper.md): the design record, the
+  alternatives it was decided against, and the traps the build surfaced.
 - [`docs/glossary.md`](../../docs/glossary.md): the Gatekeeper naming map (bindings vs machinery
   vs template).
