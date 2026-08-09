@@ -44,13 +44,15 @@ declarers and never sees it, and admission refuses every step asking for the opt
 `capability_unsupported`. That is the accurate half made unreachable and the step refused for
 lacking a capability the same registration was documenting.
 
-**This supersedes a rule the previous release stated**, and the two are worth reading in order. That
-release said a capability "says the request can CARRY a value, never which values are accepted", and
-put an endpoint offering a closed list of exact `WxH` sizes on `aspect-ratio` rather than
-`exact-size`. The first half survives and is now the boundary between the two fields; the second half
-is reversed below. What changed is not the principle but a fact about where staleness cuts: a
-declared set that is too narrow refuses by name, which is visible and one word to fix, while the
-behaviour it replaces is silent and delivers the wrong asset.
+**This supersedes a rule the previous release stated**, and the two are worth reading in order.
+`@cat-factory/contracts@0.289.0`'s note said a capability "says the request can CARRY a value, never
+which values are accepted", and put an endpoint offering a closed list of exact `WxH` sizes on
+`aspect-ratio` rather than `exact-size`. The first half survives and is now the boundary between the
+two fields; the second half is reversed below, and a definition written to it keeps working
+unchanged, since it declares a capability it genuinely has and gains the more honest one plus a set.
+What changed is not the principle but a fact about where staleness cuts: a declared set that is too
+narrow refuses by name, which is visible and one word to fix, while the behaviour it replaces is
+silent and delivers the wrong asset.
 
 **`exact-size` changes meaning, and this is the part to look at.** It used to mean ARBITRARY
 dimensions, which forced an endpoint whose `size` parameter offers a closed list of `WxH` values to
@@ -76,11 +78,3 @@ option is then judged exactly as it was before this field existed), checking tha
 object and that each member it knows is an array, which is the same tolerance the capability axis
 gets and the opposite of the credential list's refusal. A member this build has no table entry for is
 left alone rather than refused, so a mothership one build ahead is not an ordering constraint.
-
-**It supersedes a ruling published one release ago.** `@cat-factory/contracts@0.289.0`'s note closes
-by telling a deployment whose `size` parameter offers a closed list of `WxH` values to declare
-`aspect-ratio` rather than `exact-size`, on the ground that a capability never says which values are
-accepted. That is the classification this change moves, and a definition written to that guidance
-keeps working unchanged: it declares a capability it genuinely has, and gains the more honest one
-plus a set. The parameterless half of that paragraph (an endpoint with no parameter declares nothing
-and says what it does in `guidance`) still stands, and is restated above.
