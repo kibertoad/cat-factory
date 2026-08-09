@@ -84,6 +84,7 @@ export const toolServerUnavailableReasonSchema = v.picklist([
   'oauth_not_connected',
   'oauth_token_failed',
   'over_budget',
+  'consensus_panel',
 ])
 export type ToolServerUnavailableReason = v.InferOutput<typeof toolServerUnavailableReasonSchema>
 
@@ -101,11 +102,13 @@ export type ToolServerUnavailableReason = v.InferOutput<typeof toolServerUnavail
  * can re-derive it (see `recordDispatchAttribution`).
  *
  * ABSENT and `{ wired: [], unavailable: [] }` are different states and both are load-bearing:
- * absent means the step's CURRENT attempt holds no dispatch-recorded resolution (an inline step, a
- * run that predates the field, or a step re-armed for a re-run and not yet re-dispatched), while
- * both-empty means a dispatch ran and its kind declared no tool servers at all. The diagnostic
- * weight survives that third case: a step which lost every server it declared still never reads as
- * one that declared none.
+ * absent means the step's CURRENT attempt holds no dispatch-recorded resolution (an inline step
+ * that resolved none, a run that predates the field, or a step re-armed for a re-run and not yet
+ * re-dispatched), while both-empty means a dispatch ran and its kind declared no tool servers at
+ * all. An inline step is not automatically the first of those: a consensus panel resolves the
+ * kind's declarations and records every one of them as withheld, because it wires nothing. The
+ * diagnostic weight survives that third case: a step which lost every server it declared still
+ * never reads as one that declared none.
  *
  * What absent does NOT say is that the step never ran. `resetStepForRerun` clears this field while
  * leaving `attempts` and `dispatches` standing, and that asymmetry is deliberate: the counters are

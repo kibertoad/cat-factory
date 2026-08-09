@@ -1997,6 +1997,7 @@
           "oauthNotConnected": "non era disponibile: nessuno ha ancora collegato questa lavagna al server.",
           "oauthTokenFailed": "non era disponibile: la connessione ha smesso di produrre un token di accesso.",
           "overBudget": "non era disponibile: questo agente dichiara più server di strumenti di quanti ne porti una singola esecuzione.",
+          "consensusPanel": "non era disponibile: questo passo è stato eseguito come panel di consenso, e un panel non ha un runtime dell'agente a cui collegare un server di strumenti.",
           "unknown": "non era disponibile ({reason})."
         },
         "remedy": {
@@ -2007,7 +2008,8 @@
           "unusableSecret": "Correggi la dichiarazione nel codice dell’installazione: la credenziale di un server remoto viaggia in un’intestazione, quella di uno locale viene iniettata nel processo del server.",
           "oauthNotConnected": "Collega questa lavagna al server dalla finestra Infrastruttura. Un deployment senza ENCRYPTION_KEY non ha dove conservare una concessione, quindi un operatore deve impostarla prima.",
           "oauthTokenFailed": "Ricollegalo dalla finestra Infrastruttura, oppure attendi la fine del disservizio del fornitore.",
-          "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto."
+          "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto.",
+          "consensusPanel": "Disattiva il consenso per questo passo se gli serve lo strumento, oppure accetta che il panel giudichi senza. Del server non va cambiato nulla."
         },
         "observed": {
           "ready": "avviato",
@@ -4363,6 +4365,9 @@
       "binaryCapabilityUnknown": "{capability} (una capacità che questa installazione non definisce)",
       "binaryCapabilityUnsupported": "Nessuna integrazione selezionata supporta {capabilities}, richiesta dalle opzioni di generazione di questo passo. Rimuovi l’opzione oppure seleziona un’integrazione che dichiari la capacità.",
       "binaryCapabilityUnverifiable": "Nessuna integrazione selezionata dichiara di supportare {capabilities}, ma una di esse non dichiara alcuna capacità, quindi non è stato possibile verificarlo. Il passo parte comunque; conferma dall’API dell’integrazione.",
+      "binaryOptionValueUnaccepted": "Nessuna integrazione selezionata accetta {option} di {requested}. Insieme accettano: {accepted}. Richiedi uno di questi valori oppure seleziona un'integrazione che generi questo.",
+      "binaryOptionValuePartial": "{generators} non accetta {option} di {requested}, mentre un'altra integrazione selezionata sì. Il passo si avvia comunque: invia questa opzione solo alle integrazioni che la accettano, oppure rimuovi le altre.",
+      "binaryOptionValueUnverifiable": "Un'integrazione selezionata dichiara i valori che accetta e non accetta quello richiesto da questo passo ({options}), mentre un'altra non ne dichiara nessuno, quindi non è stato possibile verificarlo. Il passo si avvia comunque e solo alcune delle tue integrazioni lo serviranno.",
       "binaryReferenceImages": "Immagini di riferimento",
       "binaryReferenceImagesPlaceholder": "ruolo{'|'}posizione{'|'}servizio, una per riga",
       "binaryReferenceImagesUnusable": "Non salvate come riferimento: {entries}. Ogni riga deve essere ruolo{'|'}posizione, con ruolo style, subject, composition o base.",

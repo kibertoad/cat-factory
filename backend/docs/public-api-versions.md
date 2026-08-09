@@ -299,3 +299,21 @@ spec read while this branch was in flight, and then 1.37.0 for `unusable_secret`
 move arrived exactly as the note higher up describes it, with the VERSION line itself auto-merging
 byte-identically and only the prose beside it conflicting. Nothing about the section changed with
 either move.
+
+1.39.0, not 1.38.0: one new value, `consensus_panel`, on the `reason` of a step's unavailable tool
+servers (carried by the run reads that project `toolServers`). It says the step ran as a consensus
+panel, so its participants were inline model calls with no checkout, no shell and no agent CLI, and
+there was nothing for the server to be wired into. The same step with consensus off gets the server,
+which is why the value points at the panel rather than at the kind or the credential. Additive, and
+the SDKs tolerate unknown members by design, so a consumer built against 1.38.0 keeps parsing every
+response it already understood.
+
+It is a new member rather than a reuse of `harness_unsupported` because that is the one reuse a
+consumer would act on wrongly: `harness_unsupported` says the resolved CLI cannot serve this server,
+so the operator sent there widens a `harnesses` list that was never the constraint. Here the kind's
+standard surface serves it perfectly and the panel is what withheld it.
+
+Written against a main already on 1.38.0: the `environments` section above took that number while
+this branch was in flight. The collision arrived exactly as the note at the top describes it, with
+the VERSION line auto-merging byte-identically and only the prose beside it conflicting. Nothing
+about the reason member changed with the move.

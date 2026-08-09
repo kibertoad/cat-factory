@@ -867,6 +867,89 @@ opposite facts. A malformed `dimensions` drops the measurement and KEEPS the ent
 fields are what make a record findable, and losing a stored artifact over an optional observation
 would be the reporting loss this feature exists to prevent.
 
+### The value axis: a capability is a yes/no, and some endpoints answer "yes, at one of these"
+
+A capability partitions "can the request carry this at all", and for several real endpoints that
+is only half the truth. Grok Imagine and Nano Banana take an aspect ratio from a closed picklist;
+Flux and Retro Diffusion honour any ratio because they take a width and a height. All four declare
+`aspect-ratio`, so a step asking for `7:3` is admitted against every one of them and served by
+two. Nothing reports the crop: the modality is covered, the format is covered, the upload
+succeeded. That is the silent wrong artifact the capability axis exists to prevent, arriving
+through the capability axis, and no wording of a yes/no repairs it.
+
+So a definition may also declare `accepts` (`binary-capabilities.ts`): the closed SETS of values
+it takes, per option, for the three options with an enumerable domain (`aspectRatios`,
+`outputSizes`, `upscaleFactors`). `binaryValueCoverage` judges the step's requested value against
+them, admission refuses `option_value_unaccepted`, and the picker and the brief state the rest.
+
+**Why this is not the per-integration table the design record refuses.** It clears the same bar
+`mediaTypes` cleared: a set of accepted values partitions exactly, so `covered` / `uncovered` is
+computable and a refusal is a fact rather than a taste. It also unlocks nothing new to ASK for,
+which is the property that separates it from `style` / `resolutionRange`: it makes an existing ask
+checkable. And staleness cuts the safe way, which is the objection worth answering directly. A
+vendor that ADDS a value leaves the declaration too narrow, and a step asking for the new one is
+refused by name: visible, and one word to fix. A vendor that REMOVES one leaves it too wide, which
+is exactly today's behaviour and no worse. The status quo, by contrast, fails silently and
+delivers the wrong asset.
+
+Five rulings bound it:
+
+- **FIVE outcomes, and the extra silent one is what let this ship.** Judged per option and PER
+  DECLARER over the integrations that DECLARE the gating capability (counting the others would
+  report one fault twice under two headings): nobody stated a set is SILENT, every stated set
+  containing the value is covered, some stated set containing it beside one that EXCLUDES it is
+  PARTIAL (advisory, naming who excludes it), no stated set containing it with some declarer
+  silent is UNVERIFIABLE (advisory), and every declarer having enumerated it away is UNACCEPTED
+  (refusal). The silent case is the one that matters most: it is the state every registration is
+  in until an endpoint is audited, and an advisory that fired there would ride nearly every step
+  carrying an aspect ratio, which is how a line stops being read.
+- **The disposition is a function of the WHOLE declarer set, never of the first agreeable member.**
+  Shipped as a `some(accepts)` short-circuit, the rule went silent on its own motivating example
+  the moment BOTH endpoints enumerated: one takes `7:3`, the other crops to its nearest listed
+  shape, no refusal and no advisory, with `binaryCapabilityProviders` naming both as honouring the
+  option one paragraph earlier in the same brief. It also inverted the reporting, which is the
+  sharper tell: the LESS informed selection (a declarer that stated nothing) raised an advisory, so
+  auditing that endpoint and writing down an accurate set BOUGHT SILENCE. Partial is advisory
+  rather than a refusal for the reason one declarer covers a capability: which integration renders
+  which artifact is the agent's call. What is not optional is NAMING the ones that refuse, since
+  routing around them is the entire remedy.
+- **A stated `accepts` set whose gating capability is undeclared fails BOOT**
+  (`binary_generator_accepts_without_capability`), the same class as the media-type/modality
+  contradiction beside it. Left to run, the two halves are believed by different readers: the brief
+  renders the set as fact, the value rule judges only over the capability's declarers and never
+  sees it, and admission refuses every step asking for the option as `capability_unsupported`. The
+  accurate half is unreachable and the step is refused for lacking a capability the same
+  registration was documenting.
+- **An endpoint that takes NO parameter declares nothing, and a set cannot rescue it.** Recraft's
+  `crispUpscale` enlarges at a ratio it fixes itself, so declaring `upscale` for it would admit a
+  step asking for 4x and hand back an unknown multiple. `upscale: [2]` would not be a narrower
+  statement of that truth, it would be a fabricated one. The line is whether the REQUEST can carry
+  the value, and an endpoint on the wrong side of it says what it does in `guidance` and is
+  refused the option: a visible false refusal beats a silent wrong artifact, and the honest
+  reading is usually that the option was the wrong way to state the requirement.
+- **A set, or nothing. No ranges, and no negotiation.** `min`/`max`/`step`/`multiple-of` is a
+  constraint language, and the first thing it would have to express is Flux's "any pair up to 4 MP
+  in multiples of 32", which is the `resolutionRange` discriminator wearing a new name. An
+  endpoint with a genuine range declares the capability, states no set, and puts its limits in
+  `guidance`. A "closest supported value" rule is refused for the opposite reason: it turns the
+  refusal back into the silent substitution this whole axis is about. An empty list is refused at
+  registration too, so absent stays the one spelling of "not stated".
+- **`exact-size` moved, and the move is the structural half of this change.** It used to mean
+  ARBITRARY dimensions, which forced an endpoint whose `size` parameter offers a closed list of
+  `WxH` values to declare `aspect-ratio` instead: a size-taking API classified as shape-taking,
+  with a step needing 96x96 admitted against one whose nearest listed value is 1024x1024. Now the
+  capability answers what the REQUEST CARRIES (a shape goes on `aspect-ratio`, dimensions on
+  `exact-size`, both when both) and `accepts.outputSizes` answers which ones. Capabilities are
+  declared in deployment code and never persisted, so nothing had to migrate; a definition that
+  declared `aspect-ratio` for its size list keeps working and gains a better option.
+
+The sibling this deliberately does NOT add is a MAXIMUM: Flux takes eight reference images and
+Grok Imagine takes three, both declare `multi-reference`, and a step handing over five is admitted
+and quietly served with three. It is the same family of fault and it needs a different predicate
+(a bound, not a membership) and a different refusal payload, and the option it constrains is a
+list the step authors rather than a value it picks. Recorded in the remaining work below rather
+than folded in here, so it is not rediscovered from scratch.
+
 ## Side-by-side candidates: the choice the platform CAN make visible
 
 The section above states the overlap and ranks nothing, on the ground that the platform has no
@@ -928,6 +1011,12 @@ controller both facades mount.
       `binaryGeneratorRegistry` option on the conformance harness, which no suite has needed yet;
       the projection itself is built in the shared controller both facades mount, so the gap it
       would close is a regression guard rather than a live parity risk.
+- [ ] **A maximum for the reference-image count**, the sibling the value axis above names and
+      holds. Flux takes eight and Grok Imagine three, both declare `multi-reference`, and a step
+      handing over five is admitted and served with three. It is one field on `accepts` and one
+      branch in `binaryValueCoverage`, but it is a BOUND rather than a set, so it needs its own
+      predicate and its own refusal payload; worth landing beside the first deployment that
+      actually holds two reference-capable integrations with different ceilings.
 - [ ] **A `publicDecision` kind for the candidate park.** Every other dedicated park is projected
       onto `/api/v1` as its own decision kind, so a headless caller currently sees a `blocked` run
       with no decision to answer. It is deliberately NOT added here, because `publicDecisionKindSchema`'s

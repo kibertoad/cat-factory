@@ -1,5 +1,8 @@
 import * as v from 'valibot'
-import { binaryGeneratorCapabilitySchema } from './binary-capabilities.js'
+import {
+  binaryGeneratorAcceptsSchema,
+  binaryGeneratorCapabilitySchema,
+} from './binary-capabilities.js'
 import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 import { uploadApiContractSchema } from './foundational-services.js'
 import {
@@ -221,6 +224,22 @@ export const binaryGeneratorDefinitionSchema = v.object({
    */
   capabilities: v.optional(v.array(binaryGeneratorCapabilitySchema)),
   /**
+   * For the options whose domain is a CLOSED SET, which values this endpoint takes: the ten
+   * aspect ratios its picklist offers, the `WxH` pairs its `size` parameter enumerates, the
+   * upscale factors it recognises (see `binary-capabilities.ts`).
+   *
+   * The capability above answers "can the request carry this at all"; this answers "will it take
+   * the value this step is asking for". Without it a step asking for `7:3` is admitted against an
+   * endpoint offering ten ratios that do not include it, generates, and comes back cropped with
+   * every downstream check passing.
+   *
+   * Absent, per option, is a DOCUMENTED state and the right one for an endpoint that renders
+   * anything it is handed, or for one nobody has audited: the option is judged exactly as it was
+   * before this field existed. Declare a set only where the endpoint genuinely has one, since a
+   * set is a refusal.
+   */
+  accepts: v.optional(binaryGeneratorAcceptsSchema),
+  /**
    * The API's base URL. Stated to the agent so it does not have to infer one from the contract,
    * and refused at registration unless it is `https` (or loopback) — the credential above rides
    * this request.
@@ -312,6 +331,14 @@ export const registeredBinaryGeneratorSchema = v.object({
    * remain absent, because a workspace viewer has no business learning them.
    */
   capabilities: v.optional(v.array(binaryGeneratorCapabilitySchema)),
+  /**
+   * Which values it accepts for the options with a closed domain. Here for the reason
+   * {@link capabilities} is: the builder judges a step's generation options against it, so a
+   * projection that omitted it would let someone type an aspect ratio the only selected endpoint
+   * cannot take and learn about it one refused run start later. It also lets the picker SHOW the
+   * set, which is what turns the refusal into a fix.
+   */
+  accepts: v.optional(binaryGeneratorAcceptsSchema),
 })
 export type RegisteredBinaryGenerator = v.InferOutput<typeof registeredBinaryGeneratorSchema>
 

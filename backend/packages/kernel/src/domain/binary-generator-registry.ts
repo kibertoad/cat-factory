@@ -1,6 +1,7 @@
 import type {
   ApiContractDocument,
   ApiContractSummary,
+  BinaryGeneratorAccepts,
   BinaryGeneratorCapability,
   BinaryGeneratorCredential,
   BinaryGeneratorDefinition,
@@ -57,6 +58,14 @@ export interface BinaryGeneratorView {
    * here while the wire form omits them.
    */
   capabilities: BinaryGeneratorCapability[]
+  /**
+   * Which values it accepts for the options with a closed domain. ABSENT (not an empty object)
+   * when the definition declared none, because absent is the one spelling of "not stated": the
+   * value rule reads a missing set as "this endpoint has not been audited" and judges the option
+   * exactly as it did before the field existed, which an empty object would say just as well and
+   * an empty LIST inside one would not.
+   */
+  accepts?: BinaryGeneratorAccepts
   endpoint?: string
   guidance?: string
   /**
@@ -147,6 +156,7 @@ export class BinaryGeneratorRegistry {
         modalities: [...definition.modalities],
         mediaTypes: [...(definition.mediaTypes ?? [])],
         capabilities: [...(definition.capabilities ?? [])],
+        ...(definition.accepts ? { accepts: definition.accepts } : {}),
         ...(definition.endpoint ? { endpoint: definition.endpoint } : {}),
         ...(definition.guidance ? { guidance: definition.guidance } : {}),
         credentials: [...(definition.credentials ?? [])],

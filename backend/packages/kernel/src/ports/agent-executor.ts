@@ -883,6 +883,30 @@ export interface AgentRunResult {
 export interface AgentExecutor {
   run(context: AgentRunContext): Promise<AgentRunResult>
   /**
+   * What an INLINE dispatch will do with the tool servers (MCP) the running agent kind declared,
+   * answered BEFORE the work, the counterpart of {@link AgentJobHandle.toolServers} on the path
+   * that returns a result instead of a handle.
+   *
+   * Its one producer today is the consensus executor: a diverted step runs as inline model calls
+   * with no agent CLI to wire a server into, so every declared server is WITHHELD, and the record
+   * is what stops that reading as a step whose kind declared none. An inline executor with nothing
+   * to withhold returns undefined rather than two empty lists: an inline surface never wires
+   * anything, so an all-empty resolution from one would state that a resolution happened where no
+   * wiring was ever possible.
+   *
+   * A PREVIEW rather than a field on {@link AgentRunResult}, for the same reason
+   * {@link AgentExecutor.resolveModel} is one: the container path records its resolution off the
+   * job handle at dispatch, so the record outlives a job that later fails, and a result-carried
+   * field is by construction absent on exactly the runs where a reader most needs to know what the
+   * agent could reach. Must be cheap and side-effect-free: the answer comes from the kind's
+   * DECLARATIONS, never from resolving credentials for a dispatch that has nowhere to send them.
+   *
+   * Carries no agent kind for the same reason the handle's does not: the engine stamps the
+   * DISPATCHED kind as it folds, so an executor cannot label a resolution with a kind other than
+   * the one that ran.
+   */
+  previewToolServers?(context: AgentRunContext): Promise<DispatchToolServers | undefined>
+  /**
    * Resolve the concrete model this step will run (`provider:model`) WITHOUT doing
    * the work — no LLM call, no container dispatch. The engine calls it up front so a
    * step's model can be surfaced to the board the moment the step starts (during the

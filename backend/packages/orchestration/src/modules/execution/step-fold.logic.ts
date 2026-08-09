@@ -1,4 +1,5 @@
 import { sameSubtasks, type AgentJobHandle, type PipelineStep } from '@cat-factory/kernel'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import { shouldPersistActivity } from './job.logic.js'
 
 // The "fold one job update onto the step" family: the small, pure-ish mutators the poll paths
@@ -86,7 +87,7 @@ export function recordDispatchAttribution(
   // reporting. Guarded on presence rather than on content, like every other field here, so a
   // re-dispatch by an executor that wires no tool servers (the inline path picking up a step a
   // container path started) never erases the container round's record.
-  if (handle.toolServers) step.toolServers = { ...handle.toolServers, agentKind: dispatchedKind }
+  if (handle.toolServers) stampToolServers(step, handle.toolServers, dispatchedKind)
   // Order-preserving by FIRST dispatch, counting every one after it: the count is what makes a
   // gate's fourth fixer round visible, so a re-dispatch increments rather than deduplicating.
   const dispatches = step.dispatches ?? []
@@ -94,6 +95,48 @@ export function recordDispatchAttribution(
   step.dispatches = existing
     ? dispatches.map((d) => (d === existing ? { ...d, count: d.count + 1 } : d))
     : [...dispatches, { agentKind: dispatchedKind, count: 1 }]
+}
+
+/**
+ * Record what an INLINE dispatch will do with the running kind's tool servers (MCP).
+ *
+ * The counterpart of the `handle.toolServers` fold above on the path that returns a RESULT instead
+ * of a job handle. Its one producer today is a consensus-diverted step: the panel runs as inline
+ * model calls with no agent CLI, so every server the kind declared is withheld, and without this
+ * the step would carry no record at all and read exactly like a kind that declared none.
+ *
+ * Called BEFORE the inline call, off `AgentExecutor.previewToolServers`, so the two paths record on
+ * the same terms: the container path stamps off the handle at dispatch, and a job that later fails
+ * keeps its record. Folding an inline resolution off the RESULT instead would drop it on exactly
+ * the runs a reader most needs it for, since a failed step returns no result to carry it.
+ *
+ * `dispatchedKind` is a parameter here for the same reason it is there, and it is what keeps the
+ * stamp out of the executor's hands: the engine names the kind it dispatched, so a resolution can
+ * never be labelled with another one. Guarded on presence, so an inline executor with nothing to
+ * report never erases a record an earlier container round on this step wrote.
+ */
+export function recordInlineToolServers(
+  step: PipelineStep,
+  resolved: DispatchToolServers | undefined,
+  dispatchedKind: string,
+): void {
+  if (resolved) stampToolServers(step, resolved, dispatchedKind)
+}
+
+/**
+ * Put one dispatch's tool-server resolution on the step under the kind that ran.
+ *
+ * Shared by the container and inline folds rather than spelled out at each, because the STAMP is
+ * the invariant: the executor reports two lists and the engine alone says whose they are (see
+ * `DispatchToolServers`). Two spellings of it is two places for an executor-supplied kind to creep
+ * back in.
+ */
+function stampToolServers(
+  step: PipelineStep,
+  resolved: DispatchToolServers,
+  dispatchedKind: string,
+): void {
+  step.toolServers = { ...resolved, agentKind: dispatchedKind }
 }
 
 /**
