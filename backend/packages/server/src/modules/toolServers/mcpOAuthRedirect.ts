@@ -9,8 +9,10 @@ import type { ServerContainer } from '../../http/env.js'
  * which carries no bearer token, so a backend route receiving it could never tell who was
  * completing the grant; the page re-presents the vendor's `code` and `state` over the authenticated
  * API instead (`completeToolServerOAuthContract`), where the session, the user binding and the
- * `secrets.manage` re-check all apply. Exported for the docs and tests that must state the exact
- * string an operator registers at the vendor.
+ * `secrets.manage` re-check all apply. Exported so every backend site that states the string
+ * derives it from one place. The SPA page at this path (`pages/mcp-oauth-callback.vue`) is the
+ * other half, and nothing pins the two together: renaming the page must change this constant too,
+ * or the operator's registered redirect URI 404s while everything on this side stays green.
  */
 export const MCP_OAUTH_CALLBACK_PATH = '/mcp-oauth-callback'
 

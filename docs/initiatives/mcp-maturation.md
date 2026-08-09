@@ -6,7 +6,10 @@ a deployment can add EXTERNAL tool servers programmatically, without forking. Th
 verdict and its new findings are folded in below (the inventory rows marked 2026-08-05, slice 8,
 and the criticality notes on slices 5 and 7); its documentation findings landed with it as
 [`backend/docs/mcp-tool-servers.md`](../../backend/docs/mcp-tool-servers.md), the consuming-side
-authority doc split out of `custom-agents.md`.
+authority doc split out of `custom-agents.md`. A third source: the 2026-08-09 code audit of both
+sides against this tracker's own claims, which confirmed every landed slice and added the rows
+marked 2026-08-09 (one consuming-side defect fixed with that review's PR, one new slice, and a
+batch of serving-side doc drift the absent `public-api.md` guard had already permitted).
 
 ## Goal
 
@@ -154,8 +157,10 @@ dump and never uses the word MCP).
       second.
 - [ ] **6. Tenant-level configurability.** The binary-generator pattern applied to tool servers:
       a contracts-level non-secret vocabulary, a snapshot projection, per-workspace
-      enable/disable, per-step selection via `stepOptions`, and a picker. The SPA finally learns
-      the word MCP (i18n). Registration stays code-first on purpose: the deployment declares WHAT
+      enable/disable, per-step selection via `stepOptions`, and a picker. The SPA already says
+      "MCP" where slices 4 and 5 gave it surfaces (the inventory, the step chips); this slice
+      extends that copy to the selection surfaces rather than introducing the word. Registration
+      stays code-first on purpose: the deployment declares WHAT
       exists (URL, command, transport, credentials by name), the tenant chooses WHERE it applies
       and supplies values, so the trust boundary does not move. Capability credentials join the
       public API in the same slice, so provisioning stops being SPA-only. This supersedes ADR
@@ -174,9 +179,13 @@ dump and never uses the word MCP).
       Connect / Reconnect / Disconnect. It did NOT wait for slice 6 (see the criticality note the
       2026-08-05 review left), and did not need it: the grant is per workspace already, because the
       credential half always was. Its decisions and the gotchas it surfaced are below.
-      **Serving (open):** the MCP authorization spec on the hosted endpoint (protected-resource
-      metadata; dynamic client registration as scoped), so a host connects without a long-lived key
-      in plaintext config. It needs slice 3's endpoint, which exists, so nothing blocks it.
+      **Serving (open):** the MCP authorization spec on the hosted endpoint, so a host connects
+      without a long-lived key in plaintext config. Two parts, not one (2026-08-09): the
+      protected-resource metadata route, AND the `WWW-Authenticate: Bearer resource_metadata="…"`
+      header on the endpoint's 401, which today carries no headers at all
+      (`handleError` maps the class alone) and is the spec's entry point to the whole discovery
+      chain. Dynamic client registration as scoped. It needs slice 3's endpoint, which exists, so
+      nothing blocks it.
 - [ ] **8. Adoption loudness and `stdio` operability.** (2026-08-05 review) Two small items that
       decide whether a deployment learns its ceiling at boot or from a run. A boot warning when NO
       harness the deployment can resolve serves ANY registered server (a Pi-only deployment
@@ -187,6 +196,19 @@ dump and never uses the word MCP).
       run), and a mechanical warm-up (installing declared `stdio` packages before the agent's
       first turn, the dependency-prepopulation analogue) is the candidate follow-up if cold-start
       or registry-outage failures show up in practice; it is a harness change, so an image bump.
+- [ ] **9. Consensus-diverted steps state their tool-server ceiling.** (2026-08-09 review) A
+      consensus-enabled step runs its participants inline, with no checkout and no tools, and
+      today no layer says so: `toolServersSection` has one caller (the container job body), no
+      `step.toolServers` record is written for the diverted dispatch, and the boot warning that
+      would catch it (`tool_servers_without_container`) keys on `runsInContainer`, which is true
+      for every consensus-eligible kind. The default-eligible list (architect, analysis, the
+      reviewers, the companions) is precisely the set a deployment attaches a read-only research
+      server to, so the drop lands on the likeliest adopters. The fix follows the vocabulary the
+      run record already has: the diverted dispatch records its declared servers as unavailable
+      under a reason naming the panel (a new closed-vocabulary member, so contracts + the two SPA
+      `Record`s + ten locales), and the panel prompt states the ceiling the way the container
+      prompt states a drop. Compare the ambient-Codex case, which states the same class of drop as
+      `harness_unsupported`.
 
 ## Findings inventory
 
@@ -243,6 +265,26 @@ From the 2026-08-05 external-servers review (dispositions follow the same vocabu
 | Silent last-write-wins on a re-registered tool-server id                       | Not pursued (below)           |
 | `TOOL_SERVER_BUDGET` is a fixed constant with no deployment knob               | Not pursued (below)           |
 
+From the 2026-08-09 code audit (both sides verified against this tracker; every landed slice held):
+
+| Finding (2026-08-09)                                                          | Disposition                 |
+| ----------------------------------------------------------------------------- | --------------------------- |
+| `stdio` + `header` credential silently dropped; server starts unauthenticated | Done (boot error, this PR)  |
+| Consensus-diverted step gets no tool servers and is told nothing              | Slice 9                     |
+| Serving OAuth also needs the 401 `WWW-Authenticate` entry point               | Slice 7 (scope extended)    |
+| `public-api.md` promised JSON-RPC batching the 2025-06-18 revision removed    | Done (reworded, this PR)    |
+| No bound on the hosted endpoint's legacy batch fan-out                        | Not pursued (below)         |
+| `sdk/mcp` README: root-import mounting example, 8-of-16 group table           | Done (this PR)              |
+| "Two omitted operations" in three docs; the omission list has three members   | Done (this PR + website PR) |
+| `sdk/AGENTS.md` file map missing `http.ts` and the hosted smoketest phase     | Done (this PR)              |
+| `security-model.md` silent on the SERVING side                                | Done (this PR)              |
+| OAuth dual-success refresh rotation can strand the older refresh token        | Open (gotcha below)         |
+| `agent_tool_calls` records no per-server attribution for `mcp__*` calls       | Deferred (below)            |
+| `MCP_OAUTH_CALLBACK_PATH` docstring claimed consumers that did not exist      | Done (this PR)              |
+| CI's `sdk` filter missed `http/loopback.ts`; stale phase comments             | Done (this PR)              |
+| Hosted endpoint absent from `public-api.md`'s reference tables, unpointed     | Done (pointer, this PR)     |
+| Slice 6's "SPA learns the word MCP" already part-delivered by slices 4 and 5  | Done (tracker wording)      |
+
 ## Deliberately not pursued
 
 Recorded so the next iteration does not re-propose them.
@@ -284,6 +326,20 @@ Recorded so the next iteration does not re-propose them.
   any observed declaration, both dimensions already warn at boot, and a knob would invite raising
   the cap instead of trimming the kind. Revisit only when a real kind hits the cap for a reason
   trimming cannot fix.
+- **A bound on the hosted endpoint's legacy batch fan-out.** (2026-08-09) Promoted from a slice-3
+  gotcha to a recorded decision, since the tracker's own "a cap on one side needs the other side
+  asked" rule kept flagging it. Not a bypass: each entry re-runs the key gate and its scope rung,
+  an in-process dispatch is not a subrequest, and the 2025-06-18 revision removed batching, so a
+  current client never sends one; the transport's acceptance is compatibility for older-revision
+  clients (`public-api.md` now says exactly that). A bound would spend a limiter on a shape only a
+  deliberately old client can produce. Revisit on evidence of abuse, and bound the batch length
+  first.
+- **Per-server attribution on `agent_tool_calls`.** (2026-08-09) The trajectory records each MCP
+  call as its flat `mcp__<id>__<tool>` name, and that namespace is matchable, not parseable (a
+  server id may itself contain `__`), so a backend re-derivation would guess at exactly the
+  ambiguity the CLI-observed fold refuses to. Honest attribution needs the harness to record the
+  server id per call at the source, an image bump, for a grouping no rollup consumer asks for yet.
+  Revisit when one does; the fold's id-matching rule is the shape to copy.
 
 ## Gotchas already known
 
@@ -608,6 +664,15 @@ Recorded so the next iteration does not re-propose them.
   The binding of injected deps onto `resolveToolServers` moved out of `ContainerAgentExecutor` and
   next to the resolution itself (`resolveDispatchToolServers`), so the NEXT credential channel lands
   there rather than re-triggering the same split.
+- **The dual-success rotation race is covered for one half only.** (2026-08-09, open)
+  `adoptConcurrentToken` handles the loser whose EXCHANGE failed (`invalid_grant` from the rotated
+  token). It does not handle two dispatches whose exchanges BOTH succeed against a rotating server:
+  A stores R2, B loses the CAS holding R3, B's rotation is discarded, and the AS may already have
+  invalidated R2 in favour of R3, so the stored refresh dies and the next mint surfaces as
+  `oauth_token_failed` with nothing naming the race. Low frequency (it needs two concurrent mints
+  inside one expiry window against a rotating AS), and the fix is not obvious: CAS order does not
+  reveal exchange order, so "keep the newer refresh" cannot be decided locally. Recorded so the
+  next `oauth_token_failed` investigation checks for it rather than re-discovering it.
 
 ## Slice 4's five decisions
 

@@ -146,7 +146,7 @@ Two exports for a deployment that wants to serve MCP from its own routes rather 
 spawn a process:
 
 ```ts
-import { handleMcpHttpRequest, refuseMcpMethod } from '@cat-factory/mcp-server'
+import { handleMcpHttpRequest, refuseMcpMethod } from '@cat-factory/mcp-server/http'
 
 app.all('/api/v1/mcp', async (c) => {
   const refused = refuseMcpMethod(c.req.method) // 405 + Allow: POST for GET/DELETE
@@ -171,7 +171,9 @@ Everything `handleMcpHttpRequest` reaches is therefore written against Web stand
 Node built-in (`test/runtime-neutral.test.ts` enforces it, since the typecheck cannot): this package's
 own `bin` is a Node process, but the hosted half is bundled into deployments' Workers, where `node:fs`
 does not resolve at build time. That is also why `optionsFromEnv` takes its file reader as a
-dependency rather than importing `readFileSync`.
+dependency rather than importing `readFileSync`. The `./http` subpath is the only entry with that
+guarantee: the package root re-exports the stdio boot, whose `node:process` import a bundler cannot
+shake out, so anything that bundles imports `@cat-factory/mcp-server/http` and never the root.
 
 For a transport neither of these covers, `createCatFactoryMcpServer` returns the bare `Server`.
 
@@ -214,24 +216,34 @@ One tool per exposed operation, named `<group>_<method>` to match the SDK call
 (`client.tasks.create()` ⇄ `tasks_create`). The server reports the live count on startup and lists
 the tools themselves over the protocol, which is the only place it cannot go stale:
 
-| Group             | What it covers                                                            |
-| ----------------- | ------------------------------------------------------------------------- |
-| `jobs_*`          | Headless runs of a public inline pipeline against a brief.                |
-| `services_*`      | The board's service frames.                                               |
-| `tasks_*`         | A task's whole lifecycle: create, edit, start, stop, retry, read its run. |
-| `pipelines_*`     | Which pipelines a task can be started with.                               |
-| `notifications_*` | The human-actionable inbox, including the merge tail.                     |
-| `usage_*`         | The billing period's metered budget position.                             |
-| `decisions_*`     | A parked run's human decisions.                                           |
-| `debug_*`         | A run's recorded telemetry: LLM calls, agent context, infra logs.         |
+| Group             | What it covers                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `jobs_*`          | Headless runs of a public inline pipeline against a brief.                                                             |
+| `services_*`      | The board's service frames: list them, or create one (optionally repo-backed).                                         |
+| `spec_*`          | A service's in-repo requirement tree and the Gherkin rendered from it. Read-only.                                      |
+| `repos_*`         | The repositories a service can be backed with, and which service each already backs.                                   |
+| `tasks_*`         | A task's whole lifecycle: create, edit, start, stop, retry, read its run, plus its dependencies and requirement links. |
+| `pipelines_*`     | Which pipelines a task can be started with.                                                                            |
+| `task_types_*`    | What a task can be created as, and the fields each kind accepts.                                                       |
+| `notifications_*` | The human-actionable inbox, including the merge tail.                                                                  |
+| `webhook_*`       | The workspace's outbound endpoints for notifications and run-lifecycle events.                                         |
+| `usage_*`         | The billing period's metered budget position, and spend sliced by repo, ticket or run.                                 |
+| `me_*`            | What the calling key is and what it may do.                                                                            |
+| `decisions_*`     | A parked run's human decisions.                                                                                        |
+| `debug_*`         | A run's recorded telemetry: LLM calls, agent context, infra logs.                                                      |
+| `evidence_*`      | What a run proved: the verification report, the outcome summary, the captured artifacts.                               |
+| `merge_records_*` | The evidence behind the auto-merge policy, with its per-class rollups.                                                 |
+| `keys_*`          | The workspace's own API keys: provision, list, revoke.                                                                 |
 
-**The API's two SSE operations are deliberately absent**, and the server says so in its
-instructions rather than leaving a model to conclude the platform cannot do it:
-`GET /api/v1/jobs/{id}/events` and `GET /api/v1/tasks/{taskId}/events` are SSE streams, and a tool
-call returns one result over no streaming channel. Poll `jobs_get` / `tasks_get_run`, or consume the
-streams through an SDK. Adding a bounded "wait for the run" tool would not fix this: a run parked on
-a human decision waits **indefinitely** by design, so any such tool is a timeout dressed up as an
-answer.
+**Three operations are deliberately absent**, and the server says so in its instructions rather
+than leaving a model to conclude the platform cannot do it. `GET /api/v1/jobs/{id}/events` and
+`GET /api/v1/tasks/{taskId}/events` are SSE streams, and a tool call returns one result over no
+streaming channel: poll `jobs_get` / `tasks_get_run`, or consume the streams through an SDK. Adding
+a bounded "wait for the run" tool would not fix this, because a run parked on a human decision waits
+**indefinitely** by design, so any such tool is a timeout dressed up as an answer. The third is the
+artifact byte download (`GET /api/v1/artifacts/{artifactId}/blob`): a tool result is
+text or a declared content block, not an arbitrary byte stream, so list the artifacts with
+`evidence_list_artifacts` and fetch the bytes over HTTP (or through an SDK) with the same key.
 
 Generation FAILS on a new streaming operation nobody has classified, so the list above cannot go
 quietly stale.

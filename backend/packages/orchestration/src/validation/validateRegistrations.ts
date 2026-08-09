@@ -935,6 +935,22 @@ function checkToolServerSecret(
       message: `Tool server "${server.id}" ${on} declares credential ${reservedEnvKeyMessage(secret.key)}`,
     })
   }
+  // A `stdio` server has no request to carry a header, and the dispatch's env projection skips a
+  // header-bearing key, so the resolved value reaches NOTHING: the server is wired, advertised to
+  // the agent, and starts unauthenticated. An error rather than the warning its `http` mirror
+  // below gets, because there the value still arrives (as the header) and only the envName is
+  // inert, where here the declaration does not work at all.
+  if (server.transport.kind === 'stdio' && secret.header) {
+    problems.push({
+      severity: 'error',
+      code: 'unusable_credential_header',
+      message:
+        `Tool server "${server.id}" ${on} declares credential "${secret.key}" on header ` +
+        `"${secret.header}", but a stdio server has no request to carry a header, so the value ` +
+        `would reach nothing and the server would start without it. Declare an envName instead, ` +
+        `so the value is injected into the server's process.`,
+    })
+  }
   if (secret.envName === undefined) return problems
   // The injection name is NOT held to the reserved floor (it reads nothing), so it carries its own
   // rule: a value set as `PATH` or `npm_config_registry` reconfigures the server's process instead

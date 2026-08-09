@@ -335,6 +335,25 @@ workspace. Anything outside that is a 404 rather than a 403: a container has no 
 artifact ids exist. What remains inside the boundary is the workspace's own reference images, which
 is the same class of data the run was dispatched with.
 
+### What an MCP HOST reaches: the caller's own key, re-gated per call
+
+`POST /api/v1/mcp` serves the public API as MCP tools, and its security model is deliberately
+nothing of its own. The endpoint authenticates the same `cf_live_…` bearer every `/api/v1` call
+takes, and each tool call becomes one in-process `/api/v1` dispatch (`http/loopback.ts`) under THAT
+key, re-running the key gate and the per-operation scope rung, so nothing is reachable through a
+tool that the same key could not reach with `curl`, and revoking the key severs the host. The
+loopback forwards the caller's key verbatim and mints nothing, so the surface adds no credential of
+its own to steal. Recursion is prevented by construction rather than by a guard: the tool table is
+generated from the spec and the endpoint is deliberately absent from it, so no tool can name a path
+that re-enters it; a future hand-authored or composed tool is what would break that argument.
+
+Two residuals, stated rather than hidden: a legacy JSON-RPC batch fans one authenticated request
+into N dispatches inside one invocation, each re-gated, so the fan-out is a cost exposure rather
+than a bypass and the first shape to bound if the endpoint ever needs a limit
+([`public-api.md`](./public-api.md#from-an-mcp-host)); and the serving side has no OAuth yet, so a
+host holds a long-lived key in its own config, tracked as slice 7 of
+[`mcp-maturation.md`](../../docs/initiatives/mcp-maturation.md).
+
 ## Layer 4: no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
 
 Pushing a malicious commit to a `work` branch is, by design, _allowed_: that is what a PR is for.

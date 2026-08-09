@@ -961,6 +961,32 @@ describe('agent-capability validation: credentials', () => {
     expect(warning?.severity).toBe('warn')
   })
 
+  it('rejects a HEADER on a stdio server, whose value would reach nothing', () => {
+    // The mirror of the case above, and an error where that one is a warning: a stdio server has
+    // no request to carry a header, and the dispatch's env projection skips a header-bearing key,
+    // so the server would be wired and advertised while starting unauthenticated.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'docs',
+          transport: { kind: 'stdio', command: 'docs-mcp' },
+          secretKeys: [{ key: 'DOCS_TOKEN', header: 'Authorization' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
+    })
+    const problem = problems.find((p) => p.code === 'unusable_credential_header')
+    expect(problem?.severity).toBe('error')
+  })
+
   it('accepts an https endpoint, and a plain-http one on loopback', () => {
     // A server running beside the agent in its own container has no certificate to present.
     registry.register({
