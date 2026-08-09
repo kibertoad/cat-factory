@@ -4155,7 +4155,8 @@
         "addFailedTitle": "Servis eklenemedi",
         "servicesAddedTitle": "Servisler eklendi",
         "servicesAddedDescription": "{count} servis panoya eklendi. | {count} servis panoya eklendi.",
-        "frontendLinkedNote": "{directory} frontend olarak eklendi ve diğerlerine bağlandı. Backend URL ortam değişkenlerinin adlarını inspector’ında girin."
+        "frontendLinkedNote": "{directory} frontend olarak eklendi ve diğerlerine bağlandı. Backend URL ortam değişkenlerinin adlarını inspector’ında girin.",
+        "frontendWiringFailedNote": "Frontend ayarları kaydedilmedi. Alt dizinini ve backend servislerini ayarlamak için her frontend uygulamasının inspector’ını açın."
       },
       "repoType": "Depo türü",
       "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."

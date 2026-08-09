@@ -4155,7 +4155,8 @@
         "addFailedTitle": "Impossible d'ajouter le service",
         "servicesAddedTitle": "Services ajoutés",
         "servicesAddedDescription": "{count} service ajouté au tableau. | {count} services ajoutés au tableau.",
-        "frontendLinkedNote": "{directory} a été ajouté comme frontend et relié aux autres. Nommez ses variables d'environnement d'URL backend dans son inspecteur."
+        "frontendLinkedNote": "{directory} a été ajouté comme frontend et relié aux autres. Nommez ses variables d'environnement d'URL backend dans son inspecteur.",
+        "frontendWiringFailedNote": "Les réglages du frontend n'ont pas été enregistrés. Ouvrez l'inspecteur de chaque application frontend pour définir son sous-répertoire et ses services backend."
       },
       "repoType": "Type de dépôt",
       "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."

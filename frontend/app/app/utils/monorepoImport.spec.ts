@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { canDesignateFrontend, frontendConfigForImport, planMonorepoImport } from './monorepoImport'
+import type { CreatedMonorepoFrame } from './monorepoImport'
+import {
+  canDesignateFrontend,
+  planFrontendConfigPatches,
+  planMonorepoImport,
+} from './monorepoImport'
+
+/** Pair a plan with block ids, the way the modal does as each create call returns. */
+function created(entries: ReturnType<typeof planMonorepoImport>): CreatedMonorepoFrame[] {
+  return entries.map((entry, i) => ({ blockId: `blk_${i}`, entry }))
+}
 
 describe('canDesignateFrontend', () => {
   it('offers the mark for two or more backend services', () => {
@@ -26,9 +36,9 @@ describe('planMonorepoImport', () => {
     expect(
       planMonorepoImport(['apps/web', 'services/api', 'services/auth'], 'service', 'apps/web'),
     ).toEqual([
-      { directory: 'apps/web', type: 'frontend' },
-      { directory: 'services/api', type: 'service' },
-      { directory: 'services/auth', type: 'service' },
+      { directory: 'apps/web', type: 'frontend', designatedFrontend: true },
+      { directory: 'services/api', type: 'service', designatedFrontend: false },
+      { directory: 'services/auth', type: 'service', designatedFrontend: false },
     ])
   })
 
@@ -40,8 +50,8 @@ describe('planMonorepoImport', () => {
 
   it('gives every directory the picked role when nothing is marked', () => {
     expect(planMonorepoImport(['a', 'b'], 'service', undefined)).toEqual([
-      { directory: 'a', type: 'service' },
-      { directory: 'b', type: 'service' },
+      { directory: 'a', type: 'service', designatedFrontend: false },
+      { directory: 'b', type: 'service', designatedFrontend: false },
     ])
   })
 
@@ -49,31 +59,62 @@ describe('planMonorepoImport', () => {
     // The cart entry was removed (or was already on the board and got filtered out) after being
     // marked. Designating nothing is right; promoting some other frame to frontend would not be.
     expect(planMonorepoImport(['a', 'b'], 'service', 'apps/web')).toEqual([
-      { directory: 'a', type: 'service' },
-      { directory: 'b', type: 'service' },
+      { directory: 'a', type: 'service', designatedFrontend: false },
+      { directory: 'b', type: 'service', designatedFrontend: false },
     ])
+  })
+
+  it('designates nobody when the whole cart is imported under the frontend role', () => {
+    // Every entry is `type: 'frontend'` here, so the flag is the ONLY thing that separates
+    // "the app the others talk to" from "a cart of frontends". A mark is never on offer for this
+    // role (`canDesignateFrontend`), and one carried over from a role change must not act.
+    const plan = planMonorepoImport(['apps/web', 'apps/admin'], 'frontend', 'apps/web')
+    expect(plan.every((e) => e.type === 'frontend')).toBe(true)
+    expect(plan.some((e) => e.designatedFrontend)).toBe(false)
   })
 })
 
-describe('frontendConfigForImport', () => {
-  it('binds the frontend to every backend created beside it, one binding each', () => {
-    expect(frontendConfigForImport('apps/web', ['blk_api', 'blk_auth'])).toEqual({
-      directory: 'apps/web',
-      backendBindings: [
-        { envVar: '', source: { kind: 'service', serviceBlockId: 'blk_api' } },
-        { envVar: '', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
-      ],
-    })
-  })
-
-  it('carries the subdirectory: the harness builds the repo root without it', () => {
-    // `frontendConfig.directory` is what the frontend infra spec reads; the service-level
-    // directory that scopes an agent's checkout is a different field and does not stand in.
-    expect(frontendConfigForImport('apps/web', []).directory).toBe('apps/web')
+describe('planFrontendConfigPatches', () => {
+  it('binds the designated frontend to every other frame created beside it', () => {
+    const plan = planMonorepoImport(
+      ['apps/web', 'services/api', 'services/auth'],
+      'service',
+      'apps/web',
+    )
+    expect(planFrontendConfigPatches(created(plan))).toEqual([
+      {
+        blockId: 'blk_0',
+        config: {
+          directory: 'apps/web',
+          backendBindings: [
+            { envVar: '', source: { kind: 'service', serviceBlockId: 'blk_1' } },
+            { envVar: '', source: { kind: 'service', serviceBlockId: 'blk_2' } },
+          ],
+        },
+      },
+    ])
   })
 
   it('leaves every env var name empty rather than inventing one', () => {
-    const config = frontendConfigForImport('apps/web', ['blk_api'])
-    expect(config.backendBindings.every((b) => b.envVar === '')).toBe(true)
+    const plan = planMonorepoImport(['apps/web', 'services/api'], 'service', 'apps/web')
+    const [patch] = planFrontendConfigPatches(created(plan))
+    expect(patch?.config.backendBindings.every((b) => b.envVar === '')).toBe(true)
+  })
+
+  it('carries the subdirectory to every frontend frame, designated or not', () => {
+    // `frontendConfig.directory` is what the harness's install/build/serve reads; the service-level
+    // directory that scopes an agent's checkout is a different field and does not stand in. A cart
+    // imported under the `frontend` role has no designated frame, and every frame in it would
+    // otherwise build the repo root.
+    const plan = planMonorepoImport(['apps/web', 'apps/admin'], 'frontend', undefined)
+    expect(planFrontendConfigPatches(created(plan))).toEqual([
+      { blockId: 'blk_0', config: { directory: 'apps/web', backendBindings: [] } },
+      { blockId: 'blk_1', config: { directory: 'apps/admin', backendBindings: [] } },
+    ])
+  })
+
+  it('patches nothing when the import creates no frontend frame', () => {
+    const plan = planMonorepoImport(['services/api', 'services/auth'], 'service', undefined)
+    expect(planFrontendConfigPatches(created(plan))).toEqual([])
   })
 })

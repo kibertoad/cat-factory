@@ -3420,7 +3420,8 @@
         "addFailedTitle": "Service konnte nicht hinzugefügt werden",
         "servicesAddedTitle": "Services hinzugefügt",
         "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt.",
-        "frontendLinkedNote": "{directory} wurde als Frontend hinzugefügt und mit den übrigen verknüpft. Benennen Sie die Umgebungsvariablen für die Backend-URLs im Inspector."
+        "frontendLinkedNote": "{directory} wurde als Frontend hinzugefügt und mit den übrigen verknüpft. Benennen Sie die Umgebungsvariablen für die Backend-URLs im Inspector.",
+        "frontendWiringFailedNote": "Die Frontend-Einstellungen wurden nicht gespeichert. Öffnen Sie den Inspector jeder Frontend-App, um ihr Unterverzeichnis und ihre Backend-Services zu setzen."
       }
     },
     "repoTree": {

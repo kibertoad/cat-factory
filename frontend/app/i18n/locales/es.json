@@ -4155,7 +4155,8 @@
         "addFailedTitle": "No se pudo añadir el servicio",
         "servicesAddedTitle": "Servicios añadidos",
         "servicesAddedDescription": "{count} servicio añadido al tablero. | {count} servicios añadidos al tablero.",
-        "frontendLinkedNote": "{directory} se añadió como frontend y se enlazó con los demás. Asigna el nombre de sus variables de entorno con las URL de backend en su inspector."
+        "frontendLinkedNote": "{directory} se añadió como frontend y se enlazó con los demás. Asigna el nombre de sus variables de entorno con las URL de backend en su inspector.",
+        "frontendWiringFailedNote": "Los ajustes del frontend no se guardaron. Abre el inspector de cada aplicación frontend para definir su subdirectorio y sus servicios backend."
       },
       "repoType": "Tipo de repositorio",
       "repoTypeHint": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes)."

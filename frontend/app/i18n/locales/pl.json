@@ -4155,7 +4155,8 @@
         "addFailedTitle": "Nie udało się dodać usługi",
         "servicesAddedTitle": "Dodano usługi",
         "servicesAddedDescription": "Dodano {count} usługę do tablicy. | Dodano {count} usługi do tablicy. | Dodano {count} usług do tablicy.",
-        "frontendLinkedNote": "{directory} dodano jako frontend i powiązano z pozostałymi. Nazwy jego zmiennych środowiskowych z adresami URL backendów uzupełnij w inspektorze."
+        "frontendLinkedNote": "{directory} dodano jako frontend i powiązano z pozostałymi. Nazwy jego zmiennych środowiskowych z adresami URL backendów uzupełnij w inspektorze.",
+        "frontendWiringFailedNote": "Ustawienia frontendu nie zostały zapisane. Otwórz inspektor każdej aplikacji frontendowej, aby ustawić jej podkatalog i usługi backendowe."
       },
       "repoType": "Typ repozytorium",
       "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."

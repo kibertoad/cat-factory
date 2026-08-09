@@ -4294,7 +4294,8 @@
         "@servicesAddedDescription": {
           "description": "Count-driven toast; resolved via t(key, { count }, count) so {count} also drives the plural choice. Provide ALL plural forms your language needs (Polish/Ukrainian need 3 - one/few/many)."
         },
-        "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector."
+        "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector.",
+        "frontendWiringFailedNote": "The frontend settings did not save. Open each frontend app's inspector to set its subdirectory and its backend services."
       }
     },
     "repoTree": {
