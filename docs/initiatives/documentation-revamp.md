@@ -247,7 +247,7 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       checked-in copy of the site's page list, which is a second routing table to keep in step and
       rots in the direction that matters most, since a page deleted from the site would stay listed
       and keep passing.
-- [x] 15. **Finish the reductions the pointers only announced.** A pointer at the top of a doc is
+- [x] 15. **Finish the reductions the pointers only announced.** ([#1884](https://github.com/kibertoad/cat-factory/pull/1884)) A pointer at the top of a doc is
       not the split; it is the promise of one, and on a checklist the promise reads as done. Slices
       2 to 11 reduced five things: `sdk/README.md` (-92 lines), `security-model.md` (-60),
       `vcs-providers.md` (-24), the root `README.md` (-13) and `model-support.md` §6-§8. Every other
@@ -259,7 +259,7 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       phase E and were reduced in the same change, and 15b's parked half and 15c both ran once item
       17 landed. The per-doc state and the per-slice dispositions are their own section:
       [Slice 15 reductions](#slice-15-reductions).
-- [x] 16. **Guard the relative links BETWEEN repo docs.** `scripts/check-doc-links.mjs` (detection
+- [x] 16. **Guard the relative links BETWEEN repo docs** ([#1884](https://github.com/kibertoad/cat-factory/pull/1884))**.** `scripts/check-doc-links.mjs` (detection
       in `doc-links.mjs`, fixtures beside it) resolves every relative markdown link to a path and,
       where it deep-links one, a heading. Generated `CHANGELOG`s are OUT of scope, stated in the
       guard: they are frozen history correctly naming what was true when written, and rewriting one
@@ -281,7 +281,9 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       split that matters here is `extend/custom-agents.md`, which shed gates, step-completion
       resolvers and judges to `extend/custom-gates.html`, so a repo doc reducing a JUDGE section
       points at that page rather than the agents one.
-- [x] 17. **Decide who owns the MANIFEST FORMAT, because two reductions are parked on it.** A
+- [x] 17. **Decide who owns the MANIFEST FORMAT, because two reductions are parked on it.**
+      ([cat-factory-website#25](https://github.com/kibertoad/cat-factory-website/pull/25) +
+      [#1884](https://github.com/kibertoad/cat-factory/pull/1884)) A
       manifest is authored by a user, in the app, with no checkout, so rule 1's reader test puts the
       format on the website. The site's `extend/manifests.md` was scoped as an overview and stops at
       the shared building blocks plus a three-row operations table per manifest, which is why 15b
@@ -298,8 +300,9 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       which neither repo doc could do. 15b's parked half and 15c then ran, each keeping only what a
       change in THIS repo has to hold: where the Valibot schema lives, and that a field added there
       is a field the website page gains in the same change.
-- [x] 18. **Guard the repo → website links from the WEBSITE repo**, which is the option item 14 did
-      not consider. It rejected a checked-in page list for rotting in the deletion direction, and
+- [x] 18. **Guard the repo → website links from the WEBSITE repo**
+      ([cat-factory-website#25](https://github.com/kibertoad/cat-factory-website/pull/25)), which is
+      the option item 14 did not consider. It rejected a checked-in page list for rotting in the deletion direction, and
       that objection is right; it does not apply to a check that runs where the pages ARE. The site
       repo already reaches into this one on a schedule for `sync-env-vars.mjs --check`, so the same
       job resolves every `catfactory.ai` URL in the code repo to a page file AND a heading, with no
