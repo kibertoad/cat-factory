@@ -107,7 +107,7 @@ export class SqliteTelemetryCoverage implements LocalTelemetryCoverage {
   ) {}
 
   isRunLocallyComplete(workspaceId: string, executionId: string): boolean {
-    // `SELECT 1 AS hit` — the marker row's existence is the whole answer, so only the
+    // `SELECT 1 AS hit`: the marker row's existence is the whole answer, so only the
     // presence of a row is read.
     const row = queryOne<{ hit: number }>(
       this.db,

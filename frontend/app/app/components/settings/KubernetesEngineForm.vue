@@ -24,7 +24,7 @@ type KubeHandlerConfig = Extract<InfraHandlerConfig, { engine: 'local-k3s' | 're
 type KubeHandlerPayload = { config: KubeHandlerConfig; secrets: Record<string, string> }
 /** The engine connection block itself, read off the variant so it cannot drift from it. */
 type KubeEngineConfig = KubeHandlerConfig['kubernetes']
-/** How the environment URL is derived — its own discriminated union, keyed by `source`. */
+/** How the environment URL is derived: its own discriminated union, keyed by `source`. */
 type KubeUrlSource = KubeEngineConfig['url']
 
 const props = defineProps<{

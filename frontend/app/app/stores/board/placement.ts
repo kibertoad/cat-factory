@@ -7,7 +7,7 @@ import type { Block } from '~/types/domain'
 import type { BoardWriteContext } from './context'
 import { UNDO_WINDOW_MS } from './context'
 
-/** A field `updateBlock` may patch — the contract's key set, nothing wider. */
+/** A field `updateBlock` may patch: the contract's key set, nothing wider. */
 type PatchKey = keyof UpdateBlockInput
 /** The pre-patch values of the fields one call touches, for the rollback. */
 type PatchSnapshot = Partial<Record<PatchKey, unknown>>
@@ -18,8 +18,8 @@ type PatchSnapshot = Partial<Record<PatchKey, unknown>>
  * A plain widening, not an assertion: the rollback is inherently keyed by whatever the caller
  * put in the patch, so it has to index the block dynamically, and this bounds that indexing to
  * the contract instead of the `Record<string, unknown>` it used to widen to. Two patch keys
- * (`customTaskTypeFields` / `builtinTaskTypeFields`) are request-only — the server folds them
- * into the block's `taskTypeFields` — so the view is `Partial`: they read as absent going in
+ * (`customTaskTypeFields` / `builtinTaskTypeFields`) are request-only, since the server folds
+ * them into the block's `taskTypeFields`, so the view is `Partial`: they read as absent going in
  * and are cleared again by a rollback, which is what the untyped version did.
  */
 function blockAsPatchable(block: Block): PatchSnapshot {

@@ -34,7 +34,7 @@ export const CLOUDFLARE_PROVIDER_ID = 'cloudflare'
  * Read the per-workspace Cloudflare config off the stored manifest's `providerConfig`.
  *
  * Re-validated against the schema the connect controller admitted it through, for the reason
- * {@link parseStoredProviderConfig} states — the same treatment every native backend gives its
+ * {@link parseStoredProviderConfig} states: the same treatment every native backend gives its
  * own stored config.
  */
 export function parseCloudflareEnvConfig(

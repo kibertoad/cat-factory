@@ -208,7 +208,7 @@ function pct(score: number): string {
 
 /**
  * A rendered `chat.postMessage` body. A type alias rather than an `interface` so it keeps the
- * implicit index signature `postJson`'s `Record<string, unknown>` parameter needs — as an
+ * implicit index signature `postJson`'s `Record<string, unknown>` parameter needs. As an
  * interface the client had to assert it through `unknown` to post it.
  */
 export type SlackMessageBody = {

@@ -61,7 +61,7 @@ const RESOURCE_KINDS: Record<string, { plural: string; namespaced: boolean }> = 
  * Read the per-workspace Kubernetes config off the stored manifest's `providerConfig`.
  *
  * Re-validated against the same schema the connect controller admitted it through, rather than
- * asserted — see {@link parseStoredProviderConfig} for why a stored config is re-read.
+ * asserted. See {@link parseStoredProviderConfig} for why a stored config is re-read.
  */
 export function parseKubernetesEnvConfig(manifest: EnvironmentManifest): KubernetesProvisionConfig {
   const raw = manifest.providerConfig

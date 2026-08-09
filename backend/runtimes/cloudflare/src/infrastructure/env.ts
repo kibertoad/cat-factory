@@ -835,10 +835,10 @@ export function envBag(env: Env): Record<string, unknown> {
  * One plain string VAR off the bindings, by name; `undefined` when it is unset OR when the
  * binding under that name is not a string.
  *
- * The `typeof` check is the point. Asserting `Env` to `Record<string, string | undefined>` — the
- * shape this replaced — claims every binding is a string, which is false for every non-var
- * binding on it, so a caller reading a mistyped or misnamed key was handed a D1 database where
- * it expected a token and only found out several frames later.
+ * The `typeof` check is the point. Asserting `Env` to `Record<string, string | undefined>`, the
+ * shape this replaced, claims every binding is a string. That is false for every non-var binding
+ * on it, so a caller reading a mistyped or misnamed key was handed a D1 database where it
+ * expected a token and only found out several frames later.
  */
 export function envVar(env: Env, key: string): string | undefined {
   const value = envBag(env)[key]

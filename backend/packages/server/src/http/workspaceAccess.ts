@@ -255,7 +255,7 @@ export interface MountedGate {
   gatesReads: boolean
 }
 
-/** A middleware viewed through the tag {@link mountGate} stamps on it — present only on one
+/** A middleware viewed through the tag {@link mountGate} stamps on it. Present only on one
  *  this module mounted, so the property is optional and its value untyped. */
 type GateTaggedHandler = { readonly [MOUNTED_GATE]?: unknown }
 

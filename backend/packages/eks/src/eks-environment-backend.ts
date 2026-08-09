@@ -48,8 +48,8 @@ export const eksEnvironmentBackend: EnvironmentBackendProvider = {
   },
   fromManifest: (manifest) => ({
     kind: 'eks',
-    // Re-parsed rather than asserted, like every other native backend's stored config —
-    // see `parseStoredProviderConfig`.
+    // Re-parsed rather than asserted, like every other native backend's stored config
+    // (see `parseStoredProviderConfig`).
     eks: parseStoredProviderConfig(
       eksProvisionConfigSchema,
       manifest.providerConfig,
