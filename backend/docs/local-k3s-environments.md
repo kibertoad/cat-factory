@@ -1,5 +1,12 @@
 # Kubernetes ephemeral environments (incl. local k3s)
 
+> **Operating this is on the website**:
+> [Provision Ephemeral Environments](https://www.catfactory.ai/operate/environments.html)
+> owns connecting and running a backend, and
+> [Deploy on Kubernetes](https://www.catfactory.ai/deploy/kubernetes.html) owns the cluster
+> side. This page is the backend's own DESIGN: the render/deploy engines and the namespace
+> lifecycle.
+
 The Kubernetes environment backend provisions a per-PR preview environment by applying an
 operator-authored set of Kubernetes/k3s manifests into a fresh namespace, reached over the
 kube-apiserver. It reuses the same apiserver client (bearer token + custom-CA TLS) as the
@@ -48,24 +55,14 @@ can use the `kubernetes` backend with no extra code.
 
 ### Guided setup (recommended): `cat-factory k3s`
 
-The [`@cat-factory/cli`](../packages/cli) ships a guided command that does the whole dance below
-**on your behalf**: probe the host for a reachable cluster (or a running k3d/kind), offer to
-create a k3d cluster (Docker, no root: the default) or guide a `sudo` k3s install, apply the
-least-privilege ServiceAccount + RBAC, mint a long-lived token, read the apiserver URL from the
-kubeconfig, then open the Infrastructure → Test environments form **pre-filled** with everything
-except the token (a secret is never put in a URL):
+`@cat-factory/cli` ships a guided command that does the whole dance below on your behalf. What it
+probes, offers, provisions and hands off, plus its flags and the deploy-runner step it prints, is on
+the website's
+[local k3s guided setup](https://www.catfactory.ai/deploy/kubernetes.html#local-k3s-guided-setup).
 
-```sh
-cat-factory k3s              # probe → offer → provision → open the pre-filled form
-cat-factory k3s --yes        # non-interactive: accept every mutating step (automation)
-```
-
-Every mutating step (cluster create, RBAC apply) asks for an explicit confirmation first; the k3s
-`curl | sh` install is only ever **printed**, never run. When it finishes, the CLI prints the
-minted ServiceAccount token once: paste it into the opened form, then **Test → Save**. The form's
-**Auto-setup with the CLI** hint surfaces the same command in-app. Useful flags: `--cluster-name`,
-`--runtime`, `--app-url` (default `http://localhost:3000`), and `--no-open`. See `cat-factory k3s
---help` for the full list.
+Prefer it. The manual path below is the escape hatch for a host the guided flow cannot run on, and
+it is here rather than on the website because it is a `kubectl apply` against a file this repository
+ships.
 
 ### Manual setup (the advanced / escape-hatch path)
 

@@ -768,7 +768,9 @@ async function liveForkDecisions<E extends AppEnv>(
   workspaceId: string,
   execution: ExecutionInstance,
 ): Promise<PublicDecision[]> {
-  const fork = await c.get('container').executionService.getForkDecision(workspaceId, execution.id)
+  const fork = await c
+    .get('container')
+    .executionService.decisions.getForkDecision(workspaceId, execution.id)
   return fork && isLiveFork(fork) ? [toForkDecision(fork)] : []
 }
 

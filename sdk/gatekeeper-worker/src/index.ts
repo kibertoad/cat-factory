@@ -59,6 +59,53 @@ export {
   type VerificationResult,
 } from './webhook/signature.js'
 
+// The Cloudflare OS object model: a second door onto the rooms above, never a fork of them. The
+// workspace discovers a `GatekeeperVendor` entrypoint over a service binding, mints an account,
+// binds the paired workspace as a resource, and opens a session whose every call passes through the
+// approval queue it supplied. `/rpc` and the admin routes are unchanged and still bearer-gated.
+export { createGatekeeperVendor } from './os/vendor.js'
+export {
+  createGatekeeperAccount,
+  createGatekeeperVerifier,
+  type AccountProps,
+} from './os/account.js'
+export { createGatekeeperResource } from './os/resource.js'
+export { ResourceCore, type ResourceProps } from './os/resource-core.js'
+export { OS_EXPORTS, missingOsExports, type OsExportRole } from './os/exports.js'
+export {
+  describeDiscoverability,
+  type DiscoverabilityReport,
+  type DiscoveryBlocker,
+  type DiscoveryBlockerReason,
+} from './os/discoverability.js'
+export { supportedResourceFor } from './os/resources.js'
+export { SESSION_INTERFACE_NAME, renderTierSessionTypes } from './os/session-types.js'
+export { ActionLedger, holdQueue, queueGovernance, type LedgerSession } from './os/queue.js'
+export {
+  actionKindOf,
+  describeAction,
+  describeObservation,
+  type CallSubject,
+} from './os/descriptions.js'
+export { fenced } from './markdown.js'
+export type {
+  AccountDescription,
+  AccountEntrypoint,
+  ActionDescription,
+  ActionKind,
+  ApprovalQueue,
+  AvatarImage,
+  ObservationAuthorizer,
+  ObservationDescription,
+  ResourceDescription,
+  ResourceObject,
+  SupportedResource,
+  VendorDescription,
+  VendorEntrypoint,
+  VerifierEntrypoint,
+} from './os/protocol.js'
+export type { SessionGovernance } from './capability.js'
+
 // The policy vocabulary, also reachable on its own at `@cat-factory/gatekeeper-worker/policy` for
 // a policy file that should not have to load a Worker runtime to be read or tested.
 export * from './policy/index.js'

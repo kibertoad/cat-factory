@@ -34,7 +34,7 @@ import {
 } from '@cat-factory/kernel'
 import { type SubscriptionVendor, subscriptionVendorSchema } from '@cat-factory/contracts'
 import { decodeEnum } from '@cat-factory/server'
-import { openSqliteDb } from './db.js'
+import { openSqliteDb, queryAll, queryOne } from './db.js'
 import {
   type LocalTelemetryIngestReader,
   SqliteTelemetryIngestReader,
@@ -498,16 +498,16 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
     // re-sendable prompt chain, and those interleave with the parent's now that harness telemetry
     // streams live — treating one as the tip makes every following parent call unchainable.
     // message_count breaks a same-millisecond createdAt tie; id is the last resort.
-    const row = this.db
-      .prepare(
-        `SELECT message_count, prompt_hash FROM llm_call_metrics
+    const row = queryOne<{ message_count: number; prompt_hash: string }>(
+      this.db,
+      `SELECT message_count, prompt_hash FROM llm_call_metrics
          WHERE workspace_id = ? AND execution_id = ? AND agent_kind = ? AND message_count > 0
          ORDER BY created_at DESC, message_count DESC, id DESC
          LIMIT 1`,
-      )
-      .get(workspaceId, executionId, agentKind) as unknown as
-      | { message_count: number; prompt_hash: string }
-      | undefined
+      workspaceId,
+      executionId,
+      agentKind,
+    )
     return row ? { messageCount: row.message_count, promptHash: row.prompt_hash } : null
   }
 
@@ -518,21 +518,19 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
     agentKind?: string,
   ): Promise<LlmCallMetric[]> {
     // Newest first; `LIMIT -1` means "no limit" in SQLite, so an omitted cap reads all.
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM llm_call_metrics
+    const rows = queryAll<MetricRow>(
+      this.db,
+      `SELECT * FROM llm_call_metrics
          WHERE workspace_id = ? AND execution_id = ?
            AND (? IS NULL OR agent_kind = ?)
          ORDER BY created_at DESC, id DESC
          LIMIT ?`,
-      )
-      .all(
-        workspaceId,
-        executionId,
-        agentKind ?? null,
-        agentKind ?? null,
-        limit ?? -1,
-      ) as unknown as MetricRow[]
+      workspaceId,
+      executionId,
+      agentKind ?? null,
+      agentKind ?? null,
+      limit ?? -1,
+    )
     return rows.map(rowToMetric)
   }
 
@@ -550,14 +548,14 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
     }
     binds.push(query.limit)
     // `SELECT *` — the bodies WHOLE, unlike `listPage`, which returns slices plus their lengths.
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM llm_call_metrics
+    const rows = queryAll<MetricRow>(
+      this.db,
+      `SELECT * FROM llm_call_metrics
          WHERE ${clauses.join(' AND ')}
          ORDER BY created_at DESC, id DESC
          LIMIT ?`,
-      )
-      .all(...binds) as unknown as MetricRow[]
+      ...binds,
+    )
     return rows.map(rowToMetric)
   }
 
@@ -601,17 +599,17 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
     }
     binds.push(query.limit)
     const direction = ascending ? 'ASC' : 'DESC'
-    const rows = this.db
-      .prepare(
-        `SELECT ${PAGE_METADATA_COLUMNS}, ${bodyColumns(query.bodyChars)}${
-          query.contains != null ? MATCH_COLUMNS : ''
-        }
+    const rows = queryAll<PageRow>(
+      this.db,
+      `SELECT ${PAGE_METADATA_COLUMNS}, ${bodyColumns(query.bodyChars)}${
+        query.contains != null ? MATCH_COLUMNS : ''
+      }
          FROM llm_call_metrics
          WHERE ${clauses.join(' AND ')}
          ORDER BY created_at ${direction}, id ${direction}
          LIMIT ?`,
-      )
-      .all(...binds) as unknown as PageRow[]
+      ...binds,
+    )
     return rows.map(rowToPage)
   }
 
@@ -620,15 +618,15 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
     id: string,
     body?: LlmCallBodyWindow,
   ): Promise<LlmCallMetricPage | null> {
-    const row = this.db
-      .prepare(
-        `SELECT ${PAGE_METADATA_COLUMNS}, ${bodyColumns(body?.chars, body?.offset ?? 0)}
+    const row = queryOne<PageRow>(
+      this.db,
+      `SELECT ${PAGE_METADATA_COLUMNS}, ${bodyColumns(body?.chars, body?.offset ?? 0)}
          FROM llm_call_metrics
          WHERE workspace_id = ? AND id = ?`,
-      )
-      .get(...bodyBinds(body?.chars, body?.offset ?? 0), workspaceId, id) as unknown as
-      | PageRow
-      | undefined
+      ...bodyBinds(body?.chars, body?.offset ?? 0),
+      workspaceId,
+      id,
+    )
     return row ? rowToPage(row) : null
   }
 
@@ -638,9 +636,27 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
   ): Promise<LlmCallMetricSummary[]> {
     // Aggregate-only: selects no prompt/response text, so it stays cheap enough to run on every
     // execution emit (it backs the live board rollups).
-    const rows = this.db
-      .prepare(
-        `SELECT
+    const rows = queryAll<{
+      agent_kind: string
+      phase: string
+      provider: string
+      model: string
+      calls: number
+      prompt_tokens: number
+      cache_read_tokens: number
+      cache_write_tokens: number
+      completion_tokens: number
+      peak_completion_tokens: number
+      max_output_tokens: number | null
+      truncated_calls: number
+      upstream_ms: number
+      overhead_ms: number
+      errors: number
+      warnings: number
+      carry_cost_tokens: number
+    }>(
+      this.db,
+      `SELECT
            agent_kind                                           AS agent_kind,
            phase                                                AS phase,
            provider                                             AS provider,
@@ -660,26 +676,9 @@ class SqliteLlmCallMetricRepository implements LlmCallMetricRepository {
            COALESCE(SUM(input_tokens * turns_after), 0)         AS carry_cost_tokens
          FROM (${CARRY_COST_SUBQUERY_SQL})
          GROUP BY agent_kind, phase, provider, model`,
-      )
-      .all(workspaceId, executionId) as unknown as {
-      agent_kind: string
-      phase: string
-      provider: string
-      model: string
-      calls: number
-      prompt_tokens: number
-      cache_read_tokens: number
-      cache_write_tokens: number
-      completion_tokens: number
-      peak_completion_tokens: number
-      max_output_tokens: number | null
-      truncated_calls: number
-      upstream_ms: number
-      overhead_ms: number
-      errors: number
-      warnings: number
-      carry_cost_tokens: number
-    }[]
+      workspaceId,
+      executionId,
+    )
     return rows.map((r) => ({
       agentKind: r.agent_kind,
       phase: r.phase,
@@ -798,13 +797,14 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
   }
 
   async listByExecution(workspaceId: string, executionId: string): Promise<AgentContextSnapshot[]> {
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM agent_context_snapshots
+    const rows = queryAll<SnapshotRow>(
+      this.db,
+      `SELECT * FROM agent_context_snapshots
          WHERE workspace_id = ? AND execution_id = ?
          ORDER BY created_at DESC, id DESC`,
-      )
-      .all(workspaceId, executionId) as unknown as SnapshotRow[]
+      workspaceId,
+      executionId,
+    )
     return rows.map(rowToSnapshot)
   }
 
@@ -825,9 +825,9 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
     binds.push(query.limit)
     // Sizes only — the four body-bearing columns are MEASURED, never selected, so listing a
     // run's dispatches costs no body bytes even though a single snapshot can be megabytes.
-    const rows = this.db
-      .prepare(
-        `SELECT id, agent_kind, step_index, created_at, model, harness,
+    const rows = queryAll<IndexRow>(
+      this.db,
+      `SELECT id, agent_kind, step_index, created_at, model, harness,
                 length(system_prompt) AS system_prompt_chars,
                 length(user_prompt)   AS user_prompt_chars,
                 length(fragments)     AS fragments_chars,
@@ -836,8 +836,8 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
          WHERE ${clauses.join(' AND ')}
          ORDER BY created_at DESC, id DESC
          LIMIT ?`,
-      )
-      .all(...binds) as unknown as IndexRow[]
+      ...binds,
+    )
     return rows.map(rowToIndex)
   }
 
@@ -858,30 +858,34 @@ class SqliteAgentContextSnapshotRepository implements AgentContextSnapshotReposi
     binds.push(query.limit)
     // Same predicate, ordering and keyset as `listIndex` — bodies included. Keeping the two in
     // step is what lets a caller page the index and then page the rows and see the same run.
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM agent_context_snapshots
+    const rows = queryAll<SnapshotRow>(
+      this.db,
+      `SELECT * FROM agent_context_snapshots
          WHERE ${clauses.join(' AND ')}
          ORDER BY created_at DESC, id DESC
          LIMIT ?`,
-      )
-      .all(...binds) as unknown as SnapshotRow[]
+      ...binds,
+    )
     return rows.map(rowToSnapshot)
   }
 
   async get(workspaceId: string, id: string): Promise<AgentContextSnapshot | null> {
-    const row = this.db
-      .prepare('SELECT * FROM agent_context_snapshots WHERE workspace_id = ? AND id = ?')
-      .get(workspaceId, id) as unknown as SnapshotRow | undefined
+    const row = queryOne<SnapshotRow>(
+      this.db,
+      'SELECT * FROM agent_context_snapshots WHERE workspace_id = ? AND id = ?',
+      workspaceId,
+      id,
+    )
     return row ? rowToSnapshot(row) : null
   }
 
   async countByExecution(workspaceId: string, executionId: string): Promise<number> {
-    const row = this.db
-      .prepare(
-        'SELECT COUNT(*) AS n FROM agent_context_snapshots WHERE workspace_id = ? AND execution_id = ?',
-      )
-      .get(workspaceId, executionId) as unknown as { n: number } | undefined
+    const row = queryOne<{ n: number }>(
+      this.db,
+      'SELECT COUNT(*) AS n FROM agent_context_snapshots WHERE workspace_id = ? AND execution_id = ?',
+      workspaceId,
+      executionId,
+    )
     return row?.n ?? 0
   }
 
@@ -943,13 +947,14 @@ class SqliteAgentSearchQueryRepository implements AgentSearchQueryRepository {
   }
 
   async listByExecution(workspaceId: string, executionId: string): Promise<AgentSearchQuery[]> {
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM agent_search_queries
+    const rows = queryAll<SearchQueryRow>(
+      this.db,
+      `SELECT * FROM agent_search_queries
          WHERE workspace_id = ? AND execution_id = ?
          ORDER BY created_at DESC, id DESC`,
-      )
-      .all(workspaceId, executionId) as unknown as SearchQueryRow[]
+      workspaceId,
+      executionId,
+    )
     return rows.map(rowToQuery)
   }
 
@@ -966,23 +971,24 @@ class SqliteAgentSearchQueryRepository implements AgentSearchQueryRepository {
       binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
     }
     binds.push(query.limit)
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM agent_search_queries
+    const rows = queryAll<SearchQueryRow>(
+      this.db,
+      `SELECT * FROM agent_search_queries
          WHERE ${clauses.join(' AND ')}
          ORDER BY created_at DESC, id DESC
          LIMIT ?`,
-      )
-      .all(...binds) as unknown as SearchQueryRow[]
+      ...binds,
+    )
     return rows.map(rowToQuery)
   }
 
   async countByExecution(workspaceId: string, executionId: string): Promise<number> {
-    const row = this.db
-      .prepare(
-        'SELECT COUNT(*) AS n FROM agent_search_queries WHERE workspace_id = ? AND execution_id = ?',
-      )
-      .get(workspaceId, executionId) as unknown as { n: number } | undefined
+    const row = queryOne<{ n: number }>(
+      this.db,
+      'SELECT COUNT(*) AS n FROM agent_search_queries WHERE workspace_id = ? AND execution_id = ?',
+      workspaceId,
+      executionId,
+    )
     return row?.n ?? 0
   }
 
@@ -1064,17 +1070,17 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
       binds.push(query.ok ? 1 : 0)
     }
     binds.push(query.limit)
-    const rows = this.db
-      .prepare(
-        // Trajectory order, mirroring the D1 repo: the call's own start, `seq` breaking a
-        // shared millisecond, `id` making it total. A job id is a string and would sort a
-        // run's dispatches alphabetically.
-        `SELECT * FROM agent_tool_calls
+    const rows = queryAll<ToolCallRow>(
+      this.db,
+      // Trajectory order, mirroring the D1 repo: the call's own start, `seq` breaking a
+      // shared millisecond, `id` making it total. A job id is a string and would sort a
+      // run's dispatches alphabetically.
+      `SELECT * FROM agent_tool_calls
          WHERE ${clauses.join(' AND ')}
          ORDER BY started_at ASC, seq ASC, id ASC
          LIMIT ?`,
-      )
-      .all(...binds) as unknown as ToolCallRow[]
+      ...binds,
+    )
     return rows.map(rowToToolCall)
   }
 
@@ -1094,14 +1100,14 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
       binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
     }
     binds.push(query.limit)
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM agent_tool_calls
+    const rows = queryAll<ToolCallRow>(
+      this.db,
+      `SELECT * FROM agent_tool_calls
          WHERE ${clauses.join(' AND ')}
          ORDER BY created_at DESC, id DESC
          LIMIT ?`,
-      )
-      .all(...binds) as unknown as ToolCallRow[]
+      ...binds,
+    )
     return rows.map(rowToToolCall)
   }
 
@@ -1110,19 +1116,15 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
     executionId: string,
   ): Promise<AgentToolCallSummary[]> {
     // The D1 GROUP BY, verbatim: one pass over the run's rows, neither body column read.
-    const rows = this.db
-      .prepare(
-        `SELECT agent_kind, tool, COUNT(*) AS calls, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failures
+    const rows = queryAll<{ agent_kind: string; tool: string; calls: number; failures: number }>(
+      this.db,
+      `SELECT agent_kind, tool, COUNT(*) AS calls, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failures
          FROM agent_tool_calls
          WHERE workspace_id = ? AND execution_id = ?
          GROUP BY agent_kind, tool`,
-      )
-      .all(workspaceId, executionId) as unknown as {
-      agent_kind: string
-      tool: string
-      calls: number
-      failures: number
-    }[]
+      workspaceId,
+      executionId,
+    )
     return rows.map((row) => ({
       agentKind: row.agent_kind,
       tool: row.tool,
@@ -1209,14 +1211,14 @@ class SqliteProvisioningLogRepository implements ProvisioningLogRepository {
     }
     // Newest first; `LIMIT -1` means "no limit" in SQLite, so an omitted cap reads all.
     binds.push(query.limit ?? -1)
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM provisioning_log
+    const rows = queryAll<ProvisioningLogRow>(
+      this.db,
+      `SELECT * FROM provisioning_log
          WHERE ${clauses.join(' AND ')}
          ORDER BY created_at DESC, id DESC
          LIMIT ?`,
-      )
-      .all(...binds) as unknown as ProvisioningLogRow[]
+      ...binds,
+    )
     return rows.map((row) => ({
       id: row.id,
       workspaceId: row.workspace_id,
@@ -1238,14 +1240,15 @@ class SqliteProvisioningLogRepository implements ProvisioningLogRepository {
     executionId: string,
   ): Promise<{ total: number; failures: number }> {
     // Total + failures in ONE aggregate pass over the run's slice (see the port).
-    const row = this.db
-      .prepare(
-        `SELECT COUNT(*) AS total,
+    const row = queryOne<{ total: number; failures: number }>(
+      this.db,
+      `SELECT COUNT(*) AS total,
                 COALESCE(SUM(CASE WHEN outcome = 'failure' THEN 1 ELSE 0 END), 0) AS failures
          FROM provisioning_log
          WHERE workspace_id = ? AND execution_id = ?`,
-      )
-      .get(workspaceId, executionId) as unknown as { total: number; failures: number } | undefined
+      workspaceId,
+      executionId,
+    )
     return { total: row?.total ?? 0, failures: row?.failures ?? 0 }
   }
 
@@ -1342,12 +1345,14 @@ class SqliteSubscriptionQuotaCycleRepository implements SubscriptionQuotaCycleRe
     scopeId: string,
     vendor: SubscriptionVendor,
   ): Promise<SubscriptionQuotaCycleRecord[]> {
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM subscription_quota_cycles
+    const rows = queryAll<QuotaCycleRow>(
+      this.db,
+      `SELECT * FROM subscription_quota_cycles
           WHERE scope = ? AND scope_id = ? AND vendor = ?`,
-      )
-      .all(scope, scopeId, vendor) as unknown as QuotaCycleRow[]
+      scope,
+      scopeId,
+      vendor,
+    )
     return rows.map((row) => ({
       id: row.id,
       scope: row.scope as SubscriptionQuotaScope,

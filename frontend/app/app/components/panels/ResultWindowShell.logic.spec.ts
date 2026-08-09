@@ -27,6 +27,10 @@ const SHELL_DEFAULT_WIDTH: ResultWindowWidth = '3xl'
  * not made the decision.
  */
 const WINDOWS: Record<string, { width: ResultWindowWidth; why: string }> = {
+  'binaryCandidates/BinaryCandidatesWindow.vue': {
+    width: '5xl',
+    why: 'a preview grid of generated candidates grouped by subject, read side by side to be compared, with no rail beside it',
+  },
   'brainstorm/BrainstormWindow.vue': {
     width: 'full',
     why: 'options column + the choose/dismiss action rail',

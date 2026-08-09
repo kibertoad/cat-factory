@@ -113,10 +113,13 @@ radius (a one-line internal fix needs none; a new export / env var / capability 
 - The package's own `README.md` + `AGENTS.md`; the root `README.md`'s layout and feature-guide rows.
 - This file, only for a new CROSS-CUTTING convention or a change to a flow it indexes; detail about one flow
   goes in that flow's doc, and a higher-level doc POINTS AT a new deeper one or the deeper one is lost.
-- **Does this change behaviour a catfactory.ai page describes?** OWNERSHIP FOLLOWS THE READER: the website
-  owns what anyone can act on with NO checkout, a doc here keeps internal design plus a LINK, the two split by
-  DEPTH, never mirrored. Land the website page FIRST, and before reducing a doc check what deep-links its
-  HEADINGS from code (`check-doc-anchors.mjs`). Model: `docs/initiatives/documentation-revamp.md`.
+- **Does this change behaviour a catfactory.ai page describes? Then it ships with a WEBSITE PR, opened and
+  merged FIRST, and NAMED in this PR's description.** OWNERSHIP FOLLOWS THE READER: the website owns what
+  anyone can act on with NO checkout, a doc here keeps internal design plus a LINK, split by DEPTH, never
+  mirrored; a new env var, endpoint, capability, failure mode or operator step meets that test. **LOAD the
+  page before you link it**: neither repo's CI can see the other (the crossing guard is weekly BY DESIGN),
+  so a reduction that ASSERTED its page existed left 600 lines reachable from nowhere. Before reducing a
+  doc, check what deep-links its HEADINGS from code (`check-doc-anchors.mjs`). Model: `docs/initiatives/documentation-revamp.md`.
 
 ### Bigger initiatives get a tracker document
 
@@ -150,8 +153,7 @@ messages, code comments, UI copy.
 
 ## Environment quirks
 
-- **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`; assume the login is
-  correct.
+- **Do not validate Cloudflare auth before deployments**: skip `wrangler whoami`, assume the login is correct.
 - **Multi-line git messages: bash heredoc in the Bash tool, NOT a PowerShell here-string.** The Bash tool
   is POSIX sh, so `@'…'@` leaks literal `@` characters into the commit subject. Use
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
@@ -432,8 +434,6 @@ native-child env allow-list) updates that doc in the same PR.
 - **The model JUDGES; the platform COMPUTES.** A ranking, a score ratio, a regression count is derived in
   code from the model's stated judgements, never read off the reply, or a list is ordered by something its
   own rationale doesn't explain.
-- **A best-effort side channel LOGS its failures** through `runBestEffort`, or a swallowed classification
-  failure surfaces only as a permanently broken feature.
 - **A pass-through is the correct disposition for an unwired capability**, and it must be invisible to the
   domain: a gate with no provider, a judge with no assessor, an unset validation config are all
   byte-for-byte the prior behaviour.
@@ -582,8 +582,8 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
   imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
-- `node scripts/check-shipped-doc-links.mjs`: a published tarball's docs never link out of the package.
-- `node scripts/check-doc-anchors.mjs`: every doc URL built in code resolves to a file AND a heading.
+- `node scripts/check-doc-links.mjs`, `check-doc-anchors.mjs`, `check-shipped-doc-links.mjs`: an ordinary
+  markdown link, a doc URL built in CODE, and a shipped tarball's links each resolve to a file AND a heading.
 - `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
 - `node scripts/check-deploy-placeholders.mjs`: the `deploy/*` templates hold placeholders, never real ids.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
@@ -766,13 +766,13 @@ declaration", "empty declaration" and "unknown id" are three states needing diff
 `operationsAreIndexable` the one place the fourth (an unparseable format) lives. Doc:
 [ADR 0031](./backend/docs/adr/0031-foundational-services.md).
 
-**Binary-output steps**: a `binary-output`-trait kind generates binary artifacts and stores them through
-a foundational service its step SELECTS, never the platform's artifact store; what MAKES them is the
-separate `BinaryGeneratorRegistry`, read only through `BinaryGeneratorSource` (mothership rule). Traps:
-content type is a CLOSED vocabulary and a modality stops deciding at the SECOND producer of it (the
-platform states overlaps, ranks nothing); an unreachable source is a 503 refusal, never an empty set;
-the credential VALUE never reaches a prompt. Doc:
-[`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+**Binary-output steps**: a `binary-output`-trait kind generates binary artifacts and stores them through a
+foundational service its step SELECTS; what MAKES them is the separate `BinaryGeneratorRegistry`, read only
+through `BinaryGeneratorSource` (mothership rule), whose declared `capabilities` gate the per-step generation
+options and, past two producers, a human CANDIDATE park. Traps: content type is CLOSED and a modality stops
+deciding at the SECOND producer (the platform states overlaps, ranks nothing, and a capability gates an
+OPTION, never which producer to call); an UNDECLARED capability/format is unverifiable, never uncovered; an
+unreachable source is a 503 refusal; the credential VALUE never reaches a prompt. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
 (in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the

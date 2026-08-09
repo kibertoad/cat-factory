@@ -8,6 +8,8 @@ import {
   isCompanionKind,
   containerPhaseLabel,
   dedicatedParkView,
+  REDIRECT_PARK_PRESENTATION,
+  type RedirectParkView,
 } from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentFailureHistory from '~/components/board/AgentFailureHistory.vue'
@@ -184,15 +186,28 @@ function openStep(i: number) {
   if (instance.value) ui.openStepDetail(instance.value.id, i)
 }
 
-// Open the implementation-fork decision window for a coder step parked awaiting a choice.
-function openForkFor(i: number) {
-  if (instance.value) ui.openForkDecision(instance.value.id, i)
+/**
+ * The window-owned park holding a step, or null. `input-gate` is filtered out because it has no
+ * window: it is answered by the inline notice this list renders above itself, so offering a
+ * button here would send a human to an overlay that does not exist.
+ */
+function redirectPark(step: PipelineStep): RedirectParkView | null {
+  const park = dedicatedParkView(step, instance.value)
+  return park && park !== 'input-gate' ? park : null
 }
 
-// Open the follow-up triage window for a coder step parked on undecided follow-up items
-// (its dedicated chip — the generic approve resolver refuses this park server-side).
-function openFollowUpsFor(i: number) {
-  if (instance.value) ui.openFollowUps(instance.value.id, i)
+/**
+ * Open the window that resolves a park. A `Record` over the vocabulary, so a park added to it
+ * fails to compile until it names its opener rather than rendering a button that does nothing.
+ */
+const PARK_OPENERS: Record<RedirectParkView, (instanceId: string, stepIndex: number) => void> = {
+  'follow-ups': (id, idx) => ui.openFollowUps(id, idx),
+  'fork-decision': (id, idx) => ui.openForkDecision(id, idx),
+  'binary-candidates': (id, idx) => ui.openBinaryCandidates(id, idx),
+}
+
+function openParkFor(park: RedirectParkView, i: number) {
+  if (instance.value) PARK_OPENERS[park](instance.value.id, i)
 }
 
 // Open the PR deep-review findings-selection window for a pr-reviewer step parked awaiting
@@ -471,38 +486,23 @@ async function mergePr() {
             >
               {{ t('inspector.execution.decide') }}
             </UButton>
-            <!-- A coder step parked on the implementation-fork decision: pick an approach
-                 (or enter a custom one) in the dedicated window, not a plain approval. -->
+            <!-- A step parked on something a dedicated WINDOW answers: the implementation-fork
+                 choice, undecided follow-up items, or a candidate comparison. None of them is a
+                 plain approval (the generic resolver refuses all three server-side), and all
+                 three present the same way here: one button into the window that can resolve
+                 it. Driven by the shared per-park table rather than a branch each, because a
+                 branch each is how the candidate park shipped with no button at all. -->
             <UButton
-              v-else-if="
-                s.approval &&
-                s.approval.status === 'pending' &&
-                dedicatedParkView(s, instance) === 'fork-decision'
-              "
+              v-else-if="s.approval && s.approval.status === 'pending' && redirectPark(s)"
               color="primary"
               variant="soft"
               size="xs"
-              icon="i-lucide-git-fork"
-              @click="openForkFor(i)"
+              :icon="REDIRECT_PARK_PRESENTATION[redirectPark(s)!].icon"
+              :data-park="redirectPark(s)"
+              data-testid="dedicated-park-open"
+              @click="openParkFor(redirectPark(s)!, i)"
             >
-              {{ t('inspector.execution.chooseApproach') }}
-            </UButton>
-            <!-- A coder step parked on undecided follow-up items: triage them (file /
-                 send back / answer / dismiss) in the dedicated window, not a plain
-                 approval — the generic approve resolver refuses this park. -->
-            <UButton
-              v-else-if="
-                s.approval &&
-                s.approval.status === 'pending' &&
-                dedicatedParkView(s, instance) === 'follow-ups'
-              "
-              color="primary"
-              variant="soft"
-              size="xs"
-              icon="i-lucide-compass"
-              @click="openFollowUpsFor(i)"
-            >
-              {{ t('inspector.execution.triageFollowUps') }}
+              {{ t(REDIRECT_PARK_PRESENTATION[redirectPark(s)!].railActionKey) }}
             </UButton>
             <!-- A pr-reviewer step parked awaiting a finding selection: open the dedicated
                  findings-selection window, not the generic approval gate. -->

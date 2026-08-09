@@ -13,6 +13,7 @@ import { boardApi } from './api/board'
 import { documentsApi } from './api/documents'
 import { executionApi } from './api/execution'
 import { followUpsApi } from './api/followUps'
+import { binaryCandidatesApi } from './api/binaryCandidates'
 import { forkDecisionApi } from './api/forkDecision'
 import { inputGateApi } from './api/inputGate'
 import { judgeApi } from './api/judge'
@@ -131,6 +132,7 @@ export function useApi() {
     ...bugHuntApi(ctx),
     ...reviewsApi(ctx),
     ...followUpsApi(ctx),
+    ...binaryCandidatesApi(ctx),
     ...forkDecisionApi(ctx),
     ...inputGateApi(ctx),
     ...judgeApi(ctx),

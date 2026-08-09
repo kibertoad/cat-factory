@@ -390,10 +390,24 @@ export {
   type ResolvedBinaryGenerator,
   type ResolvedBinaryGeneratorSelection,
   binaryGeneratorSelectionIssues,
+  describeCapability,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,
   resolveBinaryGeneratorSelection,
 } from './domain/binary-generators.js'
+
+// SIDE-BY-SIDE CANDIDATE COMPARISON on a binary-output step: the two-phase brief (generate
+// comparable candidates → deliver what a human kept, under the alternate ids they assigned) and
+// the read-back of what was staged. See `domain/binary-candidates.ts`.
+export {
+  type BinaryCandidateDeclaration,
+  BINARY_CANDIDATE_DECLARATION_TAG,
+  MAX_BINARY_CANDIDATES,
+  isRenderablePreviewUrl,
+  parseBinaryCandidateDeclaration,
+  renderBinaryCandidateChoiceSection,
+  renderBinaryCandidateSection,
+} from './domain/binary-candidates.js'
 
 // The shared reader for an agent's machine-read ` ```<tag> ` declaration block — the LAST one
 // wins, because every contract using it asks the agent to END its reply with it.

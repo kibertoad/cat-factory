@@ -1,4 +1,5 @@
 import type {
+  BinaryCandidateStepState,
   BinaryModality,
   BinaryOutputArtifact,
   BinaryOutputConfig,
@@ -20,6 +21,10 @@ import {
   type ResolvedBinaryGeneratorSelection,
   renderBinaryGeneratorSection,
 } from './binary-generators.js'
+import {
+  renderBinaryCandidateChoiceSection,
+  renderBinaryCandidateSection,
+} from './binary-candidates.js'
 
 // ---------------------------------------------------------------------------
 // Pure logic for BINARY-OUTPUT agent steps
@@ -333,6 +338,16 @@ export interface BinaryOutputBriefInput {
    * generative integration is configured") rather than as silence.
    */
   generators?: ResolvedBinaryGeneratorSelection
+  /**
+   * The step's live CANDIDATE state, which is what tells the two phases of a comparison step
+   * apart. Absent (or any status but `chosen`) ⇒ this dispatch is the phase that GENERATES
+   * candidates; `chosen` ⇒ it is the phase that delivers what a human kept.
+   *
+   * Read off the step rather than passed as a phase flag, because the step is the only thing the
+   * durable path holds: a dispatch is rebuilt from it after a replay, and a caller-supplied phase
+   * would be a second source of truth about which pass this is.
+   */
+  candidates?: BinaryCandidateStepState | null
 }
 
 /**
@@ -363,13 +378,53 @@ export function renderBinaryOutputBrief(input: BinaryOutputBriefInput): string {
       selection: input.generators ?? { selected: [], unresolvedIds: [] },
       requestedModalities: input.config.modalities ?? [],
       requestedMediaTypes: input.config.mediaTypes ?? [],
+      ...(input.config.generation ? { generation: input.config.generation } : {}),
     }),
   )
   lines.push(...renderScopeSection(input), ...renderStorageSection(input))
+  // A comparison step is TWO dispatches of one step and they are given opposite instructions, so
+  // the phase is decided here, once, off the only thing the durable path carries. Getting it
+  // wrong in either direction is silent: a first pass told to deliver makes the choice the
+  // feature exists to take away, and a second pass told to generate candidates starts the
+  // comparison over with the human's decision already recorded and ignored.
+  const stage = candidateStage(input)
+  if (stage === 'generate') {
+    lines.push(
+      ...renderBinaryCandidateSection({
+        comparison: input.config.comparison!,
+        selected: input.generators?.selected ?? [],
+        ...(input.config.generation?.seed !== undefined
+          ? { fixedSeed: input.config.generation.seed }
+          : {}),
+      }),
+    )
+    // Deliberately NOT followed by the `binary-outputs` sentence below: this pass stores no
+    // deliverable, and asking for both declarations is how a first pass comes back having done
+    // the second pass's job.
+    return lines.join('\n').trimEnd()
+  }
+  if (stage === 'deliver') lines.push(...renderBinaryCandidateChoiceSection(input.candidates!))
   lines.push(
     `Declare what you stored in the fenced \`\`\`${BINARY_OUTPUT_DECLARATION_TAG} block your guidance describes, naming each artifact's service id, the integration that generated it, and its location exactly as the storage service reported it.`,
   )
   return lines.join('\n').trimEnd()
+}
+
+/**
+ * Which pass of a comparison step this dispatch is, or `null` for a step that does not compare.
+ *
+ * `no_choice` resolves to `null` rather than to either phase, and that is the interesting case: a
+ * comparison whose first pass produced nothing to choose between does not get a second pass at
+ * all, so the only dispatch that could read this brief is the first one, which already ran. If
+ * one ever were rebuilt (a replay against a step whose state had settled), treating it as a
+ * step with no comparison is the safe reading: it delivers directly, which is what a comparison
+ * with nothing to compare should have done.
+ */
+function candidateStage(input: BinaryOutputBriefInput): 'generate' | 'deliver' | null {
+  if (!input.config?.comparison) return null
+  const status = input.candidates?.status
+  if (status === 'chosen') return 'deliver'
+  return status === 'no_choice' ? null : 'generate'
 }
 
 /** The SCOPE half: which catalog services say what to generate, and which could not be resolved. */

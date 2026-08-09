@@ -1,5 +1,53 @@
 # @cat-factory/node-server
 
+## 0.195.7
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+  - @cat-factory/kernel@0.280.0
+  - @cat-factory/agents@0.122.0
+  - @cat-factory/orchestration@0.249.0
+  - @cat-factory/server@0.261.0
+  - @cat-factory/consensus@0.14.73
+  - @cat-factory/eks@0.1.285
+  - @cat-factory/gates@0.10.13
+  - @cat-factory/gitlab@0.19.4
+  - @cat-factory/integrations@0.153.4
+  - @cat-factory/observability-otel@0.18.20
+  - @cat-factory/prompt-fragments@1.0.37
+  - @cat-factory/spend@0.15.55
+  - @cat-factory/caching@0.18.28
+  - @cat-factory/observability-langfuse@0.10.57
+  - @cat-factory/provider-bedrock@0.7.434
+  - @cat-factory/provider-cloudflare@0.7.435
+  - @cat-factory/provider-s3@0.2.354
+
+## 0.195.6
+
+### Patch Changes
+
+- Updated dependencies [e3fdc15]
+  - @cat-factory/contracts@0.284.0
+  - @cat-factory/integrations@0.153.3
+  - @cat-factory/server@0.260.3
+  - @cat-factory/eks@0.1.284
+  - @cat-factory/agents@0.121.4
+  - @cat-factory/consensus@0.14.72
+  - @cat-factory/gates@0.10.12
+  - @cat-factory/gitlab@0.19.3
+  - @cat-factory/kernel@0.279.3
+  - @cat-factory/observability-otel@0.18.19
+  - @cat-factory/orchestration@0.248.5
+  - @cat-factory/prompt-fragments@1.0.36
+  - @cat-factory/spend@0.15.54
+  - @cat-factory/provider-bedrock@0.7.433
+  - @cat-factory/provider-cloudflare@0.7.434
+  - @cat-factory/caching@0.18.27
+  - @cat-factory/observability-langfuse@0.10.56
+  - @cat-factory/provider-s3@0.2.353
+
 ## 0.195.5
 
 ### Patch Changes

@@ -69,6 +69,12 @@ them independently is how one gets them backwards:
   unannotated mutation counts as destructive and non-idempotent).
 - `PUBLIC_API_SCOPE_LADDER`: the scope ranking itself, emitted from the spec's
   `x-public-api-scopes`.
+- `renderSessionTypes(request)`: the `.d.ts` an object-capability session serves as its TypeScript
+  types, composed from the generated `SESSION_METHOD_SIGNATURES` for exactly the operations a
+  policy granted. Per-grant rather than shipped whole, because a file naming the full surface would
+  promise methods the object does not have. It THROWS on a name it has no signature for: a silently
+  dropped method reads to an agent exactly like an operation the deployment does not serve, and the
+  two need opposite fixes.
 
 The ladder helpers **throw on a scope they do not carry** rather than ranking it below `read`:
 a deployment one release ahead of this package must read as version skew, never as a key with no
@@ -104,6 +110,21 @@ const result = await binding.invoke(client, {
 Two routes are deliberately absent from the table because they have no honest operation shape:
 `GET /api/v1/openapi.json` (spec discovery) and `ALL /api/v1/mcp` (the hosted MCP endpoint). Both
 gate at `read` on the server.
+
+## What is generated
+
+Two files, both by `pnpm gen:sdk` and both guarded against drift by `pnpm check:sdk`:
+
+| File                             | What it carries                                                                                       |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `src/bindings.generated.ts`      | The operation table: scope floors, mutation and transport metadata, consequence hints, invoke thunks. |
+| `src/session-types.generated.ts` | One TypeScript method signature per operation, for composing a granted session's `.d.ts`.             |
+
+The signatures carry fully typed ARGUMENTS (path parameters, query keys with their requiredness, a
+body where the operation takes one) and an `unknown` result. That is deliberate rather than a gap:
+a session relays the deployment's own decoded JSON, and the authority for those shapes is the
+OpenAPI document at `GET /api/v1/openapi.json`, which every deployment serves. Inlining the model
+tree would put a second copy of it inside every consumer's bundle, free to disagree with the first.
 
 ## Configuration and customization
 

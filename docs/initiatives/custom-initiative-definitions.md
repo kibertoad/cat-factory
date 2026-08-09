@@ -4,9 +4,9 @@
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
-> [`initiative-presets-and-docs-refresh.md`](./initiative-presets-and-docs-refresh.md) (the
-> preset system this extends), [`initiatives-feature.md`](./initiatives-feature.md),
-> [`registry-di-migration.md`](./registry-di-migration.md), and the developer doc
+> [ADR 0016](../../backend/docs/adr/0016-initiative-presets.md) (the
+> preset system this extends), [ADR 0013](../../backend/docs/adr/0013-initiatives-feature.md),
+> [ADR 0028](../../backend/docs/adr/0028-registry-di.md), and the developer doc
 > `backend/docs/initiative-presets.md`.
 
 ## Goal & rationale

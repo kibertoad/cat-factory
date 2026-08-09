@@ -7,6 +7,7 @@ import type {
   BlockType,
   TaskTypeMeta,
 } from '~/types/domain'
+import type { BadgeColor } from '~/utils/badge'
 
 /** Simple unique id helper (fine for a client-only prototype). */
 export function uid(prefix = 'id'): string {
@@ -1022,7 +1023,7 @@ export function blockTypeMeta(type: BlockType): BlockTypeMeta {
 /** Color + iconography for each block status. */
 export const STATUS_META: Record<
   BlockStatus,
-  { label: string; color: string; chip: string; icon: string }
+  { label: string; color: string; chip: BadgeColor; icon: string }
 > = {
   planned: {
     label: 'Planned',

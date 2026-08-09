@@ -30,7 +30,7 @@ import { loadLangfuseConfig } from './config/langfuse'
 import { loadObservabilityConfig } from './config/observability'
 import { loadOtelConfig } from './config/otel'
 import type { Env } from './env'
-import { requireTelemetryDb } from './env'
+import { envVar, requireTelemetryDb } from './env'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { resolveExtraRegistries } from './ai/registries'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
@@ -108,9 +108,7 @@ export function buildModelProviderResolver(env: Env, db: D1Database): ModelProvi
   // subscription refs before resolve, it is a wired pass-through here in practice.
   const resolver = wrapResolverWithTelemetry(scoped, {
     ...(instrument ? { instrument } : {}),
-    limiter: vendorConcurrencyLimiterFromEnv(
-      (key) => (env as unknown as Record<string, string | undefined>)[key],
-    ),
+    limiter: vendorConcurrencyLimiterFromEnv((key) => envVar(env, key)),
   })
   modelResolverCache.set(env, resolver)
   return resolver

@@ -15,6 +15,7 @@ import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
 import { foundationalServiceSelectionSchema } from './foundational-services.js'
 import { binaryOutputReportSchema } from './binary-outputs.js'
+import { binaryCandidateStepStateSchema } from './binary-candidates.js'
 import { stepToolServersSchema } from './tool-servers.js'
 import { stepContextDocumentSchema } from './documents.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
@@ -1100,6 +1101,18 @@ export const pipelineStepSchema = v.object({
    * reporting it stored nothing. See {@link binaryOutputReportSchema} for the bookkeeping.
    */
   binaryOutputs: v.optional(binaryOutputReportSchema),
+  /**
+   * Live CANDIDATE-COMPARISON state on a binary-output step whose selection declares a
+   * `comparison`: the candidates the agent generated and staged, the human park while they are
+   * compared side by side, and the resolved choice of which to keep (and under which alternate
+   * ids). Created lazily by the engine when the first phase settles, never at start.
+   *
+   * Deliberately PRESERVED across `resetStepForRerun`, exactly like `forkDecision` and for the
+   * same reason: the second phase of the step is dispatched by re-running it, and the choice it
+   * has to honour is the thing being reset. Absent for every step that never compared.
+   * See {@link binaryCandidateStepStateSchema}.
+   */
+  binaryCandidates: v.optional(v.nullable(binaryCandidateStepStateSchema)),
   /**
    * Identifier of an in-flight asynchronous agent job (a container run polled by
    * the durable driver). Set while the step is dispatched-but-not-yet-finished so

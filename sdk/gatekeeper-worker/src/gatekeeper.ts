@@ -9,14 +9,17 @@
 // forking it.
 
 import { CatFactoryClient } from '@cat-factory/sdk'
-import { buildCapability } from './capability.js'
+import { buildCapability, type SessionGovernance } from './capability.js'
 import { requireVar, type GatekeeperEnv } from './env.js'
 import { GatekeeperError } from './errors.js'
 import { KeyBroker, type Actor } from './keys.js'
 import {
+  autoProvisionedTier,
   compilePolicy,
+  tierForAccount,
   tierForActor,
   type CompiledPolicy,
+  type CompiledTier,
   type GatekeeperPolicy,
 } from './policy/compile.js'
 import type { GatekeeperState } from './state.js'
@@ -25,6 +28,17 @@ import { verifyDelivery, type VerificationResult } from './webhook/signature.js'
 
 /** Identifies this integration in the deployment's logs, beside the SDK's own version. */
 const USER_AGENT = 'cat-factory-gatekeeper'
+
+/**
+ * The one remedy both auto-provisioning refusals end on.
+ *
+ * Stated once because the two refusals differ only in what they could not do (open a session for a
+ * named account, describe the session a new one would get) and never in the fix.
+ */
+const AUTO_PROVISIONED_TIER_REMEDY =
+  "Name a tier as the policy's autoProvisionedTier to turn Cloudflare OS discovery on; it is " +
+  'deliberately separate from defaultTier, because an account the workspace minted carries no ' +
+  'identity your grants could have named.'
 
 /** Why a delivery was refused, drawn from the verifier so the two cannot drift. */
 type RejectionReason = Extract<VerificationResult, { ok: false }>['reason']
@@ -90,16 +104,108 @@ export class Gatekeeper {
    * The tier is resolved from the Gatekeeper's OWN policy, never from anything the caller sent:
    * an agent that could name its tier would be its own authorization.
    */
-  capabilityFor(actor: Actor) {
-    const tier = tierForActor(this.#policy, actor.id)
+  capabilityFor(actor: Actor, governance?: SessionGovernance) {
+    return this.#capability(actor, this.tierFor(actor.id), governance)
+  }
+
+  /**
+   * The capability for an auto-provisioned Cloudflare OS account.
+   *
+   * A sibling of `capabilityFor` rather than a flag on it, because the two doors resolve a tier
+   * from different halves of the policy: `/rpc` names a person the OS asserts, and an account was
+   * minted here with no name at all. Everything after the resolution is the one implementation.
+   */
+  capabilityForAccount(accountId: string, governance: SessionGovernance) {
+    return this.#capability(
+      { id: accountId, label: accountId },
+      this.tierForAccount(accountId),
+      governance,
+    )
+  }
+
+  #capability(actor: Actor, tier: CompiledTier, governance?: SessionGovernance) {
+    return buildCapability({
+      actor,
+      tier,
+      keys: this.#keys,
+      state: this.#state,
+      ...(governance ? { governance } : {}),
+    })
+  }
+
+  /**
+   * The compiled tier an actor holds, or a refusal naming what an operator has to change.
+   *
+   * Exposed beside `capabilityFor` because the OS object model asks about a tier without building
+   * a session from it: the resource's TypeScript types and its auto-approvable action kinds are
+   * both projections of the tier, and both are read before any session exists.
+   */
+  tierFor(actorId: string): CompiledTier {
+    const tier = tierForActor(this.#policy, actorId)
     if (tier === null) {
       throw new GatekeeperError(
         'unknown_actor',
-        `No tier is granted to '${actor.id}'. Add them to this Gatekeeper's policy under ` +
+        `No tier is granted to '${actorId}'. Add them to this Gatekeeper's policy under ` +
           'grants, or set a defaultTier if this deployment means every OS user to have one.',
       )
     }
-    return buildCapability({ actor, tier, keys: this.#keys, state: this.#state })
+    return tier
+  }
+
+  /**
+   * The tier an auto-provisioned Cloudflare OS account holds, or a refusal naming the knob.
+   *
+   * Separate from {@link tierFor} because the refusal has to name the right thing: a deployment
+   * that has not opted into OS discovery has not misconfigured anything, and telling its operator
+   * to add an actor to `grants` would be telling them to write a line for an id that did not exist
+   * when they were reading.
+   */
+  tierForAccount(accountId: string): CompiledTier {
+    const tier = tierForAccount(this.#policy, accountId)
+    if (tier === null) {
+      throw new GatekeeperError(
+        'unknown_actor',
+        'This Gatekeeper serves no auto-provisioned accounts, so it cannot open a session for ' +
+          `'${accountId}'. ${AUTO_PROVISIONED_TIER_REMEDY}`,
+      )
+    }
+    return tier
+  }
+
+  /**
+   * The tier EVERY auto-provisioned account falls to, asked without an account.
+   *
+   * The vendor is questioned before any account exists (its published session types are the ones a
+   * new account will get), and that question has an answer of its own. Asking it by minting a
+   * throwaway id would resolve the same tier and, when there is none, refuse by naming an
+   * `acct_…` that appears nowhere in the operator's policy.
+   */
+  tierForNewAccount(): CompiledTier {
+    const tier = autoProvisionedTier(this.#policy)
+    if (tier === null) {
+      throw new GatekeeperError(
+        'unknown_actor',
+        'This Gatekeeper serves no auto-provisioned accounts, so there is no session for it to ' +
+          `describe. ${AUTO_PROVISIONED_TIER_REMEDY}`,
+      )
+    }
+    return tier
+  }
+
+  /**
+   * The tier NAME a policy nominates for auto-provisioned accounts, or `null`.
+   *
+   * The raw knob rather than the compiled tier, because the one caller that wants it is `/health`,
+   * reporting whether this deployment has opted into Cloudflare OS discovery at all. A refusal
+   * would be the wrong shape there: not having opted in is a state, not a fault.
+   */
+  get autoProvisionedTierName(): string | null {
+    return this.#policy.autoProvisionedTier
+  }
+
+  /** The origin of the cat-factory deployment this Gatekeeper is paired with. */
+  get deployment(): string {
+    return requireVar(this.#env, 'CAT_FACTORY_BASE_URL')
   }
 
   /**

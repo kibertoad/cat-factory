@@ -10,6 +10,7 @@ import {
   compilePolicy,
   DECISION_BINDINGS,
   TELEMETRY_BINDINGS,
+  tierForAccount,
   tierForActor,
 } from '@cat-factory/gatekeeper-worker/policy'
 import { POLICY } from '../src/policy.config'
@@ -27,6 +28,14 @@ describe('the shipped policy', () => {
 
   it('resolves a granted actor to their own tier', () => {
     expect(tierForActor(compiled, 'approver@example.com')?.name).toBe('approver')
+  })
+
+  // The template ships Cloudflare OS discovery OFF, and the assertion worth making is that the two
+  // doors stayed separate: a workspace auto-provisions accounts with no identity, so naming a tier
+  // for them is a decision on its own. Sharing `defaultTier` would mean a deployment that turned
+  // discovery on also handed every unrostered `/rpc` caller a capability, silently.
+  it('serves no auto-provisioned account until an operator names a tier for one', () => {
+    expect(tierForAccount(compiled, 'acct_whoever')).toBeNull()
   })
 
   // `notifications_act` can perform a real merge and `tasks_delete` is unrecoverable; both sit at

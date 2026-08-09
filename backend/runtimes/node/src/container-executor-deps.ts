@@ -62,6 +62,7 @@ import {
   WebCryptoSecretCipher,
   DOCS,
   ENV_VARS_ANCHORS,
+  SITE_DOCS,
   buildDispatchTokenMint,
   ensureWorkBranchViaRest,
   logger,
@@ -360,8 +361,8 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     logger.warn(
       `container agent steps are DISABLED: no GitHub token source — set GITHUB_APP_ID + ` +
         `GITHUB_APP_PRIVATE_KEY so the harness can mint a push/clone token. Repo-operating steps ` +
-        `will fail at dispatch until configured. See ${DOCS.githubOperations()}.`,
-      { missing: ['GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY'], docsUrl: DOCS.githubOperations() },
+        `will fail at dispatch until configured. See ${SITE_DOCS.githubApp}.`,
+      { missing: ['GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY'], docsUrl: SITE_DOCS.githubApp },
     )
     return null
   }

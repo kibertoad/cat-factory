@@ -32,16 +32,18 @@ Cloudflare OS Gatekeeper pattern; tracker:
 `docs/initiatives/cloudflare-os-gatekeeper.md`): per-operation key-scope floors (from the spec's
 `x-min-scope`, ranked against the ladder it publishes as `x-public-api-scopes`), mutation and
 transport metadata, and invoke thunks over the TypeScript client using the MCP facade's argument
-convention. See [its README](./gatekeeper/README.md).
+convention. It emits a second file beside the table, `session-types.generated.ts`: one TypeScript
+method signature per operation, which a front-end composes into the `.d.ts` a granted capability
+serves. See [its README](./gatekeeper/README.md).
 
 [`sdk/gatekeeper-worker`](./gatekeeper-worker) (`@cat-factory/gatekeeper-worker`) is the ONE
 package in this tree that the generator does not touch: the Gatekeeper Worker machinery itself,
 hand-written on top of that table and the TypeScript client. It lives here rather than under
 `deploy/` because it is a published library an outside deployment installs, and the split it makes
 is the point: `deploy/gatekeeper` keeps the policy and the bindings an operator edits, this keeps
-the Cap'n Web capability surface, the key broker, the delivery receiver and the approval inbox, so
-upgrading the second is a version bump rather than a re-merge of the first. See
-[its README](./gatekeeper-worker/README.md).
+the capability surface, the Cloudflare OS object model in front of it, the key broker, the delivery
+receiver and the approval inbox, so upgrading the second is a version bump rather than a re-merge of
+the first. See [its README](./gatekeeper-worker/README.md).
 
 There is **no separate Kotlin SDK**, and that is a decision rather than an omission: one artifact
 serves both languages, and what it costs a Kotlin caller is stated plainly on the website's

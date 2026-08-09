@@ -1014,5 +1014,7 @@ function namedSubject(issue: BinaryGeneratorSelectionIssue): Record<string, stri
       return { modality: issue.modality }
     case 'media_type_uncovered':
       return { mediaType: issue.mediaType }
+    case 'capability_unsupported':
+      return { capability: issue.capability }
   }
 }

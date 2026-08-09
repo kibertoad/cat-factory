@@ -371,9 +371,113 @@ export const TELEMETRY_BINDINGS: readonly string[] = GATEKEEPER_BINDINGS.filter(
 `
 }
 
+/**
+ * The argument bag one binding's session method takes, as TypeScript source.
+ *
+ * It is the `invoke` convention rendered as a type, so the two cannot describe different calls:
+ * path parameters and query keys at the top level, the body under `body`. Requiredness is carried
+ * through verbatim, because the whole reason a session is TYPED rather than an untyped bag is that
+ * the caller learns what the deployment insists on before making the call rather than from its 400.
+ */
+function argumentType(operation) {
+  const fields = [
+    ...operation.pathParams.map((param) => `${param.wireName}: string`),
+    ...operation.queryParams.map(
+      (param) => `${param.wireName}${param.required ? '' : '?'}: string | number | boolean`,
+    ),
+    operation.body ? `body${operation.bodyOptional ? '?' : ''}: unknown` : null,
+  ].filter(Boolean)
+  if (fields.length === 0) return null
+  const required =
+    operation.pathParams.length > 0 ||
+    operation.queryParams.some((param) => param.required) ||
+    (operation.body && !operation.bodyOptional)
+  return { text: `{ ${fields.join('; ')} }`, required: Boolean(required) }
+}
+
+/**
+ * One granted operation as a method declaration for the rendered session `.d.ts`.
+ *
+ * The JSDoc carries the three facts an agent composing a call cannot see from the signature and
+ * would otherwise guess at: what the operation does, which route it is (so a deployment's own logs
+ * and this call can be correlated), and the scope floor it sits behind.
+ */
+function emitSessionSignature(operation) {
+  const name = bindingName(operation)
+  const argument = argumentType(operation)
+  const parameters =
+    argument === null ? '' : `args${argument.required ? '' : '?'}: ${argument.text}`
+  const notes = [
+    `\`${operation.httpMethod} ${operation.path}\`, scope floor \`${operation.minScope}\`.`,
+  ]
+  if (resultKind(operation) !== 'value') {
+    notes.push(
+      `Result is ${resultKind(operation)}, which a session call cannot carry: this operation is ` +
+        'withheld from every tier.',
+    )
+  }
+  const doc =
+    `  /**\n   * ${operation.summary}\n   *\n` +
+    notes.map((note) => `   * ${note}\n`).join('') +
+    `   */\n`
+  return {
+    name,
+    doc,
+    signature: `  ${name}(${parameters}): Promise<unknown>\n`,
+  }
+}
+
+/**
+ * The per-operation method declarations a session's `.d.ts` is composed from.
+ *
+ * Generated rather than rendered whole because the declaration a caller should read is the one for
+ * the tier they hold: a session carries exactly its granted operations, so a `.d.ts` naming the
+ * full surface would promise methods the object does not have, which is the same lie the
+ * hand-curated allow-list this table replaced used to tell. What ships is the SIGNATURES; the
+ * composition is `renderSessionTypes`, a pure function over the names a policy actually granted.
+ */
+function emitSessionTypes(ir, placed) {
+  const ordered = GROUPS.flatMap((group) => groupOperations(placed, group))
+  const signatures = ordered.map((operation) => emitSessionSignature(operation))
+
+  return `${BANNER}
+// The session type declarations, surface version ${ir.info.version}: one method signature per
+// \`/api/v1\` operation, ready to compose into the \`.d.ts\` an object-capability session serves
+// through its \`getTypeScriptTypes()\`.
+//
+// WHAT IS DELIBERATELY ABSENT is the result shape. A session relays the deployment's own decoded
+// JSON, and the authority for those shapes is the OpenAPI document this file is generated from,
+// which every deployment serves at \`GET /api/v1/openapi.json\`. Inlining the model tree here
+// would put a second copy of it inside every Worker bundle, free to disagree with the first the
+// moment a consumer upgrades one and not the other. So results are \`unknown\` and SAY they are,
+// rather than a hand-maintained subset that reads as complete.
+
+/** One operation's session method, as the source lines a rendered \`.d.ts\` splices in. */
+export interface SessionMethodSignature {
+  /** The binding name, which is also the method's own spelling. */
+  name: string
+  /** The JSDoc block, indented and newline-terminated. */
+  doc: string
+  /** The method signature, indented and newline-terminated. */
+  signature: string
+}
+
+/** Every \`/api/v1\` operation's session method signature, in resource-group order. */
+export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
+${signatures
+  .map(
+    (entry) =>
+      `  {\n    name: ${lit(entry.name)},\n    doc: ${lit(entry.doc)},\n` +
+      `    signature: ${lit(entry.signature)},\n  },\n`,
+  )
+  .join('')}]
+`
+}
+
 /** Every generated file for the gatekeeper bindings, keyed by path within `sdk/gatekeeper/`. */
 export function emit(ir, placed) {
   return {
     'src/bindings.generated.ts': emitBindings(ir, placed),
+    'src/session-types.generated.ts': emitSessionTypes(ir, placed),
   }
 }

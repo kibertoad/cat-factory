@@ -51,3 +51,10 @@ crons = ["0 * * * *"]
 
 [observability]
 enabled = true
+
+# The per-resource object a Cloudflare OS workspace binds. It holds a session's submitted-but-
+# undecided actions in memory (an approved action is performed by the same suspended call that
+# submitted it, so nothing has to survive the object), but the class still has to be declared.
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["CatFactoryResource"]

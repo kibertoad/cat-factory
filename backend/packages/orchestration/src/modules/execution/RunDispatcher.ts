@@ -1,5 +1,7 @@
 import type {
   AgentExecutor,
+  BinaryCandidateStepState,
+  KeepBinaryCandidatesInput,
   AgentRunContext,
   AgentRunResult,
   Block,
@@ -55,6 +57,7 @@ import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController } from './ReviewGateController.js'
+import type { BinaryCandidateController } from './BinaryCandidateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { JudgeStepController } from './JudgeStepController.js'
 import { GateHelperDispatcher } from './GateHelperDispatcher.js'
@@ -153,6 +156,7 @@ export class RunDispatcher {
   private readonly visualConfirmationController: VisualConfirmationController
   private readonly reviewGate: ReviewGateController
   private readonly forkDecisionController: ForkDecisionController
+  private readonly binaryCandidateController: BinaryCandidateController
   private readonly prReviewController: PrReviewController
   // The four review-gate SUBJECTS are pure pass-throughs into `registryDeps` — the dispatcher
   // never reads one itself — so they are forwarded from `deps` there rather than mirrored onto
@@ -266,6 +270,7 @@ export class RunDispatcher {
     this.visualConfirmationController = deps.visualConfirmationController
     this.reviewGate = deps.reviewGate
     this.forkDecisionController = deps.forkDecisionController
+    this.binaryCandidateController = deps.binaryCandidateController
     this.prReviewController = deps.prReviewController
     this.interviewControllers = new Map(
       (deps.interviewControllers ?? []).map((c) => [c.agentKind, c]),
@@ -442,6 +447,7 @@ export class RunDispatcher {
       visualConfirmationController: this.visualConfirmationController,
       reviewGate: this.reviewGate,
       forkDecisionController: this.forkDecisionController,
+      binaryCandidateController: this.binaryCandidateController,
       prReviewController: this.prReviewController,
       mergeResolver: this.mergeResolver,
       requirementsKind: deps.requirementsKind,
@@ -1315,6 +1321,23 @@ export class RunDispatcher {
     input: ForkChatRequestInput,
   ): Promise<ForkDecisionStepState> {
     return this.forkDecisionController.chat(workspaceId, executionId, input)
+  }
+
+  /** Read a run's active generated-candidate comparison state, or null. */
+  getBinaryCandidates(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<BinaryCandidateStepState | null> {
+    return this.binaryCandidateController.getActive(workspaceId, executionId)
+  }
+
+  /** Keep the chosen candidates, re-running the step to deliver exactly those. */
+  keepBinaryCandidates(
+    workspaceId: string,
+    executionId: string,
+    input: KeepBinaryCandidatesInput,
+  ): Promise<BinaryCandidateStepState> {
+    return this.binaryCandidateController.keep(workspaceId, executionId, input)
   }
 
   /** Read a run's active PR deep-review state, or null. */

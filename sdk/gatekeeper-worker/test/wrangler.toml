@@ -17,3 +17,10 @@ class_name = "GatekeeperState"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GatekeeperState"]
+
+# The per-resource object the Cloudflare OS object model binds. It keeps its pending actions in
+# memory rather than in storage (an action outlives nothing, by design), but a Durable Object class
+# still has to be declared before it can be reached as `ctx.exports.CatFactoryResource`.
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["CatFactoryResource"]

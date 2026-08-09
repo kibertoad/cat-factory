@@ -206,7 +206,7 @@ rather than pointing them at the OIDC button.
 ### Slice 8 (a configuration UI) — the shape it would have to take
 
 SSO is env-only today, and the reasoning is in
-[`auth.md`](../../backend/docs/auth.md#why-sso-is-configured-by-environment-not-in-the-ui): it is
+[`auth.md`](../../backend/docs/auth.md#why-sso-is-not-ui-configurable): it is
 the deployment's trust root, the bootstrap is circular, and the refusals are boot-time. The trade
 an operator pays is that rotating a client secret is a config change plus a restart.
 

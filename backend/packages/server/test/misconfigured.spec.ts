@@ -53,10 +53,14 @@ describe('ConfigValidationError', () => {
     expect(formatConfigProblems([{ key: 'B', summary: 's', remedy: 'r' }])).not.toContain('Docs:')
   })
 
-  it('every ENV_HELP entry carries a documentation link', () => {
+  // Either destination is legitimate: an in-repo doc for a remedy that needs the code open, and
+  // a catfactory.ai page for one whose instruction the website owns (a variable an operator sets
+  // needs no checkout). What must never happen is a remedy with NO link, or one pointing at some
+  // third place; `docs.spec.ts` then resolves each shape the way only it can be resolved.
+  it('every ENV_HELP entry carries a documentation link, to a repo doc or to the site', () => {
     for (const [key, help] of Object.entries(ENV_HELP)) {
       expect(help.docsUrl, `${key} should link docs`).toMatch(
-        /^https:\/\/github\.com\/kibertoad\/cat-factory\/blob\/main\//,
+        /^https:\/\/(github\.com\/kibertoad\/cat-factory\/blob\/main\/|www\.catfactory\.ai\/)/,
       )
     }
   })

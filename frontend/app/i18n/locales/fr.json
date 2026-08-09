@@ -1109,6 +1109,7 @@
       },
       "chooseApproach": "Choisir l'approche",
       "triageFollowUps": "Trancher les suivis",
+      "chooseCandidates": "Trancher les candidats",
       "elapsedTooltip": "Temps écoulé sur cette étape",
       "reviewFindings": "Examiner les remarques",
       "dryRun": "Exécution à blanc",
@@ -1387,8 +1388,10 @@
       "decisionRequired": "Décision requise",
       "followUpsParked": "Le Coder a soulevé des suivis qui doivent être tranchés avant que l'exécution puisse continuer. Traitez chaque élément (créer, renvoyer, répondre ou écarter) dans la fenêtre des suivis.",
       "forkParked": "Cette étape du Coder attend le choix d'une approche d'implémentation avant d'écrire du code. Choisissez une approche proposée (ou saisissez la vôtre) dans la fenêtre de décision.",
+      "candidatesParked": "Cette étape a généré des candidats et attend que quelqu'un choisisse ceux à conserver avant de livrer quoi que ce soit. Comparez-les et conservez ceux que vous voulez dans la fenêtre des candidats.",
       "openFollowUps": "Ouvrir les suivis",
       "chooseApproach": "Choisir l'approche",
+      "chooseCandidates": "Choisir les candidats",
       "expandAll": "Développer toutes les sections",
       "collapseAll": "Réduire toutes les sections",
       "copyRawOutput": "Copier la sortie brute",
@@ -4777,7 +4780,45 @@
         "3d-model": "Modèles 3D",
         "3d-scene": "Scènes 3D",
         "document": "Documents"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "Image de référence",
+        "multi-reference": "Plusieurs images de référence",
+        "instruction-edit": "Édition par instruction",
+        "mask-edit": "Édition par masque",
+        "negative-prompt": "Prompt négatif",
+        "seed": "Graine fixe",
+        "aspect-ratio": "Format d’image",
+        "candidate-batch": "Plusieurs candidats par appel",
+        "upscale": "Agrandissement",
+        "transparent-background": "Fond transparent",
+        "tileable": "Motif raccordable"
+      },
+      "binaryCapabilityUnknown": "{capability} (une capacité que ce déploiement ne définit pas)",
+      "binaryCapabilityUnsupported": "Aucune intégration sélectionnée ne prend en charge {capabilities}, que les options de génération de cette étape demandent. Retirez l’option ou sélectionnez une intégration qui déclare la capacité.",
+      "binaryCapabilityUnverifiable": "Aucune intégration sélectionnée ne déclare prendre en charge {capabilities}, mais l’une d’elles ne déclare aucune capacité, la vérification est donc impossible. L’étape démarre quand même ; confirmez-le dans l’API de l’intégration.",
+      "binaryReferenceImages": "Images de référence",
+      "binaryReferenceImagesPlaceholder": "rôle{'|'}emplacement{'|'}service, une par ligne",
+      "binaryReferenceImagesUnusable": "Non enregistrées comme référence : {entries}. Chaque ligne doit être rôle{'|'}emplacement, le rôle étant style, subject, composition ou base.",
+      "binaryEditMode": "Modifier l’existant",
+      "binaryEditModeNone": "Générer du neuf",
+      "binaryEditModeInstruction": "À partir d’une instruction",
+      "binaryEditModeMask": "Zone masquée",
+      "binaryEditInstruction": "Ce qu’il faut changer",
+      "binaryEditInstructionPlaceholder": "ex. remplacer le ciel",
+      "binaryNegativePrompt": "Prompt négatif",
+      "binaryNegativePromptPlaceholder": "ce qu’il faut éviter",
+      "binaryAspectRatio": "Format d’image",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binarySeed": "Graine",
+      "binarySeedPlaceholder": "graine fixe",
+      "binaryTransparent": "Fond transparent",
+      "binaryTileable": "Motif raccordable",
+      "binaryUpscale": "Agrandir le résultat",
+      "binaryComparison": "Comparer les candidats avant livraison",
+      "binaryPerGenerator": "Candidats par intégration",
+      "binaryMultiSelect": "Autoriser à en conserver plusieurs",
+      "binaryComparisonUnreachable": "Cette étape ne peut produire qu’un candidat par sujet : il n’y aurait rien à comparer et le seul serait conservé sans être présenté. Sélectionnez une deuxième intégration ou augmentez le nombre de candidats par intégration."
     },
     "progress": {
       "status": {
@@ -4823,6 +4864,9 @@
       "forkDecision": {
         "proposing": "Proposition d'approches…",
         "choose": "Choisir une approche"
+      },
+      "binaryCandidates": {
+        "choose": "Choisir des candidats"
       },
       "elapsedTooltip": "Temps écoulé sur cette étape",
       "prReview": {
@@ -6276,7 +6320,12 @@
       "unknownGenerators": "A nommé une intégration générative que ce déploiement n'enregistre pas : {ids}. L'entrée est conservée telle que déclarée ; l'intégration s'enregistre dans le code du déploiement, pas dans cet espace de travail. | A nommé des intégrations génératives que ce déploiement n'enregistre pas : {ids}. Leurs entrées sont conservées telles que déclarées ; les intégrations s'enregistrent dans le code du déploiement, pas dans cet espace de travail.",
       "generatorsUnverified": "Les intégrations génératives de ce déploiement n'ont pas pu être lues à la clôture de l'étape, les intégrations citées ci-dessous n'ont donc pas été vérifiées. Les entrées sont conservées telles que déclarées."
     },
-    "unknownGeneratorBadge": "Non enregistrée"
+    "unknownGeneratorBadge": "Non enregistrée",
+    "candidates": {
+      "automatic": "{total} candidat a été généré et conservé automatiquement, sans examen.",
+      "chosen": "{kept} des {total} candidats générés ont été conservés.",
+      "awaiting": "{total} candidats ont été générés et attendent d’être comparés."
+    }
   },
   "sandbox": {
     "title": "Bac à sable : test de prompts et de modèles",
@@ -7561,6 +7610,33 @@
       "unresolved": "Cet outil n'a pas fourni d'adresse pour l'espace de travail actuel.",
       "resolverFailed": "Cet outil a échoué lors du calcul de son adresse. La cause se trouve dans la console du navigateur, pour les responsables de ce déploiement.",
       "unsafeUrl": "Cet outil a fourni une adresse qui n'est pas un lien web, elle n'a donc pas été ouverte."
+    }
+  },
+  "binaryCandidates": {
+    "title": "Candidats générés",
+    "titleWithBlock": "Candidats générés : {title}",
+    "subtitle": "Comparez ce que chaque intégration a produit et conservez ce que vous voulez",
+    "automatic": "Un seul candidat a été généré, il a donc été conservé automatiquement. Personne ne l’a examiné.",
+    "unlabelledSubject": "Aucun sujet déclaré",
+    "noPreview": "Aucun aperçu disponible",
+    "fromGenerator": "De {generator}",
+    "unattributed": "Aucune intégration enregistrée",
+    "kept": "Conservé",
+    "keptAs": "Conservé sous {id}",
+    "storeAsPlaceholder": "enregistrer sous cet id",
+    "notePlaceholder": "Ce qu’il faut changer au moment de l’enregistrement (facultatif)",
+    "missingAlias": "Donnez à chaque candidat conservé son propre id, sinon ils seraient tous enregistrés sous le même nom.",
+    "duplicateAlias": "Deux candidats conservés partagent un id. Deux artefacts au même emplacement, c’est un artefact.",
+    "keepAction": "Conserver {count}",
+    "warning": {
+      "omitted": "{count} candidats ont été écartés au-delà de la limite, cette liste est donc un préfixe. ",
+      "invalid": "{count} entrées déclarées étaient illisibles et manquent ici. ",
+      "previews": "{count} liens d’aperçu ont été refusés, ces candidats s’affichent donc sans image."
+    },
+    "noChoice": {
+      "undeclared": "L’étape n’a jamais déclaré ses candidats, il n’y avait donc rien à comparer. L’exécution a continué.",
+      "parseFailed": "La déclaration de candidats de l’étape était illisible, il n’y avait donc rien à comparer. L’exécution a continué.",
+      "noCandidates": "L’étape n’a préparé aucun candidat, il n’y avait donc rien à comparer. L’exécution a continué."
     }
   }
 }

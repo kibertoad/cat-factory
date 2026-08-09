@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { openSqliteDb } from './db.js'
+import { openSqliteDb, queryAll, queryOne } from './db.js'
 
 // The mothership-mode DURABLE execution work queue.
 //
@@ -161,13 +161,13 @@ export class SqliteWorkQueue {
    * {@link evictExhausted} pass the runner makes before claiming.
    */
   claim(now: number, leaseMs: number, exclude: ReadonlySet<string>): ClaimedRun | null {
-    const rows = this.db
-      .prepare(
-        `SELECT execution_id, workspace_id, attempts FROM execution_work_queue
+    const rows = queryAll<ClaimRow>(
+      this.db,
+      `SELECT execution_id, workspace_id, attempts FROM execution_work_queue
          WHERE state = 'queued' OR (state = 'active' AND lease_until <= ?)
          ORDER BY enqueued_at ASC`,
-      )
-      .all(now) as unknown as ClaimRow[]
+      now,
+    )
     for (const row of rows) {
       if (exclude.has(row.execution_id)) continue
       this.db
@@ -195,13 +195,14 @@ export class SqliteWorkQueue {
    * never reaps a healthy in-flight drive. Runs before the claim pass on each drain.
    */
   evictExhausted(now: number, maxAttempts: number, exclude: ReadonlySet<string>): EvictedRun[] {
-    const rows = this.db
-      .prepare(
-        `SELECT execution_id, workspace_id, attempts FROM execution_work_queue
+    const rows = queryAll<ClaimRow>(
+      this.db,
+      `SELECT execution_id, workspace_id, attempts FROM execution_work_queue
          WHERE (state = 'queued' OR (state = 'active' AND lease_until <= ?)) AND attempts >= ?
          ORDER BY enqueued_at ASC`,
-      )
-      .all(now, maxAttempts) as unknown as ClaimRow[]
+      now,
+      maxAttempts,
+    )
     const evicted: EvictedRun[] = []
     for (const row of rows) {
       if (exclude.has(row.execution_id)) continue
@@ -224,9 +225,11 @@ export class SqliteWorkQueue {
    * budget starts fresh.
    */
   settle(executionId: string): { requeued: boolean } {
-    const row = this.db
-      .prepare('SELECT rerun FROM execution_work_queue WHERE execution_id = ?')
-      .get(executionId) as { rerun: number } | undefined
+    const row = queryOne<{ rerun: number }>(
+      this.db,
+      'SELECT rerun FROM execution_work_queue WHERE execution_id = ?',
+      executionId,
+    )
     if (row && row.rerun) {
       this.db
         .prepare(
@@ -251,9 +254,11 @@ export class SqliteWorkQueue {
    * crash recovery: if the process dies during the wait, the lease lapses and the run is reclaimed.
    */
   deferRearm(executionId: string, notBefore: number): { requeued: boolean } {
-    const row = this.db
-      .prepare('SELECT rerun FROM execution_work_queue WHERE execution_id = ?')
-      .get(executionId) as { rerun: number } | undefined
+    const row = queryOne<{ rerun: number }>(
+      this.db,
+      'SELECT rerun FROM execution_work_queue WHERE execution_id = ?',
+      executionId,
+    )
     if (row && row.rerun) {
       this.db
         .prepare(
@@ -293,9 +298,14 @@ export class SqliteWorkQueue {
   /** Count rows, optionally filtered by state (for tests / observability). */
   size(state?: 'queued' | 'active'): number {
     const row = state
-      ? this.db.prepare('SELECT COUNT(*) AS n FROM execution_work_queue WHERE state = ?').get(state)
-      : this.db.prepare('SELECT COUNT(*) AS n FROM execution_work_queue').get()
-    return Number((row as { n: number }).n)
+      ? queryOne<{ n: number }>(
+          this.db,
+          'SELECT COUNT(*) AS n FROM execution_work_queue WHERE state = ?',
+          state,
+        )
+      : queryOne<{ n: number }>(this.db, 'SELECT COUNT(*) AS n FROM execution_work_queue')
+    // `COUNT(*)` always yields a row, but the reader states the fallback rather than asserting it.
+    return row?.n ?? 0
   }
 
   close(): void {

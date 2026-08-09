@@ -260,9 +260,10 @@ key-scope floors, mutation and transport metadata, invoke thunks over the TypeSc
 credential-holding front-ends such as a Cloudflare OS Gatekeeper; see the
 [initiative tracker](./docs/initiatives/cloudflare-os-gatekeeper.md). `sdk/gatekeeper-worker` is
 the one member here that is hand-written rather than projected: the **Gatekeeper Worker
-machinery** a deployment installs (Cap'n Web capabilities compiled from that table, per-actor key
-minting, the verified webhook receiver and the approval inbox), leaving `deploy/gatekeeper` as a
-template holding only the policy and the bindings. Design notes, the Java/Kotlin story and the
+machinery** a deployment installs (capabilities compiled from that table, the Cloudflare OS object
+model and approval queue in front of them, per-actor key minting, the verified webhook receiver and
+the approval inbox), leaving `deploy/gatekeeper` as a template holding only the policy and the
+bindings. Design notes, the Java/Kotlin story and the
 release process: [`sdk/README.md`](./sdk/README.md).
 
 | Path                                               | Package                                   | Registry                                    |
@@ -343,7 +344,7 @@ model and its checklist).
 | Execution & real-time events     | [Running pipelines](https://www.catfactory.ai/guide/running-pipelines.html)                                                                                                          | [Backend → Execution & real-time events](./backend/README.md)                                                                                                                         |
 | Model support & subscriptions    | [Model providers](https://www.catfactory.ai/guide/model-providers.html)                                                                                                              | [`model-support.md`](./backend/docs/model-support.md)                                                                                                                                 |
 | Requirements review              | [Requirements](https://www.catfactory.ai/guide/requirements.html)                                                                                                                    | [`requirements-review.md`](./backend/docs/requirements-review.md)                                                                                                                     |
-| Authentication & SSO             | [Configuration → Authentication](https://www.catfactory.ai/deploy/configuration.html#authentication)                                                                                 | [`auth.md`](./backend/docs/auth.md)                                                                                                                                                   |
+| Authentication & SSO             | [Enterprise SSO](https://www.catfactory.ai/deploy/sso.html) · [Configuration → Authentication](https://www.catfactory.ai/deploy/configuration.html#authentication)                   | [`auth.md`](./backend/docs/auth.md)                                                                                                                                                   |
 | Public API, SDKs, MCP            | [Public API](https://www.catfactory.ai/extend/public-api.html) · [SDKs](https://www.catfactory.ai/extend/sdks.html) · [MCP server](https://www.catfactory.ai/extend/mcp-server.html) | [reference](./backend/docs/public-api.md) · [`sdk/README.md`](./sdk/README.md) · [ADR 0030](./backend/docs/adr/0030-public-api-surface.md)                                            |
 | Source control (GitHub, GitLab)  | [GitHub App](https://www.catfactory.ai/deploy/github-app.html) · [support matrix](https://www.catfactory.ai/reference/vcs-support-matrix.html)                                       | [design](./backend/docs/github-integration.md) · [runbook](./backend/docs/github-operations.md) · [provider layer](./backend/docs/vcs-providers.md)                                   |
 | Document & task sources          | [Documents](https://www.catfactory.ai/guide/documents.html) · [Issue sources](https://www.catfactory.ai/guide/issue-sources.html)                                                    | [`document-sources.md`](./backend/docs/document-sources.md)                                                                                                                           |
@@ -404,11 +405,15 @@ currently open and what each one is trying to change.
 
 - [Model support: selection, fallbacks, harnesses & provisioning](./backend/docs/model-support.md)
   (using it: [Model providers](https://www.catfactory.ai/guide/model-providers.html))
-- [Authentication](./backend/docs/auth.md)
+- [Authentication: the sign-in legs and how a session is ended](./backend/docs/auth.md)
+  (setting it up: [Enterprise SSO](https://www.catfactory.ai/deploy/sso.html))
 - [GitHub integration: design](./backend/docs/github-integration.md) ·
   [operations runbook](./backend/docs/github-operations.md) ·
   [App Manifest](./backend/docs/github-app-manifest.html)
-- [Document sources](./backend/docs/document-sources.md)
+- [Document sources](./backend/docs/document-sources.md) ·
+  [design context (Figma, Zeplin)](./backend/docs/figma-claude-design-context.md)
+  (using them: [Issue & document sources](https://www.catfactory.ai/guide/issue-sources.html) ·
+  [Design context](https://www.catfactory.ai/guide/design-context.html))
 - [Bug hunt: rate a tracker board's unassigned bugs and pick one](./backend/docs/bug-hunt.md)
 - [Public API (`/api/v1`): endpoint reference](./backend/docs/public-api.md)
   (using it: [Public API](https://www.catfactory.ai/extend/public-api.html))
@@ -419,6 +424,7 @@ currently open and what each one is trying to change.
 - [Remote run debugging API: telemetry + logs for an agent diagnosing a run](./backend/docs/debug-api.md)
 - [Ephemeral environments](./backend/docs/environments-integration.md) ·
   [native adapters](./backend/docs/native-environment-adapter.md)
+  (the manifest format: [Integration manifests](https://www.catfactory.ai/extend/manifests.html))
 - [Self-hosted runner pool](./backend/docs/runner-pool-integration.md) ·
   [Kubernetes topology](./backend/docs/kubernetes-topology.md)
 - [The provider-neutral VCS layer](./backend/docs/vcs-providers.md)
@@ -433,6 +439,7 @@ currently open and what each one is trying to change.
   [gate & agent ergonomics](./backend/docs/custom-agent-gate-ergonomics.md)
 - [Reusable operations: canned, parameterized units of work](./backend/docs/reusable-operations.md) ·
   [initiative presets, when the work must be planned](./backend/docs/initiative-presets.md)
+  (packaging one: [Reusable operations](https://www.catfactory.ai/extend/reusable-operations.html))
 - [Per-workspace agent prompt overrides](./backend/docs/agent-prompt-overrides.md)
 - [Requirements review: the inline review-and-answer loop](./backend/docs/requirements-review.md)
 - [Consensus panels: running a review as several models](./backend/docs/consensus-panels.md)

@@ -77,6 +77,12 @@ transport + the GitHub token/client seams differ.
   environments and probes release-health monitors for real without ever holding the org key. Read
   `docs/initiatives/mothership-mode.md` before touching any of it, and `CLAUDE.md` → "Every new
   feature ships MOTHERSHIP-READY" before adding a repository method anywhere in the backend.
+- `sqlite/db.ts`: the shared open/init for every local `node:sqlite` store, plus the typed
+  `queryAll<Row>` / `queryOne<Row>` every read goes through. `StatementSync.all()` is typed
+  `Record<string, SQLOutputValue>[]`, so a raw `.prepare(…).all(…)` needs an `as unknown as` at
+  each call site; run the query through these instead. The `SqliteRow<Row>` bound checks the row
+  shape is one SQLite could actually return, so a `boolean`, a nested object or a domain union
+  fails the build rather than being asserted into existence (decode it from the raw column).
 - `sqlite/*.conformance.test.ts`: this store runs the SAME conformance suites D1 and Postgres do,
   for every one of its six telemetry repositories. It is the store a developer's own runs are
   recorded in, so a property all three must agree about belongs in the shared suite rather than in

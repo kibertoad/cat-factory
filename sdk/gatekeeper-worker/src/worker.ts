@@ -7,10 +7,16 @@
 // is a dependency bump instead of a re-merge against a file the operator has edited.
 //
 //   POST /webhook        the platform's outbound delivery receiver
-//   ALL  /rpc            the Cap'n Web endpoint the paired Cloudflare OS talks to
+//   ALL  /rpc            a Cap'n Web capability endpoint, for an agent runtime that speaks it
 //   POST /admin/enroll   re-assert this Worker's webhook registration on demand
 //   POST /admin/retire   revoke every key minted for one OS user, for offboarding
-//   GET  /health         liveness plus whether this deployment could serve at all
+//   GET  /health         liveness, plus a report on whether a Cloudflare OS could install this
+//
+// A Cloudflare OS deployment does NOT come in here. It reaches the `GatekeeperVendor` entrypoint
+// over a service binding, using native Workers RPC (`src/os/`); Cap'n Web is the workspace's
+// browser-to-backend and gadget-side protocol, which shares the semantics and not the wire. `/rpc`
+// is the door for everything else: an agent runtime that speaks Cap'n Web, or a consumer that
+// wants this Worker's capabilities without a Cloudflare OS at all.
 //
 // Two conventions are worth stating because they look like sloppiness and are not.
 //
@@ -30,6 +36,7 @@ import { ConfigError, describeMissingBindings, missingBindings, type GatekeeperE
 import { GatekeeperError, PolicyError } from './errors.js'
 import { Gatekeeper } from './gatekeeper.js'
 import type { Actor } from './keys.js'
+import { describeDiscoverability } from './os/discoverability.js'
 import type { GatekeeperPolicy } from './policy/compile.js'
 
 /** What a deployment supplies to get a Worker. */
@@ -110,7 +117,7 @@ export function createGatekeeperWorker(
   const { policy } = options
 
   return {
-    async fetch(request: Request, env: GatekeeperEnv): Promise<Response> {
+    async fetch(request: Request, env: GatekeeperEnv, ctx: ExecutionContext): Promise<Response> {
       const url = new URL(request.url)
 
       try {
@@ -127,8 +134,20 @@ export function createGatekeeperWorker(
           }
           // Assembling IS the rest of the check: it compiles the policy against the live operation
           // table, and a policy that does not compile is a Gatekeeper that serves nothing.
-          Gatekeeper.create(env, policy)
-          return Response.json({ ok: true })
+          const assembled = Gatekeeper.create(env, policy)
+          // Whether a Cloudflare OS deployment could discover and install this Worker is REPORTED,
+          // never folded into the status. Both halves of it (the four exports resolved by name, a
+          // policy naming an autoProvisionedTier) are things an operator can half-finish with no
+          // request path to notice on, so they belong in this one pass. But a Gatekeeper serving
+          // `/rpc` and nothing else is a supported deployment, and answering 503 for it would turn
+          // a version bump into a red monitor over a Worker whose every route works.
+          return Response.json({
+            ok: true,
+            os: describeDiscoverability({
+              exports: ctx.exports,
+              autoProvisionedTier: assembled.autoProvisionedTierName,
+            }),
+          })
         }
 
         const gatekeeper = Gatekeeper.create(env, policy)

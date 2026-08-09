@@ -45,6 +45,8 @@ const SITE_BASE = 'https://www.catfactory.ai'
 export const SITE_DOCS = {
   /** VCS support matrix — including per-provider setup and the webhook secrets. */
   vcsSetup: `${SITE_BASE}/reference/vcs-support-matrix.html#setting-each-one-up`,
+  /** Registering the GitHub App: the permissions, the PKCS#8 conversion, connecting a workspace. */
+  githubApp: `${SITE_BASE}/deploy/github-app.html`,
 } as const
 
 /**

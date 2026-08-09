@@ -343,7 +343,7 @@ export {
   type ConfigProblem,
 } from './config/problems.js'
 export { createMisconfiguredApp, buildMisconfiguredResponse } from './config/misconfiguredApp.js'
-export { DOCS, ENV_VARS_ANCHORS, repoDocUrl } from './config/docs.js'
+export { DOCS, ENV_VARS_ANCHORS, SITE_DOCS, repoDocUrl } from './config/docs.js'
 export {
   parseNumericEnv,
   describeRejectedNumericEnv,

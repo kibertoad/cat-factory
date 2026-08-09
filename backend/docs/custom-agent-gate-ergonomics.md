@@ -1,5 +1,11 @@
 # Custom agent & gate authoring ergonomics
 
+> **Authoring a gate or a judge is on the website**:
+> [Custom Gates & Judges](https://www.catfactory.ai/extend/custom-gates.html) owns the
+> registration and the shapes, with agent kinds on
+> [Custom Agents](https://www.catfactory.ai/extend/custom-agents.html). This page is the
+> ergonomics layer both sit on: the helpers, and what fails loudly at boot.
+
 Companion to [`custom-agents.md`](./custom-agents.md) (the three-stage agent model) and the
 "Gates vs agents" section of [`../../CLAUDE.md`](../../CLAUDE.md). That doc covers _what_ the
 extension seams are; this one covers the ergonomics layered on top so writing a custom agent
@@ -61,35 +67,18 @@ empty and nothing leaks between builds.
 
 ## Schema-driven structured output
 
-`defineStructuredOutput(schema)` (`@cat-factory/agents`) turns ONE valibot schema into both the
-engine `AgentOutputSpec` (the `shapeHint` fed to the harness repair call) and a typed
-`parse`/`safeParse`. `registerAgentKind` auto-fills `agent.output` from it.
+`defineStructuredOutput(schema)` turns ONE valibot schema into both the engine `AgentOutputSpec`
+(the `shapeHint` the harness repair call sees) and a typed `parse`/`safeParse`; `registerAgentKind`
+auto-fills `agent.output` from it. The worked example, including how to build the schema out of
+`v.fallback` / `v.optional` so one noisy field degrades instead of failing the whole parse, is on
+the website's
+[Structured output](https://www.catfactory.ai/extend/custom-agents.html#structured-output-from-one-schema).
 
-```ts
-const securityAssessment = defineStructuredOutput(
-  v.object({
-    risk: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
-    findings: v.optional(
-      v.array(v.object({ title: v.fallback(v.string(), 'Untitled') /* … */ })),
-      [],
-    ),
-  }),
-)
-registerAgentKind({
-  kind: SECURITY_AUDITOR_KIND,
-  agent: { surface: 'container-explore', clone: { branch: 'pr' } }, // output derived from the schema
-  structuredOutput: securityAssessment,
-  postOps: [renderReportPostOp], // uses securityAssessment.safeParse(ctx.result.custom)
-})
-```
-
-`safeParse` returns `undefined` on a malformed reply (so a post-op's `if (!parsed) return` guard
-holds) and applies `v.fallback`/`v.optional` defaults, degrading exactly like the old coercer.
-Pass `{ shapeHint }` to override the auto-derived hint for an unusual shape.
-
-**Why agents, not kernel:** kernel cannot depend on valibot (it imports only `contracts` + `ai`).
-Kernel's `AgentStepSpec.output` keeps its plain-string shape; only the derived spec crosses into
-it: the schema/parser stays in the agents registration layer.
+**Why it lives in `agents` rather than kernel**, which is the fact a change here has to keep true:
+kernel cannot depend on valibot (it imports only `contracts` + `ai`). Kernel's
+`AgentStepSpec.output` keeps its plain-string shape and only the DERIVED spec crosses into it, so
+the schema and its parser stay in the agents registration layer. Moving either down breaks kernel's
+dependency floor.
 
 ## Companions (registering a rework pair)
 
@@ -197,12 +186,10 @@ The gates package depends only on kernel + contracts, never on orchestration.
 
 ## Authoring checklist
 
-1. Define a valibot schema → `defineStructuredOutput` for any structured kind.
-2. `agentKindRegistry.register({ kind, systemPrompt, agent: { surface }, structuredOutput?, preOps?, postOps?, presentation? })`:
-   the surface drives the prompt directives and the container requirement; `presentation.resultView`
-   (if set) must be a `RESULT_VIEW_IDS` id.
-3. For a gate: `defineProviderToken` + a one-line `wireX(registry, impl)`; `gateRegistry.register(kind, ctx => ({ wired: () => ctx.isProviderWired(token), probe: () => …ctx.requireProvider(token)…, helperKind, onExhausted }))`.
-   The `helperKind` must be a registered container kind (or a built-in helper). Pass
-   `{ configFields }` for anything a pipeline step should be able to tune per step.
-4. `pipelineRegistry.register(...)` to chain the kinds.
-5. The facade wires the provider impl onto its `providerRegistry` at startup and (already) calls `validateRegistrationsOnce()`.
+The step-by-step is on the website, split the way the seams are:
+[Add a Custom Agent Kind](https://www.catfactory.ai/extend/custom-agents.html) and
+[Add a Custom Gate or Judge](https://www.catfactory.ai/extend/custom-gates.html). What this page
+adds to both is the order the registrations have to happen in, which neither page can state without
+knowing what validates when: shared definitions (skills, tool servers, traits, provider tokens)
+before the kinds that reference them by id, kinds before the pipelines that chain them, and the
+facade's `validateRegistrationsOnce()` after all of it.

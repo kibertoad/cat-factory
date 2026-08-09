@@ -21,7 +21,11 @@ import StepExecutionHistory from '~/components/board/StepExecutionHistory.vue'
 import { useStepTimer } from '~/composables/useStepTimer'
 import { useStepProse } from '~/composables/useStepProse'
 import { useStepApproval } from '~/composables/useStepApproval'
-import { dedicatedParkView } from '~/utils/pipelineRender'
+import {
+  REDIRECT_PARK_PRESENTATION,
+  type RedirectParkView,
+  dedicatedParkView,
+} from '~/utils/pipelineRender'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
@@ -191,14 +195,37 @@ const genericApprovalPending = computed(
   () => approvalPending.value && !companionExceeded.value && !dedicatedPark.value,
 )
 
-/** Jump from this overlay to the window that can actually resolve the dedicated park. */
+/**
+ * How the park that holds this step presents itself (prose, icon, action label), or null when no
+ * window owns it. Read from the shared table rather than branched on here, so this overlay cannot
+ * go on naming the fork decision for a park that is not one.
+ */
+const parkPresentation = computed(() =>
+  dedicatedPark.value && dedicatedPark.value !== 'input-gate'
+    ? REDIRECT_PARK_PRESENTATION[dedicatedPark.value]
+    : null,
+)
+
+/**
+ * Jump from this overlay to the window that can actually resolve the dedicated park.
+ *
+ * A `Record` over the vocabulary rather than an `if` chain, for the reason the presentation table
+ * gives: an unhandled member falls out of a chain as a button that closes this overlay and opens
+ * NOTHING, which is indistinguishable from a misclick. Here a new park fails to compile until it
+ * names its opener.
+ */
+const PARK_OPENERS: Record<RedirectParkView, (instanceId: string, stepIndex: number) => void> = {
+  'follow-ups': (id, idx) => ui.openFollowUps(id, idx),
+  'fork-decision': (id, idx) => ui.openForkDecision(id, idx),
+  'binary-candidates': (id, idx) => ui.openBinaryCandidates(id, idx),
+}
+
 function openDedicatedWindow() {
   const c = ctx.value
   const park = dedicatedPark.value
-  if (!c || !park) return
+  if (!c || !park || park === 'input-gate') return
   close()
-  if (park === 'follow-ups') ui.openFollowUps(c.instanceId, c.stepIndex)
-  else if (park === 'fork-decision') ui.openForkDecision(c.instanceId, c.stepIndex)
+  PARK_OPENERS[park](c.instanceId, c.stepIndex)
 }
 
 // The GitHub-style approval/review state machine for a pending gate step. A park a
@@ -476,9 +503,11 @@ async function copyOutput() {
                 @resolve="resolveCompanionCap"
               />
 
-              <!-- a park a dedicated window owns (fork choice / follow-up triage): the
-                   generic approval rail can't resolve it (the server refuses), so point
-                   the human at the window that can -->
+              <!-- a park a dedicated window owns (fork choice / follow-up triage / candidate
+                   comparison): the generic approval rail can't resolve it (the server refuses),
+                   so point the human at the window that can. Copy and icon come from the shared
+                   per-park table, so a park added to the vocabulary can never inherit another
+                   one's wording here. -->
               <!-- the pre-dispatch input gate holds this step: answered here, in place -->
               <InputGateNotice
                 v-if="inputGateVerdict && instance"
@@ -489,30 +518,23 @@ async function copyOutput() {
               />
 
               <div
-                v-if="dedicatedPark && dedicatedPark !== 'input-gate'"
+                v-if="parkPresentation"
                 class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
                 data-testid="dedicated-park-redirect"
+                :data-park="dedicatedPark"
               >
                 <p class="text-[13px] leading-relaxed text-amber-200/90">
-                  {{
-                    dedicatedPark === 'follow-ups'
-                      ? t('panels.stepDetail.followUpsParked')
-                      : t('panels.stepDetail.forkParked')
-                  }}
+                  {{ t(parkPresentation.noticeKey) }}
                 </p>
                 <UButton
                   class="mt-3"
                   color="primary"
                   size="sm"
-                  :icon="dedicatedPark === 'follow-ups' ? 'i-lucide-compass' : 'i-lucide-git-fork'"
+                  :icon="parkPresentation.icon"
                   data-testid="dedicated-park-open"
                   @click="openDedicatedWindow"
                 >
-                  {{
-                    dedicatedPark === 'follow-ups'
-                      ? t('panels.stepDetail.openFollowUps')
-                      : t('panels.stepDetail.chooseApproach')
-                  }}
+                  {{ t(parkPresentation.actionKey) }}
                 </UButton>
               </div>
 

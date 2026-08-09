@@ -93,6 +93,28 @@ export function createRunStepOpeners(deps: RunStepOpenerDeps) {
     )
   }
 
+  // Open the generated-candidate comparison window for a run's binary-output step (from the
+  // pipeline chip / inspector rail / step overlay). Resolves the step index from the run when not
+  // given, preferring the step parked awaiting a choice.
+  //
+  // Resolved by the CANDIDATE STATE rather than by an agent kind, unlike its neighbours: any kind
+  // carrying the `binary-output` trait can run a comparison, and a deployment's own kinds are
+  // exactly the ones a hard-coded kind list here would never name.
+  function openBinaryCandidates(instanceId: string, stepIndex: number | null = null) {
+    withStep(
+      instanceId,
+      stepIndex,
+      (instance) => {
+        const awaiting = indexOf(instance, (s) => s.binaryCandidates?.status === 'awaiting_choice')
+        if (awaiting >= 0) return awaiting
+        const current = instance.steps[instance.currentStep]
+        if (current?.binaryCandidates) return instance.currentStep
+        return indexOf(instance, (s) => !!s.binaryCandidates)
+      },
+      (instance, idx) => deps.setResultView('binary-candidates', instance, idx),
+    )
+  }
+
   // Open the PR deep-review window for a run's `pr-reviewer` step (from the `pr_review_ready`
   // notification / the step). Resolves the step index from the run when not given, preferring
   // the step parked awaiting a finding selection.
@@ -139,5 +161,5 @@ export function createRunStepOpeners(deps: RunStepOpenerDeps) {
     )
   }
 
-  return { openFollowUps, openForkDecision, openPrReview, openTestEvidence }
+  return { openFollowUps, openForkDecision, openBinaryCandidates, openPrReview, openTestEvidence }
 }

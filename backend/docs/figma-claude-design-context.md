@@ -1,24 +1,15 @@
 # Design-context sources (Figma, Zeplin), and the Claude Design workflow
 
-> How **design context** (component structure, layout, design tokens, visual intent) is fed
-> into the UI/frontend coding agents.
+> **Connecting a design source and using it is on the website**:
+> [Feed Design Context to Agents](https://www.catfactory.ai/guide/design-context.html) owns connecting Figma or
+> Zeplin, what the agent receives, what each import cap asks the reader to do, the freshness
+> verdicts and the Claude Design workflow. This page is how the integration is BUILT: the
+> source-neutral model, why each cap is shaped the way it is, and the freshness ladder's cost model.
 >
 > **Supported backend sources:** **Figma** (`FigmaProvider`, a per-workspace OAuth grant or PAT)
-> and **Zeplin** (`ZeplinProvider`, per-workspace PAT). Both are real, server-fetchable REST integrations that
-> ride the shared, **source-neutral** `DesignContext` model + `renderDesignContext` renderer, so
-> the abstraction is not Figma-shaped.
->
-> **Claude Design is NOT a backend source**: see "Claude Design: via Claude Code, not a backend
-> connector" below.
-
-## The problem
-
-The UI agents (`coder`, `spec-writer`, `architect`, `playwright`) get task context today only from
-**prose**: Notion / Confluence / GitHub docs and tracker issues (see
-[`document-sources.md`](./document-sources.md)). They have no view of the **design**: the actual
-frames/screens, the component tree, the spacing/colour tokens, or which design-system component a
-screen is built from. So an agent implementing a frontend task guesses at layout, reinvents
-components that already exist, and ignores the team's tokens.
+> and **Zeplin** (`ZeplinProvider`, per-workspace PAT). Both are real, server-fetchable REST
+> integrations that ride the shared, **source-neutral** `DesignContext` model +
+> `renderDesignContext` renderer, so the abstraction is not Figma-shaped.
 
 ## The hard constraint: agents are headless
 
@@ -64,16 +55,10 @@ model** before rendering:
 ### One cap, one note: the caps are not interchangeable
 
 A single "was truncated" flag was the original bug here, in both directions. Each cap gets its OWN
-note because each asks the reader for something different, and one of them must not stop the walk:
-
-| Cap                | Blast radius                      | The walk         | What the reader does      |
-| ------------------ | --------------------------------- | ---------------- | ------------------------- |
-| Tree depth         | one BRANCH                        | carries on       | link that sub-frame's URL |
-| Per-frame nodes    | the rest of that frame            | stops that frame | the frame is too big      |
-| Import-wide nodes  | that frame and every one after    | stops everything | import fewer frames       |
-| Per-frame text     | the rest of that frame's text     | stops that frame | the frame is too wordy    |
-| Import-wide text   | that frame's text and all after   | stops everything | import fewer frames       |
-| Components, tokens | the design SYSTEM, not the frames | n/a              | open the library file     |
+note because each asks the reader for something different, and one of them must not stop the walk.
+The six caps and what each one asks a reader to do are the site's
+[Caps, and what each one asks you to do](https://www.catfactory.ai/guide/design-context.html#caps-and-what-each-one-asks-you-to-do);
+what shapes them is the pair below.
 
 Two traps this shape exists to prevent:
 
@@ -265,26 +250,22 @@ components` (→ grouped components), `/projects/:id/design_tokens` (→ colours
 The Zeplin endpoint paths are the documented REST shapes and are marked provisional/verify-at-build
 (the deterministic mapping is unit-tested independent of the network).
 
-## Claude Design: via Claude Code, not a backend connector
+## Claude Design: why there is no provider
 
-Anthropic's **Claude Design** (claude.ai/design) cannot be a backend document source. Its only
-programmatic read path is **login-bound**: Claude Code's built-in **`DesignSync`** tool (paired with
-the **`/design-sync`** skill) reads/writes design-system projects through the user's **claude.ai
-login** (or a `/design-login` design authorization); `list_projects` / `list_files` / `get_file`.
-There is **no per-workspace/per-user service token** a hosted, multi-tenant, headless backend could
-store and use in async agent containers (which have no claude.ai login). Community "Claude design
-studio" MCP servers are a different thing (local HTML/CSS generation), not a service-token read of
-existing projects.
+Anthropic's **Claude Design** (claude.ai/design) cannot be a backend document source, and the
+supported workflow (run `/design-sync` in Claude Code, commit the result, and the coding agents read
+it off the checkout) is on the site's
+[Claude Design: commit it, don't connect it](https://www.catfactory.ai/guide/design-context.html#claude-design-commit-it-don-t-connect-it).
 
-**The supported workflow** for getting Claude Design context to the agents is therefore:
-
-1. In **Claude Code**, run **`/design-sync`** to pull a design-system project into the repo
-   (component HTML + `_ds_manifest.json` + CSS), e.g. under `design/` or `docs/design/`.
-2. **Commit** it. cat-factory's coding agents read the checkout natively, so the design system is
-   already on disk for every run, no connector, no credential, no materialization step needed.
-
-This is why the earlier per-user-PAT Claude Design provider (and its `user_document_connections`
-store + `credentialScope` plumbing) was removed: it targeted a service-token API that does not exist.
+The reason it cannot be one is the record worth keeping, because a per-user-PAT Claude Design
+provider WAS built here and removed, along with its `user_document_connections` store and the
+`credentialScope` plumbing it needed. Its only programmatic read path is **login-bound**: Claude
+Code's built-in `DesignSync` tool reads design-system projects through the user's claude.ai login
+(or a `/design-login` authorization), and there is no per-workspace or per-user service token a
+hosted, multi-tenant, headless backend could store and use in async agent containers, which have no
+claude.ai login. It targeted an API that does not exist. Community "Claude design studio" MCP
+servers are a different thing (local HTML/CSS generation), not a service-token read of existing
+projects.
 
 ## Next drop-in: Penpot
 

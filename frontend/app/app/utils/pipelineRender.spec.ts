@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { binaryCandidateStatusSchema } from '@cat-factory/contracts'
 import type { ExecutionInstance, PipelineStep } from '~/types/execution'
-import { dedicatedParkView } from './pipelineRender'
+import { missingI18nKeys } from '../../test/i18nKeys'
+import { REDIRECT_PARK_PRESENTATION, dedicatedParkView } from './pipelineRender'
 
 /** A minimal coder step; the predicate only reads approval/followUps/forkDecision. */
 const step = (over: Partial<PipelineStep>): PipelineStep =>
@@ -75,6 +77,26 @@ describe('dedicatedParkView', () => {
     }
   })
 
+  // A generating step parks BETWEEN its candidate pass and its delivering pass. Approving it
+  // generically would mark done a step that has staged files and delivered nothing, so it owns
+  // the park exactly as the fork choice one subject over does.
+  it('owns the candidate park while awaiting a choice', () => {
+    expect(
+      dedicatedParkView(step({ binaryCandidates: { status: 'awaiting_choice' } as never }), run()),
+    ).toBe('binary-candidates')
+  })
+
+  // Derived from the picklist the engine itself writes, rather than a hand-listed set: every
+  // status EXCEPT the parked one must release the step, and a status added to the vocabulary is
+  // then covered here the day it lands instead of quietly falling outside a stale literal list.
+  it('releases the step on every settled status the vocabulary holds', () => {
+    const settled = binaryCandidateStatusSchema.options.filter((s) => s !== 'awaiting_choice')
+    expect(settled.length).toBeGreaterThan(0)
+    for (const status of settled) {
+      expect(dedicatedParkView(step({ binaryCandidates: { status } as never }), run())).toBeNull()
+    }
+  })
+
   it('leaves a plain approval park to the generic rail', () => {
     expect(dedicatedParkView(step({}), run())).toBeNull()
   })
@@ -106,5 +128,28 @@ describe('dedicatedParkView', () => {
       inputGate: { status: 'blocked', mode: 'standard', issues: [], checkedAt: 1 },
     } as never)
     expect(dedicatedParkView(step({ approval: null, state: 'working' }), blocked)).toBeNull()
+  })
+})
+
+describe('REDIRECT_PARK_PRESENTATION', () => {
+  // The `Record` over the park vocabulary already proves at COMPILE time that every park has an
+  // entry, which is the whole reason it replaced the ternaries that rendered the fork's copy for
+  // the candidate park. What no type can prove is that an entry still names a key that EXISTS:
+  // a table lookup is invisible to typed message keys and to `i18n:check` alike, so deleting the
+  // catalog entry reads as a clean removal and the button renders its own key path at runtime.
+  it('names catalog keys that resolve', () => {
+    const keys = Object.values(REDIRECT_PARK_PRESENTATION).flatMap((p) => [
+      p.noticeKey,
+      p.actionKey,
+      p.railActionKey,
+    ])
+    expect(missingI18nKeys(keys)).toEqual([])
+  })
+
+  // Two parks pointing at one string is how the bug this table replaced would come back: the
+  // copy would be uniform and wrong again, and every other check would still pass.
+  it('gives each park its own copy', () => {
+    const notices = Object.values(REDIRECT_PARK_PRESENTATION).map((p) => p.noticeKey)
+    expect(new Set(notices).size).toBe(notices.length)
   })
 })
