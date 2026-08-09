@@ -10,9 +10,17 @@ import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
 // preview URL, and an inline caller got the same text. What a designer actually cares about, what
 // the screen looks like, was invisible to every agent building it.
 //
-// Delivery is a PAIR fact, and both halves have to be true: the harness must have a way to put an
-// image into a turn, and the model must accept one. Neither half implies the other, so they are
-// declared separately and joined here, once, rather than re-derived at each delivery site.
+// Delivery is a PAIR fact, and both halves have to be true: the dispatch site must have a CHANNEL
+// that can carry bytes to the model, and the model must accept them. Neither half implies the
+// other, so they are declared separately and joined here, once, rather than re-derived at each
+// delivery site.
+//
+// The channel is stated BY the call site rather than inferred from "is there a harness", because
+// the two are not the same question and the sites where they disagree are exactly the ones that
+// break silently. An ambient inline run drives a harness CLI with one-shot text on stdin: it names
+// a harness, has no checkout to write a file into, and flattens its message to a string, so it can
+// carry a picture by neither route. A consensus panel is inline with no harness at all and still
+// cannot carry one, because its participants share a single composed prompt string.
 // ---------------------------------------------------------------------------
 
 /**
@@ -42,12 +50,15 @@ export const HARNESS_IMAGE_INPUT: Record<HarnessKind, boolean> = {
 }
 
 /**
- * Whether this harness can put an image in front of its model. An INLINE call (no harness) passes
- * `undefined` and is always able to: the caller composes the model message itself, so there is no
- * CLI in between and the model half is the only question left.
+ * Whether this harness can open an image file the platform wrote into the checkout.
+ *
+ * TOTAL over `HarnessKind`, with no "no harness" case: an inline call has no CLI to ask about, and
+ * letting `undefined` answer `true` here is what once let the ambient inline path (a harness CLI
+ * fed one-shot text) inherit the container answer and promise files nothing wrote. Which channel a
+ * site has is {@link DesignImageCarrier}'s job to state, not this table's to guess.
  */
-export function harnessAcceptsImages(harness: HarnessKind | undefined): boolean {
-  return harness === undefined ? true : HARNESS_IMAGE_INPUT[harness]
+export function harnessAcceptsImages(harness: HarnessKind): boolean {
+  return HARNESS_IMAGE_INPUT[harness]
 }
 
 /**
@@ -69,6 +80,20 @@ export function harnessAcceptsImages(harness: HarnessKind | undefined): boolean 
  * - `transfer_failed` is the store: the pair CAN carry an image and the bytes did not arrive. The
  *   only transient member, and the only one worth retrying.
  *
+ * Two more name a SEAM that carries no picture whatever the harness and the model could do, so
+ * neither comes out of {@link resolveDesignImageDelivery}: there is no pair to join, and the site
+ * that knows which seam it is states it directly, exactly as the store's own failure does.
+ *
+ * - `inline_harness_text_only` is the ambient inline path: the deployment serves a subscription ref
+ *   by driving its CLI as a host subprocess with one-shot text on stdin. It names a harness whose
+ *   container dispatch reads image files perfectly well, and has neither a checkout to write one
+ *   into nor a message part to attach. The fix is a deployment's, not a run's: serve this kind
+ *   somewhere that has one.
+ * - `consensus_panel` is a diverted step: its participants share ONE composed prompt string across
+ *   models that need not agree about image input, so there is nothing to attach a picture to. Named
+ *   for the surface rather than for a capability, and spelled to match the `UnavailableToolServer`
+ *   reason a panel already reports for the same reason on the same surface.
+ *
  * There is deliberately no member for "the task has no design": that is an absent set, not a
  * refused delivery, and a run with nothing to show must not tell its agent that something was
  * withheld.
@@ -77,6 +102,8 @@ export type DesignImageUnavailableReason =
   | 'harness_no_image_input'
   | 'model_no_image_input'
   | 'unknown_model_image_input'
+  | 'inline_harness_text_only'
+  | 'consensus_panel'
   | 'transfer_failed'
 
 /**
@@ -103,10 +130,25 @@ export type DesignImageDelivery =
   | { attached: false; reason: DesignImageUnavailableReason }
 
 /**
- * Join the two halves for one dispatch: the harness's ability to carry an image and the resolved
+ * The route a dispatch site has for putting bytes in front of its model: the half of the decision
+ * that is a property of the SEAM rather than of the model.
+ *
+ * Declared by the site because only the site knows it. "Is a harness named" does not answer it (the
+ * ambient inline path names one and can carry nothing), and neither does "is this call inline" (a
+ * consensus panel is inline and can carry nothing either). A site with no route at all does not
+ * build a carrier: it states its own refusal from the two seam reasons above.
+ */
+export type DesignImageCarrier =
+  /** A container dispatch: the harness downloads the files and its CLI opens them. */
+  | { channel: 'files'; harness: HarnessKind }
+  /** An inline model call composing its own request, so it can add image parts itself. */
+  | { channel: 'message' }
+
+/**
+ * Join the two halves for one dispatch: the carrier's ability to carry an image and the resolved
  * model's ability to take one.
  *
- * The harness is asked FIRST, and the order is load-bearing rather than stylistic. A subscription
+ * The carrier is asked FIRST, and the order is load-bearing rather than stylistic. A subscription
  * harness pins its own model, so a Codex run reporting `model_no_image_input` would send someone to
  * change a model they cannot change without also changing the harness; the CLI is the outer
  * constraint and the honest one to name.
@@ -116,17 +158,15 @@ export type DesignImageDelivery =
  * silence about this flavour.
  */
 export function resolveDesignImageDelivery(
-  harness: HarnessKind | undefined,
+  carrier: DesignImageCarrier,
   ref: Pick<ModelRef, 'acceptsImages'>,
 ): DesignImageDelivery {
-  if (!harnessAcceptsImages(harness)) {
+  if (carrier.channel === 'files' && !harnessAcceptsImages(carrier.harness)) {
     return { attached: false, reason: 'harness_no_image_input' }
   }
   if (ref.acceptsImages === undefined) {
     return { attached: false, reason: 'unknown_model_image_input' }
   }
   if (!ref.acceptsImages) return { attached: false, reason: 'model_no_image_input' }
-  // The channel follows from the same fact that decided the harness half: a harness means a CLI
-  // reading a checkout, and no harness means the caller composes the message itself.
-  return { attached: true, channel: harness === undefined ? 'message' : 'files' }
+  return { attached: true, channel: carrier.channel }
 }

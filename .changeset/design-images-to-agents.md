@@ -1,6 +1,7 @@
 ---
 '@cat-factory/kernel': minor
 '@cat-factory/agents': minor
+'@cat-factory/consensus': minor
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
 '@cat-factory/executor-harness': minor
@@ -16,15 +17,17 @@ or plan a screen, on the two channels a dispatch can actually carry an image ove
 `.cat-context/design-renders/` for a harness whose CLI reads image files, and attached to the model
 request as image parts for an inline call. Which kinds get them is a declared trait
 (`design-images`, on `coder` / `architect` / `fixer`), so a deployment's own UI kind opts in the
-same way.
+same way. Which channel a dispatch has is stated by the dispatch SITE, so a surface that has
+neither (the ambient inline CLI path, a consensus panel) refuses with its own reason instead of
+promising the agent files nothing wrote.
 
 Delivery joins two DECLARED facts, and neither is inferred: `HARNESS_IMAGE_INPUT` says which agent
 CLI can get bytes into a turn (`claude-code`; Codex and Pi are `false` with their reason stated),
 and the new per-flavour `ModelRef.acceptsImages` says which model takes one. A dispatch that cannot
-show the pictures TELLS the agent they exist, with which of the two is missing, so the textual
-design description never reads as everything the platform had. An UNDECLARED model modality is its
-own refusal reason rather than a silent "no", so an undeclared multimodal model cannot read as a
-text-only one forever.
+show the pictures TELLS the agent they exist, with the cause, so the textual design description
+never reads as everything the platform had. An UNDECLARED model modality is its own refusal reason
+rather than a silent "no", so an undeclared multimodal model cannot read as a text-only one
+forever.
 
 **Runner image bump** (`cat-factory-executor:1.107.0`): the harness gained the download for the new
 manifest, and `designImages` joins `HARNESS_BODY_CAPABILITIES`, so a deployment running an older
@@ -33,4 +36,6 @@ tag into your registry and roll it out; nothing else in the change requires it.
 
 Recorded prompt bodies now pass through `redactImagePayloads` on both the inline and proxy paths: a
 `Uint8Array` JSON-stringifies to one entry per byte, so an attached frame would otherwise have
-landed in telemetry as megabytes per recorded call.
+landed in telemetry as megabytes per recorded call. That redaction is for the record only: the
+proxy's Workers AI output cap measures the payload it forwards, since sizing a request off a
+described copy would under-reserve context-window room by the size of every attached picture.

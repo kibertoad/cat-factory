@@ -32,6 +32,7 @@ import {
   userPromptFor,
 } from '@cat-factory/agents'
 import { decideConsensusMode } from './gating.js'
+import { panelDesignImageCeiling } from './designImages.js'
 import { panelToolServerCeiling } from './toolServers.js'
 import { isConsensusEligible } from './traits.js'
 import { runSpecialistPanel } from './strategies/specialistPanel.js'
@@ -251,7 +252,13 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     const baseSystem = ceiling.section
       ? `${composedSystem}\n\n${INLINE_PANEL_SURFACE}\n\n${ceiling.section}`
       : `${composedSystem}\n\n${INLINE_PANEL_SURFACE}`
-    const goalPrompt = userPromptFor(context, this.agentKindRegistry)
+    // Composed from the context PLUS what this surface cannot carry, so the one shared goal prompt
+    // states a withheld design exactly as the container dispatch of the same kind would state an
+    // undeliverable one. Absent for a task with no linked design: the prompt is then unchanged.
+    const goalPrompt = userPromptFor(
+      { ...context, ...panelDesignImageCeiling(context) },
+      this.agentKindRegistry,
+    )
 
     const participants: ResolvedParticipant[] = cfg.participants.map((p) => {
       const ref = this.refForModelId(p.modelId, base, context.providerPreference)

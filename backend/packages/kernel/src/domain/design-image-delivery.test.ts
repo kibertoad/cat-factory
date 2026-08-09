@@ -14,17 +14,11 @@ describe('harnessAcceptsImages', () => {
       expect(typeof harnessAcceptsImages(harness)).toBe('boolean')
     }
   })
-
-  it('treats an INLINE call as able to carry one', () => {
-    // No harness means no CLI in between: the caller composes the model message itself, so the
-    // model half is the only question left.
-    expect(harnessAcceptsImages(undefined)).toBe(true)
-  })
 })
 
 describe('resolveDesignImageDelivery', () => {
   it('attaches through the MESSAGE for an inline call on an image-capable model', () => {
-    expect(resolveDesignImageDelivery(undefined, { acceptsImages: true })).toEqual({
+    expect(resolveDesignImageDelivery({ channel: 'message' }, { acceptsImages: true })).toEqual({
       attached: true,
       channel: 'message',
     })
@@ -34,7 +28,12 @@ describe('resolveDesignImageDelivery', () => {
     // The channel is what the prompt names, and naming the wrong one is worse than naming
     // neither: a container agent told its designs are "attached below" searches a message with
     // none.
-    expect(resolveDesignImageDelivery('claude-code', { acceptsImages: true })).toEqual({
+    expect(
+      resolveDesignImageDelivery(
+        { channel: 'files', harness: 'claude-code' },
+        { acceptsImages: true },
+      ),
+    ).toEqual({
       attached: true,
       channel: 'files',
     })
@@ -43,7 +42,9 @@ describe('resolveDesignImageDelivery', () => {
   it('blames the HARNESS before the model, even when the model is the weaker half', () => {
     // A subscription harness pins its own model, so reporting `model_no_image_input` would send
     // someone to change a model they cannot change without also changing the CLI.
-    expect(resolveDesignImageDelivery('pi', { acceptsImages: false })).toEqual({
+    expect(
+      resolveDesignImageDelivery({ channel: 'files', harness: 'pi' }, { acceptsImages: false }),
+    ).toEqual({
       attached: false,
       reason: 'harness_no_image_input',
     })
@@ -51,13 +52,24 @@ describe('resolveDesignImageDelivery', () => {
 
   it('keeps an UNDECLARED model apart from a text-only one', () => {
     // Two different fixes: declare the flavour's modality, versus pick a different model.
-    expect(resolveDesignImageDelivery(undefined, {})).toEqual({
+    expect(resolveDesignImageDelivery({ channel: 'message' }, {})).toEqual({
       attached: false,
       reason: 'unknown_model_image_input',
     })
-    expect(resolveDesignImageDelivery(undefined, { acceptsImages: false })).toEqual({
+    expect(resolveDesignImageDelivery({ channel: 'message' }, { acceptsImages: false })).toEqual({
       attached: false,
       reason: 'model_no_image_input',
+    })
+  })
+
+  it('does not ask the harness table on a MESSAGE carrier that happens to name one', () => {
+    // The ambient inline path is the case: it serves `claude-code` by piping text to the CLI, so
+    // the container answer for that same CLI (it opens image files) is about a checkout this call
+    // does not have. Carriers are stated, never inferred from a harness name, which is why a
+    // message carrier carries no harness for anything to read.
+    expect(resolveDesignImageDelivery({ channel: 'message' }, { acceptsImages: true })).toEqual({
+      attached: true,
+      channel: 'message',
     })
   })
 })

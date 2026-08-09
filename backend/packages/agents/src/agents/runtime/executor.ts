@@ -1,6 +1,7 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type {
+  DesignImageDelivery,
   ModelFlavor,
   ModelProvider,
   ModelProviderResolver,
@@ -147,11 +148,16 @@ export class AiAgentExecutor implements AgentExecutor {
    * Settle what this inline call can do with the task's design pictures, and load the bytes when it
    * can carry them.
    *
-   * The harness argument is `undefined` for an ordinary inline call even when the ref names one:
-   * `harness: 'pi'` describes how a CONTAINER dispatch of that model is served, and inline it means
-   * nothing at all — this executor composes the model message itself. The exception is the ambient
-   * inline path (`runsInline`), where the deployment really does serve the ref by driving a CLI as
-   * a host subprocess, and that CLI's own limits apply exactly as they would in a container.
+   * An ordinary inline call carries them as MESSAGE PARTS whatever harness the ref names:
+   * `harness: 'pi'` describes how a CONTAINER dispatch of that model is served, and here this
+   * executor composes the model message itself.
+   *
+   * The ambient inline path (`runsInline`) carries them by NEITHER route, which is why it is a
+   * refusal rather than a second carrier. The deployment serves the ref by driving its CLI as a
+   * host subprocess: `CliInlineLanguageModel` flattens the prompt to system + user TEXT on stdin,
+   * so an image part is dropped on the way out, and there is no checkout to write a file into
+   * either. Reading the container answer for the same CLI (`claude-code` opens image files) is what
+   * once left this path claiming `channel: 'files'` for a directory nothing ever wrote.
    */
   private async resolveDesignImages(
     context: AgentRunContext,
@@ -162,8 +168,9 @@ export class AiAgentExecutor implements AgentExecutor {
   }> {
     const set = context.designImages
     if (!set?.files.length) return { context: {}, images: [] }
-    const harness = this.runsInline?.(ref) ? ref.harness : undefined
-    const delivery = resolveDesignImageDelivery(harness, ref)
+    const delivery: DesignImageDelivery = this.runsInline?.(ref)
+      ? { attached: false, reason: 'inline_harness_text_only' }
+      : resolveDesignImageDelivery({ channel: 'message' }, ref)
     if (!delivery.attached)
       return { context: { designImages: set, designImageDelivery: delivery }, images: [] }
     const resolveStore = this.resolveBinaryArtifactStore

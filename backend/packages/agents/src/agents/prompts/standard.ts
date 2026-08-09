@@ -477,10 +477,15 @@ export function designImagesSection(context: AgentRunContext): string {
         'Work from the textual design description above. Do not ask for the images and do not try',
         'to fetch them; nothing in this run can deliver them to you.',
       ]
+  // Stated WITHOUT a cause, the same way the set itself records one: by the time this renders, a
+  // view can be here because a ceiling dropped it or because its bytes never arrived, and those are
+  // the same instruction to an agent (work from the text). Naming a cause meant naming the ceiling,
+  // which read it off the DELIVERED count, so a run that lost two pictures in transfer reported
+  // the survivors as its limit and blamed the loss on a cap that had not fired.
   const omitted = set.omitted.length
     ? [
         '',
-        `Not included (this run is limited to ${set.files.length} pictures): ${set.omitted.join(', ')}.`,
+        `Not included, and nothing in this run can add them: ${set.omitted.join(', ')}.`,
         'The textual design description above still covers those views.',
       ]
     : []
@@ -500,6 +505,8 @@ const DESIGN_IMAGE_REFUSALS: Record<DesignImageUnavailableReason, string> = {
   model_no_image_input: 'the model running this step does not accept image input',
   unknown_model_image_input:
     'the platform does not know whether the model running this step accepts image input',
+  inline_harness_text_only: 'this step reaches its model through a text-only channel',
+  consensus_panel: 'this step is running as a multi-model panel, which carries text only',
   transfer_failed: 'they could not be retrieved from storage',
 }
 

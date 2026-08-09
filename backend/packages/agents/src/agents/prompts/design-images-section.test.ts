@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentRunContext } from '@cat-factory/kernel'
+import type { AgentRunContext, DesignImageUnavailableReason } from '@cat-factory/kernel'
 import { DESIGN_RENDER_DIR, designImagesSection } from './standard.js'
 
 const FILES = [
@@ -47,12 +47,21 @@ describe('designImagesSection', () => {
   })
 
   it('states the CAUSE when the pictures could not be delivered, and says not to chase them', () => {
-    for (const [reason, phrase] of [
-      ['harness_no_image_input', 'agent CLI'],
-      ['model_no_image_input', 'does not accept image input'],
-      ['unknown_model_image_input', 'does not know whether'],
-      ['transfer_failed', 'could not be retrieved'],
-    ] as const) {
+    // An exhaustive `Record`, so a new member of the kernel vocabulary fails to compile here until
+    // it has agent-facing wording: the whole reason the reasons are distinct is that they must read
+    // differently to whoever hits them, and an unworded one would splice `undefined` into a prompt.
+    const phrases: Record<DesignImageUnavailableReason, string> = {
+      harness_no_image_input: 'agent CLI',
+      model_no_image_input: 'does not accept image input',
+      unknown_model_image_input: 'does not know whether',
+      inline_harness_text_only: 'text-only channel',
+      consensus_panel: 'multi-model panel',
+      transfer_failed: 'could not be retrieved',
+    }
+    for (const [reason, phrase] of Object.entries(phrases) as [
+      DesignImageUnavailableReason,
+      string,
+    ][]) {
       const section = designImagesSection(
         context({
           designImages: { files: FILES, omitted: [] },
@@ -67,7 +76,11 @@ describe('designImagesSection', () => {
     }
   })
 
-  it('names the views it is not showing', () => {
+  it('names the views it is not showing, and claims no cause for their absence', () => {
+    // A view lands in `omitted` because a ceiling dropped it OR because its bytes never arrived,
+    // and by here the two are indistinguishable. The sentence used to blame a cap and size it from
+    // the DELIVERED count, so a run that lost two pictures in transfer reported its survivors as
+    // the limit and attributed the loss to a cap that had not fired.
     const section = designImagesSection(
       context({
         designImages: { files: FILES, omitted: ['Order confirmation'] },
@@ -75,5 +88,7 @@ describe('designImagesSection', () => {
       }),
     )
     expect(section).toContain('Order confirmation')
+    expect(section).not.toContain('limited to')
+    expect(section).not.toMatch(/\b2 pictures\b/)
   })
 })
