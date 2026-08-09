@@ -300,11 +300,29 @@ move arrived exactly as the note higher up describes it, with the VERSION line i
 byte-identically and only the prose beside it conflicting. Nothing about the section changed with
 either move.
 
-1.39.0: one new optional field, `frameIds`, on the run report's `scope`
+1.39.0, not 1.38.0: one new value, `consensus_panel`, on the `reason` of a step's unavailable tool
+servers (carried by the run reads that project `toolServers`). It says the step ran as a consensus
+panel, so its participants were inline model calls with no checkout, no shell and no agent CLI, and
+there was nothing for the server to be wired into. The same step with consensus off gets the server,
+which is why the value points at the panel rather than at the kind or the credential. Additive, and
+the SDKs tolerate unknown members by design, so a consumer built against 1.38.0 keeps parsing every
+response it already understood.
+
+It is a new member rather than a reuse of `harness_unsupported` because that is the one reuse a
+consumer would act on wrongly: `harness_unsupported` says the resolved CLI cannot serve this server,
+so the operator sent there widens a `harnesses` list that was never the constraint. Here the kind's
+standard surface serves it perfectly and the panel is what withheld it.
+
+Written against a main already on 1.38.0: the `environments` section above took that number while
+this branch was in flight. The collision arrived exactly as the note at the top describes it, with
+the VERSION line auto-merging byte-identically and only the prose beside it conflicting. Nothing
+about the reason member changed with the move.
+
+1.40.0, not 1.39.0: one new optional field, `frameIds`, on the run report's `scope`
 (`GET /api/v1/runs/{runId}/report`, and the same block rendered into a pull request body). It
 names EVERY involved service frame whose changes ride the pull request the report sits on,
 where `frameId` names one. Additive: `frameId` keeps its meaning and its value (the first of
-the set), so a consumer built against 1.38.0 reads exactly what it read before.
+the set), so a consumer built against 1.39.0 reads exactly what it read before.
 
 The field exists because the singular one was answering a question with no single answer. A
 cross-service run checks out one repo per REPO, not per frame, so several involved services
@@ -312,3 +330,7 @@ living in one monorepo share a checkout, a work branch and therefore one pull re
 report on it speaks for all of them, and naming only the first made every other frame look
 like a service the run opened no pull request for. `frameId` stays because it is published;
 read `frameIds` and treat `frameId` as its head.
+
+Written against 1.39.0: the `consensus_panel` reason above took that number while this branch was
+in flight, and the VERSION line auto-merged byte-identically as the note at the top of this file
+says it does, conflicting only in this prose. Nothing about the field changed with the move.

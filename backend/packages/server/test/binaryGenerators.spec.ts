@@ -315,6 +315,69 @@ describe('mothership-mode generative binary integrations', () => {
     })
   })
 
+  it('THROWS on an `accepts` MEMBER that is not an array, to the depth its siblings are checked', async () => {
+    // A present `accepts` was checked for being an object and no further, so a member of the
+    // wrong type sailed past and reached the brief's `.join()` and the value rule's `.map()` as a
+    // `TypeError`: the same generic crash the sibling list fields are guarded against, out of the
+    // one class whose promise is that an unreadable reply arrives as this refusal.
+    const source = new HttpBinaryGeneratorSource({
+      baseUrl: 'https://mothership.test',
+      token: 'tok',
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              generators: [
+                {
+                  id: 'retro',
+                  modalities: ['image'],
+                  mediaTypes: [],
+                  credentials: [],
+                  capabilities: ['aspect-ratio'],
+                  accepts: { aspectRatios: '16:9' },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )) as unknown as typeof fetch,
+    })
+    await expect(source.views()).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'binary_generators_unreachable', field: 'generators' },
+    })
+  })
+
+  it('serves an `accepts` carrying a member this build has no table entry for', async () => {
+    // The version tolerance absence already gets, at the member level: a mothership one build
+    // ahead may enumerate a value option this node cannot judge, and nothing here reads a key it
+    // does not know. Refusing would make every node upgrade a hard ordering constraint.
+    const source = new HttpBinaryGeneratorSource({
+      baseUrl: 'https://mothership.test',
+      token: 'tok',
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              generators: [
+                {
+                  id: 'retro',
+                  modalities: ['image'],
+                  mediaTypes: [],
+                  credentials: [],
+                  capabilities: ['aspect-ratio'],
+                  accepts: { aspectRatios: ['16:9'], frameRates: 'whatever this build calls it' },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )) as unknown as typeof fetch,
+    })
+    const views = await source.views()
+    expect(views[0]!.accepts?.aspectRatios).toEqual(['16:9'])
+  })
+
   it('THROWS on a documents map whose VALUES are not arrays', async () => {
     // Otherwise this escapes as a `TypeError` from the brief renderer's `.map()` — an unreadable
     // reply surfacing as a generic crash instead of the one error every route to "we do not know

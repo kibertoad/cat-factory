@@ -45,27 +45,25 @@ import * as v from 'valibot'
  * two producers of one modality apart without unlocking an option would be the refused
  * discriminator wearing a new name.
  *
- * **A capability says the request can CARRY the value, never which values are accepted.** It is
- * the answer to "does asking this reach a parameter at all", and it is deliberately not the
- * answer to "will this endpoint take 4x, or 7:3, or 96x96". Declaring the accepted VALUES beside
- * each member is the per-integration table the design record refuses, one axis over: it goes
- * stale in the deployment's repo while the vendor changes it in its own, and the version that
- * looks harmless is the one that lies. An endpoint that upscales at a ratio it fixes itself has
- * no factor to enumerate, so `upscale: [2]` would not be a narrower declaration of the truth, it
- * would be a fabricated one, and a step asking for 4x would be admitted against it and served an
- * enlargement at an unknown multiple. That is exactly the silent wrong artifact this axis exists
- * to prevent, arriving through the axis.
+ * **A capability says the request can CARRY the value; {@link binaryGeneratorAcceptsSchema} says
+ * which values are accepted.** The two questions are separate because they fail differently, and
+ * collapsing them is what produced both halves of the problem the value axis was added to fix.
+ * This member answers only "does asking this reach a parameter at all". An endpoint that has no
+ * such parameter declares NOTHING here, however close its behaviour looks: Recraft's
+ * `crispUpscale` enlarges at a ratio it fixes itself and takes no factor, so declaring `upscale`
+ * for it would admit a step asking for 4x and hand it an enlargement at an unknown multiple. No
+ * accepted-value list repairs that, because `upscale: [2]` is not a narrower statement of the
+ * truth, it is a fabricated one. The endpoint says what it does in a definition's `guidance` and
+ * the step is refused an option the endpoint genuinely cannot answer, which is a visible refusal
+ * naming the capability rather than an artifact that checks out everywhere and is wrong where it
+ * counts. The honest reading of such a refusal is usually that the option was the wrong way to
+ * state the requirement: a step wanting a specific larger deliverable is asking for
+ * {@link 'exact-size'}, not for a multiple of something it never measured.
  *
- * So an endpoint that accepts an option only at values it fixes does one of two things, and
- * never a third. If a COARSER member already means "a set it rounds to" it declares that one
- * ({@link 'aspect-ratio'} is the worked example, and it is why the ratio and size members are
- * separate). If there is none, it declares nothing here and says what it does in a definition's
- * `guidance`: the step is then refused an option the endpoint cannot answer, which is a visible
- * refusal naming the capability rather than an artifact that checks out everywhere and is wrong
- * where it counts. A refusal that reads as too strict is the
- * correct half of that trade, and the honest reading of it is usually that the option was the
- * wrong way to state the requirement (a step wanting a specific larger deliverable is asking for
- * {@link 'exact-size'}, not for a multiple of something it never measured).
+ * An endpoint that DOES take the parameter, but only at values from a closed set, declares the
+ * capability and states the set. That is not the per-integration table the design record refuses:
+ * a set of accepted values partitions exactly, the same way `mediaTypes` does, and stating it
+ * makes an existing ask checkable without unlocking anything new to ask for.
  *
  * Anything that does not clear the bar stays prose in `description` / `guidance`, which is where
  * "good at pixel art", "expensive above 2K" and "rate limited to 5/min" belong.
@@ -104,30 +102,25 @@ export const binaryGeneratorCapabilitySchema = v.picklist([
    */
   'seed',
   /**
-   * Accepts an explicit aspect SHAPE: a ratio (`16:9`), or a fixed set of sizes it rounds to.
-   * Unlocks `generation.aspectRatio`.
+   * The request carries an explicit aspect SHAPE: a ratio (`16:9`), or a bucket it maps a shape
+   * onto (`image_size: square | portrait | landscape`, `resolution: 1k | 2k`). Unlocks
+   * `generation.aspectRatio`.
    *
    * Deliberately NOT "a ratio or an output size", which is what this member said while it was
-   * the only one on the axis. A bucketed API (`image_size: square | portrait | landscape`,
-   * `resolution: 1k | 2k`) honours a ratio exactly and an exact pixel size not at all, so one
-   * member covering both made the two integrations that CAN be handed dimensions
-   * indistinguishable from the two that cannot — see {@link 'exact-size'}.
+   * the only one on the axis. A bucketed API honours a ratio exactly and an exact pixel size not
+   * at all, so one member covering both made the integrations that CAN be handed dimensions
+   * indistinguishable from the ones that cannot: see {@link 'exact-size'}.
    *
-   * **A closed LIST of exact `WxH` values is this member, not that one**, and it is the boundary
-   * case worth stating because it looks like the other one: an endpoint whose `size` parameter
-   * takes `1024x1024 | 1365x1024 | …` is handed pixel dimensions and still ROUNDS, so a step
-   * needing 96x96 gets an 11x downscale from it. What separates the two members is not whether
-   * the request carries numbers, it is whether the endpoint can be asked for an ARBITRARY pair
-   * and render it. An enumerated set cannot, so it declares this and states the set in
-   * a definition's `guidance`.
+   * The line between the two members is WHAT THE REQUEST CARRIES, not how free the answer is. A
+   * shape goes here even when the endpoint accepts only a closed list of ratios; dimensions go
+   * on `exact-size` even when it accepts only a closed list of those. Which values each takes is
+   * {@link binaryGeneratorAcceptsSchema}'s `aspectRatios`, so an endpoint offering ten ratios is
+   * a step's `7:3` refused by name rather than admitted and quietly cropped.
    */
   'aspect-ratio',
   /**
-   * Accepts ARBITRARY output dimensions in pixels: a width and a height it renders at natively,
-   * rather than a shape it rounds to. Unlocks `generation.outputSize`.
-   *
-   * "Arbitrary" is the whole test, and it is what an endpoint offering a closed list of exact
-   * `WxH` values fails: see {@link 'aspect-ratio'}, which is where such an endpoint belongs.
+   * The request carries output DIMENSIONS in pixels: a width and a height, rather than a shape
+   * the endpoint maps onto a size of its own choosing. Unlocks `generation.outputSize`.
    *
    * Its own member rather than a refinement of `aspect-ratio`, because the two partition
    * differently and the difference is the whole deliverable for anything rendered to a fixed
@@ -137,21 +130,28 @@ export const binaryGeneratorCapabilitySchema = v.picklist([
    * format is covered, the upload succeeded). The consumer that rejects it is the game, weeks
    * later.
    *
+   * **An endpoint whose `size` parameter takes a closed list of `WxH` values declares THIS
+   * member and states the list**, which is the boundary case worth spelling out because it moved.
+   * While `accepts` did not exist such an endpoint had to declare `aspect-ratio`, on the ground
+   * that it rounds: that classification described a size-taking API as shape-taking, and it left
+   * a step needing 96x96 admitted against an endpoint whose nearest listed shape is 1024x1024.
+   * Now the capability answers the durable question (can it be handed dimensions at all) and
+   * `accepts.outputSizes` answers the vendor-specific one.
+   *
    * The vocabulary stays FLAT: an API taking width and height can honour any ratio, so it
    * declares BOTH members rather than this one implying the other. That is the same shape
-   * `reference-image` / `multi-reference` already has, and it is chosen for the same reason —
+   * `reference-image` / `multi-reference` already has, and it is chosen for the same reason:
    * an implication table is an ordering over a picklist that every future member would then
    * have to be placed in, to save a deployment one word in its own registration, and the cost
    * of forgetting that word is a loud refusal naming the capability rather than a silent
    * mis-render.
    *
-   * What this does NOT do is state which sizes an endpoint supports. Flux caps at 4 MP and
-   * wants multiples of 32; Retro Diffusion's range moves with the style. A per-integration size
-   * TABLE is refused on the design record's own grounds (it is the `resolutionRange`
-   * discriminator wearing a new name, and it goes stale in this repo while the vendor changes
-   * it in theirs). This member answers only the question that is a durable fact about the
-   * endpoint's REQUEST SHAPE: can it be handed dimensions at all. The rest is the integration's
-   * own `guidance`, where a sentence can say what the limits are.
+   * An endpoint that renders any pair it is handed, inside limits no list can enumerate (Flux
+   * caps at 4 MP and wants multiples of 32; Retro Diffusion's range moves with the style),
+   * declares this member and states NO sizes. A per-integration size RANGE stays refused on the
+   * design record's own grounds: it is the `resolutionRange` discriminator wearing a new name,
+   * and `min`/`max`/`step`/`multiple-of` is a constraint language rather than a fact. The limits
+   * stay in the integration's own `guidance`, where a sentence can say what they are.
    */
   'exact-size',
   /**
@@ -307,6 +307,33 @@ export const binaryOutputSizeSchema = v.object({
 export type BinaryOutputSize = v.InferOutput<typeof binaryOutputSizeSchema>
 
 /**
+ * An aspect ratio, `W:H`.
+ *
+ * Named rather than inlined into the one option that used to be its only reader, because an
+ * integration now declares the ratios it ACCEPTS ({@link binaryGeneratorAcceptsSchema}) and the
+ * two have to be the same rule: a declaration validated more loosely than the request could hold
+ * a value no step is able to spell, so the endpoint's own list would silently accept nothing.
+ */
+export const binaryAspectRatioSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.maxLength(16),
+  v.regex(/^[1-9][0-9]{0,3}:[1-9][0-9]{0,3}$/, 'must be an aspect ratio of the form W:H'),
+)
+
+/**
+ * How many times the integration's native size to render at. Named for the reason
+ * {@link binaryAspectRatioSchema} is: the accepted-factor list and the step's own field are one
+ * rule read from two places.
+ */
+export const binaryUpscaleFactorSchema = v.pipe(
+  v.number(),
+  v.integer(),
+  v.minValue(2),
+  v.maxValue(8),
+)
+
+/**
  * The per-step GENERATION OPTIONS: the parameters a step wants every generation to carry, each
  * gated by the capability that makes it answerable ({@link BINARY_OPTION_CAPABILITIES}).
  *
@@ -347,14 +374,7 @@ export const binaryGenerationOptionsObject = v.object({
    */
   seed: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(4294967295))),
   /** `16:9`, `1:1`, `3:2`. Needs `aspect-ratio`. */
-  aspectRatio: v.optional(
-    v.pipe(
-      v.string(),
-      v.trim(),
-      v.maxLength(16),
-      v.regex(/^[1-9][0-9]{0,3}:[1-9][0-9]{0,3}$/, 'must be an aspect ratio of the form W:H'),
-    ),
-  ),
+  aspectRatio: v.optional(binaryAspectRatioSchema),
   /**
    * Exact pixel dimensions every artifact must be delivered at. Needs `exact-size`.
    *
@@ -366,7 +386,7 @@ export const binaryGenerationOptionsObject = v.object({
    */
   outputSize: v.optional(binaryOutputSizeSchema),
   /** Render at this multiple of the integration's native size. Needs `upscale`. */
-  upscale: v.optional(v.pipe(v.number(), v.integer(), v.minValue(2), v.maxValue(8))),
+  upscale: v.optional(binaryUpscaleFactorSchema),
   /** Deliver an alpha channel rather than a background. Needs `transparent-background`. */
   transparentBackground: v.optional(v.literal(true)),
   /** Deliver a seamlessly tiling image. Needs `tileable`. */
@@ -570,4 +590,266 @@ export function binaryCapabilityProviders(
     if (generatorIds.length > 0) out.push({ capability, generatorIds })
   }
   return out
+}
+
+// ---------------------------------------------------------------------------
+// The VALUE axis: not "can this endpoint be asked", which is the capability above, but "will it
+// take the value this step is asking for".
+//
+// The capability axis is a yes/no, and for several real endpoints the honest answer is "yes, at
+// one of these". Grok Imagine and Nano Banana take an aspect ratio from a closed picklist while
+// Flux and Retro Diffusion honour any ratio at all, and all four declare `aspect-ratio`, so a
+// step asking for `7:3` is admitted against every one of them and served by two. Nothing reports
+// the crop: the modality is covered, the format is covered, the upload succeeded. That is the
+// silent wrong artifact the capability axis exists to prevent, arriving through the capability
+// axis, and no wording of a yes/no fixes it.
+//
+// What the platform will NOT do is negotiate. A "closest supported value" rule turns a refusal
+// into a substitution chosen by whoever wrote the fallback, which is the failure this axis is
+// about. A step either asks for something the endpoint takes or it is told, by name, that it
+// does not.
+// ---------------------------------------------------------------------------
+
+/**
+ * The values an integration ACCEPTS for the generation options whose domain is enumerable.
+ *
+ * A sibling of `capabilities` rather than a change to it, so a definition that declares only tags
+ * keeps working unchanged and absent goes on meaning "only the coarse facts are known".
+ *
+ * **Only the options with a CLOSED domain appear here, and each entry is a SET.** A range is
+ * deliberately unrepresentable: `min`/`max`/`step`/`multiple-of` is a constraint language, and
+ * the moment one exists it grows to cover Flux's "any pair up to 4 MP in multiples of 32", which
+ * is the `resolutionRange` discriminator the design record refuses. An endpoint with a genuine
+ * range declares the capability, states no set, and puts its limits in `guidance`: its steps are
+ * then judged exactly as they were before this field existed.
+ *
+ * **An empty list is refused rather than read as "accepts nothing".** Absent is the one spelling
+ * of "not stated", so a `[]` that fell out of a filter would otherwise refuse every value the
+ * endpoint has, silently, on a declaration whose author meant to say nothing at all.
+ */
+export const binaryGeneratorAcceptsSchema = v.object({
+  /** The aspect ratios it takes, when it takes a closed set of them. Compared in LOWEST TERMS. */
+  aspectRatios: v.optional(
+    v.pipe(v.array(binaryAspectRatioSchema), v.minLength(1), v.maxLength(64)),
+  ),
+  /** The exact `WxH` pairs it renders, when its size parameter is a closed list. */
+  outputSizes: v.optional(v.pipe(v.array(binaryOutputSizeSchema), v.minLength(1), v.maxLength(64))),
+  /** The upscale factors it takes, when it takes a closed set of them. */
+  upscaleFactors: v.optional(
+    v.pipe(v.array(binaryUpscaleFactorSchema), v.minLength(1), v.maxLength(8)),
+  ),
+})
+export type BinaryGeneratorAccepts = v.InferOutput<typeof binaryGeneratorAcceptsSchema>
+
+/** A generation option whose accepted values an integration can enumerate. */
+export type BinaryValueOption = 'aspectRatio' | 'outputSize' | 'upscale'
+
+/**
+ * One value option's three parts, as the ONE table every reader folds over: which capability
+ * gates it, how to read the step's request, and how to read an integration's accepted set.
+ *
+ * A `Record` over the union, so a member added to {@link BinaryValueOption} fails the typecheck
+ * here rather than shipping as an option nothing checks. The capability is restated rather than
+ * read out of {@link BINARY_OPTION_CAPABILITIES}, whose values are LISTS ("any of these", which
+ * is what `edit` and `referenceImages` need); `binary-capabilities.test.ts` pins that each entry
+ * here names exactly the one capability that table maps its option to, so the two cannot drift.
+ *
+ * Values are compared as STRINGS, in the spelling each renders to below, because that is also
+ * what a refusal has to say back to a human. The one normalisation is the ratio's: `1920:1080`
+ * and `16:9` are the same shape asked for twice, and refusing the first against an endpoint that
+ * declared the second would be a false refusal over spelling.
+ */
+const BINARY_VALUE_OPTIONS: Record<
+  BinaryValueOption,
+  {
+    capability: BinaryGeneratorCapability
+    requested: (options: BinaryGenerationOptions) => string | undefined
+    accepted: (accepts: BinaryGeneratorAccepts) => string[] | undefined
+  }
+> = {
+  aspectRatio: {
+    capability: 'aspect-ratio',
+    requested: (options) =>
+      options.aspectRatio ? reduceAspectRatio(options.aspectRatio) : undefined,
+    accepted: (accepts) => accepts.aspectRatios?.map(reduceAspectRatio),
+  },
+  outputSize: {
+    capability: 'exact-size',
+    requested: (options) => (options.outputSize ? formatOutputSize(options.outputSize) : undefined),
+    accepted: (accepts) => accepts.outputSizes?.map(formatOutputSize),
+  },
+  upscale: {
+    capability: 'upscale',
+    requested: (options) => (options.upscale === undefined ? undefined : String(options.upscale)),
+    accepted: (accepts) => accepts.upscaleFactors?.map(String),
+  },
+}
+
+/** `WxH`, the spelling the brief and every refusal already use for a size. */
+function formatOutputSize(size: BinaryOutputSize): string {
+  return `${size.width}x${size.height}`
+}
+
+/**
+ * An aspect ratio in lowest terms, so `1920:1080` and `16:9` compare equal.
+ *
+ * Total by construction: the string has already passed {@link binaryAspectRatioSchema} at both
+ * ends (a step's field and an integration's declaration), and a value that somehow has not is
+ * returned unchanged rather than dropped, which compares as itself and cannot silently match.
+ */
+function reduceAspectRatio(ratio: string): string {
+  const match = /^([1-9][0-9]{0,3}):([1-9][0-9]{0,3})$/.exec(ratio.trim())
+  if (!match) return ratio
+  let a = Number(match[1])
+  let b = Number(match[2])
+  while (b !== 0) [a, b] = [b, a % b]
+  return `${Number(match[1]) / a}:${Number(match[2]) / a}`
+}
+
+/** A value a step asks for that no selected integration accepts. Refuses the run. */
+export interface BinaryUnacceptedValue {
+  option: BinaryValueOption
+  /** What the step asks for, in the spelling a message states back. */
+  requested: string
+  /** What the integrations that DID state a set accept, deduplicated, in selection order. */
+  accepted: string[]
+}
+
+/**
+ * A value some selected integration accepts and another has ENUMERATED AWAY: the step can be
+ * served, by a subset of what it selected, and the rest will quietly deliver something else.
+ */
+export interface BinaryPartiallyAcceptedValue {
+  option: BinaryValueOption
+  /** What the step asks for, in the spelling a message states back. */
+  requested: string
+  /** Ids of the integrations whose stated set EXCLUDES it, in selection order. */
+  refusedBy: string[]
+}
+
+/** How a step's requested option VALUES stand against what its selected integrations accept. */
+export interface BinaryValueCoverage {
+  /** Requested values every integration that stated a set excludes, and none left open. Refuses. */
+  unaccepted: BinaryUnacceptedValue[]
+  /**
+   * Requested values a stated set contains and ANOTHER stated set excludes, naming the
+   * integrations that exclude them. The step is servable, so this is advisory.
+   */
+  partial: BinaryPartiallyAcceptedValue[]
+  /**
+   * Requested values no stated set contains, where another integration declaring the capability
+   * stated NO set, so the value may still be served and nothing may say otherwise. Advisory.
+   */
+  unverifiable: BinaryValueOption[]
+}
+
+/**
+ * Judge the VALUES a step asks for against the sets its selected integrations accept.
+ *
+ * Judged per option and PER DECLARER, over the integrations that declare the gating capability
+ * (one that declares none of it is already the coarse axis's answer, and counting it here would
+ * report one fault twice). Each declarer is in one of three states, and the disposition is a
+ * function of the whole set rather than of the first agreeable member:
+ *
+ * - **Nobody stated a set.** SILENT. This is the state every registration is in until somebody
+ *   audits an endpoint, and it is exactly what the platform knew before this field existed. An
+ *   advisory that fired here would ride nearly every step with an aspect ratio, which is how a
+ *   line stops being read.
+ * - **Every declarer that stated a set contains the value.** Covered, and a declarer that stated
+ *   nothing beside them stays the pre-field unknown rather than a finding.
+ * - **Some stated set contains it and another stated set EXCLUDES it.** PARTIAL. The step is
+ *   servable and is not refused, for the reason {@link binaryCapabilityCoverage} treats one
+ *   declarer as covering a capability: which integration renders which artifact is the agent's
+ *   call, not the platform's. But an excluding set is a DEFINITE fact about a definite endpoint,
+ *   so it is named rather than absorbed. Absorbing it is the exact silent crop this axis exists
+ *   to prevent, and it inverted the reporting: the LESS informed selection (a declarer that
+ *   stated nothing) raised an advisory, so declaring an accurate second set bought silence.
+ * - **No stated set contains it, and some declarer stated none.** UNVERIFIABLE. One integration
+ *   refuses the value and another has not said, so the step may well be served: reported, never
+ *   refused, the same disposition {@link binaryCapabilityCoverage} gives its own third state.
+ * - **No stated set contains it, and every declarer stated one.** UNACCEPTED, and this is the
+ *   refusal the axis exists for: every endpoint that could serve the option has enumerated what
+ *   it takes, and this is not among them.
+ *
+ * Takes the step's OPTIONS rather than a pre-derived requirement list, unlike its neighbours,
+ * because the judgement needs the value and not only the capability it implies. It takes each
+ * integration's `id` for the same reason {@link binaryCapabilityProviders} does: a partial
+ * finding whose remedy is routing is unusable without naming who to route around.
+ */
+export function binaryValueCoverage(
+  options: BinaryGenerationOptions | undefined,
+  selected: readonly {
+    id: string
+    capabilities?: readonly BinaryGeneratorCapability[]
+    accepts?: BinaryGeneratorAccepts
+  }[],
+): BinaryValueCoverage {
+  const unaccepted: BinaryUnacceptedValue[] = []
+  const partial: BinaryPartiallyAcceptedValue[] = []
+  const unverifiable: BinaryValueOption[] = []
+  if (!options) return { unaccepted, partial, unverifiable }
+  for (const [key, entry] of Object.entries(BINARY_VALUE_OPTIONS)) {
+    const option = key as BinaryValueOption
+    const requested = entry.requested(options)
+    if (requested === undefined) continue
+    const declarers = selected.filter((generator) =>
+      (generator.capabilities ?? []).includes(entry.capability),
+    )
+    const stated: string[][] = []
+    const refusedBy: string[] = []
+    let accepting = 0
+    let silent = false
+    for (const generator of declarers) {
+      const values = generator.accepts ? entry.accepted(generator.accepts) : undefined
+      if (!values) {
+        silent = true
+        continue
+      }
+      stated.push(values)
+      if (values.includes(requested)) accepting += 1
+      else refusedBy.push(generator.id)
+    }
+    if (stated.length === 0) continue
+    if (accepting > 0) {
+      if (refusedBy.length > 0) partial.push({ option, requested, refusedBy })
+      continue
+    }
+    if (silent) {
+      unverifiable.push(option)
+      continue
+    }
+    unaccepted.push({ option, requested, accepted: [...new Set(stated.flat())] })
+  }
+  return { unaccepted, partial, unverifiable }
+}
+
+/**
+ * The value sets a definition states for options its capabilities do NOT declare.
+ *
+ * A definition saying which aspect ratios it accepts while declaring no `aspect-ratio` has stated
+ * two contradicting facts about one endpoint, and every reader believes a different half:
+ * {@link binaryValueCoverage} judges only over the capability's declarers and never sees the set,
+ * the agent's brief renders the set as fact beside the integration's formats, and admission
+ * refuses every step asking for the option at all. So the accurate half is unreachable and the
+ * step is refused for lacking a capability the same registration was documenting.
+ *
+ * Derived from the same table the coverage rule folds over, so an option added to
+ * {@link BinaryValueOption} is checked here with no second edit. Lives beside that table rather
+ * than in the boot validator for the reason the table is private: a caller re-deriving which
+ * capability gates which set is the drift this returns instead.
+ */
+export function binaryAcceptsWithoutCapability(declaration: {
+  capabilities?: readonly BinaryGeneratorCapability[]
+  accepts?: BinaryGeneratorAccepts
+}): { option: BinaryValueOption; capability: BinaryGeneratorCapability }[] {
+  const accepts = declaration.accepts
+  if (!accepts) return []
+  const declared = declaration.capabilities ?? []
+  const missing: { option: BinaryValueOption; capability: BinaryGeneratorCapability }[] = []
+  for (const [key, entry] of Object.entries(BINARY_VALUE_OPTIONS)) {
+    if (!entry.accepted(accepts)) continue
+    if (declared.includes(entry.capability)) continue
+    missing.push({ option: key as BinaryValueOption, capability: entry.capability })
+  }
+  return missing
 }

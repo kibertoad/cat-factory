@@ -100,4 +100,9 @@ const UNAVAILABLE_REASONS: Record<
   // and the distinction (a credential the platform withholds versus one the declaration cannot
   // deliver) is the operator's, carried by the log line, the probe and the boot error.
   unusable_secret: 'its credential is not available to this deployment',
+  // The one member that names the SURFACE rather than a fault, and the one the agent can reason
+  // about: it is a panel participant, so it already knows it has no checkout and no shell, and
+  // this says the declared tool servers go the same way. Phrased as a property of the run so the
+  // agent does not read it as something a retry or a different approach recovers.
+  consensus_panel: 'not reachable from a consensus panel, which runs without an agent runtime',
 }

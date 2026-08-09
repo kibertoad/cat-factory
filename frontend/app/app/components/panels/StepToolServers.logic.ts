@@ -32,6 +32,7 @@ export const REASON_KEY: Record<ToolServerUnavailableReason, string> = {
   oauth_not_connected: 'panels.stepDetail.toolServers.reason.oauthNotConnected',
   oauth_token_failed: 'panels.stepDetail.toolServers.reason.oauthTokenFailed',
   over_budget: 'panels.stepDetail.toolServers.reason.overBudget',
+  consensus_panel: 'panels.stepDetail.toolServers.reason.consensusPanel',
 }
 
 /**
@@ -64,6 +65,7 @@ export const REMEDY_KEY: Record<ToolServerUnavailableReason, string> = {
   oauth_not_connected: 'panels.stepDetail.toolServers.remedy.oauthNotConnected',
   oauth_token_failed: 'panels.stepDetail.toolServers.remedy.oauthTokenFailed',
   over_budget: 'panels.stepDetail.toolServers.remedy.overBudget',
+  consensus_panel: 'panels.stepDetail.toolServers.remedy.consensusPanel',
 }
 
 /** The reason vocabulary as the SCHEMA states it: what a parity assertion grades {@link REASON_KEY} against. */
