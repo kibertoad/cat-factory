@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { queryOne } from './db.js'
 
 // Which runs the LOCAL telemetry store is still AUTHORITATIVE for
 // (docs/initiatives/mothership-mode.md, PR 5) — the fact the read-through needs and the sinks
@@ -106,11 +107,14 @@ export class SqliteTelemetryCoverage implements LocalTelemetryCoverage {
   ) {}
 
   isRunLocallyComplete(workspaceId: string, executionId: string): boolean {
-    const row = this.db
-      .prepare(
-        'SELECT 1 AS hit FROM telemetry_pruned_runs WHERE workspace_id = ? AND execution_id = ? LIMIT 1',
-      )
-      .get(workspaceId, executionId) as { hit?: number } | undefined
+    // `SELECT 1 AS hit` — the marker row's existence is the whole answer, so only the
+    // presence of a row is read.
+    const row = queryOne<{ hit: number }>(
+      this.db,
+      'SELECT 1 AS hit FROM telemetry_pruned_runs WHERE workspace_id = ? AND execution_id = ? LIMIT 1',
+      workspaceId,
+      executionId,
+    )
     return row === undefined
   }
 
