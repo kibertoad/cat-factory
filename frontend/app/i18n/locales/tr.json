@@ -4136,6 +4136,9 @@
       "monorepoBrowseHint": "Depoyu inceleyin ve eklemek istediğiniz servislerin dizinlerini herhangi bir klasörden seçin. Bir servis üzerinde çalışan ajanlar onun alt dizininde çalışır.",
       "selectedServices": "Seçili servisler",
       "noServicesSelected": "Henüz servis seçilmedi. Yukarıdan dizin seçin.",
+      "frontendLabel": "Frontend uygulaması (isteğe bağlı)",
+      "frontendHint": "Seçtiğiniz dizinlerden birini diğerlerinin frontend uygulaması olarak işaretleyin. O alt dizine sabitlenmiş bir frontend uygulaması olarak eklenir ve yanında eklenen her backend servisine bağlanır. Backend URL ortam değişkenlerinin adlarını sonrasında frontend’in inspector’ında girin.",
+      "frontendNone": "Yok: tüm seçimler backend servisidir",
       "addServices": "{count} servis ekle | {count} servis ekle",
       "removeService": "{directory} öğesini kaldır",
       "addedConfigure": "{title} eklendi, yapılandırın",
@@ -4149,7 +4152,8 @@
         "addedDescription": "{title} panoda, aşağıdan yapılandırın.",
         "addFailedTitle": "Servis eklenemedi",
         "servicesAddedTitle": "Servisler eklendi",
-        "servicesAddedDescription": "{count} servis panoya eklendi. | {count} servis panoya eklendi."
+        "servicesAddedDescription": "{count} servis panoya eklendi. | {count} servis panoya eklendi.",
+        "frontendLinkedNote": "{directory} frontend olarak eklendi ve diğerlerine bağlandı. Backend URL ortam değişkenlerinin adlarını inspector’ında girin."
       },
       "repoType": "Depo türü",
       "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."

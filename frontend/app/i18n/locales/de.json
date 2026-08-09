@@ -3401,6 +3401,9 @@
       "monorepoBrowseHint": "Durchsuchen Sie das Repository und wählen Sie die Verzeichnisse der Services aus, die Sie hinzufügen möchten – aus jedem beliebigen Ordner. Agents, die an einem Service arbeiten, laufen innerhalb seines Unterverzeichnisses.",
       "selectedServices": "Ausgewählte Services",
       "noServicesSelected": "Noch keine Services ausgewählt. Wählen Sie oben Verzeichnisse aus.",
+      "frontendLabel": "Frontend-App (optional)",
+      "frontendHint": "Markieren Sie eines der ausgewählten Verzeichnisse als Frontend für die übrigen. Es wird als Frontend-App angelegt, auf dieses Unterverzeichnis festgelegt und mit jedem daneben hinzugefügten Backend-Service verknüpft. Die Umgebungsvariablen für die Backend-URLs benennen Sie anschließend im Inspector des Frontends.",
+      "frontendNone": "Keines: alle Auswahlen sind Backend-Services",
       "addServices": "{count} Service hinzufügen | {count} Services hinzufügen",
       "removeService": "{directory} entfernen",
       "addedConfigure": "{title} hinzugefügt, konfigurieren Sie es",
@@ -3414,7 +3417,8 @@
         "addedDescription": "{title} ist auf dem Board, konfigurieren Sie es unten.",
         "addFailedTitle": "Service konnte nicht hinzugefügt werden",
         "servicesAddedTitle": "Services hinzugefügt",
-        "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt."
+        "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt.",
+        "frontendLinkedNote": "{directory} wurde als Frontend hinzugefügt und mit den übrigen verknüpft. Benennen Sie die Umgebungsvariablen für die Backend-URLs im Inspector."
       }
     },
     "repoTree": {

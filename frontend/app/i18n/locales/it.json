@@ -3401,6 +3401,9 @@
       "monorepoBrowseHint": "Sfoglia il repository e seleziona le directory dei servizi che vuoi aggiungere, da qualsiasi cartella. Gli agenti che lavorano su un servizio verranno eseguiti all'interno della sua sottodirectory.",
       "selectedServices": "Servizi selezionati",
       "noServicesSelected": "Nessun servizio ancora selezionato. Scegli le directory sopra.",
+      "frontendLabel": "App frontend (facoltativo)",
+      "frontendHint": "Indica una delle directory selezionate come frontend delle altre. Viene aggiunta come app frontend ancorata a quella sottodirectory e collegata a ogni servizio backend aggiunto accanto. Assegna poi il nome a ciascuna variabile d'ambiente con l'URL del backend nell'inspector del frontend.",
+      "frontendNone": "Nessuna: tutte le selezioni sono servizi backend",
       "addServices": "Aggiungi {count} servizio | Aggiungi {count} servizi",
       "removeService": "Rimuovi {directory}",
       "addedConfigure": "{title} aggiunto, configuralo",
@@ -3414,7 +3417,8 @@
         "addedDescription": "{title} è sulla board, configuralo qui sotto.",
         "addFailedTitle": "Impossibile aggiungere il servizio",
         "servicesAddedTitle": "Servizi aggiunti",
-        "servicesAddedDescription": "{count} servizio aggiunto alla board. | {count} servizi aggiunti alla board."
+        "servicesAddedDescription": "{count} servizio aggiunto alla board. | {count} servizi aggiunti alla board.",
+        "frontendLinkedNote": "{directory} è stata aggiunta come frontend e collegata alle altre. Assegna il nome alle sue variabili d'ambiente con gli URL dei backend nel suo inspector."
       }
     },
     "repoTree": {
