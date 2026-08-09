@@ -12,19 +12,18 @@ board: import a page, expand it into board structure (services → modules →
 tasks), or attach it to a task as extra context the agents read during
 execution.
 
-The integration is **source-agnostic**. A `DocumentSourceProvider` encapsulates
-everything specific to one source (credential validation, page-id parsing,
-fetching, body → Markdown), and the rest of the stack (connection/import/plan/
-spawn/link services, the D1 tables, the HTTP surface and the frontend) is
-shared. Two providers ship today:
+The integration is **source-agnostic**. A `DocumentSourceProvider` encapsulates everything specific
+to one source (credential validation, page-id parsing, fetching, body → Markdown), and the rest of
+the stack (connection/import/plan/spawn/link services, the tables, the HTTP surface and the
+frontend) is shared. Which sources ship, and what credential each takes, is the site's
+[Supported sources](https://www.catfactory.ai/guide/issue-sources.html#supported-sources); the
+vocabulary they come from is `documentSourceKindSchema` in `@cat-factory/contracts`, and it is the
+list every exhaustive `Record` over sources is built from.
 
-- **Confluence Cloud**: HTTP Basic (account email + API token), storage-format
-  XHTML bodies.
-- **Notion**: a single internal-integration token (Bearer), block-based bodies.
-
-Adding a third source is just another provider: implement
-`DocumentSourceProvider` (a `kind`, a `descriptor`, `normalizeConnection`,
-`parseRef`, `fetchDocument`) and register it in `selectDocumentsDeps`.
+Adding a source is another provider: implement `DocumentSourceProvider` (a `kind`, a `descriptor`,
+`normalizeConnection`, `parseRef`, `fetchDocument`), add the `kind` to that picklist, and register
+it in `selectDocumentsDeps`. The picklist is what makes the rest of the work a compile error rather
+than a runtime gap: the traits below, the descriptors and the connect surfaces all key off it.
 
 ## A stored document need not come from a source
 
@@ -161,32 +160,19 @@ the feature from the UI.
 
 ## Configuring it
 
-Per-workspace credentials are entered in the app and stored (encrypted) in D1;
-there are no source secrets in `wrangler.toml`. A couple of knobs are global,
-plus the one required secret: the master key used to encrypt the per-workspace
-source credentials at rest:
+The three settings an operator sets (`DOCUMENT_SOURCES`, `DOCUMENT_PLANNER`, and the required
+`ENCRYPTION_KEY`) are described in [`docs/environment-variables.md`](../../docs/environment-variables.md)
+and on the site's
+[Document & task sources](https://www.catfactory.ai/deploy/configuration.html#document-task-sources).
+Two facts about what they select are engine behaviour:
 
-```toml
-# wrangler.toml [vars]
-# Optional allow-list of sources to register (default: all known sources).
-DOCUMENT_SOURCES = "confluence,notion"
-# Doc → board planner: "llm" (default) uses the configured agent model; "headings"
-# forces the deterministic heading parser.
-DOCUMENT_PLANNER = "llm"
-```
-
-```sh
-# Shared master key for credential encryption at rest (REQUIRED - config load throws
-# without it; set as a secret, never commit it). One key backs every integration; the
-# cipher domain-separates per integration via its HKDF `info` tag:
-openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY
-```
-
-In `llm` mode the planner reuses the agents' default model
-(`AGENT_DEFAULT_PROVIDER` / `AGENT_DEFAULT_MODEL`) via the provider-agnostic
-`ModelProvider` port. If no provider credential is usable, or a response can't be
-parsed, it degrades to the deterministic heading parser, so import/plan/spawn
-always work.
+- **The planner degrades rather than failing.** In `llm` mode it reuses the agents' default model
+  through the provider-agnostic `ModelProvider` port; if no provider credential is usable, or the
+  response cannot be parsed, it falls back to the deterministic heading parser, so import, plan and
+  spawn always produce something. `DOCUMENT_PLANNER=headings` is that path taken deliberately.
+- **No source secret lives in configuration.** Per-workspace credentials are entered in the app and
+  stored sealed, and the one key the deployment holds is shared with every other integration, which
+  is why the cipher domain-separates per integration through its HKDF `info` tag.
 
 Credentials are stored encrypted at rest: the per-source JSON bag is sealed with AES-256-GCM (the
 same `WebCryptoSecretCipher` envelope the environments integration uses, under a documents-scoped
@@ -217,7 +203,8 @@ per-source facts are about this codebase rather than about connecting:
 ## HTTP API
 
 All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
-`503` when the integration is unconfigured. `:source` is `confluence` | `notion`.
+`503` when the integration is unconfigured. `:source` is any registered `DocumentSourceKind`, which
+is the picklist the descriptors are built from rather than a list restated here.
 
 | Method & path                                     | Purpose                                                                         |
 | ------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -275,83 +262,61 @@ to a block is resolved at execution time and injected into the agent prompt
 
 ### A pasted reference is judged BEFORE anything is written
 
+> What the author SEES (the trimmed link, the widened-reference warning, the two refusal shapes,
+> why an unreachable source still stages) is the site's
+> [What a pasted link resolves to](https://www.catfactory.ai/guide/issue-sources.html#what-a-pasted-link-resolves-to).
+
 `resolve-ref` is `import` with the fetch removed: `DocumentImportService.resolveRef` runs the
-provider's own `parseRef` and answers `{ externalId, canonicalUrl }`, and `import` now goes
-through it rather than re-parsing, so the pre-flight and the import cannot disagree about which
-refs are usable. It spends no upstream call and needs no connection, which is what lets the
-attach picker call it as the user types.
+provider's own `parseRef` and answers `{ externalId, canonicalUrl }`, and `import` goes through it
+rather than re-parsing, so the pre-flight and the import cannot disagree about which refs are
+usable. It spends no upstream call and needs no connection, which is what lets the picker call it as
+the user types. Four rules bind anything added to it:
 
-Two things ride on it, and both were real defects in the attach flow:
-
-- **The paste is TRIMMED to the canonical form and that form is what gets staged.** A share link
-  carries a title segment and tracking params (`?p=` / `&t=` on Figma's own Copy link output);
-  accepting it verbatim hid whether the frame the URL named had survived the parse at all.
-  `canonicalUrl` is the provider rebuilding the link from the id, so what the picker shows is what
-  the import will do. It is `null` where the id genuinely cannot rebuild one: Confluence needs the
-  connection's site base URL and Linear the workspace slug, and GitHub docs needs the deployment's
-  VCS HOST (a GitLab-backed deployment reaches that source through the adapter, so a `github.com`
-  link would be wrong for it and `ResolveRepoOrigin`, which resolves a host, needs a workspace a
-  pure method does not get). The id itself is the canonical form in those cases, NOT a weaker
-  answer, and callers render it rather than reading the null as a failed resolution.
-- **A reference that had to be WIDENED says so, separately from the trim.** A node/screen id the
-  parser cannot read (Figma's Copy link emits a complex instance id for any component instance)
-  makes `parseRef` fall back to the whole file or project rather than guess which frame was meant.
-  That is the right fallback and an invisible one: the result is a valid id with a valid canonical
-  URL, so "I attached this frame" and "I attached the entire design" render identically under a
-  bare "trimmed to the supported form" note. `droppedScope` (optional
-  `DocumentSourceProvider.droppedScope`, implemented by the design sources) carries the discarded
-  qualifier AS PASTED, and the picker states it in its own amber line. Never normalised onto a
-  supported form: nothing knows which frame it meant, which is why the parser refused it.
+- **A `null` `canonicalUrl` is an ANSWER, not a failure.** The provider rebuilds the link from the
+  id, and some ids cannot: Confluence needs the connection's site base URL, Linear the workspace
+  slug, and GitHub docs the deployment's VCS host (a GitLab-backed deployment reaches that source
+  through the adapter, so a `github.com` link would be wrong for it, and `ResolveRepoOrigin` needs a
+  workspace this pure method does not get). The id itself is the canonical form there. A caller that
+  reads the null as a failed resolution is the bug.
+- **A WIDENED reference is reported separately from the trim**, through the optional
+  `DocumentSourceProvider.droppedScope`. A node id the parser cannot read (Figma's Copy link emits a
+  complex instance id for any component instance) falls back to the whole file, and the result is a
+  valid id with a valid canonical URL, so the widening is invisible in everything except this field.
+  It carries the discarded qualifier AS PASTED and is never normalised onto a supported form:
+  nothing knows which frame was meant, which is why the parser refused it.
 - **A refusal names WHICH correction it needs**, as `details.reason` (the closed
-  `documentRefReasonSchema`). `document_ref_unrecognized` means no link of this shape will ever
-  work here, and carries the `expected` format; `document_ref_claimed_by_other_source` means the
-  link is fine and pointed at the wrong source, and names the claimant so the surface can offer
-  to switch with the text unchanged. Claimants are searched host-PINNED first, through the SAME
-  `orderSourcesByClaimConfidence` that `makeDocumentUrlResolver` reads rather than a second copy of
-  its two passes: a blind parser claims a shape, so registration order deciding would point a Figma
-  paste at Notion, and a rule living in two places would be refined in one of them.
+  `documentRefReasonSchema`): `document_ref_unrecognized` carries the `expected` format, and
+  `document_ref_claimed_by_other_source` names the claimant so a surface can offer to switch.
+  Claimants are searched host-PINNED first, through the SAME `orderSourcesByClaimConfidence` that
+  `makeDocumentUrlResolver` reads rather than a second copy of its two passes: a blind parser claims
+  a shape, so registration order deciding would point a Figma paste at Notion, and a rule living in
+  two places would be refined in one of them.
+- **A refusal is a verdict; a failed CALL is not.** `unchecked` (offline, 5xx, a proxy's own error
+  page, a reason value this build does not know) leaves the reference unjudged and still stageable,
+  with the import as the backstop it always was. An unknown reason value lands here rather than
+  being treated as a refusal, which is what lets the vocabulary grow without older builds rejecting
+  good links.
 
 The SPA half is the other side of the same rule: `ContextDocumentPicker` stages the RESOLVED
 reference rather than the pasted text, and `useContextLinking().resolvePending` fetches every staged
-attachment BEFORE the task or initiative is created, so an unreachable page is a correction the
-author can still make instead of a toast over a task that already exists without its context.
-
-Two consequences of running the fetch first, both about not overstating what the pre-flight knows:
-
-- **A refusal blocks a paste; a failed CALL does not.** `unchecked` (offline, 5xx, a proxy's own
-  error page, a reason value this build does not know) leaves the reference unjudged and still
-  stageable, with the import as the backstop it always was. Treating the two alike would make a
-  transient outage as final as a refusal, so a perfectly good link could not be attached at all.
-- **A staged item that could not be fetched is MARKED on the form** (`PendingContext.unreadable`),
-  not only named in the toast. The create is refused while any attachment is unresolved, so the
-  chip that caused it has to be identifiable where the author is still working. A tracker ISSUE has
-  no `parseRef` to pre-flight, so the add-task form's body pre-fetch is its warning: it records the
-  cause instead of swallowing it.
+attachment BEFORE the task or initiative is created, marking what it could not read
+(`PendingContext.unreadable`) rather than only naming it in a toast. A tracker ISSUE has no
+`parseRef` to pre-flight, so the add-task form's body pre-fetch is its warning: it records the cause
+instead of swallowing it.
 
 ### The picker names its source, and is the route to adding one
 
-`ContextDocumentPicker` also decides WHICH source it is reading, and that selector is the surface
-where the tier split above becomes visible copy. The selection rules are shared with the tracker
-pickers through `frontend/app/app/utils/sourcePicker.ts` (see
-[`bug-hunt.md`](./bug-hunt.md) for the tracker side).
+The copy and the tier it shows are the site's (the table under
+[Who can connect a source](https://www.catfactory.ai/guide/issue-sources.html#who-can-connect-a-source-and-who-can-attach-one)).
+Two structural facts stay here, both about where the answer is computed rather than what it says.
+`ContextDocumentPicker`'s selection rules are shared with the tracker pickers through
+`frontend/app/app/utils/sourcePicker.ts` (see [`bug-hunt.md`](./bug-hunt.md) for the tracker side).
 
-- **The source in use is always on screen**, single source or not, because which source is selected
-  decides what a pasted ref resolves to and which repository a file pick browses. When the menu has
-  nothing to decide it renders as a LABEL rather than a chevron: a trigger whose one entry re-selects
-  the current source promises a choice that isn't there.
-- **Its second tier connects a source from inside the form** (`ui.openDocumentConnect`, opened OVER
-  the caller's modal so nothing typed is lost), and `reconcileSource`'s `awaiting` selects that source
-  the moment the probe reports it connected. It routes to that source's own connect screen, never to
-  the Integrations hub, for the reason the bug hunt's tracker menu does.
-- **That second tier is WITHHELD from a member**, because connecting stores a workspace credential
-  and is `integrations.manage` while attaching what it holds is member-tier. `connectableSources` is
-  the one answer to "which sources could I connect", read by the picker's add tier AND by both hosts'
-  connect shortcuts (`ContextAttachmentFields`, `TaskContextDocs`); it withholds everything when the
-  integration is unavailable to the deployment OR the reader may not connect one. So a member sees
-  the source NAMED with no add entry, rather than a connect that opens a modal, takes a token and
-  403s. The no-source empty state splits the same way: the admin tier is told to connect one, a
-  member is told to ask an admin, because an instruction the reader's own menu withholds is not
-  advice they can act on.
+- **`connectableSources` is the ONE answer to "which sources could I connect"**, read by the
+  picker's add tier and by both hosts' connect shortcuts (`ContextAttachmentFields`,
+  `TaskContextDocs`). It withholds everything when the integration is unavailable to the deployment
+  OR the reader may not connect one, so a surface cannot accidentally offer a connect that takes a
+  token and then 403s. A third surface asking the question its own way is how the two halves drift.
 - **A document source cannot be "connected but switched off here"** the way a tracker can, so
   `buildConnectionSourceChoices` cannot emit the `enable` wording at all, and `sourceMenuItems`
   derives its wording map from what the choices can carry. A source that one day gains a
@@ -528,19 +493,19 @@ Two deliberate NON-refusals:
   notices are themselves BOUNDED (the inline one names a handful and counts the rest) since
   a notice that reports a budget overrun must not be able to cause one.
 
-**Planning is TARGET-AWARE when it is given a frame.** `plan(record, target?)` asks one of two
-questions, and they are different prompts rather than one prompt with a hint, because the answers
-have different shapes. Without a target: "what architecture does this document describe", answered
-as frames. With one: "what work does it imply inside this service that already exists", answered as
-that service's modules and tasks, with the modules it ALREADY holds named in the prompt so the plan
-adds beside them instead of proposing a second "Checkout" next to the one that is there.
+**Planning is TARGET-AWARE when it is given a frame.** What the two shapes produce, and why a design
+document always needs a target, is the site's
+[Expand a document into board structure](https://www.catfactory.ai/guide/issue-sources.html#expand-a-document-into-board-structure).
+The engine side is that `plan(record, target?)` runs two DIFFERENT prompts rather than one prompt
+with a hint, because the answers have different shapes: without a target, "what architecture does
+this document describe", answered as frames; with one, "what work does it imply inside this service
+that already exists", answered as that service's modules and tasks with the modules it ALREADY holds
+named in the prompt.
 
-That is what makes the `frameId` spawn honest, and why the SPA can now send one. Flattening a
-board-wide plan into a frame discards the frame titles, types and descriptions the preview
-rendered, so the spawn produced something other than what was approved; a plan authored FOR the
-target carries exactly one frame, which IS the target, and discards nothing. The plan says which
-(`targetFrameId`), so the preview can read "modules inside Storefront" rather than announcing a
-service nothing will create, and the spawn re-plans against the same frame.
+Flattening a board-wide plan into a frame instead is what this replaced, and it made the spawn
+dishonest: the flatten discards the frame titles, types and descriptions the preview rendered, so
+what was created was not what was approved. A plan authored FOR the target carries exactly one
+frame, which IS the target, and discards nothing.
 
 Two rules keep the two shapes from bleeding into each other:
 
@@ -553,11 +518,10 @@ Two rules keep the two shapes from bleeding into each other:
   Under a target the outline shifts up a level: h1 is consumed by the target (which occupies the
   level h1 would have created), h2 becomes a module, h3 a task.
 
-**A DESIGN document is planned into a service, always.** `isDesignSource` decides, and the SPA's
-spawn preview requires a target frame for one: a design describes screens, and asked for an
-architecture a model produces a service per Figma page. The design origin also folds a paragraph
-into whichever prompt runs, redirecting the decomposition to one task per screen, state or flow,
-named after the frame it comes from.
+**A DESIGN document is planned into a service, always**, and `isDesignSource` is what decides: the
+SPA's spawn preview requires a target frame for one, and the design origin folds a paragraph into
+whichever prompt runs, redirecting the decomposition to one task per screen, state or flow. A source
+added to that trait inherits both without a second edit here.
 
 The `credentials` bag a source expects is described by its descriptor
 (`GET /document-sources` → `credentialFields`), so the connect UI renders
