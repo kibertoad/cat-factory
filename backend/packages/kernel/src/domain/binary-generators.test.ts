@@ -837,6 +837,38 @@ describe('generation options', () => {
     expect(issues).toEqual([{ problem: 'capability_unsupported', capability: 'seed' }])
   })
 
+  // The motivating case, end to end at the refusal: a step whose deliverable is a 96x96 sprite,
+  // holding an integration that can only be asked for a bucket, is refused BEFORE it spends
+  // anything. Left admitted it succeeds, charges, stores a downscaled render, and every other
+  // check on it passes.
+  it('refuses an exact size against an integration that only takes a shape', () => {
+    const issues = binaryGeneratorSelectionIssues(
+      {
+        storageServiceId: 'store',
+        generatorIds: ['retro-diffusion'],
+        generation: { outputSize: { width: 96, height: 96 } },
+      },
+      [generator({ capabilities: ['aspect-ratio'] })],
+    )
+    expect(issues).toEqual([{ problem: 'capability_unsupported', capability: 'exact-size' }])
+  })
+
+  it('states the exact size to the agent as a requirement, not a preference', () => {
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'store', generatorIds: ['retro-diffusion'] },
+        [generator({ capabilities: ['exact-size'] })],
+      ),
+      requestedModalities: [],
+      generation: { outputSize: { width: 96, height: 96 } },
+    }).join('\n')
+    expect(section).toContain('EXACTLY 96x96 pixels')
+    // The brief deliberately states NO resize policy: the platform has no view of whether a
+    // downscale is acceptable for a given asset. What it does require is that a substitution is
+    // reported and the delivered size declared, so the loss is never silent.
+    expect(section).toContain('declare the size you actually delivered')
+  })
+
   it('admits an option nothing has declared either way', () => {
     const issues = binaryGeneratorSelectionIssues(
       { storageServiceId: 'store', generatorIds: ['retro-diffusion'], generation: { seed: 7 } },
