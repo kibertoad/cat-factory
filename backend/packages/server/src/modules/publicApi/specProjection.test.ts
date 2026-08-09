@@ -11,7 +11,7 @@ import {
   type SpecFeatureFile,
 } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
-import { toPublicServiceSpec } from './specProjection.js'
+import { toPublicRunSpec, toPublicServiceSpec } from './specProjection.js'
 
 // The public spec projection's whole job is bounding a response WITHOUT lying about the spec
 // behind it, so every test here asks the same question: after the cap, can a reader still tell
@@ -294,5 +294,37 @@ describe('toPublicServiceSpec', () => {
         total: requirements * perRequirement,
       },
     ])
+  })
+})
+
+// The RUN projection serves the same document at a different ref, so the assertion worth making
+// is not that its caps work (they are the same code) but that it IS the same code: a second copy
+// is how the two endpoints would come to bound one repository's Gherkin differently.
+describe('toPublicRunSpec', () => {
+  it('bounds a run read exactly as the service read bounds the same view', () => {
+    const view = viewWith(4, PUBLIC_SPEC_MAX_REQUIREMENTS)
+    const asService = toPublicServiceSpec('svc_1', 'present', view, PROVENANCE)
+    const asRun = toPublicRunSpec('exec_1', { anchor: 'present', view, provenance: PROVENANCE })
+
+    expect(asRun.spec).toEqual(asService.spec)
+    expect(asRun.features).toEqual(asService.features)
+    expect(asRun.issues).toEqual(asService.issues)
+    expect(asRun.truncations).toEqual(asService.truncations)
+    expect(asRun.truncations.length).toBeGreaterThan(0)
+  })
+
+  it('serves not_read as an empty body with no provenance, never as an absent spec', () => {
+    // The one shape the service read cannot produce. `provenance: null` is the point: naming a
+    // branch would imply a read that did not happen, and an `absent` anchor would claim the branch
+    // holds no requirements, which is a statement nothing has checked.
+    expect(toPublicRunSpec('exec_1', { anchor: 'not_read' })).toEqual({
+      runId: 'exec_1',
+      anchor: 'not_read',
+      spec: null,
+      features: [],
+      provenance: null,
+      issues: [],
+      truncations: [],
+    })
   })
 })

@@ -354,6 +354,9 @@ expectMutuallyAssignable<
   sdk.PublicServiceSpec,
   v.InferOutput<typeof contracts.publicServiceSpecSchema>
 >()
+// The RUN's read of the same tree, at the run's own branch. Its own envelope (a `runId`, a
+// nullable provenance, one extra anchor state) over the identical components below.
+expectMutuallyAssignable<sdk.PublicRunSpec, v.InferOutput<typeof contracts.publicRunSpecSchema>>()
 expectMutuallyAssignable<
   sdk.PublicSpecProvenance,
   v.InferOutput<typeof contracts.publicSpecProvenanceSchema>
@@ -505,6 +508,7 @@ const ASSERTED_COMPONENTS = [
   'PrReportTestConcern',
   'PrReportRequirements',
   'PublicServiceSpec',
+  'PublicRunSpec',
   'PublicSpecProvenance',
   'PublicSpecFeatureFile',
   'PublicSpecTruncation',

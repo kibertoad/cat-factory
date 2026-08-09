@@ -8,20 +8,16 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code DebugUnavailableToolServerReason} vocabulary.
+ * The {@code PublicRunSpecAnchor} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum DebugUnavailableToolServerReason {
-    HARNESS_UNSUPPORTED("harness_unsupported"),
-    TRANSPORT_UNSUPPORTED("transport_unsupported"),
-    MISSING_SECRET("missing_secret"),
-    RESERVED_SECRET("reserved_secret"),
-    UNUSABLE_SECRET("unusable_secret"),
-    OAUTH_NOT_CONNECTED("oauth_not_connected"),
-    OAUTH_TOKEN_FAILED("oauth_token_failed"),
-    OVER_BUDGET("over_budget"),
+public enum PublicRunSpecAnchor {
+    PRESENT("present"),
+    ABSENT("absent"),
+    UNPARSED("unparsed"),
+    NOT_READ("not_read"),
 
     /**
      * A value this SDK release does not know.
@@ -35,7 +31,7 @@ public enum DebugUnavailableToolServerReason {
 
     private final String wire;
 
-    DebugUnavailableToolServerReason(String wire) {
+    PublicRunSpecAnchor(String wire) {
         this.wire = wire;
     }
 
@@ -47,8 +43,8 @@ public enum DebugUnavailableToolServerReason {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static DebugUnavailableToolServerReason fromWire(@Nullable String wire) {
-        for (DebugUnavailableToolServerReason candidate : values()) {
+    public static PublicRunSpecAnchor fromWire(@Nullable String wire) {
+        for (PublicRunSpecAnchor candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

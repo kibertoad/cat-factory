@@ -329,6 +329,12 @@ export interface UnavailableToolServer {
    * - `reserved_secret` is kept apart from `missing_secret` because a missing secret is a variable
    *   to SET, while a reserved one is a DECLARATION to change: the server named a variable the
    *   platform's own configuration owns, and setting it is exactly what must not help.
+   * - `unusable_secret` is kept apart from both: the value RESOLVED and has nowhere to go, because
+   *   the declaration named a channel its transport does not have (see
+   *   {@link mcpTransportCarriesCredential}). Setting the variable does not help and neither does
+   *   changing the key; the channel is what changes. Boot validation refuses such a declaration, so
+   *   a dispatch reaches this only where the definition was authored by a process that is not the
+   *   one that booted (mothership mode, where a node runs one build behind).
    * - `transport_unsupported` is kept apart from `harness_unsupported` for the same reason: the
    *   harness DOES speak MCP and the definition DOES allow it, but this CLI's client cannot reach
    *   this transport (Codex is stdio-only). The fix is a second server declaration or a narrowed
@@ -419,6 +425,57 @@ export function mcpHarnessServesTransport(
   transport: McpTransport['kind'],
 ): boolean {
   return MCP_HARNESS_TRANSPORTS[harness].includes(transport)
+}
+
+/**
+ * The two ways a resolved credential can reach a tool server: as a variable of the server's own
+ * process, or as a header on the request to it.
+ */
+export type McpCredentialChannel = 'env' | 'header'
+
+/**
+ * The ONE channel each transport can carry a credential over. An exhaustive `Record`, so a third
+ * transport cannot be added without stating its answer.
+ *
+ * A `stdio` server is a child process the harness spawns, and there is no request to put a header
+ * on. An `http` server is a URL the CLI calls, and there is no process to set a variable in. So the
+ * channel is not a preference the declaration expresses: the transport fixes it, and a credential
+ * that named the other one reaches NOTHING at all.
+ */
+export const MCP_TRANSPORT_CREDENTIAL_CHANNEL: Record<McpTransport['kind'], McpCredentialChannel> =
+  {
+    stdio: 'env',
+    http: 'header',
+  }
+
+/**
+ * Which channel a credential DECLARATION names: `header` when it named one, else the server
+ * process's environment (under {@link McpSecretRef.envName}, or the lookup key).
+ */
+export function mcpCredentialChannel(secret: Pick<McpSecretRef, 'header'>): McpCredentialChannel {
+  return secret.header ? 'header' : 'env'
+}
+
+/**
+ * Whether the transport can actually deliver this credential: the channel the declaration named,
+ * against the one the transport has.
+ *
+ * FALSE is the silent-failure case the platform must refuse rather than resolve. Both projections
+ * that build a job body select by channel (`env` keys into the child process's environment, `header`
+ * keys into the request headers), so a mismatched declaration resolves successfully, is folded into
+ * nothing, and leaves the server WIRED, advertised to the agent, and started unauthenticated. The
+ * first evidence is the agent's first tool call failing, several minutes into a run that the prompt
+ * promised the tool for.
+ *
+ * Boot validation refuses such a declaration as an error, and dispatch refuses it again for the
+ * mothership case, where the definition was authored by a process that is not this one. Both ask
+ * THIS function, so the two cannot drift into disagreeing about which declarations work.
+ */
+export function mcpTransportCarriesCredential(
+  transport: McpTransport['kind'],
+  secret: Pick<McpSecretRef, 'header'>,
+): boolean {
+  return mcpCredentialChannel(secret) === MCP_TRANSPORT_CREDENTIAL_CHANNEL[transport]
 }
 
 /**

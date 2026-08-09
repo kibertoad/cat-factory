@@ -266,7 +266,36 @@ const API_PREFIX = '/api/v1'
 // consumer sees a value it cannot classify rather than a wrong one. That is the whole reason the
 // state is new instead of folded into `pending` — `pending` is a teardown still expected, and
 // reporting one that is never coming is the misreport the section exists to avoid.
-const API_VERSION = '1.35.0'
+//
+// 1.36.0: one new endpoint, `GET /api/v1/runs/{runId}/spec`, at `read` scope. It serves the same
+// specification `GET /api/v1/services/{serviceId}/spec` does, read at the branch ONE RUN pushed its
+// work to rather than at the repository default. Purely additive: no existing path, shape, scope
+// floor or error vocabulary moves.
+//
+// It is a second endpoint rather than a `ref` parameter on the first because the two answer
+// different questions, and the run one is what makes the criterion-to-evidence join complete: while
+// a run's pull request is open, every requirement that run ADDED is missing from the default
+// branch, so a caller joining `requirements` rows from `…/report` or `…/outcome` against the
+// service read finds no criterion for exactly the rows the run is about.
+//
+// Its `anchor` carries a fourth value the service read cannot answer, `not_read`, and it is a `200`
+// rather than a refusal on purpose: the run's spec read is gated on a tester having reported, so
+// that the tree served is the one the verdicts were made against, and before that the platform has
+// consulted no tree. That is the same fact `requirements.spec: "not_read"` on the run's outcome
+// already states. `provenance` is null there, and only there.
+//
+// 1.37.0: one new value, `unusable_secret`, on the `reason` of a step's unavailable tool servers
+// (carried by the run reads that project `toolServers`). It says a credential the server declares
+// named a channel its transport does not have (a header on a `stdio` child process, no header on a
+// remote url), so the value resolved and reached nothing. Additive, and the SDKs tolerate unknown
+// members by design, so a consumer built against 1.36.0 keeps parsing every response it already
+// understood and sees a value it cannot classify rather than a wrong one.
+//
+// It is a new member rather than a fold onto `missing_secret` or `reserved_secret` because those
+// two are what a consumer would act on wrongly: nothing is missing (the value resolved) and nothing
+// was refused (the platform withheld no key). Only a member of its own points at the declaration,
+// which is the one thing that has to change.
+const API_VERSION = '1.37.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -422,6 +451,9 @@ const COMPONENT_SCHEMAS = {
   // the reason `DocumentFreshness`'s note gives: the SDK emitter renders a hoisted picklist as an
   // empty interface.
   PublicServiceSpec: 'publicServiceSpecSchema',
+  // The RUN's read of the same document, at the run's own branch. Hoisted for the same reason and
+  // sharing every component below, which is the point: one artifact, two refs, one set of types.
+  PublicRunSpec: 'publicRunSpecSchema',
   PublicSpecProvenance: 'publicSpecProvenanceSchema',
   PublicSpecFeatureFile: 'publicSpecFeatureFileSchema',
   PublicSpecTruncation: 'publicSpecTruncationSchema',
@@ -1014,6 +1046,12 @@ const OPERATION_DOCS = {
     description:
       'The prescriptive specification stored in the service’s own repository under `spec/`: modules → feature groups → requirement items, each with its MoSCoW priority, its `aspirational`/`established` implementation state and its Given/When/Then acceptance criteria, plus the domain rules scoped to each group and the Gherkin `.feature` files rendered from the same tree. `provenance` names the branch and commit the read describes, because the default branch is not what a run with an open pull request is working against. The requirement ids here are the join key onto `requirements` on a run’s report and outcome, so criterion → evidence is a map lookup. Four outcomes are kept apart rather than folded: `present: false` means the default branch holds no spec, a `503` with `reason: "spec_read_failed"` means the repository could not be read, a `503` with `reason: "vcs_not_configured"` means the deployment or workspace wired no version control, and a partially readable spec is SERVED with `issues` naming each file that did not survive. Read-only: the spec’s write path is a reviewed commit.',
   },
+  getPublicRunSpec: {
+    tag: 'Spec',
+    summary: 'Get the specification one run was judged against',
+    description:
+      'The same in-repo specification the service read serves, read at the branch THIS RUN pushed its work to rather than at the repository default. That is the tree a run’s verdicts were made against: while its pull request is open, every requirement the run itself ADDED is absent from the default branch, so joining `requirements` rows from `GET /api/v1/runs/{runId}/report` or `…/outcome` against the service read leaves exactly those rows without a criterion. `provenance` names the branch and the commit, so a caller can see which tree it got. `anchor` carries one value the service read cannot answer, `not_read`: nothing was read, because the run’s spec read is gated on a tester having reported so that the tree served is the one the verdicts were made against, and `provenance` is null there and only there. The refusals are the service read’s: a `503` with `reason: "spec_read_failed"` for a repository that could not be read, `"spec_ref_unresolved"` for a branch that would not resolve, `"vcs_not_configured"` for a deployment or workspace that wired no version control. An outage never reaches a `200`.',
+  },
   listPublicKeys: {
     tag: 'Keys',
     summary: "List the workspace's API keys",
@@ -1054,6 +1092,7 @@ const TAG_DESCRIPTIONS = {
     'A run’s human decisions, from requirement-review and clarity findings through approval gates, judge verdicts, interviews and follow-ups, so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
   Evidence:
     'What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).',
+  Spec: 'The in-repo prescriptive specification: what a service must be true of, as opposed to what any one run did. Two reads, at the two refs that answer different questions: the SERVICE read is the repository’s default branch (the agreed truth), the RUN read is the branch one run pushed its work to (what that run was judged against, including the requirements it added and has not merged). The requirement ids are the join key onto `requirements` on a run’s report and outcome. Read-only (`read` scope): the spec’s write path is a reviewed commit.',
   Keys: 'The workspace’s public-API keys, provisioned headlessly. Requires an `admin`-scope key; a key minted here can never reach `admin` itself, and revoking a key revokes everything it minted.',
   Identity:
     'What the calling key is and what it may do — the self-check an integration runs at startup, so “can I do this?” does not have to be answered by attempting it and reading the 403. `read` scope.',

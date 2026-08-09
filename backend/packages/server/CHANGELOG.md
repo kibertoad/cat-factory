@@ -1,5 +1,131 @@
 # @cat-factory/server
 
+## 0.263.1
+
+### Patch Changes
+
+- 1fbd83c: Findings of the 2026-08-09 MCP audit, the low-hanging half (the rest lands in the
+  `mcp-maturation.md` tracker as slice 9 and its new inventory rows).
+
+  A tool-server credential rides the ONE channel its transport has: a `stdio` server is a child
+  process with an environment and no request, an `http` server is a remote url with headers and no
+  process. Naming the other one resolved the value and folded it into nothing, leaving the server
+  wired, advertised in the prompt, and started unauthenticated. Both directions are now refused, at
+  all three layers a definition can reach: boot validation (`unusable_credential_header` for a header
+  on `stdio`, `missing_credential_header` for an `http` credential with none, both errors), the
+  dispatch, and the Test-button probe. The two runtime refusals exist because a mothership-mode node
+  boot-validates nothing it resolves.
+
+  FLAGGED BREAK: a deployment carrying either (previously silently broken) declaration now fails boot
+  naming the server, the key and the fix. Remove the `header` on a `stdio` credential; add one to an
+  `http` credential.
+
+  PUBLIC API, additive (OpenAPI `1.37.0`): the unavailable-tool-server `reason` vocabulary gains
+  `unusable_secret`, which the run reads project. It is kept apart from `missing_secret` (the value
+  resolved) and `reserved_secret` (nothing was withheld), because only its own member points at the
+  declaration. The probe's status vocabulary gains the app-only `credential_unusable` beside it.
+
+  The rest is doc truth: the `@cat-factory/mcp-server` README's mounting example imports from
+  `./http` (the root drags the stdio boot into a Worker bundle) and its group table lists all sixteen
+  groups; three docs stop claiming two omitted operations where the omission list has three; the
+  hosted endpoint's JSON-RPC batch acceptance is stated as transport compatibility rather than a
+  protocol promise (the 2025-06-18 revision removed batching); `security-model.md` gains the
+  serving-side subsection; and the `MCP_OAUTH_CALLBACK_PATH` docstring stops claiming consumers that
+  did not exist.
+
+- 00228c6: Mothership mode: widen the persistence RPC by thirteen methods across three surfaces that were
+  already REACHABLE from a mothership-mode node and broken, rather than merely absent.
+
+  Both owner-pair content libraries' repo-SYNC surfaces go remote (prompt fragments, foundational
+  services) on the premise the skills slice already retired: a node reaches GitHub through the
+  delegated App token, so those link / sync / unlink routes were live and failing. Introduces the
+  `librarySource` scope rule, `skillSource` generalised from an accountId to an `(ownerKind, ownerId)`
+  pair, and `ownerFieldUpsert`, which closes the id-keyed upsert gap the skills slice named: both
+  source tables conflict on `id` alone and never re-`SET` their owner columns, so binding only the
+  declared owner let an in-scope caller repoint another tenant's source at a repo it controls. That
+  rule reads an absent row as a create, so its lookup reports `found` / `absent` / `unreadable`
+  rather than a nullable owner: a source table a deployment cannot read must not be spent as the
+  admission a genuinely free id has earned.
+
+  `PromptFragmentRepository` gains `softDeleteBySource` on both runtimes, with a new
+  `defineFragmentLibrarySuite` parity assertion. Unlink retired a source's fragments with a
+  per-fragment `softDelete` loop, which going remote turns into one HTTPS round trip per fragment;
+  both sibling repo-sourced libraries already retired by source.
+
+  `reviewQuestionPostRepository` `claim`/`settle`/`get` join them. The engine writes that marker, so a
+  `claim` answering `unknown_method` was read by the caller's deliberate fallback as "someone else
+  holds the claim": every parked review on a local run skipped its ticket comment, and only a `warn`
+  said so.
+
+  Two Node routing gaps are fixed with them: the foundational-services catalog trio and the generated
+  fragment-brief store were built over the absent `db` and never re-pointed, so the allow-list named
+  them remote while only the Cloudflare facade could reach them. An un-routed repo is a `TypeError` on
+  the run path rather than a clean refusal, so a new guard asserts the relation structurally: every
+  repository a content-library helper builds and the allow-list names as remote must be re-pointed.
+
+  No public API or wire-shape change.
+
+- Updated dependencies [1fbd83c]
+- Updated dependencies [00228c6]
+  - @cat-factory/orchestration@0.251.1
+  - @cat-factory/contracts@0.287.1
+  - @cat-factory/kernel@0.281.2
+  - @cat-factory/agents@0.123.2
+  - @cat-factory/mcp-server@0.27.1
+  - @cat-factory/integrations@0.153.7
+  - @cat-factory/spend@0.15.58
+
+## 0.263.0
+
+### Minor Changes
+
+- bf473bd: `/api/v1` gains `GET /api/v1/runs/{runId}/spec` at `read` scope: the in-repo specification a run was
+  judged against, read at the branch that run pushed its work to. Additive, so the OpenAPI surface
+  version moves to 1.36.0 and nothing existing changes shape, scope or error vocabulary.
+
+  It is the sibling `GET /api/v1/services/{serviceId}/spec` could not stand in for. That one answers
+  the repository's default branch, and a task's spec increment does not merge while its pull request
+  is open, so a caller joining `requirements` rows from `…/report` or `…/outcome` back to the criteria
+  they were scored against found no criterion for exactly the rows the run had added. The pair mirrors
+  the internal split the SPA's outcome card already needed for the same reason.
+
+  Both public reads and both internal ones now go through one reader, and the run read goes through
+  the engine's own evidence loader, so the tree a caller joins against is the tree the platform joined
+  against: the same branch rule, the same tester gate and the same per-run memo the verification
+  report and the outcome summary use.
+
+  The loader change worth knowing about is that it now reports WHERE a spec read stopped instead of
+  folding every outcome onto an empty view. The two reductions still fold (a coverage section states
+  its own absence), but the endpoint does not: an unwired integration and an unreadable repository are
+  `503`s carrying their own `details.reason`, and a fourth `anchor` value, `not_read`, says the
+  platform has consulted no tree for this run yet. Folded, an outage would have told an integrator
+  that a run was judged against a service declaring no requirements.
+
+  The read also resolves the branch head before walking, which adds one repository call per run
+  (memoised with the tree, so a later reader gets the commit the tester ruled at rather than one
+  resolved afterwards). That resolution now carries a second job: a run keeps naming its pull
+  request's head branch after the branch is deleted, which is the ordinary sequel to a merge, so a
+  read that finds neither a head nor an anchor there falls back to the repository default and names it
+  in `provenance.ref`. Without it the post-hoc audit this endpoint exists for was the one case that
+  answered a permanent `503`. Only a confirmed missing branch moves the read; a host that will not
+  answer for the ref leaves it alone, so an incident cannot swap the tree.
+
+  Between the two wiring refusals and the `not_read` gate, the gate now goes first: before a tester
+  reports, a run answers `not_read` whatever the deployment wired. Ranked by what was cheap to check,
+  an unwired deployment and an unconnected workspace behaved differently for the same run, one
+  answering `503` throughout and the other flipping from `200` to `503` partway through.
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+  - @cat-factory/orchestration@0.251.0
+  - @cat-factory/mcp-server@0.27.0
+  - @cat-factory/agents@0.123.1
+  - @cat-factory/integrations@0.153.6
+  - @cat-factory/kernel@0.281.1
+  - @cat-factory/spend@0.15.57
+
 ## 0.262.0
 
 ### Minor Changes

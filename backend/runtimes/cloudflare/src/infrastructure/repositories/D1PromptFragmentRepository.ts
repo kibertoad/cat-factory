@@ -178,4 +178,13 @@ export class D1PromptFragmentRepository implements PromptFragmentRepository {
       .all<PromptFragmentRow>()
     return results.map(rowToRecord)
   }
+
+  async softDeleteBySource(sourceId: string, at: number): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE prompt_fragments SET deleted_at = ?, updated_at = ? WHERE source_id = ? AND deleted_at IS NULL',
+      )
+      .bind(at, at, sourceId)
+      .run()
+  }
 }

@@ -15,9 +15,12 @@ import type { PipelineStep } from '@cat-factory/kernel'
 /**
  * Fold the CLI's tool-server startup report onto a step, returning whether anything changed.
  *
- * Applied on all three poll paths for the same reason `applyValidationReport` is, plus one of its
- * own: the CLI announces its servers ONCE, near the start of the run, so a job that settles
- * between two polls is never seen `running` and only its terminal poll can deliver the report.
+ * Applied at two sites that between them cover every poll disposition: the live poll, and once in
+ * the dispatcher AHEAD of the settled branch tree, so all five persisting arms inherit it (where
+ * `applyValidationReport` instead has a call per path). The coverage matters for the same reason
+ * as there, plus one of its own: the CLI announces its servers ONCE, near the start of the run, so
+ * a job that settles between two polls is never seen `running` and only its terminal poll can
+ * deliver the report.
  *
  * Two guards that are load-bearing rather than defensive:
  *

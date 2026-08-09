@@ -188,8 +188,8 @@ jobs:
               - '.github/workflows/ci.yml'
               - '.github/actions/**'
             # The cross-SDK smoketest (`sdk-smoketest`) boots a real backend and drives all four
-            # SDK clients plus the published MCP server against it, so it runs when EITHER side of
-            # that contract moves: the
+            # SDK clients plus both MCP access paths (the published stdio server and the hosted
+            # endpoint) against it, so it runs when EITHER side of that contract moves: the
             # SDKs themselves, the generator that writes them, the published spec, the Valibot
             # contracts the spec is generated FROM, or the controllers that serve `/api/v1`. That
             # last pair is the point — an SDK is only correct relative to the surface it talks to,
@@ -210,6 +210,9 @@ jobs:
               # changes the spec without touching any name a hand-list could hold.
               - 'backend/packages/contracts/src/routes/**'
               - 'backend/packages/server/src/modules/publicApi/**'
+              # The other half of the hosted MCP endpoint: the in-process dispatch every tool call
+              # rides. A loopback-only edit changes what the hosted phase is smoketested against.
+              - 'backend/packages/server/src/http/loopback.ts'
               - 'backend/internal/sdk-smoketest/**'
               # The harness boots the e2e test server, so a change to that wiring changes what the
               # SDKs are smoketested against.
@@ -1538,10 +1541,11 @@ jobs:
       - name: Wait for Postgres
         run: .github/scripts/wait-postgres.sh
 
-      # Two phases: the four clients compared against each other, then the published MCP server
-      # spawned as a real process against the same backend. The build above is what puts
-      # `sdk/mcp/dist/bin.js` there; the harness fails naming the build command if it is absent,
-      # because nothing about that phase can be concluded without it.
+      # The four clients compared against each other, then the MCP phases: the published server
+      # spawned as a real process, and a Streamable HTTP client against the hosted endpoint, both
+      # on the same backend. The build above is what puts `sdk/mcp/dist/bin.js` there; the harness
+      # fails naming the build command if it is absent, because nothing about that phase can be
+      # concluded without it.
       - name: Run the cross-SDK smoketest
         run: pnpm --filter @cat-factory/sdk-smoketest run smoketest
 

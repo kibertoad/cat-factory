@@ -63,6 +63,7 @@ class EmptyFragmentRepo implements PromptFragmentRepository {
   async listBySource() {
     return []
   }
+  async softDeleteBySource() {}
 }
 
 const clock: Clock = { now: () => 1_000_000 }

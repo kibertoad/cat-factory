@@ -351,11 +351,13 @@ What to know about it:
 - **Stateless, and it answers JSON.** No session to establish or tear down, so `GET` (the
   server-to-client event stream) and `DELETE` (end a session) are answered `405`. Watching a run
   means polling `tasks_get_run` / `jobs_get`, the same as on the stdio path.
-- **A JSON-RPC batch is one request that fans out.** The protocol permits an array of calls in one
-  `POST`, and each becomes its own `/api/v1` request, so a batch costs the deployment in proportion
-  to its length rather than to the one HTTP call it arrived as. Sized like any other public-API
-  usage: the per-tool result ceiling still applies to each entry, and the key's scope still gates
-  each one.
+- **A JSON-RPC batch still fans out, and is compatibility rather than contract.** The 2025-06-18
+  protocol revision, the one this server negotiates, REMOVED batching, so a current client never
+  sends an array. The transport still accepts one from a client on an older revision, and each
+  entry then becomes its own `/api/v1` request, so such a request costs the deployment in
+  proportion to its length rather than to the one HTTP call it arrived as; the per-tool result
+  ceiling and the key's scope still apply to each entry. Send one call per `POST`: the acceptance
+  is the transport's backwards compatibility, not a promise this section makes.
 - **The endpoint is public surface** under the stability contract above, from its first release. It
   is deliberately NOT in [`docs/openapi.json`](../../docs/openapi.json): a JSON-RPC endpoint has no
   operation shape to describe, and describing it would mint an SDK method in four languages for a
@@ -395,9 +397,11 @@ path adds per-host filters on top (`CAT_FACTORY_MCP_GROUPS`, `CAT_FACTORY_MCP_TO
 are a convenience rather than a boundary, since the key still carries whatever scope it was minted
 with.
 
-The two SSE endpoints are deliberately not tools on either path (a tool call has no streaming
-channel), so watching a run from a host means polling `tasks_get_run` / `jobs_get`, which the server's
-instructions say in so many words. The env-var table and a worked flow (create, start, poll, decide):
+Three operations are deliberately not tools on either path, and the server's instructions say so in
+so many words: the two SSE endpoints (a tool call has no streaming channel, so watching a run from a
+host means polling `tasks_get_run` / `jobs_get`) and the artifact byte download (a tool result is
+text or a declared content block, so list with `evidence_list_artifacts` and fetch the bytes over
+HTTP or an SDK). The env-var table and a worked flow (create, start, poll, decide):
 [`sdk/mcp/README.md`](../../sdk/mcp/README.md).
 
 Everything below still applies: the SDKs are a typed skin over exactly these endpoints, and the
@@ -406,6 +410,8 @@ error codes, scopes and paging rules are the same whichever you use.
 ## Reference
 
 Scope column = the minimum rung. Refusal codes are in the [conventions table](#the-error-envelope).
+One route is deliberately in no table below and not in the spec: `POST /api/v1/mcp`, the JSON-RPC
+endpoint with no operation shape to describe; [From an MCP host](#from-an-mcp-host) carries it.
 
 **Read this beside the generated
 [API Endpoint Reference](https://www.catfactory.ai/extend/api-reference.html), which owns the
@@ -1330,12 +1336,13 @@ exhaustive.
 What a run PROVED, for a consumer whose job is to judge it rather than debug it: a trial harness
 deciding whether to accept a change, an evaluation pipeline scoring a fleet of runs.
 
-| Method / path                            | Scope  | Behaviour                                                                   |
-| ---------------------------------------- | ------ | --------------------------------------------------------------------------- |
-| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                           |
-| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up.     |
-| `GET /api/v1/runs/:runId/artifacts`      | `read` | The run's binary artifacts, captured and task-attached (metadata; unpaged). |
-| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.             |
+| Method / path                            | Scope  | Behaviour                                                                                                                                   |
+| ---------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                                                                                           |
+| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up.                                                                     |
+| `GET /api/v1/runs/:runId/artifacts`      | `read` | The run's binary artifacts, captured and task-attached (metadata; unpaged).                                                                 |
+| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.                                                                             |
+| `GET /api/v1/runs/:runId/spec`           | `read` | The **specification this run was judged against**, at the run's own branch. See [The run's own specification](#the-runs-own-specification). |
 
 A run is addressable here on the same terms as the [decision routes](#parked-decisions-apiv1runsruniddecisions)
 that share the `/api/v1/runs/:runId/*` prefix: the runs this key could already read through
@@ -1602,8 +1609,10 @@ jq --slurpfile s spec.json 'map(. + {spec: $s[0][.id]})' verdicts.json
 
 A run's join reads the spec from the branch that run pushed to, not the default branch, because a
 task's spec increment has not merged while its pull request is open. This endpoint always answers
-the **default branch**, which is the service's agreed truth. The two differ exactly for the
-requirements a run is still adding, and `provenance.commit` is what lets a caller notice.
+the **default branch**, which is the service's agreed truth; its sibling
+[`GET /api/v1/runs/:runId/spec`](#the-runs-own-specification) answers the run's branch and is what a
+join keyed on one run should use. The two differ exactly for the requirements a run is still adding,
+and `provenance.commit` is what lets a caller notice.
 
 **What the response says about itself.** A spec read has several outcomes and this endpoint keeps
 them apart, because most of them produce an empty tree and need different reactions:
@@ -1686,6 +1695,52 @@ reviewed commit: agents propose changes through pull requests, and `state` is pr
 observed test pass. An API write would bypass exactly the review that makes the spec worth reading.
 The natural sibling, importing Gherkin as requirement items, is a separate proposal for the same
 reason: it AUTHORS requirements, so it belongs behind the review path rather than behind an API key.
+
+#### The run's own specification
+
+`GET /api/v1/runs/:runId/spec`, at `read` scope. The same document, read at the branch THAT RUN
+pushed its work to.
+
+This is the one the criterion to evidence join actually needs, and the join example above is the
+short version rather than the correct one. A task's spec increment lives on its pull request's
+branch until it merges, so while a run is open the service read is missing exactly the requirements
+that run ADDED, and every verdict naming one of them has no criterion to join to. Swapping the first
+fetch is the whole change:
+
+```sh
+# Every requirement THIS RUN was scored against, by id, from the branch it pushed to.
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/spec" \
+  | jq '[.spec.modules[].groups[].requirements[] | {key: .id, value: .}] | from_entries' > spec.json
+```
+
+Reach for the service read when the question is about the SERVICE (what is it committed to, what
+does its board declare); reach for this one whenever the answer is paired with a run.
+
+`provenance.ref` is the branch it read, and `commit` the head it was at, so a caller can see which
+of the two trees it got rather than infer it. Read it rather than assume the pull request's head:
+once a run merges, its head branch is usually deleted, and the read then answers the default branch,
+which by then carries the very requirements the run added. A pull request closed WITHOUT merging and
+then deleted is the one case where that tree is not what the run was judged against, and `ref` is
+what makes it visible. Only a branch the host confirms does not exist moves the read; a host that
+will not answer for the ref leaves it where it was, so a provider incident never quietly swaps the
+tree under a caller.
+
+The refusals are the service read's, with one addition and one omission. The addition is a fourth
+`anchor` value, `not_read`: nothing was read, and `provenance` is `null`. That is not an empty spec
+and not an outage. The run's spec read is gated on a tester having reported, so that the tree served
+is the one the verdicts were made against rather than one re-read afterwards (the promotion post-op
+rewrites this very branch as soon as the tester settles); before that gate opens, the platform has
+consulted no tree, which is the same fact `requirements.spec: "not_read"` on the run's own outcome
+already states. Both endpoints answer it from ONE read for that reason: a spec fetched here and a
+coverage count fetched there can never disagree about the tree they describe.
+
+`not_read` outranks the `vcs_not_configured` refusal, so a run answers it whatever the deployment
+wired: a read that was never due stopped at the gate and never reached the resolver. That ordering is
+what stops one unchanged deployment answering `200` early in a run and `503` later in it.
+
+The omission is `422`: a service with no linked repository cannot be reached down this path, because
+a run resolved a repository to push to before it could exist. A repository that becomes unreadable
+answers `503 spec_read_failed` here, as everywhere else on this surface.
 
 ### Key provisioning (`/api/v1/keys`)
 

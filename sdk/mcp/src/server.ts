@@ -21,7 +21,7 @@ import { CAT_FACTORY_TOOLS, type CatFactoryTool } from './tools.generated.ts'
 // tool that misdescribes its own input.
 
 /** The npm version, stamped into the SDK's `User-Agent` so a deployment can attribute calls. */
-export const MCP_SERVER_VERSION = '0.26.1'
+export const MCP_SERVER_VERSION = '0.27.1'
 
 /** The name this server reports to a host. */
 export const MCP_SERVER_NAME = 'cat-factory'

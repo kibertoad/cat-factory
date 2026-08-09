@@ -84,6 +84,7 @@ import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
 import { createPipelineAdoption, type PipelineAdoption } from '../pipelines/pipelineAdoption.js'
+import type { RunSpecRead } from './RunEvidenceLoader.js'
 import { RunEvidenceReads } from './RunEvidenceReads.js'
 import { PrVerificationReportController } from './PrVerificationReportController.js'
 
@@ -546,9 +547,11 @@ export class ExecutionService {
   }
 
   /**
-   * The three run-EVIDENCE reads, resolved by run id: the verification report, the outcome
-   * summary, and the `spec/` they join against. Thin delegates onto {@link RunEvidenceReads},
-   * which owns the one thing they must never disagree about (what "this run" resolves to).
+   * The run-EVIDENCE reads, resolved by run id: the verification report, the outcome summary, and
+   * the `spec/` they join against, that last one both folded (for the SPA's card) and with the
+   * outcome of the read kept (for `GET /api/v1/runs/:runId/spec`). Thin delegates onto
+   * {@link RunEvidenceReads}, which owns the one thing they must never disagree about (what "this
+   * run" resolves to).
    */
   private readonly evidenceReads = new RunEvidenceReads({
     getInstance: (workspaceId, executionId) =>
@@ -559,6 +562,8 @@ export class ExecutionService {
       this.prVerificationReport.composeOutcomeForRun(workspaceId, instance),
     readSpec: (workspaceId, instance) =>
       this.prVerificationReport.readRunSpec(workspaceId, instance),
+    readSpecOutcome: (workspaceId, instance) =>
+      this.prVerificationReport.readRunSpecOutcome(workspaceId, instance),
   })
 
   /** The read behind `GET /api/v1/runs/:runId/report`. */
@@ -577,6 +582,14 @@ export class ExecutionService {
   /** The read behind `GET /workspaces/:ws/executions/:executionId/spec` (the outcome card). */
   async readRunSpec(workspaceId: string, executionId: string): Promise<ServiceSpecView | null> {
     return this.evidenceReads.spec(workspaceId, executionId)
+  }
+
+  /**
+   * The read behind `GET /api/v1/runs/:runId/spec`: the same tree as {@link readRunSpec}, with the
+   * outcome of the read kept rather than folded onto an empty view.
+   */
+  async readRunSpecOutcome(workspaceId: string, executionId: string): Promise<RunSpecRead | null> {
+    return this.evidenceReads.specRead(workspaceId, executionId)
   }
 
   /**

@@ -19,24 +19,25 @@ run `pnpm gen:sdk`. `pnpm check:sdk` fails CI on drift and on version skew.
 
 **Where things live**
 
-| Path                                                       | What                                                                                                       |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `typescript/src/*.generated.ts`                            | generated models + resource clients                                                                        |
-| `typescript/src/{http,errors,sse,client,index}.ts`         | hand-written transport, error hierarchy, SSE reader, entry point                                           |
-| `python/cat_factory/{models,operations}.py`                | generated                                                                                                  |
-| `python/cat_factory/{_http,_sse,errors,client}.py`         | hand-written                                                                                               |
-| `go/{models,operations}_gen.go`                            | generated                                                                                                  |
-| `go/{client,errors,sse}.go`                                | hand-written                                                                                               |
-| `java/src/main/java/.../model/`, `.../resources/`          | generated (whole packages, wiped on regeneration)                                                          |
-| `java/src/main/java/ai/catfactory/sdk/*.java`              | hand-written (`Transport`, `CatFactoryClient`, the exception hierarchy, `EventStream`, `PageIterator`)     |
-| `mcp/src/tools.generated.ts`                               | generated tool table (input + output schemas, hints, one thunk per operation)                              |
-| `mcp/src/{server,config,result,instructions,stdio,bin}.ts` | hand-written: the filters, the result rendering, the model-facing prose, the executable                    |
-| `gatekeeper/src/bindings.generated.ts`                     | generated policy table; `index.ts` beside it is the hand-written scope-ladder half                         |
-| `gatekeeper-worker/src/**`                                 | hand-written throughout: the Worker factory, capability, key broker, webhook receiver, approval inbox      |
-| `gatekeeper-worker/src/policy/`                            | the `./policy` entry point: the policy vocabulary, with no Worker runtime, so a policy file loads anywhere |
-| `gatekeeper-worker/test/live/`                             | the same Worker against a REAL deployment, run by `@cat-factory/sdk-smoketest` (`--only=gatekeeper`)       |
-| `gatekeeper-worker/test/os-live/`                          | the same Worker against a REAL Cloudflare OS, run nightly out of a partner checkout (`GATEKEEPER_OS_DIR`)  |
-| `*/smoketest/`                                             | the per-SDK smoketest programs the cross-SDK harness drives                                                |
+| Path                                                       | What                                                                                                                                                  |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `typescript/src/*.generated.ts`                            | generated models + resource clients                                                                                                                   |
+| `typescript/src/{http,errors,sse,client,index}.ts`         | hand-written transport, error hierarchy, SSE reader, entry point                                                                                      |
+| `python/cat_factory/{models,operations}.py`                | generated                                                                                                                                             |
+| `python/cat_factory/{_http,_sse,errors,client}.py`         | hand-written                                                                                                                                          |
+| `go/{models,operations}_gen.go`                            | generated                                                                                                                                             |
+| `go/{client,errors,sse}.go`                                | hand-written                                                                                                                                          |
+| `java/src/main/java/.../model/`, `.../resources/`          | generated (whole packages, wiped on regeneration)                                                                                                     |
+| `java/src/main/java/ai/catfactory/sdk/*.java`              | hand-written (`Transport`, `CatFactoryClient`, the exception hierarchy, `EventStream`, `PageIterator`)                                                |
+| `mcp/src/tools.generated.ts`                               | generated tool table (input + output schemas, hints, one thunk per operation)                                                                         |
+| `mcp/src/{server,config,result,instructions,stdio,bin}.ts` | hand-written: the filters, the result rendering, the model-facing prose, the executable                                                               |
+| `mcp/src/http.ts`                                          | the hosted endpoint (`./http` entry): Web-standard only, bundled into deployments' Workers, its import graph pinned by `test/runtime-neutral.test.ts` |
+| `gatekeeper/src/bindings.generated.ts`                     | generated policy table; `index.ts` beside it is the hand-written scope-ladder half                                                                    |
+| `gatekeeper-worker/src/**`                                 | hand-written throughout: the Worker factory, capability, key broker, webhook receiver, approval inbox                                                 |
+| `gatekeeper-worker/src/policy/`                            | the `./policy` entry point: the policy vocabulary, with no Worker runtime, so a policy file loads anywhere                                            |
+| `gatekeeper-worker/test/live/`                             | the same Worker against a REAL deployment, run by `@cat-factory/sdk-smoketest` (`--only=gatekeeper`)                                                  |
+| `gatekeeper-worker/test/os-live/`                          | the same Worker against a REAL Cloudflare OS, run nightly out of a partner checkout (`GATEKEEPER_OS_DIR`)                                             |
+| `*/smoketest/`                                             | the per-SDK smoketest programs the cross-SDK harness drives                                                                                           |
 
 **The generator** is `scripts/sdk/` (`ir.mjs` → spec-to-IR, `surface.mjs` → the chosen public
 shape, `emit-*.mjs` → one per language plus `emit-mcp.mjs`) driven by `scripts/generate-sdks.mjs`.
@@ -46,9 +47,9 @@ resource group and method; generation FAILS without one, so a new endpoint canno
 un-callable hole in four clients. The same entry becomes an MCP tool with no second decision, with
 two escapes, both in `surface.mjs` and both fail-closed:
 
-- **`MCP_OMITTED_OPERATIONS`** names an operation that CANNOT be a tool (today the two SSE streams)
-  with the reason a caller should read. Generation fails on an unclassified streaming operation, and
-  on an entry naming an operation the spec no longer has.
+- **`MCP_OMITTED_OPERATIONS`** names an operation that CANNOT be a tool (today the two SSE streams
+  and the artifact byte download) with the reason a caller should read. Generation fails on an
+  unclassified streaming operation, and on an entry naming an operation the spec no longer has.
 - **`MCP_TOOL_HINTS`** names the operations whose consequence is real money or a merged pull request,
   supplying the `destructiveHint` / `idempotentHint` the HTTP method cannot. An operation absent from
   it keeps the protocol's own cautious defaults, which is why the table is deliberately not a blanket
@@ -68,5 +69,6 @@ never raises (the surface is additive forever); the error CLASS comes from the H
 narrow); and only idempotent requests are retried. The reasoning is in `README.md`.
 
 **See also:** `backend/internal/sdk-smoketest` (the cross-SDK parity harness, the only thing in
-CI that can see the four clients DISAGREE, and the only thing that spawns the MCP binary against a
-real backend), `backend/docs/adr/0030-public-api-surface.md`.
+CI that can see the four clients DISAGREE; its two MCP phases spawn the stdio binary and connect a
+real Streamable HTTP client to the hosted `POST /api/v1/mcp` against ONE backend, the only check
+that can see the two access paths answer differently), `backend/docs/adr/0030-public-api-surface.md`.
