@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { queryAll, type SqliteRow } from './db.js'
 import type {
   AgentContextSnapshot,
   AgentSearchQuery,
@@ -119,9 +120,9 @@ export class SqliteTelemetryIngestReader implements LocalTelemetryIngestReader {
     // marks. `execution_id IS NOT NULL` drops the un-run-scoped LLM calls (an inline call that
     // resolved no run): they are not part of "a finished run's telemetry" and there is nothing to
     // key their upload on.
-    const rows = this.db
-      .prepare(
-        `SELECT w.workspace_id, w.execution_id, MAX(w.last_write) AS last_write
+    const rows = queryAll<{ workspace_id: string; execution_id: string; last_write: number }>(
+      this.db,
+      `SELECT w.workspace_id, w.execution_id, MAX(w.last_write) AS last_write
            FROM (
              SELECT workspace_id, execution_id, MAX(created_at) AS last_write
                FROM llm_call_metrics WHERE execution_id IS NOT NULL GROUP BY 1, 2
@@ -142,12 +143,9 @@ export class SqliteTelemetryIngestReader implements LocalTelemetryIngestReader {
             AND (MAX(s.ingested_through) IS NULL OR MAX(s.ingested_through) < MAX(w.last_write))
           ORDER BY last_write ASC
           LIMIT ?`,
-      )
-      .all(quiescentBefore, limit) as unknown as {
-      workspace_id: string
-      execution_id: string
-      last_write: number
-    }[]
+      quiescentBefore,
+      limit,
+    )
     return rows.map((row) => ({
       workspaceId: row.workspace_id,
       executionId: row.execution_id,
@@ -155,7 +153,7 @@ export class SqliteTelemetryIngestReader implements LocalTelemetryIngestReader {
     }))
   }
 
-  private page<Row>(
+  private page<Row extends SqliteRow<Row>>(
     table: string,
     workspaceId: string,
     executionId: string,
@@ -163,14 +161,17 @@ export class SqliteTelemetryIngestReader implements LocalTelemetryIngestReader {
     limit: number,
   ): Row[] {
     const keyset = ingestKeyset(cursor)
-    return this.db
-      .prepare(
-        `SELECT * FROM ${table}
+    return queryAll<Row>(
+      this.db,
+      `SELECT * FROM ${table}
           WHERE workspace_id = ? AND execution_id = ?${keyset.sql}
           ORDER BY created_at ASC, id ASC
           LIMIT ?`,
-      )
-      .all(workspaceId, executionId, ...keyset.binds, limit) as unknown as Row[]
+      workspaceId,
+      executionId,
+      ...keyset.binds,
+      limit,
+    )
   }
 
   listMetrics(

@@ -1,5 +1,10 @@
 # Custom binary artifact stores
 
+> **Writing a provider is on the website**:
+> [Custom Providers](https://www.catfactory.ai/extend/custom-providers.html) owns the code
+> seams a deployment implements, this store among them. This page is the cache and
+> resolution DESIGN behind it.
+
 A deployment can put the bytes of the platform's binary artifacts (the UI Tester's screenshots and
 the reference design images they are reviewed against) wherever it likes, by implementing one
 interface and registering it in code. This is the extension seam for storage the platform does not

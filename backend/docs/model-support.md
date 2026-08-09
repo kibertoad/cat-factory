@@ -168,7 +168,7 @@ read-only at **`GET /models`**: labels and provider/model ids only, never keys.
 ## 3. Model resolution, which model runs a step
 
 Resolved by `resolveStepModelRef` /
-[`agent-routing.ts`](../packages/agents/src/agents/agent-routing.ts), in precedence
+[`runtime/routing.ts`](../packages/agents/src/agents/runtime/routing.ts), in precedence
 order:
 
 1. **The block's pinned model** (`Block.modelId`) → `resolveBlockModel(modelId)` →

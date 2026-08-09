@@ -1,5 +1,12 @@
 # Kubernetes ephemeral environments (incl. local k3s)
 
+> **Operating this is on the website**:
+> [Provision Ephemeral Environments](https://www.catfactory.ai/operate/environments.html)
+> owns connecting and running a backend, and
+> [Deploy on Kubernetes](https://www.catfactory.ai/deploy/kubernetes.html) owns the cluster
+> side. This page is the backend's own DESIGN: the render/deploy engines and the namespace
+> lifecycle.
+
 The Kubernetes environment backend provisions a per-PR preview environment by applying an
 operator-authored set of Kubernetes/k3s manifests into a fresh namespace, reached over the
 kube-apiserver. It reuses the same apiserver client (bearer token + custom-CA TLS) as the

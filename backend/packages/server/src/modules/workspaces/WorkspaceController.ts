@@ -303,6 +303,11 @@ async function snapshotBinaryGenerators(
     summary: view.summary,
     modalities: view.modalities,
     ...(view.mediaTypes.length > 0 ? { mediaTypes: view.mediaTypes } : {}),
+    // Projected only when the definition DECLARED some. An empty array and an absent field are
+    // one state in the coverage rule ("only the coarse facts are known"), and carrying the empty
+    // array would make every builder render "supports nothing" for a definition that said
+    // nothing: the same absent-reads-as-zero mistake the rest of this surface avoids.
+    ...(view.capabilities.length > 0 ? { capabilities: view.capabilities } : {}),
   }))
   return generators.length > 0 ? { generators } : {}
 }

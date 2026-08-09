@@ -161,6 +161,10 @@ The failure is silent, which is why this is a rule rather than a preference. An 
 
 `scripts/check-component-imports.mjs` enforces it (CI's `repo-guards` job). If a panel section is missing and the data looks right, check the import first.
 
+### Type a chip map with `BadgeColor`, never `string`
+
+A status → chip map feeding a `<UBadge :color="…">` types its values as `BadgeColor` (`utils/badge.ts`), which is derived from `UBadge`'s own prop type rather than restated as a literal union. Typed `string`, the binding does not compile and the reflex is `as any` at each call site: seven of them had accumulated. That cast also accepts a colour Nuxt UI does not define, which renders as an unstyled badge with nothing failing.
+
 ## Interface modes (basic / advanced)
 
 The SPA renders at one of two **interface tiers**. `basic` (the default) is the everyday

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { binaryGeneratorCapabilitySchema } from './binary-capabilities.js'
 import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 import { uploadApiContractSchema } from './foundational-services.js'
 import {
@@ -141,6 +142,22 @@ export const binaryGeneratorDefinitionSchema = v.object({
    */
   mediaTypes: v.optional(v.array(mediaTypeSchema)),
   /**
+   * What it can be ASKED FOR while generating: a reference image, a mask edit, a seed, a
+   * transparent background (see `binary-capabilities.ts`). This is what decides which per-step
+   * generation options the builder offers, what the brief tells the agent it may send, and which
+   * option requirements admission refuses.
+   *
+   * Absent is a DOCUMENTED state and the honest default for a definition nobody has audited: it
+   * means "only the coarse facts are known", exactly as an absent {@link mediaTypes} does, so
+   * every option requirement against it is reported as unverifiable rather than refused. Declare
+   * it once the endpoint's parameters are actually known, and the step gains a real check.
+   *
+   * The vocabulary is closed and deliberately narrow: a capability belongs here only when the
+   * platform exposes something because of it. A vendor knob nobody else has stays in
+   * {@link guidance}, where a sentence can say what it does.
+   */
+  capabilities: v.optional(v.array(binaryGeneratorCapabilitySchema)),
+  /**
    * The API's base URL. Stated to the agent so it does not have to infer one from the contract,
    * and refused at registration unless it is `https` (or loopback) — the credential above rides
    * this request.
@@ -190,6 +207,17 @@ export const registeredBinaryGeneratorSchema = v.object({
   modalities: v.array(binaryModalitySchema),
   /** The concrete formats it pins down, when it declares any. Shown as detail, never a filter. */
   mediaTypes: v.optional(v.array(mediaTypeSchema)),
+  /**
+   * What it can be asked for while generating. Unlike the two fields above this one does more
+   * than label a candidate: the builder shows a step's generation options against it, so a
+   * projection that omitted it would leave the SPA offering a reference-image field for an
+   * endpoint that takes no image, and the refusal would arrive at run start.
+   *
+   * Still identity-grade, so it stays inside the rule the omissions here follow: it is what the
+   * integration IS, not how to reach it. The credential key name, the endpoint and the contracts
+   * remain absent, because a workspace viewer has no business learning them.
+   */
+  capabilities: v.optional(v.array(binaryGeneratorCapabilitySchema)),
 })
 export type RegisteredBinaryGenerator = v.InferOutput<typeof registeredBinaryGeneratorSchema>
 

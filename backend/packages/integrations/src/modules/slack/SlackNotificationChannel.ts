@@ -114,7 +114,7 @@ export class SlackNotificationChannel implements NotificationChannel {
       : []
     const token = await this.deps.secretCipher.decrypt(connection.tokenCipher)
     const message = renderNotificationMessage(notification, channel, mentions)
-    await this.slack.chatPostMessage(token, message as unknown as Record<string, unknown>)
+    await this.slack.chatPostMessage(token, message)
   }
 
   /**

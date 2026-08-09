@@ -5,6 +5,7 @@ import {
   hasTrait,
 } from '@cat-factory/agents'
 import type {
+  BinaryCandidateStepState,
   BinaryOutputConfig,
   FoundationalServiceSelection,
   PipelineStep,
@@ -74,6 +75,9 @@ export interface FoundationalServiceResolver {
     workspaceId: string,
     config: BinaryOutputConfig | undefined,
     generatorSource?: BinaryGeneratorSource,
+    /** The step's live candidate state, which is what tells a comparison step's two passes
+     *  apart. Absent ⇒ the step does not compare, or has not staged anything yet. */
+    candidates?: BinaryCandidateStepState | null,
   ): Promise<InjectedContextFile[]>
 }
 

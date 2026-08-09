@@ -1,5 +1,11 @@
 # Custom agent & gate authoring ergonomics
 
+> **Authoring a gate or a judge is on the website**:
+> [Custom Gates & Judges](https://www.catfactory.ai/extend/custom-gates.html) owns the
+> registration and the shapes, with agent kinds on
+> [Custom Agents](https://www.catfactory.ai/extend/custom-agents.html). This page is the
+> ergonomics layer both sit on: the helpers, and what fails loudly at boot.
+
 Companion to [`custom-agents.md`](./custom-agents.md) (the three-stage agent model) and the
 "Gates vs agents" section of [`../../CLAUDE.md`](../../CLAUDE.md). That doc covers _what_ the
 extension seams are; this one covers the ergonomics layered on top so writing a custom agent

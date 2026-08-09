@@ -26,7 +26,10 @@ export function followUpController(): Hono<AppEnv> {
   buildHonoRoute(app, getFollowUpsContract, async (c) => {
     const state = await c
       .get('container')
-      .executionService.getFollowUps(param(c, 'workspaceId'), c.req.valid('param').executionId)
+      .executionService.decisions.getFollowUps(
+        param(c, 'workspaceId'),
+        c.req.valid('param').executionId,
+      )
     return c.json(state, 200)
   })
 
@@ -35,7 +38,7 @@ export function followUpController(): Hono<AppEnv> {
     const { executionId, itemId } = c.req.valid('param')
     const state = await c
       .get('container')
-      .executionService.fileFollowUp(param(c, 'workspaceId'), executionId, itemId)
+      .executionService.decisions.fileFollowUp(param(c, 'workspaceId'), executionId, itemId)
     return c.json(state, 200)
   })
 
@@ -44,7 +47,7 @@ export function followUpController(): Hono<AppEnv> {
     const { executionId, itemId } = c.req.valid('param')
     const state = await c
       .get('container')
-      .executionService.queueFollowUp(param(c, 'workspaceId'), executionId, itemId)
+      .executionService.decisions.queueFollowUp(param(c, 'workspaceId'), executionId, itemId)
     return c.json(state, 200)
   })
 
@@ -54,7 +57,12 @@ export function followUpController(): Hono<AppEnv> {
     const { answer } = c.req.valid('json')
     const state = await c
       .get('container')
-      .executionService.answerFollowUp(param(c, 'workspaceId'), executionId, itemId, answer)
+      .executionService.decisions.answerFollowUp(
+        param(c, 'workspaceId'),
+        executionId,
+        itemId,
+        answer,
+      )
     return c.json(state, 200)
   })
 
@@ -63,7 +71,7 @@ export function followUpController(): Hono<AppEnv> {
     const { executionId, itemId } = c.req.valid('param')
     const state = await c
       .get('container')
-      .executionService.dismissFollowUp(param(c, 'workspaceId'), executionId, itemId)
+      .executionService.decisions.dismissFollowUp(param(c, 'workspaceId'), executionId, itemId)
     return c.json(state, 200)
   })
 

@@ -14,6 +14,7 @@
 import { computed } from 'vue'
 import type { PipelineStep } from '~/types/execution'
 import { BINARY_OUTPUT_STATE_KEYS, binaryOutputView } from '~/utils/binaryOutput'
+import { binaryCandidateView } from '~/utils/binaryCandidates'
 import CopyButton from '~/components/common/CopyButton.vue'
 
 // Two callers, one renderer — the same split `StepEffortReport` makes: the generic step-detail
@@ -26,6 +27,16 @@ const props = withDefaults(defineProps<{ step: PipelineStep; variant?: 'card' | 
 const { t } = useI18n()
 
 const view = computed(() => binaryOutputView(props.step))
+
+/**
+ * The CANDIDATE decision, when this step compared before delivering.
+ *
+ * Rendered here rather than left to the comparison window, because that window is reachable only
+ * while the run is PARKED on it: once the choice is made, a step click routes to the kind's own
+ * result view and the record of what was compared, and by whom, would have nowhere to live. This
+ * is the same placement rule the artifacts above it follow, one decision earlier.
+ */
+const candidates = computed(() => binaryCandidateView(props.step))
 
 /**
  * The outcome's own copy, from the shared exhaustive map — shared so the collapsed section row
@@ -54,6 +65,28 @@ const state = computed(() => {
       <UIcon name="i-lucide-image" class="h-3.5 w-3.5" />
       <span>{{ t('binaryOutput.heading') }}</span>
     </div>
+
+    <!-- The CANDIDATE decision, when this step compared before delivering. It sits ABOVE the
+         delivery outcome because it happened first, and because "which of four was this" is the
+         question the artifacts below cannot answer. An AUTOMATIC keep says so: nobody looked. -->
+    <p
+      v-if="candidates && candidates.state.candidates.length > 0"
+      class="text-[12px] leading-relaxed text-slate-300"
+      data-testid="binary-output-candidate-decision"
+    >
+      {{
+        candidates.automatic
+          ? t('binaryOutput.candidates.automatic', { total: candidates.state.candidates.length })
+          : candidates.state.choice
+            ? t('binaryOutput.candidates.chosen', {
+                kept: candidates.state.choice.kept.length,
+                total: candidates.state.candidates.length,
+              })
+            : t('binaryOutput.candidates.awaiting', {
+                total: candidates.state.candidates.length,
+              })
+      }}
+    </p>
 
     <!-- What happened, in one sentence, before any list. Four of the five states have no list
          at all, and the fifth still needs its qualifications read alongside it. -->

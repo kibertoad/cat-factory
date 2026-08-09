@@ -14,6 +14,7 @@ import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { WebCryptoSecretCipher } from '@cat-factory/server'
 import type { AppConfig } from './config'
 import type { Env } from './env'
+import { envVars } from './env'
 import { D1DocumentConnectionRepository } from './repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from './repositories/D1DocumentRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
@@ -41,7 +42,7 @@ import { logger } from './observability/logger'
  * resolver holds no mutable state, so the configuration IS the whole answer.
  */
 export function deploymentDocumentDeps(env: Env): Partial<CoreDependencies> {
-  const { resolver } = resolveDeploymentDocumentResolver(deploymentEnvRecord(env))
+  const { resolver } = resolveDeploymentDocumentResolver(envVars(env))
   return resolver ? { deploymentDocumentResolver: resolver } : {}
 }
 
@@ -53,12 +54,7 @@ export function deploymentDocumentDeps(env: Env): Partial<CoreDependencies> {
  * the report is a boot-shaped event this runtime has to stage for itself.
  */
 export function deploymentDocumentProblems(env: Env): { source: string; problem: string }[] {
-  return resolveDeploymentDocumentResolver(deploymentEnvRecord(env)).problems
-}
-
-/** The Worker's bindings read as a plain variable bag, which is all the resolver wants. */
-function deploymentEnvRecord(env: Env): Record<string, string | undefined> {
-  return env as unknown as Record<string, string | undefined>
+  return resolveDeploymentDocumentResolver(envVars(env)).problems
 }
 
 /**

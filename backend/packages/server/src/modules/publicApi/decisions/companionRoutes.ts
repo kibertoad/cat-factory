@@ -52,7 +52,9 @@ export function registerFollowUpDecisionRoutes(app: Hono<AppEnv>): void {
     }
     const { workspaceId, scoped } = gated
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
-      c.get('container').executionService.fileFollowUp(workspaceId, scoped.execution.id, itemId),
+      c
+        .get('container')
+        .executionService.decisions.fileFollowUp(workspaceId, scoped.execution.id, itemId),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
@@ -66,7 +68,9 @@ export function registerFollowUpDecisionRoutes(app: Hono<AppEnv>): void {
     }
     const { workspaceId, scoped } = gated
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
-      c.get('container').executionService.queueFollowUp(workspaceId, scoped.execution.id, itemId),
+      c
+        .get('container')
+        .executionService.decisions.queueFollowUp(workspaceId, scoped.execution.id, itemId),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
@@ -83,7 +87,12 @@ export function registerFollowUpDecisionRoutes(app: Hono<AppEnv>): void {
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
-        .executionService.answerFollowUp(workspaceId, scoped.execution.id, itemId, answer),
+        .executionService.decisions.answerFollowUp(
+          workspaceId,
+          scoped.execution.id,
+          itemId,
+          answer,
+        ),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
@@ -99,7 +108,9 @@ export function registerFollowUpDecisionRoutes(app: Hono<AppEnv>): void {
     }
     const { workspaceId, scoped } = gated
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
-      c.get('container').executionService.dismissFollowUp(workspaceId, scoped.execution.id, itemId),
+      c
+        .get('container')
+        .executionService.decisions.dismissFollowUp(workspaceId, scoped.execution.id, itemId),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })

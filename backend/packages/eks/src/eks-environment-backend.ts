@@ -2,6 +2,8 @@ import {
   EKS_ACCESS_KEY_ID_SECRET_KEY,
   EKS_SECRET_ACCESS_KEY_SECRET_KEY,
   type EksProvisionConfig,
+  eksProvisionConfigSchema,
+  parseStoredProviderConfig,
 } from '@cat-factory/contracts'
 import { type EnvironmentBackendProvider, kubernetesLogic } from '@cat-factory/integrations'
 import type { EnvironmentManifest } from '@cat-factory/kernel'
@@ -46,7 +48,13 @@ export const eksEnvironmentBackend: EnvironmentBackendProvider = {
   },
   fromManifest: (manifest) => ({
     kind: 'eks',
-    eks: manifest.providerConfig as unknown as EksProvisionConfig,
+    // Re-parsed rather than asserted, like every other native backend's stored config
+    // (see `parseStoredProviderConfig`).
+    eks: parseStoredProviderConfig(
+      eksProvisionConfigSchema,
+      manifest.providerConfig,
+      'EKS environment manifest',
+    ),
   }),
   buildProvider: (ctx) => new EksEnvironmentProvider({ urlPolicy: ctx.urlPolicy }),
 }
@@ -65,6 +73,6 @@ function toEksManifest(config: EksProvisionConfig): EnvironmentManifest {
     provision: { method: 'POST', pathTemplate: '' },
     response: {},
     ...(config.defaultTtlMs ? { defaultTtlMs: config.defaultTtlMs } : {}),
-    providerConfig: config as unknown as Record<string, unknown>,
+    providerConfig: config,
   }
 }

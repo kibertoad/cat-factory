@@ -31,7 +31,7 @@ adding a field to `RiskPolicy` — the platform learning about a gate it does no
 ## Decision
 
 One per-step `gateConfig`, on the extensible `StepOptions` bag
-(`stepOptions[i].gateConfig`, [pipeline-step-options](../../docs/initiatives/pipeline-step-options.md)),
+(`stepOptions[i].gateConfig`, [pipeline-step-options](../../../docs/initiatives/pipeline-step-options.md)),
 so it needs no column and no migration on either runtime. `gates[i]` stays the answer to "is there
 a human checkpoint here"; `gateConfig` carries everything that checkpoint needs in order to be more
 specific than "a human".

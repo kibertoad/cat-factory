@@ -1,5 +1,11 @@
 # Native environment adapters
 
+> **Choosing between a manifest and code is on the website**:
+> [Provision Ephemeral Environments](https://www.catfactory.ai/operate/environments.html#when-the-manifest-isn-t-enough)
+> owns that decision and
+> [Custom Providers](https://www.catfactory.ai/extend/custom-providers.html) owns the seam.
+> This page is the CONTRACT for writing one adapter.
+
 cat-factory provisions **ephemeral environments** (the live URLs the Tester agent runs
 against) through the `EnvironmentProvider` port. The default implementation,
 `HttpEnvironmentProvider`, is fully generic: it interprets a declarative **manifest** of
@@ -260,6 +266,28 @@ providerConfig: v.optional(v.record(v.string(), v.unknown())),
 validates it off `req.manifest.providerConfig`. It serializes inside the existing
 `manifest_json` JSON column on both runtimes (D1 + Drizzle): **no migration**, automatic
 cross-runtime parity.
+
+#### Re-read it, and validate what the OPERATION uses
+
+Validate the bag on the way out with `parseStoredProviderConfig(schema, raw, label)` rather than
+asserting it. The connect form did validate it on the way in, but the value has been through
+storage since: a config written before a schema change, or edited in the database, otherwise flows
+on as a fake-valid object and misbehaves deep inside a provision instead of being named here.
+
+Then split that read by what each call actually reads, because the two halves fail in opposite
+directions. **A provision should refuse an off-contract config**, having no honest way to build
+from one. **A teardown should not**: refusing there leaves a live namespace, cluster or preview
+with nothing able to delete it, and nothing later fixes that by itself, so the sweep re-fails on
+the same parse forever while the resource keeps costing money. So parse the CONNECTION on the
+reclaim paths (`teardown` + `confirmTeardown`) and the full config everywhere else. The built-ins
+model this: `kubernetesConnectionConfigSchema` carries the apiserver URL and its TLS settings and
+nothing about manifests or URL derivation, and the Kubernetes provider's `parseConnection` is the
+seam a subclass widens (the EKS one adds the AWS coordinates its token is minted from).
+
+The fields the reclaim itself reads stay validated: there is no safe default for which cluster to
+send a `DELETE` to, and a GitHub Enterprise deployment whose API root silently fell back to the
+public one would post its teardown to the wrong host. Forgive drift in what you do not read, never
+in what you do.
 
 ### The connection is required, and that is intended
 

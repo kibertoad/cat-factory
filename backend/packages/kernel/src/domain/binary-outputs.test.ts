@@ -347,6 +347,67 @@ describe('renderBinaryOutputBrief', () => {
     expect(brief).toContain(BINARY_OUTPUT_DECLARATION_TAG)
   })
 
+  // A comparison step is TWO dispatches of one step, given opposite instructions. Getting the
+  // phase wrong is silent in both directions: a first pass told to deliver makes the very choice
+  // the comparison exists to take away, and a second pass told to generate candidates restarts
+  // the comparison with the human's decision already recorded and about to be ignored.
+  it('asks the FIRST pass of a comparison step for candidates, not deliverables', () => {
+    const brief = renderBinaryOutputBrief({
+      config: { storageServiceId: 'asset-store', comparison: { perGenerator: 2 } },
+      storage: view(),
+      contextServices: [],
+      unresolvedContextIds: [],
+    })
+    expect(brief).toContain('## Candidates for review')
+    expect(brief).toContain('```binary-candidates')
+    expect(brief).not.toContain(
+      `Declare what you stored in the fenced \`\`\`${BINARY_OUTPUT_DECLARATION_TAG}`,
+    )
+  })
+
+  it('asks the SECOND pass to deliver exactly what was kept', () => {
+    const brief = renderBinaryOutputBrief({
+      config: { storageServiceId: 'asset-store', comparison: {} },
+      storage: view(),
+      contextServices: [],
+      unresolvedContextIds: [],
+      candidates: {
+        status: 'chosen',
+        candidates: [{ id: 'cand_1', service: 'asset-store', location: 'staging/a.png' }],
+        invalidEntries: 0,
+        omitted: 0,
+        unusablePreviews: 0,
+        choice: { kept: [{ candidateId: 'cand_1' }], discarded: [], at: 1 },
+      },
+    })
+    expect(brief).toContain('## The candidate decision')
+    expect(brief).toContain('KEEP the candidate staged at `staging/a.png`')
+    expect(brief).toContain(BINARY_OUTPUT_DECLARATION_TAG)
+    expect(brief).not.toContain('## Candidates for review')
+  })
+
+  // A comparison whose first pass produced nothing gets no second pass at all, so the only brief
+  // that could read this is the first one. Treating it as a step with no comparison is the safe
+  // reading: it delivers directly, which is what a comparison with nothing to compare owed.
+  it('falls back to a plain delivering brief once a comparison settled with no choice', () => {
+    const brief = renderBinaryOutputBrief({
+      config: { storageServiceId: 'asset-store', comparison: {} },
+      storage: view(),
+      contextServices: [],
+      unresolvedContextIds: [],
+      candidates: {
+        status: 'no_choice',
+        noChoiceReason: 'undeclared',
+        candidates: [],
+        invalidEntries: 0,
+        omitted: 0,
+        unusablePreviews: 0,
+      },
+    })
+    expect(brief).not.toContain('## Candidates for review')
+    expect(brief).toContain(BINARY_OUTPUT_DECLARATION_TAG)
+  })
+
   it('states an unresolved storage id as a hard stop rather than omitting it', () => {
     const brief = renderBinaryOutputBrief({
       config: { storageServiceId: 'gone' },
