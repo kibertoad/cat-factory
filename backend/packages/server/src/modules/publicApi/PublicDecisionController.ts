@@ -179,7 +179,11 @@ function registerForkDecisionRoutes(app: Hono<AppEnv>): void {
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
-        .executionService.chooseFork(workspaceId, scoped.execution.id, c.req.valid('json')),
+        .executionService.decisions.chooseFork(
+          workspaceId,
+          scoped.execution.id,
+          c.req.valid('json'),
+        ),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })

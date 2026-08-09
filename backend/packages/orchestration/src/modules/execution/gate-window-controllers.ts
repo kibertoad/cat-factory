@@ -29,6 +29,7 @@ import { RalphController } from './RalphController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import { ReviewGateController, type ReviewGateControllerDeps } from './ReviewGateController.js'
+import { BinaryCandidateController } from './BinaryCandidateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { InputGateController } from './InputGateController.js'
 import { PrReviewController } from './PrReviewController.js'
@@ -216,6 +217,16 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     clock,
     notificationService,
   })
+  const binaryCandidateController = new BinaryCandidateController({
+    blockRepository,
+    executionRepository,
+    workRunner,
+    stateMachine,
+    stepGraph,
+    idGenerator,
+    clock,
+    notificationService,
+  })
   return {
     testerController,
     ralphController,
@@ -224,6 +235,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     reviewGate,
     forkDecisionController,
     prReviewController,
+    binaryCandidateController,
   }
 }
 

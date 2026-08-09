@@ -1654,6 +1654,7 @@
       "mergePr": "Unisci PR",
       "chooseApproach": "Scegli approccio",
       "triageFollowUps": "Decidi i follow-up",
+      "chooseCandidates": "Decidi i candidati",
       "elapsedTooltip": "Tempo trascorso su questo passaggio",
       "reviewFindings": "Esamina i rilievi",
       "dryRun": "Prova",
@@ -1932,8 +1933,10 @@
       "decisionRequired": "Decisione richiesta",
       "followUpsParked": "Il Coder ha sollevato follow-up che richiedono una decisione prima che la run possa continuare. Gestisci ogni elemento (crea, rimanda indietro, rispondi o scarta) nella finestra dei follow-up.",
       "forkParked": "Questo passo del Coder attende la scelta di un approccio di implementazione prima di scrivere codice. Scegli un approccio proposto (o inserisci il tuo) nella finestra di decisione.",
+      "candidatesParked": "Questo passo ha generato candidati e attende che qualcuno scelga quali conservare prima di consegnare qualcosa. Confrontali e conserva quelli che vuoi nella finestra dei candidati.",
       "openFollowUps": "Apri i follow-up",
       "chooseApproach": "Scegli approccio",
+      "chooseCandidates": "Scegli i candidati",
       "expandAll": "Espandi tutte le sezioni",
       "collapseAll": "Comprimi tutte le sezioni",
       "copyRawOutput": "Copia l'output grezzo",
@@ -4327,7 +4330,45 @@
         "3d-model": "Modelli 3D",
         "3d-scene": "Scene 3D",
         "document": "Documenti"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "Immagine di riferimento",
+        "multi-reference": "Più immagini di riferimento",
+        "instruction-edit": "Modifica da istruzione",
+        "mask-edit": "Modifica con maschera",
+        "negative-prompt": "Prompt negativo",
+        "seed": "Seed fisso",
+        "aspect-ratio": "Proporzioni",
+        "candidate-batch": "Più candidati per chiamata",
+        "upscale": "Ingrandimento",
+        "transparent-background": "Sfondo trasparente",
+        "tileable": "Ripetibile senza giunzioni"
+      },
+      "binaryCapabilityUnknown": "{capability} (una capacità che questa installazione non definisce)",
+      "binaryCapabilityUnsupported": "Nessuna integrazione selezionata supporta {capabilities}, richiesta dalle opzioni di generazione di questo passo. Rimuovi l’opzione oppure seleziona un’integrazione che dichiari la capacità.",
+      "binaryCapabilityUnverifiable": "Nessuna integrazione selezionata dichiara di supportare {capabilities}, ma una di esse non dichiara alcuna capacità, quindi non è stato possibile verificarlo. Il passo parte comunque; conferma dall’API dell’integrazione.",
+      "binaryReferenceImages": "Immagini di riferimento",
+      "binaryReferenceImagesPlaceholder": "ruolo{'|'}posizione{'|'}servizio, una per riga",
+      "binaryReferenceImagesUnusable": "Non salvate come riferimento: {entries}. Ogni riga deve essere ruolo{'|'}posizione, con ruolo style, subject, composition o base.",
+      "binaryEditMode": "Modifica esistente",
+      "binaryEditModeNone": "Genera nuovo",
+      "binaryEditModeInstruction": "Da un’istruzione",
+      "binaryEditModeMask": "Regione mascherata",
+      "binaryEditInstruction": "Cosa cambiare",
+      "binaryEditInstructionPlaceholder": "es. sostituire il cielo",
+      "binaryNegativePrompt": "Prompt negativo",
+      "binaryNegativePromptPlaceholder": "cosa evitare",
+      "binaryAspectRatio": "Proporzioni",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binarySeed": "Seed",
+      "binarySeedPlaceholder": "seed fisso",
+      "binaryTransparent": "Sfondo trasparente",
+      "binaryTileable": "Ripetibile senza giunzioni",
+      "binaryUpscale": "Ingrandisci il risultato",
+      "binaryComparison": "Confronta i candidati prima di consegnare",
+      "binaryPerGenerator": "Candidati per integrazione",
+      "binaryMultiSelect": "Consenti di tenerne più di uno",
+      "binaryComparisonUnreachable": "Questo passo può produrre un solo candidato per soggetto, quindi non ci sarebbe nulla da confrontare e l’unico verrebbe tenuto senza chiedere. Seleziona una seconda integrazione oppure aumenta il numero di candidati per integrazione."
     },
     "progress": {
       "status": {
@@ -4373,6 +4414,9 @@
       "forkDecision": {
         "proposing": "Proposta di approcci…",
         "choose": "Scegli un approccio"
+      },
+      "binaryCandidates": {
+        "choose": "Scegli un candidato"
       },
       "elapsedTooltip": "Tempo trascorso su questo passaggio",
       "prReview": {
@@ -5023,7 +5067,12 @@
       "unknownGenerators": "Ha indicato un'integrazione generativa che questa installazione non registra: {ids}. La voce viene mantenuta come dichiarata; l'integrazione si registra nel codice dell'installazione, non in questo spazio di lavoro. | Ha indicato integrazioni generative che questa installazione non registra: {ids}. Le loro voci vengono mantenute come dichiarate; le integrazioni si registrano nel codice dell'installazione, non in questo spazio di lavoro.",
       "generatorsUnverified": "Non è stato possibile leggere le integrazioni generative di questa installazione alla chiusura del passaggio, quindi le integrazioni indicate sotto non sono state verificate. Le voci sono conservate come dichiarate."
     },
-    "unknownGeneratorBadge": "Non registrata"
+    "unknownGeneratorBadge": "Non registrata",
+    "candidates": {
+      "automatic": "È stato generato {total} candidato e tenuto automaticamente, senza revisione.",
+      "chosen": "Sono stati tenuti {kept} dei {total} candidati generati.",
+      "awaiting": "Sono stati generati {total} candidati e attendono di essere confrontati."
+    }
   },
   "brainstorm": {
     "title": {
@@ -7550,6 +7599,33 @@
       "unresolved": "Questo strumento non ha restituito un indirizzo per l'area di lavoro corrente.",
       "resolverFailed": "Questo strumento non è riuscito a calcolare il proprio indirizzo. La causa è nella console del browser, per chi gestisce questa installazione.",
       "unsafeUrl": "Questo strumento ha restituito un indirizzo che non è un collegamento web, quindi non è stato aperto."
+    }
+  },
+  "binaryCandidates": {
+    "title": "Candidati generati",
+    "titleWithBlock": "Candidati generati: {title}",
+    "subtitle": "Confronta ciò che ogni integrazione ha prodotto e tieni quello che vuoi",
+    "automatic": "È stato generato un solo candidato, quindi è stato tenuto automaticamente. Nessuno lo ha esaminato.",
+    "unlabelledSubject": "Nessun soggetto dichiarato",
+    "noPreview": "Nessuna anteprima disponibile",
+    "fromGenerator": "Da {generator}",
+    "unattributed": "Nessuna integrazione registrata",
+    "kept": "Tenuto",
+    "keptAs": "Tenuto come {id}",
+    "storeAsPlaceholder": "salva con questo id",
+    "notePlaceholder": "Cosa cambiare al momento del salvataggio (facoltativo)",
+    "missingAlias": "Dai a ogni candidato tenuto un id proprio, altrimenti verrebbero salvati tutti con lo stesso nome.",
+    "duplicateAlias": "Due candidati tenuti condividono un id. Due artefatti in una posizione sono un artefatto.",
+    "keepAction": "Tieni {count}",
+    "warning": {
+      "omitted": "{count} candidati sono stati scartati oltre il limite, quindi questo elenco è un prefisso. ",
+      "invalid": "{count} voci dichiarate erano illeggibili e mancano qui. ",
+      "previews": "{count} link di anteprima sono stati rifiutati, quindi quei candidati appaiono senza immagine."
+    },
+    "noChoice": {
+      "undeclared": "Il passo non ha mai dichiarato i suoi candidati, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",
+      "parseFailed": "La dichiarazione dei candidati del passo non era leggibile, quindi non c’era nulla da confrontare. L’esecuzione è proseguita.",
+      "noCandidates": "Il passo non ha preparato alcun candidato, quindi non c’era nulla da confrontare. L’esecuzione è proseguita."
     }
   }
 }

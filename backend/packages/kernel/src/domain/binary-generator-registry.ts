@@ -1,6 +1,7 @@
 import type {
   ApiContractDocument,
   ApiContractSummary,
+  BinaryGeneratorCapability,
   BinaryGeneratorCredential,
   BinaryGeneratorDefinition,
   BinaryModality,
@@ -49,6 +50,13 @@ export interface BinaryGeneratorView {
   description: string
   modalities: BinaryModality[]
   mediaTypes: string[]
+  /**
+   * What it can be ASKED FOR while generating. EMPTY means the definition declared none, which
+   * the coverage rule reads as "only the coarse facts are known" rather than as a denial: the
+   * same reading an empty {@link mediaTypes} gets, and the reason both are projected as arrays
+   * here while the wire form omits them.
+   */
+  capabilities: BinaryGeneratorCapability[]
   endpoint?: string
   guidance?: string
   credential?: BinaryGeneratorCredential
@@ -132,6 +140,7 @@ export class BinaryGeneratorRegistry {
         description: definition.description,
         modalities: [...definition.modalities],
         mediaTypes: [...(definition.mediaTypes ?? [])],
+        capabilities: [...(definition.capabilities ?? [])],
         ...(definition.endpoint ? { endpoint: definition.endpoint } : {}),
         ...(definition.guidance ? { guidance: definition.guidance } : {}),
         ...(definition.credential ? { credential: definition.credential } : {}),

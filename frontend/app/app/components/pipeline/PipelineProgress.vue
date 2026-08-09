@@ -11,6 +11,7 @@ import {
   FAILED_STEP_META,
   containerPhaseLabel,
   dedicatedParkView,
+  REDIRECT_PARK_PRESENTATION,
 } from '~/utils/pipelineRender'
 import { prReviewPhase } from '~/utils/prReviewProgress'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
@@ -88,6 +89,17 @@ function forkPhase(step: PipelineStep): 'proposing' | 'awaiting_choice' | null {
  */
 function prReviewAwaiting(step: PipelineStep): boolean {
   return step.prReview?.status === 'awaiting_selection'
+}
+
+/**
+ * Whether a binary-output step is parked awaiting a human candidate choice. Asked of the shared
+ * park recognizer rather than re-derived from `step.binaryCandidates`, so this chip and the
+ * generic approval gate below (which suppresses itself for exactly the parks that recognizer
+ * names) can never disagree about who owns the park. That disagreement is what leaves a parked
+ * run showing no action at all.
+ */
+function candidatesAwaiting(step: PipelineStep): boolean {
+  return dedicatedParkView(step, props.instance) === 'binary-candidates'
 }
 
 /**
@@ -662,6 +674,31 @@ const ITEM_ICON: Record<string, string> = {
             </span>
             <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
               {{ t('pipeline.progress.prReview.review') }}
+            </span>
+          </button>
+
+          <!-- A generating step parked between its candidate pass and its delivering pass: a
+               purpose-built chip opening the comparison window, ahead of the generic approval
+               gate (mirrors the fork-decision and pr-review chips above). Without it the step
+               shows no action at all, because the generic gate below is suppressed for every
+               park a dedicated window owns. -->
+          <button
+            v-if="candidatesAwaiting(s)"
+            type="button"
+            data-testid="binary-candidates-open"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-cyan-500/50 bg-cyan-500/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-cyan-400/60"
+            @click="ui.openBinaryCandidates(instance.id, i)"
+          >
+            <span
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-cyan-500/40 bg-cyan-500/15"
+            >
+              <UIcon
+                :name="REDIRECT_PARK_PRESENTATION['binary-candidates'].icon"
+                class="h-3 w-3 text-cyan-300"
+              />
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
+              {{ t('pipeline.progress.binaryCandidates.choose') }}
             </span>
           </button>
 
