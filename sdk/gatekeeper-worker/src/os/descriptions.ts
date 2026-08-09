@@ -8,12 +8,11 @@
 // place the staleness lands is an approval prompt, which is the worst possible place for it.
 //
 // The description is MARKDOWN rendered to a human, and the argument bag inside it is agent-authored
-// text. So arguments go inside a fence sized one tick longer than the longest backtick run in the
-// body, which is this repo's own rule for captured output reaching a rendered surface: a fixed
-// ``` fence closes on the first ``` inside the payload and spills the rest, plus everything after
-// it, into what the approver reads as the platform's own prose.
+// text, so every hole carrying one goes through `fenced` (`../markdown.ts`), which is where that
+// rule and the reason for it live.
 
 import { resolveConsequence, type GatekeeperBinding } from '@cat-factory/gatekeeper-bindings'
+import { fenced } from '../markdown.js'
 import type { ActionDescription, ActionKind, ObservationDescription } from './protocol.js'
 
 /** Who a described call is made as, for the approver reading it. */
@@ -24,22 +23,6 @@ export interface CallSubject {
   tier: string
   /** The paired deployment the call lands on. */
   deployment: string
-}
-
-/**
- * Fence a payload so it cannot break out of the code block that holds it.
- *
- * Sized one backtick longer than the longest run the payload contains, which is what makes it
- * total: a payload holding ```` closes a ``` fence and everything after it, including the rest of
- * this description, renders as prose the approver reads as ours.
- */
-function fenced(payload: string): string {
-  const longestRun = [...payload.matchAll(/`+/g)].reduce(
-    (longest, match) => Math.max(longest, match[0].length),
-    0,
-  )
-  const fence = '`'.repeat(Math.max(3, longestRun + 1))
-  return `${fence}json\n${payload}\n${fence}`
 }
 
 /** The arguments as an approver should see them: the bag that will actually be forwarded. */

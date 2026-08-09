@@ -491,8 +491,8 @@ official examples do not exceed. Nothing in slices 1 to 6 needs undoing.
    governance above it, and neither replaces the other.
 6. **Smaller contract items.** No observer/verifier sharing governance (`addObserver` must
    verify a new viewer could directly read everything historically observed, or throw to block
-   the share); no `[Symbol.dispose]` / `.dup()` stub lifecycle on the capability; a hook
-   delivery is itself an observation to authorize.
+   the share); a hook delivery is itself an observation to authorize. (The `[Symbol.dispose]` /
+   `.dup()` stub lifecycle was on this list and landed with slice 7.)
 
 **Governing principle for slices 7 to 10: organic evolution, never a Cloudflare-OS-specific
 hack.** OS support is the goal and a matured integration surface is the side product, and the way
@@ -521,7 +521,8 @@ that already existed: `GatekeeperVendor` (a named `WorkerEntrypoint`) → `CatFa
 `CatFactoryResource` (a Durable Object) → the session. Four exports the deployment's entry module
 names, resolved at runtime as `ctx.exports.<Name>`, with `/health` asking about all four in one pass
 because a perfectly bound Worker whose entry module is three lines short is undiscoverable and that
-failure has no request path of its own.
+failure has no request path of its own. It REPORTS the answer (`os.discoverable`, with a blocker
+per cause) rather than refusing on it: see the gotcha below on what a check may and may not fail.
 
 **A resource is the PAIRED CAT-FACTORY WORKSPACE, named by a URLPattern over the deployment
 origin** (`<CAT_FACTORY_BASE_URL>/*`). It follows from the credential rather than being a modelling
@@ -621,9 +622,10 @@ fall behind; the answer to that is slice 10's nightly leg, not a dependency.
   answer that from the observer's own tier (the plausible rule: their tier reaches every
   operation that produced the observed data), throw, which blocks the share; a share blocked
   loudly beats an observation leaked quietly. Record the eventual rule here.
-- **The small print**: `[Symbol.dispose]` and `.dup()` lifecycle on sessions and queue stubs;
-  runtime argument validation on the entrypoint path (`capnweb-validate`, generated from the
-  session signatures, matching the reference gatekeepers' build step).
+- **The small print**: runtime argument validation on the entrypoint path (`capnweb-validate`,
+  generated from the session signatures, matching the reference gatekeepers' build step). The stub
+  LIFETIME half of this item landed with slice 7 instead, because the queue is slice 8's headline
+  and a queue held past its parameter's lifetime is not a refinement of it (see the gotchas).
 
 ### 10. The live leg, and the MCP-bridge probe
 
@@ -710,6 +712,30 @@ here:
   ONE pass, because an operator who learns the next unset binding only after redeploying wires a
   deployment one restart at a time. The check is derived from `GatekeeperEnv` through an exhaustive
   `Record`, so a binding this check would silently pass over fails the build instead.
+- **A health check may only FAIL on what the deployment asked for.** The correction above has a
+  mirror image, and slice 7 walked straight into it: `/health` began refusing whenever the four
+  object-model exports were absent, which turned every `/rpc`-only deployment red the moment it
+  bumped this package. Both failures are the same one wearing opposite clothes, a monitor saying
+  something its operator cannot act on. So the rule is two-sided: a check asks about EVERYTHING,
+  and it fails only on what makes the deployment's OWN doors refuse. What is optional is reported
+  beside the status (`os: { discoverable, blockers }`) with a reason per cause and its remedy, and
+  the operator who wants that door keys a monitor on it.
+- **A stub is a LOAN whose term is the call it arrived on.** Workers RPC disposes a parameter stub
+  when the method returns, so `startSession(queue)`, which returns immediately and hands back a
+  session that uses the queue for the rest of its life, was holding a reference the runtime had
+  already torn down. `dup()` takes a reference of one's own and the session releases it when it is
+  disposed. Two things follow beyond the fix. Owning a thing means having somewhere to give it
+  back, which is what made `[Symbol.dispose]` on the capability the natural home for ending the
+  session's pending actions too. And this seam is invisible to the suite by construction: the
+  class handed to a workspace is a `DurableObjectClass` only that workspace's machinery can
+  instantiate, so what the specs can pin is the shell's `holdQueue`/release PAIR, and the real
+  boundary belongs to slice 10's nightly leg.
+- **`capnweb`'s `RpcTarget` IS the runtime's, inside workerd.** It reads like a bug that a session
+  built on the `capnweb` class crosses NATIVE Workers RPC, which serializes only
+  `cloudflare:workers` targets. The library re-exports the runtime's own class rather than
+  declaring one, which is what lets a single capability object serve both doors. Stated in
+  `capability.ts` because the wrong reading (two base classes, a `DataCloneError` on the first
+  bind) is the more obvious one and costs a redesign.
 - **"Set it in wrangler.toml or with `wrangler secret put`" is a refusal that leaks credentials.**
   Offered both mechanisms, an operator picks the one that is a file, and the file is committed. The
   mechanism each binding takes is now a fact stated once (`BINDING_KINDS`) and cited by both

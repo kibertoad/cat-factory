@@ -21,12 +21,20 @@ import type { ActionKind, ApprovalQueue, ResourceDescription, ResourceObject } f
 import { ActionLedger, queueGovernance } from './queue.js'
 import { renderTierSessionTypes, SESSION_INTERFACE_NAME } from './session-types.js'
 
-/** What the account imbues a resource object with when it hands the class to the workspace. */
+/**
+ * What the account imbues a resource object with when it hands the class to the workspace.
+ *
+ * The account and NOTHING else. The URL the workspace matched is deliberately not here: under this
+ * Gatekeeper's own model a resource IS the paired workspace, so every URL that matches the pattern
+ * binds the same one and the matched URL decides nothing. Carrying it would be state whose only
+ * effect is that the next reader has to work out it decides nothing, and it had already been
+ * assigned the pattern rather than the match without anything noticing. A consumer that genuinely
+ * needs the bound URL adds it back WITH the reader that wants it, which is also the change that
+ * would say which of the two it meant.
+ */
 export interface ResourceProps {
   /** The account this resource is bound for. Every key minted through it is stamped with this. */
   accountId: string
-  /** The resource URL the workspace matched, which is the paired deployment's origin. */
-  resourceUrl: string
 }
 
 /** One bound resource: the session it opens, its types, and the action lifecycle behind it. */
@@ -73,6 +81,12 @@ export class ResourceCore implements ResourceObject {
    * funnels through the one `invoke` closure, which submits actions to this queue and authorizes
    * observations against it. The tier policy underneath is the FLOOR, so an operation the policy
    * never granted is absent from the object rather than something the queue has to refuse.
+   *
+   * The queue passed here is OWNED by the session that comes back: it is released, along with
+   * every action that session left undecided, when the session is disposed. A caller reaching this
+   * over RPC therefore hands in a reference of its own rather than the parameter it received (see
+   * `resource.ts`), because the parameter's lifetime ends when this call returns and the session's
+   * does not.
    */
   async startSession(approvalQueue: ApprovalQueue): Promise<unknown> {
     const gatekeeper = this.#gatekeeper()
@@ -81,7 +95,7 @@ export class ResourceCore implements ResourceObject {
       accountId,
       queueGovernance({
         queue: approvalQueue,
-        ledger: this.#ledger,
+        ledger: this.#ledger.openSession(),
         subject: {
           accountId,
           tier: gatekeeper.tierForAccount(accountId).name,
@@ -89,6 +103,17 @@ export class ResourceCore implements ResourceObject {
         },
       }),
     )
+  }
+
+  /**
+   * How many submitted actions this object is still holding, across every live session.
+   *
+   * Exposed for the same reason the ledger counts them: the ONE unbounded thing about a long-lived
+   * resource object is this set, and a count that does not fall back to zero when the sessions are
+   * gone is the leak rather than a slow day.
+   */
+  get pendingActionCount(): number {
+    return this.#ledger.pendingCount
   }
 
   /**

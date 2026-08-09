@@ -10,6 +10,13 @@
 // Methods live on a per-session PROTOTYPE, never on the instance. Cap'n Web deliberately refuses
 // to serve an RpcTarget's own instance properties (they would leak private internals), so an
 // instance-property capability would be a set of methods no caller can reach.
+//
+// ONE object serves both doors, which looks like it should not work and does. `RpcTarget` is
+// imported from `capnweb` while the Cloudflare OS door returns this across NATIVE Workers RPC,
+// which serializes only `cloudflare:workers` targets. They are the same class: inside workerd
+// capnweb re-exports the runtime's own `RpcTarget` rather than declaring one, which is what lets a
+// session cross either wire. It is stated here because the alternative reading (two incompatible
+// base classes, a `DataCloneError` on the first bind) is the more obvious one.
 
 import { RpcTarget } from 'capnweb'
 import type { GatekeeperBinding } from '@cat-factory/gatekeeper-bindings'
@@ -25,6 +32,7 @@ import {
 import { GatekeeperError, PolicyError } from './errors.js'
 import type { Actor, KeyBroker } from './keys.js'
 import { applyMask } from './masking.js'
+import { fenced } from './markdown.js'
 import { describeBinding, type CompiledTier } from './policy/compile.js'
 import type { ApprovalCard, GatekeeperState, RunState } from './state.js'
 
@@ -60,8 +68,8 @@ const RESERVED_METHODS = [
  */
 export interface SessionGovernance {
   /**
-   * Authorize a read. Called with the result already in hand, which the contract explicitly
-   * allows, so the description can name what was actually read. Throws to refuse.
+   * Authorize a read, BEFORE it is made. Throws to refuse, and a refusal means the upstream call
+   * never happened rather than happening and being withheld.
    */
   observe(binding: GatekeeperBinding, args: Record<string, unknown>): Promise<void>
   /**
@@ -83,6 +91,14 @@ export interface SessionGovernance {
     args: Record<string, unknown>,
     perform: () => Promise<T>,
   ): Promise<T>
+  /**
+   * The session is gone: release everything it was holding on the workspace's behalf.
+   *
+   * Called from the capability's own disposer, which the runtime runs when the last stub pointing
+   * at it is dropped. Without it a session's undecided actions and its hold on the workspace's
+   * queue would both outlive the only thing that could ever settle them.
+   */
+  close(): void
 }
 
 export interface SessionDependencies {
@@ -174,14 +190,18 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
     const governance = deps.governance
     if (governance === undefined) return applyMask(await perform(), tier.mask)
 
-    // A read runs first and is authorized before its result is handed back, which is what the
-    // contract asks for and why the order is not the obvious one: an authorizer that has to decide
-    // before the fetch can only describe the REQUEST, and the interesting question is usually about
-    // what came back. A refusal throws, so nothing reaches the caller either way.
+    // A read is authorized BEFORE it is performed. The contract permits the other order (the
+    // result may be in hand when the authorizer is asked), and it buys nothing here while costing
+    // something real. It buys nothing because the description is DERIVED from the operation table:
+    // the route, the scope floor, the argument bag and whether the read serves captured agent text
+    // are all known before the call, and handing an approver the rows themselves would put the
+    // very bytes `prohibitAllSharing` exists to withhold into an approval prompt. It costs
+    // something because performing first means a refused read has already been made: a real
+    // request, with a key minted for the occasion, pulling a telemetry sink's captured prompts into
+    // this Worker in order to ask whether the workspace wanted them read.
     if (binding.readOnly) {
-      const result = await perform()
       await governance.observe(binding, args)
-      return applyMask(result, tier.mask)
+      return applyMask(await perform(), tier.mask)
     }
     return applyMask(await governance.act(binding, args, perform), tier.mask)
   }
@@ -199,7 +219,15 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
   }
 
   class Capability extends RpcTarget {}
-  const proto = Capability.prototype as unknown as Record<string, unknown>
+  const proto = Capability.prototype as unknown as Record<string | symbol, unknown>
+
+  // The end of the session, in the one place the runtime signals it. Both doors dispose an
+  // `RpcTarget` whose stubs have all been dropped, and both call this on the way; a `/rpc` session
+  // brings no governance and so has nothing to release. It is keyed by SYMBOL, which is also why
+  // it cannot collide with a binding or be reached over RPC as a method.
+  proto[Symbol.dispose] = (): void => {
+    deps.governance?.close()
+  }
 
   for (const binding of tier.granted) {
     proto[binding.name] = (args: Record<string, unknown> = {}) => invoke(binding.name, args)
@@ -253,9 +281,12 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
           'workspace, or predate this Gatekeeper.',
       )
     }
+    // The card's own title is agent- and user-authored: it came off a task somebody filed, rode
+    // the delivery in, and is about to be interpolated into Markdown a person reads in order to
+    // decide something. It gets the same fence the argument bag gets, for the same reason.
     await observeLocal(
       `Inspect approval card ${cardId}`,
-      `The card raised for run ${card.runId}: ${card.title}`,
+      `The card raised for run ${card.runId}, titled:\n\n${fenced(card.title, '')}`,
     )
     const list = (await invoke('decisions_list', { runId: card.runId })) as DecisionListShape
     const parks = pendingParks(list).map((park) => ({

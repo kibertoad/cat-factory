@@ -18,6 +18,7 @@ import { DurableObject } from 'cloudflare:workers'
 import type { GatekeeperEnv } from '../env.js'
 import type { GatekeeperPolicy } from '../policy/compile.js'
 import type { ActionKind, ApprovalQueue, ResourceDescription, ResourceObject } from './protocol.js'
+import { holdQueue } from './queue.js'
 import { ResourceCore, type ResourceProps } from './resource-core.js'
 
 export type { ResourceProps } from './resource-core.js'
@@ -48,8 +49,10 @@ export function createGatekeeperResource(options: {
       return this.#core.getTypeScriptTypes()
     }
 
+    // The one method where being the SHELL is not delegation: this is where the RPC boundary is,
+    // so this is where the queue's lifetime is taken over from the call that carried it in.
     async startSession(approvalQueue: ApprovalQueue): Promise<unknown> {
-      return this.#core.startSession(approvalQueue)
+      return this.#core.startSession(holdQueue(approvalQueue))
     }
 
     async getAutoApprovableActions(): Promise<ActionKind[]> {

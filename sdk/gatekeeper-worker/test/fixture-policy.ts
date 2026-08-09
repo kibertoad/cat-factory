@@ -71,10 +71,13 @@ export const FIXTURE_POLICY: GatekeeperPolicy = {
 
     workspace: {
       description:
-        'What a Cloudflare OS workspace agent gets: the delivery loop, and one look at a run’s ' +
-        'model calls.',
+        'What a Cloudflare OS workspace agent gets: the delivery loop, a run’s parked decisions, ' +
+        'and one look at its model calls.',
       keyScope: 'write',
-      allow: [...DELIVERY_LOOP, 'debug_list_llm_calls'],
+      // `decisions_list` is here because `approvals_inspect` is a RESERVED method every capability
+      // carries and it reads the run's live decision list through the same `invoke`: a tier that
+      // does not grant it ships an inbox method that refuses on the operation it was built on.
+      allow: [...DELIVERY_LOOP, 'decisions_list', 'debug_list_llm_calls'],
     },
   },
 

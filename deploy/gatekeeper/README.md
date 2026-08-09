@@ -68,7 +68,7 @@ The Worker serves five routes:
 | `ALL /rpc`                     | `OS_SHARED_TOKEN` | The Cap'n Web endpoint your OS deployment talks to.           |
 | `POST /admin/enroll`           | `OS_SHARED_TOKEN` | Re-assert the webhook registration. Also runs hourly on cron. |
 | `POST /admin/retire?actorId=…` | `OS_SHARED_TOKEN` | Offboarding: revoke every key minted for one OS user.         |
-| `GET /health`                  | none              | Green only when every binding is set and the policy compiles. |
+| `GET /health`                  | none              | Green when every binding is set and the policy compiles.      |
 
 `/rpc` is bearer-gated even though the intended path is a Worker service binding, which never
 traverses the internet: a Worker with a route attached is reachable by anyone who finds it, and a
@@ -90,7 +90,7 @@ Holding that binding is the authorization on this path: it is configuration only
 operator can write, and the call never leaves Cloudflare's network. `OS_SHARED_TOKEN` gates the HTTP
 routes only, which is where a caller that is not a Cloudflare OS comes in.
 
-Two things on this side have to be true, and `GET /health` checks both:
+Two things on this side have to be true, and `GET /health` reports on both under `os`:
 
 - **`src/index.ts` exports all four names the object model resolves** (`GatekeeperVendor`,
   `CatFactoryAccount`, `CatFactoryResource`, `CatFactoryVerifier`). They are resolved by name at
@@ -101,6 +101,11 @@ Two things on this side have to be true, and `GET /health` checks both:
   turning discovery on also handed a capability to every unrostered caller on `/rpc`. To raise one
   account above the tier, read its id from the account's description in the workspace and grant that
   id directly.
+
+The template ships with discovery OFF (`autoProvisionedTier: null`), so a fresh copy answers
+`{"ok": true, "os": {"discoverable": false, …}}` with that named as the blocker. That is a report
+rather than a failure: the routes above all work without it. Once you have named a tier and
+deployed, `os.discoverable` is what a monitor on the OS door watches.
 
 ## Write the policy
 

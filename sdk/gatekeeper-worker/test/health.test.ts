@@ -9,10 +9,17 @@
 // request path happens to read leaves an operator with a green monitor over a Gatekeeper whose
 // every `/rpc` call answers 503, which is worse than no check at all: it is a check that agrees
 // the deployment is fine.
+//
+// The mirror-image failure has its own specs below: a check that REFUSES for something the
+// deployment did not ask for. Cloudflare OS discoverability is reported here and never folded into
+// the status, because a Gatekeeper serving `/rpc` and nothing else is a supported deployment, and
+// a monitor going red on it would be this route answering a question nobody asked.
 
 import { describe, expect, it } from 'vitest'
 import type { GatekeeperEnv } from '../src/env.js'
+import type { DiscoverabilityReport } from '../src/os/discoverability.js'
 import { OS_EXPORTS } from '../src/os/exports.js'
+import type { GatekeeperPolicy } from '../src/policy/index.js'
 import { createGatekeeperWorker } from '../src/worker.js'
 import { FIXTURE_POLICY } from './fixture-policy.js'
 
@@ -58,8 +65,9 @@ function exported(): Record<string, () => unknown> {
 async function health(
   env: PartialEnv,
   exports: Record<string, unknown> = exported(),
+  policy: GatekeeperPolicy = FIXTURE_POLICY,
 ): Promise<Response> {
-  const worker = createGatekeeperWorker({ policy: FIXTURE_POLICY })
+  const worker = createGatekeeperWorker({ policy })
   const response = await worker.fetch?.(
     new Request(`${ORIGIN}/health`),
     env as GatekeeperEnv,
@@ -71,11 +79,16 @@ async function health(
   return response
 }
 
+/** The discoverability half of a green response. */
+async function osReport(response: Response): Promise<DiscoverabilityReport> {
+  return ((await response.json()) as { os: DiscoverabilityReport }).os
+}
+
 describe('GET /health', () => {
-  it('is green only when every binding is set and the object model is exported', async () => {
+  it('is green when every binding is set, and says the OS door is open too', async () => {
     const response = await health(configured())
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ ok: true })
+    expect(await response.json()).toEqual({ ok: true, os: { discoverable: true, blockers: [] } })
   })
 
   // The two the assembly reads on its own (`CAT_FACTORY_BASE_URL`, `PROVISIONING_KEY`) were the
@@ -114,19 +127,42 @@ describe('GET /health', () => {
 
   // A perfectly bound Worker whose entry module is three lines short is undiscoverable, and that
   // failure has no request path of its own: a workspace simply never finishes installing it, which
-  // is not a call anyone monitors.
-  it('refuses when the object model is not exported, naming every missing export', async () => {
+  // is not a call anyone monitors. So it is REPORTED here, naming every missing export at once.
+  it('reports a missing object model without calling the deployment unhealthy', async () => {
     const exports = exported()
     delete exports[OS_EXPORTS.account]
     delete exports[OS_EXPORTS.resource]
 
     const response = await health(configured(), exports)
-    expect(response.status).toBe(503)
-    const body = (await response.json()) as { error: { reason: string; message: string } }
-    expect(body.error.reason).toBe('not_configured')
-    expect(body.error.message).toContain(OS_EXPORTS.account)
-    expect(body.error.message).toContain(OS_EXPORTS.resource)
-    expect(body.error.message).not.toContain(OS_EXPORTS.vendor)
+    // The routes all work: this Worker's `/rpc`, admin and webhook doors do not go through the
+    // object model at all, and turning them red would be a monitor an operator cannot act on.
+    expect(response.status).toBe(200)
+    const report = await osReport(response)
+    expect(report.discoverable).toBe(false)
+    expect(report.blockers.map((blocker) => blocker.reason)).toEqual(['missing_exports'])
+    expect(report.blockers[0]?.detail).toContain(OS_EXPORTS.account)
+    expect(report.blockers[0]?.detail).toContain(OS_EXPORTS.resource)
+    expect(report.blockers[0]?.detail).not.toContain(OS_EXPORTS.vendor)
+  })
+
+  // The second half of "could a workspace use this", and the one the exports check cannot see: a
+  // Worker exporting all four still opens no session when no tier catches the accounts it mints.
+  it('reports a policy that names no autoProvisionedTier, beside the exports', async () => {
+    const exports = exported()
+    delete exports[OS_EXPORTS.verifier]
+
+    const response = await health(configured(), exports, {
+      ...FIXTURE_POLICY,
+      autoProvisionedTier: null,
+    })
+    const report = await osReport(response)
+    // Both blockers in ONE pass, for the same reason the bindings are named in one: an operator who
+    // learns the next one only after redeploying wires a deployment one restart at a time.
+    expect(report.blockers.map((blocker) => blocker.reason)).toEqual([
+      'missing_exports',
+      'no_auto_provisioned_tier',
+    ])
+    expect(report.blockers[1]?.detail).toContain('autoProvisionedTier')
   })
 
   // A secret named as something to write in wrangler.toml is how an admin key reaches a

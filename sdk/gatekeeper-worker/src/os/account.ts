@@ -94,10 +94,10 @@ export function createGatekeeperAccount(options: {
             'holds; a second workspace takes a second Gatekeeper deployment.',
         )
       }
-      const props: ResourceProps = {
-        accountId: this.ctx.props.accountId,
-        resourceUrl: resource.urlPattern,
-      }
+      // The account, and nothing else: the URL is what was CHECKED, not what has to be carried.
+      // Every URL this pattern matches binds the same paired workspace, so recording which one a
+      // caller happened to name would be state no reader could act on (`ResourceProps`).
+      const props: ResourceProps = { accountId: this.ctx.props.accountId }
       return { class: loopbackExport<unknown>(this.ctx.exports, 'resource', props), resource }
     }
 

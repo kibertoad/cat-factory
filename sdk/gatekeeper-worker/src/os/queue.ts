@@ -19,6 +19,15 @@
 // result nothing reads and whose caller was told nothing. An action that outlives its session is a
 // SIMULATING gatekeeper's problem, and simulation is deliberately not what this one does
 // (`awaitDecision: true` says so on every action it submits).
+//
+// So an entry's LIFETIME IS ITS SESSION'S, and nothing else bounds it. A TTL would be the wrong
+// bound twice over: the thing being waited on is a person deciding, which has no deadline worth
+// guessing, and expiring an entry would settle an action the workspace can still legitimately
+// apply. What DOES end is the session: when the workspace drops it, every action it submitted is
+// refused and dropped together, so the ledger of a long-lived resource object holds pending work
+// for live sessions only. Without that, an approval card nobody ever answered pinned its entry for
+// the object's whole lifetime, and `#take`'s "the session that submitted it has ended" was a
+// sentence nothing made true.
 
 import type { GatekeeperBinding } from '@cat-factory/gatekeeper-bindings'
 import type { SessionGovernance } from '../capability.js'
@@ -34,6 +43,32 @@ interface PendingAction {
   reject: (error: unknown) => void
   /** What the caller is waiting on, for a refusal that can name it. */
   label: string
+  /** The session that submitted it, so ending that session settles exactly its own actions. */
+  session: number
+}
+
+/**
+ * One session's view of the ledger: what it may register, and the end of everything it registered.
+ *
+ * A handle rather than a second store, because the IDS are the object's (see {@link ActionLedger})
+ * while the LIFETIME is the session's, and the two facts have to live in one map for a decision
+ * naming an id to find the entry it settles.
+ */
+export interface LedgerSession {
+  /** Register an effect, returning the id to submit it under and the promise the caller awaits. */
+  register(
+    label: string,
+    perform: () => Promise<unknown>,
+  ): { id: number; settled: Promise<unknown> }
+  /**
+   * Drop a registration whose submission never reached the queue.
+   *
+   * Without it a queue that throws would leave an entry the workspace can never decide, and the
+   * caller would be told about the submission failure while the ledger silently grew.
+   */
+  abandon(id: number): void
+  /** The session is over: refuse every action it left undecided and drop them. */
+  end(): void
 }
 
 /**
@@ -45,28 +80,17 @@ interface PendingAction {
  */
 export class ActionLedger {
   #nextId = 1
+  #nextSession = 1
   readonly #pending = new Map<number, PendingAction>()
 
-  /** Register an effect, returning the id to submit it under and the promise the caller awaits. */
-  register(
-    label: string,
-    perform: () => Promise<unknown>,
-  ): { id: number; settled: Promise<unknown> } {
-    const id = this.#nextId++
-    const settled = new Promise<unknown>((resolve, reject) => {
-      this.#pending.set(id, { perform, resolve, reject, label })
-    })
-    return { id, settled }
-  }
-
-  /**
-   * Drop a registration whose submission never reached the queue.
-   *
-   * Without it a queue that throws would leave an entry the workspace can never decide, and the
-   * caller would be told about the submission failure while the ledger silently grew.
-   */
-  abandon(id: number): void {
-    this.#pending.delete(id)
+  /** Open one session's handle. Ending it is what bounds the entries it registered. */
+  openSession(): LedgerSession {
+    const session = this.#nextSession++
+    return {
+      register: (label, perform) => this.#register(session, label, perform),
+      abandon: (id) => this.#pending.delete(id),
+      end: () => this.#endSession(session),
+    }
   }
 
   /**
@@ -100,9 +124,50 @@ export class ActionLedger {
     )
   }
 
-  /** How many actions are still waiting. Used by the resource's own description. */
+  /**
+   * How many actions are still waiting, across every live session on this object.
+   *
+   * Here so the ledger's one growth path is observable: an entry is added by a session and removed
+   * by a decision, an abandoned submission, or that session ending, and a count that does not
+   * return to zero once the sessions are gone is the leak this exists to fail a test on.
+   */
   get pendingCount(): number {
     return this.#pending.size
+  }
+
+  #register(
+    session: number,
+    label: string,
+    perform: () => Promise<unknown>,
+  ): { id: number; settled: Promise<unknown> } {
+    const id = this.#nextId++
+    const settled = new Promise<unknown>((resolve, reject) => {
+      this.#pending.set(id, { perform, resolve, reject, label, session })
+    })
+    return { id, settled }
+  }
+
+  /**
+   * End one session: every action it submitted and nobody decided is refused, and nothing is
+   * performed.
+   *
+   * The awaiting caller is told, rather than left on a promise that can no longer settle: the
+   * session it called through is gone, so no `applyAction` can ever reach its effect again.
+   */
+  #endSession(session: number): void {
+    // Deleting the entry the iterator is standing on is defined behaviour for a Map, so this
+    // walks the live one rather than a snapshot of it.
+    for (const [id, action] of this.#pending) {
+      if (action.session !== session) continue
+      this.#pending.delete(id)
+      action.reject(
+        new GatekeeperError(
+          'session_ended',
+          `The session that submitted this action (${action.label}) ended before the workspace ` +
+            'decided it, so it was not performed.',
+        ),
+      )
+    }
   }
 
   #take(id: number, verb: string): PendingAction {
@@ -120,6 +185,39 @@ export class ActionLedger {
 }
 
 /**
+ * Take a reference to the workspace's queue that outlives the call it arrived on.
+ *
+ * Workers RPC disposes every stub a call received as a PARAMETER the moment that call returns, and
+ * `startSession` returns immediately with a session that goes on using the queue for the rest of
+ * its life. Without this the first governed read or write would authorize against a stub the
+ * runtime had already torn down, and the failure would reach the caller as a broken connection
+ * rather than as anything naming the queue. `dup()` is what the RPC contract offers for exactly
+ * this case.
+ *
+ * The check is not defensiveness about a malformed argument: `ResourceCore` is also driven
+ * IN-PROCESS, by this package's own suite and by anything embedding it, and there the queue is an
+ * ordinary object that was never a stub and has nothing to duplicate.
+ *
+ * Paired with {@link releaseQueue} and kept beside it, because a duplicate taken here and released
+ * anywhere else is a leak that nothing about either half would show on its own.
+ */
+export function holdQueue(queue: ApprovalQueue): ApprovalQueue {
+  const stub = queue as Partial<{ dup: () => ApprovalQueue }>
+  return typeof stub.dup === 'function' ? stub.dup() : queue
+}
+
+/**
+ * Release this session's hold on the workspace's queue.
+ *
+ * The other half of {@link holdQueue}: a duplicate nobody disposes holds the workspace's end of
+ * the connection open for the resource object's whole lifetime. The optional call is the
+ * in-process case again, where nothing was duplicated and there is nothing to give back.
+ */
+function releaseQueue(queue: ApprovalQueue): void {
+  ;(queue as Partial<Disposable>)[Symbol.dispose]?.()
+}
+
+/**
  * The governance one session applies, over the queue the workspace handed it at `startSession`.
  *
  * Every method here is a thin translation: what to describe comes from the operation table
@@ -128,7 +226,7 @@ export class ActionLedger {
  */
 export function queueGovernance(deps: {
   queue: ApprovalQueue
-  ledger: ActionLedger
+  ledger: LedgerSession
   subject: CallSubject
 }): SessionGovernance {
   return {
@@ -164,6 +262,14 @@ export function queueGovernance(deps: {
         throw error
       }
       return (await settled) as T
+    },
+
+    close(): void {
+      // Order matters: the actions are refused while the queue is still ours to hold, so an
+      // awaiting caller is told the session ended rather than left on a promise whose only route
+      // to a decision has already been released.
+      deps.ledger.end()
+      releaseQueue(deps.queue)
     },
   }
 }

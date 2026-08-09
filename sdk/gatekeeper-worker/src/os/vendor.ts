@@ -78,19 +78,18 @@ export function createGatekeeperVendor(options: {
     }
 
     /**
-     * The session types, rendered for the DEFAULT tier.
+     * The session types, rendered for the tier an auto-provisioned account will get.
      *
-     * The vendor is asked this before any account exists, so the tier is the one an account will
-     * get: that is what `defaultTier` means. The authoritative copy for a bound session is the
-     * resource's own `getTypeScriptTypes()`, which knows the tier the account actually resolved to
-     * and is the one `ResourceDescription.tsType` points at.
+     * That is `autoProvisionedTier`, never `defaultTier`: the two are different knobs answering
+     * different questions (`policy/compile.ts` holds why), and this door only ever mints accounts.
+     * The tier is resolved WITHOUT an account, because there is none yet and inventing one to
+     * resolve through would make the refusal name an `acct_…` id no operator could find. The
+     * authoritative copy for a bound session is the resource's own `getTypeScriptTypes()`, which
+     * knows the tier the account actually resolved to and is the one `ResourceDescription.tsType`
+     * points at.
      */
     async getTypeScriptTypes(): Promise<string> {
-      const gatekeeper = this.#gatekeeper()
-      // Asked with a throwaway id on purpose: an id no policy grants resolves the
-      // auto-provisioned default, which is exactly the tier a real account will get. It refuses
-      // when there is none, which is better than describing a session that will not open.
-      return renderTierSessionTypes(gatekeeper.tierForAccount(mintAccountId()))
+      return renderTierSessionTypes(this.#gatekeeper().tierForNewAccount())
     }
 
     /**

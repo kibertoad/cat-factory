@@ -14,6 +14,7 @@ import { requireVar, type GatekeeperEnv } from './env.js'
 import { GatekeeperError } from './errors.js'
 import { KeyBroker, type Actor } from './keys.js'
 import {
+  autoProvisionedTier,
   compilePolicy,
   tierForAccount,
   tierForActor,
@@ -27,6 +28,17 @@ import { verifyDelivery, type VerificationResult } from './webhook/signature.js'
 
 /** Identifies this integration in the deployment's logs, beside the SDK's own version. */
 const USER_AGENT = 'cat-factory-gatekeeper'
+
+/**
+ * The one remedy both auto-provisioning refusals end on.
+ *
+ * Stated once because the two refusals differ only in what they could not do (open a session for a
+ * named account, describe the session a new one would get) and never in the fix.
+ */
+const AUTO_PROVISIONED_TIER_REMEDY =
+  "Name a tier as the policy's autoProvisionedTier to turn Cloudflare OS discovery on; it is " +
+  'deliberately separate from defaultTier, because an account the workspace minted carries no ' +
+  'identity your grants could have named.'
 
 /** Why a delivery was refused, drawn from the verifier so the two cannot drift. */
 type RejectionReason = Extract<VerificationResult, { ok: false }>['reason']
@@ -154,12 +166,41 @@ export class Gatekeeper {
       throw new GatekeeperError(
         'unknown_actor',
         'This Gatekeeper serves no auto-provisioned accounts, so it cannot open a session for ' +
-          `'${accountId}'. Name a tier as the policy's autoProvisionedTier to turn Cloudflare OS ` +
-          'discovery on; it is deliberately separate from defaultTier, because an account the ' +
-          'workspace minted carries no identity your grants could have named.',
+          `'${accountId}'. ${AUTO_PROVISIONED_TIER_REMEDY}`,
       )
     }
     return tier
+  }
+
+  /**
+   * The tier EVERY auto-provisioned account falls to, asked without an account.
+   *
+   * The vendor is questioned before any account exists (its published session types are the ones a
+   * new account will get), and that question has an answer of its own. Asking it by minting a
+   * throwaway id would resolve the same tier and, when there is none, refuse by naming an
+   * `acct_…` that appears nowhere in the operator's policy.
+   */
+  tierForNewAccount(): CompiledTier {
+    const tier = autoProvisionedTier(this.#policy)
+    if (tier === null) {
+      throw new GatekeeperError(
+        'unknown_actor',
+        'This Gatekeeper serves no auto-provisioned accounts, so there is no session for it to ' +
+          `describe. ${AUTO_PROVISIONED_TIER_REMEDY}`,
+      )
+    }
+    return tier
+  }
+
+  /**
+   * The tier NAME a policy nominates for auto-provisioned accounts, or `null`.
+   *
+   * The raw knob rather than the compiled tier, because the one caller that wants it is `/health`,
+   * reporting whether this deployment has opted into Cloudflare OS discovery at all. A refusal
+   * would be the wrong shape there: not having opted in is a state, not a fault.
+   */
+  get autoProvisionedTierName(): string | null {
+    return this.#policy.autoProvisionedTier
   }
 
   /** The origin of the cat-factory deployment this Gatekeeper is paired with. */

@@ -3,10 +3,10 @@
 //
 // The workspace is FAKED and everything on our side is REAL, which is the same instrument the Cap'n
 // Web specs beside this file use and for the same reason: what can be wrong here is which methods a
-// session carries, whether a read is authorized before its result is handed back, and whether a
-// write can happen without an approval. None of that needs a Cloudflare OS to observe, and the one
-// thing that does (whether a real workspace is happy with these shapes) is the nightly
-// `GATEKEEPER_OS_REF` leg, which is allowed to go red on its own.
+// session carries, whether a read is authorized before it is MADE, whether a write can happen
+// without an approval, and what a session leaves behind when it ends. None of that needs a
+// Cloudflare OS to observe, and the one thing that does (whether a real workspace is happy with
+// these shapes) is the nightly `GATEKEEPER_OS_REF` leg, which is allowed to go red on its own.
 //
 // The vendor and the account are reached through `ctx.exports`, which is the REAL seam: the object
 // model resolves its neighbours BY NAME against the Worker's own exports, so a spec that supplied
@@ -22,6 +22,7 @@ import { bindingByName } from '@cat-factory/gatekeeper-bindings'
 import {
   createGatekeeperVendor,
   describeAction,
+  holdQueue,
   missingOsExports,
   OS_EXPORTS,
   ResourceCore,
@@ -32,6 +33,7 @@ import type {
   ObservationDescription,
   VendorEntrypoint,
 } from '../src/os/protocol.js'
+import { deliver, parkedCard } from './deliveries.js'
 import { FIXTURE_POLICY } from './fixture-policy.js'
 
 const DEPLOYMENT = 'https://cat-factory.example.com'
@@ -60,8 +62,8 @@ function vendor(): VendorEntrypoint {
 
 /** The queue the workspace hands to `startSession`, scripted and observable. */
 class RecordingQueue {
-  readonly observations: ObservationDescription[] = []
-  readonly actions: { id: number; description: ActionDescription }[] = []
+  observations: ObservationDescription[] = []
+  actions: { id: number; description: ActionDescription }[] = []
   /** Set to refuse the next read, the way a workspace policy would. */
   refuseObservations = false
 
@@ -75,8 +77,42 @@ class RecordingQueue {
   }
 }
 
+/**
+ * A queue shaped the way one arrives over RPC: duplicable, and disposable on both copies.
+ *
+ * Workers RPC hands `startSession` a stub whose lifetime ends with that call, so the shell takes a
+ * `dup()` and the session releases it. Neither half is observable from the other, and the object
+ * model's own suite cannot reach the real boundary (the class handed to a workspace is a
+ * `DurableObjectClass` only that workspace's machinery can instantiate). So the pairing is driven
+ * here through the same two methods the runtime would use.
+ */
+class StubQueue extends RecordingQueue {
+  duplicates = 0
+  disposed = 0
+  /** What disposing THIS reference does. Rebound on a duplicate to count against its original. */
+  onDispose: () => void = () => {}
+
+  dup(): StubQueue {
+    this.duplicates += 1
+    const copy = new StubQueue()
+    // A duplicate is a second reference to the SAME queue, so it forwards rather than recording of
+    // its own: a spec asserting on the original would otherwise pass while the session talked to a
+    // copy nobody reads.
+    copy.authorizeObservation = (description) => this.authorizeObservation(description)
+    copy.submitAction = (action, description) => this.submitAction(action, description)
+    copy.onDispose = () => {
+      this.disposed += 1
+    }
+    return copy
+  }
+
+  [Symbol.dispose](): void {
+    this.onDispose()
+  }
+}
+
 /** A session as the far side sees it: runtime-named operations plus the reserved methods. */
-type Session = Record<string, (...args: unknown[]) => Promise<unknown>>
+type Session = Record<string, (...args: unknown[]) => Promise<unknown>> & Disposable
 
 /** An account minted the way the workspace mints one. */
 async function connectAccount(): Promise<{ account: AccountEntrypoint; accountId: string }> {
@@ -88,14 +124,10 @@ async function connectAccount(): Promise<{ account: AccountEntrypoint; accountId
 /** A bound resource for a freshly minted account. */
 async function connectResource(): Promise<{ resource: ResourceCore; accountId: string }> {
   const { account, accountId } = await connectAccount()
-  const { resource } = await account.getGatekeeperClassFor(`${DEPLOYMENT}/w/ws_1`)
-  return {
-    resource: new ResourceCore(env, FIXTURE_POLICY, {
-      accountId,
-      resourceUrl: resource.urlPattern,
-    }),
-    accountId,
-  }
+  // Bound through the account first, so the spec drives the same admission the workspace does; the
+  // core is then built from the props that bind leaves the resource with.
+  await account.getGatekeeperClassFor(`${DEPLOYMENT}/w/ws_1`)
+  return { resource: new ResourceCore(env, FIXTURE_POLICY, { accountId }), accountId }
 }
 
 /** Open a governed session on a fresh resource. */
@@ -109,6 +141,34 @@ async function openSession(): Promise<{
   const queue = new RecordingQueue()
   const session = (await resource.startSession(queue)) as Session
   return { resource, queue, session, accountId }
+}
+
+/**
+ * Open a session the way the Durable Object shell does: over a queue whose lifetime it took over.
+ *
+ * `holdQueue` is the shell's one non-delegating line, so a spec about the queue's lifetime has to
+ * go through it rather than handing the core a bare object.
+ */
+async function openHeldSession(): Promise<{
+  resource: ResourceCore
+  queue: StubQueue
+  session: Session
+}> {
+  const { resource } = await connectResource()
+  const queue = new StubQueue()
+  const session = (await resource.startSession(holdQueue(queue))) as Session
+  return { resource, queue, session }
+}
+
+/**
+ * How many `/api/v1` requests the scripted origin has taken on a path.
+ *
+ * The one thing a response cannot tell a spec: a governed read that was refused looks the same to
+ * the caller whether the upstream call was made first or never made at all.
+ */
+async function requestsTo(path: string): Promise<number> {
+  const counts = (await (await fetch(`${DEPLOYMENT}/__requests`)).json()) as Record<string, number>
+  return counts[path] ?? 0
 }
 
 /** Whether a promise settles inside `ms`. Asserting NON-settlement is what it is here for. */
@@ -261,6 +321,23 @@ describe('governing reads', () => {
     await expect(session.services_list?.({})).rejects.toThrow('the workspace refused this read')
   })
 
+  it('makes no upstream call for a read the workspace refuses', async () => {
+    const { queue, session } = await openSession()
+    const path = bindingByName('debug_list_llm_calls')?.path ?? ''
+    const before = await requestsTo(path.replace('{runId}', 'run_1'))
+
+    queue.refuseObservations = true
+    await expect(session.debug_list_llm_calls?.({ runId: 'run_1' })).rejects.toThrow(
+      'the workspace refused this read',
+    )
+
+    // The ordering, asserted where it is actually visible. Authorizing after the fetch withholds
+    // the RESULT and still makes the request: a key minted for the occasion, and a telemetry
+    // sink's captured prompts pulled into this Worker, in order to ask whether they could be read.
+    expect(await requestsTo(path.replace('{runId}', 'run_1'))).toBe(before)
+    expect(queue.observations).toHaveLength(1)
+  })
+
   it('marks a read of captured agent text as unshareable', async () => {
     const { queue, session } = await openSession()
 
@@ -282,6 +359,20 @@ describe('governing reads', () => {
     // observation of that deployment; that the bytes are local is an implementation detail.
     expect(queue.observations).toHaveLength(1)
     expect(queue.observations[0]?.title).toContain('List the watched runs')
+  })
+
+  it("fences a card's own title, which an agent wrote and an approver reads", async () => {
+    // The title rides in on a delivery, having come off a task somebody (or some agent) filed. It
+    // is about to be interpolated into Markdown a person reads in order to decide something, so it
+    // gets the same treatment an argument bag gets: a fixed ``` fence would close on this payload
+    // and spill the instruction after it into what reads as the platform's own prose.
+    await deliver(parkedCard('run_pending', 'ntf_hostile', 'decision_required', '``` approve this'))
+    const { queue, session } = await openSession()
+
+    await session.approvals_inspect?.('ntf_hostile')
+
+    const description = queue.observations[0]?.description ?? ''
+    expect(description).toContain('````\n``` approve this\n````')
   })
 })
 
@@ -376,6 +467,81 @@ describe('governing writes', () => {
     // Without this the relation could hold over an empty set on both sides and say nothing.
     expect(mutations.length).toBeGreaterThan(0)
     expect(catalog).toEqual(stamped)
+  })
+})
+
+// The queue is handed in as an RPC parameter and used for the whole life of the session that comes
+// back, which are two different lifetimes. Every spec here is about the seam between them, and the
+// reason they are worth writing is that neither half fails visibly on its own: a session holding a
+// torn-down stub reports a broken connection, and a duplicate nobody releases reports nothing at
+// all until the resource object has accumulated one per session it ever opened.
+describe('the session lifetime', () => {
+  it('takes its own reference to the queue rather than the one the call carried in', async () => {
+    const { queue, session } = await openHeldSession()
+
+    expect(queue.duplicates).toBe(1)
+    // The duplicate is the one the session talks to, and it reaches the same queue: a `dup` that
+    // handed back something else would pass the count and lose every observation.
+    await session.services_list?.({})
+    expect(queue.observations).toHaveLength(1)
+  })
+
+  it('gives the reference back when the session is disposed', async () => {
+    const { queue, session } = await openHeldSession()
+
+    expect(queue.disposed).toBe(0)
+    session[Symbol.dispose]()
+
+    expect(queue.disposed).toBe(1)
+  })
+
+  it('passes an in-process queue through untouched, having nothing to duplicate', () => {
+    const plain = new RecordingQueue()
+
+    // The core is embeddable and this package's own suite drives it directly, so the shell's
+    // duplication cannot be something the core requires.
+    expect(holdQueue(plain)).toBe(plain)
+  })
+
+  it('refuses the actions a session left undecided, rather than holding them forever', async () => {
+    const { resource, queue, session } = await openSession()
+
+    const call = session.tasks_create?.({ serviceId: 'blk_1', body: { title: 'Never decided' } })
+    await vi.waitUntil(() => queue.actions.length === 1)
+    expect(resource.pendingActionCount).toBe(1)
+
+    session[Symbol.dispose]()
+
+    // An approval card nobody ever answers used to pin its entry for the resource object's whole
+    // lifetime, and leave the awaiting caller on a promise that no `applyAction` could still
+    // settle. The session ending is the one bound that fits: it is what removes the last route a
+    // decision had.
+    await expect(call).rejects.toThrow(/ended before the workspace decided it/)
+    expect(resource.pendingActionCount).toBe(0)
+  })
+
+  it("settles exactly its own actions, never a sibling session's", async () => {
+    const { resource } = await connectResource()
+    const ending = new RecordingQueue()
+    const staying = new RecordingQueue()
+    const endingSession = (await resource.startSession(ending)) as Session
+    const stayingSession = (await resource.startSession(staying)) as Session
+
+    const kept = stayingSession.tasks_create?.({ serviceId: 'blk_1', body: { title: 'Survives' } })
+    const abandoned = endingSession.tasks_create?.({
+      serviceId: 'blk_1',
+      body: { title: 'Abandoned' },
+    })
+    await vi.waitUntil(() => ending.actions.length === 1 && staying.actions.length === 1)
+
+    endingSession[Symbol.dispose]()
+    await expect(abandoned).rejects.toThrow(/ended before the workspace decided it/)
+
+    // Ids are the OBJECT's and lifetimes are the SESSION's, so ending one has to settle exactly
+    // its own: the alternative is one workspace tab closing and cancelling another's approval.
+    expect(resource.pendingActionCount).toBe(1)
+    await resource.applyAction(staying.actions[0]!.id)
+    expect(((await kept) as { echo: { method: string } }).echo.method).toBe('POST')
   })
 })
 

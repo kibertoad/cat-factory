@@ -106,7 +106,7 @@ version has to be the consumer's.
   URLPattern over the deployment origin: one Gatekeeper serves one workspace, because the
   provisioning key it holds is scoped to one.
 - **The workspace's approval queue, in front of every call.** On the entrypoint path each read is
-  authorized before its result is handed back, and each write is SUBMITTED and performed only when
+  authorized before it is MADE, and each write is SUBMITTED and performed only when
   the workspace applies it. Reads that serve captured agent text are marked unshareable, actions
   carry the consequence the table states, and nothing is offered for unattended auto-approval while
   the surface annotates no write as safe. The tier policy underneath stays the floor.
@@ -165,7 +165,7 @@ The Worker serves five routes:
 | `ALL /rpc`                     | `OS_SHARED_TOKEN` | Cap'n Web, for an agent runtime that is not a Cloudflare OS.  |
 | `POST /admin/enroll`           | `OS_SHARED_TOKEN` | Re-assert the webhook registration. Also runs hourly on cron. |
 | `POST /admin/retire?actorId=…` | `OS_SHARED_TOKEN` | Offboarding: revoke every key minted for one OS user.         |
-| `GET /health`                  | none              | Green only when every binding is set and the policy compiles. |
+| `GET /health`                  | none              | Green when every binding is set and the policy compiles.      |
 
 `/rpc` is bearer-gated because a Worker with a route attached is reachable by anyone who finds it,
 and a capability surface whose only defence is obscurity is not one. The Cloudflare OS path does not
@@ -173,10 +173,25 @@ come through here at all: it arrives on a service binding, which never traverses
 which only that deployment's operator can write, so holding it IS the authorization and a second
 secret in front of it would protect nothing.
 
-Beyond the routes, the entry module must export the four names the Cloudflare OS object model
-resolves (`GatekeeperVendor`, `CatFactoryAccount`, `CatFactoryResource`, `CatFactoryVerifier`).
-`/health` checks those in the same pass as the bindings: a perfectly bound Worker whose entry module
-is three lines short is undiscoverable, and that failure has no request path of its own.
+### `/health` also reports whether a Cloudflare OS could install this
+
+Two things decide that, and neither has a request path of its own: the entry module must export the
+four names the object model resolves (`GatekeeperVendor`, `CatFactoryAccount`,
+`CatFactoryResource`, `CatFactoryVerifier`), and the policy must name an `autoProvisionedTier`. A
+workspace that finds either missing does not get an error anyone monitors; it never finishes
+installing. So a green response carries the answer beside `ok`:
+
+```json
+{ "ok": true, "os": { "discoverable": true, "blockers": [] } }
+```
+
+It is REPORTED, never folded into the status, because a Gatekeeper serving `/rpc` and nothing else
+is a supported deployment: this package promises that door to consumers that are not a Cloudflare
+OS, and turning their liveness red on a version bump would be this route answering a question
+nobody asked it. A deployment that wants discovery keys a monitor on `os.discoverable`; each entry
+in `blockers` carries a `reason` (`missing_exports`, `no_auto_provisioned_tier`) and a `detail`
+naming the fix, and both are reported in one pass so a half-wired deployment is not wired one
+redeploy at a time.
 
 ## What to customize: the policy
 

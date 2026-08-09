@@ -282,16 +282,30 @@ export function tierForActor(policy: CompiledPolicy, actorId: string): CompiledT
 }
 
 /**
- * The tier an auto-provisioned Cloudflare OS account holds, or a refusal.
+ * The tier EVERY auto-provisioned account falls to, resolved without an account to ask about.
+ *
+ * Asked on its own because the vendor is questioned before any account exists: the session types
+ * it publishes are the ones a not-yet-created account will get. Answering that by minting a
+ * throwaway id and letting it miss `grants` produces the same tier and a refusal naming an id that
+ * exists nowhere in the operator's config, which is the wrong sentence for the one reader who has
+ * to act on it.
+ */
+export function autoProvisionedTier(policy: CompiledPolicy): CompiledTier | null {
+  if (policy.autoProvisionedTier === null) return null
+  return policy.tiers.get(policy.autoProvisionedTier) ?? null
+}
+
+/**
+ * The tier one auto-provisioned Cloudflare OS account holds, or a refusal.
  *
  * `grants` is consulted FIRST and by the account's own minted id, which is the whole affordance an
  * operator has for raising one account above the rest: nothing else about such an account is
  * nameable, because nothing about it was named when it was created.
  */
 export function tierForAccount(policy: CompiledPolicy, accountId: string): CompiledTier | null {
-  const name = policy.grants.get(accountId) ?? policy.autoProvisionedTier
-  if (name === null) return null
-  return policy.tiers.get(name) ?? null
+  const granted = policy.grants.get(accountId)
+  if (granted !== undefined) return policy.tiers.get(granted) ?? null
+  return autoProvisionedTier(policy)
 }
 
 /**

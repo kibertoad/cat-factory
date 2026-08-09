@@ -54,6 +54,16 @@ function identityOf(authorization) {
  */
 const mintCounts = new Map()
 
+/**
+ * How many `/api/v1` requests this origin has received per path, readable at `/__requests`.
+ *
+ * The other fact a response cannot carry, and the mirror image of the mint counter: it is what a
+ * spec asserting a call did NOT happen has to read. A refused governed read fails the caller
+ * identically whether the request went out first or never went out at all, and which of those it
+ * is decides whether a refusal still spends a minted key on the platform's telemetry sinks.
+ */
+const requestCounts = new Map()
+
 function approvalGate(overrides = {}) {
   return {
     kind: 'approval-gate',
@@ -205,10 +215,14 @@ export default {
     const body = raw.length > 0 ? JSON.parse(raw) : null
     const echo = { echo: { method: request.method, path: url.pathname, authorization, body } }
 
-    // Not part of `/api/v1`: the suite's own read of what this origin has been asked to do.
+    // Not part of `/api/v1`: the suite's own reads of what this origin has been asked to do.
     if (url.pathname === '/__mints') {
       return Response.json(Object.fromEntries(mintCounts))
     }
+    if (url.pathname === '/__requests') {
+      return Response.json(Object.fromEntries(requestCounts))
+    }
+    requestCounts.set(url.pathname, (requestCounts.get(url.pathname) ?? 0) + 1)
 
     if (url.pathname === '/api/v1/keys' && request.method === 'POST') {
       const scope = body?.scope ?? 'write'

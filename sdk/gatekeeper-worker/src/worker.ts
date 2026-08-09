@@ -10,7 +10,7 @@
 //   ALL  /rpc            a Cap'n Web capability endpoint, for an agent runtime that speaks it
 //   POST /admin/enroll   re-assert this Worker's webhook registration on demand
 //   POST /admin/retire   revoke every key minted for one OS user, for offboarding
-//   GET  /health         liveness plus whether this deployment could serve at all
+//   GET  /health         liveness, plus a report on whether a Cloudflare OS could install this
 //
 // A Cloudflare OS deployment does NOT come in here. It reaches the `GatekeeperVendor` entrypoint
 // over a service binding, using native Workers RPC (`src/os/`); Cap'n Web is the workspace's
@@ -36,7 +36,7 @@ import { ConfigError, describeMissingBindings, missingBindings, type GatekeeperE
 import { GatekeeperError, PolicyError } from './errors.js'
 import { Gatekeeper } from './gatekeeper.js'
 import type { Actor } from './keys.js'
-import { missingOsExports, OS_EXPORTS, type OsExportRole } from './os/exports.js'
+import { describeDiscoverability } from './os/discoverability.js'
 import type { GatekeeperPolicy } from './policy/compile.js'
 
 /** What a deployment supplies to get a Worker. */
@@ -98,17 +98,6 @@ function problem(status: number, reason: string, message: string): Response {
  * Both are 503 rather than 500 because neither is a fault in the request: the deployment is not
  * wired, which is exactly what the status class means, and the `reason` is what a monitor keys on.
  */
-/** The refusal an operator can act on: every export the OS object model needs and cannot find. */
-function describeMissingOsExports(missing: readonly OsExportRole[]): string {
-  const names = missing.map((role) => OS_EXPORTS[role]).join(', ')
-  return (
-    'This Gatekeeper cannot be discovered or installed by a Cloudflare OS deployment: its entry ' +
-    `module does not export ${names}. The Cloudflare OS object model resolves each by name ` +
-    'against this Worker (deploy/gatekeeper/src/index.ts is the template). The HTTP routes here ' +
-    'are unaffected.'
-  )
-}
-
 function refuseSetup(error: unknown): Response | null {
   if (error instanceof ConfigError) return problem(503, 'not_configured', error.message)
   if (error instanceof PolicyError) return problem(503, 'policy_invalid', error.message)
@@ -143,19 +132,22 @@ export function createGatekeeperWorker(
           if (missing.length > 0) {
             return problem(503, 'not_configured', describeMissingBindings(missing))
           }
-          // The OS object model is resolved by NAME against this Worker's own exports, so a
-          // deployment can be perfectly configured and still be undiscoverable because its entry
-          // module is three lines short. That failure has no request path of its own: the workspace
-          // simply never gets past `createAccount()`, which is not a call anyone monitors. Asked
-          // here, in the same one pass as the bindings, for the same reason they are.
-          const missingExports = missingOsExports(ctx.exports)
-          if (missingExports.length > 0) {
-            return problem(503, 'not_configured', describeMissingOsExports(missingExports))
-          }
           // Assembling IS the rest of the check: it compiles the policy against the live operation
           // table, and a policy that does not compile is a Gatekeeper that serves nothing.
-          Gatekeeper.create(env, policy)
-          return Response.json({ ok: true })
+          const assembled = Gatekeeper.create(env, policy)
+          // Whether a Cloudflare OS deployment could discover and install this Worker is REPORTED,
+          // never folded into the status. Both halves of it (the four exports resolved by name, a
+          // policy naming an autoProvisionedTier) are things an operator can half-finish with no
+          // request path to notice on, so they belong in this one pass. But a Gatekeeper serving
+          // `/rpc` and nothing else is a supported deployment, and answering 503 for it would turn
+          // a version bump into a red monitor over a Worker whose every route works.
+          return Response.json({
+            ok: true,
+            os: describeDiscoverability({
+              exports: ctx.exports,
+              autoProvisionedTier: assembled.autoProvisionedTierName,
+            }),
+          })
         }
 
         const gatekeeper = Gatekeeper.create(env, policy)

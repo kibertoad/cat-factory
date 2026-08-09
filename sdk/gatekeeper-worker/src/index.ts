@@ -72,15 +72,22 @@ export {
 export { createGatekeeperResource } from './os/resource.js'
 export { ResourceCore, type ResourceProps } from './os/resource-core.js'
 export { OS_EXPORTS, missingOsExports, type OsExportRole } from './os/exports.js'
+export {
+  describeDiscoverability,
+  type DiscoverabilityReport,
+  type DiscoveryBlocker,
+  type DiscoveryBlockerReason,
+} from './os/discoverability.js'
 export { supportedResourceFor } from './os/resources.js'
 export { SESSION_INTERFACE_NAME, renderTierSessionTypes } from './os/session-types.js'
-export { ActionLedger, queueGovernance } from './os/queue.js'
+export { ActionLedger, holdQueue, queueGovernance, type LedgerSession } from './os/queue.js'
 export {
   actionKindOf,
   describeAction,
   describeObservation,
   type CallSubject,
 } from './os/descriptions.js'
+export { fenced } from './markdown.js'
 export type {
   AccountDescription,
   AccountEntrypoint,
