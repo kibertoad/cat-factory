@@ -13,12 +13,13 @@
 // the decision is about.
 
 import type { GatekeeperEnv } from '../env.js'
-import { GatekeeperError } from '../errors.js'
 import { Gatekeeper } from '../gatekeeper.js'
 import type { CompiledTier, GatekeeperPolicy } from '../policy/compile.js'
 import { actionKindOf } from './descriptions.js'
+import { loopbackExport } from './exports.js'
 import type { ActionKind, ApprovalQueue, ResourceDescription, ResourceObject } from './protocol.js'
 import { ActionLedger, queueGovernance } from './queue.js'
+import { assertObserverMaySee, identifyObserver } from './sharing.js'
 import { renderTierSessionTypes, SESSION_INTERFACE_NAME } from './session-types.js'
 
 /**
@@ -37,17 +38,37 @@ export interface ResourceProps {
   accountId: string
 }
 
+/**
+ * What a resource needs beyond its own environment: the Worker's exports.
+ *
+ * A hook's controller is one of this Worker's own named exports, resolved as
+ * `ctx.exports.CatFactoryHookController` against the DEPLOYMENT's entry module, and the shell is
+ * the only place that bag exists. It is a dependency rather than a lookup so this core stays
+ * drivable in process, where the suite supplies its own.
+ */
+export interface ResourceDependencies {
+  /** The Worker's own exports, as the object model reaches them. */
+  exports: unknown
+}
+
 /** One bound resource: the session it opens, its types, and the action lifecycle behind it. */
 export class ResourceCore implements ResourceObject {
   readonly #env: GatekeeperEnv
   readonly #policy: GatekeeperPolicy
   readonly #props: ResourceProps
+  readonly #deps: ResourceDependencies
   readonly #ledger = new ActionLedger()
 
-  constructor(env: GatekeeperEnv, policy: GatekeeperPolicy, props: ResourceProps) {
+  constructor(
+    env: GatekeeperEnv,
+    policy: GatekeeperPolicy,
+    props: ResourceProps,
+    deps: ResourceDependencies,
+  ) {
     this.#env = env
     this.#policy = policy
     this.#props = props
+    this.#deps = deps
   }
 
   async describe(): Promise<ResourceDescription> {
@@ -101,6 +122,11 @@ export class ResourceCore implements ResourceObject {
           tier: gatekeeper.tierForAccount(accountId).name,
           deployment: gatekeeper.deployment,
         },
+        // Resolved per bind rather than once per session: the refusal for a deployment missing
+        // the export belongs to the call that needed it, and a session that binds no hook is one
+        // this Gatekeeper has no reason to refuse at all.
+        controllerFor: (props) =>
+          loopbackExport<unknown>(this.#deps.exports, 'hookController', props),
       }),
     )
   }
@@ -165,25 +191,32 @@ export class ResourceCore implements ResourceObject {
   }
 
   /**
-   * Sharing this resource's observations onward is REFUSED, which blocks the share.
+   * Share this resource's observations onward, if the observer could have read them all directly.
    *
-   * The contract asks the gatekeeper to verify that the new viewer could directly read everything
-   * historically observed through it. This Gatekeeper cannot answer that: it keeps no observation
-   * log, and the plausible rule (the observer's own tier reaches every operation that produced the
-   * observed data) needs a tier for a viewer this deployment's policy has never named. A share
-   * blocked loudly beats an observation leaked quietly, so the refusal stands until there is a rule
-   * worth writing down.
+   * The contract's requirement, answered rather than declined: the observer names an account this
+   * deployment minted, its policy resolves that account's tier, and the share is admitted only
+   * when that tier reaches everything the tier THIS resource is bound at reaches. `sharing.ts`
+   * holds the tests and why each is the one the contract asks for, including why the account has
+   * to be recognised before its tier means anything.
+   *
+   * Nothing is recorded about an admitted observer, and that is a property of the rule rather than
+   * an omission: every accepted observer can read everything this resource could ever have
+   * observed, so there is never an observation to exclude from them afterwards.
    */
-  async addObserver(id: string, _user: unknown): Promise<void> {
-    throw new GatekeeperError(
-      'sharing_refused',
-      `This Gatekeeper cannot verify that '${id}' may see everything already read through this ` +
-        'resource, so it refuses the share. Give them their own connected account instead: their ' +
-        "tier is then resolved from this deployment's own policy.",
-    )
+  async addObserver(id: string, user: unknown): Promise<void> {
+    const gatekeeper = this.#gatekeeper()
+    const observerAccount = await identifyObserver(user, {
+      recognize: (accountId) => gatekeeper.recognizesAccount(accountId),
+    })
+    assertObserverMaySee({
+      observerId: id,
+      observerAccount,
+      owner: this.#tier(),
+      observer: gatekeeper.tierForAccount(observerAccount),
+    })
   }
 
-  /** Idempotent by contract: nothing was ever added, so there is nothing to forget. */
+  /** Idempotent by contract: nothing is recorded about an observer, so nothing is forgotten. */
   async removeObserver(_id: string): Promise<void> {}
 
   #gatekeeper(): Gatekeeper {

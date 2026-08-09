@@ -12,13 +12,23 @@
 // asked it, which is the same failure as the health route that reported only the bindings its
 // request path happened to read: a monitor saying something the operator cannot act on.
 //
-// So the two facts are reported side by side, each naming its own remedy, and a deployment that
-// wants discovery keys a monitor on `os.discoverable` while one that does not ignores it.
+// So the facts are reported side by side, each naming its own remedy, and a deployment that wants
+// discovery keys a monitor on `os.discoverable` while one that does not ignores it.
+//
+// The same reasoning splits the report a second time. A workspace can install this Gatekeeper and
+// still find one capability missing (the hook controller is reached only when a session binds a
+// hook), and that is a LIMITATION rather than a blocker: reporting it as one would say a serving
+// deployment is undiscoverable, and omitting it would leave the gap to be discovered from an
+// agent's failed call.
 
-import { missingOsExports, OS_EXPORTS } from './exports.js'
+import { missingOsExports, OS_EXPORTS, OS_EXPORT_REQUIREMENT } from './exports.js'
 
 /** Why a Cloudflare OS deployment could not finish installing this Gatekeeper. */
-export type DiscoveryBlockerReason = 'missing_exports' | 'no_auto_provisioned_tier'
+export type DiscoveryBlockerReason =
+  | 'missing_exports'
+  | 'no_auto_provisioned_tier'
+  /** Installs and serves; only the hook push is missing. Reported as a LIMITATION, never a blocker. */
+  | 'hooks_unavailable'
 
 /** One thing standing between this Worker and a workspace that could use it. */
 export interface DiscoveryBlocker {
@@ -35,6 +45,16 @@ export interface DiscoveryBlocker {
 export interface DiscoverabilityReport {
   discoverable: boolean
   blockers: DiscoveryBlocker[]
+  /**
+   * What a workspace COULD install and would find missing once it had.
+   *
+   * Separate from `blockers` because the remedies are alike and the urgency is not: a blocker is a
+   * workspace that never finishes installing, and a limitation is one that installs, works, and
+   * refuses one capability. Folding the second into the first would turn a deployment that never
+   * wanted hooks red; leaving it out entirely would let a deployment that does want them discover
+   * the gap from an agent's failed subscribe.
+   */
+  limitations: DiscoveryBlocker[]
 }
 
 /**
@@ -50,15 +70,28 @@ export function describeDiscoverability(deps: {
   autoProvisionedTier: string | null
 }): DiscoverabilityReport {
   const blockers: DiscoveryBlocker[] = []
+  const limitations: DiscoveryBlocker[] = []
 
   const missing = missingOsExports(deps.exports)
-  if (missing.length > 0) {
+  const missingModel = missing.filter((role) => OS_EXPORT_REQUIREMENT[role] === 'install')
+  if (missingModel.length > 0) {
     blockers.push({
       reason: 'missing_exports',
       detail:
-        `This Worker's entry module does not export ${missing.map((role) => OS_EXPORTS[role]).join(', ')}. ` +
+        `This Worker's entry module does not export ${missingModel.map((role) => OS_EXPORTS[role]).join(', ')}. ` +
         'The Cloudflare OS object model resolves each by name against this Worker ' +
         '(deploy/gatekeeper/src/index.ts is the template).',
+    })
+  }
+
+  if (missing.includes('hookController')) {
+    limitations.push({
+      reason: 'hooks_unavailable',
+      detail:
+        `This Worker's entry module does not export ${OS_EXPORTS.hookController}, so a session ` +
+        'cannot bind a hook and nothing is pushed. Everything else works, and a workspace reads ' +
+        'the same cards and runs from approvals_list() and runs_watched(); add the export to ' +
+        'turn the push on.',
     })
   }
 
@@ -73,5 +106,5 @@ export function describeDiscoverability(deps: {
     })
   }
 
-  return { discoverable: blockers.length === 0, blockers }
+  return { discoverable: blockers.length === 0, blockers, limitations }
 }

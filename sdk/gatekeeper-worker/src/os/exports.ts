@@ -30,10 +30,39 @@ export const OS_EXPORTS = {
    * account itself would hand over `revoke()` and the resource classes with it.
    */
   verifier: 'CatFactoryVerifier',
+  /**
+   * The handle a workspace turns one bound hook on and off by.
+   *
+   * Its own export for the same reason the verifier is: what the workspace persists here must
+   * carry the authority to disable ONE registration and nothing else. A session or an account
+   * handed over instead would carry a capability, a key broker and every other hook with it.
+   */
+  hookController: 'CatFactoryHookController',
 } as const satisfies Record<string, string>
 
 /** A role in the object model, spelled as {@link OS_EXPORTS} keys it. */
 export type OsExportRole = keyof typeof OS_EXPORTS
+
+/** What a deployment loses by not exporting one role: the whole OS door, or one capability of it. */
+export type OsExportRequirement = 'install' | 'hooks'
+
+/**
+ * What each role's absence actually costs, which is not the same answer for all of them.
+ *
+ * The four object-model roles are walked while a workspace installs this Gatekeeper, so a missing
+ * one is a workspace that never finishes installing. The hook controller is reached only when a
+ * session binds a hook, so a deployment without it installs, serves and answers exactly as before
+ * and loses pushes. Reporting the two as one number would do the damage this file's own health
+ * rule names in both directions at once: an operator told their Gatekeeper is undiscoverable when
+ * it is serving, or told nothing at all about a capability that will refuse.
+ */
+export const OS_EXPORT_REQUIREMENT = {
+  vendor: 'install',
+  account: 'install',
+  resource: 'install',
+  verifier: 'install',
+  hookController: 'hooks',
+} as const satisfies Record<OsExportRole, OsExportRequirement>
 
 /** What `ctx.exports` offers: a callable per export that imbues props and returns the stub. */
 type LoopbackExports = Record<string, ((options: { props: unknown }) => unknown) | undefined>
