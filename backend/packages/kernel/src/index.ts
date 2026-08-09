@@ -386,6 +386,8 @@ export {
 // A convenience re-export would put two import paths on one rule, which is the shape that let a
 // second hand-written copy exist in the first place.
 export {
+  type BinaryGeneratorCredentialConflict,
+  type BinaryGeneratorCredentialPlan,
   type BinaryGeneratorSelectionIssue,
   type ResolvedBinaryGenerator,
   type ResolvedBinaryGeneratorCredential,
@@ -394,6 +396,7 @@ export {
   describeCapability,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,
+  planBinaryGeneratorCredentials,
   resolveBinaryGeneratorSelection,
 } from './domain/binary-generators.js'
 

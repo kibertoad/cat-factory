@@ -321,20 +321,47 @@ describe('resolveBinaryGeneratorSecrets', () => {
     ).toEqual([{ key: 'GITHUB_MODELS_KEY', value: 'tok' }])
   })
 
-  it('dedupes on the INJECTION name, since that is what the job body is keyed by', async () => {
-    // Two integrations resolving different keys into one variable would otherwise both emit it and
-    // the last would silently win, handing the agent one vendor's key under the other's name.
-    const { resolver } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b' })
+  it('withholds an integration ENTIRELY when another is given a variable it declares', async () => {
+    // Two integrations resolving different keys into one variable cannot both be served: the job
+    // body is keyed by the injection name and an agent process has one variable per name. Emitting
+    // both would hand the agent one vendor's key under the other's name.
+    //
+    // Dropping only the CLASHING half is the trap this asserts against, and the list made it
+    // reachable: `two` would keep `TWO_SECRET`, read `VENDOR_KEY` as its own because that is what
+    // its brief says, and sign a request with one vendor's key and another's secret. The 401 that
+    // comes back is indistinguishable from a revoked key. Withheld whole, `TWO_SECRET` is unset
+    // and the brief's own "do not call this integration" is the honest instruction again.
+    const { resolver, subjects } = recordingResolver({
+      FIRST_KEY: 'a',
+      SECOND_KEY: 'b',
+      TWO_SECRET: 'c',
+    })
+    const logger = createRecordingLogger()
     expect(
       await resolveBinaryGeneratorSecrets({
         context: context([
           { ...retro, id: 'one', credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
-          { ...retro, id: 'two', credentials: [{ key: 'SECOND_KEY', envName: 'VENDOR_KEY' }] },
+          {
+            ...retro,
+            id: 'two',
+            credentials: [{ key: 'SECOND_KEY', envName: 'VENDOR_KEY' }, { key: 'TWO_SECRET' }],
+          },
         ]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
+        logger,
       }),
     ).toEqual([{ key: 'VENDOR_KEY', value: 'a' }])
+    // …and the withheld integration is never asked for, so a sealed store is not queried for a
+    // value nothing can deliver.
+    expect(subjects).toEqual([{ kind: 'binary-generator', id: 'one' }])
+    const warned = logger.lines.filter((line) => line.level === 'warn')
+    expect(warned).toHaveLength(1)
+    expect(warned[0]?.fields).toMatchObject({
+      binaryGeneratorId: 'two',
+      credentialEnvName: 'VENDOR_KEY',
+      claimedBy: 'one',
+    })
   })
 
   it('refuses a TOOLCHAIN injection name, which would reconfigure the run instead of authenticating', async () => {

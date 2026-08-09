@@ -9,6 +9,7 @@ import {
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,
+  planBinaryGeneratorCredentials,
   renderBinaryGeneratorSection,
   resolveBinaryGeneratorSelection,
 } from './binary-generators.js'
@@ -326,119 +327,6 @@ describe('renderBinaryGeneratorSection', () => {
     expect(section).toContain('never ask one for a kind of output it does not produce')
   })
 
-  it('names the credential variable and what an unset one means', () => {
-    const section = renderBinaryGeneratorSection({
-      selection: resolveBinaryGeneratorSelection(
-        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [generator()],
-      ),
-      requestedModalities: [],
-    }).join('\n')
-    expect(section).toContain('`RD_TOKEN`')
-    expect(section).toContain('the X-RD-Token request header')
-    expect(section).toContain('do not call `retro-diffusion` at all')
-  })
-
-  it('names the INJECTION variable, never the lookup key, when a declaration splits them', () => {
-    // The two differ whenever a definition had to keep a vendor's documented variable name while
-    // looking the value up under one of its own (the reserved-family escape). Naming the lookup
-    // key here would tell the agent to read a variable that is never set: an integration reported
-    // unavailable on every run, with the brief itself as the reason nobody could see it.
-    const section = renderBinaryGeneratorSection({
-      selection: resolveBinaryGeneratorSelection(
-        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [generator({ credentials: [{ key: 'ACME_RD_TOKEN', envName: 'GITHUB_MODELS_TOKEN' }] })],
-      ),
-      requestedModalities: [],
-    }).join('\n')
-    expect(section).toContain('`GITHUB_MODELS_TOKEN`')
-    expect(section).not.toContain('ACME_RD_TOKEN')
-  })
-
-  it('names EVERY variable of a paired credential, and states the disposition JOINTLY', () => {
-    // The case one credential could not express: HTTP Basic over an API key and its secret. Told
-    // per variable that a missing one means "do not call", an agent holding the key without the
-    // secret has been told something true about each half and nothing about the request it is
-    // about to write, and the plausible reading (send what arrived) costs the run a 401 it will
-    // read as a wrong key.
-    const section = renderBinaryGeneratorSection({
-      selection: resolveBinaryGeneratorSelection(
-        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [
-          generator({
-            credentials: [
-              { key: 'SCENARIO_API_KEY', usage: 'the HTTP Basic username' },
-              { key: 'SCENARIO_API_SECRET', usage: 'the HTTP Basic password' },
-            ],
-          }),
-        ],
-      ),
-      requestedModalities: [],
-    }).join('\n')
-    expect(section).toContain('`SCENARIO_API_KEY`')
-    expect(section).toContain('the HTTP Basic username')
-    expect(section).toContain('`SCENARIO_API_SECRET`')
-    expect(section).toContain('the HTTP Basic password')
-    expect(section).toContain('parts of ONE credential')
-    // ONE sentence covering both, not one per variable.
-    expect(section).toContain('If `SCENARIO_API_KEY` and `SCENARIO_API_SECRET` are unset or empty')
-    expect(section).toContain('do not call `retro-diffusion` at all')
-  })
-
-  it('keeps a REQUIRED and an OPTIONAL half of one credential apart', () => {
-    // Collapsing them would produce the wrong instruction in both directions: "do not call" over
-    // a value the deployment declared as skippable, or "call anyway" over the one that
-    // authenticates the request.
-    const section = renderBinaryGeneratorSection({
-      selection: resolveBinaryGeneratorSelection(
-        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [
-          generator({
-            credentials: [
-              { key: 'ACME_KEY' },
-              { key: 'ACME_ACCOUNT_ID', usage: 'the X-Account header', required: false },
-            ],
-          }),
-        ],
-      ),
-      requestedModalities: [],
-    }).join('\n')
-    expect(section).toContain('If `ACME_KEY` is unset or empty')
-    expect(section).toContain('`ACME_ACCOUNT_ID` is OPTIONAL')
-    // …and the optional half's remedy is the call MINUS that value, never an unauthenticated one:
-    // the required half is still required.
-    expect(section).not.toContain('unauthenticated as its contract describes')
-    expect(section).toContain('with the value above and without it')
-  })
-
-  it('tells an OPTIONAL credential’s agent to call the integration anyway when it is unset', () => {
-    // `required: false` is declared for an endpoint that genuinely works unauthenticated, so the
-    // required case's "do not call it at all" is exactly the wrong instruction: it would strand a
-    // working integration on the most ordinary misconfiguration there is.
-    const section = renderBinaryGeneratorSection({
-      selection: resolveBinaryGeneratorSelection(
-        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [generator({ credentials: [{ key: 'RD_TOKEN', required: false }] })],
-      ),
-      requestedModalities: [],
-    }).join('\n')
-    expect(section).toContain('`RD_TOKEN` is OPTIONAL')
-    expect(section).toContain('still call the integration, unauthenticated')
-    expect(section).not.toContain('do not call `retro-diffusion` at all')
-  })
-
-  it('treats an undeclared `required` as REQUIRED, so silence is the safe reading', () => {
-    const section = renderBinaryGeneratorSection({
-      selection: resolveBinaryGeneratorSelection(
-        { storageServiceId: 'asset-store', generatorIds: ['studio-music'] },
-        [music],
-      ),
-      requestedModalities: [],
-    }).join('\n')
-    expect(section).toContain('do not call `studio-music` at all')
-    expect(section).not.toContain('is OPTIONAL')
-  })
-
   it('injects an integration’s contract under its OWN directory, so no service id can collide', () => {
     // A catalog service may legitimately be called `generator-sprites`, which under a filename
     // prefix would land on exactly the path the integration `sprites` writes. A slug cannot
@@ -634,6 +522,256 @@ describe('renderBinaryGeneratorSection', () => {
       requestedModalities: [],
     }).join('\n')
     expect(section).toContain(`.cat-context/${binaryGeneratorContextFileFor('retro-diffusion')}`)
+  })
+})
+
+describe('renderBinaryGeneratorSection: what the agent is told about credentials', () => {
+  it('names the credential variable and what an unset one means', () => {
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [generator()],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`RD_TOKEN`')
+    expect(section).toContain('the X-RD-Token request header')
+    expect(section).toContain('do not call `retro-diffusion` at all')
+  })
+
+  it('names the INJECTION variable, never the lookup key, when a declaration splits them', () => {
+    // The two differ whenever a definition had to keep a vendor's documented variable name while
+    // looking the value up under one of its own (the reserved-family escape). Naming the lookup
+    // key here would tell the agent to read a variable that is never set: an integration reported
+    // unavailable on every run, with the brief itself as the reason nobody could see it.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [generator({ credentials: [{ key: 'ACME_RD_TOKEN', envName: 'GITHUB_MODELS_TOKEN' }] })],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`GITHUB_MODELS_TOKEN`')
+    expect(section).not.toContain('ACME_RD_TOKEN')
+  })
+
+  it('names EVERY variable of a paired credential, and states the disposition JOINTLY', () => {
+    // The case one credential could not express: HTTP Basic over an API key and its secret. Told
+    // per variable that a missing one means "do not call", an agent holding the key without the
+    // secret has been told something true about each half and nothing about the request it is
+    // about to write, and the plausible reading (send what arrived) costs the run a 401 it will
+    // read as a wrong key.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [
+              { key: 'SCENARIO_API_KEY', usage: 'the HTTP Basic username' },
+              { key: 'SCENARIO_API_SECRET', usage: 'the HTTP Basic password' },
+            ],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`SCENARIO_API_KEY`')
+    expect(section).toContain('the HTTP Basic username')
+    expect(section).toContain('`SCENARIO_API_SECRET`')
+    expect(section).toContain('the HTTP Basic password')
+    expect(section).toContain('parts of ONE credential')
+    // ONE sentence covering both, and it has to fire on EITHER being missing. Under a conjunction
+    // ("if A and B are unset") the sentence reads as false in the case it exists for: one half in
+    // hand, the other missing, and a request about to be written from what arrived.
+    expect(section).toContain(
+      'If ANY ONE of `SCENARIO_API_KEY` or `SCENARIO_API_SECRET` is unset or empty',
+    )
+    expect(section).not.toContain('`SCENARIO_API_KEY` and `SCENARIO_API_SECRET` are unset')
+    expect(section).toContain('do not call `retro-diffusion` at all')
+  })
+
+  it('tells an agent to send the OPTIONAL values that arrived, not to drop them together', () => {
+    // The optional rule is per value: each one was declared skippable ON ITS OWN. Stated jointly
+    // ("if they are unset, call without them") it instructs an agent holding one of two optional
+    // values to discard the one it was given, which is a worse call than the platform could make
+    // for it and one no declaration asked for.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [
+              { key: 'ACME_KEY' },
+              { key: 'ACME_REGION', required: false },
+              { key: 'ACME_ACCOUNT_ID', required: false },
+            ],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`ACME_REGION` and `ACME_ACCOUNT_ID` are OPTIONAL')
+    expect(section).toContain('send every one that arrived')
+    expect(section).toContain(
+      'Never drop a value you were given because a different optional one was missing',
+    )
+    // The required half is still required, so "none of them arrived" is not an unauthenticated call.
+    expect(section).not.toContain('unauthenticated')
+    expect(section).toContain('with the value above')
+  })
+
+  it('states an integration whose credential variable another one on this step is given', () => {
+    // The one credential failure the ordinary prose cannot describe. Everywhere else a value that
+    // did not arrive leaves its variable UNSET, and "unset means the platform could not provide
+    // it" is then both true and actionable. Here the variable is SET with a different
+    // integration's secret, so an agent told to read it obeys and signs with the wrong key: the
+    // 401 that comes back is indistinguishable from a revoked one.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion', 'studio-music'] },
+        [
+          generator({ credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] }),
+          generator({
+            id: 'studio-music',
+            name: 'Studio Music',
+            modalities: ['audio'],
+            mediaTypes: ['audio/mpeg'],
+            credentials: [{ key: 'SECOND_KEY', envName: 'VENDOR_KEY' }, { key: 'STUDIO_SECRET' }],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    // The winner is told nothing new: first in selection order keeps the name.
+    expect(section).toContain(
+      'The credential for `retro-diffusion` is provided to your process as the environment variable `VENDOR_KEY`',
+    )
+    expect(section).toContain('The platform could NOT provide the credentials for `studio-music`')
+    expect(section).toContain('`retro-diffusion` is given `VENDOR_KEY` on this step')
+    expect(section).toContain('Do not call `studio-music` at all')
+    // The clashing half is not the only one withheld, so its SECOND variable must not be
+    // described as holding a credential either.
+    expect(section).toContain("NONE of `studio-music`'s own credentials is delivered")
+    expect(section).not.toContain('`STUDIO_SECRET`: ')
+    expect(section).toContain('fails as a WRONG key rather than as a missing one')
+  })
+
+  it('keeps a REQUIRED and an OPTIONAL half of one credential apart', () => {
+    // Collapsing them would produce the wrong instruction in both directions: "do not call" over
+    // a value the deployment declared as skippable, or "call anyway" over the one that
+    // authenticates the request.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [
+              { key: 'ACME_KEY' },
+              { key: 'ACME_ACCOUNT_ID', usage: 'the X-Account header', required: false },
+            ],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('If `ACME_KEY` is unset or empty')
+    expect(section).toContain('`ACME_ACCOUNT_ID` is OPTIONAL')
+    // …and the optional half's remedy is the call MINUS that value, never an unauthenticated one:
+    // the required half is still required.
+    expect(section).not.toContain('unauthenticated as its contract describes')
+    expect(section).toContain('with the value above and without it')
+  })
+
+  it('tells an OPTIONAL credential’s agent to call the integration anyway when it is unset', () => {
+    // `required: false` is declared for an endpoint that genuinely works unauthenticated, so the
+    // required case's "do not call it at all" is exactly the wrong instruction: it would strand a
+    // working integration on the most ordinary misconfiguration there is.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [generator({ credentials: [{ key: 'RD_TOKEN', required: false }] })],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`RD_TOKEN` is OPTIONAL')
+    expect(section).toContain('still call the integration, unauthenticated')
+    expect(section).not.toContain('do not call `retro-diffusion` at all')
+  })
+
+  it('treats an undeclared `required` as REQUIRED, so silence is the safe reading', () => {
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['studio-music'] },
+        [music],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('do not call `studio-music` at all')
+    expect(section).not.toContain('is OPTIONAL')
+  })
+})
+
+describe('planBinaryGeneratorCredentials', () => {
+  it('gives an injection name to the FIRST integration that claims it, and withholds the rest', () => {
+    const [first, second] = planBinaryGeneratorCredentials([
+      { id: 'one', credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
+      {
+        id: 'two',
+        credentials: [{ key: 'SECOND_KEY', envName: 'VENDOR_KEY' }, { key: 'TWO_SECRET' }],
+      },
+    ])
+    expect(first?.injectable.map((entry) => entry.envName)).toEqual(['VENDOR_KEY'])
+    expect(first?.conflicts).toEqual([])
+    // The whole set, not the clashing half: leaving `TWO_SECRET` behind would hand `two` the other
+    // integration's key beside its own secret, which is a WRONG credential rather than a missing
+    // one and the only state the brief's "unset means unavailable" cannot describe.
+    expect(second?.injectable).toEqual([])
+    expect(second?.conflicts).toEqual([{ envName: 'VENDOR_KEY', claimedBy: 'one' }])
+  })
+
+  it('treats a name as claimed case-insensitively, since Windows env lookup is', () => {
+    const [, second] = planBinaryGeneratorCredentials([
+      { id: 'one', credentials: [{ key: 'ACME_KEY' }] },
+      { id: 'two', credentials: [{ key: 'acme_key' }] },
+    ])
+    expect(second?.conflicts).toEqual([{ envName: 'acme_key', claimedBy: 'one' }])
+  })
+
+  it('lets a valid declaration behind a floor-refused one claim the name', () => {
+    // A credential the floors drop is never injected, so holding the name against a later
+    // declaration would cost that one its credential for nothing.
+    const [first, second] = planBinaryGeneratorCredentials([
+      { id: 'one', credentials: [{ key: 'ACME_KEY', envName: 'NODE_OPTIONS' }] },
+      { id: 'two', credentials: [{ key: 'OTHER_KEY', envName: 'NODE_OPTIONS' }] },
+    ])
+    expect(first?.refused).toEqual([
+      {
+        credential: { key: 'ACME_KEY', envName: 'NODE_OPTIONS' },
+        envName: 'NODE_OPTIONS',
+        reason: 'toolchain_env_name',
+      },
+    ])
+    // `two` names a toolchain variable too, so it is refused on its own account rather than
+    // conflicting: the floor is what stops either from reconfiguring the agent's process.
+    expect(second?.conflicts).toEqual([])
+    expect(second?.injectable).toEqual([])
+    expect(second?.refused.map((entry) => entry.reason)).toEqual(['toolchain_env_name'])
+  })
+
+  it('conflicts a definition that would inject two credentials under one name', () => {
+    // Registration refuses this, and a MOTHERSHIP-served definition is validated by nobody: the
+    // node resolves it per dispatch from a process that is not the one that registered it.
+    const [only] = planBinaryGeneratorCredentials([
+      {
+        id: 'one',
+        credentials: [
+          { key: 'A', envName: 'SHARED' },
+          { key: 'B', envName: 'SHARED' },
+        ],
+      },
+    ])
+    expect(only?.injectable).toEqual([])
+    expect(only?.conflicts).toEqual([{ envName: 'SHARED', claimedBy: 'one' }])
   })
 })
 

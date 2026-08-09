@@ -1291,6 +1291,36 @@ describe('generative binary integration registry validation', () => {
     ).toEqual([])
   })
 
+  it('warns when TWO integrations would inject a credential under one variable', () => {
+    // The cross-definition version of the rule above, and a WARNING rather than an error because
+    // nothing is broken until a step selects both: the dispatch settles it by giving the name to
+    // the first and withholding the second's credentials whole, which the second's brief states.
+    // Boot is the only place the two declarations can be named together, and they are routinely
+    // registered by different packages neither of which is wrong on its own.
+    const problems = problemsFor([
+      { ...valid, credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
+      { ...valid, id: 'studio-music', credentials: [{ key: 'SECOND_KEY', envName: 'vendor_key' }] },
+    ])
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatchObject({
+      severity: 'warn',
+      code: 'binary_generator_credential_name_collision',
+    })
+    expect(problems[0]?.message).toContain('"retro-diffusion" and "studio-music"')
+    // The shape it exists to ADMIT: one vendor account behind two endpoints resolves from a single
+    // deployment variable, as long as each integration reads it under its own name.
+    expect(
+      problemsFor([
+        { ...valid, credentials: [{ key: 'VENDOR_KEY', envName: 'IMAGE_KEY' }] },
+        {
+          ...valid,
+          id: 'studio-music',
+          credentials: [{ key: 'VENDOR_KEY', envName: 'MUSIC_KEY' }],
+        },
+      ]),
+    ).toEqual([])
+  })
+
   it('fails boot on a cleartext endpoint off loopback, because the credential rides it', () => {
     const problems = problemsFor([{ ...valid, endpoint: 'http://api.example.com/v1' }])
     expect(problems[0]?.code).toBe('insecure_binary_generator_endpoint')

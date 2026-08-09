@@ -1,6 +1,7 @@
 ---
 '@cat-factory/contracts': minor
 '@cat-factory/kernel': minor
+'@cat-factory/orchestration': minor
 '@cat-factory/server': minor
 ---
 
@@ -35,9 +36,26 @@ Each credential keeps its own `envName`, `usage` and `required`, and each must l
 environment variable (case-insensitively, since environment lookup is on Windows), refused at
 registration: two entries under one name would both resolve and one would silently overwrite the
 other. An integration's whole list is resolved in ONE `ToolSecretResolver` call, so a per-workspace
-sealed store is not asked once per value. The agent's brief names every variable and states the
-missing-value disposition jointly, because a pair with one half missing must not be sent at all, and
-per-variable instructions leave "send what arrived" as the plausible reading.
+sealed store is not asked once per value.
+
+The same one-owner-per-variable rule now holds ACROSS integrations, where it was previously a
+first-wins dedupe. Two integrations declaring one injection name is two values and one slot in the
+agent's environment, and the credential resolver is subject-scoped by design, so the second cannot be
+handed its own value there. A step selecting both now gives the name to the first and withholds the
+second's credentials WHOLE, with the brief telling that agent the variable holds another
+integration's value and that it must not call the integration at all. Dropping only the clashing half
+left it holding one vendor's key beside its own secret, signing a request with the pair, and reading
+the 401 as a revoked credential. Boot additionally WARNS
+(`binary_generator_credential_name_collision`) when two registered definitions name one variable; the
+remedy is a distinct `envName` on one of them, which may keep the same lookup `key`, so a shared
+vendor account still resolves from a single deployment variable.
+
+The agent's brief names every variable and states each missing-value disposition under the quantifier
+that rule actually has. A REQUIRED value is stated jointly and fires on ANY missing part, because a
+pair with one half missing must not be sent at all and per-variable instructions leave "send what
+arrived" as the plausible reading. An OPTIONAL value is stated per value, because each was declared
+skippable on its own: an agent given one of two optional values sends the one it has instead of
+discarding both.
 
 No auth SCHEME field comes with this, deliberately. The agent writes the request here, so a scheme
 would be a fact the platform stores and never acts on, and the first vendor with a signed request

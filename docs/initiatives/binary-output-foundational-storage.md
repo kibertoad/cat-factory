@@ -288,13 +288,33 @@ timestamp would need a member nobody can add without a platform release. Each cr
 is prose for exactly that reason: prose covers every scheme, including saying which half of a pair
 a value is.
 
-Two rules follow from the list and neither is optional. Each credential must land in a DISTINCT
-environment variable, refused at registration (case-insensitively, since environment lookup is on
-Windows), because two entries injected under one name is not a redundant declaration but a silent
-one: both resolve, one overwrites the other, and the agent authenticates with whichever won. And
-the brief states the missing-value disposition JOINTLY: told per variable that a missing one means
-"do not call", an agent holding a key whose secret did not resolve has been told something true
-about each half and nothing about the request it is about to write.
+Two rules follow from the list and neither is optional.
+
+**An injection name belongs to at most one integration, and the rule spans the whole selection.**
+Within a definition it is refused at registration (case-insensitively, since environment lookup is
+on Windows), because two entries under one name is not a redundant declaration but a silent one:
+both resolve, one overwrites the other, and the agent authenticates with whichever won. Across two
+definitions the same fault is latent, so boot WARNS and the dispatch settles it: an agent process
+has one variable per name, and the resolver is subject-scoped by design, so two integrations naming
+one variable is two values and one slot. `planBinaryGeneratorCredentials` (kernel) gives the name to
+the first in selection order and withholds the loser's credentials WHOLE, and it is the single
+computation both the brief and the container executor's resolver read, because a disagreement
+between them is not a missing key but a WRONG one. Dropping only the clashing half is the failure
+the whole-set rule exists to prevent: the loser would keep its own secret beside the winner's key
+and sign a request with the pair, and the 401 that comes back is indistinguishable from a revoked
+credential. Withheld whole, its required variables are unset and the brief's ordinary "do not call
+this integration" is honest again. The remedy costs a deployment nothing, since two integrations
+behind one vendor account keep the same lookup `key` under distinct `envName`s and still resolve
+from a single deployment variable.
+
+**Each disposition sentence carries the quantifier its rule actually has**, which the two do not
+share. Told per variable that a missing one means "do not call", an agent holding a key whose
+secret did not resolve has been told something true about each half and nothing about the request
+it is about to write. So the REQUIRED rule is stated jointly and fires on ANY missing part, since a
+credential assembled from some of its halves is refused whole. The OPTIONAL rule is stated per
+value and fires per value, since each was declared skippable on its own: an agent given one of two
+optional values sends the one it has. Either sentence under a bare conjunction ("if A and B are
+unset") reads as false in exactly the case it exists for.
 
 **An unresolvable credential is not a failed dispatch.** The brief states, per integration, that
 an unset variable means the platform could not provide the key and the integration must not be

@@ -1,18 +1,12 @@
 import type {
   AgentRunContext,
+  BinaryGeneratorCredentialPlan,
   Logger,
-  ResolvedBinaryGenerator,
   ResolvedBinaryGeneratorCredential,
   ToolSecretResolver,
 } from '@cat-factory/kernel'
-import { noopLogger, runBestEffort } from '@cat-factory/kernel'
-import {
-  binaryGeneratorCredentialEnvName,
-  isReservedPlatformEnvKey,
-  isToolchainEnvName,
-  reservedEnvKeyMessage,
-  toolchainEnvNameMessage,
-} from '@cat-factory/contracts'
+import { noopLogger, planBinaryGeneratorCredentials, runBestEffort } from '@cat-factory/kernel'
+import { reservedEnvKeyMessage, toolchainEnvNameMessage } from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // GENERATIVE BINARY INTEGRATIONS for one container dispatch: take the integrations the ENGINE
@@ -33,6 +27,12 @@ import {
 // platform could not provide the key and the integration must not be called. The agent can SEE
 // the variable; a second declaration from this side could only ever agree with the environment or
 // contradict it.
+//
+// Which holds only because the brief and this file decide DELIVERABILITY from one computation
+// (kernel's `planBinaryGeneratorCredentials`). The one case where an unset variable is not the
+// story is an injection name two integrations declare: there the loser's variable is SET, with the
+// winner's secret in it, so the brief has to name it as poisoned rather than absent. That is
+// exactly why the rule may not be re-derived here.
 // ---------------------------------------------------------------------------
 
 /**
@@ -56,11 +56,8 @@ export interface ResolveBinaryGeneratorSecretsInput {
   logger?: Logger
 }
 
-/** One credential that survived the floors, with the name it will be injected under. */
-interface WantedCredential {
-  credential: ResolvedBinaryGeneratorCredential
-  envName: string
-}
+/** One integration's credentials as kernel's shared plan settles them for this dispatch. */
+type GeneratorPlan = BinaryGeneratorCredentialPlan<ResolvedBinaryGeneratorCredential>
 
 /**
  * Resolve the credentials of this dispatch's generative integrations into job-body env pairs.
@@ -79,14 +76,18 @@ interface WantedCredential {
  * JOINT disposition (a pair with one half missing must not be sent at all) is the brief's, not
  * this resolver's, because only the agent can see what arrived.
  *
- * Deduplicated by INJECTION NAME: two integrations sharing one credential variable (a vendor with
- * an image and a music endpoint behind one account is the obvious case) must not fight over the
- * value, and the first declaration wins deterministically in selection order.
+ * WHICH credentials are deliverable at all is decided by kernel's `planBinaryGeneratorCredentials`
+ * rather than here, because the BRIEF decides it too and the two must agree exactly: it applies
+ * the name floors and settles injection-name conflicts across the whole selection. See that
+ * function for why a conflict withholds an integration's whole set. Nothing in this file may
+ * re-derive either rule; a second copy is how the brief and the environment drift into naming
+ * different variables.
  *
- * The dedupe is decided BEFORE any resolution (the names are on the projection), so the surviving
- * lookups are independent and run CONCURRENTLY — a per-workspace sealed-store resolver is a real
- * round trip, and a step holding three integrations should not pay for three of them in series.
- * Order is preserved by resolving a pre-built list rather than pushing as results arrive.
+ * The plan is built BEFORE any resolution (it reads only names, which are on the projection), so
+ * the surviving lookups are independent and run CONCURRENTLY: a per-workspace sealed-store
+ * resolver is a real round trip, and a step holding three integrations should not pay for three of
+ * them in series. Order is preserved by resolving a pre-built list rather than pushing as results
+ * arrive.
  */
 export async function resolveBinaryGeneratorSecrets(
   input: ResolveBinaryGeneratorSecretsInput,
@@ -94,86 +95,66 @@ export async function resolveBinaryGeneratorSecrets(
   const generators = input.context.binaryGenerators ?? []
   const resolver = input.resolveToolSecrets
   if (!resolver || generators.length === 0) return []
-  // Deduplicated on the INJECTION name rather than the lookup key, because that name is what the
-  // job body is keyed by: two integrations that resolve different keys into one variable would
-  // otherwise both emit it and the last would silently win. Deduping here also covers the ordinary
-  // shared-account case (one vendor behind an image and a music endpoint), since a shared lookup
-  // key with no `envName` shares its injection name too.
-  const seen = new Set<string>()
-  const wanted = generators.map((generator) => ({
-    generator,
-    credentials: (generator.credentials ?? []).flatMap((credential) => {
-      const envName = binaryGeneratorCredentialEnvName(credential)
-      if (seen.has(envName) || !passesEnvNameFloors(input, generator, credential, envName))
-        return []
-      seen.add(envName)
-      return [{ credential, envName }]
-    }),
-  }))
+  const plans = planBinaryGeneratorCredentials(generators)
+  for (const plan of plans) reportWithheldCredentials(input, plan)
   const resolved = await Promise.all(
-    wanted.map(async ({ generator, credentials }) =>
-      credentials.length === 0 ? [] : resolveFor(input, resolver, generator, credentials),
+    plans.map(async (plan) =>
+      plan.injectable.length === 0 ? [] : resolveFor(input, resolver, plan),
     ),
   )
   return resolved.flat()
 }
 
 /**
- * The two name floors, applied BEFORE the resolver is asked and reported at the severity a
- * declaration earns. A credential that fails one contributes nothing, exactly as an unresolvable
- * one does, so the brief's "an unset variable means the platform could not provide it" stays the
- * single story the agent is told.
+ * What the operator is told about a credential the plan withheld, at the severity its cause earns.
  *
- * Both checks live HERE rather than inside the env-backed default resolver so they hold whatever
- * a facade wired. Boot validation refuses such a declaration through the credential schema, but a
- * MOTHERSHIP-MODE node boot-validates none of the definitions it resolves: they arrive per
- * dispatch over `/internal/binary-generators`, chosen by a process that is not this one, and the
- * environment they would be read from is a developer's own laptop.
+ * Every case here is a DECLARATION defect rather than an unset variable, so each is a `warn` and
+ * each names the fix in the deployment's own code. None is reported to the agent from this side:
+ * the brief already states what a withheld credential means for the integration it belongs to,
+ * and a second declaration from here could only agree with the environment or contradict it.
  */
-function passesEnvNameFloors(
+function reportWithheldCredentials(
   input: ResolveBinaryGeneratorSecretsInput,
-  generator: ResolvedBinaryGenerator,
-  credential: ResolvedBinaryGeneratorCredential,
-  envName: string,
-): boolean {
-  // Only the LOOKUP key is held to the platform floor. The injection name reads nothing, so it
-  // gets the toolchain rule below instead, which is what lets an integration keep a vendor's
-  // documented variable name even when a platform prefix family covers it.
-  if (isReservedPlatformEnvKey(credential.key)) {
-    // Reported at WARN, not at the `debug` an optional missing key gets: this is never a
-    // deployment's stated normal, and its fix is a declaration rather than a variable to set.
-    input.logger?.warn(
-      'binary-generator declares a reserved credential key; the agent is told the integration is unavailable',
-      {
-        binaryGeneratorId: generator.id,
-        credentialKey: credential.key,
-        detail: reservedEnvKeyMessage(credential.key),
-      },
-    )
-    return false
-  }
-  // A value injected under a toolchain name reconfigures the agent's process instead of
-  // authenticating a call. Registration refuses one; this is the mothership case again.
-  if (isToolchainEnvName(envName)) {
+  plan: GeneratorPlan,
+): void {
+  for (const { credential, envName, reason } of plan.refused) {
+    if (reason === 'reserved_key') {
+      input.logger?.warn(
+        'binary-generator declares a reserved credential key; the agent is told the integration is unavailable',
+        {
+          binaryGeneratorId: plan.generatorId,
+          credentialKey: credential.key,
+          detail: reservedEnvKeyMessage(credential.key),
+        },
+      )
+      continue
+    }
     input.logger?.warn(
       'binary-generator declares a toolchain injection name; the agent is told the integration is unavailable',
       {
-        binaryGeneratorId: generator.id,
+        binaryGeneratorId: plan.generatorId,
         credentialEnvName: envName,
         detail: toolchainEnvNameMessage(envName),
       },
     )
-    return false
   }
-  return true
+  for (const conflict of plan.conflicts) {
+    input.logger?.warn(
+      'binary-generator credential name is already claimed on this step; none of its credentials is injected',
+      {
+        binaryGeneratorId: plan.generatorId,
+        credentialEnvName: conflict.envName,
+        claimedBy: conflict.claimedBy,
+      },
+    )
+  }
 }
 
 /** One resolver call for one integration's whole credential list, mapped to injection names. */
 async function resolveFor(
   input: ResolveBinaryGeneratorSecretsInput,
   resolver: ToolSecretResolver,
-  generator: ResolvedBinaryGenerator,
-  wanted: WantedCredential[],
+  plan: GeneratorPlan,
 ): Promise<GeneratorSecretJobSpec[]> {
   const resolved = await runBestEffort(
     input.logger ?? noopLogger,
@@ -182,17 +163,17 @@ async function resolveFor(
       resolver.resolve({
         workspaceId: input.workspaceId,
         ...(input.blockId ? { blockId: input.blockId } : {}),
-        subject: { kind: 'binary-generator', id: generator.id },
+        subject: { kind: 'binary-generator', id: plan.generatorId },
         // The credentials are declared with no `header`, so the default env-var channel applies —
         // an integration is called by the AGENT's own code, not by a client we configure, so a
         // header template would be a shape nothing here could act on. `required` rides the
         // declaration for the BRIEF's benefit, not this resolver's: the disposition for a missing
         // key is stated to the agent, never enforced by dropping something silently here.
-        keys: wanted.map(({ credential }) => ({ key: credential.key })),
+        keys: plan.injectable.map(({ credential }) => ({ key: credential.key })),
       }),
-    { binaryGeneratorId: generator.id },
+    { binaryGeneratorId: plan.generatorId },
   )
-  return wanted.flatMap(({ credential, envName }) => {
+  return plan.injectable.flatMap(({ credential, envName }) => {
     const value = resolved?.[credential.key]
     if (value) return [{ key: envName, value }]
     // An unresolved credential is reported at the severity its DECLARATION earns, because the two
@@ -203,13 +184,13 @@ async function resolveFor(
     if (credential.required === false) {
       input.logger?.debug(
         'binary-generator optional credential did not resolve; the agent is told to call it unauthenticated',
-        { binaryGeneratorId: generator.id, credentialKey: credential.key },
+        { binaryGeneratorId: plan.generatorId, credentialKey: credential.key },
       )
       return []
     }
     input.logger?.warn(
       'binary-generator credential did not resolve; the agent is told the integration is unavailable',
-      { binaryGeneratorId: generator.id, credentialKey: credential.key },
+      { binaryGeneratorId: plan.generatorId, credentialKey: credential.key },
     )
     return []
   })

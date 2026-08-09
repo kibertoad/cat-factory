@@ -4,6 +4,8 @@ import {
   binaryFormatCoverage,
   binaryGeneratorCredentialEnvName,
   binaryModalityOverlaps,
+  isReservedPlatformEnvKey,
+  isToolchainEnvName,
   requiredBinaryCapabilities,
 } from '@cat-factory/contracts'
 import type {
@@ -114,6 +116,115 @@ export function dispatchBinaryGenerators(
         }
       : {}),
   }))
+}
+
+/**
+ * A credential as EITHER of its projections carries it. The registry view holds declarations and
+ * the dispatch projection holds their names, and the rule below reads only the two names, so it
+ * is stated once against both rather than twice against each.
+ */
+interface BinaryGeneratorCredentialNames {
+  key: string
+  envName?: string
+}
+
+/** One integration whose declared credentials cannot be delivered, and who has the name instead. */
+export interface BinaryGeneratorCredentialConflict {
+  /** The injection name two declarations want. */
+  envName: string
+  /**
+   * The integration this step gives the name to, which is the FIRST in selection order to claim
+   * it. Equal to the conflicted integration's own id when a single definition declares the name
+   * twice (registration refuses that, and a mothership-served definition is validated by nobody).
+   */
+  claimedBy: string
+}
+
+/** What one integration's declared credentials come to, once the WHOLE selection is considered. */
+export interface BinaryGeneratorCredentialPlan<C> {
+  generatorId: string
+  /**
+   * The credentials that will be resolved and injected under their own values, in declaration
+   * order. EMPTY whenever {@link conflicts} is not, because a partial set is the failure this
+   * plan exists to prevent.
+   */
+  injectable: { credential: C; envName: string }[]
+  /**
+   * Credentials dropped by a NAME FLOOR. Their variable is simply never set, which is a state the
+   * brief already covers: an unset required value means the integration must not be called.
+   */
+  refused: {
+    credential: C
+    envName: string
+    reason: 'reserved_key' | 'toolchain_env_name'
+  }[]
+  /** Non-empty means NOTHING of this integration's is injected. See {@link injectable}. */
+  conflicts: BinaryGeneratorCredentialConflict[]
+}
+
+/**
+ * Which of a selection's declared credentials are actually deliverable, and which are withheld.
+ *
+ * ONE function because the BRIEF and the container executor's resolver must agree about this
+ * exactly: the brief tells the agent which variables hold this integration's credential, and the
+ * resolver decides which variables are set. A disagreement is not a missing key, it is a WRONG
+ * one, which is the more expensive failure by a wide margin. An agent told a variable holds its
+ * credential reads whatever is there and signs a request with it; the 401 that comes back is
+ * indistinguishable from a revoked key, so the operator debugs against the vendor's console
+ * rather than against the declaration that caused it.
+ *
+ * The rule is that an injection name belongs to at most ONE integration in a selection. It has to
+ * be a whole-integration rule rather than a per-credential one because the resolver is SUBJECT
+ * scoped by design (`ToolSecretSubject` exists precisely so a per-workspace store can hold a
+ * different value per integration under one key name), so two integrations naming one variable is
+ * two values and one slot in the agent's environment. Dropping just the loser's clashing half
+ * would leave it holding the winner's key beside its own secret, which is the one state no prose
+ * can describe usefully: withholding the whole set puts it back on the honest path the brief
+ * already has, where an unset required variable means "do not call this integration".
+ *
+ * Compared case-INSENSITIVELY, the same rule the within-definition check applies and for the same
+ * reason: environment lookup is case-insensitive on Windows, so `ACME_KEY` and `acme_key` are one
+ * variable on a developer's laptop and two in the declaration.
+ *
+ * The NAME FLOORS are applied here rather than at either consumer, so a credential refused by one
+ * claims no name and a valid declaration behind it can still use it. Applying them on only one
+ * side of the seam would put the two readers back into disagreement through the side door.
+ */
+export function planBinaryGeneratorCredentials<C extends BinaryGeneratorCredentialNames>(
+  generators: readonly { id: string; credentials?: readonly C[] }[],
+): BinaryGeneratorCredentialPlan<C>[] {
+  const claimedBy = new Map<string, string>()
+  return generators.map((generator) => {
+    const plan: BinaryGeneratorCredentialPlan<C> = {
+      generatorId: generator.id,
+      injectable: [],
+      refused: [],
+      conflicts: [],
+    }
+    for (const credential of generator.credentials ?? []) {
+      const envName = binaryGeneratorCredentialEnvName(credential)
+      // Only the LOOKUP key is held to the platform floor. The injection name reads nothing, so it
+      // gets the toolchain rule instead, which is what lets an integration keep a vendor's
+      // documented variable name even when a platform prefix family covers it.
+      if (isReservedPlatformEnvKey(credential.key)) {
+        plan.refused.push({ credential, envName, reason: 'reserved_key' })
+        continue
+      }
+      if (isToolchainEnvName(envName)) {
+        plan.refused.push({ credential, envName, reason: 'toolchain_env_name' })
+        continue
+      }
+      const owner = claimedBy.get(envName.toUpperCase())
+      if (owner !== undefined) {
+        plan.conflicts.push({ envName, claimedBy: owner })
+        continue
+      }
+      claimedBy.set(envName.toUpperCase(), generator.id)
+      plan.injectable.push({ credential, envName })
+    }
+    if (plan.conflicts.length > 0) plan.injectable = []
+    return plan
+  })
 }
 
 /** One way a step's generative-integration selection fails against the registry. */
@@ -397,6 +508,12 @@ export function renderBinaryGeneratorSection(input: {
       'Generate every artifact through these integrations, and only these. Each is limited to the content types listed — never ask one for a kind of output it does not produce.',
       '',
     )
+    // The SAME computation the container executor's resolver runs, so what the agent is told a
+    // variable holds and what is actually set in its environment cannot disagree. Once, above the
+    // loop, because the rule is a fact about the whole selection rather than about one entry.
+    const conflicts = new Map(
+      planBinaryGeneratorCredentials(selected).map((plan) => [plan.generatorId, plan.conflicts]),
+    )
     for (const generator of selected) {
       lines.push(`### \`${generator.id}\` — ${generator.name}`, '')
       lines.push(`- Produces: ${generator.modalities.map(describeModality).join(', ')}.`)
@@ -411,7 +528,12 @@ export function renderBinaryGeneratorSection(input: {
       lines.push(`- ${generator.summary}`)
       if (generator.description.trim()) lines.push('', generator.description.trim())
       if (generator.guidance?.trim()) lines.push('', generator.guidance.trim())
-      lines.push('', ...credentialLines(generator), ...contractLines(generator), '')
+      lines.push(
+        '',
+        ...credentialLines(generator, conflicts.get(generator.id) ?? []),
+        ...contractLines(generator),
+        '',
+      )
     }
     lines.push(...overlapLines(selected))
   }
@@ -587,8 +709,25 @@ function overlapLines(selected: BinaryGeneratorView[]): string[] {
 
 /** `` `a` and `b` ``; `` `a`, `b` and `c` ``. Total for any length, including the empty list. */
 function joinIds(ids: readonly string[]): string {
+  return joinQuoted(ids, 'and')
+}
+
+/**
+ * The same list under a DISJUNCTION: `` `a` or `b` ``; `` `a`, `b` or `c` ``.
+ *
+ * Its own helper because the conjunction states the wrong CONDITION wherever the rule fires on any
+ * one member: "if `A` and `B` are unset" reads as both, so an agent holding one half of a pair
+ * whose other half resolved concludes the sentence does not apply to it.
+ */
+function joinIdsOr(ids: readonly string[]): string {
+  return joinQuoted(ids, 'or')
+}
+
+function joinQuoted(ids: readonly string[], conjunction: 'and' | 'or'): string {
   const quoted = ids.map((id) => `\`${id}\``)
-  return [quoted.slice(0, -1).join(', '), ...quoted.slice(-1)].filter(Boolean).join(' and ')
+  return [quoted.slice(0, -1).join(', '), ...quoted.slice(-1)]
+    .filter(Boolean)
+    .join(` ${conjunction} `)
 }
 
 /**
@@ -662,8 +801,19 @@ function requirementLines(
  * missing one means "do not call", an agent holding an API key whose secret did not resolve has
  * been told something true about each half and nothing about the request it is about to write,
  * and the plausible reading (send what arrived) costs the run a 401 it will read as a wrong key.
+ *
+ * Which makes the QUANTIFIER of each joint sentence load-bearing, and the two dispositions take
+ * opposite ones. The required rule fires on ANY missing part, because a credential assembled from
+ * some of its halves is refused whole; the optional rule fires PER value, because each was
+ * declared skippable on its own. Stating either with a bare conjunction ("if A and B are unset")
+ * hands the agent a condition that reads as false in exactly the case the sentence is for: one
+ * half missing, the other in hand, and a request about to be written from what arrived.
  */
-function credentialLines(generator: BinaryGeneratorView): string[] {
+function credentialLines(
+  generator: BinaryGeneratorView,
+  conflicts: readonly BinaryGeneratorCredentialConflict[],
+): string[] {
+  if (conflicts.length > 0) return credentialConflictLines(generator, conflicts)
   if (generator.credentials.length === 0) {
     return [
       `No credential is configured for \`${generator.id}\`: call it unauthenticated as its contract describes, and report a rejection rather than inventing a key.`,
@@ -682,6 +832,8 @@ function credentialLines(generator: BinaryGeneratorView): string[] {
     usage: credential.usage,
     required: credential.required !== false,
   }))
+  const required = credentials.filter((credential) => credential.required).map((c) => c.envName)
+  const optional = credentials.filter((credential) => !credential.required).map((c) => c.envName)
   const [only] = credentials
   const lines =
     credentials.length === 1 && only
@@ -696,21 +848,81 @@ function credentialLines(generator: BinaryGeneratorView): string[] {
               `- \`${credential.envName}\`: ${credential.usage ? `send it as ${credential.usage}` : 'its API contract states how to present it'}.`,
           ),
           '',
-          'They are parts of ONE credential, not alternatives: a request carrying some of them is not partly authenticated, it is refused. Assemble them exactly as stated above, and never improvise a value for one you were not given.',
+          // Inseparability is a fact about the REQUIRED values, not about the list. Stated over
+          // every declared value it contradicts the optional sentence two lines below, which tells
+          // the agent to send a call missing exactly the values this one calls indispensable.
+          required.length > 1
+            ? `${joinIds(required)} are parts of ONE credential, not alternatives: a request carrying some of them is not partly authenticated, it is refused. Assemble them exactly as stated above, and never improvise a value for one you were not given.`
+            : 'Assemble them exactly as stated above, and never improvise a value for one you were not given.',
         ]
-  const required = credentials.filter((credential) => credential.required).map((c) => c.envName)
-  const optional = credentials.filter((credential) => !credential.required).map((c) => c.envName)
-  if (required.length > 0) {
+  lines.push(...credentialDispositionLines(generator.id, credentials.length, required, optional))
+  return lines
+}
+
+/**
+ * The two sentences that say what a MISSING value means, each under the quantifier its rule
+ * actually has: see {@link credentialLines} for why a shared conjunction is wrong for both.
+ */
+function credentialDispositionLines(
+  generatorId: string,
+  declared: number,
+  required: readonly string[],
+  optional: readonly string[],
+): string[] {
+  const lines: string[] = []
+  // "the credential" only where the integration declared exactly one. With more declared, a single
+  // required value is still one PART of the thing being assembled, and calling it the whole
+  // credential invites a call carrying it alone.
+  const missingPart = declared === 1 ? 'the credential' : 'that part of the credential'
+  if (required.length === 1) {
     lines.push(
-      `If ${joinIds(required)} ${required.length === 1 ? 'is' : 'are'} unset or empty, the platform could NOT provide ${required.length === 1 ? 'the credential' : 'that part of the credential'}: do not call \`${generator.id}\` at all, and report that its credential was unavailable. An empty variable is not an empty key.`,
+      `If ${joinIds(required)} is unset or empty, the platform could NOT provide ${missingPart}: do not call \`${generatorId}\` at all, and report that its credential was unavailable. An empty variable is not an empty key.`,
+    )
+  } else if (required.length > 1) {
+    lines.push(
+      `If ANY ONE of ${joinIdsOr(required)} is unset or empty, the platform could NOT provide that part of the credential, and the parts that did arrive authenticate nothing without it: do not call \`${generatorId}\` at all, and report that its credential was unavailable. It takes only one of them to be missing, and an empty variable is not an empty key.`,
     )
   }
-  if (optional.length > 0) {
+  if (optional.length === 1) {
     lines.push(
-      `${joinIds(optional)} ${optional.length === 1 ? 'is' : 'are'} OPTIONAL for \`${generator.id}\`: if ${optional.length === 1 ? 'it is' : 'they are'} unset or empty, still call the integration, ${required.length === 0 ? 'unauthenticated as its contract describes' : `with the ${required.length === 1 ? 'value' : 'values'} above and without ${optional.length === 1 ? 'it' : 'them'}`}. Report a rejection rather than inventing a key.`,
+      `${joinIds(optional)} is OPTIONAL for \`${generatorId}\`: if it is unset or empty, still call the integration, ${required.length === 0 ? 'unauthenticated as its contract describes' : `with the ${required.length === 1 ? 'value' : 'values'} above and without it`}. Report a rejection rather than inventing a key.`,
+    )
+  } else if (optional.length > 1) {
+    lines.push(
+      `${joinIds(optional)} are OPTIONAL for \`${generatorId}\`, and each of them stands on its own: send every one that arrived and leave out ONLY the ones that are unset or empty. Never drop a value you were given because a different optional one was missing. If none of them arrived, still call the integration${required.length === 0 ? ' unauthenticated, as its contract describes' : `, with the ${required.length === 1 ? 'value' : 'values'} above`}. Report a rejection rather than inventing a key.`,
     )
   }
   return lines
+}
+
+/**
+ * The integration whose credentials another one on this step is given the variables for.
+ *
+ * Its own disposition because it is the one credential failure the ordinary prose cannot describe:
+ * everywhere else a value that did not arrive leaves its variable UNSET, and "unset means the
+ * platform could not provide it" is then both true and actionable. Here the variable is SET, with
+ * a different integration's secret in it, so an agent told to read it obeys and signs the request
+ * with the wrong key. The instruction has to name the variable as poisoned rather than absent.
+ */
+function credentialConflictLines(
+  generator: BinaryGeneratorView,
+  conflicts: readonly BinaryGeneratorCredentialConflict[],
+): string[] {
+  const clashing = [...new Set(conflicts.map((conflict) => conflict.envName))]
+  const names = joinIds(clashing)
+  const claimants = [...new Set(conflicts.map((conflict) => conflict.claimedBy))].filter(
+    (id) => id !== generator.id,
+  )
+  const cause =
+    claimants.length > 0
+      ? `${joinIds(claimants)} ${claimants.length === 1 ? 'is' : 'are'} given ${names} on this step, and one environment variable cannot carry two integrations' values.`
+      : `it declares more than one credential that would arrive in ${names}, and one environment variable cannot carry two values.`
+  const holds = clashing.length === 1 ? 'that variable holds' : 'those variables hold'
+  const whose = claimants.length > 0 ? "another integration's value" : "another declaration's value"
+  return [
+    `The platform could NOT provide the credentials for \`${generator.id}\`: ${cause}`,
+    `NONE of \`${generator.id}\`'s own credentials is delivered, not only the clashing one. Do not call \`${generator.id}\` at all, and do not read ${names} for it: ${holds} ${whose}, so a request signed with what is there fails as a WRONG key rather than as a missing one. Report that \`${generator.id}\`'s credential was unavailable.`,
+  ]
 }
 
 /** Where an integration's API contract was injected, or the explicit statement that none exists. */

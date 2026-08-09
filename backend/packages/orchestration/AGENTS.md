@@ -208,7 +208,9 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   each kind's `{ role, directives }` pair so a per-workspace prompt override replaces the role only.
   See CLAUDE.md → "Requirements review".
 - `validation/`: request validation, plus `validateRegistrations.ts`, the BOOT check over a
-  deployment's registered extensions (kinds, gates, pipelines, task types, generators). Its
+  deployment's registered extensions (kinds, gates, pipelines, task types, generators). The
+  generative binary integrations' section lives beside it in `binaryGenerators.ts`, and both speak
+  the `RegistrationProblem` shape from the leaf `registrationProblem.ts`. Its
   severities are the design: an unresolvable pipeline id is an `error` because the created task
   would silently fall back to the positional default, while a task type's unresolvable
   `defaultFragmentIds` is a `warn` naming both causes, since an account/workspace-tier fragment
