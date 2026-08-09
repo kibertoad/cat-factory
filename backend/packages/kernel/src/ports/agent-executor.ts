@@ -623,15 +623,19 @@ export interface AgentRunContext {
    */
   aprioriBranches?: AprioriBranch[]
   /**
-   * For a `conflict-resolver` the conflicts gate dispatched on a PEER-repo conflict
-   * (a multi-repo, service-connections task), which of the block's repos the resolver
-   * must target — set by the engine from the gate's `step.gate.conflictTarget` when the
-   * conflict is on a connected involved service's repo (`frameId` present). The container
-   * executor resolves THAT frame's repo (not the task's own service) and clones its PR
-   * (work) branch. Absent ⇒ the own-service repo (the single-repo default). Only the
+   * For a `conflict-resolver` the conflicts gate dispatched on a multi-repo
+   * (service-connections) task, which of the block's repos conflicted, set by the engine from
+   * the gate's `step.gate.conflictTarget`. The container executor resolves THAT repo and clones
+   * its PR (work) branch when it is a peer, and leaves the resolver on the own service when it
+   * is the own repo. Absent ⇒ the own-service repo (the single-repo default). Only the
    * conflict-resolver reads it; every other kind ignores it.
+   *
+   * `repo` is what ADDRESSES the checkout and is always set. `frameId` rides along as
+   * attribution when the conflicted pull request recorded one, and seeds the repo resolution;
+   * nothing decides own-versus-peer on its presence, since a peer pull request recorded without
+   * its frames would then read as an own-repo conflict.
    */
-  conflictTarget?: { repo: string; frameId: string }
+  conflictTarget?: { repo: string; frameId?: string }
   /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.

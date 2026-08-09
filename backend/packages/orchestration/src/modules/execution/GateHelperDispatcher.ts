@@ -76,17 +76,23 @@ export class GateHelperDispatcher {
       : [gate.helperPriorOutput?.(failureSummary ?? '')].filter(
           (o): o is { agentKind: string; output: string } => o != null,
         )
-    // When the conflicts gate detected the conflict on a PEER repo (multi-repo task), hand the
-    // conflict-resolver the target repo so the executor points it at THAT repo (own-service or
-    // a connected service) instead of always the own service. Own-repo conflicts leave it absent
-    // (`conflictTarget` carries no `frameId`), so the resolver targets the own repo as before.
+    // When the conflicts gate named the repo that conflicted (a multi-repo task), hand it to the
+    // conflict-resolver so the executor points it at THAT repo instead of always the own service.
+    // Forwarded on the REPO, which is what addresses a checkout: gating this on the frame beside
+    // it dropped the target for any peer pull request recorded without its attribution, and a
+    // dropped target reads as an own-repo conflict rather than as the missing record it is.
     const conflictTarget = step.gate?.conflictTarget
     const context: AgentRunContext = {
       ...base,
       agentKind: gate.helperKind,
       priorOutputs: [...base.priorOutputs, ...extras],
-      ...(conflictTarget?.frameId
-        ? { conflictTarget: { repo: conflictTarget.repo, frameId: conflictTarget.frameId } }
+      ...(conflictTarget?.repo
+        ? {
+            conflictTarget: {
+              repo: conflictTarget.repo,
+              ...(conflictTarget.frameId ? { frameId: conflictTarget.frameId } : {}),
+            },
+          }
         : {}),
     }
     const handle = await executor.startJob(context)

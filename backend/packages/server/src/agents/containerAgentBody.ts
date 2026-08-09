@@ -5,7 +5,7 @@ import type {
   HarnessKind,
   ModelRef,
 } from '@cat-factory/kernel'
-import { resolveDesignImageDelivery } from '@cat-factory/kernel'
+import { noopLogger, resolveDesignImageDelivery } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   CONFLICT_RESOLVER_AGENT_KIND,
@@ -271,14 +271,14 @@ export async function resolveMultiRepoFanout(
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
 ): Promise<{
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
   multiRepoSection?: string
   repoSpecOverride?: Record<string, unknown>
   repoTargets: RepoTarget[]
 }> {
   const { workspaceId, blockId, repo } = args
   let peerRepos:
-    | { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+    | { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
     | undefined
   let multiRepoSection: string | undefined
   let repoSpecOverride: Record<string, unknown> | undefined
@@ -305,10 +305,20 @@ export async function resolveMultiRepoFanout(
     if (peerCheckouts.length > 0 || coLocated.length > 0) {
       const origin = deps.resolveRepoOrigin ?? githubRepoOrigin
       if (peerCheckouts.length > 0) {
-        peerRepos = peerCheckouts.map((c: RepoCheckout) => ({
-          repo: buildRepoSpec(c.target, origin(c.target)),
-          ...(c.involved[0]?.frameId ? { frameId: c.involved[0].frameId } : {}),
-        }))
+        peerRepos = peerCheckouts.map((c: RepoCheckout) => {
+          // Whole-repo, exactly like the primary below: a peer checkout can host SEVERAL of the
+          // run's involved services (one monorepo, several service frames), and scoping it to
+          // the subdirectory of whichever resolved first would put the rest out of reach. The
+          // layout section names each service's subdirectory instead.
+          const { serviceDirectory: _drop, ...rootTarget } = c.target
+          return {
+            repo: buildRepoSpec(rootTarget, origin(rootTarget)),
+            // EVERY frame this repo hosts, not the first: they share this checkout, its work
+            // branch and its single pull request, so the PR the harness echoes them back onto
+            // is the one pull request all of them landed in.
+            ...(c.involved.length ? { frameIds: c.involved.map((i) => i.frameId) } : {}),
+          }
+        })
         repoTargets.push(...peerCheckouts.map((c: RepoCheckout) => c.target))
       }
       multiRepoSection = renderMultiRepoWorkspaceSection(checkouts, involvedServices)
@@ -335,9 +345,13 @@ export async function resolveMultiRepoFanout(
  * `context.conflictTarget`. Point the (single-repo) resolver at that PEER repo — resolve its
  * target and swap `repo`/`common.repo` — instead of the task's own service. The resolver clones
  * the peer's PR (work) branch and merges the peer's base in (jobBody pins the branch to the shared
- * work branch and reads `mergeBase` off this swapped target). An own-repo conflict carries no
- * `frameId`, so this returns `undefined` and the resolver targets the own service. Extracted from
+ * work branch and reads `mergeBase` off this swapped target). Extracted from
  * `ContainerAgentExecutor.resolveAuxiliaryRepos` to keep it under the complexity ceiling.
+ *
+ * Own or peer is decided by the target's REPO, the same field that addresses the checkout, and
+ * never by whether the gate managed to tag a frame beside it: the frame is attribution, it comes
+ * off a recorded pull request, and a record carrying none would otherwise read as an own-repo
+ * conflict and send the resolver at a repo that does not conflict.
  */
 export async function resolveConflictResolverPeer(
   context: AgentRunContext,
@@ -349,12 +363,25 @@ export async function resolveConflictResolverPeer(
   deps: ContainerAgentExecutorDependencies,
 ): Promise<{ repoForKind: RepoTarget; repoSpecOverride: Record<string, unknown> } | undefined> {
   const { workspaceId, blockId, repo } = args
-  const conflictFrameId =
-    context.agentKind === CONFLICT_RESOLVER_AGENT_KIND ? context.conflictTarget?.frameId : undefined
-  if (!conflictFrameId || !deps.resolveRepoTargets) return undefined
-  const { checkouts } = await deps.resolveRepoTargets(workspaceId, blockId, [conflictFrameId], repo)
+  const target =
+    context.agentKind === CONFLICT_RESOLVER_AGENT_KIND ? context.conflictTarget : undefined
+  // Nothing to retarget: a single-repo block (the gate tags no target at all) or a conflict on
+  // the task's own repo, which is where the resolver already runs.
+  if (!target || target.repo === `${repo.owner}/${repo.name}` || !deps.resolveRepoTargets) {
+    return undefined
+  }
+  // The frames whose repos to resolve: the task's involved services, plus the one the gate
+  // tagged when it had it. The tag alone was not enough, since a peer pull request recorded
+  // without its attribution tags nothing.
+  const frameIds = [
+    ...new Set([
+      ...(context.involvedServices ?? []).map((s) => s.frameId),
+      ...(target.frameId ? [target.frameId] : []),
+    ]),
+  ]
+  const { checkouts } = await deps.resolveRepoTargets(workspaceId, blockId, frameIds, repo)
   const peer = checkouts.find(
-    (c) => !c.primary && c.involved.some((i) => i.frameId === conflictFrameId),
+    (c) => !c.primary && `${c.target.owner}/${c.target.name}` === target.repo,
   )
   // Fail fast if the tagged peer can't be resolved (e.g. a stale/missing repo projection row):
   // falling through would silently point the resolver at the OWN repo, which has no conflict, so
@@ -363,7 +390,7 @@ export async function resolveConflictResolverPeer(
   // inconsistency immediately instead.
   if (!peer) {
     throw new Error(
-      `Conflict-resolver could not resolve the conflicted peer repo (frame '${conflictFrameId}') ` +
+      `Conflict-resolver could not resolve the conflicted peer repo '${target.repo}' ` +
         `for block '${blockId}' — its repo projection may be missing or unlinked.`,
     )
   }
@@ -384,6 +411,15 @@ export async function resolveConflictResolverPeer(
  * own PR branch to check out, plus a section naming the sibling diff commands. Returns `undefined`
  * (leaving the fan-out result to stand) when it doesn't fire. Extracted from
  * `ContainerAgentExecutor.resolveAuxiliaryRepos` to keep it under the complexity ceiling.
+ *
+ * A recorded peer PR is addressed by its REPO, never by its frame attribution, which is the same
+ * split the conflict gate makes (`conflictTarget.frameId` addresses, `frameIds` attributes). The
+ * repo is what a checkout is, and it is the one field every recorded peer PR carries: keying the
+ * lookup on the attribution instead made a record whose frames were absent resolve to NOTHING, so
+ * the merger fell back to scoring the own-service diff alone and auto-merged a cross-repo change
+ * on a third of the evidence, with nothing to tell that apart from a genuine single-repo run.
+ * `resolveRepoTargets` is what CONFIRMS the repo (it is harness-reported), so a peer outside the
+ * resolved checkout set is dropped LOUDLY: named to the merger in the section, and logged.
  */
 export async function resolveMergerCombinedDiff(
   context: AgentRunContext,
@@ -396,7 +432,7 @@ export async function resolveMergerCombinedDiff(
   deps: ContainerAgentExecutorDependencies,
 ): Promise<
   | {
-      peerRepos: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+      peerRepos: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
       multiRepoSection: string
       repoTargets: RepoTarget[]
     }
@@ -407,46 +443,76 @@ export async function resolveMergerCombinedDiff(
   if (context.agentKind !== MERGER_AGENT_KIND || peerPrs.length === 0 || !deps.resolveRepoTargets) {
     return undefined
   }
-  const frameIds = peerPrs.map((p) => p.frameId).filter((f): f is string => !!f)
+  // The frames to resolve: what the task declares as involved, plus any frame a recorded peer PR
+  // attributes itself to. The union rather than either alone, the same rule the report publisher
+  // resolves its targets by. The declared list is what the run fanned out over, the recorded
+  // attribution is what it actually opened, and a peer whose frame has since left the task still
+  // has an open pull request whose diff belongs in the score.
+  const frameIds = [
+    ...new Set([
+      ...(context.involvedServices ?? []).map((s) => s.frameId),
+      ...peerPrs.flatMap((p) => p.frameIds ?? []),
+    ]),
+  ]
   if (frameIds.length === 0) return undefined
   const { checkouts } = await deps.resolveRepoTargets(workspaceId, blockId, frameIds, repo)
   const origin = deps.resolveRepoOrigin ?? githubRepoOrigin
+  const byRepo = new Map(
+    checkouts.filter((c) => !c.primary).map((c) => [`${c.target.owner}/${c.target.name}`, c]),
+  )
   const legs: {
     spec: Record<string, unknown>
-    frameId: string
+    frameIds: string[]
     cloneBranch: string
     target: RepoTarget
   }[] = []
+  const unaddressable: string[] = []
   for (const pr of peerPrs) {
-    if (!pr.frameId) continue
-    const checkout = checkouts.find(
-      (c) => !c.primary && c.involved.some((i) => i.frameId === pr.frameId),
-    )
-    if (!checkout) continue
+    const checkout = pr.repo ? byRepo.get(pr.repo) : undefined
+    if (!checkout) {
+      unaddressable.push(pr.repo || pr.ref.url)
+      continue
+    }
     legs.push({
       spec: buildRepoSpec(checkout.target, origin(checkout.target)),
-      frameId: pr.frameId,
+      // The recorded attribution when the run stated one, else the frames this checkout hosts:
+      // the same derivation the dispatch made, off the same resolution, so a record that
+      // carries none is attributed rather than left blank.
+      frameIds: pr.frameIds?.length ? pr.frameIds : checkout.involved.map((i) => i.frameId),
       cloneBranch: pr.ref.branch ?? workBranch,
       target: checkout.target,
+    })
+  }
+  if (unaddressable.length) {
+    // Not a dispatch failure: the merger still scores every repo it CAN see, and refusing the
+    // whole run over one unresolvable peer would be worse. It must know the diff it is holding
+    // is partial, though, so the omission is named to the model and to the operator alike.
+    ;(deps.logger ?? noopLogger).warn('Merger combined diff omits an unresolvable peer repo', {
+      workspaceId,
+      blockId,
+      repos: unaddressable,
     })
   }
   if (legs.length === 0) return undefined
   return {
     peerRepos: legs.map((l) => ({
       repo: l.spec,
-      frameId: l.frameId,
+      frameIds: l.frameIds,
       cloneBranch: l.cloneBranch,
     })),
     // The own service rides the primary checkout at its PR head (clone `pr`, or base when the
     // own service had no change); list it first so the section names its diff command too.
-    multiRepoSection: renderMergerMultiRepoSection([
-      { owner: repo.owner, name: repo.name, baseBranch: repo.baseBranch },
-      ...legs.map((l) => ({
-        owner: l.target.owner,
-        name: l.target.name,
-        baseBranch: l.target.baseBranch,
-      })),
-    ]),
+    multiRepoSection: renderMergerMultiRepoSection(
+      [
+        { owner: repo.owner, name: repo.name, baseBranch: repo.baseBranch },
+        ...legs.map((l) => ({
+          owner: l.target.owner,
+          name: l.target.name,
+          baseBranch: l.target.baseBranch,
+        })),
+      ],
+      unaddressable,
+    ),
     repoTargets: legs.map((l) => l.target),
   }
 }
@@ -618,7 +684,7 @@ export async function resolveAuxiliaryRepos(
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
 ): Promise<{
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
   multiRepoSection?: string
   repoSpecOverride?: Record<string, unknown>
   repoForKind: RepoTarget

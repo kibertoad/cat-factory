@@ -115,34 +115,44 @@ describe('allPullRequests', () => {
     expect(allPullRequests({ pullRequest: undefined, peerPullRequests: undefined })).toEqual([])
   })
 
-  it('lists the own-service PR first with no repo/frameId', () => {
+  it('lists the own-service PR first with no repo/frameIds', () => {
     const out = allPullRequests({ pullRequest: ref('own'), peerPullRequests: [] })
     expect(out).toEqual([{ ref: ref('own') }])
     expect(out[0]).not.toHaveProperty('repo')
   })
 
-  it('appends peer PRs carrying repo and (when known) frameId', () => {
+  it('appends peer PRs carrying repo and (when known) frameIds', () => {
     const block: Pick<Block, 'pullRequest' | 'peerPullRequests'> = {
       pullRequest: ref('own'),
       peerPullRequests: [
-        { repo: 'org/peer1', frameId: 'f1', ref: ref('p1') },
+        { repo: 'org/peer1', frameIds: ['f1'], ref: ref('p1') },
         { repo: 'org/peer2', ref: ref('p2') },
       ],
     }
     expect(allPullRequests(block)).toEqual([
       { ref: ref('own') },
-      { repo: 'org/peer1', frameId: 'f1', ref: ref('p1') },
+      { repo: 'org/peer1', frameIds: ['f1'], ref: ref('p1') },
       { repo: 'org/peer2', ref: ref('p2') },
     ])
   })
 
-  it('omits frameId entirely when a peer has none (not set to undefined)', () => {
+  // A monorepo hosting several of the run's involved services is ONE checkout, ONE work branch
+  // and ONE pull request, so every frame it hosts rides that single entry.
+  it('keeps every frame of a shared-monorepo peer PR', () => {
+    const out = allPullRequests({
+      pullRequest: undefined,
+      peerPullRequests: [{ repo: 'org/mono', frameIds: ['f_api', 'f_web'], ref: ref('p') }],
+    })
+    expect(out).toEqual([{ repo: 'org/mono', frameIds: ['f_api', 'f_web'], ref: ref('p') }])
+  })
+
+  it('omits frameIds entirely when a peer has none (not set to undefined)', () => {
     const out = allPullRequests({
       pullRequest: undefined,
       peerPullRequests: [{ repo: 'org/peer', ref: ref('p') }],
     })
     expect(out).toHaveLength(1)
-    expect(out[0]).not.toHaveProperty('frameId')
+    expect(out[0]).not.toHaveProperty('frameIds')
   })
 })
 

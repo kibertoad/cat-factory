@@ -62,10 +62,17 @@ export interface PrReportTarget {
    */
   role: 'own' | 'peer'
   /**
-   * The involved service frame whose repo this is, when the recorded peer PR attributed one.
-   * Null for the own-service target, and for a peer whose frame was not recorded.
+   * The involved service frames whose changes ride this pull request. More than one when the
+   * repo is a monorepo hosting several of the run's involved services: they share the checkout,
+   * the work branch and this pull request.
+   *
+   * Set on the OWN-SERVICE target too, naming the involved services co-located in the primary
+   * repo. Those have no checkout and no pull request of their own (the fan-out dedupes by REPO),
+   * so this report is the only place their change is reported at all, and a co-located service
+   * left unnamed here reads exactly like one the run opened no pull request for. Absent on a
+   * single-repo run, which has no involved service to name.
    */
-  frameId?: string | null
+  frameIds?: string[]
   /** The pull request's web URL, when known — what a peer report links back to. */
   url?: string | null
 }
