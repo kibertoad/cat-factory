@@ -50,12 +50,9 @@ about a deployment that configured a key. So a node needs a mothership new enoug
 field and fails loudly against one that is not, rather than reporting a 401 against an integration
 nobody gave credentials to.
 
-Also states, in the capability vocabulary itself, the rule a closed-enumeration endpoint kept turning
-into a judgement call: a capability says the request can CARRY a value, never which values are
-accepted. An endpoint offering a closed list of exact `WxH` sizes is handed pixel dimensions and
-still rounds, so it declares `aspect-ratio` (whose meaning already covers a set it rounds to) and not
-`exact-size`, whose test is whether an ARBITRARY pair can be asked for. Where no coarser member
-exists, an endpoint that accepts an option only at values it fixes declares nothing and says what it
-does in `guidance`: declaring the accepted values instead would be the stale per-integration table
-the design record refuses, and for an upscaler with no factor to enumerate it would be a fabricated
-one, admitting a step that asked for 4x and serving it an enlargement at an unknown multiple.
+Also states, in the capability vocabulary itself, the rule an endpoint with no parameter kept turning
+into a judgement call: a capability says the request can CARRY a value. An endpoint that does
+something adjacent without a parameter for it declares nothing and says what it does in `guidance`,
+because an upscaler that enlarges at a ratio it fixes itself has no factor to be handed, and
+declaring `upscale` for it admits a step that asked for 4x and serves it an enlargement at an unknown
+multiple.

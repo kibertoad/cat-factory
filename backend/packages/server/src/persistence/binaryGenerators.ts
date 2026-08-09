@@ -184,6 +184,14 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
  * older mothership, and the same one that lets every integration registered before the axis
  * existed keep running. A capabilities key that is PRESENT and not an array is a wrong shape like
  * any other, so it is refused here rather than quietly flattened into "declared none".
+ *
+ * `accepts` is the same case one axis finer, and it needs no fill: the view carries it OPTIONALLY,
+ * so a mothership predating the value axis serves nothing and every option is judged exactly as it
+ * was before the field existed. Only its SHAPE is checked, because a present non-object would reach
+ * the value rule as a property read on the wrong kind of value, which is the unreadable reply
+ * escaping as a wrong verdict rather than as the one `UnavailableError` this class promises. The
+ * sets inside it are not re-validated, for the reason nothing else here is: the mothership
+ * boot-checked the definition they came from.
  */
 type ServedGeneratorView = Omit<BinaryGeneratorView, 'capabilities'> &
   Partial<Pick<BinaryGeneratorView, 'capabilities'>>
@@ -196,7 +204,9 @@ function isGeneratorView(value: unknown): value is ServedGeneratorView {
     Array.isArray(view.modalities) &&
     Array.isArray(view.mediaTypes) &&
     Array.isArray(view.credentials) &&
-    (view.capabilities === undefined || Array.isArray(view.capabilities))
+    (view.capabilities === undefined || Array.isArray(view.capabilities)) &&
+    (view.accepts === undefined ||
+      (typeof view.accepts === 'object' && view.accepts !== null && !Array.isArray(view.accepts)))
   )
 }
 

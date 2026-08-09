@@ -3,6 +3,7 @@ import {
   binaryCapabilityCoverage,
   binaryFormatCoverage,
   binaryModalityOverlaps,
+  binaryValueCoverage,
   conflictingOutputSizeOptions,
   isBinaryModality,
   modalityCarriesPixelDimensions,
@@ -13,6 +14,8 @@ import type {
   BinaryGeneratorCapability,
   BinaryModality,
   BinaryModalityOverlap,
+  BinaryUnacceptedValue,
+  BinaryValueOption,
   ConflictingOutputSizeOption,
   RegisteredBinaryGenerator,
 } from '@cat-factory/contracts'
@@ -533,6 +536,20 @@ export type BinaryOutputPickIssue =
    */
   | 'capability_unverifiable'
   /**
+   * A generation option every selected integration can be ASKED for and none of them accepts the
+   * step's VALUE at: a `7:3` aspect ratio against endpoints whose picklists offer ten others
+   * (kernel's `option_value_unaccepted` spelling verbatim, like the members above it). A refusal.
+   */
+  | 'option_value_unaccepted'
+  /**
+   * The step's value is on no stated set, and a selected integration that declares the capability
+   * states no set at all, so it may still be served. ADVISORY, for the reason
+   * `capability_unverifiable` is, and it is deliberately silent where NOBODY states a set: that is
+   * the state every registration is in until an endpoint is audited, and a line that fired there
+   * would ride nearly every step carrying an aspect ratio.
+   */
+  | 'option_value_unverifiable'
+  /**
    * The step states an exact output size AND another option that restates the delivered
    * dimensions (`aspectRatio`, `upscale`). A refusal, mirroring `assertUnambiguousOutputSize` at
    * pipeline save.
@@ -567,6 +584,11 @@ export interface BinaryOutputPickState {
   unsupportedCapabilities: readonly BinaryGeneratorCapability[]
   /** The ones that could not be judged, kept apart from the refusal above. */
   unverifiableCapabilities: readonly BinaryGeneratorCapability[]
+  /** The requested option values nothing selected accepts, each with what IS accepted, so the
+   *  message names a value the reader can pick instead of only the one they cannot. */
+  unacceptedValues: readonly BinaryUnacceptedValue[]
+  /** The ones a silent declarer left open, kept apart from the refusal above. */
+  unverifiableValues: readonly BinaryValueOption[]
   /** The options restating the delivered dimensions beside an exact size, for the line that names
    *  which field to delete. Computed through contracts' own rule, so this cannot come to a
    *  different answer from the save that refuses it. */
@@ -598,7 +620,7 @@ function generatorPickIssues(
   config: BinaryOutputConfig | undefined,
   generators: readonly Pick<
     RegisteredBinaryGenerator,
-    'id' | 'modalities' | 'mediaTypes' | 'capabilities'
+    'id' | 'modalities' | 'mediaTypes' | 'capabilities' | 'accepts'
   >[],
   unavailable: boolean,
 ): {
@@ -610,6 +632,8 @@ function generatorPickIssues(
   overlaps: BinaryModalityOverlap[]
   unsupportedCapabilities: BinaryGeneratorCapability[]
   unverifiableCapabilities: BinaryGeneratorCapability[]
+  unacceptedValues: BinaryUnacceptedValue[]
+  unverifiableValues: BinaryValueOption[]
 } {
   const none = {
     unknownGeneratorIds: [],
@@ -619,6 +643,8 @@ function generatorPickIssues(
     overlaps: [],
     unsupportedCapabilities: [],
     unverifiableCapabilities: [],
+    unacceptedValues: [],
+    unverifiableValues: [],
   }
   if (unavailable) return { issues: ['generators_unavailable'], ...none }
   const byId = new Map(generators.map((g) => [g.id, g]))
@@ -646,6 +672,10 @@ function generatorPickIssues(
     requiredBinaryCapabilities(config?.generation),
     selected,
   )
+  // One notch finer: the option is supported and the VALUE is not. Imported like every rule
+  // beside it, so the line this surface shows and the refusal the backend raises are one
+  // judgement rather than two that agree until somebody edits one of them.
+  const value = binaryValueCoverage(config?.generation, selected)
   const issues: BinaryOutputPickIssue[] = []
   if (unknownGeneratorIds.length) issues.push('unknown_generator')
   if (uncovered.length) issues.push('modality_uncovered')
@@ -654,6 +684,8 @@ function generatorPickIssues(
   if (overlaps.length) issues.push('generator_overlap')
   if (capability.uncovered.length) issues.push('capability_unsupported')
   if (capability.unverifiable.length) issues.push('capability_unverifiable')
+  if (value.unaccepted.length) issues.push('option_value_unaccepted')
+  if (value.unverifiable.length) issues.push('option_value_unverifiable')
   return {
     issues,
     unknownGeneratorIds,
@@ -663,6 +695,8 @@ function generatorPickIssues(
     overlaps,
     unsupportedCapabilities: capability.uncovered,
     unverifiableCapabilities: capability.unverifiable,
+    unacceptedValues: value.unaccepted,
+    unverifiableValues: value.unverifiable,
   }
 }
 
@@ -699,7 +733,7 @@ export function binaryOutputPickIssues(
   // stays a legitimate value rather than a hole.
   generators: readonly Pick<
     RegisteredBinaryGenerator,
-    'id' | 'modalities' | 'mediaTypes' | 'capabilities'
+    'id' | 'modalities' | 'mediaTypes' | 'capabilities' | 'accepts'
   >[] = [],
   // Whether the deployment's integrations could not be READ. Defaulted to `false` — the honest
   // default, since every deployment but a mothership-mode node reads them in-process and cannot
@@ -737,6 +771,8 @@ export function binaryOutputPickIssues(
       generatorOverlaps: generative.overlaps,
       unsupportedCapabilities: generative.unsupportedCapabilities,
       unverifiableCapabilities: generative.unverifiableCapabilities,
+      unacceptedValues: generative.unacceptedValues,
+      unverifiableValues: generative.unverifiableValues,
       conflictingSizeOptions,
     }
   }
@@ -764,6 +800,8 @@ export function binaryOutputPickIssues(
     generatorOverlaps: generative.overlaps,
     unsupportedCapabilities: generative.unsupportedCapabilities,
     unverifiableCapabilities: generative.unverifiableCapabilities,
+    unacceptedValues: generative.unacceptedValues,
+    unverifiableValues: generative.unverifiableValues,
     conflictingSizeOptions,
   }
 }

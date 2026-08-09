@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import {
+  BINARY_OPTION_CAPABILITIES,
   binaryCapabilityCoverage,
   binaryCapabilityProviders,
   binaryGenerationOptionsObject,
+  binaryGeneratorAcceptsSchema,
   binaryGeneratorCapabilitySchema,
+  binaryValueCoverage,
   conflictingOutputSizeOptions,
   isBinaryGeneratorCapability,
   MAX_BINARY_PIXEL_EXTENT,
   requiredBinaryCapabilities,
   type BinaryGenerationOptions,
+  type BinaryGeneratorAccepts,
+  type BinaryGeneratorCapability,
 } from './binary-capabilities.js'
 
 // The DRIFT GUARD for the one hand-written type in this module. `binaryGenerationOptionsSchema`
@@ -232,6 +237,128 @@ describe('isBinaryGeneratorCapability', () => {
     expect(isBinaryGeneratorCapability('holographic')).toBe(false)
   })
 })
+
+describe('binaryGeneratorAcceptsSchema', () => {
+  it('validates a declared set with the SAME rule the step field uses', () => {
+    const parse = (accepts: unknown) => v.safeParse(binaryGeneratorAcceptsSchema, accepts).success
+    expect(parse({ aspectRatios: ['1:1', '16:9'], upscaleFactors: [2, 4] })).toBe(true)
+    expect(parse({ outputSizes: [{ width: 1024, height: 1024 }] })).toBe(true)
+    // Each of these parses somewhere else in the product and must not parse here: a declaration
+    // validated more loosely than the request could hold a value no step is able to spell, and
+    // the endpoint's own list would then accept nothing at all.
+    expect(parse({ aspectRatios: ['1024x1024'] })).toBe(false)
+    expect(parse({ upscaleFactors: [1] })).toBe(false)
+    expect(parse({ outputSizes: [{ width: 96 }] })).toBe(false)
+  })
+
+  // Absent is the ONE spelling of "not stated". A `[]` that fell out of a filter would otherwise
+  // mean "accepts nothing", refusing every value the endpoint actually has.
+  it('refuses an empty set rather than reading it as "accepts nothing"', () => {
+    expect(v.safeParse(binaryGeneratorAcceptsSchema, { aspectRatios: [] }).success).toBe(false)
+    expect(v.safeParse(binaryGeneratorAcceptsSchema, {}).success).toBe(true)
+  })
+})
+
+describe('binaryValueCoverage', () => {
+  const bucketed = {
+    capabilities: caps('aspect-ratio'),
+    accepts: { aspectRatios: ['1:1', '16:9'] },
+  }
+  const anyRatio = { capabilities: caps('aspect-ratio') }
+
+  it('refuses a value every declarer enumerated away, naming what they do accept', () => {
+    expect(binaryValueCoverage({ aspectRatio: '7:3' }, [bucketed])).toEqual({
+      unaccepted: [{ option: 'aspectRatio', requested: '7:3', accepted: ['1:1', '16:9'] }],
+      unverifiable: [],
+    })
+  })
+
+  it('admits a value one of them accepts', () => {
+    expect(binaryValueCoverage({ aspectRatio: '16:9' }, [bucketed, anyRatio]).unaccepted).toEqual(
+      [],
+    )
+  })
+
+  // The state that lets this ship: one integration refuses the value and another has not said, so
+  // the step is served by the second and the gap is reported rather than refused.
+  it('reports a value as unverifiable when a declarer states no set', () => {
+    expect(binaryValueCoverage({ aspectRatio: '7:3' }, [bucketed, anyRatio])).toEqual({
+      unaccepted: [],
+      unverifiable: ['aspectRatio'],
+    })
+  })
+
+  // Silence here is deliberate and is what keeps the advisory readable. Nobody stating a set is
+  // the state EVERY registration is in until an endpoint is audited, so a line fired there would
+  // ride nearly every step carrying an aspect ratio.
+  it('says nothing at all when no declarer states a set', () => {
+    expect(binaryValueCoverage({ aspectRatio: '7:3' }, [anyRatio, anyRatio])).toEqual({
+      unaccepted: [],
+      unverifiable: [],
+    })
+  })
+
+  // The coarse axis already refuses this selection by name. Counting it here too would report one
+  // fault twice, under two headings with two different remedies.
+  it('ignores an integration that does not declare the gating capability', () => {
+    expect(binaryValueCoverage({ aspectRatio: '7:3' }, [{ capabilities: caps('seed') }])).toEqual({
+      unaccepted: [],
+      unverifiable: [],
+    })
+  })
+
+  it('compares ratios in lowest terms, so one shape asked for two ways is one answer', () => {
+    expect(binaryValueCoverage({ aspectRatio: '1920:1080' }, [bucketed]).unaccepted).toEqual([])
+  })
+
+  it('judges sizes and upscale factors by the same rule', () => {
+    const recraft = {
+      capabilities: caps('exact-size', 'upscale'),
+      accepts: { outputSizes: [{ width: 1024, height: 1024 }], upscaleFactors: [2] },
+    }
+    expect(binaryValueCoverage({ outputSize: { width: 96, height: 96 } }, [recraft])).toEqual({
+      unaccepted: [{ option: 'outputSize', requested: '96x96', accepted: ['1024x1024'] }],
+      unverifiable: [],
+    })
+    expect(binaryValueCoverage({ upscale: 4 }, [recraft]).unaccepted).toEqual([
+      { option: 'upscale', requested: '4', accepted: ['2'] },
+    ])
+    expect(binaryValueCoverage({ upscale: 2 }, [recraft]).unaccepted).toEqual([])
+  })
+
+  // The value axis restates each option's gating capability, because `BINARY_OPTION_CAPABILITIES`
+  // holds LISTS ("any of these") that `edit` and `referenceImages` need. Derived from that table
+  // rather than re-listed here, so the pin is against the source the coarse axis reads and not
+  // against a third copy of the same fact.
+  it('gates each value option on exactly the capability the option table names', () => {
+    for (const option of ['aspectRatio', 'outputSize', 'upscale'] as const) {
+      const gating = BINARY_OPTION_CAPABILITIES[option]
+      expect(gating).toHaveLength(1)
+      const [capability] = gating as [BinaryGeneratorCapability]
+      const requested: BinaryGenerationOptions =
+        option === 'aspectRatio'
+          ? { aspectRatio: '7:3' }
+          : option === 'outputSize'
+            ? { outputSize: { width: 96, height: 96 } }
+            : { upscale: 4 }
+      // Declared under the gating capability the table names, the value is judged; declared under
+      // any other, this axis has no opinion.
+      const accepts: BinaryGeneratorAccepts = {
+        aspectRatios: ['1:1'],
+        outputSizes: [{ width: 1, height: 1 }],
+        upscaleFactors: [2],
+      }
+      expect(binaryValueCoverage(requested, [{ capabilities: [capability], accepts }])).toEqual({
+        unaccepted: [expect.objectContaining({ option })],
+        unverifiable: [],
+      })
+    }
+  })
+})
+
+function caps(...capabilities: BinaryGeneratorCapability[]): BinaryGeneratorCapability[] {
+  return capabilities
+}
 
 function ref() {
   return { location: 'assets/hero.png', role: 'style' as const }

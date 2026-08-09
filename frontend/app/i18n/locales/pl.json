@@ -4802,6 +4802,8 @@
       "binaryCapabilityUnknown": "{capability} (możliwość, której ta instalacja nie definiuje)",
       "binaryCapabilityUnsupported": "Żadna wybrana integracja nie obsługuje {capabilities}, o co proszą opcje generowania tego kroku. Usuń opcję albo wybierz integrację, która deklaruje tę możliwość.",
       "binaryCapabilityUnverifiable": "Żadna wybrana integracja nie deklaruje obsługi {capabilities}, ale jedna z nich nie deklaruje żadnych możliwości, więc nie dało się tego sprawdzić. Krok i tak wystartuje; potwierdź to w API integracji.",
+      "binaryOptionValueUnaccepted": "Żadna z wybranych integracji nie przyjmuje {option} o wartości {requested}. Łącznie przyjmują: {accepted}. Poproś o jedną z tych wartości albo wybierz integrację, która wygeneruje tę.",
+      "binaryOptionValueUnverifiable": "Jedna z wybranych integracji podaje przyjmowane wartości i nie przyjmuje tej, o którą prosi ten krok ({options}), a inna nie podaje żadnych, więc nie dało się tego rozstrzygnąć. Krok i tak się uruchomi, a obsłuży go tylko część integracji.",
       "binaryReferenceImages": "Obrazy referencyjne",
       "binaryReferenceImagesPlaceholder": "rola{'|'}lokalizacja{'|'}usługa, po jednym w wierszu",
       "binaryReferenceImagesUnusable": "Nie zapisano jako referencji: {entries}. Każdy wiersz musi mieć postać rola{'|'}lokalizacja, gdzie rola to style, subject, composition albo base.",

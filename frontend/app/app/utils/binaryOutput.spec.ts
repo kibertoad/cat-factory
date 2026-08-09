@@ -521,6 +521,56 @@ describe('binaryOutputPickIssues, generative half', () => {
     expect(pick.conflictingSizeOptions).toEqual(['upscale'])
   })
 
+  // The refusal a value axis adds over the capability one: every selected endpoint takes an
+  // aspect ratio and none of them takes THIS ratio. Stated here because the builder is where the
+  // fix is (pick a listed ratio, or select an integration that renders this one), and because the
+  // set it names is already on the snapshot the picker is holding.
+  it('names a value nothing selected accepts, and what they do accept', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['bucketed'], generation: { aspectRatio: '7:3' } },
+      catalog,
+      true,
+      [
+        {
+          id: 'bucketed',
+          modalities: ['image' as const],
+          capabilities: ['aspect-ratio' as const],
+          accepts: { aspectRatios: ['1:1', '16:9'] },
+        },
+      ],
+    )
+    expect(pick.issues).toContain('option_value_unaccepted')
+    expect(pick.unacceptedValues).toEqual([
+      { option: 'aspectRatio', requested: '7:3', accepted: ['1:1', '16:9'] },
+    ])
+  })
+
+  // ADVISORY, and the state that keeps the refusal above from firing on a working selection: one
+  // integration refuses the ratio and another has not said what it takes.
+  it('advises rather than refuses when a silent declarer might still serve the value', () => {
+    const pick = binaryOutputPickIssues(
+      {
+        storageServiceId: 'files',
+        generatorIds: ['bucketed', 'open'],
+        generation: { aspectRatio: '7:3' },
+      },
+      catalog,
+      true,
+      [
+        {
+          id: 'bucketed',
+          modalities: ['image' as const],
+          capabilities: ['aspect-ratio' as const],
+          accepts: { aspectRatios: ['1:1', '16:9'] },
+        },
+        { id: 'open', modalities: ['image' as const], capabilities: ['aspect-ratio' as const] },
+      ],
+    )
+    expect(pick.issues).toContain('option_value_unverifiable')
+    expect(pick.issues).not.toContain('option_value_unaccepted')
+    expect(pick.unverifiableValues).toEqual(['aspectRatio'])
+  })
+
   it('reports BOTH faults when an unknown id was the one covering a requirement', () => {
     // One edit should clear the step. Naming only the missing id would leave the user to
     // discover the uncovered requirement on the next round trip.

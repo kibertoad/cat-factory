@@ -4802,6 +4802,8 @@
       "binaryCapabilityUnknown": "{capability} (une capacité que ce déploiement ne définit pas)",
       "binaryCapabilityUnsupported": "Aucune intégration sélectionnée ne prend en charge {capabilities}, que les options de génération de cette étape demandent. Retirez l’option ou sélectionnez une intégration qui déclare la capacité.",
       "binaryCapabilityUnverifiable": "Aucune intégration sélectionnée ne déclare prendre en charge {capabilities}, mais l’une d’elles ne déclare aucune capacité, la vérification est donc impossible. L’étape démarre quand même ; confirmez-le dans l’API de l’intégration.",
+      "binaryOptionValueUnaccepted": "Aucune intégration sélectionnée n'accepte {option} de {requested}. Ensemble, elles acceptent : {accepted}. Demandez l'une de ces valeurs ou sélectionnez une intégration capable de produire celle-ci.",
+      "binaryOptionValueUnverifiable": "Une intégration sélectionnée indique les valeurs qu'elle accepte et refuse ce que demande cette étape ({options}), tandis qu'une autre n'en indique aucune : impossible de trancher. L'étape démarre quand même, et seule une partie de vos intégrations la servira.",
       "binaryReferenceImages": "Images de référence",
       "binaryReferenceImagesPlaceholder": "rôle{'|'}emplacement{'|'}service, une par ligne",
       "binaryReferenceImagesUnusable": "Non enregistrées comme référence : {entries}. Chaque ligne doit être rôle{'|'}emplacement, le rôle étant style, subject, composition ou base.",

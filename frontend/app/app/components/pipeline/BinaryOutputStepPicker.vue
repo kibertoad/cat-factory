@@ -29,6 +29,7 @@ import {
   type BinaryGeneratorCapability,
   type BinaryModality,
   type BinaryOutputConfig,
+  type BinaryValueOption,
   type ConflictingOutputSizeOption,
 } from '@cat-factory/contracts'
 import { binaryOutputPickIssues, type BinaryOutputPickIssue } from '~/utils/binaryOutput'
@@ -280,6 +281,17 @@ const CAPABILITY_LABELS: Record<BinaryGeneratorCapability, () => string> = {
  */
 const SIZE_CONFLICT_LABELS: Record<ConflictingOutputSizeOption, () => string> = {
   aspectRatio: () => t('pipeline.builder.binaryAspectRatio'),
+  upscale: () => t('pipeline.builder.binaryUpscale'),
+}
+
+/**
+ * A value option named by the FIELD LABEL it carries on this form, so a refusal about a value
+ * points at the control holding it. Closed and compiled-against on both sides of the wire (unlike
+ * a capability, which a newer mothership can name), so the lookup needs no membership guard.
+ */
+const VALUE_OPTION_LABELS: Record<BinaryValueOption, () => string> = {
+  aspectRatio: () => t('pipeline.builder.binaryAspectRatio'),
+  outputSize: () => t('pipeline.builder.binaryOutputSize'),
   upscale: () => t('pipeline.builder.binaryUpscale'),
 }
 
@@ -881,6 +893,23 @@ const declaredFormats = computed(() => {
         })
       }}
     </p>
+    <!-- A refusal one notch finer than the one above it: the option is supported everywhere and
+         the VALUE is on nobody's list. It names what IS accepted, because a refusal that only
+         says no leaves the reader guessing at a set the picker is already holding. -->
+    <p
+      v-for="value in pick.unacceptedValues"
+      :key="value.option"
+      class="text-[10px] text-amber-400"
+      data-testid="binary-output-value-unaccepted"
+    >
+      {{
+        t('pipeline.builder.binaryOptionValueUnaccepted', {
+          option: VALUE_OPTION_LABELS[value.option](),
+          requested: value.requested,
+          accepted: value.accepted.join(', '),
+        })
+      }}
+    </p>
     <!-- A refusal the SAVE makes on the step's own fields, so it is stated here rather than
          waited for: all three controls are offered together, and the remedy is deleting one of
          two values on this form. -->
@@ -907,6 +936,19 @@ const declaredFormats = computed(() => {
       {{
         t('pipeline.builder.binaryCapabilityUnverifiable', {
           capabilities: pick.unverifiableCapabilities.map(capabilityLabel).join(', '),
+        })
+      }}
+    </p>
+    <!-- ADVISORY, grouped with the lines above it: one selected integration refuses the value and
+         another has not said what it takes, so the step starts and is served by the second. -->
+    <p
+      v-if="has('option_value_unverifiable')"
+      class="text-[10px] text-slate-500"
+      data-testid="binary-output-value-unverifiable"
+    >
+      {{
+        t('pipeline.builder.binaryOptionValueUnverifiable', {
+          options: pick.unverifiableValues.map((o) => VALUE_OPTION_LABELS[o]()).join(', '),
         })
       }}
     </p>
