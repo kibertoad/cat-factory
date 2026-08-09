@@ -152,8 +152,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     // Authors the service's in-repo specification from the clarified requirements, so it sits
     // beside the design kinds and ahead of the architect that reads what it wrote. Registered on
     // the backend so it also arrives via the workspace manifest, and modelled statically here for
-    // the same reason `pr-reviewer` is: a `pl_bugfix` / `pl_spec` timeline must name the step
-    // before the manifest hydrates. Mirrors the backend `presentation` in `spec-blueprints.ts`.
+    // the same reason `pr-reviewer` is: a `pl_bugfix` timeline must name the step before the
+    // manifest hydrates. Mirrors the backend `presentation` in `spec-blueprints.ts`.
     kind: 'spec-writer',
     tier: 'intermediate',
     label: 'Spec Writer',
@@ -179,8 +179,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     // Refreshes the service → modules map the board projects. Statically modelled beside its
-    // backend `presentation` for the same reason the Spec Writer is: `pl_blueprint` timelines
-    // render before the manifest hydrates.
+    // backend `presentation` for the same reason the Spec Writer is: the single-kind run behind
+    // the board's "Map service" action renders its timeline before the manifest hydrates.
     kind: 'blueprints',
     tier: 'intermediate',
     label: 'Blueprinter',

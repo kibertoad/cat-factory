@@ -71,6 +71,25 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
     }
   }
 
+  /**
+   * Start ONE agent kind against a block. The single-kind counterpart of {@link start}: same
+   * credential gate, same snapshot refresh, same false-on-refusal contract — only the thing being
+   * started is an agent rather than a pipeline.
+   */
+  async function startAgentKind(blockId: string, agentKind: string): Promise<boolean> {
+    const ws = useWorkspaceStore()
+    const personal = usePersonalSubscriptionsStore()
+    try {
+      return await personal.withCredential(async (password) => {
+        await api.startAgentKindExecution(ws.requireId(), blockId, agentKind, password)
+        await ws.refresh()
+      })
+    } catch (e) {
+      runErrors.present(e, 'errors.action.startFailed')
+      return false
+    }
+  }
+
   // Interacting with a running individual-usage run (resolve/approve/request-changes) advances
   // + re-dispatches the run, so the server re-mints its short-TTL activation from the personal
   // password first. It rides the cached password transparently, and — like start/retry — is
@@ -237,6 +256,7 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
 
   return {
     start,
+    startAgentKind,
     resolveDecision,
     approveStep,
     requestStepChanges,

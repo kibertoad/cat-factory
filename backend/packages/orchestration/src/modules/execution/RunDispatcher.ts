@@ -753,20 +753,26 @@ export class RunDispatcher {
   }
 
   /**
-   * Finish a gated step that was skipped (its estimate gate was not satisfied) and either
-   * complete the run or advance to the next step — the deterministic finish/advance tail
-   * of {@link recordStepResult}, minus all the agent-result handling (no LLM ran, so there
-   * is no usage / decision / PR / artifact / approval / resolver to process). The step is
-   * marked `skipped` with empty output so the UI renders "skipped (gated)".
+   * Finish a gated step that was skipped (its estimate gate or its run condition was not
+   * satisfied) and either complete the run or advance to the next step — the deterministic
+   * finish/advance tail of {@link recordStepResult}, minus all the agent-result handling (no LLM
+   * ran, so there is no usage / decision / PR / artifact / approval / resolver to process). The
+   * step is marked `skipped` so the UI renders "skipped (gated)".
+   *
+   * `note` states WHY, for a skip whose reason a reader cannot recover from the pipeline: an
+   * estimate gate is visible on the step itself (the thresholds are right there beside it), while
+   * a run condition is a fact about the TASK, so an unexplained skip reads as a tester that
+   * silently did nothing. Empty output otherwise, exactly as before.
    */
   async skipGatedStep(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
+    note?: string,
   ): Promise<AdvanceResult> {
     step.skipped = true
-    step.output = ''
+    step.output = note ?? ''
     step.progress = 1
     step.subtasks = undefined
     this.stepGraph.finishStep(step)

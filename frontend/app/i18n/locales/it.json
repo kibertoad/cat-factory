@@ -2113,6 +2113,8 @@
       "priorDocHint": "Dalla revisione precedente. Usalo come base: modifica la descrizione sopra e reinvia.",
       "bootstrapping": "Bootstrap in corso…",
       "viewRequirements": "Visualizza requisiti",
+      "mapService": "Mappa il servizio",
+      "mapServiceNoRepo": "Collega prima un repository a questo servizio: non c'è ancora nulla da mappare.",
       "reRun": "Riesegui",
       "run": "Esegui",
       "focus": "Metti a fuoco",
@@ -4161,7 +4163,11 @@
     "preview": {
       "stepCount": "{count} step | {count} step",
       "gateCount": "{count} approvazione | {count} approvazioni",
-      "gated": "Approvazione umana dopo questo step"
+      "gated": "Approvazione umana dopo questo step",
+      "conditionalCount": "{count} passaggio condizionale | {count} passaggi condizionali",
+      "conditionEstimate": "Viene eseguito solo se la stima dell'attività supera le soglie di questo passaggio",
+      "conditionFrontend": "Viene eseguito solo se l'attività modifica un servizio frontend",
+      "conditionBackend": "Viene eseguito solo se l'attività modifica un servizio non frontend"
     },
     "picker": {
       "noneHint": "Nessuna pipeline predefinita. Ne scegli una quando esegui l'attivita.",
@@ -4251,6 +4257,11 @@
         "body": "\"{name}\" verra rimossa. Questa operazione non puo essere annullata."
       },
       "disabledStepTooltip": "Disabilitato, saltato durante l'esecuzione",
+      "condition": {
+        "always": "Viene eseguito su ogni attività: fai clic per renderlo condizionale",
+        "frontend": "Viene eseguito solo sulle attività che modificano un servizio frontend",
+        "backend": "Viene eseguito solo sulle attività che modificano un servizio non frontend"
+      },
       "cancelEdit": "Annulla modifica",
       "clear": "Svuota",
       "update": "Aggiorna pipeline",

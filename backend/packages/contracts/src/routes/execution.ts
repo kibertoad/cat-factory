@@ -17,6 +17,7 @@ import {
   requestStepChangesSchema,
   resolveDecisionSchema,
   restartFromStepSchema,
+  startAgentKindExecutionSchema,
   startExecutionSchema,
 } from '../requests.js'
 import { errorResponses, singleStringParam } from './_shared.js'
@@ -106,6 +107,19 @@ export const startExecutionContract = defineApiContract({
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/blocks/${blockId}/executions`,
   requestBodySchema: startExecutionSchema,
+  responsesByStatusCode: { 201: executionInstanceSchema, ...errorResponses },
+})
+
+/**
+ * The single-kind run door. A path of its own rather than a variant body on
+ * `startExecutionContract`, matching the split in the request schemas: what is being started is a
+ * different KIND of thing, and the response is the same ordinary run either way.
+ */
+export const startAgentKindExecutionContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/agent-kind-executions`,
+  requestBodySchema: startAgentKindExecutionSchema,
   responsesByStatusCode: { 201: executionInstanceSchema, ...errorResponses },
 })
 

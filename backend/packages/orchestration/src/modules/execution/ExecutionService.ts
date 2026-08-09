@@ -26,10 +26,8 @@ import { allPullRequests } from '@cat-factory/contracts'
 import type { PrVerificationReport, RunOutcome, ServiceSpecView } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunStartOptions } from './runStartOptions.js'
-import {
-  resolveIndividualVendors,
-  type HasPersonalSubscription,
-} from './individualVendors.logic.js'
+import type { HasPersonalSubscription } from './runVendorGate.js'
+import { createRunVendorGate, type RunVendorGate } from './runVendorGate.js'
 import {
   assertFound,
   RunContendedError,
@@ -51,6 +49,7 @@ import { PostMergeBoardController, type PostMergeBoardHost } from './PostMergeBo
 import { orderPrsForMerge } from './mergeOrder.logic.js'
 import { type ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import { runStepPreamble, type StepPreambleDeps } from './stepPreamble.js'
+import { resolveScopeForRun } from './runServiceScope.js'
 import type { InputGateController } from './InputGateController.js'
 import {
   buildGateWindowControllers,
@@ -221,6 +220,8 @@ export class ExecutionService {
   private readonly inputGate: InputGateController
   /** Bound collaborators for the shared pre-dispatch preamble ({@link runStepPreamble}). */
   private stepPreambleDepsCache?: StepPreambleDeps
+  /** The three doors onto "what personal subscriptions would a run started here lease". */
+  private vendorGateCache?: RunVendorGate
   /** Drives the human-facing half of the implementation-fork decision phase on the Coder step. */
   private readonly forkDecisionController: ForkDecisionController
   private readonly prReviewController: PrReviewController
@@ -661,7 +662,7 @@ export class ExecutionService {
       // A system-initiated auto-start has no human present to unlock a personal credential, so it
       // reports NO activation and any individual-usage dependent is skipped rather than started.
       resolveIndividualVendors: (ws, modelId, presetId, kinds) =>
-        this.resolveIndividualVendors(ws, modelId, presetId, kinds, () => false),
+        this.vendorGate.forSteps(ws, modelId, presetId, kinds, () => false),
       start: (ws, blockId, pipelineId, opts) => this.start(ws, blockId, pipelineId, opts),
     })
   }
@@ -754,6 +755,28 @@ export class ExecutionService {
     return this.wiredInterviewGates.find((c) => c.agentKind === agentKind)
   }
 
+  /**
+   * The three doors onto "what personal subscriptions would a run started here lease". Built
+   * lazily and memoised for the reason {@link stepPreambleDeps} is: it closes over collaborators
+   * this class assigns during construction, so binding it in the constructor would depend on the
+   * field order rather than on the object being finished.
+   */
+  private get vendorGate(): RunVendorGate {
+    const cached = this.vendorGateCache
+    if (cached) return cached
+    const gate = createRunVendorGate({
+      requireBlock: (ws, id) => this.requireBlock(ws, id),
+      blockOf: (ws, id) => this.blockRepository.get(ws, id),
+      executionRepository: this.executionRepository,
+      resolveDefinition: (ws, id) => this.pipelineAdoption.resolveDefinition(ws, id),
+      ...(this.resolveWorkspaceModelDefault
+        ? { resolveWorkspaceModelDefault: this.resolveWorkspaceModelDefault }
+        : {}),
+    })
+    this.vendorGateCache = gate
+    return gate
+  }
+
   private requireWorkspace(workspaceId: string) {
     return requireWorkspace(this.workspaceRepository, workspaceId)
   }
@@ -763,76 +786,38 @@ export class ExecutionService {
   }
 
   /**
-   * The individual-usage subscription vendors a run STARTED against `blockId` with
-   * `pipelineId` will lease a personal credential for — so the controller can gate the
-   * run on the initiator's personal subscription(s) up-front. Mirrors the dispatch-time
-   * model precedence (block pin → workspace per-kind default) across every step, AND the
-   * per-user dispatch decision: `hasPersonalSubscription(vendor)` reports whether the
-   * initiator has their own subscription for a vendor, so a dual-mode model (GLM) only
-   * gates a subscriber (a non-subscriber runs it on the Cloudflare base, ungated).
-   * Defaults to "no personal subscription" for system/unauthenticated callers.
+   * The individual-usage subscription vendors a run STARTED against `blockId` with `pipelineId`
+   * will lease a personal credential for — so the controller can gate the run on the initiator's
+   * personal subscription(s) up-front. The three doors (a pipeline, one agent kind, a failed run's
+   * stored steps) live on {@link RunVendorGate}; these delegate so no start path can answer the
+   * question its own way.
    */
-  async individualVendorsForBlock(
+  individualVendorsForBlock(
     workspaceId: string,
     blockId: string,
     pipelineId: string,
-    hasPersonalSubscription: HasPersonalSubscription = () => false,
+    hasPersonalSubscription?: HasPersonalSubscription,
   ): Promise<SubscriptionVendor[]> {
-    const block = await this.requireBlock(workspaceId, blockId)
-    // Through adoption's READ-ONLY resolve, not the bare row: this runs on the start REQUEST, and a
-    // board that has not adopted the pipeline yet has no row, so a row-only read answered "no
-    // agent kinds" and the gate concluded the run needed no personal credential. It would then
-    // adopt and start ungated.
-    const pipeline = await this.pipelineAdoption.resolveDefinition(workspaceId, pipelineId)
-    return this.resolveIndividualVendors(
-      workspaceId,
-      block.modelId,
-      block.modelPresetId,
-      pipeline?.agentKinds ?? [],
-      hasPersonalSubscription,
-    )
+    return this.vendorGate.forBlock(workspaceId, blockId, pipelineId, hasPersonalSubscription)
+  }
+
+  /** The individual-usage vendors a SINGLE-KIND run would use (for its start gate). */
+  individualVendorsForAgentKind(
+    workspaceId: string,
+    blockId: string,
+    agentKind: string,
+    hasPersonalSubscription?: HasPersonalSubscription,
+  ): Promise<SubscriptionVendor[]> {
+    return this.vendorGate.forAgentKind(workspaceId, blockId, agentKind, hasPersonalSubscription)
   }
 
   /** The individual-usage vendors a failed run's resumed steps use (for the retry gate). */
-  async individualVendorsForRun(
+  individualVendorsForRun(
     workspaceId: string,
     executionId: string,
-    hasPersonalSubscription: HasPersonalSubscription = () => false,
+    hasPersonalSubscription?: HasPersonalSubscription,
   ): Promise<SubscriptionVendor[]> {
-    const run = await this.executionRepository.get(workspaceId, executionId)
-    if (!run) return []
-    const block = await this.blockRepository.get(workspaceId, run.blockId)
-    if (!block) return []
-    return this.resolveIndividualVendors(
-      workspaceId,
-      block.modelId,
-      block.modelPresetId,
-      run.steps.map((s) => s.agentKind),
-      hasPersonalSubscription,
-    )
-  }
-
-  /**
-   * The set of individual-usage vendors the given steps resolve to, used to gate a run
-   * on the initiator's personal subscription(s) up-front. Delegates to the pure
-   * {@link resolveIndividualVendors}, which mirrors the dispatch-time precedence: a
-   * resolvable block pin decides the set alone (NONE for a non-subscription model), and
-   * only an unpinned run falls to the workspace per-kind defaults.
-   */
-  private resolveIndividualVendors(
-    workspaceId: string,
-    blockModelId: string | undefined,
-    modelPresetId: string | undefined,
-    agentKinds: string[],
-    hasPersonalSubscription: HasPersonalSubscription,
-  ): Promise<SubscriptionVendor[]> {
-    const resolveDefault = this.resolveWorkspaceModelDefault
-    return resolveIndividualVendors(
-      blockModelId,
-      agentKinds,
-      resolveDefault ? (kind) => resolveDefault(workspaceId, kind, modelPresetId) : undefined,
-      hasPersonalSubscription,
-    )
+    return this.vendorGate.forRun(workspaceId, executionId, hasPersonalSubscription)
   }
 
   /**
@@ -899,8 +884,10 @@ export class ExecutionService {
       accountOf: (ws) => this.workspaceRepository.accountOf(ws),
       currentStepIsNonMetered: (ws, inst, step) =>
         this.runDispatcher.currentStepIsNonMetered(ws, inst, step),
-      skipGatedStep: (ws, inst, step, isFinal) =>
-        this.runDispatcher.skipGatedStep(ws, inst, step, isFinal),
+      skipGatedStep: (ws, inst, step, isFinal, note) =>
+        this.runDispatcher.skipGatedStep(ws, inst, step, isFinal, note),
+      serviceScopeOf: (ws, block) =>
+        resolveScopeForRun((id) => this.blockRepository.listByWorkspace(id), ws, block),
       blockOf: (ws, blockId) => this.blockRepository.get(ws, blockId),
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
@@ -1438,6 +1425,16 @@ export class ExecutionService {
     options: RunStartOptions = {},
   ): Promise<ExecutionInstance> {
     return this.runActions.lifecycle.start(workspaceId, blockId, pipelineId, options)
+  }
+
+  /** @see RunLifecycleController.startAgentKind */
+  startAgentKind(
+    workspaceId: string,
+    blockId: string,
+    agentKind: string,
+    options: RunStartOptions = {},
+  ): Promise<ExecutionInstance> {
+    return this.runActions.lifecycle.startAgentKind(workspaceId, blockId, agentKind, options)
   }
 
   /** @see RunLifecycleController.retry */

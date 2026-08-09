@@ -7,6 +7,7 @@ import {
   FINAL_SPEND_FOLD_BUDGET_MS,
   registerServiceForFrame,
   requireWorkspace,
+  offeredPipelines,
   retiredPipelines,
   runBestEffort,
   seedBlocks,
@@ -403,7 +404,7 @@ export class WorkspaceService {
 
   async snapshot(id: string): Promise<WorkspaceSnapshot> {
     const workspace = await this.require(id)
-    const [localBlocks, pipelines, localExecutions] = await Promise.all([
+    const [localBlocks, allPipelines, localExecutions] = await Promise.all([
       this.blockRepository.listByWorkspace(id),
       this.pipelineRepository.listByWorkspace(id),
       this.executionRepository.listByWorkspace(id),
@@ -460,6 +461,12 @@ export class WorkspaceService {
     // companion NAME map, which is the only way the "new built-ins" advisory can name a catalog
     // entry this board holds no row for. ONE read, so the two maps cannot list different ids.
     const catalog = seedPipelines(this.pipelineRegistry)
+    // INTERNAL pipelines are withheld from the snapshot for the same reason `PipelineService.list`
+    // withholds them: the SPA builds every picker and the builder library off this array, and a
+    // pipeline the platform starts on its own behalf is not a choice anyone makes. Filtered here,
+    // against the catalog this snapshot already built, rather than at the read above — the answer
+    // is a property of the DEFINITION, so the catalog is what has to be asked.
+    const pipelines = offeredPipelines(allPipelines, catalog)
     const pipelineCatalogVersions = Object.fromEntries(catalog.map((p) => [p.id, p.version ?? 0]))
     const pipelineCatalogNames = Object.fromEntries(catalog.map((p) => [p.id, p.name]))
     // The complement: built-ins WITHDRAWN from the catalog, so the SPA can offer to remove a stored

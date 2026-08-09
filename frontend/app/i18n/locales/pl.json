@@ -1545,6 +1545,8 @@
       "priorDocHint": "Z poprzedniej recenzji. Użyj go jako bazy: edytuj opis powyżej i prześlij ponownie.",
       "bootstrapping": "Inicjowanie…",
       "viewRequirements": "Wyświetl wymagania",
+      "mapService": "Zmapuj usługę",
+      "mapServiceNoRepo": "Najpierw połącz repozytorium z tą usługą — nie ma jeszcze czego mapować.",
       "reRun": "Uruchom ponownie",
       "run": "Uruchom",
       "focus": "Skup",
@@ -4600,7 +4602,11 @@
     "preview": {
       "stepCount": "{count} krok | {count} kroki | {count} kroków",
       "gateCount": "{count} zatwierdzenie | {count} zatwierdzenia | {count} zatwierdzeń",
-      "gated": "Ręczne zatwierdzenie po tym kroku"
+      "gated": "Ręczne zatwierdzenie po tym kroku",
+      "conditionalCount": "{count} krok warunkowy | {count} kroki warunkowe | {count} kroków warunkowych",
+      "conditionEstimate": "Uruchamia się tylko wtedy, gdy oszacowanie zadania przekracza progi tego kroku",
+      "conditionFrontend": "Uruchamia się tylko wtedy, gdy zadanie zmienia usługę frontendową",
+      "conditionBackend": "Uruchamia się tylko wtedy, gdy zadanie zmienia usługę inną niż frontendowa"
     },
     "picker": {
       "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania.",
@@ -4686,6 +4692,11 @@
       "edit": "Edytuj ten pipeline",
       "delete": "Usuń ten pipeline",
       "disabledStepTooltip": "Wyłączony, pomijany przy uruchomieniu",
+      "condition": {
+        "always": "Uruchamia się przy każdym zadaniu — kliknij, aby ustawić warunek",
+        "frontend": "Uruchamia się tylko przy zadaniach zmieniających usługę frontendową",
+        "backend": "Uruchamia się tylko przy zadaniach zmieniających usługę inną niż frontendowa"
+      },
       "cancelEdit": "Anuluj edycję",
       "clear": "Wyczyść",
       "update": "Zaktualizuj pipeline",

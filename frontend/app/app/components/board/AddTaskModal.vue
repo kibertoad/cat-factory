@@ -32,7 +32,11 @@ import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { ReviewTargetReason } from '@cat-factory/contracts'
-import { sanitizeDescriptorFields, validateDescriptorFields } from '@cat-factory/contracts'
+import {
+  defaultBuildPipelineId,
+  sanitizeDescriptorFields,
+  validateDescriptorFields,
+} from '@cat-factory/contracts'
 import { defaultDescriptorValues } from '~/utils/descriptorFields'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
@@ -411,10 +415,14 @@ watch(taskType, (next) => {
   // to whatever defaults the new type declares.
   customFieldValues.value = defaultDescriptorValues(custom?.fields ?? [])
   // Pre-select the type's default pipeline: a custom type's registered `defaultPipelineId`, else
-  // the built-in map. (For a custom type with no default, `BoardService` applies the registry
-  // default at creation, so leaving the picker unset is fine.)
-  const preset = custom?.defaultPipelineId ?? DEFAULT_PIPELINE_FOR_TYPE[next]
-  if (!preset) return
+  // the built-in map — and for an ordinary IMPLEMENTATION task (feature / bug / chore, which the
+  // map deliberately does not name), the build rung this interface mode defaults to. Basic mode
+  // gets the fixed Standard build, advanced the Adaptive one; `defaultBuildPipelineId` owns that
+  // rule so the create form and the task card's plain "Start" cannot disagree about it.
+  const preset =
+    custom?.defaultPipelineId ??
+    DEFAULT_PIPELINE_FOR_TYPE[next] ??
+    defaultBuildPipelineId(uiMode.isAdvanced)
   const match = pipelines.pipelines.find((p) => p.id === preset)
   if (match) pipelineId.value = match.id
 })

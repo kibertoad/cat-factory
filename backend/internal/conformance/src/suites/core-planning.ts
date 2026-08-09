@@ -173,7 +173,7 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
 
     // A non-public pipeline id is refused; a revoked key no longer authenticates.
     expect(
-      (await call('POST', '/api/v1/jobs', { pipelineId: 'pl_blueprint', input: 'x' }, auth)).status,
+      (await call('POST', '/api/v1/jobs', { pipelineId: 'pl_simple', input: 'x' }, auth)).status,
     ).toBe(400)
     expect(
       (await call('DELETE', `/workspaces/${wsId}/public-api-keys/${created.body.key.id}`)).status,

@@ -7,7 +7,7 @@ import { usePipelineHealth } from '~/composables/usePipelineHealth'
 /**
  * Guards the startup pipeline-health advisory against the failure that bit the first cut: a
  * legitimate built-in agent kind missing from the frontend catalog made `isKnownAgentKind`
- * return false, so a stock seeded pipeline (`pl_tech_debt`, which uses `analysis` + `tracker`)
+ * return false, so a stock seeded pipeline (one using `analysis` + `tracker`)
  * was reported "invalid" in every workspace with a Reseed action that could never fix it.
  *
  * The kind lists below mirror the canonical built-ins in
@@ -94,8 +94,8 @@ describe('isKnownAgentKind', () => {
 })
 
 describe('usePipelineHealth', () => {
-  it('does not flag the stock tech-debt built-in (analysis + tracker) as invalid', () => {
-    const techDebt = builtin(
+  it('does not flag an audit pipeline (analysis + tracker) as invalid', () => {
+    const audit = builtin(
       [
         'analysis',
         'tracker',
@@ -107,9 +107,9 @@ describe('usePipelineHealth', () => {
         'ci',
         'merger',
       ],
-      { id: 'pl_tech_debt', name: 'Tech debt' },
+      { id: 'pl_audit', name: 'Audit and fix' },
     )
-    const { hasIssues, invalid, outdated } = scan([techDebt])
+    const { hasIssues, invalid, outdated } = scan([audit])
     expect(hasIssues.value).toBe(false)
     expect(invalid.value).toHaveLength(0)
     expect(outdated.value).toHaveLength(0)

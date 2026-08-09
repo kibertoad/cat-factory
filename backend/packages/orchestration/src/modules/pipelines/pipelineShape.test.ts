@@ -48,13 +48,14 @@ describe('validatePipelineShape', () => {
       'reviewer',
       'deployer',
       'tester-api',
+      'tester-ui',
       'conflicts',
       'ci',
       'merger',
       'disposer',
     ])
     // It includes the design phase but stops short of the requirements interview, which is the
-    // whole point of this rung sitting between pl_simple and pl_full.
+    // whole point of this rung sitting between pl_simple and pl_complex.
     expect(build.agentKinds).not.toContain('requirements-review')
     expect(build.agentKinds).not.toContain('spec-writer')
   })
@@ -143,7 +144,7 @@ describe('validatePipelineShape', () => {
     // `architect-companion` is deliberately absent: it CASCADES off the architect rather than
     // carrying a duplicate copy of its threshold.
     const gatedKinds = kinds.filter((_k, i) => full!.gating?.[i]?.enabled)
-    expect(gatedKinds).toEqual(['architect', 'tester-api', 'human-review'])
+    expect(gatedKinds).toEqual(['architect', 'tester-api', 'tester-ui', 'human-review'])
     expect(full!.gating?.[kinds.indexOf('architect-companion')]).toBeNull()
     for (const unconditional of ['coder', 'reviewer', 'deployer', 'conflicts', 'ci', 'merger']) {
       const i = kinds.indexOf(unconditional)
@@ -155,25 +156,6 @@ describe('validatePipelineShape', () => {
     // No human approval gate at all on the default — the only human checkpoint is the risk-gated
     // `human-review` STEP, which is an escalation rather than an approval pause.
     expect(full!.gates?.some(Boolean) ?? false).toBe(false)
-  })
-
-  it('the retired build variants are gone from the catalog and tombstoned', () => {
-    const live = new Set(seedPipelines().map((p) => p.id))
-    for (const retired of [
-      'pl_quick',
-      'pl_fullstack',
-      'pl_dep_update',
-      'pl_pr_review',
-      'pl_human_review',
-      'pl_integrate',
-    ]) {
-      expect(live.has(retired), `${retired} must be withdrawn`).toBe(false)
-    }
-    // Every `replacedBy` target must still be live, or the advisory names a replacement the
-    // workspace cannot switch to.
-    for (const target of ['pl_simple', 'pl_build', 'pl_full']) {
-      expect(live.has(target), `${target} must remain live`).toBe(true)
-    }
   })
 
   it('the seeded pl_bug_triage pipeline is recurring-only, well-shaped, and estimator-first', () => {

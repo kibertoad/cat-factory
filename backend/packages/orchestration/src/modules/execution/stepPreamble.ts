@@ -1,4 +1,5 @@
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import { type RunServiceScope, stepConditionSatisfied } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { AdvanceResult } from './advance.js'
 import type { InputGateController } from './InputGateController.js'
@@ -14,6 +15,7 @@ import { producerWasSkipped, shouldRunGatedStep } from './stepGating.logic.js'
 //   2. the DECISION park   (is a human still holding this step?)
 //   3. the INPUT gate      (is there anything in the task to act on?)
 //   4. ESTIMATE gating     (does this step apply to a task this size?)
+//   5. the RUN CONDITION   (does this step apply to a change of this shape at all?)
 //
 // They live together, and outside `ExecutionService`, because the ORDER is the design and the
 // family keeps growing: each is a reason to stop before dispatching, and each new one is another
@@ -44,7 +46,14 @@ export interface StepPreambleDeps {
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
+    note?: string,
   ) => Promise<AdvanceResult>
+  /**
+   * The run's frontend/backend service scope, for the steps that declare a run CONDITION
+   * (`resolveScopeForRun`). A function rather than a value because resolving it costs a block-list
+   * read, and the guard below only calls it for a step that actually has a condition to judge.
+   */
+  serviceScopeOf: (workspaceId: string, block: Block) => Promise<RunServiceScope>
   /** `BlockRepository.get` — the block every downstream handler reads, fetched once here. */
   blockOf: (workspaceId: string, blockId: string) => Promise<Block | null>
   stateMachine: RunStateMachine
@@ -153,6 +162,34 @@ export async function runStepPreamble(
     return {
       kind: 'stop',
       result: await deps.skipGatedStep(workspaceId, instance, step, isFinalStep),
+    }
+  }
+
+  // RUN CONDITION: a step declaring one applies only to a run whose SERVICE SCOPE matches — the
+  // conditional tester pair being the case it was built for, where the browser pass and the API
+  // pass sit side by side in one preset and each decides whether this run is its business.
+  //
+  // Evaluated here, beside the estimate gate, rather than at run start where the answer is already
+  // knowable: the two skips must look identical from every surface that reads a run (the step is
+  // present and `skipped`, not silently absent from the chain), and one skip path is how they stay
+  // that way. Unlike the estimate gate it carries a NOTE, because "skipped" alone would leave a
+  // reader of a frontend task's run to guess why the API tester did nothing.
+  const condition = step.stepOptions?.condition
+  if (condition) {
+    const scope = await deps.serviceScopeOf(workspaceId, block)
+    if (!stepConditionSatisfied(condition, scope)) {
+      return {
+        kind: 'stop',
+        result: await deps.skipGatedStep(
+          workspaceId,
+          instance,
+          step,
+          isFinalStep,
+          condition.serviceScope === 'frontend'
+            ? 'Skipped: this task changes no frontend service, so there is no UI to exercise.'
+            : 'Skipped: this task changes only a frontend service, so there is no API behind it to exercise.',
+        ),
+      }
     }
   }
   return { kind: 'proceed', block, isFinalStep }

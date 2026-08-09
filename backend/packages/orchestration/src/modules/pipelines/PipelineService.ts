@@ -17,6 +17,7 @@ import {
   ConflictError,
   noopOperationalMetrics,
   retiredPipelines,
+  offeredPipelines,
   seedPipelines,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -183,9 +184,18 @@ export class PipelineService {
     return requireWorkspace(this.workspaceRepository, workspaceId)
   }
 
+  /**
+   * The workspace's pipeline LIBRARY — what the builder, the pickers and the health advisory work
+   * against. INTERNAL pipelines are withheld ({@link offeredPipelines}): the platform starts them
+   * by id for a flow of its own, and a row nobody may pick, clone or edit has no business in a
+   * library. They still resolve for a run through {@link resolveForRun}, which is the whole point.
+   */
   async list(workspaceId: string): Promise<Pipeline[]> {
     await this.requireWorkspace(workspaceId)
-    return this.pipelineRepository.listByWorkspace(workspaceId)
+    return offeredPipelines(
+      await this.pipelineRepository.listByWorkspace(workspaceId),
+      seedPipelines(this.pipelineRegistry),
+    )
   }
 
   /**

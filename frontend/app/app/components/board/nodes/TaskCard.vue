@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { defaultBuildPipelineId } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import { STATUS_META, MODULE_META, taskTypeMeta } from '~/utils/catalog'
 import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
@@ -52,6 +53,8 @@ const { start: startConnect } = useDependencyConnect()
 const deps = computed(() =>
   (task.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
 )
+const uiMode = useUiModeStore()
+
 /** Deps that haven't merged yet — these block this task from running. */
 const unmet = computed(() => board.unmetDeps(props.taskId))
 const runnable = computed(() => board.isRunnable(props.taskId))
@@ -60,12 +63,21 @@ const runnable = computed(() => board.isRunnable(props.taskId))
 const { depLabel: labelDep } = useDepLabels()
 const depLabel = (dep: Block) => labelDep(dep, task.value?.parentId)
 
-/** The pipeline a plain "Start" will use: the task's pinned pipeline, else the first. */
-const defaultPipeline = computed(
-  () =>
-    (task.value?.pipelineId ? pipelines.getPipeline(task.value.pipelineId) : undefined) ??
-    pipelines.pipelines[0],
-)
+/**
+ * The pipeline a plain "Start" will use: the task's pinned pipeline, else the build rung this
+ * INTERFACE MODE defaults to (`defaultBuildPipelineId` — the fixed Standard build in basic mode,
+ * the Adaptive one in advanced). The workspace's positional first pipeline remains the last
+ * resort, for a board whose catalog does not carry the rung (an older seed, or a deployment that
+ * retired it).
+ */
+const defaultPipeline = computed(() => {
+  const pinned = task.value?.pipelineId ? pipelines.getPipeline(task.value.pipelineId) : undefined
+  return (
+    pinned ??
+    pipelines.getPipeline(defaultBuildPipelineId(uiMode.isAdvanced)) ??
+    pipelines.pipelines[0]
+  )
+})
 
 /** The PR the implementer agent opened for this task, if any. */
 const pr = computed(() => task.value?.pullRequest)
@@ -85,7 +97,6 @@ const prLabel = computed(() =>
  * every section says "nothing here" would teach people the surface is empty. A task marked done
  * by hand, with no pull request and no run, is that task.
  */
-const uiMode = useUiModeStore()
 const outcomeReadable = computed(() => {
   const block = task.value
   if (!block) return false
