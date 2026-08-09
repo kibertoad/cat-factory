@@ -2116,6 +2116,8 @@
       "priorDocHint": "Aus der vorherigen Prüfung. Verwende es als Basis: bearbeite die Beschreibung oben und reiche erneut ein.",
       "bootstrapping": "Wird initialisiert…",
       "viewRequirements": "Anforderungen anzeigen",
+      "mapService": "Service kartieren",
+      "mapServiceNoRepo": "Verknüpfen Sie zuerst ein Repository mit diesem Service — es gibt noch nichts zu kartieren.",
       "reRun": "Erneut ausführen",
       "run": "Ausführen",
       "focus": "Fokussieren",
@@ -4164,7 +4166,11 @@
     "preview": {
       "stepCount": "{count} Schritt | {count} Schritte",
       "gateCount": "{count} Freigabe | {count} Freigaben",
-      "gated": "Manuelle Freigabe nach diesem Schritt"
+      "gated": "Manuelle Freigabe nach diesem Schritt",
+      "conditionalCount": "{count} bedingter Schritt | {count} bedingte Schritte",
+      "conditionEstimate": "Läuft nur, wenn die Aufwandsschätzung die Schwellenwerte dieses Schritts erreicht",
+      "conditionFrontend": "Läuft nur, wenn die Aufgabe einen Frontend-Service ändert",
+      "conditionBackend": "Läuft nur, wenn die Aufgabe einen Nicht-Frontend-Service ändert"
     },
     "picker": {
       "noneHint": "Keine Standard-Pipeline. Du wählst beim Ausführen der Aufgabe eine aus.",
@@ -4254,6 +4260,11 @@
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
       },
       "disabledStepTooltip": "Deaktiviert, wird beim Lauf übersprungen",
+      "condition": {
+        "always": "Läuft bei jeder Aufgabe — klicken, um eine Bedingung zu setzen",
+        "frontend": "Läuft nur bei Aufgaben, die einen Frontend-Service ändern",
+        "backend": "Läuft nur bei Aufgaben, die einen Nicht-Frontend-Service ändern"
+      },
       "cancelEdit": "Bearbeitung abbrechen",
       "clear": "Leeren",
       "update": "Pipeline aktualisieren",
@@ -4339,6 +4350,7 @@
         "negative-prompt": "Negativer Prompt",
         "seed": "Fester Seed",
         "aspect-ratio": "Seitenverhältnis",
+        "exact-size": "Exakte Größe",
         "candidate-batch": "Mehrere Kandidaten pro Aufruf",
         "upscale": "Hochskalierung",
         "transparent-background": "Transparenter Hintergrund",
@@ -4360,6 +4372,11 @@
       "binaryNegativePromptPlaceholder": "was vermieden werden soll",
       "binaryAspectRatio": "Seitenverhältnis",
       "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "Ausgabegröße",
+      "binaryOutputSizeWidth": "Breite",
+      "binaryOutputSizeHeight": "Höhe",
+      "binaryOutputSizeIncomplete": "Nicht gespeichert: eine exakte Größe braucht Breite und Höhe.",
+      "binaryOutputSizeAmbiguous": "Eine exakte Ausgabegröße lässt sich nicht mit {options} kombinieren: beides gibt die gelieferten Maße ein zweites Mal an. Behalte das, was die Anforderung ist.",
       "binarySeed": "Seed",
       "binarySeedPlaceholder": "fester Seed",
       "binaryTransparent": "Transparenter Hintergrund",
@@ -4421,6 +4438,14 @@
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
       "prReview": {
         "review": "Befunde prüfen"
+      },
+      "skipped": {
+        "gated": "Übersprungen: Die Aufgabenschätzung lag unter den Schwellenwerten dieses Schritts.",
+        "conditionFrontend": "Übersprungen: Diese Aufgabe ändert keinen Frontend-Dienst, es gibt also keine Oberfläche zu prüfen.",
+        "conditionBackend": "Übersprungen: Diese Aufgabe ändert nur einen Frontend-Dienst, es gibt also keine API dahinter zu prüfen.",
+        "producerSkipped": "Übersprungen: Der geprüfte Schritt wurde übersprungen, es gibt nichts zu bewerten.",
+        "runComplete": "Übersprungen: Der Lauf endete vor diesem Schritt, es blieb nichts zu tun.",
+        "unknown": "Übersprungen: Dieser Schritt wurde nicht ausgeführt."
       }
     },
     "health": {
@@ -5061,6 +5086,8 @@
       "unknownServices": "Nennt einen Dienst, den der Katalog nicht enthält: {ids}. Der Eintrag bleibt wie angegeben erhalten; prüfe die Kennung gegen den Katalog des Boards. | Nennt Dienste, die der Katalog nicht enthält: {ids}. Die Einträge bleiben wie angegeben erhalten; prüfe die Kennungen gegen den Katalog des Boards.",
       "targetUnknown": "Der Katalog enthält den eigenen Speicherdienst dieses Schritts nicht mehr ({id}), deshalb konnte nichts unten dagegen geprüft werden. Registriere ihn erneut, oder verweise den Schritt auf einen anderen Dienst.",
       "undeliveredMediaTypes": "Dieser Schritt sollte {formats} liefern, und kein Artefakt unten meldet dieses Format. | Dieser Schritt sollte {formats} liefern, und kein Artefakt unten meldet diese Formate.",
+      "missized": "1 Artefakt wurde in einer anderen Größe als {width}×{height} geliefert. | {count} Artefakte wurden in einer anderen Größe als {width}×{height} geliefert.",
+      "sizeUnreported": "1 Artefakt meldet keine Abmessungen, daher konnte seine Größe nicht geprüft werden. | {count} Artefakte melden keine Abmessungen, daher konnten ihre Größen nicht geprüft werden.",
       "misdirected": "1 Artefakt ging an einen anderen Dienst als {target}. | {count} Artefakte gingen an einen anderen Dienst als {target}.",
       "invalidEntries": "1 angegebener Eintrag wurde verworfen: er nannte weder Dienst noch Ablageort. | {count} angegebene Einträge wurden verworfen: sie nannten weder Dienst noch Ablageort.",
       "omitted": "1 weiteres Artefakt wurde jenseits der Berichtsgrenze angegeben und ist nicht aufgeführt. | {count} weitere Artefakte wurden jenseits der Berichtsgrenze angegeben und sind nicht aufgeführt.",
@@ -5068,6 +5095,7 @@
       "generatorsUnverified": "Die generativen Integrationen dieser Installation konnten beim Abschluss des Schritts nicht gelesen werden, daher wurden die unten genannten Integrationen nicht dagegen geprüft. Die Einträge bleiben wie angegeben erhalten."
     },
     "unknownGeneratorBadge": "Nicht registriert",
+    "missizedBadge": "Falsche Größe",
     "candidates": {
       "automatic": "{total} Kandidat wurde erzeugt und ohne Prüfung automatisch behalten.",
       "chosen": "{kept} von {total} erzeugten Kandidaten wurden behalten.",

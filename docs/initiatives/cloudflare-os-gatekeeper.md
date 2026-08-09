@@ -1,10 +1,11 @@
 # Cloudflare OS Gatekeeper integration
 
-Status: in progress. Slices 1 to 4, 6, 7 and 8 have landed, and slice 5's first leg with them.
+Status: in progress. Slices 1 to 4 and 6 to 9 have landed, and slice 5's first leg with them.
 Cloudflare OS published its source on 2026-08-04, and the 2026-08-09 review against it (below)
-unblocked slice 5's second leg and opened slices 7 to 10, the protocol-alignment work. Cloudflare
-OS support is the goal of this initiative; the matured integration surface the alignment forces is
-the side product, not the other way round.
+unblocked slice 5's second leg and opened slices 7 to 10, the protocol-alignment work. What is
+left is slice 10: the nightly leg against a real Cloudflare OS, plus the MCP-bridge probe.
+Cloudflare OS support is the goal of this initiative; the matured integration surface the
+alignment forces is the side product, not the other way round.
 
 **Slices 7 and 8 landed TOGETHER, and the sequencing is worth recording** because the tracker had
 them apart. Separately, neither is shippable: the object model without a session is a vendor a
@@ -609,23 +610,105 @@ make their release cadence this package's build, which the initiative's own CI r
 transcription is partial on purpose (it carries what this Worker implements or is handed) and can
 fall behind; the answer to that is slice 10's nightly leg, not a dependency.
 
-### 9. Hooks, sharing, and the session contract's small print
+### 9. Hooks, sharing, and the session contract's small print (landed)
 
-- **Deliver cards and run events through the official hook contract** (`bindHook`, a
-  `HookController` holding registration state, a fresh callback per delivery, never a stored
-  callback stub), with each delivery authorized as the observation it is. The cat-factory
-  webhook stays the ingestion path and the DO projection stays the truth; the hook is the
-  OS-facing delivery of what `approvals_list()` and `runs_watched()` already serve, so `/rpc`
-  consumers lose nothing.
-- **Sharing governance needs a decision, and the safe default is refusal.** `addObserver` must
-  verify the new viewer could directly read everything historically observed. Until we can
-  answer that from the observer's own tier (the plausible rule: their tier reaches every
-  operation that produced the observed data), throw, which blocks the share; a share blocked
-  loudly beats an observation leaked quietly. Record the eventual rule here.
-- **The small print**: runtime argument validation on the entrypoint path (`capnweb-validate`,
-  generated from the session signatures, matching the reference gatekeepers' build step). The stub
-  LIFETIME half of this item landed with slice 7 instead, because the queue is slice 8's headline
-  and a queue held past its parameter's lifetime is not a refinement of it (see the gotchas).
+Three items that had nothing in common except being what the contract asks for beyond the object
+model and the queue. Each landed as the rule it was waiting for, and the rules are worth carrying.
+
+**Hooks push what the inbox already holds** (`approvals_subscribe` / `runs_subscribe`, plus
+`hooks_bound`). The lifecycle is the published one: a session hands the queue a CONTROLLER of its
+own (a fifth named export, `CatFactoryHookController`), the workspace enables it later, and each
+event asks the initiator for a FRESH callback and authorizes the delivery before it is pushed.
+
+- **Nothing is stored until the workspace ENABLES it.** The contract asks for that literally, and
+  the reason is not tidiness: a row written at bind time is a registration for a hook nobody
+  approved, and the set of those grows with every agent that ever asked.
+- **The registry lives in the delivery's own durable object**, because that is the only place the
+  live half CAN live: a stub is a reference into another Worker and cannot be written to storage,
+  so the object that is already woken by every delivery is the one that can hold it. The
+  consequence is stated rather than hidden: an eviction between two deliveries keeps the record and
+  loses the stub, so a push with no live half COUNTS as `missed` on the record and `hooks_bound()`
+  publishes it beside `live`. A hook that goes quiet is otherwise indistinguishable from a
+  deployment where nothing happened, which is the one reading a workspace must never be left to
+  make on its own. That is also why the hook is an accelerator and never a source of truth.
+- **The push is BEHIND the write AND BESIDE the acknowledgement, and every failure is a count
+  rather than a throw.** The card commits first, then the fan-out, on `waitUntil` and with a
+  deadline per push. Awaiting it in front of the 202 made a hanging workspace cost both halves it
+  was supposed to cost neither of: the delivery times out, the platform retries to protect a write
+  that had already committed, and the retry dedupes into pushing nothing, so the notification the
+  wait was there to guarantee is the one thing certain to be lost. What the 202 can therefore
+  honestly carry is what was DISPATCHED (`hooks: { pushes, topics }`), never a count of deliveries
+  nobody has made yet: a `delivered: 0` there is indistinguishable from a push every hook refused.
+  The counts live on each registration, where `hooks_bound()` publishes them.
+- **A push reports an outcome; the RECORD is re-read and folded afterwards.** A push awaits a call
+  into another Worker, which is not a storage operation, so the durable object's input gate is open
+  across it: the row read before the push is a snapshot, and writing that snapshot back resurrected
+  a registration a person had withdrawn mid-push (permanently not live, counting a miss against
+  every later delivery) and discarded a concurrent delivery's increments. Reading and writing with
+  no await between them is what makes the fold atomic. It also retires the multi-key write-back,
+  which would have thrown past the 128-key ceiling and taken the whole delivery's counters with it.
+- **A registration is identified by WHERE ITS DELIVERIES LAND**, not by the id one bind minted.
+  This is what makes the documented remedy for a quiet hook ("bind again") work: a bind mints a
+  fresh id, so a hook-id-keyed row turned every re-arm into a second row, and the dead one stayed
+  for the deployment's life. Re-binding from the same gadget now replaces the row and carries its
+  counters over, since `missed` is the evidence that prompted the re-arm.
+- **A terminal run event pushes the CARDS it settled, not only the run.** The write changes two
+  topics' worth of state, so the dispatcher is handed what the write changed rather than the effect
+  it came from. Told only about the run, a card-subscribed gadget went on rendering decisions
+  nobody could answer, which is exactly what `HOOK_TOPICS.approval_card` tells an approver it will
+  not do. `approvals_answer` settles a card the same way, and pushes the same way.
+- **A bind the workspace does not take is a refusal that carries the CAUSE.** The structural
+  `typeof queue.bindHook !== 'function'` check can only ever catch an in-process caller: a stub
+  answers every property, so it reads `function` for a method the far side does not implement. An
+  older workspace and a person declining the registration both arrive as a failure from the far
+  side and cannot be told apart here, so the cause is reported verbatim under one reason
+  (`hook_bind_refused`) rather than sorted into a guess.
+- **A missing export costs a CAPABILITY, not the door**, which forced `/health` to answer in two
+  parts: `blockers` (a workspace that never finishes installing) and `limitations` (one that
+  installs, serves, and refuses hooks). Folding the second into the first would turn every
+  `/rpc`-only deployment red on a version bump, which is the mistake this route has now made in
+  both directions once (see the gotchas).
+
+**Sharing is now VERIFIED rather than refused.** The rule slice 8 asked for: an observer is
+admitted when their own account's tier reaches every operation the bound tier reaches and masks no
+more, and never at all while the bound tier can read a telemetry sink (those reads are described
+`prohibitAllSharing`, which is a statement about the data rather than about the viewer, and nothing
+records which of them were made). It is answerable because a resource is bound FOR ONE ACCOUNT, so
+the tier is an upper bound on everything ever observed through it, and no observation log is
+needed. Two corollaries: an observer this Gatekeeper cannot IDENTIFY is refused separately
+(`sharing_unverifiable`), because "unknown" and "not permitted" are the same outcome and opposite
+facts; and every admitted observer can read everything, so `excludeObservers` stays unused rather
+than becoming a second, weaker gate on the same question.
+
+**Identifying an observer is TWO questions, and the second is what makes the comparison mean
+anything.** Reading an account id off the verifier answers what the observer CLAIMS. It does not
+answer whether this deployment has ever heard of them, and the tier lookup cannot tell the
+difference on its own: it resolves an unknown id to the auto-provisioned tier, which is the tier
+nearly every account here holds. So a viewer connected to a DIFFERENT VENDOR, whose verifier
+honestly names an account of theirs, resolved to the owner's own tier and passed all three tests
+while holding none of the operations being shared. No impersonation required, which is why it is
+the case worth closing. An observer must now hold an account this Gatekeeper MINTED, which is the
+one fact recorded about an account and the only reason the durable object knows accounts exist at
+all (`createAccount` writes it; nothing else reads it, because every other account id in the
+package arrives on `ctx.props` of a stub we handed over). What that does not establish is stated
+at the seam: a verifier naming an account of ours is taken at its word, since proving the holder
+IS that account would need a challenge the published contract does not carry.
+
+**Argument validation is derived from the table, and runs on BOTH doors.** The contract asks for a
+call carrying an argument the receiver does not declare to be rejected, and `capnweb-validate`
+generates that from the declared signatures; ours is generated already, one layer down, because
+every binding carries its path parameters, its query parameters with requiredness, and whether it
+takes a body. The reason it earns its place is the SILENT DROP it replaces: an unrecognised filter
+used to be forwarded as nothing at all, so an unfiltered answer came back shaped exactly like a
+filtered one. It runs ahead of the key broker and the queue, so a call that cannot succeed mints no
+credential and spends no approval, and it is deliberately not door-specific: `/rpc` had the same
+bug. What it does NOT check is what a value may BE, which is the deployment's judgement and is
+already stated in the spec these bindings come from.
+
+**Rejected: keeping the blanket `addObserver` refusal and documenting it.** It is defensible while
+there is no rule and indefensible once there is one: the tier comparison is exactly the question
+the contract asks, and a permanent refusal would push every share onto a second account nobody
+manages.
 
 ### 10. The live leg, and the MCP-bridge probe
 
@@ -638,9 +721,10 @@ fall behind; the answer to that is slice 10's nightly leg, not a dependency.
   `gatekeeper-mcp-portal` can front our existing hosted MCP endpoint (`ALL /api/v1/mcp`) today,
   which would exercise the platform's side of the loop cheaply. It is a PROBE, not the destination: the bridge cannot
   carry per-actor key minting, `withheld()`'s four reasons, the tier floor or the approvals inbox,
-  which are the reasons this Worker exists. Slices 7 and 8 have since landed, so what a probe is
+  which are the reasons this Worker exists. Slices 7, 8 and 9 have since landed, so what a probe is
   still worth is a second reading of the approval UX against one that already exists; do not let a
-  working bridge demo mute slice 9.
+  working bridge demo stand in for the nightly leg above, which is the only thing that reads the
+  transcribed protocol types against a real workspace.
 
 ## Checklist
 
@@ -663,8 +747,8 @@ fall behind; the answer to that is slice 10's nightly leg, not a dependency.
       `autoProvisionedTier` knob it forced)
 - [x] Slice 8: the approval queue (observations authorized, actions submitted and performed only on
       `applyAction`, `ActionDescription` derived from the table, tier floor kept)
-- [ ] Slice 9: hooks and sharing governance (cards and run events over `bindHook`,
-      `addObserver` refusal default, stub lifecycle, runtime validation)
+- [x] Slice 9: hooks and sharing governance (cards and run events over `bindHook`, the observer
+      rule that replaced the refusal default, argument validation on both doors)
 - [ ] Slice 10: the live leg (`GATEKEEPER_OS_REF`, after slice 7) and the MCP-bridge probe,
       outcome recorded either way
 
@@ -801,7 +885,11 @@ here:
   `tasks_get.call`, and the failure reads like a client-side bug in the caller's own helper. Invoke
   a stub's method directly. The same rule is why a capability's state lives in a CLOSURE rather
   than on the instance: own properties of an RpcTarget are refused outright, so a method installed
-  as an instance field is unreachable while looking present in the source.
+  as an instance field is unreachable while looking present in the source. And the same rule decides what a
+  DEFENSIVE check can be worth: since a stub answers every property, `typeof stub.onApprovalCard`
+  is not a question about the far side, so an absent-method guard can only ever catch the
+  in-process case. Write it for that (a plain object deserves the better message), invoke directly
+  otherwise, and let the far side report what it does not implement.
 - **`@cloudflare/vitest-pool-workers` declares `cloudflare:test` under its `./types` export, not
   its main one.** `"types": ["@cloudflare/vitest-pool-workers"]` in a tsconfig resolves the POOL's
   types and leaves `cloudflare:test` unresolvable; the module declaration arrives through a

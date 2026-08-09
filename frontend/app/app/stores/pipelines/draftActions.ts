@@ -4,6 +4,7 @@ import { companionForProducer } from '~/utils/catalog'
 import type { PipelinesContext } from './context'
 import { createPipelineGateConfigActions } from './draftGateConfig'
 import { createPipelineStepConfigActions } from './draftStepConfig'
+import { createPipelineStepOptionActions } from './draftStepOptions'
 
 /**
  * The pipeline-builder draft's STRUCTURE: inserting/removing/reordering steps, the companion
@@ -193,6 +194,7 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
 
   return {
     ...createPipelineStepConfigActions(ctx),
+    ...createPipelineStepOptionActions(ctx),
     ...createPipelineGateConfigActions(ctx),
     addToDraft,
     removeFromDraft,

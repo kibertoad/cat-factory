@@ -142,6 +142,27 @@ describe('the RPC surface', () => {
     expect(byName.get('tasks_create')?.reason).toBe('above_key_scope')
   })
 
+  it('refuses to bind a hook here, and names the reads that answer the same question', async () => {
+    const capability = (await connectRpc()).connect({ actorId: 'operator@example.com' })
+
+    // This door brings no approval queue, so there is nowhere to register a callback and nothing
+    // to authorize what it would push. A registration that silently never fired would be the one
+    // outcome worse than the refusal.
+    await expect(operation(capability, 'approvals_subscribe')).rejects.toThrow(
+      /no approval queue, so approvals_subscribe\(\)/,
+    )
+  })
+
+  it('refuses an argument the operation does not declare, rather than dropping it', async () => {
+    const capability = (await connectRpc()).connect({ actorId: 'observer@example.com' })
+
+    // Forwarded silently, an unrecognised filter is an unfiltered answer shaped exactly like a
+    // filtered one. Both doors check it, ahead of the key broker and ahead of any queue.
+    await expect(operation(capability, 'tasks_get', { taskId: 'blk_1', limit: 5 })).rejects.toThrow(
+      /does not take 'limit'/,
+    )
+  })
+
   // The consequence annotations are what an OS deployment runs its own approval governance on,
   // with the cautious default (an unannotated mutation is destructive) already applied.
   it('annotates each granted operation with its consequence', async () => {

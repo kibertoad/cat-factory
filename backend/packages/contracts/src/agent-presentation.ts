@@ -135,6 +135,21 @@ export const agentPresentationSchema = v.object({
    * panel — the `pairById` `missing` bucket). Omitted ⇒ the generic step-detail panel.
    */
   resultView: v.optional(v.union([v.picklist(RESULT_VIEW_IDS), namespacedIdSchema])),
+  /**
+   * When true the kind is INTERNAL: the platform dispatches it for a flow of its own and the
+   * builder palette never offers it as a placeable block. The environment analyst is the model —
+   * it exists to draft a stack recipe for the setup wizard, which runs it on demand, and a step of
+   * it in a hand-built pipeline has nothing to hand its draft to.
+   *
+   * Deliberately NOT expressed by omitting {@link category}: a kind with no category is not a
+   * palette block either, but it is also how a COMPANION and a deployment kind that simply
+   * classified nothing arrive, and the palette files those under "Custom" rather than dropping
+   * them. This says the opposite thing on purpose — do not offer it, whatever else it declares —
+   * and it still carries the label/icon/result view every run view needs to RENDER the step.
+   *
+   * Absent / false ⇒ an ordinary palette block.
+   */
+  internal: v.optional(v.boolean()),
 })
 export type AgentPresentation = v.InferOutput<typeof agentPresentationSchema>
 

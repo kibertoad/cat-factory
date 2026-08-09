@@ -29,11 +29,14 @@ import {
   type BinaryGeneratorCapability,
   type BinaryModality,
   type BinaryOutputConfig,
+  type ConflictingOutputSizeOption,
 } from '@cat-factory/contracts'
 import { binaryOutputPickIssues, type BinaryOutputPickIssue } from '~/utils/binaryOutput'
 import {
+  formatExtent,
   formatReferenceImages,
   generationControlOffer,
+  parseExtent,
   parseMediaTypeRequirement,
   parseReferenceImages,
   sameFormats,
@@ -262,10 +265,22 @@ const CAPABILITY_LABELS: Record<BinaryGeneratorCapability, () => string> = {
   'negative-prompt': () => t('pipeline.builder.binaryCapability.negative-prompt'),
   seed: () => t('pipeline.builder.binaryCapability.seed'),
   'aspect-ratio': () => t('pipeline.builder.binaryCapability.aspect-ratio'),
+  'exact-size': () => t('pipeline.builder.binaryCapability.exact-size'),
   'candidate-batch': () => t('pipeline.builder.binaryCapability.candidate-batch'),
   upscale: () => t('pipeline.builder.binaryCapability.upscale'),
   'transparent-background': () => t('pipeline.builder.binaryCapability.transparent-background'),
   tileable: () => t('pipeline.builder.binaryCapability.tileable'),
+}
+
+/**
+ * The options that restate a delivered size, named by the FIELD LABEL each one carries in this
+ * form, so the refusal points at a control the reader can see. Static literal keys, the
+ * enum-keyed-set rule again; the union is closed here (not a persisted vocabulary a stale step
+ * could carry a retired member of), so the lookup needs no membership guard.
+ */
+const SIZE_CONFLICT_LABELS: Record<ConflictingOutputSizeOption, () => string> = {
+  aspectRatio: () => t('pipeline.builder.binaryAspectRatio'),
+  upscale: () => t('pipeline.builder.binaryUpscale'),
 }
 
 /**
@@ -320,6 +335,44 @@ function setGeneration(fields: Partial<BinaryGenerationOptions>) {
   patch({
     generation: Object.keys(next).length > 0 ? (next as BinaryGenerationOptions) : undefined,
   })
+}
+
+/**
+ * The size fields' own text, held locally like {@link referenceText} and for the same reason: a
+ * control has to render what is being typed, and the step must not store what is being typed.
+ *
+ * The pair is ONE requirement, so it reaches the step only once BOTH halves read as a pixel
+ * extent. Writing the unset half as 0 while the first number is typed would store a value the
+ * schema refuses (the minimum is 1), which makes the step unsaveable behind an opaque validation
+ * error and renders "0" back into a field nobody touched. A half-entered pair is instead simply
+ * not stored, and {@link outputSizeIncomplete} says so where it is being typed.
+ */
+const outputSizeText = ref({
+  width: formatExtent(config.value?.generation?.outputSize?.width),
+  height: formatExtent(config.value?.generation?.outputSize?.height),
+})
+
+watch(
+  () => config.value?.generation?.outputSize,
+  (size) => {
+    outputSizeText.value = { width: formatExtent(size?.width), height: formatExtent(size?.height) }
+  },
+)
+
+/** One half is filled and the other is not, so nothing is stored and the composer is told why. */
+const outputSizeIncomplete = computed(() => {
+  const filled = [outputSizeText.value.width, outputSizeText.value.height].filter(
+    (half) => half.trim() !== '',
+  )
+  return filled.length === 1
+})
+
+/** Patch ONE half of the exact output size, committing the pair only once both halves read. */
+function setOutputSize(axis: 'width' | 'height', raw: string) {
+  outputSizeText.value = { ...outputSizeText.value, [axis]: raw }
+  const width = parseExtent(outputSizeText.value.width)
+  const height = parseExtent(outputSizeText.value.height)
+  setGeneration({ outputSize: width !== null && height !== null ? { width, height } : undefined })
 }
 
 /** The reference-image field's text, and the lines it refused (see `parseReferenceImages`). */
@@ -582,6 +635,48 @@ const declaredFormats = computed(() => {
         />
       </div>
 
+      <!-- Two numbers rather than one free-text "WxH": the requirement is a pair of integers and
+           a parser over a string is a second place for it to be wrong. Offered only where an
+           integration declares `exact-size`, because a bucketed endpoint cannot be asked for
+           dimensions at all and a control implying otherwise is the misconception this axis
+           exists to remove. -->
+      <div v-if="offers('exact-size')" class="flex flex-col gap-1">
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] text-slate-500">{{
+            t('pipeline.builder.binaryOutputSize')
+          }}</span>
+          <UInput
+            class="w-24"
+            type="number"
+            size="xs"
+            :model-value="outputSizeText.width"
+            :placeholder="t('pipeline.builder.binaryOutputSizeWidth')"
+            data-testid="binary-output-size-width"
+            @change="setOutputSize('width', ($event.target as HTMLInputElement).value)"
+          />
+          <span class="text-[10px] text-slate-500">×</span>
+          <UInput
+            class="w-24"
+            type="number"
+            size="xs"
+            :model-value="outputSizeText.height"
+            :placeholder="t('pipeline.builder.binaryOutputSizeHeight')"
+            data-testid="binary-output-size-height"
+            @change="setOutputSize('height', ($event.target as HTMLInputElement).value)"
+          />
+        </div>
+        <!-- Nothing is stored until both halves read, so the half-entered state is stated where
+             it is being typed. Silence there would be a field that looks filled in and a step
+             that does not carry the requirement. -->
+        <p
+          v-if="outputSizeIncomplete"
+          class="text-[10px] text-amber-400"
+          data-testid="binary-output-size-incomplete"
+        >
+          {{ t('pipeline.builder.binaryOutputSizeIncomplete') }}
+        </p>
+      </div>
+
       <div v-if="offers('seed')" class="flex items-center gap-2">
         <span class="text-[10px] text-slate-500">{{ t('pipeline.builder.binarySeed') }}</span>
         <UInput
@@ -783,6 +878,20 @@ const declaredFormats = computed(() => {
       {{
         t('pipeline.builder.binaryCapabilityUnsupported', {
           capabilities: pick.unsupportedCapabilities.map(capabilityLabel).join(', '),
+        })
+      }}
+    </p>
+    <!-- A refusal the SAVE makes on the step's own fields, so it is stated here rather than
+         waited for: all three controls are offered together, and the remedy is deleting one of
+         two values on this form. -->
+    <p
+      v-if="has('output_size_ambiguous')"
+      class="text-[10px] text-amber-400"
+      data-testid="binary-output-size-ambiguous"
+    >
+      {{
+        t('pipeline.builder.binaryOutputSizeAmbiguous', {
+          options: pick.conflictingSizeOptions.map((o) => SIZE_CONFLICT_LABELS[o]()).join(', '),
         })
       }}
     </p>

@@ -8,6 +8,7 @@ import type {
   ExecutionRepository,
   IdGenerator,
   Logger,
+  Pipeline,
   PipelineStep,
   SubscriptionActivationRepository,
   WorkRunner,
@@ -25,6 +26,7 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionFor } from '@cat-factory/agents'
 import { DEFAULT_COMPANION_MAX_ATTEMPTS, pipelineHasVisualStep } from '@cat-factory/contracts'
 import type { PipelineAdoption } from '../pipelines/pipelineAdoption.js'
+import { adHocPipelineFor } from '../pipelines/adHocPipeline.js'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import { isTesterKind } from './ci.logic.js'
 import { DEFAULT_FOLLOW_UP_MAX_LOOPS, FOLLOW_UP_PRODUCER_KIND } from './followUp.logic.js'
@@ -121,7 +123,6 @@ export class RunLifecycleController {
     pipelineId: string,
     options: RunStartOptions = {},
   ): Promise<ExecutionInstance> {
-    const { initiatedBy, activate, origin = 'manual', intakeOrigin, gatesOverride } = options
     await this.deps.requireWorkspace(workspaceId)
     const block = await this.deps.requireBlock(workspaceId, blockId)
     // Adopts a catalog built-in this board was never seeded with, so a task whose type PINS one
@@ -132,6 +133,44 @@ export class RunLifecycleController {
       'Pipeline',
       pipelineId,
     )
+    return this.launch(workspaceId, block, pipeline, options)
+  }
+
+  /**
+   * Start ONE agent kind against a block — a run with no pipeline behind it (see
+   * {@link adHocPipelineFor}). The board's "Map service" action and the environment setup wizard's
+   * deep analysis are the two callers today; both used to need a single-step catalog preset.
+   *
+   * Everything past the definition is {@link start}: the same admission gates, the same live-run
+   * claim, the same durable hand-off, the same retry. The ONE thing it deliberately does not
+   * accept is a launch ORIGIN, because a synthesized definition has no `availability` to check it
+   * against — a single-kind run is always the manual, on-demand thing it looks like.
+   */
+  async startAgentKind(
+    workspaceId: string,
+    blockId: string,
+    agentKind: string,
+    options: RunStartOptions = {},
+  ): Promise<ExecutionInstance> {
+    await this.deps.requireWorkspace(workspaceId)
+    const block = await this.deps.requireBlock(workspaceId, blockId)
+    const pipeline = adHocPipelineFor(agentKind, this.deps.agentKindRegistry)
+    return this.launch(workspaceId, block, pipeline, options)
+  }
+
+  /**
+   * The shared launch path both entry points above run: gate, build the instance from the
+   * definition's enabled steps, claim the live run, hand it off. It takes the RESOLVED pipeline
+   * rather than an id precisely so a single-kind run cannot take a shortcut past any of it.
+   */
+  private async launch(
+    workspaceId: string,
+    block: Block,
+    pipeline: Pipeline,
+    options: RunStartOptions,
+  ): Promise<ExecutionInstance> {
+    const { initiatedBy, activate, origin = 'manual', intakeOrigin, gatesOverride } = options
+    const blockId = block.id
 
     // Launch-constraint gate (start-only, NOT part of the shared retry re-validation): reject a
     // manual start of a recurring-only pipeline (or a scheduled fire of a one-off-only one), and

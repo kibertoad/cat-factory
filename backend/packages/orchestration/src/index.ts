@@ -27,6 +27,9 @@ export {
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService.js'
 export type { TesterQualityReviewer } from './modules/execution/TesterQualityReviewService.js'
+// Where a run's `spec/` read stopped, for the ONE caller that reports the read rather than
+// surviving it: `GET /api/v1/runs/:runId/spec`.
+export type { RunSpecRead } from './modules/execution/RunEvidenceLoader.js'
 // The default judge assessor (the inline LLM verdict producer). Exported so a facade or a test
 // harness can build/replace it explicitly; `createCore` builds one from the model-provider deps
 // by default, so a deployment normally never names it. See `docs/initiatives/judge-registry.md`.

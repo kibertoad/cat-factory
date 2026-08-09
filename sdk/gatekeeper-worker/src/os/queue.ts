@@ -31,8 +31,9 @@
 
 import type { GatekeeperBinding } from '@cat-factory/gatekeeper-bindings'
 import type { SessionGovernance } from '../capability.js'
-import { GatekeeperError } from '../errors.js'
+import { describeError, GatekeeperError } from '../errors.js'
 import { describeAction, describeObservation, type CallSubject } from './descriptions.js'
+import { describeHook, HOOK_TOPICS, type HookControllerProps } from './hooks.js'
 import type { ApprovalQueue } from './protocol.js'
 
 /** One submitted action waiting on the workspace's decision. */
@@ -228,6 +229,14 @@ export function queueGovernance(deps: {
   queue: ApprovalQueue
   ledger: LedgerSession
   subject: CallSubject
+  /**
+   * Build the controller for one hook, which is this Worker's own `CatFactoryHookController`
+   * export imbued with the registration's identity.
+   *
+   * Supplied by the caller rather than built here because only the resource object can reach
+   * `ctx.exports`, and a session that could not build one is a session on a door with no hooks.
+   */
+  controllerFor: (props: HookControllerProps) => unknown
 }): SessionGovernance {
   return {
     async observe(binding: GatekeeperBinding, args: Record<string, unknown>): Promise<void> {
@@ -262,6 +271,58 @@ export function queueGovernance(deps: {
         throw error
       }
       return (await settled) as T
+    },
+
+    /**
+     * Hand the workspace a controller and the callback, and keep NEITHER.
+     *
+     * Everything about the registration rides the controller's props, so this call leaves no
+     * state behind: the workspace may take days to approve the hook, or never approve it, and a
+     * row written here would be a registration for something nobody enabled. What comes back is
+     * nothing at all, because there is nothing to report yet; `hooks_bound()` answers once the
+     * workspace has enabled it.
+     */
+    async subscribe(topic, callback): Promise<void> {
+      // Reachable only in process, and kept for exactly that: an embedding suite hands over a
+      // plain object, where a missing method is a mistake worth naming. It CANNOT catch a
+      // workspace whose queue predates hooks, because a stub answers every property (the same
+      // fact `callBack` turns on), so `typeof` reads `function` for a method the far side does not
+      // implement. That case arrives below, as a failure from the far side.
+      if (typeof deps.queue.bindHook !== 'function') {
+        throw new GatekeeperError(
+          'hooks_unavailable',
+          'The approval queue this session was opened with offers no bindHook(), so this ' +
+            'workspace cannot hold a callback for us. Read `approvals_list()` and ' +
+            '`runs_watched()` instead: they carry exactly what a hook would push.',
+        )
+      }
+      const props: HookControllerProps = {
+        hookId: `hook_${crypto.randomUUID().replaceAll('-', '')}`,
+        topic,
+        accountId: deps.subject.accountId,
+        tier: deps.subject.tier,
+        deployment: deps.subject.deployment,
+      }
+      try {
+        await deps.queue.bindHook(
+          deps.controllerFor(props),
+          callback,
+          describeHook(topic, deps.subject),
+        )
+      } catch (error) {
+        // A workspace whose queue has no `bindHook` and a person who declined the registration
+        // both surface here, and this Gatekeeper cannot tell them apart: the contract offers no
+        // way to ask whether hooks are servable, and the two failures cross the wire the same way.
+        // So the cause is reported VERBATIM rather than sorted into a guess, because it is the one
+        // thing that distinguishes them and the two need opposite fixes.
+        throw new GatekeeperError(
+          'hook_bind_refused',
+          `This workspace did not take the ${HOOK_TOPICS[topic].sessionMethod}() binding ` +
+            `(${describeError(error)}). Either its approval queue serves no hooks, or the ` +
+            'registration was declined. `approvals_list()` and `runs_watched()` answer exactly ' +
+            'what the hook would have pushed, and go on doing so.',
+        )
+      }
     },
 
     close(): void {

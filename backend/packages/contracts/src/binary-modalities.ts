@@ -92,6 +92,36 @@ export function isBinaryModality(value: string): value is BinaryModality {
 
 const BINARY_MODALITY_SET: ReadonlySet<string> = new Set(binaryModalitySchema.options)
 
+/**
+ * Whether artifacts of this content type are MEASURED in pixels, so an exact
+ * `generation.outputSize` is a statement about them at all.
+ *
+ * An exhaustive `Record` rather than a set membership test, so a new member of the vocabulary
+ * fails the build until someone decides which side of this it falls on. The answers are facts
+ * about the media, not preferences: an image and a video frame have a width and a height, while
+ * audio has a duration, a 3D asset has model units a renderer scales, and a document has a page
+ * size in millimetres. None of the last three becomes measurable by asking harder.
+ *
+ * It exists because a size requirement on a MIXED step is not a requirement on every artifact.
+ * A step selecting an image generator and an audio generator states one size, means it about the
+ * images, and a reader that judged the audio against it would report a permanent failure about a
+ * step that delivered exactly what was asked. Shared rather than restated in the SPA for the
+ * standing reason: the surface that COUNTS a size failure and the layer that states the
+ * requirement must not be able to disagree about which artifacts it covers.
+ */
+export function modalityCarriesPixelDimensions(modality: BinaryModality): boolean {
+  return PIXEL_MEASURED_MODALITY[modality]
+}
+
+const PIXEL_MEASURED_MODALITY: Record<BinaryModality, boolean> = {
+  image: true,
+  video: true,
+  audio: false,
+  '3d-model': false,
+  '3d-scene': false,
+  document: false,
+}
+
 /** A content type that more than one of a step's selected integrations produces. */
 export interface BinaryModalityOverlap {
   /** The content type they share. */
