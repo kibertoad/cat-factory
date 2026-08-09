@@ -59,17 +59,17 @@
     "@cat-factory/spend": "workspace:*",
     "@hono/node-server": "^2.1.0",
     "drizzle-orm": "1.0.0-rc.4",
-    "hono": "^4.13.0",
+    "hono": "^4.13.1",
     "layered-loader": "^16.1.0",
     "pg": "^8.22.0",
     "pg-boss": "^12.27.0",
     "toad-scheduler": "^4.1.0",
-    "ws": "^8.21.2"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
-    "@types/node": "^26.1.2",
-    "@types/pg": "^8.20.3",
+    "@types/node": "^26.2.0",
+    "@types/pg": "^8.21.0",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "1.0.0-rc.4",
     "typescript": "7.0.2",

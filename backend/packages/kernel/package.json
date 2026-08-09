@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^7.0.51",
+    "ai": "^7.0.58",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
