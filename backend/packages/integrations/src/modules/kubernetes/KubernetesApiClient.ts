@@ -17,6 +17,8 @@ import { KUBERNETES_TOKEN_KEY } from './kubernetes.logic.js'
 // Agent is cached at MODULE scope keyed by the CA/insecure pair (the wiring builds a
 // fresh transport on every dispatch/poll resolve, so a per-instance cache would
 // create — and abandon — one TLS connection pool per tick, defeating keep-alive).
+// The request that USES that Agent is dispatched by undici's own `fetch`, never the
+// global one: see {@link KubernetesApiClient.tlsTransport}.
 
 /** The minimal connection shape both the runner + env K8s configs satisfy. */
 export interface KubernetesClientConfig {
@@ -102,38 +104,63 @@ export class KubernetesApiClient {
       body: payload,
       signal: AbortSignal.timeout(timeoutMs),
     }
-    const dispatcher = await this.tlsDispatcher()
-    if (dispatcher) init.dispatcher = dispatcher
-    return fetch(url, init)
+    const tls = await this.tlsTransport()
+    if (!tls) return fetch(url, init)
+    init.dispatcher = tls.dispatcher
+    return tls.fetch(url, init)
   }
 
-  private async tlsDispatcher(): Promise<unknown> {
+  /**
+   * The transport a custom-CA / insecure-skip config needs: an undici `Agent` carrying the TLS
+   * options AND the `fetch` that dispatches through it. Undefined when the config needs neither,
+   * in which case the caller uses the global `fetch` and undici is never loaded at all.
+   *
+   * **The two come from ONE undici instance, and that is the whole point of this method.** Node's
+   * global `fetch` is implemented by the undici BUNDLED INTO NODE, and the request handler it
+   * builds is that copy's internal shape; passing it a dispatcher from the userland `undici`
+   * package makes one undici validate the other's handler. undici 8 dropped the legacy handler
+   * interface that Node's bundled undici 7 still emits, so every apiserver call with a CA or a
+   * skip-verify configured died before a socket was opened, as `fetch failed: invalid
+   * onRequestStart method (UND_ERR_INVALID_ARG)`. That is indistinguishable, on a connect form,
+   * from a cluster that is not answering, and it is exactly the config a k3s box needs, so k3s
+   * could not be connected at all. undici's own `fetch` builds the handler its own `Agent`
+   * expects, so the pair cannot drift again on either side's next major.
+   */
+  private async tlsTransport(): Promise<
+    { fetch: UndiciModule['fetch']; dispatcher: unknown } | undefined
+  > {
     if (!this.config.caCertPem && !this.config.insecureSkipTlsVerify) return undefined
-    const key = `${this.config.insecureSkipTlsVerify ? 'insecure' : 'verify'}:${this.config.caCertPem ?? ''}`
-    const existing = tlsDispatcherCache.get(key)
-    if (existing) return existing
-    // Variable specifier so bundlers don't statically resolve `undici`.
+    // Variable specifier so bundlers don't statically resolve `undici`. Nothing memoises the
+    // import because the module loader already does: this is a cache lookup after the first call.
     const moduleName = 'undici'
-    const undici = (await import(moduleName).catch(() => null)) as {
-      Agent: new (opts: unknown) => unknown
-    } | null
+    const undici = (await import(moduleName).catch(() => null)) as UndiciModule | null
     if (!undici) {
       throw new Error(
         'Kubernetes custom CA / insecure TLS requires the Node runtime (undici is unavailable).',
       )
     }
-    const agent = new undici.Agent({
-      connect: {
-        ca: this.config.caCertPem,
-        rejectUnauthorized: !this.config.insecureSkipTlsVerify,
-      },
-    })
-    tlsDispatcherCache.set(key, agent)
-    return agent
+    const key = `${this.config.insecureSkipTlsVerify ? 'insecure' : 'verify'}:${this.config.caCertPem ?? ''}`
+    let dispatcher = tlsDispatcherCache.get(key)
+    if (!dispatcher) {
+      dispatcher = new undici.Agent({
+        connect: {
+          ca: this.config.caCertPem,
+          rejectUnauthorized: !this.config.insecureSkipTlsVerify,
+        },
+      })
+      tlsDispatcherCache.set(key, dispatcher)
+    }
+    return { fetch: undici.fetch, dispatcher }
   }
 }
 
-/** Module-scoped undici Agent cache, keyed by the CA/insecure pair (see tlsDispatcher). */
+/** The two undici entry points the custom-TLS path needs, typed structurally (dynamic import). */
+interface UndiciModule {
+  Agent: new (opts: unknown) => unknown
+  fetch: (url: string, init: unknown) => Promise<Response>
+}
+
+/** Module-scoped undici Agent cache, keyed by the CA/insecure pair (see tlsTransport). */
 const tlsDispatcherCache = new Map<string, unknown>()
 
 /** Read a response body defensively, length-capped, for error messages. */
