@@ -729,6 +729,7 @@ export {
 } from './domain/agent-capabilities.js'
 
 export {
+  type DesignImageCarrier,
   type DesignImageChannel,
   type DesignImageDelivery,
   type DesignImageUnavailableReason,

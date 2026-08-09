@@ -76,7 +76,9 @@ export function dispatchDesignImageDelivery(
   harness: HarnessKind,
   ref: Pick<ModelRef, 'acceptsImages'>,
 ): DesignImageDelivery | undefined {
-  return context.designImages?.files.length ? resolveDesignImageDelivery(harness, ref) : undefined
+  return context.designImages?.files.length
+    ? resolveDesignImageDelivery({ channel: 'files', harness }, ref)
+    : undefined
 }
 
 /** One image manifest as the harness parses it: where to fetch, with what, and which files. */

@@ -82,6 +82,36 @@ export function parseHarnessBodyCapabilities(value: unknown): HarnessBodyCapabil
   return value.filter(isHarnessBodyCapability)
 }
 
+/** A non-empty array: the wire shape of every capability that is simply a list. */
+function isPopulatedList(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0
+}
+
+/**
+ * What "the body carries this capability" means for each one, as an exhaustive `Record` so a new
+ * member cannot be added without stating its own answer.
+ *
+ * A predicate per capability rather than one shape test over all of them, because the field shapes
+ * genuinely differ and the wrong generalisation is SILENT in the worst direction: `designImages` is
+ * an object (`{ url, token, files }`), so the populated-list test every list-shaped capability
+ * shares reads it as absent, the handshake never fires for it, and an image that predates the field
+ * ignores the manifest while the backend's prompt names a directory nothing wrote. That is
+ * precisely the blind run this whole handshake exists to refuse.
+ *
+ * The KEY is still the body field name, which is what keeps the harness's own list a list of field
+ * names and needs no second mapping there; only the emptiness test lives here.
+ */
+const HARNESS_BODY_CAPABILITY_CARRIED: Record<HarnessBodyCapability, (value: unknown) => boolean> =
+  {
+    mcpServers: isPopulatedList,
+    skills: isPopulatedList,
+    // A manifest with no files promises the agent nothing, exactly as an empty server list does.
+    designImages: (value) =>
+      typeof value === 'object' &&
+      value !== null &&
+      isPopulatedList((value as { files?: unknown }).files),
+  }
+
 /**
  * Which capabilities a job body actually CARRIES, which is what the handshake is checked against.
  *
@@ -89,18 +119,13 @@ export function parseHarnessBodyCapabilities(value: unknown): HarnessBodyCapabil
  * dropped every tool server for its own reasons (an unsupported harness, a missing credential)
  * promised the agent nothing and has nothing to verify. What must line up is the body and the
  * PROMPT, and the prompt is composed from the same resolution the body is.
- *
- * A capability's name IS its body field name, deliberately. That is what lets this stay one
- * filter instead of a second mapping to keep in step, and it is why the harness's own list is a
- * list of field names too.
  */
 export function requiredHarnessCapabilities(
   body: Readonly<Record<string, unknown>>,
 ): HarnessBodyCapability[] {
-  return HARNESS_BODY_CAPABILITIES.filter((capability) => {
-    const value = body[capability]
-    return Array.isArray(value) && value.length > 0
-  })
+  return HARNESS_BODY_CAPABILITIES.filter((capability) =>
+    HARNESS_BODY_CAPABILITY_CARRIED[capability](body[capability]),
+  )
 }
 
 /**

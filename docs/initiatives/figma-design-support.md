@@ -498,17 +498,28 @@ DONE.
       harness whose CLI reads image files, and attached to the model request as image parts for an
       inline call.
       **Delivery is a PAIR fact and both halves are DECLARED, never inferred.** `HARNESS_IMAGE_INPUT`
-      says which CLI can get bytes into a turn (`claude-code` today; Codex and Pi are `false` with
-      their reason, flipped in the change that teaches an image to carry them, never ahead of it) and
-      `ModelRef.acceptsImages` says which flavour takes one. The harness is asked FIRST, which is not
-      stylistic: a subscription harness pins its own model, so reporting the model's limitation would
-      send someone to change a model they cannot change without also changing the CLI.
-      **The refusals are four, not one**, because each names a different fix, and the third is the
-      one that keeps the feature honest: `unknown_model_image_input` says the CATALOG has not
-      declared this flavour's modality, kept apart from `model_no_image_input` so an undeclared
-      multimodal model cannot read as a text-only one forever with nothing saying the platform never
-      asked. `acceptsImages: true` is therefore set only where the serving provider documents it, and
-      everything else is left absent rather than guessed at.
+      says which CLI can open an image file the platform wrote (`claude-code` today; Codex and Pi are
+      `false` with their reason, flipped in the change that teaches an image to carry them, never
+      ahead of it) and `ModelRef.acceptsImages` says which flavour takes one. The harness is asked
+      FIRST, which is not stylistic: a subscription harness pins its own model, so reporting the
+      model's limitation would send someone to change a model they cannot change without also
+      changing the CLI.
+      **The CARRIER is stated by the dispatch site, never derived from "is a harness named".**
+      `DesignImageCarrier` is `{ channel: 'files', harness }` for a container dispatch and
+      `{ channel: 'message' }` for an inline call that composes its own request. Deriving it once
+      cost the AMBIENT INLINE path its honesty: it names a harness whose CONTAINER dispatch reads
+      image files, drives that CLI with one-shot text on stdin, and so claimed `channel: 'files'`
+      for a directory a call with no checkout never wrote.
+      **The refusals are six, not one**, because each names a different fix. `unknown_model_image_input`
+      is the one that keeps the feature honest: it says the CATALOG has not declared this flavour's
+      modality, kept apart from `model_no_image_input` so an undeclared multimodal model cannot read
+      as a text-only one forever with nothing saying the platform never asked. `acceptsImages: true`
+      is therefore set only where the serving provider documents it, and everything else is left
+      absent rather than guessed at. Two more name a SEAM that carries no picture at all and so come
+      from the site rather than from the join: `inline_harness_text_only` (the ambient CLI path) and
+      `consensus_panel` (participants share one composed prompt STRING across models that need not
+      agree about image input, so there is nothing to attach to; the panel states its ceiling exactly
+      as it already does for the tool servers it cannot reach).
       **A kind that cannot be shown the pictures is TOLD they exist**, with the cause and the view
       names, and told not to chase them. That is what stops the textual description from reading like
       everything the platform had.
@@ -520,7 +531,11 @@ DONE.
       pass FIRST (`redactImagePayloads`, shared by the inline recorder and the LLM proxy): a
       `Uint8Array` JSON-stringifies to one object entry per byte, so an attached frame would have
       landed in telemetry as megabytes of `{"0":137,…}` on every turn of the run, and the proxy's
-      `data:`-URL form has the same shape of problem for any future producer. And the Node
+      `data:`-URL form has the same shape of problem for any future producer. That redaction is for
+      the RECORD only: nothing may size a request off it, because the proxy's Workers AI output cap
+      reserves context-window room from a measurement of the prompt, and measuring the described
+      copy would under-reserve by the whole size of every attached picture.
+      And the Node
       composition root builds its artifact store AFTER the model stack that constructs the inline
       executor, with neither ordering free to move, so the store reaches it through one documented
       late binding that fails safe (no store ⇒ the prompt states the pictures could not be
@@ -529,7 +544,10 @@ DONE.
       `designImages` joins `HARNESS_BODY_CAPABILITIES` (so an older image cannot leave the backend's
       prompt naming a directory it never wrote, which is precisely why the CAPTURE manifest is not a
       member: the harness composes that block itself), and the new directory joins
-      `HARNESS_SENTINEL_PATHS`.
+      `HARNESS_SENTINEL_PATHS`. Joining that union is only half of joining the handshake: whether a
+      body CARRIES a capability is now a per-capability predicate, because `designImages` is a
+      manifest object and the populated-list test its list-shaped siblings share read it as absent,
+      which turned the whole refusal into a no-op for the one capability it was added for.
       Website: [cat-factory-website#40](https://github.com/kibertoad/cat-factory-website/pull/40).
 
 ### Track E: the designer verification loop
