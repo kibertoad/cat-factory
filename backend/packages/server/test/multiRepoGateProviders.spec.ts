@@ -24,7 +24,10 @@ const MULTI_BLOCK = {
   peerPullRequests: [
     {
       repo: 'o/email',
-      frameId: 'frm_email',
+      // Two frames: the peer is a monorepo hosting two of the run's involved services, which
+      // share this ONE pull request. The mergeability report addresses the REPO, so it tags the
+      // first of them (see `RepoMergeability.frameId`).
+      frameIds: ['frm_email', 'frm_email_admin'],
       ref: { url: 'https://github.com/o/email/pull/7', number: 7, branch: 'cat-factory/login' },
     },
   ],
@@ -107,7 +110,7 @@ describe('GitHubPullRequestMerger (multi-repo merge-all)', () => {
     const outcome = await merger.mergePullRequests('ws', 'task_login', [
       {
         repo: 'o/email',
-        frameId: 'frm_email',
+        frameIds: ['frm_email'],
         ref: { url: '', number: 7, branch: 'cat-factory/login' },
       },
       { ref: { url: '', number: 1, branch: 'cat-factory/login' } },
@@ -153,7 +156,7 @@ describe('GitHubPullRequestMerger (multi-repo merge-all)', () => {
     const outcome = await merger.mergePullRequests('ws', 'task_login', [
       {
         repo: 'o/email',
-        frameId: 'frm_email',
+        frameIds: ['frm_email'],
         ref: { url: '', number: 7, branch: 'cat-factory/login' },
       },
       { ref: { url: '', number: 1, branch: 'cat-factory/login' } },

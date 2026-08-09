@@ -171,10 +171,7 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
     // list is what the run fanned out over while the recorded PRs are what it actually opened,
     // and a peer whose frame left the task's involved list still has an open PR owed a report.
     const frameIds = [
-      ...new Set([
-        ...(block.involvedServiceIds ?? []),
-        ...peers.map((p) => p.frameId).filter((id): id is string => !!id),
-      ]),
+      ...new Set([...(block.involvedServiceIds ?? []), ...peers.flatMap((p) => p.frameIds ?? [])]),
     ]
     const resolved = await resolveAll(workspaceId, blockId, frameIds, ownRepo ?? undefined)
     const byRepo = new Map(
@@ -187,7 +184,7 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
       const repo = peer.repo ? byRepo.get(peer.repo) : undefined
       if (number == null || !repo) continue
       out.push(
-        this.describe(repo, number, { role: 'peer', frameId: peer.frameId, url: peer.ref.url }),
+        this.describe(repo, number, { role: 'peer', frameIds: peer.frameIds, url: peer.ref.url }),
       )
     }
     return out
@@ -206,7 +203,7 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
   private describe(
     repo: RepoTarget,
     prNumber: number,
-    scope: { role: 'own' | 'peer'; frameId?: string; url?: string | null },
+    scope: { role: 'own' | 'peer'; frameIds?: string[]; url?: string | null },
   ): PrReportTarget {
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
     return {
@@ -215,7 +212,7 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
       provider: origin.provider,
       connection: { provider: origin.provider, connectionId: String(repo.installationId) },
       role: scope.role,
-      frameId: scope.frameId ?? null,
+      ...(scope.frameIds?.length ? { frameIds: scope.frameIds } : {}),
       url: scope.url ?? null,
     }
   }

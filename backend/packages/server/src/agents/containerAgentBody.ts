@@ -205,14 +205,14 @@ export async function resolveMultiRepoFanout(
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
 ): Promise<{
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
   multiRepoSection?: string
   repoSpecOverride?: Record<string, unknown>
   repoTargets: RepoTarget[]
 }> {
   const { workspaceId, blockId, repo } = args
   let peerRepos:
-    | { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+    | { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
     | undefined
   let multiRepoSection: string | undefined
   let repoSpecOverride: Record<string, unknown> | undefined
@@ -239,10 +239,20 @@ export async function resolveMultiRepoFanout(
     if (peerCheckouts.length > 0 || coLocated.length > 0) {
       const origin = deps.resolveRepoOrigin ?? githubRepoOrigin
       if (peerCheckouts.length > 0) {
-        peerRepos = peerCheckouts.map((c: RepoCheckout) => ({
-          repo: buildRepoSpec(c.target, origin(c.target)),
-          ...(c.involved[0]?.frameId ? { frameId: c.involved[0].frameId } : {}),
-        }))
+        peerRepos = peerCheckouts.map((c: RepoCheckout) => {
+          // Whole-repo, exactly like the primary below: a peer checkout can host SEVERAL of the
+          // run's involved services (one monorepo, several service frames), and scoping it to
+          // the subdirectory of whichever resolved first would put the rest out of reach. The
+          // layout section names each service's subdirectory instead.
+          const { serviceDirectory: _drop, ...rootTarget } = c.target
+          return {
+            repo: buildRepoSpec(rootTarget, origin(rootTarget)),
+            // EVERY frame this repo hosts, not the first: they share this checkout, its work
+            // branch and its single pull request, so the PR the harness echoes them back onto
+            // is the one pull request all of them landed in.
+            ...(c.involved.length ? { frameIds: c.involved.map((i) => i.frameId) } : {}),
+          }
+        })
         repoTargets.push(...peerCheckouts.map((c: RepoCheckout) => c.target))
       }
       multiRepoSection = renderMultiRepoWorkspaceSection(checkouts, involvedServices)
@@ -330,7 +340,7 @@ export async function resolveMergerCombinedDiff(
   deps: ContainerAgentExecutorDependencies,
 ): Promise<
   | {
-      peerRepos: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+      peerRepos: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
       multiRepoSection: string
       repoTargets: RepoTarget[]
     }
@@ -341,25 +351,29 @@ export async function resolveMergerCombinedDiff(
   if (context.agentKind !== MERGER_AGENT_KIND || peerPrs.length === 0 || !deps.resolveRepoTargets) {
     return undefined
   }
-  const frameIds = peerPrs.map((p) => p.frameId).filter((f): f is string => !!f)
+  // Every frame the recorded peer PRs name, flattened: a PR opened in a monorepo hosting
+  // several involved services carries all of theirs, and resolving the whole set is what
+  // brings that ONE checkout back (any of its frames would, but the set is what was recorded).
+  const frameIds = [...new Set(peerPrs.flatMap((p) => p.frameIds ?? []))]
   if (frameIds.length === 0) return undefined
   const { checkouts } = await deps.resolveRepoTargets(workspaceId, blockId, frameIds, repo)
   const origin = deps.resolveRepoOrigin ?? githubRepoOrigin
   const legs: {
     spec: Record<string, unknown>
-    frameId: string
+    frameIds: string[]
     cloneBranch: string
     target: RepoTarget
   }[] = []
   for (const pr of peerPrs) {
-    if (!pr.frameId) continue
+    const prFrames = pr.frameIds ?? []
+    if (prFrames.length === 0) continue
     const checkout = checkouts.find(
-      (c) => !c.primary && c.involved.some((i) => i.frameId === pr.frameId),
+      (c) => !c.primary && c.involved.some((i) => prFrames.includes(i.frameId)),
     )
     if (!checkout) continue
     legs.push({
       spec: buildRepoSpec(checkout.target, origin(checkout.target)),
-      frameId: pr.frameId,
+      frameIds: prFrames,
       cloneBranch: pr.ref.branch ?? workBranch,
       target: checkout.target,
     })
@@ -368,7 +382,7 @@ export async function resolveMergerCombinedDiff(
   return {
     peerRepos: legs.map((l) => ({
       repo: l.spec,
-      frameId: l.frameId,
+      frameIds: l.frameIds,
       cloneBranch: l.cloneBranch,
     })),
     // The own service rides the primary checkout at its PR head (clone `pr`, or base when the
@@ -552,7 +566,7 @@ export async function resolveAuxiliaryRepos(
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
 ): Promise<{
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
   multiRepoSection?: string
   repoSpecOverride?: Record<string, unknown>
   repoForKind: RepoTarget

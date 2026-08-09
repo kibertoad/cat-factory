@@ -159,14 +159,27 @@ harness path via a widened `peerRepos` job body, with no runner-image bump. `ste
     whose own service was a no-op but a peer changed surfaces the peer PRs in its output; and
     the multi-repo dispatch reuses the already-resolved primary `RepoTarget` (no second
     installation read / ancestry walk).
-  - **Deferred: all-frame peer-PR attribution.** A shared-monorepo peer checkout can carry
-    `>1` involved frame (`RepoCheckout.involved[]`), but the peer PR is attributed to only
-    `involved[0].frameId` end-to-end (`PeerRepoSpec.frameId`, `peerPullRequestSchema.frameId`,
-    the gate `conflictTarget`, `mergeOrder`). Phase 4 keys its gates + merge-order off the
-    SINGULAR `frameId`, so widening the whole chain to `frameIds[]` (contracts → kernel →
-    harness → server → gates → mergeOrder + tests) is its own isolated change, not a rider on
-    the review fixes. Until then a monorepo hosting several involved services links its single
-    PR to just the first frame.
+  - **All-frame peer-PR attribution: LANDED.** A shared-monorepo peer checkout carries every
+    involved frame it hosts (`RepoCheckout.involved[]`), and that whole set now travels the
+    chain as `frameIds[]`: `peerPullRequestSchema` / `allPullRequests` / `MergePrEntry` /
+    `PrReportTarget` / `RunnerJobResult` and the harness's `PeerRepoSpec` + `RepoLeg`. The
+    harness echoes it back untouched (it decides no attribution of its own), so the ONE pull
+    request a monorepo peer opens is recorded against every frame whose change landed in it.
+    Two things stayed singular ON PURPOSE, each documented at its own type: the gate's
+    `conflictTarget.frameId` and `RepoMergeability.frameId` are ADDRESSES, not attribution
+    (a conflict is per-repo, and `resolveConflictResolverPeer` resolves the whole checkout back
+    from any frame co-located in it), and `PrReportScope.frameId` is published `/api/v1`, kept
+    beside the new `frameIds` as its head (surface 1.39.0). `mergeOrder` keys a peer on the
+    LEAST of its frames, so the order is a function of the set rather than of resolution order.
+    The same change stopped a peer checkout inheriting one co-located service's
+    `serviceDirectory`: it is whole-repo, exactly as the primary already was.
+  - **Deferred: the conflict-resolver's service-directory scoping.** The resolver is SINGLE-repo,
+    so it keeps the ordinary `serviceDirectory` cwd scoping on both the own and the peer repo.
+    On a monorepo whose work branch touched two involved services' subtrees that points the agent
+    at one of them, while the merge it is resolving is whole-repo (git operations already run at
+    the checkout root; only the agent's cwd is scoped). Left alone here because it is symmetric
+    with the own-repo path and predates this change: fixing it means deciding what scoping a
+    whole-repo REPAIR should have at all, which is not the fan-out's question.
   - **Deferred: `runMultiRepoCoding` ⇄ `runCodingAgent` duplication.** The multi-repo flow
     re-implements the no-op-result object, the `hasWork`/resumed-branch detection, and the
     involved-frame level resolution rather than sharing helpers with the single-repo path /

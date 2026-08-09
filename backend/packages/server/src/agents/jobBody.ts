@@ -56,7 +56,7 @@ export interface KindBodyParts {
    * snapshot. Present only for the tester kinds when the service frame has secrets configured.
    */
   testSecretEnv?: { key: string; value: string }[]
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
   /**
    * The backend-rendered "Multi-repo workspace" system-prompt section (which repo is primary,
    * where each involved service lives, how the checkouts are laid out). Appended to the coding
@@ -328,7 +328,7 @@ function buildCodingRepoLegs(
   const peerRepos = parts.peerRepos?.length
     ? parts.peerRepos.map((p) => ({
         repo: p.repo,
-        ...(p.frameId ? { frameId: p.frameId } : {}),
+        ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
         newBranch: workBranch,
         ...(opensPr ? { pr } : {}),
       }))
@@ -526,12 +526,12 @@ function buildExploreAgentBody(
   // `bug-investigator`) clones each connected involved-service repo as a SIBLING checkout so
   // it can read across every repo the bug touches. Unlike the coding path there is no
   // `newBranch`/`pr` — the peers are read, never pushed — so the harness's read-only
-  // `runMultiRepoExplore` just clones them (`{ repo, frameId }`) and runs the agent at the
+  // `runMultiRepoExplore` just clones them (`{ repo, frameIds }`) and runs the agent at the
   // workspace root. The layout section names each repo/subdir + role.
   const explorePeers = parts.peerRepos?.length
     ? parts.peerRepos.map((p) => ({
         repo: p.repo,
-        ...(p.frameId ? { frameId: p.frameId } : {}),
+        ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
         // The merger pins each read-only peer to its PR branch so the combined diff sees the PR
         // change; the bug-investigator omits it (cloned at the repo's default branch).
         ...(p.cloneBranch ? { cloneBranch: p.cloneBranch } : {}),

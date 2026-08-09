@@ -1104,7 +1104,7 @@ export class ExecutionService {
     const ordered = orderPrsForMerge(
       allPullRequests(block).map((p) => ({
         ...(p.repo ? { repo: p.repo } : {}),
-        ...(p.frameId ? { frameId: p.frameId } : {}),
+        ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
         ref: p.ref,
       })),
     )

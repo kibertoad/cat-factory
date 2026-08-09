@@ -852,8 +852,8 @@ export type PrReportOwnPullRequest = v.InferOutput<typeof prReportOwnPullRequest
  * {@link prReportScopeSchema.entries.ownPullRequest}, and `role` is what lets a consumer tell
  * that withholding apart from a section that was absent because its step never ran.
  *
- * A single-repo run is `own` with a null `frameId` and a null `ownPullRequest` — the ordinary
- * case, and the shape every report had before peer reports existed.
+ * A single-repo run is `own` with an empty `frameIds` and a null `ownPullRequest` — the
+ * ordinary case, and the shape every report had before peer reports existed.
  */
 export const prReportScopeSchema = v.object({
   /**
@@ -864,8 +864,20 @@ export const prReportScopeSchema = v.object({
   /**
    * The involved service frame whose repo this PR belongs to, when the peer PR recorded one.
    * Null on an own-service report, and on a peer whose frame attribution was not recorded.
+   *
+   * The FIRST of {@link prReportScopeSchema.entries.frameIds}, kept because it is part of the
+   * published `/api/v1` shape. A peer repo hosting several involved services (a monorepo)
+   * carries all of them in `frameIds`; read that instead.
    */
   frameId: v.optional(v.nullable(v.string())),
+  /**
+   * EVERY involved service frame whose changes ride this pull request.
+   *
+   * More than one when the repo is a monorepo hosting several of the run's involved services:
+   * they share a checkout, a work branch and this pull request, so the report on it speaks for
+   * all of them. Absent/empty on an own-service report.
+   */
+  frameIds: v.optional(v.array(v.string())),
   /** Where the own-service sections live. Null on an own-service report. */
   ownPullRequest: v.optional(v.nullable(prReportOwnPullRequestSchema)),
 })

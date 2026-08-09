@@ -19,12 +19,25 @@ describe('orderPrsForMerge', () => {
     // `allPullRequests` yields own first; the merge order must invert that so providers land first.
     const entries: MergePrEntry[] = [
       { ref: ref(1) }, // own service (no repo)
-      { repo: 'o/email', frameId: 'frm_email', ref: ref(2) },
-      { repo: 'o/auth', frameId: 'frm_auth', ref: ref(3) },
+      { repo: 'o/email', frameIds: ['frm_email'], ref: ref(2) },
+      { repo: 'o/auth', frameIds: ['frm_auth'], ref: ref(3) },
     ]
     const ordered = orderPrsForMerge(entries)
     // Own service (the consumer) is last; peers first, sorted deterministically by frame id.
     expect(ordered.map((e) => e.repo ?? 'own')).toEqual(['o/auth', 'o/email', 'own'])
+  })
+
+  // A monorepo peer carries several frames on its one PR, so its key is the LEAST of them:
+  // a function of the set, which is what keeps the order independent of resolution order.
+  it('keys a multi-frame peer on its least frame id, whatever order they arrive in', () => {
+    const mono = (frameIds: string[]): MergePrEntry[] => [
+      { repo: 'o/mono', frameIds, ref: ref(1) },
+      { repo: 'o/other', frameIds: ['frm_b'], ref: ref(2) },
+      { ref: ref(3) },
+    ]
+    const expected = ['o/mono', 'o/other', 'own']
+    expect(orderPrsForMerge(mono(['frm_a', 'frm_z'])).map((e) => e.repo ?? 'own')).toEqual(expected)
+    expect(orderPrsForMerge(mono(['frm_z', 'frm_a'])).map((e) => e.repo ?? 'own')).toEqual(expected)
   })
 
   it('orders peers deterministically by frame id (falling back to repo name)', () => {

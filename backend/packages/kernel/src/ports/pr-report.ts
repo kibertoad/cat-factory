@@ -62,10 +62,12 @@ export interface PrReportTarget {
    */
   role: 'own' | 'peer'
   /**
-   * The involved service frame whose repo this is, when the recorded peer PR attributed one.
-   * Null for the own-service target, and for a peer whose frame was not recorded.
+   * The involved service frames whose changes ride this pull request, when the recorded peer
+   * PR attributed any. Empty/absent for the own-service target, and for a peer whose frames
+   * were not recorded. More than one when the repo is a monorepo hosting several of the run's
+   * involved services: they share the checkout, the work branch and this pull request.
    */
-  frameId?: string | null
+  frameIds?: string[]
   /** The pull request's web URL, when known — what a peer report links back to. */
   url?: string | null
 }

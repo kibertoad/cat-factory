@@ -816,8 +816,9 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
   }
   if (typeof o.pushed === 'boolean') out.pushed = o.pushed
   // Multi-repo run's peer PRs (service-connections phase 3): keep only well-formed entries
-  // (a repo + prUrl + branch string), passing the optional frameId through. Absent for a
-  // single-repo run — so a pool proxying the executor-harness verbatim carries them intact.
+  // (a repo + prUrl + branch string), passing the optional frame attribution through. Absent
+  // for a single-repo run — so a pool proxying the executor-harness verbatim carries them
+  // intact, including a monorepo peer's several frames on the ONE PR they share.
   if (Array.isArray(o.peerPullRequests)) {
     const peers = (o.peerPullRequests as unknown[])
       .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
@@ -825,12 +826,17 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
         (x) =>
           typeof x.repo === 'string' && typeof x.prUrl === 'string' && typeof x.branch === 'string',
       )
-      .map((x) => ({
-        repo: x.repo as string,
-        prUrl: x.prUrl as string,
-        branch: x.branch as string,
-        ...(typeof x.frameId === 'string' ? { frameId: x.frameId } : {}),
-      }))
+      .map((x) => {
+        const frameIds = Array.isArray(x.frameIds)
+          ? x.frameIds.filter((f): f is string => typeof f === 'string' && !!f)
+          : []
+        return {
+          repo: x.repo as string,
+          prUrl: x.prUrl as string,
+          branch: x.branch as string,
+          ...(frameIds.length ? { frameIds } : {}),
+        }
+      })
     if (peers.length) out.peerPullRequests = peers
   }
   // The single structured work-product channel (carried as `unknown` on the port — the

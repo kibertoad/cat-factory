@@ -123,8 +123,13 @@ export interface PrSpec {
  */
 export interface PeerRepoSpec {
   repo: RepoSpec
-  /** The involved service frame this repo resolved from, echoed back on the peer PR. */
-  frameId?: string
+  /**
+   * The involved service frames this repo resolved from, echoed back on the peer PR verbatim.
+   * More than one when the peer is a monorepo hosting several of the run's involved services:
+   * they share this ONE checkout, its work branch and its pull request. Opaque to the harness,
+   * which decides no frame attribution of its own.
+   */
+  frameIds?: string[]
   /**
    * The work branch to create off the peer's base and push (the shared `cat-factory/<block>`).
    * Present for a COING fan-out (coder / ci-fixer). Absent for a READ-ONLY explore fan-out
@@ -319,7 +324,10 @@ function parsePeerRepos(value: unknown): PeerRepoSpec[] {
     if (e.cloneBranch !== undefined) {
       spec.cloneBranch = str(e.cloneBranch, `peerRepos[${i}].cloneBranch`)
     }
-    if (typeof e.frameId === 'string' && e.frameId) spec.frameId = e.frameId
+    if (Array.isArray(e.frameIds)) {
+      const frameIds = e.frameIds.filter((f): f is string => typeof f === 'string' && !!f)
+      if (frameIds.length) spec.frameIds = frameIds
+    }
     if (typeof e.ghToken === 'string' && e.ghToken) spec.ghToken = e.ghToken
     if (typeof e.pr === 'object' && e.pr !== null) {
       const p = e.pr as Record<string, unknown>
@@ -974,8 +982,12 @@ export interface AgentResult {
    * repo the run actually changed (service-connections phase 3). Beside the own-service
    * `prUrl`/`branch`; the backend lifts these onto the block's `peerPullRequests`. Absent for
    * a single-repo run.
+   *
+   * `frameIds` is the dispatch's own attribution echoed back untouched (see
+   * {@link PeerRepoSpec.frameIds}): one entry per repo, carrying every involved frame that
+   * repo hosts.
    */
-  peerPullRequests?: { repo: string; frameId?: string; prUrl: string; branch: string }[]
+  peerPullRequests?: { repo: string; frameIds?: string[]; prUrl: string; branch: string }[]
   /** Coding mode (bootstrap): the default branch the bootstrapped contents were pushed to. */
   defaultBranch?: string
   error?: string

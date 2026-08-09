@@ -21,7 +21,7 @@ const BLOCK_MULTI_REPO = {
   peerPullRequests: [
     {
       repo: 'o/email',
-      frameId: 'frm_email',
+      frameIds: ['frm_email'],
       ref: { number: 12, url: 'https://github.test/o/email/pull/12', branch: 'work' },
     },
   ],
@@ -101,7 +101,7 @@ const peerTarget: PrReportTarget = {
   provider: 'github',
   connection: { provider: 'github', connectionId: '1' },
   role: 'peer',
-  frameId: 'frm_email',
+  frameIds: ['frm_email'],
 }
 
 describe('GitHubPrReportPublisher.resolveTargets', () => {
@@ -114,7 +114,6 @@ describe('GitHubPrReportPublisher.resolveTargets', () => {
         provider: 'github',
         connection: { provider: 'github', connectionId: '1' },
         role: 'own',
-        frameId: null,
         url: 'https://github.test/o/r/pull/7',
       },
     ])
@@ -158,7 +157,7 @@ describe('GitHubPrReportPublisher.resolveTargets', () => {
       ['o/r', 7, 'own'],
       ['o/email', 12, 'peer'],
     ])
-    expect(targets[1]?.frameId).toBe('frm_email')
+    expect(targets[1]?.frameIds).toEqual(['frm_email'])
   })
 
   it('resolves a peer PR even when the own service has not opened one yet', async () => {
@@ -211,7 +210,7 @@ describe('GitHubPrReportPublisher.resolveTargets', () => {
     // about, in a repo it is not about.
     const block = {
       id: 'blk_1',
-      peerPullRequests: [{ repo: '', frameId: 'frm_email', ref: { number: 12 } }],
+      peerPullRequests: [{ repo: '', frameIds: ['frm_email'], ref: { number: 12 } }],
     } as unknown as Block
     const h = makeDeps(block, null)
     const targets = await new GitHubPrReportPublisher(h.deps).resolveTargets('ws_1', 'blk_1')

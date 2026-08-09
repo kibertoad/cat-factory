@@ -175,10 +175,20 @@ newBranch?, pr?, serviceDirectory? }`). A per-repo token is optional (defaults t
   `git.ts` helpers gain an explicit `dir` parameter.
 - **Result / PR tracking**: keep `block.pullRequest` **singular** (the primary repo's PR)
   and add `block.peerPullRequests` + `AgentRunResult.peerPullRequests`
-  (`{ repo, frameId?, ref: PullRequestRef }[]`). Chosen on caller count, not
+  (`{ repo, frameIds?, ref: PullRequestRef }[]`). Chosen on caller count, not
   backwards compatibility: every single-repo reader (CI/mergeability/merger providers,
   issue writeback, the board PR chip) stays untouched, and the few multi-repo-aware
   phase-4 paths read a contracts helper `allPullRequests(block)`.
+- **Attribution follows the CHECKOUT, so it is a SET.** The unit above is one repo, not
+  one frame, so several involved services in one monorepo share a checkout, the work
+  branch and therefore a single pull request: `frameIds` names all of them. The harness
+  echoes the dispatch's set back untouched rather than picking, and the peer checkout is
+  whole-repo (no `serviceDirectory` scoping, exactly like the primary), or the services
+  that resolved second would be out of the agent's reach. Two places stay singular
+  because they ADDRESS a repo rather than attribute a change, each documented at its
+  type: the conflicts gate's `conflictTarget.frameId` / `RepoMergeability.frameId` (a
+  git conflict is per-repo, and any co-located frame resolves the same checkout back),
+  and the published `PrReportScope.frameId`, kept beside `frameIds` as its head.
 - **Image**: any harness `src/**` change bumps `@cat-factory/executor-harness` + the
   three pinned tags per the CLAUDE.md image rules.
 

@@ -1044,7 +1044,8 @@ interface RepoLeg {
   workBranch: string
   ghToken: string
   pr?: { title: string; body: string }
-  frameId?: string
+  /** The involved frames the dispatch attributed to this checkout, echoed onto its peer PR. */
+  frameIds?: string[]
   primary: boolean
   /**
    * A READ-ONLY reference checkout (doc-writer's `referenceRepos`): cloned at its base branch for
@@ -1107,7 +1108,7 @@ export async function runMultiRepoCoding(
       workBranch: peer.newBranch ?? primaryWorkBranch,
       ghToken: peer.ghToken ?? job.ghToken,
       ...(peer.pr ? { pr: peer.pr } : {}),
-      ...(peer.frameId ? { frameId: peer.frameId } : {}),
+      ...(peer.frameIds?.length ? { frameIds: peer.frameIds } : {}),
       primary: false,
       baseSha: '',
       resumed: false,
@@ -1465,7 +1466,7 @@ async function pushMultiRepoLegs(
     } else if (prUrl) {
       peerPullRequests.push({
         repo: `${leg.repo.owner}/${leg.repo.name}`,
-        ...(leg.frameId ? { frameId: leg.frameId } : {}),
+        ...(leg.frameIds?.length ? { frameIds: leg.frameIds } : {}),
         prUrl,
         branch: leg.workBranch,
       })
