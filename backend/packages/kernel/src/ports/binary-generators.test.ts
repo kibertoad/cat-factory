@@ -27,7 +27,7 @@ function views(id: string): BinaryGeneratorView[] {
     summary: 'Pixel-art image generation.',
     description: '',
     modalities: ['image'],
-    credential: { key: 'RD_TOKEN' },
+    credentials: [{ key: 'RD_TOKEN' }],
   })
   return registry.views()
 }
@@ -113,7 +113,7 @@ describe('memoizeBinaryGeneratorViews', () => {
       summary: '',
       description: '',
       modalities: ['image'],
-      credential: { key: 'RD_TOKEN' },
+      credentials: [{ key: 'RD_TOKEN' }],
       contracts: [{ contractId: 'api', format: 'openapi', title: 'API', body: '{}' }],
     })
     const memo = memoizeBinaryGeneratorViews(registryBinaryGeneratorSource(registry))

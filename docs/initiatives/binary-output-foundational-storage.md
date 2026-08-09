@@ -121,7 +121,7 @@ binaryGenerators.register({
   mediaTypes: ['image/png'],
   endpoint: 'https://api.retrodiffusion.ai/v1',
   guidance: 'Inference is synchronous; the response carries base64 images in `base64_images`.',
-  credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token request header' },
+  credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token request header' }],
   contracts: [{ contractId: 'api', format: 'openapi', title: 'Inference API', body: OPENAPI }],
 })
 ```
@@ -248,15 +248,15 @@ storage id is fixed in the workspace catalog by whoever runs the board, an integ
 in the deployment's own build, and one reason would send half the readers to the wrong place. It
 also runs with NO catalog seam wired, since the registry needs no I/O.
 
-### The credential: declared by name, delivered per job, never to a prompt
+### The credentials: declared by name, delivered per job, never to a prompt
 
 This is the one place the feature's original "credentials reach the agent through the existing
 seams" answer did not hold. A tool server's credential works because the platform configures the
 client; an image API is called by the agent's OWN code, so the value has to be in that job's
 environment or the integration is decorative.
 
-So a definition declares the credential BY NAME and the value takes the same route a tool server's
-does, one channel over:
+So a definition declares its credentials BY NAME and each value takes the same route a tool
+server's does, one channel over:
 
 1. the ENGINE resolves the selection onto `AgentRunContext.binaryGenerators`: ids, content types
    and the credential's KEY NAME, all non-secret, which is why the agent-context snapshot may
@@ -277,6 +277,51 @@ an unset variable means the platform could not provide the key and the integrati
 called, and the agent can SEE the variable, so a second declaration from the executor could only
 agree with the environment or contradict it. A run that generates what it can and NAMES the gap
 beats one that refuses to start over the most ordinary misconfiguration there is.
+
+**A vendor account is not always one string, so `credentials` is a LIST.** HTTP Basic over a
+key/secret pair is the shape that breaks a single field, and it is common enough (Scenario,
+Twilio, Mailgun and a long tail of REST APIs) to be a shape rather than one vendor's eccentricity.
+The workaround under one field was colon-joining the halves into a single variable, which rotates
+them together, offers the operator one checklist row where their vendor console shows two values,
+and turns a mis-joined value into a 401 indistinguishable from a wrong key. Every other layer this
+travels through was already plural (the resolver port takes `keys`, a tool server declares
+`credentials`, the checklist keys rows by `(subject, id, key)`, the job body carries pairs), so
+the single field was the one singular link in the chain.
+
+Two rules come with it. INJECTION NAMES must be distinct within a definition, refused at
+registration: the job body is keyed by the variable each value arrives as, so a collision does not
+conflict loudly, one value silently wins and the integration authenticates with half a pair. And
+the brief NAMES a multi-credential set before its parts, because two credential paragraphs read as
+two independent keys and an agent has no reason not to try the first alone.
+
+**The same name ACROSS definitions is refused only when the key behind it differs.** One vendor
+behind an image endpoint and a music endpoint is one account, and sharing a variable is the point
+there: both look the value up under the same key, so whichever resolves first sets it to exactly
+what the other wanted. Different keys behind one name is the opposite and has no right answer.
+Serving the first claimant sets the variable the SECOND integration's brief tells the agent to
+read, so it authenticates one vendor with the other's key, and a pair loses a half the same way
+while the brief still says the two names belong together. So boot refuses it
+(`binary_generator_injection_name_collision`), and dispatch, which a mothership node reaches with
+definitions it never boot-validated, withholds the value from every claimant rather than picking
+one. Unset is the only state the brief already describes truthfully.
+
+**The multi-credential set line states its joint rule over the REQUIRED members alone.** "Never
+call the integration with a subset of them" is right for a Basic pair and contradicts an optional
+member's own line, which tells the agent to call anyway when that one is missing. Below two
+required members there is no subset to refuse, and the set line says so instead.
+
+There is no `authScheme` field and deliberately so: the agent writes the request, `usage` is
+already where each half says how it is presented, and a scheme enum would need a member for the
+first vendor with a signed request or a rotating timestamp. The platform names values; it does not
+assemble headers.
+
+**The mothership relay refuses a reply carrying no `credentials`**, where the sibling capability
+axis absorbs the same absence. The asymmetry is which state the fill would land on: an empty
+capability declaration is a documented reading ("only the coarse facts are known"), while an empty
+credential list reads as "this integration is unauthenticated" and the brief would tell the agent
+so about a deployment that configured a key. That is a 401 reported against an integration nobody
+gave credentials to, with the skew invisible. A node therefore needs a mothership new enough to
+serve the plural field, and fails loudly against one that is not.
 
 ### The brief leads with generation
 

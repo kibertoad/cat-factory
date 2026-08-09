@@ -35,7 +35,7 @@ const DEFINITION: BinaryGeneratorDefinition = {
   modalities: ['image'],
   mediaTypes: ['image/png'],
   endpoint: 'https://api.retrodiffusion.test',
-  credential: { key: 'RD_TOKEN', usage: 'X-RD-Token: <value>' },
+  credentials: [{ key: 'RD_TOKEN', usage: 'X-RD-Token: <value>' }],
   contracts: [{ contractId: 'api', format: 'openapi', title: 'Inference API', body: OPENAPI }],
 }
 
@@ -94,7 +94,7 @@ describe('mothership-mode generative binary integrations', () => {
     // secret crosses, because a declaration is a name and never a value.
     const source = await node(mothership())
     const views = await source.views()
-    expect(views[0]!.credential).toEqual({ key: 'RD_TOKEN', usage: 'X-RD-Token: <value>' })
+    expect(views[0]!.credentials).toEqual([{ key: 'RD_TOKEN', usage: 'X-RD-Token: <value>' }])
   })
 
   it('serves the FULL documents on the lazy read, batched over the selection', async () => {
@@ -236,7 +236,9 @@ describe('mothership-mode generative binary integrations', () => {
         Promise.resolve(
           new Response(
             JSON.stringify({
-              generators: [{ id: 'retro', modalities: ['image'], mediaTypes: ['image/png'] }],
+              generators: [
+                { id: 'retro', modalities: ['image'], mediaTypes: ['image/png'], credentials: [] },
+              ],
             }),
             { status: 200, headers: { 'content-type': 'application/json' } },
           ),
@@ -244,6 +246,42 @@ describe('mothership-mode generative binary integrations', () => {
     })
     const views = await source.views()
     expect(views[0]!.capabilities).toEqual([])
+  })
+
+  it('THROWS on an ABSENT `credentials`, where the capability axis absorbs the same skew', async () => {
+    // The deliberate asymmetry with the test above, and the reason is which state the fill would
+    // land on. An empty capability declaration is a real and documented reading ("only the coarse
+    // facts are known"), so absorbing it costs nothing. An empty CREDENTIAL list reads as "this
+    // integration is unauthenticated", and the brief would tell the agent exactly that about a
+    // deployment that configured a key: the run then reports a 401 against an integration nobody
+    // gave credentials to, with the mothership one build behind invisible in the message. A
+    // mothership predating the plural field emits a singular `credential`, so the node fails
+    // loudly against it instead.
+    const source = new HttpBinaryGeneratorSource({
+      baseUrl: 'https://mothership.test',
+      token: 'tok',
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              generators: [
+                {
+                  id: 'retro',
+                  modalities: ['image'],
+                  mediaTypes: [],
+                  capabilities: [],
+                  credential: { key: 'RD_TOKEN' },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )) as unknown as typeof fetch,
+    })
+    await expect(source.views()).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'binary_generators_unreachable', field: 'generators' },
+    })
   })
 
   it('THROWS on a `capabilities` that is PRESENT and not an array', async () => {
@@ -258,7 +296,13 @@ describe('mothership-mode generative binary integrations', () => {
           new Response(
             JSON.stringify({
               generators: [
-                { id: 'retro', modalities: ['image'], mediaTypes: [], capabilities: 'seed' },
+                {
+                  id: 'retro',
+                  modalities: ['image'],
+                  mediaTypes: [],
+                  credentials: [],
+                  capabilities: 'seed',
+                },
               ],
             }),
             { status: 200, headers: { 'content-type': 'application/json' } },
