@@ -1,0 +1,5 @@
+node_modules/
+.env
+# The resumable run ledger: ids of repositories, tasks and runs one live pass created. Local to
+# whoever ran it, and worthless to anyone else.
+.acceptance/
