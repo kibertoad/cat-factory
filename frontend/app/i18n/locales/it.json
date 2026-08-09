@@ -278,6 +278,11 @@
           "blurb": "Dove vengono eseguiti gli agenti di coding quando non si usano i Cloudflare Containers. Scegli un pool di runner self-hosted (il tuo scheduler) o un cluster Kubernetes, poi configura il suo endpoint e le sue credenziali."
         }
       },
+      "serviceAccountToken": {
+        "whitespace": "Questo token contiene uno spazio o un'interruzione di riga, cosa che un token bearer non ha mai. Probabilmente è stato copiato a cavallo di una riga mandata a capo nel terminale. Ricopialo come un'unica riga ininterrotta.",
+        "base64Encoded": "Sembra il valore base64 del campo .data.token del Secret, non il token vero e proprio. Decodificalo prima, ad esempio con base64 -d.",
+        "notAJwt": "Non sembra un token di ServiceAccount, che è un JWT composto da tre parti separate da punti. Verifica di aver copiato il valore completo. Ignora questo avviso se il tuo cluster usa token bearer statici."
+      },
       "kubernetesEnv": {
         "label": "Nome",
         "labelPlaceholder": "Cluster di anteprima",
@@ -364,6 +369,19 @@
         "button": "Testa la connessione",
         "ok": "Connessione OK",
         "failed": "Connessione fallita",
+        "causes": {
+          "refused": "Nessuno è in ascolto a quell'indirizzo: la connessione è stata rifiutata.",
+          "dns": "Quel nome host non viene risolto da questa installazione.",
+          "timeout": "Nessuna risposta è arrivata prima della scadenza del test.",
+          "aborted": "La richiesta è stata annullata prima che arrivasse una risposta.",
+          "unreachable": "Non esiste una rotta di rete verso quell'indirizzo da questa installazione.",
+          "reset": "La connessione è stata chiusa prima che arrivasse una risposta.",
+          "tlsUntrusted": "Questa installazione non considera attendibile il certificato TLS.",
+          "tlsExpired": "Il certificato TLS è fuori dal suo periodo di validità.",
+          "tlsHostname": "Il certificato TLS non è stato emesso per quel nome host.",
+          "tlsProtocol": "L'handshake TLS è fallito.",
+          "invalidHeader": "Non è stato possibile costruire la richiesta: una credenziale contiene un carattere che un header HTTP non può trasportare."
+        },
         "warningsTitle": "Lacune in questa configurazione",
         "warnings": {
           "runner_manifest_no_release": "Nessun template di release: annullare un'esecuzione non può dire al pool di fermare il suo job, quindi un job orfano tiene occupato il suo runner finché il pool non lo recupera da solo.",

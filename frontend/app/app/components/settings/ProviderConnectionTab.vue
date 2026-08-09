@@ -15,6 +15,7 @@ import { computed, ref, toRaw, watch } from 'vue'
 import type { ConnectionTestResult } from '@cat-factory/contracts'
 import type { ProviderConfigField, ProviderConnectionKind } from '~/types/providerConnections'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import KubernetesEnvironmentForm from '~/components/settings/KubernetesEnvironmentForm.vue'
@@ -498,7 +499,7 @@ function fieldHelp(key: string): string | undefined {
         />
       </UFormField>
 
-      <div v-if="descriptor.supportsTest" class="flex items-center gap-2">
+      <div v-if="descriptor.supportsTest" class="space-y-1.5">
         <UButton
           color="neutral"
           variant="soft"
@@ -509,12 +510,7 @@ function fieldHelp(key: string): string | undefined {
         >
           {{ t('settings.providerConnection.test.button') }}
         </UButton>
-        <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-          {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
-        </span>
-        <span v-else-if="testResult" class="text-xs text-rose-400">
-          {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
-        </span>
+        <ConnectionTestVerdict :result="testResult" />
       </div>
 
       <ConnectionWarnings :warnings="testResult?.warnings" />

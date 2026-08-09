@@ -2744,6 +2744,19 @@
         "button": "Przetestuj połączenie",
         "ok": "Połączenie poprawne",
         "failed": "Połączenie nieudane",
+        "causes": {
+          "refused": "Nic nie nasłuchuje pod tym adresem: połączenie zostało odrzucone.",
+          "dns": "Ta nazwa hosta nie jest rozwiązywana z tego wdrożenia.",
+          "timeout": "Nie nadeszła żadna odpowiedź przed upływem czasu testu.",
+          "aborted": "Żądanie zostało anulowane, zanim nadeszła odpowiedź.",
+          "unreachable": "Z tego wdrożenia nie ma trasy sieciowej do tego adresu.",
+          "reset": "Połączenie zostało zamknięte, zanim nadeszła odpowiedź.",
+          "tlsUntrusted": "To wdrożenie nie ufa certyfikatowi TLS.",
+          "tlsExpired": "Certyfikat TLS jest poza okresem swojej ważności.",
+          "tlsHostname": "Certyfikat TLS nie został wystawiony dla tej nazwy hosta.",
+          "tlsProtocol": "Uzgadnianie TLS nie powiodło się.",
+          "invalidHeader": "Nie udało się zbudować żądania: dane uwierzytelniające zawierają znak, którego nagłówek HTTP nie może przenieść."
+        },
         "warningsTitle": "Braki w tej konfiguracji",
         "warnings": {
           "runner_manifest_no_release": "Brak szablonu release: anulowanie przebiegu nie może przekazać puli, że ma zatrzymać zadanie, więc osierocone zadanie zajmuje swojego runnera, dopóki pula sama go nie odzyska.",
@@ -2758,6 +2771,11 @@
         "saveFailed": "Nie udało się zapisać połączenia",
         "removed": "Połączenie usunięte",
         "removeFailed": "Nie udało się usunąć połączenia"
+      },
+      "serviceAccountToken": {
+        "whitespace": "Ten token zawiera spację lub znak nowego wiersza, czego token typu bearer nigdy nie ma. Najprawdopodobniej został skopiowany przez zawinięty wiersz w terminalu. Skopiuj go ponownie jako jeden nieprzerwany wiersz.",
+        "base64Encoded": "To wygląda na wartość base64 z pola .data.token obiektu Secret, a nie na sam token. Najpierw ją zdekoduj, na przykład poleceniem base64 -d.",
+        "notAJwt": "To nie wygląda na token ServiceAccount, który jest tokenem JWT złożonym z trzech części oddzielonych kropkami. Sprawdź, czy skopiowano całą wartość. Zignoruj to ostrzeżenie, jeśli Twój klaster używa statycznych tokenów bearer."
       },
       "kubernetesEnv": {
         "label": "Nazwa",

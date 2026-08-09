@@ -804,6 +804,13 @@ export {
 } from './shared/post-mortem.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
+  connectionFailureResult,
+  describeConnectionFailure,
+  type ConnectionFailureCause,
+  type ConnectionFailureContext,
+  type ConnectionFailureDescription,
+} from './shared/connection-failure.logic.js'
+export {
   createStoreAgentContextGate,
   type StoreAgentContextGate,
 } from './shared/agent-context-gate.js'

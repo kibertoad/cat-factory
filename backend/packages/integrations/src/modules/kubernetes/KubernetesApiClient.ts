@@ -1,4 +1,9 @@
 import type { SecretResolver } from '@cat-factory/kernel'
+import { ValidationError } from '@cat-factory/kernel'
+import {
+  classifyServiceAccountToken,
+  isFatalServiceAccountTokenProblem,
+} from '@cat-factory/contracts'
 import { KUBERNETES_TOKEN_KEY } from './kubernetes.logic.js'
 
 // Shared kube-apiserver HTTP client. Both the native Kubernetes RUNNER backend
@@ -57,10 +62,31 @@ export class KubernetesApiClient {
     timeoutMs: number,
     contentType?: string,
   ): Promise<Response> {
-    const token = this.tokenProvider
+    const stored = this.tokenProvider
       ? await this.tokenProvider()
       : this.resolveSecret(this.tokenKey)
+    // Trimmed HERE, not just inside the classifier. `classifyServiceAccountToken` judges the
+    // TRIMMED value, on the stated premise that surrounding padding is stripped before use, so
+    // this is the line that has to make that true. Left untrimmed, a token ending in a newline
+    // passed the guard clean and then died in undici as `TypeError: Invalid header value`: the
+    // exact failure the guard exists to replace, now with a guard that called the token fine.
+    const token = stored?.trim()
     if (!token) throw new Error(`Missing Kubernetes ServiceAccount token ('${this.tokenKey}')`)
+    // Refuse a token that cannot become a header BEFORE handing it to `fetch`. This is the one
+    // boundary every apiserver call (env + runner, probe + provision) passes through, so it is
+    // where the rule belongs. Left to undici the same paste fails as `TypeError: Invalid header
+    // value`, with nothing naming the token, let alone the wrapped-terminal copy that caused it.
+    // Only the IMPOSSIBLE problem is refused here; the merely-suspicious shapes are the connect
+    // form's advisory, because a static-token apiserver's token is legitimately not a JWT.
+    const problem = classifyServiceAccountToken(token)
+    if (problem && isFatalServiceAccountTokenProblem(problem)) {
+      throw new ValidationError(
+        `The Kubernetes ServiceAccount token ('${this.tokenKey}') contains a space or line break, ` +
+          'which a bearer token never does and an HTTP header cannot carry. It was most likely ' +
+          'copied across a wrapped terminal line: re-copy it as a single unbroken line and save it again.',
+        { reason: 'service_account_token_whitespace' },
+      )
+    }
     const headers: Record<string, string> = {
       authorization: `Bearer ${token}`,
       accept: 'application/json',

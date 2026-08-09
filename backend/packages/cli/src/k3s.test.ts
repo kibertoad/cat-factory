@@ -103,6 +103,28 @@ describe('setupK3s', () => {
     expect(out).toContain('tok-abc')
   })
 
+  it('presents the ServiceAccount as token PROVENANCE, not as a field of the connect form', async () => {
+    const io = captureIo()
+    await setupK3s(opts({ yes: true }), { io, shell: scriptShell({ ...REACHABLE, ...PROVISION }) })
+    const summary = io.lines.join('\n')
+
+    // It used to sit in the "enter these into the form" list, where there is no such field: the
+    // bearer token carries the identity, so nothing client-side names the ServiceAccount. Someone
+    // hunting for the field could only conclude the setup was incomplete.
+    const enterList = summary.slice(
+      summary.indexOf('Open Settings'),
+      summary.indexOf('Then paste this ServiceAccount token'),
+    )
+    expect(enterList).toContain('API server URL')
+    expect(enterList).not.toContain('cat-factory/cat-factory')
+
+    // It is still printed, because it is the coordinate for minting a REPLACEMENT token.
+    expect(summary).toContain('cat-factory/cat-factory')
+    expect(summary).toContain('kubectl create token cat-factory -n cat-factory')
+    // And the paste hazard the whole token-shape check exists for is named where it happens.
+    expect(summary).toContain('Paste it as ONE line')
+  })
+
   it('prints the k3s install command (never runs it) when nothing usable is present', async () => {
     const io = captureIo()
     const { chosen, connection } = await setupK3s(opts({ yes: true }), {

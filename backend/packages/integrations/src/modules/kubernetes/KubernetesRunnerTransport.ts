@@ -1,6 +1,7 @@
 import {
   composePostMortem,
   type ConnectionTestResult,
+  connectionFailureResult,
   CONTAINER_EVICTION_ERROR,
   harnessDispatchError,
   type KubernetesRunnerConfig,
@@ -225,7 +226,12 @@ export class KubernetesRunnerTransport implements RunnerTransport {
         }),
       }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      // Nothing answered, so there is no status to map. The real cause is buried in the thrown
+      // error's `.cause` chain, which reads as a bare "fetch failed" if taken at face value.
+      return connectionFailureResult(err, {
+        subject: 'the Kubernetes apiserver',
+        target: apiBase(this.config),
+      })
     }
   }
 

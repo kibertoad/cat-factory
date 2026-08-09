@@ -2744,6 +2744,19 @@
         "button": "Probar conexión",
         "ok": "Conexión correcta",
         "failed": "Falló la conexión",
+        "causes": {
+          "refused": "No hay nada escuchando en esa dirección: la conexión fue rechazada.",
+          "dns": "Ese nombre de host no se resuelve desde esta instalación.",
+          "timeout": "No llegó ninguna respuesta antes de que la prueba agotara su tiempo.",
+          "aborted": "La solicitud se canceló antes de que llegara una respuesta.",
+          "unreachable": "No hay ruta de red hacia esa dirección desde esta instalación.",
+          "reset": "La conexión se cerró antes de que llegara una respuesta.",
+          "tlsUntrusted": "Esta instalación no confía en el certificado TLS.",
+          "tlsExpired": "El certificado TLS está fuera de su periodo de validez.",
+          "tlsHostname": "El certificado TLS no se emitió para ese nombre de host.",
+          "tlsProtocol": "El protocolo de enlace TLS falló.",
+          "invalidHeader": "No se pudo construir la solicitud: una credencial contiene un carácter que una cabecera HTTP no puede transportar."
+        },
         "warningsTitle": "Carencias en esta configuración",
         "warnings": {
           "runner_manifest_no_release": "Sin plantilla de release: al cancelar una ejecución no se puede indicar al pool que detenga su trabajo, así que un trabajo huérfano ocupa su runner hasta que el pool lo recupere por su cuenta.",
@@ -2758,6 +2771,11 @@
         "saveFailed": "No se pudo guardar la conexión",
         "removed": "Conexión eliminada",
         "removeFailed": "No se pudo eliminar la conexión"
+      },
+      "serviceAccountToken": {
+        "whitespace": "Este token contiene un espacio o un salto de línea, algo que nunca ocurre en un token de portador. Lo más probable es que se haya copiado a través de una línea ajustada en la terminal. Vuelve a copiarlo como una única línea continua.",
+        "base64Encoded": "Esto parece el valor en base64 del campo .data.token del Secret, no el token en sí. Descodifícalo primero, por ejemplo con base64 -d.",
+        "notAJwt": "Esto no parece un token de ServiceAccount, que es un JWT de tres partes separadas por puntos. Comprueba que has copiado el valor completo. Ignora este aviso si tu clúster usa tokens de portador estáticos."
       },
       "kubernetesEnv": {
         "label": "Nombre",

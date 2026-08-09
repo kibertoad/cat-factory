@@ -6,6 +6,7 @@ import {
   collectUnsupportedComposeRefs,
   composeConfigToManifest,
   composeFileDir,
+  composeProbeFailure,
   ensureServicePublishes,
   escapesCheckout,
   extractComposeProfiles,
@@ -358,6 +359,31 @@ describe('composeFileDir', () => {
     expect(composeFileDir('deploy/docker-compose.yml')).toBe('deploy')
     expect(composeFileDir('a/b/compose.yaml')).toBe('a/b')
     expect(composeFileDir('deploy\\compose.yaml')).toBe('deploy')
+  })
+})
+
+describe('composeProbeFailure', () => {
+  it('leads with the remedy and flattens the captured output onto one line', () => {
+    // The verdict renders as a paragraph that collapses newlines, so a multi-line stderr spliced
+    // mid-sentence ran together and glued its own trailing period onto the next clause.
+    const message = composeProbeFailure(
+      'Start Docker.',
+      'permission denied while trying to connect.\nIs the docker daemon running?\n',
+    )
+    expect(message).toBe(
+      'Start Docker. Docker reported: permission denied while trying to connect. Is the docker daemon running?',
+    )
+    expect(message).not.toContain('\n')
+  })
+
+  it('is the remedy alone when the command said nothing, with no dangling label', () => {
+    expect(composeProbeFailure('Start Docker.', '   \n\n')).toBe('Start Docker.')
+  })
+
+  it('names who is speaking, because a throw is not docker reporting anything', () => {
+    expect(
+      composeProbeFailure('Install Docker.', 'spawn docker ENOENT', 'The invocation failed with'),
+    ).toBe('Install Docker. The invocation failed with: spawn docker ENOENT')
   })
 })
 

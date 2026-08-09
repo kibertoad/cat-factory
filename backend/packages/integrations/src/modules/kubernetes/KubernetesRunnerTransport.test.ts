@@ -15,14 +15,22 @@ const resolveSecret = (key: string) => (key === 'apiToken' ? 'sa-token' : undefi
 
 type Route = (method: string, url: string, init: RequestInit) => Response | undefined
 
-/** Install a routing fetch stub; returns the recorded calls. */
+/**
+ * Install a routing fetch stub; returns the recorded calls. A route that THROWS stands for a
+ * transport failure (nothing answered), handed back as a rejection exactly as `fetch` does, so a
+ * test about the failure path uses this one recorder too rather than a second hand-rolled stub.
+ */
 function stubFetch(route: Route): { calls: Array<{ method: string; url: string }> } {
   const calls: Array<{ method: string; url: string }> = []
   vi.stubGlobal('fetch', (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET'
     calls.push({ method, url })
-    const res = route(method, url, init)
-    return Promise.resolve(res ?? new Response('not routed', { status: 500 }))
+    try {
+      const res = route(method, url, init)
+      return Promise.resolve(res ?? new Response('not routed', { status: 500 }))
+    } catch (err) {
+      return Promise.reject(err)
+    }
   })
   return { calls }
 }
@@ -244,6 +252,64 @@ describe('KubernetesRunnerTransport.testConnection', () => {
     const result = await transport.testConnection()
     expect(result.ok).toBe(false)
     expect(result.message).toMatch(/401/)
+  })
+
+  it('names the EXACT transport failure and its remedy when nothing answered', async () => {
+    // The regression this guards: a stopped cluster reported as the bare string `fetch failed`,
+    // which is undici's wrapper and says nothing. The cause chain holds the real answer.
+    stubFetch(() => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:6443'), {
+          code: 'ECONNREFUSED',
+        }),
+      })
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    const result = await transport.testConnection()
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('ECONNREFUSED 127.0.0.1:6443')
+    expect(result.message).not.toBe('fetch failed')
+    // The remedy names the apiserver being probed, so the operator knows what to go start.
+    expect(result.message).toContain('https://k8s.example:6443')
+    expect(result.message).toContain('The Kubernetes apiserver is most likely not running')
+    // The SPA renders its own translated headline off this, not the English sentence above.
+    expect(result.failureCause).toBe('refused')
+  })
+
+  it('refuses a token carrying a line break BEFORE dialing, naming the paste', async () => {
+    // A token copied across a wrapped terminal line. undici would reject the header with an
+    // opaque `Invalid header value`; the refusal has to name the token and the fix instead.
+    const { calls } = stubFetch(() => new Response('{"items":[]}', { status: 200 }))
+    const transport = new KubernetesRunnerTransport(config, (key) =>
+      key === 'apiToken' ? 'sa-\ntoken' : undefined,
+    )
+    const result = await transport.testConnection()
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('space or line break')
+    // Nothing was sent: an unusable header must not reach the network at all.
+    expect(calls).toEqual([])
+  })
+
+  it('sends a token that merely arrived with surrounding whitespace, having trimmed it', async () => {
+    // The trap the guard alone left open: `classifyServiceAccountToken` judges the TRIMMED value,
+    // so a token ending in a newline is NOT a bad paste. Building the header from the untrimmed
+    // value still died in undici with the opaque error the guard exists to replace.
+    const { calls } = stubFetch((method, url, init) => {
+      const auth = new Headers(init.headers).get('authorization')
+      if (method === 'GET' && url.includes('/pods') && auth === 'Bearer sa-token') {
+        return new Response('{"items":[]}', { status: 200 })
+      }
+      return new Response('unexpected authorization header', { status: 401 })
+    })
+    const transport = new KubernetesRunnerTransport(config, (key) =>
+      key === 'apiToken' ? '  sa-token\n' : undefined,
+    )
+    const result = await transport.testConnection()
+
+    expect(result.ok).toBe(true)
+    expect(calls).toHaveLength(1)
   })
 })
 

@@ -176,6 +176,20 @@ else imports its **ports** and domain types from here.
   `shared/best-effort.ts` (`runBestEffort` / `describeError`), the convention that replaces
   `.catch(() => {})`: keep the swallow, add one scrubbed `warn`. See
   [`backend/docs/logging.md`](../../docs/logging.md).
+- `shared/connection-failure.logic.ts`: **`describeConnectionFailure` / `connectionFailureResult`**,
+  what every "Test connection" button reports when the probe got no ANSWER at all. On Node/undici a
+  transport failure arrives as a generic `TypeError: fetch failed` with the real cause on `.cause`
+  (or on an `AggregateError`'s `.errors`, one per resolved address), so reading `error.message`
+  renders the single least informative string in the chain: a stopped cluster, an untrusted
+  certificate and a firewalled host all read as `fetch failed`. This flattens the chain and adds a
+  remedy per recognised cause. It lives in kernel for the same reason `domain/vcs-errors.ts` does:
+  the probes are spread across integrations and each facade, which share only kernel; the cause
+  UNION lives in contracts, because the SPA owns the translated copy per member. A probe returns
+  `connectionFailureResult`, which carries that cause on the wire beside the English prose, rather
+  than a hand-built `{ ok: false, message }` a localized surface cannot render. `unknown` is a real
+  member, and it yields NO hint: a guessed remedy for an unrecognised failure sends the operator
+  somewhere wrong. Classification walks the chain INNERMOST-first, because the outer links are
+  generic wrappers whose own codes would mask the specific cause underneath.
 - `shared/initiator-pat-gate.ts`: **`createInitiatorPatGate`**, the two-tier `allowInitiatorPat`
   policy: may a RUN authenticate as its initiator's own personal access token instead of the
   deployment credential? Effective = the ACCOUNT permits AND the WORKSPACE permits, and the tiers

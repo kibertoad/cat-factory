@@ -206,7 +206,9 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     }
-    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy)
+    return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy, {
+      subject: 'the environment management API',
+    })
   }
 
   // --- internals ----------------------------------------------------------

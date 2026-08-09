@@ -12,6 +12,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 import type { ConnectionTestResult } from '@cat-factory/contracts'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 import type { ProviderConnection } from '~/types/providerConnections'
 
@@ -54,6 +55,10 @@ const form = reactive({
   urlScheme: 'default' as 'default' | 'http' | 'https',
 })
 const apiToken = ref('')
+// Flag a bad paste on the field itself rather than leaving it to surface as an opaque probe
+// failure. Destructured at the top level so the template auto-unwraps the refs. Same rule and
+// same copy as the per-type engine form, via the shared composable.
+const { blocking: tokenBlocking, message: tokenProblem } = useServiceAccountTokenProblem(apiToken)
 
 const manifestSourceItems = computed(() => [
   { label: t('settings.providerConnection.kubernetesEnv.sourceColocated'), value: 'colocated' },
@@ -168,6 +173,7 @@ const canSave = computed(
     !!form.label.trim() &&
     !!form.apiServerUrl.trim() &&
     !!apiToken.value.trim() &&
+    !tokenBlocking.value &&
     manifestSourceValid.value &&
     urlValid.value,
 )
@@ -191,6 +197,8 @@ const connectBlockedReason = computed(() => {
     missing.push(t('settings.providerConnection.kubernetesEnv.serviceName'))
   if (missing.length)
     return t('settings.providerConnection.form.missingFields', { fields: missing.join(', ') })
+  // Repeated from under the token field, so the disabled button is never left unexplained.
+  if (tokenBlocking.value) return tokenProblem.value
   return t('settings.providerConnection.kubernetesEnv.invalidFields')
 })
 
@@ -273,6 +281,16 @@ function optional(label: string): string {
       :help="t('settings.providerConnection.kubernetesEnv.apiTokenHelp')"
     >
       <SecretInput v-model="apiToken" class="w-full font-mono" />
+      <!-- Rose when the paste is impossible (blocks Test/Save), amber when it is only suspicious
+           and the operator may legitimately overrule it. -->
+      <p
+        v-if="tokenProblem"
+        class="mt-1 text-[11px]"
+        :class="tokenBlocking ? 'text-rose-400' : 'text-amber-400'"
+        data-testid="service-account-token-problem"
+      >
+        {{ tokenProblem }}
+      </p>
     </UFormField>
 
     <!-- Manifest source: where the per-PR resources are read from. -->
@@ -391,7 +409,7 @@ function optional(label: string): string {
       />
     </UFormField>
 
-    <div v-if="supportsTest" class="flex items-center gap-2">
+    <div v-if="supportsTest" class="space-y-1.5">
       <UButton
         color="neutral"
         variant="soft"
@@ -403,12 +421,7 @@ function optional(label: string): string {
       >
         {{ t('settings.providerConnection.test.button') }}
       </UButton>
-      <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
-      </span>
-      <span v-else-if="testResult" class="text-xs text-rose-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
-      </span>
+      <ConnectionTestVerdict :result="testResult" />
     </div>
 
     <ConnectionWarnings :warnings="testResult?.warnings" />

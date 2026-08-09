@@ -2854,6 +2854,11 @@
           "blurb": "Cloudflare Containers kullanılmadığında kodlama ajanlarının çalıştığı yer. Bir self-hosted runner havuzu (kendi zamanlayıcınız) veya bir Kubernetes kümesi seçin, ardından uç noktasını ve kimlik bilgilerini yapılandırın."
         }
       },
+      "serviceAccountToken": {
+        "whitespace": "Bu belirteç bir boşluk ya da satır sonu içeriyor; taşıyıcı belirteçlerde bu asla bulunmaz. Büyük olasılıkla terminalde kaydırılmış bir satırın üzerinden kopyalanmış. Tek ve kesintisiz bir satır olarak yeniden kopyalayın.",
+        "base64Encoded": "Bu, belirtecin kendisi değil, Secret nesnesinin .data.token alanındaki base64 değeri gibi görünüyor. Önce çözün, örneğin base64 -d ile.",
+        "notAJwt": "Bu, noktayla ayrılmış üç bölümden oluşan bir JWT olan ServiceAccount belirtecine benzemiyor. Değerin tamamının kopyalandığını doğrulayın. Kümeniz statik taşıyıcı belirteç kullanıyorsa bu uyarıyı yoksayın."
+      },
       "kubernetesEnv": {
         "label": "Ad",
         "labelPlaceholder": "Önizleme kümesi",
@@ -2940,6 +2945,19 @@
         "button": "Bağlantıyı test et",
         "ok": "Bağlantı tamam",
         "failed": "Bağlantı başarısız",
+        "causes": {
+          "refused": "Bu adreste dinleyen bir şey yok: bağlantı reddedildi.",
+          "dns": "Bu ana bilgisayar adı bu kurulumdan çözümlenemiyor.",
+          "timeout": "Test zaman aşımına uğrayana kadar yanıt gelmedi.",
+          "aborted": "Yanıt gelmeden önce istek iptal edildi.",
+          "unreachable": "Bu kurulumdan bu adrese ağ yolu yok.",
+          "reset": "Yanıt gelmeden önce bağlantı kapatıldı.",
+          "tlsUntrusted": "Bu kurulum TLS sertifikasına güvenmiyor.",
+          "tlsExpired": "TLS sertifikası geçerlilik süresinin dışında.",
+          "tlsHostname": "TLS sertifikası bu ana bilgisayar adı için verilmemiş.",
+          "tlsProtocol": "TLS el sıkışması başarısız oldu.",
+          "invalidHeader": "İstek oluşturulamadı: kimlik bilgisi, bir HTTP başlığının taşıyamayacağı bir karakter içeriyor."
+        },
         "warningsTitle": "Bu yapılandırmadaki eksikler",
         "warnings": {
           "runner_manifest_no_release": "Release şablonu yok: bir çalıştırma iptal edildiğinde havuza işi durdurması söylenemez, bu yüzden sahipsiz kalan iş, havuz onu kendi kendine geri alana kadar runner'ını meşgul tutar.",

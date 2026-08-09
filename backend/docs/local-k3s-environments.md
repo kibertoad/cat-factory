@@ -173,6 +173,13 @@ Read the token (paste into the connection's `apiToken`):
 kubectl -n cat-factory get secret cat-factory-token -o jsonpath='{.data.token}' | base64 -d; echo
 ```
 
+Paste it as ONE line, and don't skip the `base64 -d`. Both mistakes are invisible in a password
+field and were previously indistinguishable from a wrong token: a value copied across a wrapped
+terminal line carries a newline no HTTP header can carry, and the raw `.data.token` is still
+base64. The connect form now flags both on the field itself (the newline blocks Test/Save; the
+other two shapes are overrulable warnings, since a `--token-auth-file` apiserver accepts arbitrary
+static tokens), and `KubernetesApiClient` refuses the newline case before it ever dials.
+
 The preset uses `insecureSkipTlsVerify`, so a CA is optional locally. To pin TLS instead, read
 the cluster CA into `caCertPem`:
 
