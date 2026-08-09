@@ -26,12 +26,26 @@
 // all. And an observer this Gatekeeper cannot identify is refused separately again, because
 // "unknown" and "not permitted" are the same outcome and opposite facts.
 //
+// WHICH IS WHY IDENTIFYING ONE IS TWO QUESTIONS, not one. Reading an account id off the verifier
+// answers what the observer CLAIMS; it does not answer whether this deployment has ever heard of
+// them, and the tier lookup behind the comparison cannot tell the difference on its own. It
+// resolves an unknown id to the auto-provisioned tier, which is the tier nearly every account
+// here holds, so a viewer from an entirely different vendor (whose verifier honestly names an
+// account of THEIRS) resolved to the same tier as the owner and passed all three tests without
+// holding a single one of the operations they were being shown. The comparison was answering
+// "would an account like this be able to read it", which is not a question anyone asked.
+//
+// So an observer must be an account this Gatekeeper MINTED. That is a fact only the deployment's
+// own state knows, so the caller supplies the recogniser and this module supplies the refusal:
+// the message it already carried ("Observers must hold an account on this same Gatekeeper") is
+// now enforced rather than asserted.
+//
 // The rule is deliberately conservative in the one direction that costs nothing but a share:
 // every accepted observer can read everything the owner's tier can, so no observation ever needs
 // excluding afterwards and `ObservationDescription.excludeObservers` stays unused rather than
 // being a second, weaker gate on the same question.
 
-import { GatekeeperError } from '../errors.js'
+import { describeError, GatekeeperError } from '../errors.js'
 import type { CompiledTier } from '../policy/compile.js'
 
 /** How many withheld operations a refusal names before it stops listing them. */
@@ -42,15 +56,28 @@ interface ObserverIdentity {
   accountId?: unknown
 }
 
+/** What the caller supplies so a claimed account can be checked against the ones this Gatekeeper made. */
+export interface ObserverRecognition {
+  /** Whether this deployment minted the named account. Never a guess: an unknown id is refused. */
+  recognize: (accountId: string) => Promise<boolean>
+}
+
 /**
  * Resolve the account behind an observer's verifier, or refuse.
  *
  * The verifier is the contract's own identity token: another vendor's gatekeeper is handed one,
  * and the only thing it carries is who its holder is. Ours answers `{ accountId }`, so a stub that
  * answers anything else did not come from this vendor and cannot be resolved against this
- * deployment's policy.
+ * deployment's policy. Answering the right SHAPE is not the same as being one of ours, which is
+ * why the id is then checked against the accounts this deployment actually minted.
+ *
+ * What that does NOT establish is worth stating, because the rule above is only as strong as this:
+ * a verifier that names an account of ours is taken at its word. The stub is reached over RPC from
+ * whoever the workspace handed us, so proving the holder IS that account would take a challenge
+ * the published contract does not carry. What is closed here is the case that needs no
+ * impersonation at all, which was every honest viewer from every other vendor.
  */
-export async function identifyObserver(user: unknown): Promise<string> {
+export async function identifyObserver(user: unknown, deps: ObserverRecognition): Promise<string> {
   const verifier = user as Partial<{ describe: () => Promise<ObserverIdentity> }>
   if (typeof verifier?.describe !== 'function') {
     throw new GatekeeperError(
@@ -74,6 +101,17 @@ export async function identifyObserver(user: unknown): Promise<string> {
       'sharing_unverifiable',
       "The observer's verifier named no account, so this deployment's policy has nothing to " +
         'resolve a tier against. Observers must hold an account on this same Gatekeeper.',
+    )
+  }
+  if (!(await deps.recognize(identity.accountId))) {
+    throw new GatekeeperError(
+      'sharing_unverifiable',
+      `This Gatekeeper did not mint account '${identity.accountId}', so it holds no tier for it ` +
+        'and cannot judge what its holder could read for themselves. A viewer connected to some ' +
+        'other vendor is refused here rather than measured against the tier an account of ours ' +
+        'would have had: that comparison would pass for a viewer holding none of these ' +
+        'operations. Connect this deployment as a vendor from that workspace and share with the ' +
+        'account it mints.',
     )
   }
   return identity.accountId
@@ -138,8 +176,4 @@ function names(all: readonly string[]): string {
   return all.length > NAMED_OPERATIONS
     ? `${shown} and ${all.length - NAMED_OPERATIONS} more`
     : shown
-}
-
-function describeError(error: unknown): string {
-  return error instanceof Error ? `${error.name}: ${error.message}` : String(error)
 }

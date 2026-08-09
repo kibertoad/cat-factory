@@ -12,12 +12,22 @@
 import { createExecutionContext, env } from 'cloudflare:test'
 import { RpcTarget } from 'cloudflare:workers'
 import { afterEach, describe, expect, it } from 'vitest'
-import { HOOK_TOPICS, OS_EXPORTS, pushToHook, ResourceCore, type HookRecord } from '../src/index.js'
+import {
+  applyPushOutcome,
+  HOOK_TOPICS,
+  OS_EXPORTS,
+  pushToHook,
+  ResourceCore,
+  type DeliveryApplication,
+  type HookPushTarget,
+  type HookRecord,
+} from '../src/index.js'
 import type {
   AccountEntrypoint,
   HookController,
   HookDescription,
   HookInitiator,
+  HookTargetMetadata,
   ObservationDescription,
   VendorEntrypoint,
 } from '../src/os/protocol.js'
@@ -97,9 +107,19 @@ class TestInitiator extends RpcTarget implements HookInitiator {
   starts = 0
   readonly callback = new TestCallback()
   readonly authorizer = new TestAuthorizer()
+  /**
+   * Run while the push is in flight, which is the window this whole design turns on.
+   *
+   * A push awaits a call into the workspace, and a non-storage await opens the durable object's
+   * input gate, so anything the workspace does here is delivered BEFORE the outcome is recorded.
+   * That is not a contrivance: it is the ordinary case of a person disabling a gadget while a
+   * delivery is being pushed to it.
+   */
+  duringPush: (() => Promise<void>) | undefined
 
   async startHook(): Promise<{ callback: unknown; approvalQueue: TestAuthorizer }> {
     this.starts += 1
+    await this.duringPush?.()
     return { callback: this.callback, approvalQueue: this.authorizer }
   }
 }
@@ -132,22 +152,32 @@ afterEach(async () => {
   while (enabled.length > 0) await enabled.pop()!.disable()
 })
 
+/** Bind one hook on an already-bound resource, and enable it the way the workspace does. */
+async function bindAndEnable(
+  resource: ResourceCore,
+  topic: 'approval_card' | 'run_event',
+  target: HookTargetMetadata,
+) {
+  const queue = new RecordingQueue()
+  const session = (await resource.startSession(queue)) as Session
+
+  await session[HOOK_TOPICS[topic].sessionMethod]!(new TestCallback())
+  const initiator = new TestInitiator()
+  const controller = queue.hooks[0]!.controller as HookController
+  await controller.enable(initiator, target)
+  enabled.push(controller)
+
+  return { session, queue, initiator, controller }
+}
+
 /** Bind a hook the way an agent does, and enable it the way the workspace does. */
 async function boundAndEnabled(topic: 'approval_card' | 'run_event' = 'approval_card') {
   const { resource, accountId } = await connectResource()
-  const queue = new RecordingQueue()
-  const session = (await resource.startSession(queue)) as Session
-  const callbackStub = new TestCallback()
-
-  await session[HOOK_TOPICS[topic].sessionMethod]!(callbackStub)
-  const bound = queue.hooks[0]!
-  const initiator = new TestInitiator()
-  const controller = bound.controller as HookController
-  await controller.enable(initiator, { workspaceId: 'ws_os_1' })
-  enabled.push(controller)
-
-  return { resource, session, queue, accountId, initiator, controller }
+  return { resource, accountId, ...(await bindAndEnable(resource, topic, TARGET)) }
 }
+
+/** Where a hook's deliveries land, and therefore what identifies its registration. */
+const TARGET: HookTargetMetadata = { workspaceId: 'ws_os_1' }
 
 describe('binding a hook', () => {
   it('hands the workspace a controller and a description, and stores nothing yet', async () => {
@@ -171,7 +201,7 @@ describe('binding a hook', () => {
     expect(hooks).toHaveLength(1)
     expect(hooks[0]!.topic).toBe('approval_card')
     expect(hooks[0]!.live).toBe(true)
-    expect(hooks[0]!.target.workspaceId).toBe('ws_os_1')
+    expect(hooks[0]!.target.workspaceId).toBe(TARGET.workspaceId)
   })
 
   it('publishes what a bound hook has taken and missed, for this account only', async () => {
@@ -187,6 +217,61 @@ describe('binding a hook', () => {
     const theirs = (await ((await other.resource.startSession(new RecordingQueue())) as Session)
       .hooks_bound!()) as unknown[]
     expect(theirs).toEqual([])
+  })
+
+  it('names the cause when the workspace does not take the binding', async () => {
+    const { resource } = await connectResource()
+    // What an approval queue that predates hooks does over RPC, verbatim: a stub answers every
+    // property, so `typeof queue.bindHook` reads `function` for a method the far side does not
+    // implement, and the structural check ahead of the call cannot see it. Left unwrapped, the
+    // agent got this raw and had nothing to act on.
+    const queue = new RecordingQueue()
+    queue.bindHook = async () => {
+      throw new TypeError('The RPC receiver does not implement "bindHook".')
+    }
+    const session = (await resource.startSession(queue)) as Session
+
+    await expect(session.approvals_subscribe!(new TestCallback())).rejects.toThrow(
+      /did not take the approvals_subscribe\(\) binding \(TypeError: .*bindHook/,
+    )
+    // Both halves matter: the cause is the only thing that separates a workspace with no hooks
+    // from a person who declined, and the fallback is what the agent does next either way.
+    await expect(session.approvals_subscribe!(new TestCallback())).rejects.toThrow(
+      /approvals_list\(\)/,
+    )
+  })
+
+  it('re-arms the same registration when a gadget binds again, rather than adding a second', async () => {
+    const { resource, accountId, initiator } = await boundAndEnabled()
+    const state = env.STATE.get(env.STATE.idFromName(DEPLOYMENT))
+    const card = sampleCard('ntf_rearm')
+    const applied = await state.applyDelivery('dlv_rearm', { kind: 'open', card }, Date.now())
+    await state.dispatchHooks(pushesOf(applied), Date.now())
+    expect(initiator.callback.cards).toHaveLength(1)
+
+    // What a workspace does when it notices a hook has gone quiet: bind again and enable the new
+    // controller. The bind mints a fresh hook id, so a registration keyed on that id left the dead
+    // one behind forever, never live and counting a miss against every later delivery.
+    await bindAndEnable(resource, 'approval_card', TARGET)
+
+    const hooks = await state.listHooks(accountId)
+    expect(hooks).toHaveLength(1)
+    expect(hooks[0]!.live).toBe(true)
+    // Re-arming is not a fresh start: `deliveries` and `missed` are the history a workspace was
+    // reading when it decided to re-arm, so zeroing them would erase the evidence at the moment it
+    // is being acted on.
+    expect(hooks[0]!.deliveries).toBe(1)
+  })
+
+  it('keeps a second gadget on the same account as its own registration', async () => {
+    const { resource, accountId } = await boundAndEnabled()
+
+    await bindAndEnable(resource, 'approval_card', { workspaceId: 'ws_os_1', gadgetId: 7 })
+
+    // Two places for one topic's deliveries to land is two registrations. Only re-binding from the
+    // SAME place is the same hook coming back.
+    const hooks = await env.STATE.get(env.STATE.idFromName(DEPLOYMENT)).listHooks(accountId)
+    expect(hooks).toHaveLength(2)
   })
 
   it('forgets the registration permanently when the workspace disables it', async () => {
@@ -216,10 +301,10 @@ describe('pushing to a bound hook', () => {
       resolution: null,
     }
 
-    await state.applyDelivery('dlv_hook_1', { kind: 'open', card }, Date.now())
-    const report = await state.dispatchHooks({ kind: 'open', card }, Date.now())
+    const applied = await state.applyDelivery('dlv_hook_1', { kind: 'open', card }, Date.now())
+    const report = await state.dispatchHooks(pushesOf(applied), Date.now())
 
-    expect(report).toMatchObject({ topic: 'approval_card', delivered: 1, stale: 0, failed: 0 })
+    expect(report).toMatchObject({ delivered: 1, stale: 0, failed: 0 })
     // The order the contract asks for, and the reason it matters: a workspace that has withdrawn
     // this person's access refuses here, and nothing reaches the callback.
     expect(initiator.starts).toBe(1)
@@ -238,12 +323,40 @@ describe('pushing to a bound hook', () => {
       kind: 'run-event' as const,
       state: { runId: 'run_2', event: 'run.started', terminal: false, run: {} },
     }
-    await state.applyDelivery('dlv_run_2', event, Date.now())
-    const report = await state.dispatchHooks(event, Date.now())
+    const applied = await state.applyDelivery('dlv_run_2', event, Date.now())
+    const report = await state.dispatchHooks(pushesOf(applied), Date.now())
 
-    expect(report).toMatchObject({ topic: 'run_event', delivered: 1 })
+    expect(report).toMatchObject({ delivered: 1 })
     expect(initiator.callback.runs).toEqual([{ runId: 'run_2', event: 'run.started' }])
     expect(initiator.callback.cards).toEqual([])
+  })
+
+  it('tells a card hook that a terminal run settled its cards, not only the run hook', async () => {
+    const { resource, accountId } = await connectResource()
+    const cards = await bindAndEnable(resource, 'approval_card', TARGET)
+    const runs = await bindAndEnable(resource, 'run_event', TARGET)
+    const state = env.STATE.get(env.STATE.idFromName(DEPLOYMENT))
+    const card: ApprovalCard = { ...sampleCard('ntf_settled'), runId: 'run_settled' }
+    await state.applyDelivery('dlv_settled_open', { kind: 'open', card }, Date.now())
+
+    const applied = await state.applyDelivery(
+      'dlv_settled_end',
+      {
+        kind: 'run-event',
+        state: { runId: 'run_settled', event: 'run.completed', terminal: true, run: {} },
+      },
+      Date.now(),
+    )
+    await state.dispatchHooks(pushesOf(applied), Date.now())
+
+    // The run event settles the run's open cards, so a gadget subscribed to CARDS has to hear
+    // about it: told only about the run, it goes on rendering a decision nobody can answer, which
+    // is exactly what the topic's own published description says it will not do.
+    expect(runs.initiator.callback.runs).toEqual([{ runId: 'run_settled', event: 'run.completed' }])
+    expect(cards.initiator.callback.cards.map((pushed) => pushed.resolution)).toEqual([
+      'run_run.completed',
+    ])
+    expect(await state.listHooks(accountId)).toHaveLength(2)
   })
 
   it('counts a delivery the workspace refused as a failure, and keeps the registration', async () => {
@@ -252,8 +365,12 @@ describe('pushing to a bound hook', () => {
     const state = env.STATE.get(env.STATE.idFromName(DEPLOYMENT))
     const card = sampleCard('ntf_hook_refused')
 
-    await state.applyDelivery('dlv_hook_refused', { kind: 'open', card }, Date.now())
-    const report = await state.dispatchHooks({ kind: 'open', card }, Date.now())
+    const applied = await state.applyDelivery(
+      'dlv_hook_refused',
+      { kind: 'open', card },
+      Date.now(),
+    )
+    const report = await state.dispatchHooks(pushesOf(applied), Date.now())
 
     expect(report).toMatchObject({ delivered: 0, failed: 1 })
     expect(initiator.callback.cards).toEqual([])
@@ -266,52 +383,63 @@ describe('pushing to a bound hook', () => {
   })
 })
 
+describe('a write that lands while a push is in flight', () => {
+  it('does not resurrect a registration the workspace withdrew mid-push', async () => {
+    const { accountId, initiator, controller } = await boundAndEnabled()
+    const state = env.STATE.get(env.STATE.idFromName(DEPLOYMENT))
+    // Delivered while the durable object is awaiting `startHook`, which is a call OUT of the
+    // object and therefore a moment its input gate is open. Reading the record before the push and
+    // writing that copy back afterwards undid this disable: the row came back permanently not
+    // live, counting a miss against every later delivery, with nothing anywhere recording that a
+    // person had withdrawn it.
+    initiator.duringPush = async () => {
+      await controller.disable()
+      enabled.length = 0
+    }
+    const card = sampleCard('ntf_withdrawn')
+
+    const applied = await state.applyDelivery('dlv_withdrawn', { kind: 'open', card }, Date.now())
+    const report = await state.dispatchHooks(pushesOf(applied), Date.now())
+
+    // The push itself still completed, and is reported as what it was. What must not survive it is
+    // the row.
+    expect(report).toMatchObject({ delivered: 1 })
+    expect(await state.listHooks(accountId)).toEqual([])
+  })
+})
+
 describe('a registration whose live half is gone', () => {
   it('counts the miss on the record rather than passing over it', async () => {
-    const record: HookRecord = {
-      hookId: 'hook_1',
-      topic: 'approval_card',
-      accountId: 'acct_1',
-      tier: 'workspace',
-      deployment: DEPLOYMENT,
-      target: { workspaceId: 'ws_os_1' },
-      enabledAt: 1,
-      deliveries: 3,
-      missed: 0,
-      failures: 0,
-      lastDeliveryAt: 2,
-      lastError: null,
-    }
+    const record = hookRecord({ deliveries: 3, lastDeliveryAt: 2 })
 
     const pushed = await pushToHook(
       { topic: 'approval_card', card: sampleCard() },
       record,
       undefined,
-      10,
     )
 
     // The one number that must never be inferred from silence: a workspace reads it to discover
     // that its hook stopped receiving without anybody deciding it should.
     expect(pushed.outcome).toBe('stale')
-    expect(pushed.record.missed).toBe(1)
-    expect(pushed.record.deliveries).toBe(3)
+    const folded = applyPushOutcome(record, pushed, 10)
+    expect(folded.missed).toBe(1)
+    expect(folded.deliveries).toBe(3)
+  })
+
+  it('folds the outcome onto the record as it stands, never onto the one it was described from', () => {
+    const described = hookRecord({ deliveries: 3, missed: 0 })
+    // What a concurrent delivery left behind while this push was awaiting the workspace. Folding
+    // onto `described` would silently discard it, which is the whole reason the push reports an
+    // outcome instead of handing back a modified copy.
+    const moved = { ...described, deliveries: 4, missed: 1 }
+
+    const folded = applyPushOutcome(moved, { outcome: 'delivered' }, 99)
+
+    expect(folded).toMatchObject({ deliveries: 5, missed: 1, lastDeliveryAt: 99, lastError: null })
   })
 
   it('reports a callback with no method for the topic as a failure, never as a delivery', async () => {
-    const record: HookRecord = {
-      hookId: 'hook_2',
-      topic: 'approval_card',
-      accountId: 'acct_1',
-      tier: 'workspace',
-      deployment: DEPLOYMENT,
-      target: { workspaceId: 'ws_os_1' },
-      enabledAt: 1,
-      deliveries: 0,
-      missed: 0,
-      failures: 0,
-      lastDeliveryAt: null,
-      lastError: null,
-    }
+    const record = hookRecord({ hookId: 'hook_2' })
     const initiator = {
       startHook: async () => ({
         callback: {},
@@ -323,27 +451,53 @@ describe('a registration whose live half is gone', () => {
       { topic: 'approval_card', card: sampleCard() },
       record,
       initiator,
-      10,
     )
 
     expect(pushed.outcome).toBe('failed')
-    expect(pushed.record.lastError).toContain('onApprovalCard')
+    expect(applyPushOutcome(record, pushed, 10).lastError).toContain('onApprovalCard')
   })
 })
 
 describe('the delivery receiver', () => {
-  it('reports what pushing the delivery did, on the delivery the platform can log', async () => {
+  it('reports what it dispatched, and never a count of what it has not pushed yet', async () => {
     const response = await deliver(parkedCard('run_receipt_1', 'ntf_receipt_1'))
 
     expect(response.status).toBe(202)
-    // With nothing bound this is all zeroes, and that is the point: a receiver that reported
-    // nothing would leave "was it pushed" to be answered by comparing an inbox against a gadget.
+    // The acknowledgement does not wait on the fan-out, so what it can honestly carry is what the
+    // delivery produced. A `delivered: 0` here would be a zero standing in for a number nobody
+    // has, and indistinguishable from a push every hook refused; the counts live on each
+    // registration, where `hooks_bound()` publishes them.
     expect(await response.json()).toMatchObject({
       handled: 'accepted',
-      hooks: { topic: 'approval_card', delivered: 0, stale: 0, failed: 0 },
+      hooks: { pushes: 1, topics: ['approval_card'] },
     })
   })
 })
+
+/** A registration as `enable` would have written it, before any delivery has moved its counters. */
+function hookRecord(overrides: Partial<HookRecord> = {}): HookRecord {
+  return {
+    hookId: 'hook_1',
+    topic: 'approval_card',
+    accountId: 'acct_1',
+    tier: 'workspace',
+    deployment: DEPLOYMENT,
+    target: TARGET,
+    enabledAt: 1,
+    deliveries: 0,
+    missed: 0,
+    failures: 0,
+    lastDeliveryAt: null,
+    lastError: null,
+    ...overrides,
+  }
+}
+
+/** What a committed delivery left to push, which is the dispatcher's whole input. */
+function pushesOf(applied: DeliveryApplication): HookPushTarget[] {
+  if (!applied.applied) throw new Error('the delivery was deduped, so it left nothing to push')
+  return applied.pushes
+}
 
 /** A card as a delivery would have written it. */
 function sampleCard(cardId = 'ntf_sample'): ApprovalCard {

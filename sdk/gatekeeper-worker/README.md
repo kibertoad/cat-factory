@@ -128,12 +128,17 @@ version has to be the consumer's.
   transition is then pushed: a fresh callback per delivery, authorized as the observation it is.
   What a hook pushes is exactly what `approvals_list()` and `runs_watched()` answer, which stay the
   truth: a delivery a hook missed is still readable there, and `hooks_bound()` reports the miss
-  rather than leaving it to be inferred from a quiet inbox.
+  rather than leaving it to be inferred from a quiet inbox. The fan-out runs BEHIND the delivery's
+  acknowledgement and each push is bounded by its own deadline, so a workspace that hangs costs a
+  notification and never the platform's retry budget.
 - **Sharing that is verified, not assumed.** A workspace user shared onto a bound resource is
   admitted only when their OWN account's tier reaches everything the resource's tier reaches, and
-  masks no more; a tier that can read captured agent text is never shareable at all. Anything the
-  Gatekeeper cannot answer (an observer with no verifier, an account this policy does not tier) is
-  a refusal that says which it is.
+  masks no more; a tier that can read captured agent text is never shareable at all. The observer
+  has to hold an account THIS deployment minted, checked before any tier is resolved: an unknown id
+  would otherwise resolve to the auto-provisioned tier, which is the tier every account here holds,
+  so a viewer from another vendor entirely measured up as identical to the owner. Anything the
+  Gatekeeper cannot answer (an observer with no verifier, an account it never minted) is a refusal
+  that says which it is.
 - **Arguments checked against what each operation declares.** An argument no operation reads used
   to be dropped on the way through, so a filter nobody applied came back as an answer shaped like a
   filtered one. It is now a refusal naming what the operation does take, made before a key is
@@ -272,15 +277,21 @@ methods, every capability carries ten reserved methods:
   approval inbox; see the template README for the flow and the three answer outcomes.
 - `runs_watched()`: the run-lifecycle projection built from the `run.*` webhook events.
 - `approvals_subscribe(callback)`, `runs_subscribe(callback)`: bind a hook, so the two projections
-  above are PUSHED. The callback needs one method (`onApprovalCard(card)` / `onRunEvent(state)`).
+  above are PUSHED. The callback needs one method (`onApprovalCard(card)` / `onRunEvent(state)`),
+  and a card is pushed on every transition it makes, settlement by a terminal run event included.
   Both refuse on the `/rpc` door, which brings no approval queue to register a hook with and
   nothing to authorize a delivery against; the refusal names the two reads that answer the same
-  question.
+  question. A workspace that does not take the binding (its queue serves no hooks, or a person
+  declined) is a `hook_bind_refused` carrying the cause verbatim, because those two need opposite
+  fixes and nothing at this seam can tell them apart.
 - `hooks_bound()`: what this account has enabled, with what each hook has been pushed
   (`deliveries`), what it could not be pushed (`missed`), what the workspace refused (`failures`)
   and whether it is still `live`. A hook goes quiet when the durable object is evicted between
   deliveries, because the workspace's callback source is a stub and cannot be stored; that reads as
-  `live: false` with a rising `missed`, and the remedy is to bind again.
+  `live: false` with a rising `missed`, and the remedy is to bind again. Re-binding from the same
+  gadget RE-ARMS the same registration rather than adding a second: a hook is identified by where
+  its deliveries land, and its counters carry over, since they are the history that prompted the
+  re-arm.
 
 Refusals from a live Gatekeeper are `GatekeeperError`s carrying a machine-readable `reason`
 (`unknown_actor`, `card_not_found`, `ambiguous_park`, …), the same role the platform's own

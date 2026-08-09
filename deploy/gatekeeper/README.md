@@ -192,12 +192,17 @@ await cat.approvals_subscribe(myCallback) // myCallback.onApprovalCard(card)
 await cat.runs_subscribe(myOtherCallback) // myOtherCallback.onRunEvent(state)
 
 // What is enabled, and what each hook has taken. `live: false` with a rising `missed` is a hook
-// that stopped receiving: bind again, and read `approvals_list()` for what it missed.
+// that stopped receiving: bind again, and read `approvals_list()` for what it missed. Binding
+// again from the same gadget re-arms THAT hook and keeps its counters, rather than adding a second.
 await cat.hooks_bound()
 ```
 
 A hook is an accelerator over the two reads, never a replacement for them: they stay the truth, so
-a workspace that missed a push has lost a notification rather than a card.
+a workspace that missed a push has lost a notification rather than a card. That is also why the
+fan-out runs behind the delivery's acknowledgement, with a deadline on each push: a workspace whose
+callback hangs costs its own notification and never the platform's retry of a card already
+recorded. A card is pushed on every transition it makes, including the settlement a terminal run
+event gives it, so an inbox rendered from pushes alone stops offering decisions nobody can answer.
 
 `connect()` takes the identity your OS deployment authenticated (plus an optional display
 `label`), and NOTHING else the caller sends picks a tier: an agent that could name its own tier

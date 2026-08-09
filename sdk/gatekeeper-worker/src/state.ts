@@ -1,5 +1,5 @@
-// The Gatekeeper's durable state: one object per paired workspace, holding the four things a
-// stateless Worker cannot.
+// The Gatekeeper's durable state: one object per paired workspace, holding what a stateless Worker
+// cannot.
 //
 //   1. WHICH DELIVERIES HAVE BEEN SEEN. The platform's terminal run events are at-least-once and
 //      a replay re-stamps `sentAt`, so two deliveries of one transition are not byte-identical
@@ -18,6 +18,10 @@
 //      is also the object every delivery already wakes, which is why the fan-out runs HERE rather
 //      than in the receiver: the live half of a registration is a stub, and a stub can only be
 //      held where it was handed over.
+//   6. WHICH ACCOUNTS THIS DEPLOYMENT MINTED. One boolean, for one question: `addObserver` is
+//      handed an account id by a verifier and has to know whether it is an account of ours before
+//      resolving a tier for it. Without this the tier lookup answers for an id it has never seen,
+//      and a viewer from another vendor entirely measures up as identical to the owner.
 //
 // The dedupe marker and the effect it guards are written TOGETHER, in one multi-key `put`, which
 // is the reason `applyDelivery` lives here rather than being composed from two calls in the
@@ -35,12 +39,15 @@
 
 import { DurableObject } from 'cloudflare:workers'
 import {
+  applyPushOutcome,
   holdInitiator,
-  NO_HOOK_DISPATCH,
   pushToHook,
+  registrationKey,
   releaseInitiator,
   type HookDispatchReport,
   type HookPayload,
+  type HookPushOutcome,
+  type HookPushTarget,
   type HookRecord,
   type HookRegistration,
   type HookRegistry,
@@ -121,7 +128,22 @@ export type DeliveryEffect =
 /** What taking one delivery did to durable state. */
 export type DeliveryApplication =
   | { applied: false; reason: 'duplicate' }
-  | { applied: true; effect: 'opened' | 'superseded' | 'run-event' | 'none' }
+  | {
+      applied: true
+      effect: 'opened' | 'superseded' | 'run-event' | 'none'
+      /**
+       * What this delivery CHANGED, for the hooks registered on each topic to be pushed about.
+       *
+       * Named here rather than re-derived by the dispatcher, for two reasons that are really one.
+       * A terminal run event both records the transition and settles the run's open cards, so it
+       * changes two topics' worth of state, and a dispatcher handed only the effect could see just
+       * the first: a card-subscribed gadget went on rendering settled cards as answerable, which
+       * is exactly what `HOOK_TOPICS.approval_card` tells an approver it will not do. And what the
+       * write actually changed is knowable only here, so a supersede that met a card already
+       * settled pushes nothing rather than re-announcing a transition that did not happen.
+       */
+      pushes: HookPushTarget[]
+    }
 
 const DELIVERY_PREFIX = 'delivery:'
 const CARD_PREFIX = 'card:'
@@ -129,6 +151,7 @@ const KEY_PREFIX = 'key:'
 const CLAIM_PREFIX = 'mint:'
 const RUN_PREFIX = 'run:'
 const HOOK_PREFIX = 'hook:'
+const ACCOUNT_PREFIX = 'account:'
 
 /**
  * How long a `deliveryId` is remembered for dedupe purposes.
@@ -188,39 +211,64 @@ export class GatekeeperState extends DurableObject {
     }
 
     const writes: Record<string, unknown> = { [marker]: now }
+    const pushes: HookPushTarget[] = []
 
     if (effect.kind === 'open') {
       writes[`${CARD_PREFIX}${effect.card.cardId}`] = effect.card
+      pushes.push({ topic: 'approval_card', cardId: effect.card.cardId })
     } else if (effect.kind === 'supersede') {
       const key = `${CARD_PREFIX}${effect.cardId}`
       const card = await this.ctx.storage.get<ApprovalCard>(key)
       if (card !== undefined && card.resolvedAt === null) {
-        writes[key] = { ...card, resolvedAt: now, resolution: 'superseded' }
+        writes[key] = { ...card, resolvedAt: now, resolution: 'superseded' } satisfies ApprovalCard
+        pushes.push({ topic: 'approval_card', cardId: effect.cardId })
       }
     } else if (effect.kind === 'run-event') {
       writes[`${RUN_PREFIX}${effect.state.runId}`] = { ...effect.state, updatedAt: now }
+      pushes.push({ topic: 'run_event', runId: effect.state.runId })
       // A run that ended answers nothing more, so its open cards stop asking. Doing it here rather
       // than lazily at read time is what keeps the inbox honest for an OS that renders the list
-      // without asking this Gatekeeper anything else.
+      // without asking this Gatekeeper anything else, and each settlement is pushed for the same
+      // reason: a hook that heard only the run event would leave its gadget showing decisions
+      // nobody can answer any more.
       if (effect.state.terminal) {
         for (const [key, card] of await this.#openCardsFor(effect.state.runId)) {
-          writes[key] = { ...card, resolvedAt: now, resolution: `run_${effect.state.event}` }
+          writes[key] = {
+            ...card,
+            resolvedAt: now,
+            resolution: `run_${effect.state.event}`,
+          } satisfies ApprovalCard
+          pushes.push({ topic: 'approval_card', cardId: card.cardId })
         }
       }
     }
 
     await this.ctx.storage.put(writes)
     await this.#ensureAlarm(now)
-    return { applied: true, effect: effect.kind === 'none' ? 'none' : effectName(effect.kind) }
+    return {
+      applied: true,
+      effect: effect.kind === 'none' ? 'none' : effectName(effect.kind),
+      pushes,
+    }
   }
 
-  /** Settle a card this Gatekeeper answered. A card already settled keeps its first resolution. */
+  /**
+   * Settle a card this Gatekeeper answered. A card already settled keeps its first resolution.
+   *
+   * The settlement is pushed before this returns, which is the opposite disposition from the
+   * webhook receiver's and for the reason that separates the two callers. There the fan-out is
+   * deferred because the platform's retry is waiting on the acknowledgement and would re-drive a
+   * delivery this Gatekeeper has already committed; here the caller is the session that just
+   * answered the card, nothing is retrying it, and a push bounded by its own per-hook deadline
+   * costs that one call rather than the record.
+   */
   async resolveCard(cardId: string, resolution: string, now: number): Promise<ApprovalCard | null> {
     const key = `${CARD_PREFIX}${cardId}`
     const card = await this.ctx.storage.get<ApprovalCard>(key)
     if (card === undefined || card.resolvedAt !== null) return card ?? null
     const resolved: ApprovalCard = { ...card, resolvedAt: now, resolution }
     await this.ctx.storage.put(key, resolved)
+    await this.dispatchHooks([{ topic: 'approval_card', cardId }], now)
     return resolved
   }
 
@@ -249,7 +297,7 @@ export class GatekeeperState extends DurableObject {
    * on. What is replaced is the initiator, which the contract asks for by name.
    */
   async enableHook(record: HookRecord, initiator: HookInitiator): Promise<void> {
-    const key = `${HOOK_PREFIX}${record.hookId}`
+    const key = `${HOOK_PREFIX}${registrationKey(record)}`
     const existing = await this.ctx.storage.get<HookRecord>(key)
     // The record lands FIRST, so a failure between the two halves leaves the one that reports
     // itself: a registration with no live initiator counts every delivery as missed, where a live
@@ -262,13 +310,30 @@ export class GatekeeperState extends DurableObject {
       lastDeliveryAt: existing?.lastDeliveryAt ?? record.lastDeliveryAt,
       lastError: existing?.lastError ?? record.lastError,
     } satisfies HookRecord)
+    // A re-bind arrives under a fresh hook id and replaces the row (see `registrationKey`), so the
+    // id it displaced is one nothing can reach any more: its hold on the workspace's end of a
+    // connection is released here or never.
+    if (existing !== undefined && existing.hookId !== record.hookId) {
+      this.#replaceInitiator(existing.hookId, undefined)
+    }
     this.#replaceInitiator(record.hookId, holdInitiator(initiator))
   }
 
-  /** The workspace withdrew a hook: both halves go, which is the permanent clean-up asked for. */
+  /**
+   * The workspace withdrew a hook: both halves go, which is the permanent clean-up asked for.
+   *
+   * Found BY HOOK ID rather than addressed by it, because the row is keyed on the target while the
+   * controller a workspace persisted names the id it was bound under. A controller whose row was
+   * replaced by a later bind from the same gadget finds nothing and settles for releasing its own
+   * half, which is the right answer: it is being asked to withdraw a registration that a re-arm
+   * has already superseded, and deleting the successor's row would silence a live hook.
+   */
   async disableHook(hookId: string): Promise<void> {
     this.#replaceInitiator(hookId, undefined)
-    await this.ctx.storage.delete(`${HOOK_PREFIX}${hookId}`)
+    const rows = await this.ctx.storage.list<HookRecord>({ prefix: HOOK_PREFIX })
+    for (const [key, record] of rows) {
+      if (record.hookId === hookId) await this.ctx.storage.delete(key)
+    }
   }
 
   /**
@@ -286,31 +351,95 @@ export class GatekeeperState extends DurableObject {
   }
 
   /**
-   * Push one applied delivery to every hook registered for its topic.
+   * Push what a change produced to every hook registered for each payload's topic.
    *
-   * Called AFTER `applyDelivery` has committed, never as part of it: the card is the durable
+   * Called AFTER the write it reports has committed, never as part of it: the card is the durable
    * truth and the push is the accelerator over it, so an outbound call that hangs or refuses costs
    * a notification and never the record of what the deployment reported. Each registration is
-   * pushed independently and every outcome lands on that registration's own counters, because one
-   * workspace's broken gadget must not decide whether another's hook fires.
+   * pushed independently and concurrently, and every outcome lands on that registration's own
+   * counters, because one workspace's broken gadget must not decide whether another's hook fires
+   * or how long it waits to.
    */
-  async dispatchHooks(effect: DeliveryEffect, now: number): Promise<HookDispatchReport> {
-    const payload = await this.#payloadFor(effect)
-    if (payload === null) return NO_HOOK_DISPATCH
+  async dispatchHooks(pushes: readonly HookPushTarget[], now: number): Promise<HookDispatchReport> {
+    const report: HookDispatchReport = { delivered: 0, stale: 0, failed: 0 }
+    if (pushes.length === 0) return report
 
-    const rows = await this.ctx.storage.list<HookRecord>({ prefix: HOOK_PREFIX })
-    const report: HookDispatchReport = { topic: payload.topic, delivered: 0, stale: 0, failed: 0 }
-    const writes: Record<string, HookRecord> = {}
-    for (const [key, record] of rows) {
-      if (record.topic !== payload.topic) continue
-      const pushed = await pushToHook(payload, record, this.#initiators.get(record.hookId), now)
-      writes[key] = pushed.record
-      if (pushed.outcome === 'delivered') report.delivered += 1
-      else if (pushed.outcome === 'stale') report.stale += 1
+    const rows = [...(await this.ctx.storage.list<HookRecord>({ prefix: HOOK_PREFIX }))]
+    // Every payload is resolved BEFORE any push starts, rather than as each one comes up. The two
+    // phases read the same either way, and interleaving them would leave a push in flight across
+    // the next `#payloadFor` await with nothing yet attached to its rejection: a storage failure in
+    // that window is an unhandled rejection instead of the outcome it should have been.
+    const planned: { payload: HookPayload; key: string; record: HookRecord }[] = []
+    for (const target of pushes) {
+      const registered = rows.filter(([, record]) => record.topic === target.topic)
+      // Read once per target rather than once per hook, and not at all for a topic nothing is
+      // registered for.
+      if (registered.length === 0) continue
+      const payload = await this.#payloadFor(target)
+      if (payload === null) continue
+      for (const [key, record] of registered) planned.push({ payload, key, record })
+    }
+
+    const work = planned.map((push) => this.#pushOne(push.payload, push.key, push.record, now))
+    for (const outcome of await Promise.all(work)) {
+      if (outcome === 'delivered') report.delivered += 1
+      else if (outcome === 'stale') report.stale += 1
       else report.failed += 1
     }
-    if (Object.keys(writes).length > 0) await this.ctx.storage.put(writes)
     return report
+  }
+
+  /**
+   * Push to one registration, then fold the outcome onto the row AS IT STANDS.
+   *
+   * The re-read is the point. A push awaits a call into another Worker, and a non-storage await
+   * opens this object's input gate, so by the time it resolves a concurrent `disableHook` may have
+   * removed the row and a concurrent delivery may have moved its counters. Writing back the
+   * snapshot the push was described from resurrected the withdrawn registration (permanently not
+   * live, counting a miss against every later delivery) and discarded the sibling's increments.
+   * Reading and writing with no await between them is what makes the fold atomic: a storage
+   * operation holds the gate closed, so nothing is delivered in the gap.
+   *
+   * A row that has GONE, or that a re-arm has replaced with a different hook id, is one this push
+   * is no longer about, so its outcome is reported and not recorded.
+   */
+  async #pushOne(
+    payload: HookPayload,
+    key: string,
+    record: HookRecord,
+    now: number,
+  ): Promise<HookPushOutcome['outcome']> {
+    const result = await pushToHook(payload, record, this.#initiators.get(record.hookId))
+    const current = await this.ctx.storage.get<HookRecord>(key)
+    if (current !== undefined && current.hookId === record.hookId) {
+      await this.ctx.storage.put(key, applyPushOutcome(current, result, now))
+    }
+    return result.outcome
+  }
+
+  /**
+   * Remember that this deployment minted an account.
+   *
+   * The one thing an account id has to be checkable for, and the reason it is the only account
+   * state here: `addObserver` is handed an id by a verifier and has to decide whether this
+   * Gatekeeper has ever heard of it. Nothing else consults this, because nothing else needs to. A
+   * session's account id rides `ctx.props` on a stub the workspace holds, so it was minted here by
+   * construction, and re-deriving that on every call would be a lookup with no question behind it.
+   */
+  async recordAccount(accountId: string, now: number): Promise<void> {
+    await this.ctx.storage.put(`${ACCOUNT_PREFIX}${accountId}`, now)
+  }
+
+  /**
+   * Whether this deployment minted the named account.
+   *
+   * Never pruned, and that is deliberate rather than an omission: the workspace holds the account
+   * stub for as long as it likes, and an id whose row expired would read as an account this
+   * Gatekeeper never made. Revoking an account's keys does not remove it either, because what was
+   * revoked is a credential and what is asked here is a fact about who exists.
+   */
+  async hasAccount(accountId: string): Promise<boolean> {
+    return (await this.ctx.storage.get<number>(`${ACCOUNT_PREFIX}${accountId}`)) !== undefined
   }
 
   /**
@@ -425,24 +554,19 @@ export class GatekeeperState extends DurableObject {
   }
 
   /**
-   * What a delivery pushes, read back from what the write committed.
+   * The row one push target names, as it stands now.
    *
-   * Read rather than taken from the effect, because a card the platform SETTLED is worth pushing
-   * too and the stored row is the only place its resolution exists. `null` is the honest answer
-   * for a delivery no topic covers (an alert family, an unrecognised shape): a hook that fired on
-   * one would be pushing an event its callback has no method for.
+   * `null` is the honest answer for a row that has gone (a card pruned, a run whose state a later
+   * write removed): a callback cannot be handed a payload nothing backs, and a hook that fired on
+   * one would be pushing an event with no subject.
    */
-  async #payloadFor(effect: DeliveryEffect): Promise<HookPayload | null> {
-    if (effect.kind === 'open' || effect.kind === 'supersede') {
-      const cardId = effect.kind === 'open' ? effect.card.cardId : effect.cardId
-      const card = await this.ctx.storage.get<ApprovalCard>(`${CARD_PREFIX}${cardId}`)
+  async #payloadFor(target: HookPushTarget): Promise<HookPayload | null> {
+    if (target.topic === 'approval_card') {
+      const card = await this.ctx.storage.get<ApprovalCard>(`${CARD_PREFIX}${target.cardId}`)
       return card === undefined ? null : { topic: 'approval_card', card }
     }
-    if (effect.kind === 'run-event') {
-      const state = await this.ctx.storage.get<RunState>(`${RUN_PREFIX}${effect.state.runId}`)
-      return state === undefined ? null : { topic: 'run_event', state }
-    }
-    return null
+    const state = await this.ctx.storage.get<RunState>(`${RUN_PREFIX}${target.runId}`)
+    return state === undefined ? null : { topic: 'run_event', state }
   }
 
   async #openCardsFor(runId: string): Promise<[string, ApprovalCard][]> {

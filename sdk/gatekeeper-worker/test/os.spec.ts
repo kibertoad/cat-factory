@@ -591,6 +591,18 @@ describe('sharing', () => {
     ).rejects.toThrow(/not shareable onward whatever the viewer holds/)
   })
 
+  it('refuses an account this deployment never minted, rather than tiering it by fallback', async () => {
+    const { resource } = await connectResource()
+
+    // The case that needs no impersonation at all: a viewer connected to some other vendor, whose
+    // verifier honestly names an account of THEIRS. Resolving a tier for an unknown id lands on
+    // the auto-provisioned one, which is the tier every account here holds, so the comparison
+    // downstream found them identical to the owner while they held none of the operations.
+    await expect(
+      resource.addObserver('someone-else', { describe: async () => ({ accountId: 'acct_ffff' }) }),
+    ).rejects.toThrow(/did not mint account 'acct_ffff'/)
+  })
+
   it('forgets an observer it never had, because the contract asks for idempotence', async () => {
     const { resource } = await connectResource()
 

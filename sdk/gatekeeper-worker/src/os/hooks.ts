@@ -31,8 +31,13 @@
 // `live`: a workspace can see that its hook went quiet, and reconcile from the projection that
 // never did. A silent stop would be the one failure this design cannot tolerate, because a
 // workspace has no way to tell it from a deployment where nothing happened.
+//
+// So RE-BINDING IS THE DOCUMENTED REMEDY, and a registration is therefore keyed on where its
+// deliveries land rather than on the id one bind minted (`registrationKey`). Re-arming a hook is
+// the same registration coming back, not a second one beside the first.
 
 import type { ApprovalCard, RunState } from '../state.js'
+import { describeError } from '../errors.js'
 import { fenced } from '../markdown.js'
 import type {
   HookDescription,
@@ -123,6 +128,40 @@ export interface HookRecord extends HookControllerProps {
 }
 
 /**
+ * What IDENTIFIES a registration in storage: the place its deliveries land.
+ *
+ * Not the hook id, which is the wrong key for the one lifecycle a workspace is documented to run.
+ * The live half of a registration cannot be stored, so a durable object evicted between two
+ * deliveries keeps the record and loses the stub, and the remedy is to bind again. A bind mints a
+ * FRESH hook id, so a hook-id-keyed row made every one of those cycles a new row: the dead
+ * registration stayed forever, never live, counting a `missed` against every delivery for the rest
+ * of the deployment's life, and no reader could tell it from a hook that had genuinely gone quiet.
+ *
+ * Keying on the target makes re-binding what it reads as: the same registration, re-armed. The row
+ * is replaced, its counters carry forward (the `missed` count is the evidence the workspace acted
+ * on, so re-arming must not erase it), and the set of rows stays bounded by the gadgets a
+ * workspace actually runs rather than by how many times one was re-armed.
+ *
+ * The account comes first and is never the caller's to assert, so no target a workspace names can
+ * collide with another account's row; the remaining parts are escaped so a separator inside one of
+ * them cannot make two different targets share a key.
+ */
+export function registrationKey(record: {
+  accountId: string
+  topic: HookTopic
+  target: HookTargetMetadata
+}): string {
+  return [
+    record.accountId,
+    record.topic,
+    record.target.workspaceId,
+    record.target.gadgetId === undefined ? '' : String(record.target.gadgetId),
+  ]
+    .map((part) => encodeURIComponent(part))
+    .join(':')
+}
+
+/**
  * One hook as a session reads it back, which is the record PLUS the fact it cannot store.
  *
  * `live` is computed at read time from whether the initiator is still held, never persisted: a
@@ -133,27 +172,40 @@ export interface HookRegistration extends HookRecord {
   live: boolean
 }
 
-/** What one delivery did, across every hook registered for its topic. */
+/**
+ * What one fan-out did, summed over every push it made.
+ *
+ * It carries no topic: a change can produce payloads for more than one (a terminal run event
+ * settles the run's open cards as it records the transition), and one number per outcome across
+ * all of them is what a caller acts on. WHICH topics were dispatched is the receiver's to report,
+ * because it is knowable before any push is made.
+ */
 export interface HookDispatchReport {
-  topic: HookTopic | null
   delivered: number
   /** Registrations whose live half was lost, so nothing was pushed and the record counted it. */
   stale: number
   failed: number
 }
 
-/** The empty report: what a delivery no topic covers did. */
-export const NO_HOOK_DISPATCH: HookDispatchReport = {
-  topic: null,
-  delivered: 0,
-  stale: 0,
-  failed: 0,
-}
-
 /** What a topic pushes, as the callback receives it. */
 export type HookPayload =
   | { topic: 'approval_card'; card: ApprovalCard }
   | { topic: 'run_event'; state: RunState }
+
+/**
+ * One thing a committed write left to push, named by its id rather than carried whole.
+ *
+ * The fan-out runs in the durable object and the write is reported out of it, so what crosses that
+ * boundary is a list of ids and the dispatcher reads each row back. Two reasons, and the second is
+ * the one that decides it. A `RunState` carries the run projection verbatim as an open record,
+ * which a Durable Object stub's serialization type will not carry (the same constraint
+ * `runs_watched()` annotates around), so a payload cannot make the trip. And re-reading is the
+ * more correct half anyway: a card that has been answered between the commit and the push is
+ * pushed as it now stands, rather than as the delivery left it.
+ */
+export type HookPushTarget =
+  | { topic: 'approval_card'; cardId: string }
+  | { topic: 'run_event'; runId: string }
 
 /** What the approver is asked when a workspace binds a hook. */
 export function describeHook(
@@ -219,44 +271,114 @@ export function releaseInitiator(initiator: HookInitiator): void {
 }
 
 /**
- * Push one payload to one enabled hook, and report what that did to its record.
+ * What one push did, SEPARATE from the record it will be counted on.
  *
- * Every outcome is a COUNT on the record rather than a throw, because the caller is the webhook
- * receiver: a delivery whose card is already committed must be acknowledged whatever the
- * workspace's side did with the push, or the platform retries a message this Gatekeeper has
- * handled and the retry is deduped into doing nothing at all.
+ * The split is the whole safety property of the fan-out. A push awaits a call into another Worker,
+ * which is not a storage operation, so the durable object's input gate is open across it and the
+ * record read before the push is a snapshot that may be stale by the time it resolves: a
+ * concurrent `disable` may have removed the registration, and a concurrent delivery may have moved
+ * the very counters this one is about to bump. Reporting the outcome and folding it onto whatever
+ * is stored AFTERWARDS is what keeps both of those true, where writing back a modified snapshot
+ * resurrected the withdrawn registration and lost the sibling's increments.
+ */
+export type HookPushOutcome =
+  | { outcome: 'delivered' }
+  /** The registration's live half was lost, so there was nothing to push through. */
+  | { outcome: 'stale' }
+  | { outcome: 'failed'; error: string }
+
+/**
+ * How long one workspace has to take one push before it is counted as a failure.
+ *
+ * A hook delivery is a call into somebody else's Worker, and the failure this bounds is the one
+ * with no natural end: a workspace that accepts the connection and never answers. Unbounded, one
+ * such hook holds the fan-out (and, on the receiver, the invocation carrying it) until the runtime
+ * kills it, and the counter update that would have SAID so never lands, so the registration reads
+ * as one nothing was ever pushed to.
+ */
+const PUSH_TIMEOUT_MS = 10_000
+
+/**
+ * Push one payload to one enabled hook, and report what that did.
+ *
+ * Every outcome is a REPORT rather than a throw, because the caller is a fan-out on behalf of a
+ * delivery whose record has already committed: a workspace that refuses, breaks or hangs costs a
+ * notification, and must never cost the acknowledgement the platform's retry is protecting.
  */
 export async function pushToHook(
   payload: HookPayload,
   record: HookRecord,
   initiator: HookInitiator | undefined,
-  now: number,
-): Promise<{ record: HookRecord; outcome: 'delivered' | 'stale' | 'failed' }> {
-  if (initiator === undefined) {
-    return { record: { ...record, missed: record.missed + 1 }, outcome: 'stale' }
-  }
+): Promise<HookPushOutcome> {
+  if (initiator === undefined) return { outcome: 'stale' }
   try {
-    const started = await initiator.startHook()
-    try {
-      await started.approvalQueue.authorizeObservation(describeHookDelivery(payload, record))
-      await callBack(started.callback, payload)
-    } finally {
-      releaseStarted(started)
-    }
-    return {
-      record: {
-        ...record,
-        deliveries: record.deliveries + 1,
-        lastDeliveryAt: now,
-        lastError: null,
-      },
-      outcome: 'delivered',
-    }
+    await withDeadline(deliverThrough(initiator, payload, record), PUSH_TIMEOUT_MS)
+    return { outcome: 'delivered' }
   } catch (error) {
-    return {
-      record: { ...record, failures: record.failures + 1, lastError: describeError(error) },
-      outcome: 'failed',
-    }
+    return { outcome: 'failed', error: describeError(error) }
+  }
+}
+
+/**
+ * Fold one push's outcome onto the record as it stands NOW.
+ *
+ * Pure, and takes the current record rather than the one the push was described from, so a caller
+ * can re-read between the two. `lastError` is cleared by a delivery on purpose: it is what a
+ * reader acts on beside `failures`, and a stale one beside a hook that has since recovered points
+ * at a fix nobody needs to make.
+ */
+export function applyPushOutcome(
+  record: HookRecord,
+  result: HookPushOutcome,
+  now: number,
+): HookRecord {
+  if (result.outcome === 'stale') return { ...record, missed: record.missed + 1 }
+  if (result.outcome === 'failed') {
+    return { ...record, failures: record.failures + 1, lastError: result.error }
+  }
+  return { ...record, deliveries: record.deliveries + 1, lastDeliveryAt: now, lastError: null }
+}
+
+/** One delivery, through a callback minted for it and released with it. */
+async function deliverThrough(
+  initiator: HookInitiator,
+  payload: HookPayload,
+  record: HookRecord,
+): Promise<void> {
+  const started = await initiator.startHook()
+  try {
+    await started.approvalQueue.authorizeObservation(describeHookDelivery(payload, record))
+    await callBack(started.callback, payload)
+  } finally {
+    releaseStarted(started)
+  }
+}
+
+/**
+ * Give up on a push that never answers, and say that is what happened.
+ *
+ * The timer is cleared on both paths: a Worker invocation stays alive while one is outstanding, so
+ * leaving them behind would hold every delivery's invocation open for the timeout even when every
+ * push answered at once.
+ */
+async function withDeadline<T>(work: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expiry = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `The workspace did not answer this hook delivery within ${timeoutMs}ms, so it was ` +
+              'counted as a failure rather than waited on.',
+          ),
+        ),
+      timeoutMs,
+    )
+  })
+  try {
+    return await Promise.race([work, expiry])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
   }
 }
 
@@ -292,10 +414,4 @@ async function callBack(callback: unknown, payload: HookPayload): Promise<void> 
 function releaseStarted(started: { callback: unknown; approvalQueue: unknown }): void {
   ;(started.callback as Partial<Disposable>)?.[Symbol.dispose]?.()
   ;(started.approvalQueue as Partial<Disposable>)?.[Symbol.dispose]?.()
-}
-
-/** A failure as the record carries it: one line, and never an object nothing can render. */
-function describeError(error: unknown): string {
-  if (error instanceof Error) return `${error.name}: ${error.message}`
-  return String(error)
 }

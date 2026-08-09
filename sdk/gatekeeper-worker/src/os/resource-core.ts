@@ -193,22 +193,26 @@ export class ResourceCore implements ResourceObject {
   /**
    * Share this resource's observations onward, if the observer could have read them all directly.
    *
-   * The contract's requirement, answered rather than declined: the observer names an account of
-   * their own, this deployment's policy resolves its tier, and the share is admitted only when
-   * that tier reaches everything the tier THIS resource is bound at reaches. `sharing.ts` holds
-   * the three tests and why each is the one the contract asks for.
+   * The contract's requirement, answered rather than declined: the observer names an account this
+   * deployment minted, its policy resolves that account's tier, and the share is admitted only
+   * when that tier reaches everything the tier THIS resource is bound at reaches. `sharing.ts`
+   * holds the tests and why each is the one the contract asks for, including why the account has
+   * to be recognised before its tier means anything.
    *
    * Nothing is recorded about an admitted observer, and that is a property of the rule rather than
    * an omission: every accepted observer can read everything this resource could ever have
    * observed, so there is never an observation to exclude from them afterwards.
    */
   async addObserver(id: string, user: unknown): Promise<void> {
-    const observerAccount = await identifyObserver(user)
+    const gatekeeper = this.#gatekeeper()
+    const observerAccount = await identifyObserver(user, {
+      recognize: (accountId) => gatekeeper.recognizesAccount(accountId),
+    })
     assertObserverMaySee({
       observerId: id,
       observerAccount,
       owner: this.#tier(),
-      observer: this.#gatekeeper().tierForAccount(observerAccount),
+      observer: gatekeeper.tierForAccount(observerAccount),
     })
   }
 

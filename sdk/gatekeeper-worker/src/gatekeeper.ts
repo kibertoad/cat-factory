@@ -13,7 +13,7 @@ import { buildCapability, type SessionGovernance } from './capability.js'
 import { requireVar, stateFor, type GatekeeperEnv } from './env.js'
 import { GatekeeperError } from './errors.js'
 import { KeyBroker, type Actor } from './keys.js'
-import type { HookDispatchReport } from './os/hooks.js'
+import type { HookPushTarget, HookTopic } from './os/hooks.js'
 import {
   autoProvisionedTier,
   compilePolicy,
@@ -44,6 +44,22 @@ const AUTO_PROVISIONED_TIER_REMEDY =
 /** Why a delivery was refused, drawn from the verifier so the two cannot drift. */
 type RejectionReason = Extract<VerificationResult, { ok: false }>['reason']
 
+/**
+ * What the receiver handed to the hook fan-out, which is DISPATCH and never delivery.
+ *
+ * The distinction is the whole reason this shape changed. The fan-out runs behind the
+ * acknowledgement, so at the moment this is reported no push has been made and any count of them
+ * would be a zero standing in for a number nobody has yet: the one reading a receiver must never
+ * offer, because it is indistinguishable from a delivery no hook took. What each push DID land on
+ * its own registration's counters, which `hooks_bound()` publishes.
+ */
+export interface HookDispatchReceipt {
+  /** How many payloads this delivery produced. Zero when no topic covers it. */
+  pushes: number
+  /** The distinct topics they carry, so the platform's delivery log names what was dispatched. */
+  topics: HookTopic[]
+}
+
 /** What taking delivery of one webhook POST did. */
 export type DeliveryOutcome =
   | { handled: 'rejected'; reason: RejectionReason }
@@ -53,15 +69,7 @@ export type DeliveryOutcome =
       handled: 'accepted'
       deliveryId: string
       effect: 'opened' | 'superseded' | 'run-event' | 'none'
-      /**
-       * What pushing it to the enabled hooks did, reported rather than merely attempted.
-       *
-       * On the response because this is the one place the platform's own delivery log can carry
-       * it: a hook whose workspace refused the push, or one whose live half was lost to an
-       * eviction, is a fact about THIS delivery, and the alternative is an operator comparing an
-       * inbox against a Gadget to discover it.
-       */
-      hooks: HookDispatchReport
+      hooks: HookDispatchReceipt
     }
 
 export class Gatekeeper {
@@ -210,6 +218,18 @@ export class Gatekeeper {
     return this.#policy.autoProvisionedTier
   }
 
+  /**
+   * Whether this deployment minted the named account.
+   *
+   * Asked by the ONE caller that is handed an account id from outside (`addObserver`, over an
+   * observer's verifier) and has to resolve a tier for it. Every other account id in this package
+   * arrives on `ctx.props` of a stub this Gatekeeper handed the workspace, so it was minted here
+   * by construction and asking again would be a lookup with no question behind it.
+   */
+  async recognizesAccount(accountId: string): Promise<boolean> {
+    return await this.#state.hasAccount(accountId)
+  }
+
   /** The origin of the cat-factory deployment this Gatekeeper is paired with. */
   get deployment(): string {
     return requireVar(this.#env, 'CAT_FACTORY_BASE_URL')
@@ -270,8 +290,16 @@ export class Gatekeeper {
    * Deduping in a call of its own would be worse than useless: a marker committed before the card
    * write turns a failed write into a `duplicate` on the platform's retry, so the approval never
    * reaches the inbox and nothing anywhere reports that it did not.
+   *
+   * `defer` is how the fan-out is kept OFF that path, and it is a parameter rather than something
+   * read here because the lifetime being extended is the Worker invocation's, which only the
+   * handler holds.
    */
-  async takeDelivery(request: Request, now: number): Promise<DeliveryOutcome> {
+  async takeDelivery(
+    request: Request,
+    now: number,
+    defer: (work: Promise<unknown>) => void,
+  ): Promise<DeliveryOutcome> {
     const rawBody = await request.text()
     const verdict = await verifyDelivery(
       request.headers,
@@ -294,14 +322,25 @@ export class Gatekeeper {
     const applied = await this.#state.applyDelivery(delivery.deliveryId, effect, now)
     if (!applied.applied) return { handled: 'duplicate', deliveryId: delivery.deliveryId }
 
-    // AFTER the write, never as part of it. The card is the durable truth and the push is the
-    // accelerator over it, so an outbound call that hangs or is refused costs a notification and
-    // never the record of what the deployment reported. It is also why a redelivery of this
-    // message is a `duplicate` that pushes nothing: the platform's retry exists to protect the
-    // write, which already committed.
-    const hooks = await this.#state.dispatchHooks(effect, now)
-    return { handled: 'accepted', deliveryId: delivery.deliveryId, effect: applied.effect, hooks }
+    // AFTER the write and BESIDE the acknowledgement, never in front of it. The card is the
+    // durable truth and the push is the accelerator over it, so a workspace that hangs or refuses
+    // must cost a notification and never the record. Awaiting the fan-out here made it cost both:
+    // one slow workspace times the delivery out, the platform retries to protect a write that had
+    // already committed, and the retry is deduped into pushing nothing at all, so the notification
+    // the wait was supposed to guarantee is the one thing certain to be lost.
+    if (applied.pushes.length > 0) defer(this.#state.dispatchHooks(applied.pushes, now))
+    return {
+      handled: 'accepted',
+      deliveryId: delivery.deliveryId,
+      effect: applied.effect,
+      hooks: receiptFor(applied.pushes),
+    }
   }
+}
+
+/** What was handed to the fan-out, summarised for the platform's own delivery log. */
+function receiptFor(pushes: readonly HookPushTarget[]): HookDispatchReceipt {
+  return { pushes: pushes.length, topics: [...new Set(pushes.map((push) => push.topic))] }
 }
 
 /**

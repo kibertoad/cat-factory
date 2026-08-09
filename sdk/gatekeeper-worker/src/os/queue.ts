@@ -31,9 +31,9 @@
 
 import type { GatekeeperBinding } from '@cat-factory/gatekeeper-bindings'
 import type { SessionGovernance } from '../capability.js'
-import { GatekeeperError } from '../errors.js'
+import { describeError, GatekeeperError } from '../errors.js'
 import { describeAction, describeObservation, type CallSubject } from './descriptions.js'
-import { describeHook, type HookControllerProps } from './hooks.js'
+import { describeHook, HOOK_TOPICS, type HookControllerProps } from './hooks.js'
 import type { ApprovalQueue } from './protocol.js'
 
 /** One submitted action waiting on the workspace's decision. */
@@ -283,6 +283,11 @@ export function queueGovernance(deps: {
      * workspace has enabled it.
      */
     async subscribe(topic, callback): Promise<void> {
+      // Reachable only in process, and kept for exactly that: an embedding suite hands over a
+      // plain object, where a missing method is a mistake worth naming. It CANNOT catch a
+      // workspace whose queue predates hooks, because a stub answers every property (the same
+      // fact `callBack` turns on), so `typeof` reads `function` for a method the far side does not
+      // implement. That case arrives below, as a failure from the far side.
       if (typeof deps.queue.bindHook !== 'function') {
         throw new GatekeeperError(
           'hooks_unavailable',
@@ -298,11 +303,26 @@ export function queueGovernance(deps: {
         tier: deps.subject.tier,
         deployment: deps.subject.deployment,
       }
-      await deps.queue.bindHook(
-        deps.controllerFor(props),
-        callback,
-        describeHook(topic, deps.subject),
-      )
+      try {
+        await deps.queue.bindHook(
+          deps.controllerFor(props),
+          callback,
+          describeHook(topic, deps.subject),
+        )
+      } catch (error) {
+        // A workspace whose queue has no `bindHook` and a person who declined the registration
+        // both surface here, and this Gatekeeper cannot tell them apart: the contract offers no
+        // way to ask whether hooks are servable, and the two failures cross the wire the same way.
+        // So the cause is reported VERBATIM rather than sorted into a guess, because it is the one
+        // thing that distinguishes them and the two need opposite fixes.
+        throw new GatekeeperError(
+          'hook_bind_refused',
+          `This workspace did not take the ${HOOK_TOPICS[topic].sessionMethod}() binding ` +
+            `(${describeError(error)}). Either its approval queue serves no hooks, or the ` +
+            'registration was declined. `approvals_list()` and `runs_watched()` answer exactly ' +
+            'what the hook would have pushed, and go on doing so.',
+        )
+      }
     },
 
     close(): void {

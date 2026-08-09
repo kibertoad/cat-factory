@@ -631,11 +631,38 @@ event asks the initiator for a FRESH callback and authorizes the delivery before
   publishes it beside `live`. A hook that goes quiet is otherwise indistinguishable from a
   deployment where nothing happened, which is the one reading a workspace must never be left to
   make on its own. That is also why the hook is an accelerator and never a source of truth.
-- **The push is BEHIND the write, and every failure is a count rather than a throw.** The card
-  commits first, then the fan-out; a workspace that refuses or a gadget that has gone away costs a
-  notification and never the record. The 202 the platform's own delivery log keeps carries the
-  report (`hooks: { delivered, stale, failed }`), so "was it pushed" is answerable without
-  comparing an inbox against a gadget.
+- **The push is BEHIND the write AND BESIDE the acknowledgement, and every failure is a count
+  rather than a throw.** The card commits first, then the fan-out, on `waitUntil` and with a
+  deadline per push. Awaiting it in front of the 202 made a hanging workspace cost both halves it
+  was supposed to cost neither of: the delivery times out, the platform retries to protect a write
+  that had already committed, and the retry dedupes into pushing nothing, so the notification the
+  wait was there to guarantee is the one thing certain to be lost. What the 202 can therefore
+  honestly carry is what was DISPATCHED (`hooks: { pushes, topics }`), never a count of deliveries
+  nobody has made yet: a `delivered: 0` there is indistinguishable from a push every hook refused.
+  The counts live on each registration, where `hooks_bound()` publishes them.
+- **A push reports an outcome; the RECORD is re-read and folded afterwards.** A push awaits a call
+  into another Worker, which is not a storage operation, so the durable object's input gate is open
+  across it: the row read before the push is a snapshot, and writing that snapshot back resurrected
+  a registration a person had withdrawn mid-push (permanently not live, counting a miss against
+  every later delivery) and discarded a concurrent delivery's increments. Reading and writing with
+  no await between them is what makes the fold atomic. It also retires the multi-key write-back,
+  which would have thrown past the 128-key ceiling and taken the whole delivery's counters with it.
+- **A registration is identified by WHERE ITS DELIVERIES LAND**, not by the id one bind minted.
+  This is what makes the documented remedy for a quiet hook ("bind again") work: a bind mints a
+  fresh id, so a hook-id-keyed row turned every re-arm into a second row, and the dead one stayed
+  for the deployment's life. Re-binding from the same gadget now replaces the row and carries its
+  counters over, since `missed` is the evidence that prompted the re-arm.
+- **A terminal run event pushes the CARDS it settled, not only the run.** The write changes two
+  topics' worth of state, so the dispatcher is handed what the write changed rather than the effect
+  it came from. Told only about the run, a card-subscribed gadget went on rendering decisions
+  nobody could answer, which is exactly what `HOOK_TOPICS.approval_card` tells an approver it will
+  not do. `approvals_answer` settles a card the same way, and pushes the same way.
+- **A bind the workspace does not take is a refusal that carries the CAUSE.** The structural
+  `typeof queue.bindHook !== 'function'` check can only ever catch an in-process caller: a stub
+  answers every property, so it reads `function` for a method the far side does not implement. An
+  older workspace and a person declining the registration both arrive as a failure from the far
+  side and cannot be told apart here, so the cause is reported verbatim under one reason
+  (`hook_bind_refused`) rather than sorted into a guess.
 - **A missing export costs a CAPABILITY, not the door**, which forced `/health` to answer in two
   parts: `blockers` (a workspace that never finishes installing) and `limitations` (one that
   installs, serves, and refuses hooks). Folding the second into the first would turn every
@@ -652,6 +679,20 @@ needed. Two corollaries: an observer this Gatekeeper cannot IDENTIFY is refused 
 (`sharing_unverifiable`), because "unknown" and "not permitted" are the same outcome and opposite
 facts; and every admitted observer can read everything, so `excludeObservers` stays unused rather
 than becoming a second, weaker gate on the same question.
+
+**Identifying an observer is TWO questions, and the second is what makes the comparison mean
+anything.** Reading an account id off the verifier answers what the observer CLAIMS. It does not
+answer whether this deployment has ever heard of them, and the tier lookup cannot tell the
+difference on its own: it resolves an unknown id to the auto-provisioned tier, which is the tier
+nearly every account here holds. So a viewer connected to a DIFFERENT VENDOR, whose verifier
+honestly names an account of theirs, resolved to the owner's own tier and passed all three tests
+while holding none of the operations being shared. No impersonation required, which is why it is
+the case worth closing. An observer must now hold an account this Gatekeeper MINTED, which is the
+one fact recorded about an account and the only reason the durable object knows accounts exist at
+all (`createAccount` writes it; nothing else reads it, because every other account id in the
+package arrives on `ctx.props` of a stub we handed over). What that does not establish is stated
+at the seam: a verifier naming an account of ours is taken at its word, since proving the holder
+IS that account would need a challenge the published contract does not carry.
 
 **Argument validation is derived from the table, and runs on BOTH doors.** The contract asks for a
 call carrying an argument the receiver does not declare to be rejected, and `capnweb-validate`

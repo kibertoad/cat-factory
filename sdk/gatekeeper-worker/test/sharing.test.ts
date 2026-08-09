@@ -28,12 +28,19 @@ function readTier(
 }
 
 describe('identifyObserver', () => {
+  /** A deployment that minted exactly the accounts named, and nothing else. */
+  function minted(...accounts: string[]) {
+    return { recognize: async (accountId: string) => accounts.includes(accountId) }
+  }
+
   it('refuses a viewer that offers no verifier to question', async () => {
-    await expect(identifyObserver({})).rejects.toThrow(/no verifier this Gatekeeper can question/)
+    await expect(identifyObserver({}, minted())).rejects.toThrow(
+      /no verifier this Gatekeeper can question/,
+    )
   })
 
   it('refuses a verifier that names no account, rather than sharing with an unnamed one', async () => {
-    await expect(identifyObserver({ describe: async () => ({}) })).rejects.toThrow(
+    await expect(identifyObserver({ describe: async () => ({}) }, minted())).rejects.toThrow(
       /named no account/,
     )
   })
@@ -47,12 +54,22 @@ describe('identifyObserver', () => {
 
     // The two are the same outcome and opposite facts: one is a viewer this deployment refuses,
     // the other is a question it failed to ask.
-    await expect(identifyObserver(thrower)).rejects.toThrow(/could not be questioned/)
+    await expect(identifyObserver(thrower, minted())).rejects.toThrow(/could not be questioned/)
   })
 
-  it('answers the account id when the verifier names one', async () => {
+  it('refuses an account this deployment never minted, rather than tiering it by fallback', async () => {
+    const foreign = { describe: async () => ({ accountId: 'acct_from_another_vendor' }) }
+
+    // The case that needs no impersonation: a viewer connected to a different vendor, whose
+    // verifier honestly names an account of THEIRS. Resolving a tier for it lands on the
+    // auto-provisioned one, which is the tier nearly every account here holds, so the comparison
+    // downstream would find them identical to the owner while they hold none of the operations.
+    await expect(identifyObserver(foreign, minted('acct_1'))).rejects.toThrow(/did not mint/)
+  })
+
+  it('answers the account id when the verifier names one this deployment minted', async () => {
     await expect(
-      identifyObserver({ describe: async () => ({ accountId: 'acct_1' }) }),
+      identifyObserver({ describe: async () => ({ accountId: 'acct_1' }) }, minted('acct_1')),
     ).resolves.toBe('acct_1')
   })
 })

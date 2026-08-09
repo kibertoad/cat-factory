@@ -8,7 +8,7 @@
 // argument to `createGatekeeperWorker`.
 
 export { createGatekeeperWorker, type GatekeeperWorkerOptions } from './worker.js'
-export { Gatekeeper, type DeliveryOutcome } from './gatekeeper.js'
+export { Gatekeeper, type DeliveryOutcome, type HookDispatchReceipt } from './gatekeeper.js'
 
 // The Durable Object class. A deployment re-exports it from its own entry module, because
 // wrangler's `class_name` binding resolves against the Worker's exports, not this package's.
@@ -73,19 +73,23 @@ export { createGatekeeperResource } from './os/resource.js'
 export { ResourceCore, type ResourceDependencies, type ResourceProps } from './os/resource-core.js'
 export { createGatekeeperHookController, type HookControllerProps } from './os/hook-controller.js'
 export {
+  applyPushOutcome,
   describeHook,
   describeHookDelivery,
   holdInitiator,
   HOOK_TOPICS,
   HOOK_TOPIC_NAMES,
   pushToHook,
+  registrationKey,
   type HookDispatchReport,
   type HookPayload,
+  type HookPushOutcome,
+  type HookPushTarget,
   type HookRecord,
   type HookRegistration,
   type HookTopic,
 } from './os/hooks.js'
-export { assertObserverMaySee, identifyObserver } from './os/sharing.js'
+export { assertObserverMaySee, identifyObserver, type ObserverRecognition } from './os/sharing.js'
 export { checkedArguments, declaredArguments } from './arguments.js'
 export {
   OS_EXPORTS,
