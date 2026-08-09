@@ -23,7 +23,7 @@ const definition = {
   mediaTypes: ['image/png'],
   endpoint: 'https://api.acme.example/v1',
   guidance: 'Poll /jobs until status is done.',
-  credential: { key: 'ACME_IMAGES_API_KEY', header: 'Authorization' },
+  credentials: [{ key: 'ACME_IMAGES_API_KEY', header: 'Authorization' }],
   contracts: [{ contractId: 'http', format: 'openapi' as const, title: 'HTTP API', body: OPENAPI }],
 } as unknown as BinaryGeneratorDefinition
 
@@ -75,25 +75,27 @@ describe('BinaryGeneratorRegistry', () => {
     // The key NAME is what the operator checklist renders. The value is resolved per dispatch on
     // the container executor's side and travels on the job body alone, so there is nothing here
     // for it to leak into.
-    expect(registered(definition).views()[0]?.credential).toEqual({
-      key: 'ACME_IMAGES_API_KEY',
-      header: 'Authorization',
-    })
+    expect(registered(definition).views()[0]?.credentials).toEqual([
+      { key: 'ACME_IMAGES_API_KEY', header: 'Authorization' },
+    ])
   })
 
   it('omits an optional field rather than projecting it as empty or undefined', () => {
-    // `endpoint`, `guidance` and `credential` are spread conditionally. "Not declared" and
-    // "declared empty" are different facts to the brief renderer, and a key present with an
-    // undefined value would survive `toMatchObject` while breaking the wire projection.
+    // `endpoint` and `guidance` are spread conditionally. "Not declared" and "declared empty" are
+    // different facts to the brief renderer, and a key present with an undefined value would
+    // survive `toMatchObject` while breaking the wire projection.
     const lean = { ...definition }
-    for (const key of ['endpoint', 'guidance', 'credential', 'mediaTypes', 'contracts']) {
+    for (const key of ['endpoint', 'guidance', 'credentials', 'mediaTypes', 'contracts']) {
       delete (lean as unknown as Record<string, unknown>)[key]
     }
     const [view] = registered(lean).views()
     expect(view).not.toHaveProperty('endpoint')
     expect(view).not.toHaveProperty('guidance')
-    expect(view).not.toHaveProperty('credential')
-    // These two are always present: a list, defaulted to empty rather than dropped.
+    // These are always present: a list, defaulted to empty rather than dropped. `credentials`
+    // joined them when it became plural, and the mothership relay's shape check REQUIRES it for
+    // that reason: an absent key there is a version skew, never a deployment that configured no
+    // credential, and the two must not read the same.
+    expect(view?.credentials).toEqual([])
     expect(view?.mediaTypes).toEqual([])
     expect(view?.contracts).toEqual([])
   })

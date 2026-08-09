@@ -33,7 +33,7 @@ export default defineConfig({
       remoteBindings: false,
       // The same Worker, the same Durable Object, the same migration tag as the hermetic suite and
       // as the template: what differs between the two runs is the origin, and nothing else.
-      wrangler: { configPath: './test/wrangler.toml' },
+      wrangler: { configPath: './test/wrangler.jsonc' },
       miniflare: {
         bindings: {
           CAT_FACTORY_BASE_URL: fromHarness('CAT_FACTORY_BASE_URL'),

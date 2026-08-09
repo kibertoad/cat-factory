@@ -20,7 +20,13 @@
 name = "cat-factory-gatekeeper"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
-compatibility_flags = ["nodejs_compat"]
+# `allow_irrevocable_stub_storage` is what makes the Cloudflare OS door work at all, and it is not
+# optional there: `createAccount()` hands the workspace a stub it PERSISTS, and workerd refuses to
+# store a stub whose target Worker has not opted in. Without it a perfectly bound, perfectly
+# configured Gatekeeper is discovered and then fails on the first account anyone connects. Every
+# gatekeeper in the Cloudflare OS repository carries it for the same reason. It costs a `/rpc`-only
+# deployment nothing.
+compatibility_flags = ["nodejs_compat", "allow_irrevocable_stub_storage"]
 
 [vars]
 # The cat-factory deployment this Gatekeeper is paired with.

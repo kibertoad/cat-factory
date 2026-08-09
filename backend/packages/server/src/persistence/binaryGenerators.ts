@@ -166,6 +166,15 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
  * of the one `UnavailableError` every route to "we do not know what is registered" ends at. A
  * registry that declares no formats serves `[]`, which every version of the projection emits.
  *
+ * `credentials` is checked for the same reason, and deliberately WITHOUT the tolerance
+ * `capabilities` gets. A mothership predating the plural field emits a singular `credential`, so
+ * admitting the absence and filling `[]` would land on "this integration is unauthenticated" and
+ * the brief would tell the agent so, in a deployment that configured a key: a 401 reported as an
+ * integration nobody gave credentials to, with the version skew that caused it invisible in the
+ * message. The states differ, unlike the capability axis where an empty declaration is a real and
+ * documented reading, so this one refuses and the node fails loudly against a mothership too old
+ * to answer it.
+ *
  * `capabilities` is DECIDED on too (by the same coverage rule and by the candidate brief), but
  * it is the one field here whose ABSENCE is an expected version skew rather than a wrong shape,
  * because a mothership predating the capability axis emits no such key. So absence is admitted
@@ -186,6 +195,7 @@ function isGeneratorView(value: unknown): value is ServedGeneratorView {
     typeof view.id === 'string' &&
     Array.isArray(view.modalities) &&
     Array.isArray(view.mediaTypes) &&
+    Array.isArray(view.credentials) &&
     (view.capabilities === undefined || Array.isArray(view.capabilities))
   )
 }

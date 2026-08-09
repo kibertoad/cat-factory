@@ -24,7 +24,7 @@ ways:
 For building **credential-holding front-ends**: services that hold the cat-factory API key
 themselves and meter what their own callers may do. The motivating consumer is a
 [Cloudflare OS](https://github.com/cloudflare/cloudflare-os) Gatekeeper Worker (design record: the
-[initiative tracker](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/cloudflare-os-gatekeeper.md)),
+[design record](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0052-cloudflare-os-gatekeeper.md)),
 but nothing here is Cloudflare-specific: any proxy, bot or governance layer that fronts a
 cat-factory key can use it.
 
@@ -141,5 +141,5 @@ contracts, never the file.
   family and the generation chain this table rides.
 - [`@cat-factory/gatekeeper-worker`](https://www.npmjs.com/package/@cat-factory/gatekeeper-worker):
   the Worker machinery that compiles deployment policy against this table.
-- [The initiative tracker](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/cloudflare-os-gatekeeper.md):
-  design record, decisions and gotchas.
+- [ADR 0052](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0052-cloudflare-os-gatekeeper.md):
+  the design record, the alternatives it was decided against, and the traps the build surfaced.

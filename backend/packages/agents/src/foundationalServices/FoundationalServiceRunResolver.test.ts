@@ -150,7 +150,7 @@ describe('FoundationalServiceRunResolver.binaryOutputContextFilesFor', () => {
       summary: 'Pixel-art image generation.',
       description: '',
       modalities: ['image'],
-      credential: { key: 'RD_TOKEN' },
+      credentials: [{ key: 'RD_TOKEN' }],
       contracts: [
         { contractId: 'api', format: 'openapi', title: 'Inference API', body: document.body },
       ],

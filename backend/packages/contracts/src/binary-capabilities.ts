@@ -45,6 +45,28 @@ import * as v from 'valibot'
  * two producers of one modality apart without unlocking an option would be the refused
  * discriminator wearing a new name.
  *
+ * **A capability says the request can CARRY the value, never which values are accepted.** It is
+ * the answer to "does asking this reach a parameter at all", and it is deliberately not the
+ * answer to "will this endpoint take 4x, or 7:3, or 96x96". Declaring the accepted VALUES beside
+ * each member is the per-integration table the design record refuses, one axis over: it goes
+ * stale in the deployment's repo while the vendor changes it in its own, and the version that
+ * looks harmless is the one that lies. An endpoint that upscales at a ratio it fixes itself has
+ * no factor to enumerate, so `upscale: [2]` would not be a narrower declaration of the truth, it
+ * would be a fabricated one, and a step asking for 4x would be admitted against it and served an
+ * enlargement at an unknown multiple. That is exactly the silent wrong artifact this axis exists
+ * to prevent, arriving through the axis.
+ *
+ * So an endpoint that accepts an option only at values it fixes does one of two things, and
+ * never a third. If a COARSER member already means "a set it rounds to" it declares that one
+ * ({@link 'aspect-ratio'} is the worked example, and it is why the ratio and size members are
+ * separate). If there is none, it declares nothing here and says what it does in a definition's
+ * `guidance`: the step is then refused an option the endpoint cannot answer, which is a visible
+ * refusal naming the capability rather than an artifact that checks out everywhere and is wrong
+ * where it counts. A refusal that reads as too strict is the
+ * correct half of that trade, and the honest reading of it is usually that the option was the
+ * wrong way to state the requirement (a step wanting a specific larger deliverable is asking for
+ * {@link 'exact-size'}, not for a multiple of something it never measured).
+ *
  * Anything that does not clear the bar stays prose in `description` / `guidance`, which is where
  * "good at pixel art", "expensive above 2K" and "rate limited to 5/min" belong.
  */
@@ -82,19 +104,30 @@ export const binaryGeneratorCapabilitySchema = v.picklist([
    */
   'seed',
   /**
-   * Accepts an explicit aspect SHAPE: a ratio (`16:9`), or a fixed set of size buckets it
-   * rounds to. Unlocks `generation.aspectRatio`.
+   * Accepts an explicit aspect SHAPE: a ratio (`16:9`), or a fixed set of sizes it rounds to.
+   * Unlocks `generation.aspectRatio`.
    *
    * Deliberately NOT "a ratio or an output size", which is what this member said while it was
    * the only one on the axis. A bucketed API (`image_size: square | portrait | landscape`,
    * `resolution: 1k | 2k`) honours a ratio exactly and an exact pixel size not at all, so one
    * member covering both made the two integrations that CAN be handed dimensions
    * indistinguishable from the two that cannot — see {@link 'exact-size'}.
+   *
+   * **A closed LIST of exact `WxH` values is this member, not that one**, and it is the boundary
+   * case worth stating because it looks like the other one: an endpoint whose `size` parameter
+   * takes `1024x1024 | 1365x1024 | …` is handed pixel dimensions and still ROUNDS, so a step
+   * needing 96x96 gets an 11x downscale from it. What separates the two members is not whether
+   * the request carries numbers, it is whether the endpoint can be asked for an ARBITRARY pair
+   * and render it. An enumerated set cannot, so it declares this and states the set in
+   * a definition's `guidance`.
    */
   'aspect-ratio',
   /**
-   * Accepts exact output DIMENSIONS in pixels: a width and a height it renders at natively,
+   * Accepts ARBITRARY output dimensions in pixels: a width and a height it renders at natively,
    * rather than a shape it rounds to. Unlocks `generation.outputSize`.
+   *
+   * "Arbitrary" is the whole test, and it is what an endpoint offering a closed list of exact
+   * `WxH` values fails: see {@link 'aspect-ratio'}, which is where such an endpoint belongs.
    *
    * Its own member rather than a refinement of `aspect-ratio`, because the two partition
    * differently and the difference is the whole deliverable for anything rendered to a fixed
