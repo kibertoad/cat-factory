@@ -235,36 +235,38 @@ explicitly rather than papered over.
       routing), `pl_spike_direct`, `pl_initiative_docs`; reclassify `pl_business_docs` off the
       `build` purpose. (`pl_frontend` and `pl_spec` went in WS6; `pl_code_comments` is internal.)
 - [x] **WS6: the catalog narrowing + the CONDITIONAL step.** Five more presets withdrawn, one
-      added, and the mechanism that made most of the withdrawals possible.
+      added, and the mechanism that made most of the withdrawals possible. Detail below.
 
-      **The mechanism.** A step can now carry a RUN CONDITION (`stepOptions[i].condition`, a
-                  service scope) beside its estimate gate, and the two answer different questions: the estimate
-                  asks "is this task big enough to be worth the step", the condition asks "does this step apply
-                  to a change of this shape at all". Every build rung carries BOTH testers, each conditional —
-                  the browser pass where the change touches a frontend service, the API pass where it touches
-                  anything else. Run admission drops the condition-excluded steps before its gates, so one
-                  preset carrying `tester-ui` is not refused on every backend service.
+## WS6 in detail: the catalog narrowing and the conditional step
 
-                  `RunServiceScope` can express a task in BOTH scopes at once, but no board state produces
-                  one today: an involved service must be a connection neighbour, and only a `service`-type
-                  frame may declare or be named by a connection, so a frontend frame has no peers in either
-                  direction. Widening that is a change to the CONNECTION model, not to the condition, and is
-                  not in this slice; the reduction stays general so it is the one place that would change.
+**The mechanism.** A step can now carry a RUN CONDITION (`stepOptions[i].condition`, a
+service scope) beside its estimate gate, and the two answer different questions: the estimate
+asks "is this task big enough to be worth the step", the condition asks "does this step apply
+to a change of this shape at all". Every build rung carries BOTH testers, each conditional —
+the browser pass where the change touches a frontend service, the API pass where it touches
+anything else. Run admission drops the condition-excluded steps before its gates, so one
+preset carrying `tester-ui` is not refused on every backend service.
 
-                  **Retired:** `pl_frontend` (a near-duplicate of the ladder that existed only because
-                  `tester-ui` could not say "not on this run"), `pl_tech_debt` (the build tail behind an
-                  `analysis` + `tracker` head — a schedule pointed at a rung, not a preset), `pl_blueprint` and
-                  `pl_environment_analysis` and `pl_spec` (one step each; see WS3b).
+`RunServiceScope` can express a task in BOTH scopes at once, but no board state produces
+one today: an involved service must be a connection neighbour, and only a `service`-type
+frame may declare or be named by a connection, so a frontend frame has no peers in either
+direction. Widening that is a change to the CONNECTION model, not to the condition, and is
+not in this slice; the reduction stays general so it is the one place that would change.
 
-                  **Added:** `pl_complex` — the requirements-review conversation and a `researcher` pass in
-                  front of `pl_build`, for work whose SCOPE is the risky part. It is the one thing no amount of
-                  estimate-gating can add to `pl_full`: an estimator scores the task as written, and a task
-                  written vaguely enough to need that conversation is the one it scores wrong.
+**Retired:** `pl_frontend` (a near-duplicate of the ladder that existed only because
+`tester-ui` could not say "not on this run"), `pl_tech_debt` (the build tail behind an
+`analysis` + `tracker` head — a schedule pointed at a rung, not a preset), `pl_blueprint` and
+`pl_environment_analysis` and `pl_spec` (one step each; see WS3b).
 
-                  **Also:** an interface-mode default (`defaultBuildPipelineId` — basic gets the fixed
-                  `pl_build`, advanced the adaptive `pl_full`), the builder showing per-step conditions in both
-                  the draft chain and the library, and `presentation.internal` keeping the environment analyst
-                  out of the palette now that nothing places it.
+**Added:** `pl_complex` — the requirements-review conversation and a `researcher` pass in
+front of `pl_build`, for work whose SCOPE is the risky part. It is the one thing no amount of
+estimate-gating can add to `pl_full`: an estimator scores the task as written, and a task
+written vaguely enough to need that conversation is the one it scores wrong.
+
+**Also:** an interface-mode default (`defaultBuildPipelineId` — basic gets the fixed
+`pl_build`, advanced the adaptive `pl_full`), the builder showing per-step conditions in both
+the draft chain and the library, and `presentation.internal` keeping the environment analyst
+out of the palette now that nothing places it.
 
 ## Gotchas the first slice surfaced
 
