@@ -695,6 +695,7 @@ export * from './ports/index.js'
 // Agent capabilities — the skills an agent kind applies and the tool servers (MCP) it may call.
 // See `backend/docs/custom-agents.md` → "Capabilities: skills and tools".
 export {
+  type McpCredentialChannel,
   type McpHttpTransport,
   type McpOAuthConfig,
   type McpSecretRef,
@@ -712,14 +713,17 @@ export {
   MCP_SERVER_ID_PATTERN,
   MCP_SUPPORTED_HARNESSES,
   MCP_TOOL_NAME_PATTERN,
+  MCP_TRANSPORT_CREDENTIAL_CHANNEL,
   TOOL_SERVER_BUDGET,
   isAllowedMcpHttpUrl,
   isLoopbackMcpHttpUrl,
   isValidMcpServerId,
   isValidMcpToolName,
+  mcpCredentialChannel,
   mcpHarnessServesTransport,
   mcpServableHarnesses,
   mcpServerSupportsHarness,
+  mcpTransportCarriesCredential,
   toolServerDeclaredBytes,
 } from './domain/agent-capabilities.js'
 

@@ -96,4 +96,8 @@ const UNAVAILABLE_REASONS: Record<
   // The distinction that matters is the operator's, and it is carried by the log line and the
   // boot problem, both of which name the reserved key.
   reserved_secret: 'its credential is not available to this deployment',
+  // Renders as `reserved_secret` does, on the same argument: the agent's disposition is identical,
+  // and the distinction (a credential the platform withholds versus one the declaration cannot
+  // deliver) is the operator's, carried by the log line, the probe and the boot error.
+  unusable_secret: 'its credential is not available to this deployment',
 }
