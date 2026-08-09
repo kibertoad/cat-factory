@@ -193,6 +193,10 @@ export type {
   EnvironmentBackendConfig,
   EnvironmentBackendKind,
   KubernetesEnvironmentConfig,
+  // What it takes to REACH a cluster, as opposed to what it takes to stand an environment up
+  // in one: the reclaim path validates only this, so drift in the provisioning half of a
+  // stored config can never strand a live namespace.
+  KubernetesConnectionConfig,
   KubernetesManifestSource,
   KubernetesUrlSource,
   KubernetesRenderer,
@@ -204,6 +208,7 @@ export type {
   KubernetesProvisionConfig,
   // Cloudflare Workers preview (per-PR Worker, driven over the VCS deployments API).
   CloudflareEnvironmentConfig,
+  CloudflareConnectionConfig,
   // Per-service provision type + per-type infra handlers (the what/where ÷ how split).
   ProvisionType,
   EnvironmentFailureReason,

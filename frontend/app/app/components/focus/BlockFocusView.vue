@@ -124,7 +124,7 @@ function openApprovalFor(approvalId: string) {
           {{ t('focus.typeSubtitle', { type: typeMeta.label }) }}
         </div>
       </div>
-      <UBadge :color="statusMeta.chip as any" variant="subtle" class="ms-2">
+      <UBadge :color="statusMeta.chip" variant="subtle" class="ms-2">
         {{ statusMeta.label }}
       </UBadge>
       <div class="ms-auto flex items-center gap-2">

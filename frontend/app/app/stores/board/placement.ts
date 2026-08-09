@@ -3,8 +3,28 @@ import { useServicesStore } from '~/stores/services'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { createBoardDependencies } from './dependencies'
 import { moveRefusalKey } from './moveRefusal'
+import type { Block } from '~/types/domain'
 import type { BoardWriteContext } from './context'
 import { UNDO_WINDOW_MS } from './context'
+
+/** A field `updateBlock` may patch: the contract's key set, nothing wider. */
+type PatchKey = keyof UpdateBlockInput
+/** The pre-patch values of the fields one call touches, for the rollback. */
+type PatchSnapshot = Partial<Record<PatchKey, unknown>>
+
+/**
+ * View a block through the patch key set, for the optimistic write's snapshot + rollback.
+ *
+ * A plain widening, not an assertion: the rollback is inherently keyed by whatever the caller
+ * put in the patch, so it has to index the block dynamically, and this bounds that indexing to
+ * the contract instead of the `Record<string, unknown>` it used to widen to. Two patch keys
+ * (`customTaskTypeFields` / `builtinTaskTypeFields`) are request-only, since the server folds
+ * them into the block's `taskTypeFields`, so the view is `Partial`: they read as absent going in
+ * and are cleared again by a rollback, which is what the untyped version did.
+ */
+function blockAsPatchable(block: Block): PatchSnapshot {
+  return block
+}
 
 /**
  * The board's placement (drag/drop/reparent) and per-block edit operations — the writes that
@@ -194,10 +214,13 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
     // Snapshot ONLY the fields this patch touches so a rejected write restores them exactly
     // (a patch may set several at once) rather than leaving a stale optimistic value stuck on
     // screen with no feedback — the same rollback contract the other mutations here follow.
-    const prev: Record<string, unknown> = {}
-    const patchRecord = patch as Record<string, unknown>
-    const record = b as unknown as Record<string, unknown>
-    for (const key of Object.keys(patch)) prev[key] = record[key]
+    // `Object.keys` is typed `string[]`, so the key set is narrowed to the patch contract once
+    // here; every read and write below then goes through `PatchKey`, and a key outside the
+    // contract cannot reach the block.
+    const keys = Object.keys(patch) as PatchKey[]
+    const prev: PatchSnapshot = {}
+    const before = blockAsPatchable(b)
+    for (const key of keys) prev[key] = before[key]
     Object.assign(b, patch) // optimistic
     try {
       upsert(await api.updateBlock(useWorkspaceStore().requireId(), id, patch))
@@ -206,10 +229,11 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
       // swaps in a fresh one) while the write was in flight, so `b` can be stale. Only revert
       // fields that still hold OUR optimistic value, so a newer server value that landed
       // mid-flight isn't clobbered by the rollback.
-      const cur = getBlock(id) as unknown as Record<string, unknown> | undefined
-      if (cur) {
-        for (const key of Object.keys(patch)) {
-          if (cur[key] === patchRecord[key]) cur[key] = prev[key]
+      const live = getBlock(id)
+      if (live) {
+        const cur = blockAsPatchable(live)
+        for (const key of keys) {
+          if (cur[key] === patch[key]) cur[key] = prev[key]
         }
       }
       toast.add({

@@ -202,6 +202,45 @@ describe('teardown', () => {
     expect(result.status).toBe('torn_down')
     expect(calls).toHaveLength(0)
   })
+
+  it('marks a preview inactive whose stored config no longer matches the contract', async () => {
+    // Same reason as the case above, from the other direction: a stored `providerConfig` is
+    // re-parsed on the way out, and a `workersSubdomain` that stopped validating would otherwise
+    // refuse the one call teardown makes — which reads none of it.
+    const drifted: EnvironmentManifest = cloudflareConfigToManifest(CONFIG)
+    drifted.providerConfig = { cloudflare: { label: 'preview', workersSubdomain: 'NOT VALID' } }
+    const calls = stubFetch(() => ({ body: {} }))
+    const provider = new CloudflareEnvironmentProvider()
+
+    const result = await provider.teardown({
+      manifest: drifted,
+      externalId: '42',
+      provisionFields: { owner: 'acme', repo: 'widgets' },
+      resolveSecret,
+    })
+
+    expect(result.status).toBe('torn_down')
+    expect(calls[0]).toMatchObject({ method: 'POST', body: { state: 'inactive' } })
+  })
+
+  it('still refuses when the API ROOT is what drifted, rather than posting to the public one', async () => {
+    // The one field teardown reads, and the one with an unsafe default: falling back to
+    // `api.github.com` for a GitHub Enterprise deployment is a wrong-host write.
+    const drifted: EnvironmentManifest = cloudflareConfigToManifest(CONFIG)
+    drifted.providerConfig = { cloudflare: { ...CONFIG, apiBaseUrl: '' } }
+    const calls = stubFetch(() => ({ body: {} }))
+    const provider = new CloudflareEnvironmentProvider()
+
+    await expect(
+      provider.teardown({
+        manifest: drifted,
+        externalId: '42',
+        provisionFields: { owner: 'acme', repo: 'widgets' },
+        resolveSecret,
+      }),
+    ).rejects.toThrow(/apiBaseUrl/)
+    expect(calls).toHaveLength(0)
+  })
 })
 
 describe('validateRepo', () => {

@@ -32,7 +32,7 @@ export const eksRunnerBackend: RunnerBackendProvider = {
     skeleton: () => ({ kind: 'eks', eks: {} }) as RunnerBackendConfig,
     valuesFromConfig: (config) =>
       'eks' in config
-        ? kubernetesLogic.flattenConfigValues(config.eks as unknown as Record<string, unknown>, [
+        ? kubernetesLogic.flattenConfigValues(config.eks, [
             ...kubernetesLogic.KUBERNETES_RUNNER_FORM_FIELDS,
             ...EKS_CLUSTER_FORM_FIELDS,
           ])

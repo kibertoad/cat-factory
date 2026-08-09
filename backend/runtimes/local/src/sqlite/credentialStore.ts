@@ -16,7 +16,7 @@ import type {
   SubscriptionVendor,
 } from '@cat-factory/kernel'
 import type { LocalRunner } from '@cat-factory/contracts'
-import { openSqliteDb } from './db.js'
+import { openSqliteDb, queryAll, queryOne } from './db.js'
 
 // The mothership-mode LOCAL credential store.
 //
@@ -195,15 +195,15 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
     scopeId: string,
     provider?: ApiKeyProvider,
   ): Promise<ProviderApiKeyRecord[]> {
-    const rows = this.db
-      .prepare(
-        `SELECT ${API_KEY_COLUMNS} FROM provider_api_keys
+    const rows = queryAll<ApiKeyRow>(
+      this.db,
+      `SELECT ${API_KEY_COLUMNS} FROM provider_api_keys
          WHERE scope = ? AND scope_id = ?
            ${provider ? 'AND provider = ?' : ''}
            AND deleted_at IS NULL
          ORDER BY created_at ASC`,
-      )
-      .all(...(provider ? [scope, scopeId, provider] : [scope, scopeId])) as unknown as ApiKeyRow[]
+      ...(provider ? [scope, scopeId, provider] : [scope, scopeId]),
+    )
     return rows.map(apiKeyRowToRecord)
   }
 
@@ -213,25 +213,26 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
   ): Promise<ProviderApiKeyRecord[]> {
     if (scopes.length === 0) return []
     const match = scopeMatch(scopes)
-    const rows = this.db
-      .prepare(
-        `SELECT ${API_KEY_COLUMNS} FROM provider_api_keys
+    const rows = queryAll<ApiKeyRow>(
+      this.db,
+      `SELECT ${API_KEY_COLUMNS} FROM provider_api_keys
          WHERE ${match.sql} AND provider = ? AND deleted_at IS NULL AND enabled = 1
          ORDER BY created_at ASC`,
-      )
-      .all(...match.params, provider) as unknown as ApiKeyRow[]
+      ...match.params,
+      provider,
+    )
     return rows.map(apiKeyRowToRecord)
   }
 
   async listConfiguredProviders(scopes: ApiKeyScopeRef[]): Promise<ApiKeyProvider[]> {
     if (scopes.length === 0) return []
     const match = scopeMatch(scopes)
-    const rows = this.db
-      .prepare(
-        `SELECT DISTINCT provider FROM provider_api_keys
+    const rows = queryAll<{ provider: string }>(
+      this.db,
+      `SELECT DISTINCT provider FROM provider_api_keys
          WHERE ${match.sql} AND deleted_at IS NULL AND enabled = 1`,
-      )
-      .all(...match.params) as unknown as { provider: string }[]
+      ...match.params,
+    )
     return rows.map((r) => r.provider as ApiKeyProvider)
   }
 
@@ -240,13 +241,15 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
     scopeId: string,
     id: string,
   ): Promise<ProviderApiKeyRecord | null> {
-    const row = this.db
-      .prepare(
-        `SELECT ${API_KEY_COLUMNS} FROM provider_api_keys
+    const row = queryOne<ApiKeyRow>(
+      this.db,
+      `SELECT ${API_KEY_COLUMNS} FROM provider_api_keys
          WHERE id = ? AND scope = ? AND scope_id = ? AND deleted_at IS NULL
          LIMIT 1`,
-      )
-      .get(id, scope, scopeId) as unknown as ApiKeyRow | undefined
+      id,
+      scope,
+      scopeId,
+    )
     return row ? apiKeyRowToRecord(row) : null
   }
 
@@ -295,20 +298,25 @@ class SqliteProviderApiKeyRepository implements ProviderApiKeyRepository {
     // interleaving), so no `FOR UPDATE` analogue is needed.
     const usage = `CASE WHEN window_started_at IS NULL OR ? - window_started_at >= ?
                         THEN 0 ELSE input_tokens + output_tokens END`
-    const picked = this.db
-      .prepare(
-        `SELECT id FROM provider_api_keys
+    const picked = queryOne<{ id: string }>(
+      this.db,
+      `SELECT id FROM provider_api_keys
          WHERE ${match.sql} AND provider = ? AND deleted_at IS NULL AND enabled = 1
          ORDER BY is_default DESC, (${usage}) ASC, last_used_at ASC NULLS FIRST, created_at ASC
          LIMIT 1`,
-      )
-      .get(...match.params, provider, now, windowMs) as { id: string } | undefined
+      ...match.params,
+      provider,
+      now,
+      windowMs,
+    )
     const id = picked?.id
     if (!id) return null
     this.db.prepare('UPDATE provider_api_keys SET last_used_at = ? WHERE id = ?').run(now, id)
-    const row = this.db
-      .prepare(`SELECT ${API_KEY_COLUMNS} FROM provider_api_keys WHERE id = ?`)
-      .get(id) as unknown as ApiKeyRow | undefined
+    const row = queryOne<ApiKeyRow>(
+      this.db,
+      `SELECT ${API_KEY_COLUMNS} FROM provider_api_keys WHERE id = ?`,
+      id,
+    )
     return row ? apiKeyRowToRecord(row) : null
   }
 
@@ -431,12 +439,12 @@ class SqliteLocalModelEndpointRepository implements LocalModelEndpointRepository
   constructor(private readonly db: DatabaseSync) {}
 
   async listByUser(userId: string): Promise<LocalModelEndpointRecord[]> {
-    const rows = this.db
-      .prepare(
-        `SELECT ${ENDPOINT_COLUMNS} FROM local_model_endpoints
+    const rows = queryAll<LocalEndpointRow>(
+      this.db,
+      `SELECT ${ENDPOINT_COLUMNS} FROM local_model_endpoints
          WHERE user_id = ? ORDER BY created_at ASC`,
-      )
-      .all(userId) as unknown as LocalEndpointRow[]
+      userId,
+    )
     return rows.map(endpointRowToRecord)
   }
 
@@ -444,12 +452,13 @@ class SqliteLocalModelEndpointRepository implements LocalModelEndpointRepository
     userId: string,
     provider: LocalRunner,
   ): Promise<LocalModelEndpointRecord | null> {
-    const row = this.db
-      .prepare(
-        `SELECT ${ENDPOINT_COLUMNS} FROM local_model_endpoints
+    const row = queryOne<LocalEndpointRow>(
+      this.db,
+      `SELECT ${ENDPOINT_COLUMNS} FROM local_model_endpoints
          WHERE user_id = ? AND provider = ? LIMIT 1`,
-      )
-      .get(userId, provider) as unknown as LocalEndpointRow | undefined
+      userId,
+      provider,
+    )
     return row ? endpointRowToRecord(row) : null
   }
 
@@ -543,24 +552,26 @@ class SqliteProviderSubscriptionTokenRepository implements ProviderSubscriptionT
     workspaceId: string,
     vendor: SubscriptionVendor,
   ): Promise<ProviderSubscriptionTokenRecord[]> {
-    const rows = this.db
-      .prepare(
-        `SELECT ${SUBSCRIPTION_TOKEN_COLUMNS} FROM provider_subscription_tokens
+    const rows = queryAll<SubscriptionTokenRow>(
+      this.db,
+      `SELECT ${SUBSCRIPTION_TOKEN_COLUMNS} FROM provider_subscription_tokens
          WHERE workspace_id = ? AND vendor = ? AND deleted_at IS NULL
          ORDER BY created_at ASC`,
-      )
-      .all(workspaceId, vendor) as unknown as SubscriptionTokenRow[]
+      workspaceId,
+      vendor,
+    )
     return rows.map(subscriptionTokenRowToRecord)
   }
 
   async getById(workspaceId: string, id: string): Promise<ProviderSubscriptionTokenRecord | null> {
-    const row = this.db
-      .prepare(
-        `SELECT ${SUBSCRIPTION_TOKEN_COLUMNS} FROM provider_subscription_tokens
+    const row = queryOne<SubscriptionTokenRow>(
+      this.db,
+      `SELECT ${SUBSCRIPTION_TOKEN_COLUMNS} FROM provider_subscription_tokens
          WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL
          LIMIT 1`,
-      )
-      .get(id, workspaceId) as unknown as SubscriptionTokenRow | undefined
+      id,
+      workspaceId,
+    )
     return row ? subscriptionTokenRowToRecord(row) : null
   }
 
@@ -719,24 +730,25 @@ class SqlitePersonalSubscriptionRepository implements PersonalSubscriptionReposi
     userId: string,
     vendor: SubscriptionVendor,
   ): Promise<PersonalSubscriptionRecord | null> {
-    const row = this.db
-      .prepare(
-        `SELECT ${PERSONAL_SUBSCRIPTION_COLUMNS} FROM personal_subscriptions
+    const row = queryOne<PersonalSubscriptionRow>(
+      this.db,
+      `SELECT ${PERSONAL_SUBSCRIPTION_COLUMNS} FROM personal_subscriptions
          WHERE user_id = ? AND vendor = ? AND deleted_at IS NULL
          LIMIT 1`,
-      )
-      .get(userId, vendor) as unknown as PersonalSubscriptionRow | undefined
+      userId,
+      vendor,
+    )
     return row ? personalSubscriptionRowToRecord(row) : null
   }
 
   async listByUser(userId: string): Promise<PersonalSubscriptionRecord[]> {
-    const rows = this.db
-      .prepare(
-        `SELECT ${PERSONAL_SUBSCRIPTION_COLUMNS} FROM personal_subscriptions
+    const rows = queryAll<PersonalSubscriptionRow>(
+      this.db,
+      `SELECT ${PERSONAL_SUBSCRIPTION_COLUMNS} FROM personal_subscriptions
          WHERE user_id = ? AND deleted_at IS NULL
          ORDER BY created_at ASC`,
-      )
-      .all(userId) as unknown as PersonalSubscriptionRow[]
+      userId,
+    )
     return rows.map(personalSubscriptionRowToRecord)
   }
 
@@ -792,14 +804,15 @@ class SqlitePersonalSubscriptionRepository implements PersonalSubscriptionReposi
   }
 
   async listExpiring(now: number, before: number): Promise<PersonalSubscriptionRecord[]> {
-    const rows = this.db
-      .prepare(
-        `SELECT ${PERSONAL_SUBSCRIPTION_COLUMNS} FROM personal_subscriptions
+    const rows = queryAll<PersonalSubscriptionRow>(
+      this.db,
+      `SELECT ${PERSONAL_SUBSCRIPTION_COLUMNS} FROM personal_subscriptions
          WHERE deleted_at IS NULL AND expires_at IS NOT NULL
            AND expires_at >= ? AND expires_at <= ?
          ORDER BY expires_at ASC`,
-      )
-      .all(now, before) as unknown as PersonalSubscriptionRow[]
+      now,
+      before,
+    )
     return rows.map(personalSubscriptionRowToRecord)
   }
 }
@@ -852,13 +865,16 @@ class SqliteSubscriptionActivationRepository implements SubscriptionActivationRe
     vendor: SubscriptionVendor,
     now: number,
   ): Promise<SubscriptionActivationRecord | null> {
-    const row = this.db
-      .prepare(
-        `SELECT ${SUBSCRIPTION_ACTIVATION_COLUMNS} FROM subscription_activations
+    const row = queryOne<SubscriptionActivationRow>(
+      this.db,
+      `SELECT ${SUBSCRIPTION_ACTIVATION_COLUMNS} FROM subscription_activations
          WHERE execution_id = ? AND user_id = ? AND vendor = ? AND expires_at > ?
          LIMIT 1`,
-      )
-      .get(executionId, userId, vendor, now) as unknown as SubscriptionActivationRow | undefined
+      executionId,
+      userId,
+      vendor,
+      now,
+    )
     return row ? subscriptionActivationRowToRecord(row) : null
   }
 

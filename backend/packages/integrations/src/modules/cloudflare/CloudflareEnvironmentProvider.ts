@@ -1,5 +1,6 @@
 import { CLOUDFLARE_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 import {
+  type CloudflareConnectionConfig,
   type CloudflareEnvironmentConfig,
   type ConnectionTestResult,
   type EnvironmentConnectionTestRequest,
@@ -24,6 +25,7 @@ import {
   cloudflareConfigToManifest,
   mapDeploymentState,
   parseCloudflareEnvConfig,
+  parseCloudflareEnvConnection,
   provisionFieldsFor,
   resolveCloudflareTarget,
   vcsApiBase,
@@ -206,7 +208,9 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
   }
 
   async teardown(req: EnvironmentTeardownRequest): Promise<{ status: 'torn_down' }> {
-    const config = parseCloudflareEnvConfig(req.manifest)
+    // The CONNECTION, not the full config: marking a deployment inactive needs the API root and
+    // nothing the rest of the config describes (see {@link parseCloudflareEnvConnection}).
+    const config = parseCloudflareEnvConnection(req.manifest)
     const { owner, repo } = req.provisionFields
     // Nothing addressable to tear down is SUCCESS, not an error: a provision that never got
     // a deployment id created no cloud resources, and reporting failure here would leave the
@@ -362,7 +366,7 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
 
   /** One SSRF-guarded, authenticated JSON call against the VCS API. */
   private async request<T>(
-    config: CloudflareEnvironmentConfig,
+    config: CloudflareConnectionConfig,
     method: 'GET' | 'POST',
     path: string,
     resolveSecret: SecretResolver,

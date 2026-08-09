@@ -7,15 +7,12 @@ import type {
   InitiativeQa,
   InitiativeStatus,
 } from '~/types/domain'
+import type { BadgeColor } from '~/utils/badge'
 
 // Shared initiative presentation vocabulary, so the board card, the inspector body and
 // the tracker window render statuses/progress from ONE source. The exhaustive
 // `Record<Enum, …>` maps keep the tier-2 typecheck guard live (a new status without
 // a label/chip fails the build) without triplicating it across the components.
-
-/** Nuxt UI badge/chip colour names — mirrors `UBadge`'s `color` prop union, so a chip map
- *  types its values against it and the `:color` binding needs no cast. */
-type BadgeColor = 'error' | 'info' | 'primary' | 'secondary' | 'success' | 'warning' | 'neutral'
 
 /** Initiative lifecycle status → i18n label key. */
 export const INITIATIVE_STATUS_LABEL_KEYS: Record<InitiativeStatus, string> = {

@@ -17,6 +17,7 @@ import { prReviewPhase } from '~/utils/prReviewProgress'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
 import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
+import type { BadgeColor } from '~/utils/badge'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
 const emit = defineEmits<{
@@ -159,15 +160,15 @@ const STATE_META = computed<Record<AgentState, { label: string; color: string; i
 )
 
 /** Visual language for the pipeline instance as a whole. */
-const STATUS_META = computed<Record<ExecutionInstance['status'], { label: string; chip: string }>>(
-  () => ({
-    running: { label: t('pipeline.progress.status.running'), chip: 'primary' },
-    blocked: { label: t('pipeline.progress.status.blocked'), chip: 'warning' },
-    paused: { label: t('pipeline.progress.status.paused'), chip: 'neutral' },
-    done: { label: t('pipeline.progress.status.done'), chip: 'success' },
-    failed: { label: t('pipeline.progress.status.failed'), chip: 'error' },
-  }),
-)
+const STATUS_META = computed<
+  Record<ExecutionInstance['status'], { label: string; chip: BadgeColor }>
+>(() => ({
+  running: { label: t('pipeline.progress.status.running'), chip: 'primary' },
+  blocked: { label: t('pipeline.progress.status.blocked'), chip: 'warning' },
+  paused: { label: t('pipeline.progress.status.paused'), chip: 'neutral' },
+  done: { label: t('pipeline.progress.status.done'), chip: 'success' },
+  failed: { label: t('pipeline.progress.status.failed'), chip: 'error' },
+}))
 
 const steps = computed(() => props.instance.steps)
 const total = computed(() => steps.value.length)
@@ -266,7 +267,7 @@ const ITEM_ICON: Record<string, string> = {
     <!-- summary -->
     <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
       <div class="flex flex-wrap items-center gap-3">
-        <UBadge :color="statusMeta.chip as any" variant="subtle">{{ statusMeta.label }}</UBadge>
+        <UBadge :color="statusMeta.chip" variant="subtle">{{ statusMeta.label }}</UBadge>
         <span class="text-sm text-slate-300">
           <i18n-t keypath="pipeline.progress.agentsComplete" tag="span" scope="global">
             <template #completed>
