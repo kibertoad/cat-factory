@@ -129,7 +129,9 @@ describe('setupK3s', () => {
     expect(out).not.toContain(K3S_INSTALL_COMMAND) // curl | sh can't run on Windows
     expect(out).toContain('only on Linux')
     expect(out).toContain('k3d cluster create cat-factory')
-    expect(out).toContain('local-kubernetes-setup-windows.md')
+    // The install steps are the website's: a reader who hit this message has no checkout to
+    // read a repo path from.
+    expect(out).toContain('catfactory.ai/deploy/kubernetes-windows.html')
   })
 
   it('steers to `brew install k3d` on macOS', async () => {

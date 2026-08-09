@@ -335,8 +335,7 @@ wired in `container.ts`. The full breakdown is in the
 **Using a capability is documented on [catfactory.ai](https://www.catfactory.ai/), not here.** This
 repository documents how each one is BUILT. The rule is the reader: anyone who can act without
 cloning this repo reads the website, and a doc here links it rather than restating it
-([`docs/initiatives/documentation-revamp.md`](./docs/initiatives/documentation-revamp.md) is the
-model and its checklist).
+([ADR 0051](./backend/docs/adr/0051-documentation-repo-website-split.md) is the model).
 
 | Capability                       | Using it                                                                                                                                                                             | How it is built                                                                                                                                                                      |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -367,8 +366,8 @@ is the repository's own. Ownership follows the reader: the website owns everythi
 operator, user or public-surface integrator can act on without a checkout, and the docs here own
 internal design plus this repository's own process. Where a topic serves both, it is split by DEPTH
 and never mirrored, so a doc here that needs user-level context links the website section rather
-than restating it. The model, its named exceptions and the remaining slices:
-[`docs/initiatives/documentation-revamp.md`](./docs/initiatives/documentation-revamp.md).
+than restating it. The model, its named exceptions and the findings behind them:
+[ADR 0051](./backend/docs/adr/0051-documentation-repo-website-split.md).
 
 The repository docs come in four kinds, and it matters which one you are reading:
 

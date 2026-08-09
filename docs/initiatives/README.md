@@ -120,6 +120,12 @@ surface built on those seams is still open, as
 ### Engineering hygiene
 
 - [Contracts parse-boundary test backfill](./contracts-test-backfill.md)
-- [Documentation revamp: the repo ⇄ website split](./documentation-revamp.md)
 - [Ratchet down oxlint complexity and size ceilings](./lint-complexity-size-ratchet.md)
 - [System audit: data lifecycle, runtime parity, robustness](./system-audit-improvements.md)
+
+The documentation revamp closed with its 23rd item and converted to
+[ADR 0051](../../backend/docs/adr/0051-documentation-repo-website-split.md), which holds the
+ownership rule (the website owns what a reader can act on with no checkout; a doc here keeps the
+internal design plus a link) and the findings the execution produced. The site's own restructure
+tracker stays under `planning/` in
+[kibertoad/cat-factory-website](https://github.com/kibertoad/cat-factory-website).
