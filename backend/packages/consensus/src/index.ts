@@ -7,6 +7,7 @@ export {
   type ConsensusAgentExecutorDependencies,
 } from './ConsensusAgentExecutor.js'
 export { decideConsensusMode, type ConsensusMode } from './gating.js'
+export { panelToolServerCeiling, type PanelToolServerCeiling } from './toolServers.js'
 export {
   SPECIALIST_PANEL_CAPABLE,
   DEBATE_CAPABLE,

@@ -1541,6 +1541,7 @@
           "oauthNotConnected": "was not available: nobody has connected this board to it yet.",
           "oauthTokenFailed": "was not available: the connection stopped producing an access token.",
           "overBudget": "was not available: this agent declares more tool servers than one run carries.",
+          "consensusPanel": "was not available: this step ran as a consensus panel, and a panel has no agent runtime to connect a tool server to.",
           "unknown": "was not available ({reason})."
         },
         "remedy": {
@@ -1551,7 +1552,8 @@
           "unusableSecret": "Fix the declaration in the deployment's code: a remote server's credential rides a header, and a local one is injected into the server's own process.",
           "oauthNotConnected": "Connect this board to it from the Infrastructure window. A deployment with no ENCRYPTION_KEY has nowhere to keep a grant, so an operator has to set that first.",
           "oauthTokenFailed": "Reconnect it from the Infrastructure window, or wait out the vendor's outage.",
-          "overBudget": "Trim what the agent declares, so one run can carry all of it."
+          "overBudget": "Trim what the agent declares, so one run can carry all of it.",
+          "consensusPanel": "Turn consensus off for this step if it needs the tool, or accept that the panel judges without it. Nothing about the server has to change."
         },
         "observed": {
           "ready": "started",

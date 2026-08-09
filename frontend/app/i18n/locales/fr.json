@@ -1450,6 +1450,7 @@
           "oauthNotConnected": "n'était pas disponible : personne n'a encore connecté ce tableau à ce serveur.",
           "oauthTokenFailed": "n'était pas disponible : la connexion ne produit plus de jeton d'accès.",
           "overBudget": "n'était pas disponible : cet agent déclare plus de serveurs d'outils qu'une exécution n'en transporte.",
+          "consensusPanel": "n'était pas disponible : cette étape s'est exécutée comme un panel de consensus, et un panel n'a pas d'environnement d'agent auquel rattacher un serveur d'outils.",
           "unknown": "n'était pas disponible ({reason})."
         },
         "remedy": {
@@ -1460,7 +1461,8 @@
           "unusableSecret": "Corrigez la déclaration dans le code du déploiement : l’identifiant d’un serveur distant voyage dans un en-tête, celui d’un serveur local est injecté dans son processus.",
           "oauthNotConnected": "Connectez ce tableau à ce serveur depuis la fenêtre Infrastructure. Un déploiement sans ENCRYPTION_KEY n’a nulle part où conserver une autorisation : un opérateur doit d’abord la définir.",
           "oauthTokenFailed": "Reconnectez-le depuis la fenêtre Infrastructure, ou attendez la fin de la panne du fournisseur.",
-          "overBudget": "Réduisez ce que l’agent déclare, pour qu’une exécution puisse tout transporter."
+          "overBudget": "Réduisez ce que l’agent déclare, pour qu’une exécution puisse tout transporter.",
+          "consensusPanel": "Désactivez le consensus pour cette étape si elle a besoin de l'outil, ou acceptez que le panel juge sans lui. Rien n'est à changer côté serveur."
         },
         "observed": {
           "ready": "démarré",

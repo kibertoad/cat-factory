@@ -1450,6 +1450,7 @@
           "oauthNotConnected": "kullanılamadı: bu panoyu henüz kimse ona bağlamadı.",
           "oauthTokenFailed": "kullanılamadı: bağlantı artık erişim jetonu üretmiyor.",
           "overBudget": "kullanılamadı: bu ajan tek bir çalıştırmanın taşıdığından fazla araç sunucusu bildiriyor.",
+          "consensusPanel": "kullanılamadı: bu adım bir uzlaşı paneli olarak çalıştı ve panelin bir araç sunucusunu bağlayacağı ajan çalışma ortamı yok.",
           "unknown": "kullanılamadı ({reason})."
         },
         "remedy": {
@@ -1460,7 +1461,8 @@
           "unusableSecret": "Kurulumun kodundaki bildirimi düzeltin: uzak bir sunucunun kimlik bilgisi bir başlıkta taşınır, yerel olanınki sunucunun sürecine enjekte edilir.",
           "oauthNotConnected": "Bu panoyu Altyapı penceresinden ona bağlayın. ENCRYPTION_KEY olmayan bir dağıtımda izni saklayacak bir yer yoktur, bu yüzden önce bir operatörün bunu ayarlaması gerekir.",
           "oauthTokenFailed": "Altyapı penceresinden yeniden bağlayın ya da sağlayıcının kesintisinin geçmesini bekleyin.",
-          "overBudget": "Tek bir çalıştırma hepsini taşıyabilsin diye ajanın bildirdiklerini kısaltın."
+          "overBudget": "Tek bir çalıştırma hepsini taşıyabilsin diye ajanın bildirdiklerini kısaltın.",
+          "consensusPanel": "Adımın bu araca ihtiyacı varsa uzlaşıyı kapatın, ya da panelin araçsız karar vermesini kabul edin. Sunucuda değiştirilecek bir şey yok."
         },
         "observed": {
           "ready": "başlatıldı",

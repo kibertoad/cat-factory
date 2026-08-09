@@ -269,6 +269,96 @@ describe('ConsensusAgentExecutor', () => {
     expect(kept.every((r) => r.provider === 'anthropic' && r.harness === 'claude-code')).toBe(true)
   })
 
+  it('states the tool servers the panel withheld, in the participants’ prompt and on the record', async () => {
+    // The finding this closes: `architect` runs in a container in its standard mode, so boot
+    // validation has nothing to warn about, and the container executor (which owns the whole
+    // unavailability vocabulary) is not on this path. Without this the step silently loses the
+    // server AND records nothing, reading exactly like a kind that declared none.
+    const registry = defaultAgentKindRegistry()
+    registerConsensusTraits(registry)
+    registry.registerToolServer({
+      id: 'issues',
+      label: 'Issue tracker',
+      transport: { kind: 'stdio', command: 'npx', args: ['-y', 'issue-mcp'] },
+    })
+    registry.assignToolServers('architect', ['issues'])
+    const systems: string[] = []
+    const exec = new ConsensusAgentExecutor({
+      ...baseDeps,
+      agentKindRegistry: registry,
+      generate: async (args) => {
+        systems.push(args.system)
+        return fakeGenerate(args)
+      },
+    })
+
+    const context = makeContext({
+      consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+    })
+    await exec.run(context)
+
+    expect(await exec.previewToolServers(context)).toEqual({
+      wired: [],
+      unavailable: [{ id: 'issues', label: 'Issue tracker', reason: 'consensus_panel' }],
+    })
+    // Every PARTICIPANT is told, not just one: each is a separate model call planning its own work
+    // around the tools its instructions name.
+    const participantSystems = systems.filter((s) => !s.startsWith('You are a neutral synthesizer'))
+    expect(participantSystems).toHaveLength(2)
+    expect(participantSystems.every((s) => s.includes('Issue tracker'))).toBe(true)
+    // After the surface statement, which is itself appended after any workspace prompt override.
+    expect(
+      participantSystems.every(
+        (s) => s.indexOf('## Tool servers') > s.indexOf('SURFACE FOR THIS RUN'),
+      ),
+    ).toBe(true)
+  })
+
+  it('reports no tool-server resolution when the diverted kind declared none', async () => {
+    const exec = new ConsensusAgentExecutor(baseDeps)
+    const context = makeContext({
+      consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+    })
+    expect(await exec.previewToolServers(context)).toBeUndefined()
+  })
+
+  // The whole reason the ceiling is a PREVIEW rather than a field on the result: a reader needs to
+  // know what a step could not reach most on the runs that failed, and a failed panel returns no
+  // result to carry it.
+  it('previews the ceiling for a panel that then throws', async () => {
+    const registry = defaultAgentKindRegistry()
+    registerConsensusTraits(registry)
+    registry.registerToolServer({
+      id: 'issues',
+      label: 'Issue tracker',
+      transport: { kind: 'stdio', command: 'npx', args: ['-y', 'issue-mcp'] },
+    })
+    registry.assignToolServers('architect', ['issues'])
+    const exec = new ConsensusAgentExecutor({
+      ...baseDeps,
+      agentKindRegistry: registry,
+      generate: async () => {
+        throw new Error('participant model unavailable')
+      },
+    })
+    const context = makeContext({
+      consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+    })
+
+    expect(await exec.previewToolServers(context)).toEqual({
+      wired: [],
+      unavailable: [{ id: 'issues', label: 'Issue tracker', reason: 'consensus_panel' }],
+    })
+    await expect(exec.run(context)).rejects.toThrow('participant model unavailable')
+  })
+
+  // A non-diverted step is the delegated path: the ceiling is a fact about the PANEL, so a step the
+  // wrapped executor runs must answer whatever that executor answers (nothing, for the inline one).
+  it('delegates the preview when consensus is not active', async () => {
+    const exec = new ConsensusAgentExecutor(baseDeps)
+    expect(await exec.previewToolServers(makeContext())).toBeUndefined()
+  })
+
   it('runsAsync is false while consensus is active, delegated otherwise', () => {
     const exec = new ConsensusAgentExecutor(baseDeps)
     expect(

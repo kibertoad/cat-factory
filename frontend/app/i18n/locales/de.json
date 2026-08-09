@@ -1997,6 +1997,7 @@
           "oauthNotConnected": "war nicht verfügbar: dieses Board wurde noch nicht damit verbunden.",
           "oauthTokenFailed": "war nicht verfügbar: die Verbindung liefert kein Zugriffstoken mehr.",
           "overBudget": "war nicht verfügbar: dieser Agent deklariert mehr Tool-Server, als ein Lauf mitführt.",
+          "consensusPanel": "war nicht verfügbar: dieser Schritt lief als Konsens-Panel, und ein Panel hat keine Agentenlaufzeit, an die sich ein Tool-Server anschließen ließe.",
           "unknown": "war nicht verfügbar ({reason})."
         },
         "remedy": {
@@ -2007,7 +2008,8 @@
           "unusableSecret": "Korrigiere die Deklaration im Code der Installation: Die Zugangsdaten eines entfernten Servers reisen in einem Header, die eines lokalen werden in den Serverprozess injiziert.",
           "oauthNotConnected": "Verbinden Sie dieses Board im Infrastruktur-Fenster damit. Ein Deployment ohne ENCRYPTION_KEY hat keinen Ort für eine Berechtigung, das muss ein Betreiber also zuerst setzen.",
           "oauthTokenFailed": "Verbinden Sie es im Infrastruktur-Fenster neu, oder warten Sie die Störung des Anbieters ab.",
-          "overBudget": "Kürzen Sie, was der Agent deklariert, damit ein Lauf alles mitführen kann."
+          "overBudget": "Kürzen Sie, was der Agent deklariert, damit ein Lauf alles mitführen kann.",
+          "consensusPanel": "Schalten Sie Konsens für diesen Schritt ab, wenn er das Tool braucht, oder nehmen Sie in Kauf, dass das Panel ohne es urteilt. Am Server selbst muss sich nichts ändern."
         },
         "observed": {
           "ready": "gestartet",
