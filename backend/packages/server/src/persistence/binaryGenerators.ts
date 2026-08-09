@@ -1,4 +1,4 @@
-import type { ApiContractDocument } from '@cat-factory/contracts'
+import type { ApiContractDocument, BinaryGeneratorAccepts } from '@cat-factory/contracts'
 import type { BinaryGeneratorSource, BinaryGeneratorView } from '@cat-factory/kernel'
 import { UnavailableError, describeError } from '@cat-factory/kernel'
 
@@ -184,6 +184,19 @@ export class HttpBinaryGeneratorSource implements BinaryGeneratorSource {
  * older mothership, and the same one that lets every integration registered before the axis
  * existed keep running. A capabilities key that is PRESENT and not an array is a wrong shape like
  * any other, so it is refused here rather than quietly flattened into "declared none".
+ *
+ * `accepts` is the same case one axis finer, and it needs no fill: the view carries it OPTIONALLY,
+ * so a mothership predating the value axis serves nothing and every option is judged exactly as it
+ * was before the field existed. Only its SHAPE is checked, because a present non-object would reach
+ * the value rule as a property read on the wrong kind of value, which is the unreadable reply
+ * escaping as a wrong verdict rather than as the one `UnavailableError` this class promises. Its
+ * MEMBERS are checked to the same depth as the sibling list fields above and for the same reason:
+ * every reader of a set maps or joins it, so a member that is not an array escapes as a `TypeError`
+ * out of the brief or the coverage rule rather than as this class's one refusal. Their CONTENTS are
+ * not re-validated, for the reason nothing else here is: the mothership boot-checked the definition
+ * they came from. An UNKNOWN member is left alone rather than refused, which is the same version
+ * tolerance absence gets one line up: a mothership one build ahead may serve a value option this
+ * node has no table entry for, and nothing here reads a key it does not know.
  */
 type ServedGeneratorView = Omit<BinaryGeneratorView, 'capabilities'> &
   Partial<Pick<BinaryGeneratorView, 'capabilities'>>
@@ -196,7 +209,27 @@ function isGeneratorView(value: unknown): value is ServedGeneratorView {
     Array.isArray(view.modalities) &&
     Array.isArray(view.mediaTypes) &&
     Array.isArray(view.credentials) &&
-    (view.capabilities === undefined || Array.isArray(view.capabilities))
+    (view.capabilities === undefined || Array.isArray(view.capabilities)) &&
+    isServedAccepts(view.accepts)
+  )
+}
+
+/**
+ * The keys of `accepts` this build reads, named here rather than inferred, so the guard's depth is
+ * a decision rather than a side effect of whichever member a reader happened to touch.
+ */
+const ACCEPTS_MEMBERS = [
+  'aspectRatios',
+  'outputSizes',
+  'upscaleFactors',
+] as const satisfies readonly (keyof BinaryGeneratorAccepts)[]
+
+function isServedAccepts(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const accepts = value as Record<string, unknown>
+  return ACCEPTS_MEMBERS.every(
+    (member) => accepts[member] === undefined || Array.isArray(accepts[member]),
   )
 }
 

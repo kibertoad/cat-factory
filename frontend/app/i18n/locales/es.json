@@ -1450,6 +1450,7 @@
           "oauthNotConnected": "no estuvo disponible: nadie ha conectado este tablero con él todavía.",
           "oauthTokenFailed": "no estuvo disponible: la conexión dejó de producir un token de acceso.",
           "overBudget": "no estuvo disponible: este agente declara más servidores de los que lleva una ejecución.",
+          "consensusPanel": "no estuvo disponible: este paso se ejecutó como un panel de consenso, y un panel no tiene entorno de agente al que conectar un servidor de herramientas.",
           "unknown": "no estuvo disponible ({reason})."
         },
         "remedy": {
@@ -1460,7 +1461,8 @@
           "unusableSecret": "Corrige la declaración en el código de la instalación: la credencial de un servidor remoto viaja en una cabecera y la de uno local se inyecta en el proceso del servidor.",
           "oauthNotConnected": "Conecta este tablero con él desde la ventana de Infraestructura. Un despliegue sin ENCRYPTION_KEY no tiene dónde guardar una concesión, así que un operador debe configurarla primero.",
           "oauthTokenFailed": "Vuelve a conectarlo desde la ventana de Infraestructura, o espera a que pase la caída del proveedor.",
-          "overBudget": "Recorta lo que declara el agente, para que una ejecución pueda llevarlo todo."
+          "overBudget": "Recorta lo que declara el agente, para que una ejecución pueda llevarlo todo.",
+          "consensusPanel": "Desactiva el consenso en este paso si necesita la herramienta, o acepta que el panel juzgue sin ella. No hay que cambiar nada del servidor."
         },
         "observed": {
           "ready": "iniciado",
@@ -4802,6 +4804,9 @@
       "binaryCapabilityUnknown": "{capability} (una capacidad que esta instalación no define)",
       "binaryCapabilityUnsupported": "Ninguna integración seleccionada admite {capabilities}, que las opciones de generación de este paso solicitan. Quita la opción o selecciona una integración que declare la capacidad.",
       "binaryCapabilityUnverifiable": "Ninguna integración seleccionada declara admitir {capabilities}, pero una de ellas no declara capacidad alguna, así que no se pudo comprobar. El paso arranca igualmente; confírmalo en la API de la integración.",
+      "binaryOptionValueUnaccepted": "Ninguna integración seleccionada acepta {option} de {requested}. Entre todas aceptan: {accepted}. Pide uno de esos valores o selecciona una integración que genere este.",
+      "binaryOptionValuePartial": "{generators} no acepta {option} de {requested}, pero otra integración seleccionada sí. El paso se inicia igualmente: envía esta opción solo a las integraciones que la aceptan, o quita las que no.",
+      "binaryOptionValueUnverifiable": "Una integración seleccionada indica los valores que acepta y no acepta lo que pide este paso ({options}), mientras que otra no indica ninguno, así que no se pudo comprobar. El paso se inicia igualmente y solo algunas de tus integraciones lo atenderán.",
       "binaryReferenceImages": "Imágenes de referencia",
       "binaryReferenceImagesPlaceholder": "rol{'|'}ubicación{'|'}servicio, una por línea",
       "binaryReferenceImagesUnusable": "No se guardaron como referencia: {entries}. Cada línea debe ser rol{'|'}ubicación, con el rol style, subject, composition o base.",
