@@ -1,5 +1,13 @@
 # @cat-factory/workspaces
 
+## 0.27.1
+
+### Patch Changes
+
+- Updated dependencies [bf473bd]
+  - @cat-factory/contracts@0.287.0
+  - @cat-factory/kernel@0.281.1
+
 ## 0.27.0
 
 ### Minor Changes
