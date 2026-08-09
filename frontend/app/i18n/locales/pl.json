@@ -4803,6 +4803,8 @@
       "binaryOutputSize": "Rozmiar wyjściowy",
       "binaryOutputSizeWidth": "Szerokość",
       "binaryOutputSizeHeight": "Wysokość",
+      "binaryOutputSizeIncomplete": "Nie zapisano: dokładny rozmiar wymaga szerokości i wysokości.",
+      "binaryOutputSizeAmbiguous": "Dokładnego rozmiaru wyjściowego nie można łączyć z {options}: każde z nich podaje dostarczone wymiary po raz drugi. Zostaw to, co jest wymaganiem.",
       "binarySeed": "Ziarno",
       "binarySeedPlaceholder": "stałe ziarno",
       "binaryTransparent": "Przezroczyste tło",
@@ -6316,6 +6318,7 @@
       "generatorsUnverified": "Nie udało się odczytać integracji generatywnych tego wdrożenia przy zamykaniu kroku, więc wymienione poniżej integracje nie zostały z nimi porównane. Wpisy są zachowane w takiej postaci, w jakiej je zgłoszono."
     },
     "unknownGeneratorBadge": "Niezarejestrowana",
+    "missizedBadge": "Zły rozmiar",
     "candidates": {
       "automatic": "Wygenerowano {total} kandydata i zachowano go automatycznie, bez przeglądu.",
       "chosen": "Zachowano {kept} z {total} wygenerowanych kandydatów.",

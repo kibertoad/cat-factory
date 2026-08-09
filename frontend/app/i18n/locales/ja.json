@@ -4803,6 +4803,8 @@
       "binaryOutputSize": "出力サイズ",
       "binaryOutputSizeWidth": "幅",
       "binaryOutputSizeHeight": "高さ",
+      "binaryOutputSizeIncomplete": "幅と高さの両方がないと、正確なサイズは保存されません。",
+      "binaryOutputSizeAmbiguous": "正確な出力サイズは {options} と併用できません。どちらも納品される寸法を二重に指定します。要件であるほうだけを残してください。",
       "binarySeed": "シード",
       "binarySeedPlaceholder": "固定シード",
       "binaryTransparent": "背景を透過",
@@ -6316,6 +6318,7 @@
       "generatorsUnverified": "ステップの完了時にこのデプロイメントの生成系インテグレーションを読み取れなかったため、以下に記載されたインテグレーションは照合されていません。エントリは申告どおり保持されます。"
     },
     "unknownGeneratorBadge": "未登録",
+    "missizedBadge": "サイズ不一致",
     "candidates": {
       "automatic": "候補が {total} 件生成され、確認なしで自動的に採用されました。",
       "chosen": "生成された {total} 件の候補のうち {kept} 件が採用されました。",

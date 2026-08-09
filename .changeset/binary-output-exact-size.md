@@ -29,9 +29,14 @@ be ASKED for a size, states the target in the brief, and requires that any subst
 
 `outputSize` is mutually exclusive with `aspectRatio` and `upscale`, refused at pipeline save: each
 states the delivered dimensions a second time and can disagree, and resolving that by precedence
-would leave the choice to the agent writing the vendor call.
+would leave the choice to the agent writing the vendor call. The pipeline builder raises the same
+refusal against the step being edited, so the conflict is reported where the fix is deleting one of
+two visible fields.
+
+The size covers what is measured in pixels (images and video), so a step generating an icon and its
+pickup sound states one size and means it about the icon.
 
 The read-back closes the loop, because admission checks only what an integration can be asked for: a
-declared artifact may carry `dimensions`, and the step's result window counts what came back at
-another size, keeping artifacts that reported no dimensions on their own line rather than letting an
-unmeasured one read as a delivered one.
+declared artifact may carry `dimensions`, which the step's result window renders per artifact and
+counts against the requirement, keeping artifacts that reported no dimensions on their own line
+rather than letting an unmeasured one read as a delivered one.

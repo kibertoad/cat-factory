@@ -4803,6 +4803,8 @@
       "binaryOutputSize": "Tamaño de salida",
       "binaryOutputSizeWidth": "Ancho",
       "binaryOutputSizeHeight": "Alto",
+      "binaryOutputSizeIncomplete": "No se guardó: un tamaño exacto necesita un ancho y un alto.",
+      "binaryOutputSizeAmbiguous": "Un tamaño de salida exacto no se puede combinar con {options}: cada uno indica las dimensiones entregadas por segunda vez. Conserva el que sea el requisito.",
       "binarySeed": "Semilla",
       "binarySeedPlaceholder": "semilla fija",
       "binaryTransparent": "Fondo transparente",
@@ -6316,6 +6318,7 @@
       "generatorsUnverified": "No se han podido leer las integraciones generativas de esta instalación al cerrarse el paso, así que las integraciones indicadas abajo no se han contrastado con ellas. Las entradas se conservan tal como se declararon."
     },
     "unknownGeneratorBadge": "No registrada",
+    "missizedBadge": "Tamaño incorrecto",
     "candidates": {
       "automatic": "Se generó {total} candidato y se conservó automáticamente, sin revisión.",
       "chosen": "Se conservaron {kept} de {total} candidatos generados.",

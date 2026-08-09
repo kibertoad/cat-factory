@@ -4803,6 +4803,8 @@
       "binaryOutputSize": "Taille de sortie",
       "binaryOutputSizeWidth": "Largeur",
       "binaryOutputSizeHeight": "Hauteur",
+      "binaryOutputSizeIncomplete": "Non enregistré : une taille exacte demande une largeur et une hauteur.",
+      "binaryOutputSizeAmbiguous": "Une taille de sortie exacte ne se combine pas avec {options} : chacun énonce une seconde fois les dimensions livrées. Gardez celui qui est l’exigence.",
       "binarySeed": "Graine",
       "binarySeedPlaceholder": "graine fixe",
       "binaryTransparent": "Fond transparent",
@@ -6316,6 +6318,7 @@
       "generatorsUnverified": "Les intégrations génératives de ce déploiement n'ont pas pu être lues à la clôture de l'étape, les intégrations citées ci-dessous n'ont donc pas été vérifiées. Les entrées sont conservées telles que déclarées."
     },
     "unknownGeneratorBadge": "Non enregistrée",
+    "missizedBadge": "Mauvaise taille",
     "candidates": {
       "automatic": "{total} candidat a été généré et conservé automatiquement, sans examen.",
       "chosen": "{kept} des {total} candidats générés ont été conservés.",

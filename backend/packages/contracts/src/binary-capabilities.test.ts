@@ -5,6 +5,7 @@ import {
   binaryCapabilityProviders,
   binaryGenerationOptionsObject,
   binaryGeneratorCapabilitySchema,
+  conflictingOutputSizeOptions,
   isBinaryGeneratorCapability,
   MAX_BINARY_PIXEL_EXTENT,
   requiredBinaryCapabilities,
@@ -91,7 +92,10 @@ describe('requiredBinaryCapabilities', () => {
     ])
     expect(requiredBinaryCapabilities({ aspectRatio: '1:1' })).toEqual(['aspect-ratio'])
 
-    const bucketed = [{ id: 'grok', capabilities: ['aspect-ratio' as const] }]
+    // Grok Imagine's shape: a `resolution` of 1k or 2k, so a ratio is honoured exactly and a
+    // pixel size not at all. Only `capabilities` is read here, which is why the vendor each list
+    // stands for is carried by its NAME rather than by an id the function never looks at.
+    const bucketed = [{ capabilities: ['aspect-ratio' as const] }]
     expect(binaryCapabilityCoverage(['exact-size'], bucketed)).toEqual({
       uncovered: ['exact-size'],
       unverifiable: [],
@@ -99,14 +103,14 @@ describe('requiredBinaryCapabilities', () => {
     // And the converse holds: the vocabulary is FLAT, so an integration that takes width and
     // height covers a ratio only by DECLARING that too. Forgetting the second word is a loud
     // refusal naming the capability, which is the trade an implication table would buy out.
-    const dimensioned = [{ id: 'flux', capabilities: ['exact-size' as const] }]
+    const dimensioned = [{ capabilities: ['exact-size' as const] }]
     expect(binaryCapabilityCoverage(['aspect-ratio'], dimensioned).uncovered).toEqual([
       'aspect-ratio',
     ])
     expect(
       binaryCapabilityCoverage(
         ['aspect-ratio', 'exact-size'],
-        [{ id: 'flux', capabilities: ['aspect-ratio' as const, 'exact-size' as const] }],
+        [{ capabilities: ['aspect-ratio' as const, 'exact-size' as const] }],
       ).uncovered,
     ).toEqual([])
   })
@@ -136,6 +140,30 @@ describe('requiredBinaryCapabilities', () => {
       const only = { [key]: full[key as keyof BinaryGenerationOptions] }
       expect(requiredBinaryCapabilities(only as BinaryGenerationOptions).length).toBeGreaterThan(0)
     }
+  })
+})
+
+// The one rule the pipeline SAVE and the pipeline BUILDER both read, so a selection the backend
+// refuses cannot be one the builder offers without comment.
+describe('conflictingOutputSizeOptions', () => {
+  it('names every option that restates the delivered dimensions', () => {
+    const size = { width: 96, height: 96 }
+    expect(conflictingOutputSizeOptions({ outputSize: size })).toEqual([])
+    expect(conflictingOutputSizeOptions({ outputSize: size, aspectRatio: '16:9' })).toEqual([
+      'aspectRatio',
+    ])
+    expect(conflictingOutputSizeOptions({ outputSize: size, upscale: 2 })).toEqual(['upscale'])
+    expect(
+      conflictingOutputSizeOptions({ outputSize: size, aspectRatio: '16:9', upscale: 2 }),
+    ).toEqual(['aspectRatio', 'upscale'])
+  })
+
+  it('finds no conflict where there is no exact size to conflict with', () => {
+    // The options are not mutually exclusive with EACH OTHER: an aspect ratio beside an upscale
+    // states a shape and a multiple, which compose. Only a stated SIZE makes either one a second
+    // answer to a question already answered.
+    expect(conflictingOutputSizeOptions({ aspectRatio: '16:9', upscale: 2 })).toEqual([])
+    expect(conflictingOutputSizeOptions(undefined)).toEqual([])
   })
 })
 

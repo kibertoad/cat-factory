@@ -4954,6 +4954,8 @@
       "binaryOutputSize": "Output size",
       "binaryOutputSizeWidth": "Width",
       "binaryOutputSizeHeight": "Height",
+      "binaryOutputSizeIncomplete": "Not saved: an exact size needs both a width and a height.",
+      "binaryOutputSizeAmbiguous": "An exact output size cannot be combined with {options}: each states the delivered dimensions a second time. Keep whichever one is the requirement.",
       "binarySeed": "Seed",
       "binarySeedPlaceholder": "fixed seed",
       "binaryTransparent": "Transparent background",
@@ -6601,6 +6603,7 @@
       "generatorsUnverified": "This deployment's generative integrations could not be read when the step settled, so the integrations named below were not checked against them. The entries are kept as claimed."
     },
     "unknownGeneratorBadge": "Not registered",
+    "missizedBadge": "Wrong size",
     "candidates": {
       "automatic": "{total} candidate was generated and kept automatically, without review.",
       "chosen": "{kept} of {total} generated candidates were kept.",

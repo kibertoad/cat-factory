@@ -787,15 +787,27 @@ Four rulings bound it, and each is the reason a nearby version was refused:
   refused structurally at save (`assertUnambiguousOutputSize`), because each of those states the
   delivered dimensions a second time and can disagree. Resolving it by precedence instead would hand
   the leftover decision to the agent writing the vendor call, which is the same party the
-  every-format-required rule keeps it away from.
+  every-format-required rule keeps it away from. WHICH options conflict is contracts'
+  `conflictingOutputSizeOptions`, not a rule stated twice: the builder offers all three controls
+  together, so it has to raise the same refusal (`output_size_ambiguous`) where the fix is deleting
+  one of two visible fields, and a rule with a home on only one side is one the two sides drift on.
 - **No resize POLICY, at any layer.** The platform has no view of whether a downscale is acceptable
   for a given asset, so the brief states the target and requires that a substitution be REPORTED and
-  the delivered size declared. What it never says is what to do instead.
+  the delivered size declared. What it never says is what to do instead, and it makes no claim about
+  what the CONSUMER of the artifacts does with a substituted one: that is a fact about a game, a
+  storefront or a print run, none of which the platform can see.
+- **A size covers what is MEASURED in pixels**, which is contracts' `modalityCarriesPixelDimensions`
+  (`image` and `video`; not audio, 3D or documents). A step generating an icon and its pickup sound
+  states one size and means it about the icon, so the brief scopes it and the report judges only the
+  covered artifacts. An artifact the platform could not CLASSIFY stays covered: absent is not "not an
+  image", and excluding it would turn an unreadable content type into a silent pass on the one axis
+  the requirement exists to check.
 
 **The read-back closes it, and admission alone would not have.** The capability gate checks what a
 selected integration can be ASKED for; the complaint that motivated the axis is a DELIVERY fact. So a
 declared artifact carries optional `dimensions`, and `BinaryOutputView` derives `missized` against
-the step's own `outputSize`, the same judgement `undeliveredMediaTypes` makes one axis over and from
+the step's own `outputSize` (and renders the reported dimensions on the row beside it, so a counted
+failure names which artifact), the same judgement `undeliveredMediaTypes` makes one axis over and from
 the same kind of self-report (the platform never holds the bytes; `contentType` has always been the
 agent's own claim on the same terms). `sizeUnreported` counts the unmeasured artifacts SEPARATELY,
 because an artifact that stated no dimensions and one that came back wrong are the same value and

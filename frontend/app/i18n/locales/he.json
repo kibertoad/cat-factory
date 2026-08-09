@@ -4803,6 +4803,8 @@
       "binaryOutputSize": "גודל הפלט",
       "binaryOutputSizeWidth": "רוחב",
       "binaryOutputSizeHeight": "גובה",
+      "binaryOutputSizeIncomplete": "לא נשמר: גודל מדויק דורש רוחב וגובה.",
+      "binaryOutputSizeAmbiguous": "אי אפשר לשלב גודל פלט מדויק עם {options}: כל אחד מהם מציין שוב את המידות שיסופקו. השאירו את מה שהוא הדרישה.",
       "binarySeed": "זרע",
       "binarySeedPlaceholder": "זרע קבוע",
       "binaryTransparent": "רקע שקוף",
@@ -6316,6 +6318,7 @@
       "generatorsUnverified": "לא ניתן היה לקרוא את האינטגרציות הגנרטיביות של הפריסה הזו בעת סיום השלב, ולכן האינטגרציות המצוינות למטה לא נבדקו מולן. הרשומות נשמרות כפי שהוצהרו."
     },
     "unknownGeneratorBadge": "לא רשומה",
+    "missizedBadge": "גודל שגוי",
     "candidates": {
       "automatic": "נוצר {total} מועמד ונשמר אוטומטית, ללא בדיקה.",
       "chosen": "נשמרו {kept} מתוך {total} מועמדים שנוצרו.",

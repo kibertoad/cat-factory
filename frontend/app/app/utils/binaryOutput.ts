@@ -3,6 +3,9 @@ import {
   binaryCapabilityCoverage,
   binaryFormatCoverage,
   binaryModalityOverlaps,
+  conflictingOutputSizeOptions,
+  isBinaryModality,
+  modalityCarriesPixelDimensions,
   normalizeMediaType,
   requiredBinaryCapabilities,
 } from '@cat-factory/contracts'
@@ -10,6 +13,7 @@ import type {
   BinaryGeneratorCapability,
   BinaryModality,
   BinaryModalityOverlap,
+  ConflictingOutputSizeOption,
   RegisteredBinaryGenerator,
 } from '@cat-factory/contracts'
 import type {
@@ -88,11 +92,32 @@ export interface BinaryOutputRow extends BinaryOutputArtifact {
   /**
    * The artifact reports pixel dimensions that are not the exact size the step asked for.
    *
-   * FALSE when the step asked for no size, and false when the artifact reports no dimensions:
-   * the second is "not stated", which is why {@link BinaryOutputView.sizeUnreported} counts it
-   * separately instead of letting an absent measurement read as a passing one.
+   * FALSE when the step asked for no size, false when the size does not cover this artifact (see
+   * {@link sizeRequirementCovers}), and false when the artifact reports no dimensions: the last
+   * is "not stated", which is why {@link BinaryOutputView.sizeUnreported} counts it separately
+   * instead of letting an absent measurement read as a passing one.
    */
   missized: boolean
+}
+
+/**
+ * Whether the step's exact size is a statement about THIS artifact.
+ *
+ * A size covers what is measured in pixels, which is the contracts rule
+ * {@link modalityCarriesPixelDimensions} and not a judgement made here: a step selecting an image
+ * generator beside an audio one states one size, means it about the images, and counting the audio
+ * against it would warn permanently about a step that delivered exactly what was asked.
+ *
+ * An artifact whose content type the platform could not classify is COVERED, because absent is not
+ * "not an image": the row may well be one, and excluding it would turn an unclassifiable artifact
+ * into a silent pass on the one axis this requirement exists to check. A RETIRED modality reads the
+ * same way for the same reason, which is why the membership guard runs before the lookup rather
+ * than a bare index that would throw on it.
+ */
+function sizeRequirementCovers(artifact: BinaryOutputArtifact): boolean {
+  const modality = artifact.modality
+  if (modality === undefined || !isBinaryModality(modality)) return true
+  return modalityCarriesPixelDimensions(modality)
 }
 
 /** The whole surface's read model: one state, the join, and every loss the report counted. */
@@ -161,9 +186,9 @@ export interface BinaryOutputView {
    */
   undeliveredMediaTypes: readonly string[]
   /**
-   * The exact pixel size the step asked every generation to be delivered at
-   * (`stepOptions.binaryOutput.generation.outputSize`), or null when it asked for none — which
-   * stays the ordinary case.
+   * The exact pixel size the step asked its pixel-measured generations to be delivered at
+   * (`stepOptions.binaryOutput.generation.outputSize`), or null when it asked for none, which
+   * stays the ordinary case. Which artifacts it covers is {@link sizeRequirementCovers}.
    */
   requiredSize: { width: number; height: number } | null
   /**
@@ -177,7 +202,7 @@ export interface BinaryOutputView {
    */
   missized: number
   /**
-   * How many of {@link rows} reported NO dimensions on a step that required a size.
+   * How many of the COVERED {@link rows} reported no dimensions on a step that required a size.
    *
    * Its own number rather than folded into {@link missized}, for the rule this whole feature
    * runs on: an unmeasured artifact and a wrong-sized one are the same value and opposite facts.
@@ -275,6 +300,7 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     // `sizeUnreported`, never folded in here.
     missized:
       requiredSize !== null &&
+      sizeRequirementCovers(artifact) &&
       artifact.dimensions !== undefined &&
       (artifact.dimensions.width !== requiredSize.width ||
         artifact.dimensions.height !== requiredSize.height),
@@ -294,7 +320,9 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     requiredSize,
     missized: rows.filter((row) => row.missized).length,
     sizeUnreported:
-      requiredSize === null ? 0 : rows.filter((row) => row.dimensions === undefined).length,
+      requiredSize === null
+        ? 0
+        : rows.filter((row) => row.dimensions === undefined && sizeRequirementCovers(row)).length,
     unknownDeclaredGenerators: report.unknownGenerators,
     generatorsUnverified: report.generatorsUnverified === true,
     invalidEntries: report.invalidEntries,
@@ -504,6 +532,17 @@ export type BinaryOutputPickIssue =
    * flag most working selections in the product.
    */
   | 'capability_unverifiable'
+  /**
+   * The step states an exact output size AND another option that restates the delivered
+   * dimensions (`aspectRatio`, `upscale`). A refusal, mirroring `assertUnambiguousOutputSize` at
+   * pipeline save.
+   *
+   * Unlike every member above it this needs no catalog and no registry: it is a fact about the
+   * step's own fields, which is exactly why it belongs here. The builder offers all three controls
+   * at once, so without this line the only report of the conflict is a failed round trip carrying
+   * backend prose, on a surface where the fix is deleting one of two visible fields.
+   */
+  | 'output_size_ambiguous'
 
 /** What the builder found wrong with one step's selection, and which ids to name. */
 export interface BinaryOutputPickState {
@@ -528,6 +567,10 @@ export interface BinaryOutputPickState {
   unsupportedCapabilities: readonly BinaryGeneratorCapability[]
   /** The ones that could not be judged, kept apart from the refusal above. */
   unverifiableCapabilities: readonly BinaryGeneratorCapability[]
+  /** The options restating the delivered dimensions beside an exact size, for the line that names
+   *  which field to delete. Computed through contracts' own rule, so this cannot come to a
+   *  different answer from the save that refuses it. */
+  conflictingSizeOptions: readonly ConflictingOutputSizeOption[]
 }
 
 /**
@@ -670,6 +713,12 @@ export function binaryOutputPickIssues(
   // generative fault too. Reporting them one round at a time is exactly the fix-and-retry cycle
   // this function returns every issue to avoid.
   const generative = generatorPickIssues(config, generators, generatorsUnavailable)
+  // Judged beside the generative half and before the storage early return, because it depends on
+  // neither registry: a step holding two statements of its own dimensions is mis-configured whether
+  // or not its storage pick resolved, and reporting it only on the second pass would cost the
+  // fix-and-retry cycle every other issue here is returned together to avoid.
+  const conflictingSizeOptions = conflictingOutputSizeOptions(config?.generation)
+  if (conflictingSizeOptions.length) issues.push('output_size_ambiguous')
   const noStorageService =
     resolved && !catalog.some((s) => s.capabilities.includes(ASSET_STORAGE_CAPABILITY))
   if (available === false) issues.push('catalog_unavailable')
@@ -688,6 +737,7 @@ export function binaryOutputPickIssues(
       generatorOverlaps: generative.overlaps,
       unsupportedCapabilities: generative.unsupportedCapabilities,
       unverifiableCapabilities: generative.unverifiableCapabilities,
+      conflictingSizeOptions,
     }
   }
 
@@ -714,5 +764,6 @@ export function binaryOutputPickIssues(
     generatorOverlaps: generative.overlaps,
     unsupportedCapabilities: generative.unsupportedCapabilities,
     unverifiableCapabilities: generative.unverifiableCapabilities,
+    conflictingSizeOptions,
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { BinaryOutputReport, PipelineStep } from '~/types/execution'
+import type { BinaryOutputArtifact, BinaryOutputReport, PipelineStep } from '~/types/execution'
 import {
   BINARY_OUTPUT_STATE_KEYS,
   binaryOutputHasWarnings,
@@ -377,7 +377,11 @@ describe('the delivered-format check', () => {
 describe('binaryOutputView, the delivered size', () => {
   const sized = (
     outputSize: { width: number; height: number } | undefined,
-    stored: { location: string; dimensions?: { width: number; height: number } }[],
+    stored: {
+      location: string
+      dimensions?: { width: number; height: number }
+      modality?: BinaryOutputArtifact['modality']
+    }[],
   ) =>
     binaryOutputView(
       step({
@@ -424,6 +428,36 @@ describe('binaryOutputView, the delivered size', () => {
     expect(view?.sizeUnreported).toBe(0)
     expect(binaryOutputHasWarnings(view!)).toBe(false)
   })
+
+  // A size is a statement about what is MEASURED in pixels. A step that generates the icon and
+  // its pickup sound delivered exactly what was asked, and counting the audio as unmeasured
+  // would warn about it forever, on a panel whose whole discipline is that a warning means
+  // something went wrong.
+  it('says nothing about an artifact a size cannot describe', () => {
+    const view = sized({ width: 96, height: 96 }, [
+      { location: 'a.png', modality: 'image', dimensions: { width: 96, height: 96 } },
+      { location: 'a.mp3', modality: 'audio' },
+      { location: 'a.glb', modality: '3d-model' },
+    ])
+    expect(view?.missized).toBe(0)
+    expect(view?.sizeUnreported).toBe(0)
+    expect(binaryOutputHasWarnings(view!)).toBe(false)
+  })
+
+  // The other direction, and the one that must not go quiet: an artifact the platform could not
+  // CLASSIFY may well be an image, so it stays covered. Excluding it would turn an unreadable
+  // content type into a silent pass on the one axis the requirement exists to check, and a
+  // RETIRED modality a stale run carries reads the same way.
+  it('keeps an unclassified artifact under the requirement', () => {
+    const view = sized({ width: 96, height: 96 }, [
+      { location: 'a.bin' },
+      // A modality the union no longer has, which a run saved before the 3D split goes on
+      // carrying. Cast because the TYPE cannot express it and the DATA can, which is the whole
+      // reason the read narrows through `isBinaryModality` before it looks anything up.
+      { location: 'b.bin', modality: '3d' as BinaryOutputArtifact['modality'] },
+    ])
+    expect(view?.sizeUnreported).toBe(2)
+  })
 })
 
 describe('binaryOutputPickIssues, generative half', () => {
@@ -453,6 +487,38 @@ describe('binaryOutputPickIssues, generative half', () => {
     )
     expect(pick.issues).toContain('modality_uncovered')
     expect(pick.uncoveredModalities).toEqual(['audio'])
+  })
+
+  // The builder offers a ratio, an exact size and an upscale together, so the conflict it can
+  // save is one it must state: reported only by the failed round trip, the fix (delete one of two
+  // fields on this form) arrives as backend prose about a step the reader has already left.
+  it('states the save refusal for two statements of one delivered size', () => {
+    const pick = binaryOutputPickIssues(
+      {
+        storageServiceId: 'files',
+        generatorIds: ['retro'],
+        generation: { outputSize: { width: 96, height: 96 }, aspectRatio: '16:9' },
+      },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).toContain('output_size_ambiguous')
+    expect(pick.conflictingSizeOptions).toEqual(['aspectRatio'])
+  })
+
+  // A step with no storage pick still gets the whole list: the two halves resolve against
+  // different registries, and reporting them one round at a time is the retry cycle this
+  // function returns every issue together to avoid.
+  it('states it on a step whose storage is not picked either', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: '', generation: { outputSize: { width: 96, height: 96 }, upscale: 2 } },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).toEqual(expect.arrayContaining(['not_selected', 'output_size_ambiguous']))
+    expect(pick.conflictingSizeOptions).toEqual(['upscale'])
   })
 
   it('reports BOTH faults when an unknown id was the one covering a requirement', () => {

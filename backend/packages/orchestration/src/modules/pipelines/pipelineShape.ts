@@ -8,7 +8,7 @@ import type {
   TesterQualityConfig,
 } from '@cat-factory/kernel'
 import type { BinaryOutputConfig } from '@cat-factory/contracts'
-import { validateDescriptorFields } from '@cat-factory/contracts'
+import { conflictingOutputSizeOptions, validateDescriptorFields } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
   companionTargets,
@@ -238,19 +238,10 @@ export function assertValidBinaryOutputSteps({
 /**
  * A step that states exact output DIMENSIONS may not also state the shape a second way.
  *
- * `outputSize` exists because for some deliverables the pixel dimensions ARE the requirement (a
- * 96x96 inventory icon is not a 128px icon rendered carefully). `aspectRatio` and `upscale` each
- * state the final dimensions too — the first as a shape the size already fixes, the second as a
- * multiple of whatever the integration renders natively — so holding either beside a size leaves
- * the deliverable's actual dimensions undetermined at exactly the point the step went to the
- * trouble of determining them.
- *
- * Refused rather than resolved by precedence, because the party a precedence rule hands the
- * leftover decision to is the AGENT writing the vendor call: it would read "96x96" and "16:9" in
- * one brief and pick. That is the same reason `mediaTypes` requires every entry rather than
- * meaning "any of these" — a requirement that leaves a choice hands it to the party with the
- * least basis for making it. Two contradicting statements of one fact is a mis-configured step,
- * and the fix (delete one) is unambiguous, which is what makes refusing it the cheap option.
+ * WHICH options conflict, and why, is contracts' {@link conflictingOutputSizeOptions}: the SPA's
+ * pipeline builder has to state this same refusal where it is fixable without a round trip, so the
+ * rule is shared and only the MESSAGE is composed here. What stays here is the disposition (this
+ * one refuses the save) and the wording, which names the numbers actually configured.
  *
  * Structural, so it lands beside {@link assertComparableCandidates} at pipeline SAVE and again at
  * run start: all three fields are readable off the step and none depends on workspace state or on
@@ -258,14 +249,14 @@ export function assertValidBinaryOutputSteps({
  */
 function assertUnambiguousOutputSize(kind: string, config: BinaryOutputConfig): void {
   const generation = config.generation
-  if (!generation?.outputSize) return
+  const conflicting = conflictingOutputSizeOptions(generation)
+  if (!generation?.outputSize || conflicting.length === 0) return
   const { width, height } = generation.outputSize
-  const conflicts: string[] = []
-  if (generation.aspectRatio) conflicts.push(`an aspect ratio of ${generation.aspectRatio}`)
-  if (generation.upscale !== undefined) {
-    conflicts.push(`an upscale of ${generation.upscale}x`)
-  }
-  if (conflicts.length === 0) return
+  const conflicts = conflicting.map((option) =>
+    option === 'aspectRatio'
+      ? `an aspect ratio of ${generation.aspectRatio}`
+      : `an upscale of ${generation.upscale}x`,
+  )
   throw new ValidationError(
     `Step '${kind}' asks for an exact output size of ${width}x${height} and also states ` +
       `${conflicts.join(' and ')}, which describe the delivered dimensions a second time and ` +

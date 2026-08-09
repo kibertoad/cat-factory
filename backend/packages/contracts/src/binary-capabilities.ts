@@ -246,20 +246,27 @@ export const binaryEditRequestSchema = v.object({
 export type BinaryEditRequest = v.InferOutput<typeof binaryEditRequestSchema>
 
 /**
+ * The largest pixel extent either axis may carry: a SANITY ceiling on the field, never a claim
+ * about what any endpoint supports.
+ *
+ * Nothing here knows Flux's 4 MP cap or Retro Diffusion's per-style range, and by design nothing
+ * will: the platform checks that a step CAN be asked for dimensions (the `exact-size` capability)
+ * and states the number to the agent, which is the party holding the vendor's contract when it
+ * writes the call. Exported so the read-back that re-checks a reported dimension bounds it against
+ * the same number the write boundary does.
+ */
+export const MAX_BINARY_PIXEL_EXTENT = 16384
+
+/**
  * Exact output DIMENSIONS in pixels, for the deliverables where the size IS the requirement.
  *
  * A named schema rather than an inline object, for the reason {@link binaryEditRequestSchema} is
  * one: this nests another object level under an already-deep chain and a named const is where
  * `tsc` stops re-instantiating it.
  *
- * The bounds are a SANITY floor and ceiling on the field, never a claim about what any endpoint
- * supports. Nothing here knows Flux's 4 MP cap or Retro Diffusion's per-style range, and by
- * design nothing will: the platform checks that a step CAN be asked for dimensions (the
- * `exact-size` capability) and states the number to the agent, which is the party holding the
- * vendor's contract when it writes the call.
+ * Both members are required together: a width with no height describes no deliverable, and half a
+ * pair would let a size comparison downstream read one axis as matching.
  */
-export const MAX_BINARY_PIXEL_EXTENT = 16384
-
 export const binaryOutputSizeSchema = v.object({
   width: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_BINARY_PIXEL_EXTENT)),
   height: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_BINARY_PIXEL_EXTENT)),
@@ -426,6 +433,41 @@ export function requiredBinaryCapabilities(
   if (options.transparentBackground) required.push('transparent-background')
   if (options.tileable) required.push('tileable')
   return required
+}
+
+/**
+ * A generation option that states the DELIVERED DIMENSIONS a second time, beside an exact
+ * `outputSize`. The union is the option keys themselves, so a reader on either side of the wire
+ * names the field the composer has to delete.
+ */
+export type ConflictingOutputSizeOption = 'aspectRatio' | 'upscale'
+
+/**
+ * The options that restate the delivered dimensions beside an exact {@link BinaryOutputSize}, in a
+ * stable order. Empty when the step asks for no exact size, which stays the ordinary case.
+ *
+ * `aspectRatio` states the shape the size already fixes, and `upscale` states a multiple of
+ * whatever the integration renders natively, so either one held beside a size leaves the
+ * deliverable's actual dimensions undetermined at exactly the point the step went to the trouble of
+ * determining them. The platform refuses that rather than resolving it by precedence: the party a
+ * precedence rule hands the leftover decision to is the AGENT writing the vendor call, which reads
+ * "96x96" and "16:9" in one brief and picks. Two contradicting statements of one fact is a
+ * mis-configured step and the fix (delete one) is unambiguous, which is what makes refusing it the
+ * cheap option.
+ *
+ * Shared rather than restated on each side, like {@link binaryFormatCoverage} one axis over: the
+ * backend REFUSES the save with it and the SPA has to state the same refusal in the builder, where
+ * it is fixable without a round trip. A rule with a home on only one side becomes a hand-kept copy
+ * on the other, and the two then disagree about which selection is legal.
+ */
+export function conflictingOutputSizeOptions(
+  options: BinaryGenerationOptions | undefined,
+): ConflictingOutputSizeOption[] {
+  if (!options?.outputSize) return []
+  const conflicts: ConflictingOutputSizeOption[] = []
+  if (options.aspectRatio) conflicts.push('aspectRatio')
+  if (options.upscale !== undefined) conflicts.push('upscale')
+  return conflicts
 }
 
 /** How a step's required capabilities stand against what its selected integrations declare. */

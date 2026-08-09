@@ -186,6 +186,22 @@ const state = computed(() => {
           </UBadge>
           <span v-if="row.entity">{{ row.entity }}</span>
           <span v-if="row.contentType" class="font-mono">{{ row.contentType }}</span>
+          <!-- What was actually DELIVERED, beside the media type it was delivered as. Rendered
+               whenever the artifact reported it, not only on a step that asked for a size: it is
+               a recorded fact about the asset, and it is the one the counted warning below is
+               made of. Without it that warning gives a number and no way to tell WHICH. -->
+          <span v-if="row.dimensions" class="font-mono" data-testid="binary-output-dimensions"
+            >{{ row.dimensions.width }}×{{ row.dimensions.height }}</span
+          >
+          <UBadge
+            v-if="row.missized"
+            color="warning"
+            variant="subtle"
+            size="sm"
+            data-testid="binary-output-missized-badge"
+          >
+            {{ t('binaryOutput.missizedBadge') }}
+          </UBadge>
         </div>
         <p v-if="row.description" class="mt-1 text-[11px] leading-relaxed text-slate-400">
           {{ row.description }}

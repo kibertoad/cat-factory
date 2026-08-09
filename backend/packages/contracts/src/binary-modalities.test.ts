@@ -7,6 +7,7 @@ import {
   isBinaryModality,
   mediaTypeSchema,
   modalitiesOfMediaType,
+  modalityCarriesPixelDimensions,
   modalityOfMediaType,
   normalizeMediaType,
 } from './binary-modalities.js'
@@ -43,6 +44,28 @@ describe('isBinaryModality', () => {
     // through an exhaustive `Record` is total against the type and partial against the data.
     expect(isBinaryModality('3d')).toBe(false)
     expect(isBinaryModality('')).toBe(false)
+  })
+})
+
+describe('modalityCarriesPixelDimensions', () => {
+  it('answers for every member of the vocabulary', () => {
+    // Derived from the picklist rather than pinned to a count: the property worth asserting is
+    // that the rule is TOTAL over the vocabulary, which is what keeps a new member from reaching
+    // a caller as `undefined` and reading there as "not measured in pixels".
+    for (const modality of binaryModalitySchema.options)
+      expect(typeof modalityCarriesPixelDimensions(modality)).toBe('boolean')
+  })
+
+  it('separates what has a width and a height from what does not', () => {
+    expect(modalityCarriesPixelDimensions('image')).toBe(true)
+    expect(modalityCarriesPixelDimensions('video')).toBe(true)
+    // The reason this exists: a step selecting an image generator beside an audio one states ONE
+    // exact size, means it about the images, and a reader judging the audio against it would
+    // report a permanent failure about a step that delivered exactly what was asked.
+    expect(modalityCarriesPixelDimensions('audio')).toBe(false)
+    expect(modalityCarriesPixelDimensions('3d-model')).toBe(false)
+    expect(modalityCarriesPixelDimensions('3d-scene')).toBe(false)
+    expect(modalityCarriesPixelDimensions('document')).toBe(false)
   })
 })
 

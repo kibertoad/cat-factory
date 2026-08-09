@@ -4803,6 +4803,8 @@
       "binaryOutputSize": "Çıktı boyutu",
       "binaryOutputSizeWidth": "Genişlik",
       "binaryOutputSizeHeight": "Yükseklik",
+      "binaryOutputSizeIncomplete": "Kaydedilmedi: tam boyut için hem genişlik hem yükseklik gerekir.",
+      "binaryOutputSizeAmbiguous": "Tam çıktı boyutu {options} ile birlikte kullanılamaz: her biri teslim edilecek ölçüleri ikinci kez belirtir. Gereksinim olan hangisiyse onu bırakın.",
       "binarySeed": "Tohum",
       "binarySeedPlaceholder": "sabit tohum",
       "binaryTransparent": "Saydam arka plan",
@@ -6316,6 +6318,7 @@
       "generatorsUnverified": "Adım tamamlanırken bu dağıtımın üretken entegrasyonları okunamadı, bu yüzden aşağıda adı geçen entegrasyonlar bunlarla karşılaştırılmadı. Kayıtlar bildirildiği gibi saklanır."
     },
     "unknownGeneratorBadge": "Kayıtlı değil",
+    "missizedBadge": "Yanlış boyut",
     "candidates": {
       "automatic": "{total} aday üretildi ve inceleme olmadan otomatik olarak tutuldu.",
       "chosen": "Üretilen {total} adayın {kept} tanesi tutuldu.",

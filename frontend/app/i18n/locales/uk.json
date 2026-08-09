@@ -4803,6 +4803,8 @@
       "binaryOutputSize": "Розмір результату",
       "binaryOutputSizeWidth": "Ширина",
       "binaryOutputSizeHeight": "Висота",
+      "binaryOutputSizeIncomplete": "Не збережено: точний розмір потребує і ширини, і висоти.",
+      "binaryOutputSizeAmbiguous": "Точний розмір результату не поєднується з {options}: кожен з них удруге задає розміри, які буде доставлено. Залиште те, що є вимогою.",
       "binarySeed": "Seed",
       "binarySeedPlaceholder": "фіксований seed",
       "binaryTransparent": "Прозорий фон",
@@ -6316,6 +6318,7 @@
       "generatorsUnverified": "Під час завершення кроку не вдалося прочитати генеративні інтеграції цього розгортання, тому названі нижче інтеграції не було з ними звірено. Записи збережено так, як їх заявлено."
     },
     "unknownGeneratorBadge": "Не зареєстровано",
+    "missizedBadge": "Неправильний розмір",
     "candidates": {
       "automatic": "Створено {total} кандидата й залишено автоматично, без перегляду.",
       "chosen": "Залишено {kept} із {total} створених кандидатів.",

@@ -1,5 +1,6 @@
 import {
   binaryReferenceImageSchema,
+  MAX_BINARY_PIXEL_EXTENT,
   mediaTypeSchema,
   normalizeMediaType,
   requiredBinaryCapabilities,
@@ -109,6 +110,28 @@ export function formatReferenceImages(
   return (references ?? [])
     .map((ref) => [ref.role, ref.location, ref.service].filter(Boolean).join('|'))
     .join('\n')
+}
+
+/**
+ * Read one half of an exact output size out of the field, or null when what is typed is not a
+ * pixel extent the step could carry.
+ *
+ * Held to the SAME bounds the schema holds it to, {@link MAX_BINARY_PIXEL_EXTENT} imported rather
+ * than repeated, so a number this accepts is one the save accepts. Blank is null like anything
+ * else here: the caller's job is to tell "nothing typed yet" from "typed and unusable", and it has
+ * the raw text to do it with.
+ */
+export function parseExtent(raw: string): number | null {
+  const text = raw.trim()
+  if (!text) return null
+  const value = Number(text)
+  if (!Number.isInteger(value) || value < 1 || value > MAX_BINARY_PIXEL_EXTENT) return null
+  return value
+}
+
+/** Render a stored extent back into the text its field shows; absent is an empty field. */
+export function formatExtent(value: number | undefined): string {
+  return value === undefined ? '' : String(value)
 }
 
 /**
