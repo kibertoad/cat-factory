@@ -1,116 +1,40 @@
-# MCP tool servers: external tools for agents, without forking
+# MCP tool servers: the consuming side, engine design
 
-> Not to be confused with the platform's OWN public API served as MCP
-> ([MCP Server](https://www.catfactory.ai/extend/mcp-server.html) on the website): that is the
-> serving side, this is the consuming side. What a deployment author does is summarised on
-> [Custom Agents & Gates](https://www.catfactory.ai/extend/custom-agents.html#skills-and-tool-servers);
-> this page is the full model.
+> **Wiring one is on the website**:
+> [Give Agents External Tools (MCP)](https://www.catfactory.ai/extend/tool-servers.html) owns registering a
+> server, the harness support matrix, the credential rules, OAuth, the Test button, operating a
+> `stdio` server, the security posture and a worked vendor runbook. Not to be confused with the
+> platform's OWN API served as MCP ([MCP Server](https://www.catfactory.ai/extend/mcp-server.html)),
+> which is the serving side.
+>
+> This page is what a change in THIS repository has to keep true.
 
-The authority for the CONSUMING side of MCP on this platform: how a deployment gives its agents
-extra tool servers (an issue tracker, an advisory database, a vendor's MCP server, an internal
-service) programmatically, without forking the platform and without rebuilding the harness image.
+Where each decision is made, because the layering is the thing a change here breaks:
 
-The platform has TWO MCP surfaces, and this doc is one of them:
+| Decision | Resolved in | Why there |
+| --- | --- | --- |
+| Which transports a CLI can reach | kernel `MCP_HARNESS_TRANSPORTS` (`domain/agent-capabilities.ts`) | A fact about the CLI, held once so boot validation and dispatch cannot disagree |
+| Whether a server applies to THIS run | the container EXECUTOR, at dispatch | It depends on the resolved harness and the facade-wired credential resolver, neither of which the engine knows |
+| Whether a credential may be looked up | kernel `isReservedPlatformEnvKey`, at boot AND at dispatch AND at the job boundary | Three layers, because each is reachable without the others |
+| What the agent is TOLD it has | the prompt's tool-server section, from `step.toolServers` | The same record a person reads, so the two cannot drift |
 
-- **Consuming** (this doc): agent kinds calling MCP servers a deployment registered.
-- **Serving**: the public `/api/v1` surface exposed AS an MCP server, both as the published
-  `cat-factory-mcp` stdio binary and as the hosted `POST /api/v1/mcp` endpoint. That is
-  `sdk/mcp` (`@cat-factory/mcp-server`); see [`sdk/mcp/README.md`](../../sdk/mcp/README.md) and
-  [`public-api.md`](./public-api.md).
-
-Neighbouring docs, each with its own job:
-
-- [`custom-agents.md`](./custom-agents.md): the extension MODEL (three stages, registry seams,
-  skills, the frontend surface). Tool servers are one capability inside that model; this doc is
-  where its detail lives.
-- [`custom-agent-roles.md`](./custom-agent-roles.md): the field-by-field authoring reference for
-  `McpServerDefinition` and `McpSecretRef`, and how the prompt renders what you declare.
-- [ADR 0029](./adr/0029-agent-kind-capabilities.md): the design record.
-- [ADR 0041](./adr/0041-capability-credential-store.md): the
-  per-workspace sealed credential store the resolver chain reads first.
-- [`mcp-maturation.md`](../../docs/initiatives/mcp-maturation.md): the roadmap, including every
-  known limit below and its disposition.
-
-## Registering a server: the no-fork path
-
-A tool server is deployment-STATIC data registered in the deployment's own composition root, on
-the same app-owned `AgentKindRegistry` the deployment already injects for custom agent kinds. All
-three facades are published packages whose entry points take the registry (and the credential
-resolver) as options, so a deployment depends on a facade, composes its own entry point, and never
-touches this repository:
-
-```ts
-import { defaultAgentKindRegistry } from '@cat-factory/agents'
-import { createWorker } from '@cat-factory/worker'
-// Node: `start` from '@cat-factory/node-server'; local: `startLocal` from '@cat-factory/local-server'.
-// All three take the same `agentKindRegistry` / `createToolSecretResolver` options.
-
-const registry = defaultAgentKindRegistry()
-
-registry.registerToolServer({
-  id: 'org-advisories',
-  label: 'Org advisory database',
-  guidance: 'Look up a dependency here before judging whether a version bump is risky.',
-  transport: { kind: 'stdio', command: 'npx', args: ['-y', '@example-org/advisories-mcp@1.4.2'] },
-  allowedTools: ['lookup_advisory'],
-  secretKeys: [
-    { key: 'MCP_ORG_ADVISORY_TOKEN', usage: 'A read token from the advisory admin page.' },
-  ],
-})
-
-// Attach it to a BUILT-IN kind without redefining it, or list it in a custom kind's `toolServers`.
-registry.assignToolServers('coder', ['org-advisories'])
-
-export default createWorker({ agentKindRegistry: registry })
-```
-
-Registration is code-first ON PURPOSE: the deployment declares WHAT exists (URL, command,
-transport, credentials by name), and a tenant supplies credential VALUES through the per-workspace
-store, so the trust boundary does not move. Per-workspace say over WHERE a server applies is
-planned (tracker slice 6) but not built; today a registered server reaches every workspace's runs
-of the kinds it is declared on.
-
-`registerToolServer` replaces by id (last write wins), which is the documented seam for repointing
-a server an installed third-party package registered: see
-[`custom-agent-roles.md` → Repointing without forking](./custom-agent-roles.md#repointing-without-forking)
-for the composition-root ordering that makes it deterministic.
-
-## Which harnesses can serve what
-
-Which transports each CLI's MCP client reaches is a fact about the CLI, held once in kernel's
-`MCP_HARNESS_TRANSPORTS` (`packages/kernel/src/domain/agent-capabilities.ts`):
-
-| Harness       | `stdio` | `http` | Notes                                                                                           |
-| ------------- | ------- | ------ | ----------------------------------------------------------------------------------------------- |
-| `claude-code` | yes     | yes    | Config rides a per-run `--mcp-config` file, so ambient (developer-login) runs are served too.   |
-| `codex`       | yes     | no     | Stdio-only client. An AMBIENT Codex run has no per-run config home, so it is not served at all. |
-| `pi`          | no      | no     | Pi has no MCP client (a standing non-goal, ADR 0029). Tool servers never apply on Pi runs.      |
-
-A definition's `harnesses` field may NARROW this (a server that only makes sense under one CLI)
-but never widen it. Narrowing to a combination no harness can serve (an `http` server on
-`['codex']`, anything on `['pi']`) is dead configuration a run cannot report, because the server
-never applies rather than being dropped for a reason, so boot warns (`tool_server_unservable`).
-
-Tool servers also need a **container surface**: an inline LLM step has no agent CLI to wire them
-into, and boot validation warns about that combination (the same warning covers `skills`).
+Design records: [ADR 0029](./adr/0029-agent-kind-capabilities.md) (the capability model) and
+[ADR 0041](./adr/0041-capability-credential-store.md) (the per-workspace sealed store the resolver
+chain reads first). The roadmap, including every limit the website page lists, is
+[`mcp-maturation.md`](../../docs/initiatives/mcp-maturation.md). Field-by-field authoring of
+`McpServerDefinition` is [`custom-agent-roles.md`](./custom-agent-roles.md).
 
 ## Which runs actually get the server
 
-**A declared server that is not wired is STATED to the agent, never silently missing** (in the
-prompt's tool-server section) and recorded on the step (see below). Silence would let the
-agent plan around a tool that was never there and discover the gap mid-run. Each reason below is
-its own member of a closed vocabulary, because each needs a DIFFERENT fix, and the prompt renders
-them through an exhaustive `Record`, so adding one fails the typecheck rather than rendering blank:
+**A declared server that is not wired is STATED to the agent, never silently missing**, and the
+seven reasons plus their fixes are on the site's
+[Why a run did not get the server](https://www.catfactory.ai/extend/tool-servers.html#why-a-run-did-not-get-the-server).
+Silence would let the agent plan around a tool that was never there and discover the gap mid-run.
 
-| Reason                  | What happened                                                                                                                    | The fix                                                                                                                  |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `harness_unsupported`   | This CLI speaks no MCP (Pi), the definition's `harnesses` excludes it, or it is an ambient Codex run with no per-run config home | The run's harness, the `harnesses` list, or (ambient Codex) a leased credential instead of the developer's own CLI login |
-| `transport_unsupported` | The CLI speaks MCP but its client cannot reach this transport (Codex is stdio-only)                                              | A second declaration for the other transport                                                                             |
-| `missing_secret`        | A `required` credential did not resolve                                                                                          | Set the variable, or store the workspace value                                                                           |
-| `reserved_secret`       | The credential's LOOKUP key names a platform variable                                                                            | The DECLARATION (setting the variable must not help)                                                                     |
-| `oauth_not_connected`   | The server authenticates with OAuth and this workspace holds no grant (or the deployment has no `ENCRYPTION_KEY` to keep one in) | Press Connect on the board and sign in at the vendor; set `ENCRYPTION_KEY` first if the deployment has no grant store    |
-| `oauth_token_failed`    | A grant IS on file and produced no access token: revoked/expired refresh, an authorization server that refused, discovery failed | Reconnect, or wait out the vendor's outage                                                                               |
-| `over_budget`           | Nothing is wrong with the server; the kind declares more than a dispatch carries                                                 | Trim the kind's declarations                                                                                             |
+The rule a change here must hold: each reason is its own member of a CLOSED vocabulary, rendered
+through an exhaustive `Record`, so adding one fails the typecheck rather than rendering blank. They
+are not collapsible into "unavailable", because each names a different party's fix, and the reason
+is what the prompt and the step chip both carry.
 
 ### What the RUN records, and where a person sees it
 
@@ -198,8 +122,8 @@ one whose post-mortem needs this most.
 A self-hosted runner pool that proxies the executor-harness verbatim should set
 `response.toolServersPath` to `toolServers` in its manifest. Leaving it unset costs the diagnostic
 and never manufactures a false one, which is exactly the trade the absent-vs-empty rule above buys.
-The mapping is written up for pool operators beside its sibling response paths in
-[`runner-pool-integration.md`](./runner-pool-integration.md#3-describe-your-scheduler-as-a-manifest-application-team).
+The mapping is written up for pool operators beside its sibling response paths on the website's
+[Integration Manifests](https://www.catfactory.ai/extend/manifests.html#response-mapping-notes).
 
 This is deliberately not the agent-context telemetry snapshot, which carried the same facts in its
 untyped `extras` bag. That snapshot is double-gated (`LLM_RECORD_PROMPTS` plus the per-workspace
@@ -293,338 +217,110 @@ from the agent kind. The counters are `container.capability_unsupported` and
 `container.capability_unknown`, both dimensioned by the capability alone; the run and workspace ids
 ride the log line, since a metric dimension has to be bounded.
 
-## What the agent may call (`allowedTools`)
+## `allowedTools` and credentials: where the floors are enforced
 
-- **Each entry is a single tool NAME.** The harness joins the whole list into one `--allowedTools`
-  argument with commas, so `['search_issues,get_issue']` becomes two patterns of which the second
-  matches nothing, while the prompt goes on advertising the name verbatim. Refused at registration
-  (`invalid_tool_server_tool_name`), and dropped at the DISPATCH (where it would otherwise reach the
-  prompt) and again at the job boundary, the same three-layer shape the credential floors have.
-- **It is SCOPING, not a security boundary.** It is always stated in the prompt, and additionally
-  passed to claude-code's `--allowedTools`, but whether that CLI list gates depends on the run's
-  permission mode, and Codex cannot express a per-tool restriction at all. If an agent kind must
-  never reach a server's other tools, do not wire that server for that kind.
+What to declare, and why, is the site's
+[What the agent may call](https://www.catfactory.ai/extend/tool-servers.html#what-the-agent-may-call) and
+[Credentials](https://www.catfactory.ai/extend/tool-servers.html#credentials). Three enforcement
+facts belong here, each because it is a place a change could quietly remove a floor:
 
-## Credentials
+- **Every floor is applied at THREE layers**: registration (boot), the dispatch (where the value
+  would otherwise reach the prompt), and the harness job boundary. Not defence in depth for its own
+  sake: a deployment can register at boot, a workflow can replay a dispatch, and a runner pool can
+  be handed a job body directly, so each layer is reachable without the others.
+- **A credential has TWO names and only ONE of them is a boundary.** `isReservedPlatformEnvKey`
+  binds the LOOKUP key (case-insensitively, because `process.env` lookup is case-insensitive on
+  Windows). `envName` is only the name the value is injected under in the server's own process,
+  which reads nothing of ours, so it carries the narrower `isToolchainEnvName` rule instead. Merging
+  the two rules in either direction breaks something real: the strict one makes the GitHub and Slack
+  servers unwireable, the loose one lets `ENCRYPTION_KEY` be read.
+- **A deployment resolver REPLACES the chain, and gates every SUBJECT the port serves.** A
+  `createToolSecretResolver` allow-list holding only `MCP_…` keys silently resolves nothing for a
+  registered binary generator, which goes through the same `ToolSecretResolver` port. Anything new
+  that resolves a capability credential joins that port rather than reading the environment.
 
-- **An `http` server must be `https`, or loopback.** Its credential rides the request as a header,
-  so a cleartext off-box endpoint is refused at registration (`insecure_tool_server_url`) and again
-  at the harness boundary. A sidecar on `http://127.0.0.1:…` is fine.
-  - **"Loopback" is decided by the URL parser that resolves the request**, not by how the host
-    reads. So `http://127.1` and `http://0177.0.0.1` are loopback (they dial `127.0.0.1`), while
-    `http://evil.example\@127.0.0.1` is not: the backslash ends the authority, and everything after
-    it is path. The one thing the rule will not do is canonicalise for you, because the url is
-    stored and written verbatim into the CLI's config: a url carrying an ASCII control character or
-    a space is refused rather than trimmed, so what was admitted and what is started cannot differ.
-- **`required` defaults to true**, because a tool whose first call 401s is worse than one the agent
-  was told it does not have.
-- **Give each credential a `usage` line.** It is rendered beside the key in the operator's checklist,
-  and the checklist can only ever say what the declaration says: a bare `SLACK_MCP_TOKEN` names
-  neither the token TYPE nor the scopes it needs, so without it the operator goes back to your
-  source, the one trip the checklist exists to remove. One sentence, naming where to get the value.
-  It is operator-facing and non-secret, so it must name no value.
-- **A credential may NOT be LOOKED UP BY a platform configuration variable.** A definition names
-  both the key it wants and the endpoint that key is sent to, so
-  `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` would boot clean and ship the deployment's
-  master sealing key to a third party. Every variable in `docs/environment-variables.md` is
-  reserved (`isReservedPlatformEnvKey`, case-insensitively, because `process.env` lookup is
-  case-insensitive on Windows). The declaration is refused at boot (`reserved_credential_key`), and
-  refused again at dispatch, where the server is reported unavailable under its own
-  `reserved_secret` reason rather than `missing_secret`: the two need opposite fixes, and setting
-  the variable is precisely what must not help. This floor needs no configuration and cannot be
-  widened.
-- **Use `envName` when the server's own client requires a specific variable.** The floor binds the
-  LOOKUP key, not the variable the value is injected under in the server's process, which reads
-  nothing. That distinction is what keeps the floor affordable: the GitHub MCP server reads
-  `GITHUB_PERSONAL_ACCESS_TOKEN`, the Slack one `SLACK_BOT_TOKEN`, and the platform reads neither
-  while owning both families. Declare
-  `{ key: 'ACME_GITHUB_TOKEN', envName: 'GITHUB_PERSONAL_ACCESS_TOKEN' }` and the value is looked
-  up under a name of your own and injected under the one the SDK wants. `envName` has its own,
-  narrower rule (`isToolchainEnvName`): not `PATH`, `NODE_OPTIONS`, `npm_config_*` or anything else
-  that would reconfigure the process instead of authenticating a call. It applies to `stdio`
-  servers; an `http` server's value goes to its `header`, so an `envName` there is warned about as
-  inert.
-- **A workspace's OWN value wins over the deployment's.** Every facade composes the per-workspace
-  capability-credential store (sealed, `secrets.manage`-gated, edited over
-  `/workspaces/:ws/capability-credentials`) in FRONT of the environment resolver, PER KEY, so a
-  tenant supplies its own vendor account and a workspace that has stored nothing resolves exactly
-  as it did before the store existed. The surface is a CHECKLIST, not a blank form: the
-  Infrastructure window's "Capability credentials" tab projects the credentials this deployment's
-  registered capabilities declare, so an operator never has to read the deployment's source to
-  learn what to fill in. It appears only for a caller holding `secrets.manage` and only when
-  something is declared, stored or unreadable, and it saves ONE key at a time
-  (`PUT /workspaces/:ws/capability-credentials/:key`) because it holds no values to re-send. See
-  [ADR 0041](./adr/0041-capability-credential-store.md).
-- **Mind what `secretKeys` can reach BEYOND that floor.** Everything outside the platform's own
-  configuration is a developer's own tooling, and only the deployment knows which of it an
-  integration may see. If a deployment installs agent packages it did not author, wire
-  `createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })` and
-  keep the credentials behind a dedicated prefix (`MCP_…` by convention). Note that a deployment
-  resolver REPLACES the chain above rather than being wrapped by it. See ADR 0029 → Consequences.
+## OAuth: the four decisions that are not obvious
 
-  **The list gates every SUBJECT that resolver serves**, not only tool servers: a generative binary
-  integration's credential (`BinaryGeneratorRegistry`) goes through the same port. So an
-  allow-list holding only `MCP_…` keys silently resolves nothing for a registered image or music
-  generator: the run continues and the agent reports the integration as unavailable, with nothing
-  naming the allow-list as the cause. Cover both families, or list the exact keys.
+Declaring an OAuth server, the two grants, endpoint discovery, what a deployment configures and what
+a board sees are on the site's
+[OAuth-protected servers](https://www.catfactory.ai/extend/tool-servers.html#oauth-protected-servers). Four
+choices in the implementation are load-bearing and would each be got wrong by the obvious version:
 
-## OAuth: connecting an OAuth-protected remote server
-
-Most of the hosted MCP ecosystem (Linear, Atlassian, Figma, Slack's remote server) authenticates
-with OAuth rather than a static token, so a declaration that can only name a key reaches none of
-it. A remote (`http`) server may therefore declare `oauth` instead of, or beside, its
-`secretKeys`:
-
-```ts
-registry.registerToolServer({
-  id: 'linear',
-  label: 'Linear',
-  guidance: 'Read the issue behind a task before guessing at its intent. Never file or edit.',
-  transport: { kind: 'http', url: 'https://mcp.linear.app/mcp' },
-  oauth: {
-    grant: 'authorization_code',
-    clientId: 'the client id you registered at the vendor',
-    // Public client (PKCE only) when omitted, which is what most remote MCP servers expect.
-    clientSecretKey: 'MCP_LINEAR_CLIENT_SECRET',
-    scopes: ['read'],
-    // authorizationUrl / tokenUrl omitted ⇒ DISCOVERED from the server url (see below).
-  },
-})
-registry.assignToolServers('coder', ['linear'])
-```
-
-**The split is the same one the static path has, one level up.** A `secretKeys` declaration names
-a credential and the tenant supplies its VALUE; an `oauth` declaration names a CLIENT and the
-tenant supplies its GRANT. Registration stays deployment code either way, so the trust boundary
-does not move: a workspace can authorise its own vendor account, and cannot point the deployment
-at a different endpoint.
-
-**Two grants, and only one of them involves a person.**
-
-| Grant                | Who authorises                                        | What a board does                                 |
-| -------------------- | ----------------------------------------------------- | ------------------------------------------------- |
-| `authorization_code` | A human with `secrets.manage`, in the vendor's own UI | Presses Connect once; the grant is then refreshed |
-| `client_credentials` | Nobody: the deployment's own client authenticates     | Nothing; the token is minted on first dispatch    |
-
-`client_credentials` is what makes an OAuth-protected INTERNAL or partner server reachable on a
-deployment with no one to press a button (a cron-driven install, a CI environment). It needs no
-redirect URL and shows no Connect button.
-
-### Endpoints: discovered, or declared
-
-Omit `authorizationUrl` / `tokenUrl` and the platform discovers them the way the MCP authorization
-spec prescribes: the server's protected-resource metadata (RFC 9728, tried at the path-aware
-well-known location first) names its authorization server, and that server's metadata (RFC 8414,
-falling back to OpenID Connect discovery) names the endpoints. A server that publishes no
-protected-resource document is treated as its own issuer, which is what makes the pre-RFC-9728
-generation of servers reachable.
-
-**Declaring an endpoint WINS over discovery**, half a pair included: pinning one and discovering
-the other is a legitimate declaration for a vendor whose metadata is right about one and stale
-about the other. Pin both when you do not want a third party's metadata document deciding where
-your client secret is sent.
-
-**A discovered endpoint is held to the same URL floor a declared one is** (https, or plain http on
-loopback; never a cloud instance-metadata address). A metadata document is a third party telling
-this deployment where to send its client secret and receive its tokens, so that is the one rule
-discovery may not relax. The floor runs on EVERY url the walk touches, each candidate and each
-redirect hop, because checking the first one and following whatever it points at is not checking.
-
-**The token endpoint's redirects are refused rather than followed.** That request body carries the
-client secret and the grant, and while `fetch` strips an `Authorization` header across origins it
-never strips a form body, so following a 30x there would hand the client secret to wherever it
-pointed. A metadata GET carries no credential and does follow, up to three re-validated hops.
-
-### What a deployment has to configure
-
-- **`ENCRYPTION_KEY`**, because a grant is sealed at rest like every other credential in the
-  platform. Without it there is nowhere to keep one, and every OAuth server is stated to its agent
-  as `oauth_not_connected` rather than dispatched without a token.
-- **`MCP_OAUTH_REDIRECT_URL`**, for the interactive grant only: this deployment's public app URL
-  followed by `/mcp-oauth-callback`, and the SAME string registered as the client's redirect URI at
-  the vendor. It points at the SPA, not at the backend, for the reason the security notes below
-  give. Operator-set rather than derived from the request, because a `Host`-derived value differs
-  behind every proxy and preview URL a deployment sits behind, and the vendor then refuses the
-  exchange with `redirect_uri_mismatch`, which names nothing on this side. Unset ⇒ Connect refuses
-  with a 503 naming the variable, before the browser leaves the app.
-- **The client secret**, when the client has one. It is looked up through the SAME
-  capability-credential chain a `secretKeys` entry uses (the workspace store in front of the
-  environment, per key), so a tenant can bring its own OAuth client through the credential
-  checklist rather than through a second mechanism. It is held to the same reserved-key floor.
-
-### What a board sees, and what a run gets
-
-The tool-server row in Infrastructure → Capability credentials carries the connection: Connect /
-Reconnect / Disconnect, who granted it, the scopes the vendor actually granted, and — beside
-`connected` rather than instead of it — the last token renewal that failed. That pairing is the
-point: a grant that is on file and no longer producing tokens is precisely the state that reads as
-working and is not.
-
-At dispatch the access token is refreshed if it is close to spent and folded into the header the
-declaration names (`Authorization: Bearer …` by default). It rides the job body only, exactly like
-a resolved `secretKeys` value: never a prompt, never the agent-context snapshot.
-
-Three things worth knowing before you wire one:
-
-- **A refresh token the vendor did not rotate is carried forward.** Servers differ, and dropping
-  the old one on a non-rotating server would turn a working grant into a single-use one.
-- **A grant with NO refresh token is reported as such** (`refreshable: false`), before its access
-  token expires rather than after. It has to be granted again by hand when it does.
-- **Disconnect is not gated on the declaration still existing.** A grant outlives the registration
-  that created it (a retired server, a rename in a refactor), and the row is then a live vendor
-  token nobody can reach, so the one action that removes it always works.
-
-### Security notes specific to OAuth
-
-- **The vendor's redirect lands on the SPA, and the backend never receives one.** This is the
-  load-bearing choice of the whole flow. A redirect target is reached by a top-level browser
-  navigation a third party triggers, and sessions here are BEARER TOKENS, which such a navigation
-  cannot carry, so a backend route receiving the redirect directly sees no user on every request,
-  on an authenticated deployment exactly as in dev-open, and any "same user" or "still permitted"
-  check written there is unreachable code that reads like protection. The page at
-  `/mcp-oauth-callback` re-presents the `code` and `state` to `POST /mcp/oauth/complete`, which is
-  ordinary session-gated API, so the two checks below actually run. (It also means the completion
-  route is behind the shared default-deny gate rather than exempted from it.)
+- **The vendor's redirect lands on the SPA, and the backend never receives one.** A redirect target
+  is reached by a top-level browser navigation a third party triggers, and sessions here are BEARER
+  tokens, which such a navigation cannot carry. A backend route receiving the redirect directly
+  would see no user on every request, on an authenticated deployment exactly as in dev-open, and any
+  "same user" or "still permitted" check written there is unreachable code that reads like
+  protection. The page at `/mcp-oauth-callback` re-presents `code` and `state` to
+  `POST /mcp/oauth/complete`, which is ordinary session-gated API, so the two checks below actually
+  run.
 - **The `state` is SEALED, not signed.** It carries the PKCE verifier, so it is encrypted under the
-  deployment's own key rather than merely authenticated: the state travels through the same browser
-  redirect the authorization code does. It also carries the user who STARTED the flow, and the
-  completion refuses anyone else. Without that binding, getting an admin to open an attacker's
-  authorization link plants the attacker's vendor account as the board's connection.
-- **`secrets.manage` is re-resolved when the token is stored**, not assumed from the Connect press.
-  A grant takes minutes of human time and the permission can be revoked inside that window. It goes
-  through the same single `loadWorkspaceAccess` the workspace gate uses; that gate cannot do it
-  itself, because the board is sealed into the state rather than named in the path.
-- **A grant row is reclaimed with the board.** `mcp_oauth_grants` is in the workspace-delete
-  cascade, so deleting a workspace does not leave live vendor tokens behind. Neither disconnect nor
-  delete REVOKES at the vendor (no RFC 7009 call is made), so revoke there too when that matters.
-- **The `resource` indicator (RFC 8707) is always sent**, defaulting to the server's own url, so a
-  token minted for one MCP server is not replayable against another behind the same authorization
-  server.
-- **Everything the security posture section says about a wired server still applies.** OAuth
-  changes who the run authenticates AS; it does not make the server's results trusted input, and
-  the granted scopes are the boundary you actually control. Grant read-only scopes at the vendor.
+  deployment's own key rather than merely authenticated. It also carries the user who STARTED the
+  flow, and completion refuses anyone else: without that binding, getting an admin to open an
+  attacker's authorization link plants the attacker's vendor account as the board's connection.
+- **`secrets.manage` is re-resolved when the token is STORED**, not assumed from the Connect press.
+  A grant takes minutes of human time and the permission can be revoked inside that window. The
+  workspace gate cannot do it, because the board is sealed into the state rather than named in the
+  path.
+- **The token endpoint's redirects are REFUSED rather than followed.** That request body carries the
+  client secret and the grant, and while `fetch` strips an `Authorization` header across origins it
+  never strips a form body. A metadata GET carries no credential and does follow, up to three
+  re-validated hops, with the URL floor applied to every candidate and every hop: checking the first
+  and following whatever it points at is not checking.
 
-## Testing one for real (the probe)
+Two more that shape the data rather than the flow: a refresh token the vendor did not rotate is
+carried forward (dropping it turns a working grant into a single-use one on a non-rotating server),
+and disconnect is deliberately not gated on the declaration still existing, or a retired
+registration would strand a live vendor token nobody can reach. `mcp_oauth_grants` is in the
+workspace-delete cascade; neither path revokes at the vendor.
 
-Boot validation rules on the DECLARATION and a dispatch reports what it DROPPED. Neither can tell you
-whether a server that survives both actually answers, so a dead url, a rotated token or a typo'd tool
-name used to surface only as an agent quietly working without a tool it was promised.
+## The probe: what it can and cannot answer
 
-The Infrastructure window's "Capability credentials" tab lists every registered server with a **Test**
-button (`POST /workspaces/:ws/tool-servers/:id/test`, `secrets.manage`, read included). A test resolves
-the credentials through the SAME composed chain a dispatch uses (the workspace store in front of the
-environment, per key, with the reserved-key floor applied before the resolver is asked), then speaks
-`initialize` + `tools/list` to the server. So the verdict is about THIS board rather than about
-whoever set the deployment's variable.
+The Test button, its nine verdicts and their fixes are on the site's
+[Test a server for real](https://www.catfactory.ai/extend/tool-servers.html#test-a-server-for-real). Two
+properties of it are design rather than usage:
 
-| Verdict               | What it means                                                                                                      | The fix                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `ok`                  | The handshake completed and the tool list came back                                                                | Nothing; the row names the server, its version and its tool count |
-| `credentials_missing` | A `required` credential did not resolve, so NOTHING was sent                                                       | Store the value for this board, or set the variable               |
-| `credential_refused`  | A credential's LOOKUP key names a platform configuration variable                                                  | The DECLARATION (setting the variable must not help)              |
-| `oauth_not_connected` | The server authenticates with OAuth and this board has not granted it, so NOTHING was sent                         | Press Connect and sign in at the vendor                           |
-| `oauth_token_failed`  | A grant is on file and produced no token (revoked refresh, an authorization server that refused, failed discovery) | Reconnect; the row's detail carries the cause                     |
-| `unreachable`         | No answer at all: DNS, TLS, connection refused, or the 10s deadline (including a body that stalls after its 200)   | The endpoint, or the network between here and it                  |
-| `http_error`          | Something answered with a status rather than an MCP frame (`401` ⇒ a WRONG token)                                  | The credential's value, or the url's path                         |
-| `protocol_error`      | It answered, but not as an MCP server (non-JSON, a JSON-RPC error, a bad redirect)                                 | The url almost certainly names something else                     |
-| `not_probeable`       | The backend has no vantage point (see below)                                                                       | Verify from a run, or change the transport                        |
+- **It resolves through the SAME composed chain a dispatch uses**, so the verdict is about this
+  board rather than about whoever set the deployment's variable. A probe with its own resolution
+  path would answer a question nobody asked.
+- **A redirect is followed, but a credential stops at its own origin.** A hop leaving the declared
+  origin is refused outright while a credential is riding, which is what a run does too rather than
+  extra caution: the Web platform removes `Authorization` across origins, so the agent's own MCP
+  client would reach that hop unauthenticated and report a 401. Naming the origin change points at
+  the fix instead.
+- **`not_probeable` is a refusal by NAME, not a failed attempt.** For a `stdio` server or a loopback
+  URL the backend is a different machine from the run container, and a SUCCESS there would be the
+  more misleading of the two outcomes.
 
-Three declarations are refused BY NAME instead of being probed, because a probe from the backend would
-answer about the wrong process: a `stdio` server is a child of the harness inside the run container; a
-loopback url means "beside the agent, in its own container", and the backend's `127.0.0.1` is a
-different machine (a SUCCESS there would be the more misleading of the two outcomes); and a url that
-fails the transport rule is held to the same floor the dispatch holds it to.
+## Operating `stdio` servers, and the security posture
 
-**A REDIRECT is followed, but a credential stops at its own origin.** Each hop is re-checked against
-the transport rule, so an https endpoint cannot redirect a credential-bearing request onto cleartext.
-A hop that leaves the DECLARED ORIGIN is refused outright while a credential is riding, and that is
-what a run does too rather than extra caution: the Web platform removes `Authorization` when a
-redirect crosses origins, so an agent's own MCP client reaches such a hop unauthenticated and would
-report a 401. Naming the origin change instead points at the fix, which is the declaration naming the
-final url. A server that needs no credential is followed across origins as usual.
+Both are on the site
+([stdio](https://www.catfactory.ai/extend/tool-servers.html#operating-a-stdio-server),
+[security](https://www.catfactory.ai/extend/tool-servers.html#security-posture)). The repo-side halves:
 
-**The probe is also the only thing that can check `allowedTools` against reality.** Every other layer
-holds an entry to a NAME pattern and none can tell a well-formed name from a real one. When the tool
-list came back COMPLETE, the result names any declared tool the server does not expose. When it did
-not (a paginated list past the probe's page bound), the check reports itself as unchecked rather than
-calling a working tool missing: absence from a prefix is not absence from the server.
-
-## Operating `stdio` servers
-
-A `stdio` server is a child process the agent CLI spawns INSIDE the run container, which shapes
-everything about operating one:
-
-- **It cannot be probed.** The Test button refuses it by name (`not_probeable`): the backend is a
-  different machine from the run container, so there is no vantage point that would answer about
-  the right process. The verification path is a run: read the prompt's tool-server section, or the
-  run's agent-context snapshot.
-- **An `npx`-launched server resolves and installs its package at CLI startup, per run.** That
-  spends the run container's network and the registry's availability on every dispatch, and a
-  resolution failure surfaces from the CLI mid-run (the CLI simply fails to connect to the server)
-  rather than through the platform's unavailability vocabulary, which has already said the server
-  was wired. **Pin the package version in `args`** (`@example-org/advisories-mcp@1.4.2`, never a
-  bare name or a dist-tag) so every run executes the same code and a vendor's bad publish cannot
-  change agent behaviour mid-week.
-- **Pre-installing the package into the runner image** removes the cold start and the registry
-  dependence, and is an image-affecting change with everything that implies (an
-  `@cat-factory/executor-harness` version bump and a fresh immutable tag; see
+- **The harness redacts exactly the RESOLVED credential values, by name.** That is why a token
+  placed in `transport.env` or in an argv entry bypasses redaction as well as the credential chain:
+  the redactor knows values it resolved, not values it was handed.
+- **Pre-installing a server's package into the runner image is an image-affecting change**, with
+  everything that implies (an `@cat-factory/executor-harness` bump and a fresh immutable tag; see
   [`docs/internal/releases.md`](../../docs/internal/releases.md)).
-- **Non-secret process config rides `transport.env`; anything secret rides `secretKeys`.** The
-  harness redacts exactly the resolved credential values from its logs, by name, so putting a token
-  into `transport.env` (or a `--api-key=…` argv entry) bypasses both the credential chain and the
-  redaction.
+- **The threat model is [`security-model.md`](./security-model.md)'s**, and wiring a server extends
+  the set of parties who can attempt an injection to that server's operator and its own upstreams. A
+  change that widens what a wired server may reach updates that doc in the same PR.
 
-## Security posture
+## Current limits
 
-The threat model for everything below is
-[`security-model.md`](./security-model.md): assume an agent whose instructions have been subverted
-by text it read. Three facts follow for tool servers specifically:
+Listed for an adopting deployment on the site's
+[Current limits](https://www.catfactory.ai/extend/tool-servers.html#current-limits); every entry's
+disposition, and the slice that would close it, is in
+[`mcp-maturation.md`](../../docs/initiatives/mcp-maturation.md). Two of them are obligations on code
+here rather than on an adopter:
 
-- **A wired server's RESULTS are untrusted input**, exactly like repository contents and issue
-  text. A third-party or vendor server (or anything it proxies) can inject instructions through a
-  tool result, so wiring a server extends the set of parties who can attempt injection to that
-  server's operator and its own upstreams.
-- **`allowedTools` does not contain a subverted agent** (scoping, above), and the run container
-  applies no egress bound on which wired servers such an agent may call with what it has read. A
-  wired server is therefore also a potential exfiltration channel for anything else in the agent's
-  context.
-- **The credential is the boundary you actually control.** Wire third-party servers with read-only,
-  minimally-scoped tokens (the Slack runbook below omits `chat:write` at the Slack app, not just in
-  `allowedTools`), prefer the per-workspace store over deployment env vars, and set `allowKeys`
-  when the deployment runs agent packages it did not author.
-
-## Current limits, and where each is tracked
-
-Every entry here has a disposition in [`mcp-maturation.md`](../../docs/initiatives/mcp-maturation.md);
-this list exists so an adopting deployment learns the ceiling from the docs rather than from a run.
-
-- **No dynamic client registration** (RFC 7591). OAuth works from a client the deployment
-  registered at the vendor and named in code; a server that offers ONLY dynamic registration
-  cannot be connected. Registering a client at runtime would be deployment state with no home in a
-  composition-root registration and no operator-visible identity at the vendor, which is why it is
-  deferred rather than absent by accident.
-- **A runner pool that maps no `dispatchCapabilitiesPath` gets no capability handshake** (see
-  above). Its dispatches are then counted as UNVERIFIABLE rather than confirmed, which is honest
-  but is not the same as safe: keeping pool images at the pinned tag remains an adopter obligation.
-- **A runner pool cannot PROVE it stopped a refused job**, and one with no `release` template
-  cannot stop it at all. Both are stated on the failure rather than hidden, but on that backend a
-  refused blind run really can keep working against the repository until someone kills it.
-- **No per-workspace or per-step server selection** (slice 6). A registered server applies to
-  every workspace's runs of the kinds it is declared on; only the credential half is per-workspace
-  today. Capability credentials are also SPA-only (absent from the public API) until the same
-  slice.
-- **Only the claude-code harness reports what it reached.** `step.toolServers.observed` carries
-  the agent CLI's own startup report (see above), and codex's CLI publishes none, so a codex run
-  records the platform's half alone. That is stated as ABSENT rather than as a healthy or failed
-  server, and on that harness a wired-but-broken server is still diagnosed with the probe. The same
-  holds for a runner pool that leaves `response.toolServersPath` unmapped, and for any image older
-  than 1.95.0.
-- **Pi has no MCP client** (standing non-goal, ADR 0029). A deployment whose model provisioning
-  resolves to Pi runs gets no tool servers there, stated per run as `harness_unsupported`.
-- **`http` means streamable HTTP.** The legacy HTTP+SSE transport is deliberately not a vocabulary
-  member; an SSE-only server is unreachable (revisit recorded in the tracker).
-- **Tools only.** MCP resources, prompts, elicitation and progress notifications are not consumed
-  (deferred, not refused).
+- **A runner pool that maps no `dispatchCapabilitiesPath` gets no capability handshake**, so its
+  dispatches count as UNVERIFIABLE rather than confirmed. Honest, and not the same as safe.
+- **A runner pool cannot PROVE it stopped a refused job**, and one with no `release` template cannot
+  stop it at all. Stated on the failure rather than hidden, but on that backend a refused blind run
+  really can keep working against the repository until someone kills it.
 
 ## Two things that hold WHEREVER the server was declared
 
@@ -643,81 +339,9 @@ this list exists so an adopting deployment learns the ceiling from the docs rath
   resets on any call outside its family, so raising one is safe while interleaving several would
   otherwise have been bounded by nothing but the job's wall-clock ceiling.
 
-## Runbook: give `coder` the Slack MCP server
+## Adopting one: the checklist is the website's
 
-A real vendor server, end to end, because the worked example
-(`backend/internal/example-custom-agent`) is a house server on a house endpoint and every
-interesting rule shows up when a VENDOR fixes the names. Slack's MCP server is `stdio` (an npm
-package) and its client reads `SLACK_BOT_TOKEN` and `SLACK_TEAM_ID`, both of which fall inside a
-prefix family the platform reserves and neither of which the platform reads.
-
-1. **Register the server and attach it to a built-in**, in the deployment's composition root, beside
-   its other `register*` calls:
-
-   ```ts
-   registry.registerToolServer({
-     id: 'slack',
-     label: 'Slack',
-     guidance:
-       'Read Slack history to find the discussion behind a task. Prefer it over guessing at ' +
-       'intent from the ticket alone. Never post.',
-     transport: {
-       kind: 'stdio',
-       command: 'npx',
-       args: ['-y', '@modelcontextprotocol/server-slack'],
-     },
-     allowedTools: ['slack_list_channels', 'slack_get_channel_history', 'slack_get_thread_replies'],
-     secretKeys: [
-       {
-         key: 'ORG_SLACK_BOT_TOKEN',
-         envName: 'SLACK_BOT_TOKEN',
-         usage: 'A Slack bot token (xoxb-…) with channels:history and channels:read.',
-       },
-       {
-         key: 'ORG_SLACK_TEAM_ID',
-         envName: 'SLACK_TEAM_ID',
-         required: false,
-         usage: 'The workspace id (T…), from Slack’s About this workspace page.',
-       },
-     ],
-   })
-   registry.assignToolServers('coder', ['slack'])
-   ```
-
-   Three things in there are the rules above rather than taste. The LOOKUP keys are prefixed
-   `ORG_` because `SLACK_` is a reserved family, and `envName` carries the names Slack's own client
-   insists on: the floor binds what may be READ off the deployment's environment, and an injection
-   name reads nothing. `allowedTools` lists the three READ tools and omits `slack_post_message`,
-   which is scoping rather than a security boundary: if `coder` must never post, the right answer is
-   a Slack app without `chat:write`.
-
-2. **Fill in the values.** Infrastructure → Capability credentials shows both keys as a checklist
-   with the `usage` lines beside them. Store them for the board (sealed, per workspace) or set the
-   variables on the deployment; the store wins per key.
-
-3. **Check the row.** The tool-server list above the checklist should say `Given to: coder` and
-   `Works on: claude-code, codex`. `Given to:` empty means the `assignToolServers` call did not run.
-
-4. **Verify from a run, not from the Test button.** A `stdio` server is a child process of the
-   harness INSIDE the run container, so the button is absent and the row says why: there is no
-   vantage point here, and a probe that reached for the nearest thing it could talk to would answer
-   about the backend. Start a `coder` run and read the prompt's tool-server section, or the run's
-   context snapshot. A remote (`http`) vendor server is the case the Test button exists for.
-
-5. **If the run says the server is unavailable**, the reason names the fix: `missing_secret` is a
-   value to supply, `reserved_secret` is a declaration to change, `harness_unsupported` means the run
-   used Pi (no MCP client), and `over_budget` means `coder` has accreted more servers than one
-   dispatch carries.
-
-## Adoption checklist
-
-1. Register the server (and `assignToolServers` it onto the kinds that should reach it) in the
-   composition root; read the boot log, which is where a bad id, an insecure url, a reserved key or
-   an unservable harness/transport combination is named.
-2. Supply credential values: the per-workspace store (preferred on anything multi-tenant) or the
-   deployment environment; `allowKeys` if the deployment runs third-party agent packages.
-3. Check the Infrastructure window's inventory row (`Given to:` / `Works on:`), then verify: the
-   Test button for an `http` server, a real run's prompt section or context snapshot for `stdio`.
-4. Keep self-hosted runner pools on the current pinned image (the blind-run limit above).
-5. For third-party servers, read the Security posture section before wiring: minimal scopes,
-   read-only tokens, and the store over the environment.
+Registering, supplying credentials, checking the inventory row, verifying, and the worked Slack
+runbook are all on the site's
+[Adoption checklist](https://www.catfactory.ai/extend/tool-servers.html#adoption-checklist) and
+[Worked example](https://www.catfactory.ai/extend/tool-servers.html#worked-example-give-coder-the-slack-mcp-server).

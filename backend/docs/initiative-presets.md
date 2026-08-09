@@ -1,5 +1,9 @@
 # Initiative presets: a form + a plan shape + typed spawned tasks, no fork
 
+> **Running an initiative, presets included, is on the website**:
+> [Run an Initiative](https://www.catfactory.ai/guide/initiatives.html). This page is the
+> registration MODEL and the seams a deployment extends it through.
+
 An **initiative preset** turns the open-ended Initiative feature into a task-shaped one: a
 preset bundles a create-time **form**, a **planning-pipeline binding**, a declarative
 **plan shape**, per-agent-kind **prompt steering**, and **spawn decoration** so the tasks
@@ -10,11 +14,11 @@ change and no per-facade wiring.
 > This document is the model + the seams. The pilot is the built-in **Documentation-refresh**
 > preset (`@cat-factory/agents`); the worked deployment example is
 > `backend/internal/example-custom-agent`'s `preset_org_audit`. The durable design trackers are
-> [`docs/initiatives/initiative-presets-and-docs-refresh.md`](../../docs/initiatives/initiative-presets-and-docs-refresh.md)
+> [ADR 0016](./adr/0016-initiative-presets.md)
 > (the system + the docs-refresh pilot) and
-> [`docs/initiatives/tech-migration-preset-and-mssql-postgres-pilot.md`](../../docs/initiatives/tech-migration-preset-and-mssql-postgres-pilot.md)
+> [ADR 0014](./adr/0014-tech-migration-preset.md)
 > (a second consumer). For the generic Initiative feature this builds on, see
-> [`docs/initiatives/initiatives-feature.md`](../../docs/initiatives/initiatives-feature.md).
+> [ADR 0013](./adr/0013-initiatives-feature.md).
 
 ## Why presets exist
 

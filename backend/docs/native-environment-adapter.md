@@ -1,5 +1,11 @@
 # Native environment adapters
 
+> **Choosing between a manifest and code is on the website**:
+> [Provision Ephemeral Environments](https://www.catfactory.ai/operate/environments.html#when-the-manifest-isn-t-enough)
+> owns that decision and
+> [Custom Providers](https://www.catfactory.ai/extend/custom-providers.html) owns the seam.
+> This page is the CONTRACT for writing one adapter.
+
 cat-factory provisions **ephemeral environments** (the live URLs the Tester agent runs
 against) through the `EnvironmentProvider` port. The default implementation,
 `HttpEnvironmentProvider`, is fully generic: it interprets a declarative **manifest** of
