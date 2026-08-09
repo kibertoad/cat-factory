@@ -70,6 +70,43 @@ Every call receives the per-workspace `manifest` plus a `resolveSecret(key)` cal
 `blockId`) derived from the block under deployment. `status`/`teardown` get the `externalId`
 and the `provisionFields` captured at provision time.
 
+### `confirmTeardown`: proving the environment is gone
+
+A fourth optional method, and the difference between a reported reclaim and a proven one. Nothing
+reads your `teardown()` returning cleanly as the environment's death, so implement this to be
+credited with one:
+
+```ts
+confirmTeardown?(req: EnvironmentTeardownRequest): Promise<TeardownProbe>
+
+type TeardownProbe =
+  | { state: 'gone' } // the ONLY answer that proves a teardown
+  | { state: 'present'; terminating: boolean; detail?: string }
+  | { state: 'unknown'; reason: string; retryable: boolean }
+```
+
+Three rules for writing one:
+
+- **Under-claim.** Anything you cannot establish is `unknown`, never `gone`. A 404 from a
+  misconfigured base URL and a 404 from a reclaimed environment are the same response; if your
+  adapter cannot tell them apart, say so. The signal exists to be trusted, so the cautious
+  direction is the only safe one to be wrong in.
+- **`terminating` and `retryable` decide whether anyone should wait.** A resource draining its
+  finalizers will confirm on a later pass; one that is simply still there never will. A transient
+  outage (`retryable: true`) is worth re-probing, while a permanent inability to verify will answer
+  identically forever and is only ever fixed by a human.
+- **Don't answer out of `status()` instead.** You wrote `status()` to describe a LIVE environment,
+  so what it says about a destroyed one is incidental: the generic manifest provider with no
+  `status:` template returns `ready` forever, which as a teardown verdict is a confident lie in the
+  worst direction.
+
+Omitting it is a supported choice rather than a bug: the teardown is then recorded as
+`unverifiable` and reported as such, never as a reclaim. The probe is bounded in wall-clock time by
+the service (it is awaited inline on an on-demand teardown and on the TTL sweep), so an
+unresponsive one costs the confirmation and never the teardown. What the verdicts mean and which
+paths record them:
+[`environment-disposal-and-teardown-proof.md`](../../docs/initiatives/environment-disposal-and-teardown-proof.md).
+
 ### `frontendOrigins`: wiring a bound frontend's CORS
 
 When a `deployer` step provisions a service that one or more `frontend` frames bind (via the
@@ -284,6 +321,9 @@ idempotent and an already-gone environment never wedges the registry. A provider
 own auto-expiry (e.g. an `online_until` cap) coexists safely: cat-factory owns teardown of
 the environments it created; the provider's auto-expiry is a backstop. Make your adapter's
 `teardown` tolerant of an already-deleted environment (treat 404 as success).
+
+Tombstoning is bookkeeping, not proof: whether the resource actually went away is a separate probe,
+which is why [`confirmTeardown`](#confirmteardown-proving-the-environment-is-gone) exists.
 
 ## Dependency: `@cat-factory/kernel`
 
