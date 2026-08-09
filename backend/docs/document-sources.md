@@ -198,33 +198,21 @@ mothership opens it. Credentials are never returned on the wire, and a bag that 
 raises rather than resolving to an empty one, so "connected with nothing in it" and "this row is
 unreadable" stay different answers.
 
-- **Confluence**: each workspace owner connects their own site with an Atlassian
-  **API token** (`id.atlassian.com → Security → API tokens`); the backend
-  authenticates with HTTP Basic (`email:token`). The stored base URL is
-  SSRF-guarded (https, public host).
-- **Notion**: create an **internal integration**
-  (`notion.so/my-integrations`), share each page with it, and paste the token.
-  The API host is fixed (`api.notion.com`), so there is no SSRF surface.
-- **GitHub** (repo docs: READMEs / RFCs / notes under `docs/`): rides the
-  workspace's installed GitHub App (or PAT in local mode), so it stores **no
-  per-workspace credential and needs no separate connect step**. It is reported as a
-  live connection as soon as the App is installed: the provider's
-  `resolveImplicitConnection` resolves the workspace's installation, and
-  `DocumentConnectionService` surfaces it in `listConnections` / `requireConnection`
-  without a stored marker row (an explicit stored connection, if one exists, still
-  wins). This mirrors the GitHub-issues **task** source's App-presence availability.
-  Reads are **tenant-scoped**: `fetchDocument` / `probeVersion` resolve the installation
-  via `getByWorkspace` and require the doc's `owner` to match the workspace's own
-  installation account, so a crafted `owner/repo:path` id can't reach another tenant's
-  repo through a different workspace's installation token (the same scoping `search` uses).
-  In the UI the GitHub (and, via the VCS adapter, GitLab) source doesn't use the generic
-  free-text search box: instead the context-document picker offers a **repository
-  picker**: search for a repo (reusing the shared server-side repo search), then pick one
-  or more **files** from it by searching the whole tree by path or browsing it with the
-  same tree browser the monorepo add-service flow uses (now multi-pick in file mode). The
-  file search is backed by a single recursive tree read per repo: `listRepoFiles`
-  (`GET /github/repos/:repoGithubId/files`) over the `listTree` client port, so the
-  picker filters files client-side without walking the contents API level-by-level.
+Which credential each source takes, and where an operator gets it, is the site's
+[Supported sources](https://www.catfactory.ai/guide/issue-sources.html#supported-sources). Two
+per-source facts are about this codebase rather than about connecting:
+
+- **GitHub stores NO per-workspace credential and needs no connect step.** The provider's
+  `resolveImplicitConnection` resolves the workspace's installation and `DocumentConnectionService`
+  surfaces it in `listConnections` / `requireConnection` with no stored marker row (an explicit
+  stored connection still wins). This mirrors the GitHub-issues task source's App-presence
+  availability, and anything new with an implicit connection copies that seam rather than seeding a
+  row.
+- **GitHub reads are TENANT-SCOPED at the provider.** `fetchDocument` / `probeVersion` resolve the
+  installation via `getByWorkspace` and require the doc's `owner` to match the workspace's own
+  installation account, so a crafted `owner/repo:path` id cannot reach another tenant's repo through
+  a different workspace's installation token. `search` applies the same scoping; a new read on this
+  provider that skips it is a cross-tenant hole with no other guard behind it.
 
 ## HTTP API
 

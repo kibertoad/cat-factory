@@ -247,18 +247,19 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       checked-in copy of the site's page list, which is a second routing table to keep in step and
       rots in the direction that matters most, since a page deleted from the site would stay listed
       and keep passing.
-- [x] 15. **Finish the reductions the pointers only announced.** ([#1884](https://github.com/kibertoad/cat-factory/pull/1884)) A pointer at the top of a doc is
+- [ ] 15. **Finish the reductions the pointers only announced.** ([#1884](https://github.com/kibertoad/cat-factory/pull/1884)) A pointer at the top of a doc is
       not the split; it is the promise of one, and on a checklist the promise reads as done. Slices
       2 to 11 reduced five things: `sdk/README.md` (-92 lines), `security-model.md` (-60),
       `vcs-providers.md` (-24), the root `README.md` (-13) and `model-support.md` §6-§8. Every other
       doc in the "mixed" row was believed to have gained a pointer over unchanged prose, which is the
       two-parallel-full-accounts state rule 1 exists to end. Each section checked
-      against the LIVE page before it is cut. CLOSED: all 24 mixed docs open with a pointer and
-      twelve have been reduced. The three that had nothing to point AT (`auth`,
-      `reusable-operations`, `figma-claude-design-context`) got their destinations in the website's
-      phase E and were reduced in the same change, and 15b's parked half and 15c both ran once item
-      17 landed. The per-doc state and the per-slice dispositions are their own section:
-      [Slice 15 reductions](#slice-15-reductions).
+      against the LIVE page before it is cut. All 24 mixed docs now open with a pointer and eight
+      have been reduced (-1,186 lines, a 16% cut of the 7,386-line corpus). **This item was marked
+      closed once with fourteen docs still carrying full prose under a fresh pointer, which is the
+      exact state it exists to end**; that is recorded under
+      [What "closed" got wrong the first time](#what-closed-got-wrong-the-first-time), because the
+      mistake is repeatable and a checklist tick is what hid it. What remains is eleven docs, each
+      with a named verdict in the per-doc table rather than an unassessed row.
 - [x] 16. **Guard the relative links BETWEEN repo docs** ([#1884](https://github.com/kibertoad/cat-factory/pull/1884))**.** `scripts/check-doc-links.mjs` (detection
       in `doc-links.mjs`, fixtures beside it) resolves every relative markdown link to a path and,
       where it deep-links one, a heading. Generated `CHANGELOG`s are OUT of scope, stated in the
@@ -345,27 +346,52 @@ already. `pointer` means the doc opens by naming the website page that owns its 
 | `auth.md`                         | yes     | yes (15f)      | nothing                                                                       |
 | `reusable-operations.md`          | yes     | yes (15g)      | nothing                                                                       |
 | `figma-claude-design-context.md`  | yes     | yes (15h)      | nothing                                                                       |
+| `mcp-tool-servers.md`             | yes     | yes (15i)      | nothing: 723 → 347, after the site gained a tool-servers page                 |
+| `debug-api.md`                    | yes     | yes (15j)      | nothing: 433 → 207, after the site gained a debugging-a-run page              |
+| `document-sources.md`             | yes     | partly (15k)   | the import/plan/spawn half, and the picker's tier split: both unread          |
 | `llm-telemetry.md`                | yes     | not needed     | nothing: the clean-split model to copy                                        |
-| `custom-agent-roles.md`           | yes     | not assessed   | a read against `extend/custom-agents.html`                                    |
-| `custom-agent-gate-ergonomics.md` | yes     | not assessed   | a read against `extend/custom-gates.html`                                     |
-| `custom-binary-stores.md`         | yes     | not assessed   | a read against `extend/custom-providers.html`                                 |
-| `native-environment-adapter.md`   | yes     | not assessed   | a read against `extend/custom-providers.html`                                 |
-| `local-k3s-environments.md`       | yes     | not assessed   | a read against `operate/environments.html` + `deploy/kubernetes.html`         |
-| `document-sources.md`             | yes     | not assessed   | a read against `guide/issue-sources.html`; the heaviest remaining UI how-to   |
-| `initiative-presets.md`           | yes     | not assessed   | a read against `guide/initiatives.html`                                       |
-| `storage-and-retention.md`        | yes     | not assessed   | a read against `operate/upgrades-and-retention.html`                          |
-| `github-integration.md`           | yes     | not assessed   | a read against `deploy/github-app.html`                                       |
-| `github-operations.md`            | yes     | not assessed   | the runbook stays; setup already moved                                        |
-| `kubernetes-topology.md`          | yes     | not assessed   | a read against `deploy/kubernetes.html`                                       |
-| `mcp-tool-servers.md`             | yes     | not assessed   | a read against `extend/mcp-server.html` and the custom-agents anchor          |
-| `debug-api.md`                    | yes     | not assessed   | a read against `extend/public-api.html`                                       |
-| `reports.md`                      | yes     | not assessed   | a read against `operate/observability.html`                                   |
+| `storage-and-retention.md`        | yes     | not needed     | nothing: read, and it is sink/rollup design the site does not carry           |
+| `reports.md`                      | yes     | not needed     | nothing: read, and it is the decision record behind the reports surface       |
+| `custom-agent-roles.md`           | yes     | NOT READ       | against `extend/custom-agents.html`                                           |
+| `custom-agent-gate-ergonomics.md` | yes     | NOT READ       | against `extend/custom-gates.html`                                            |
+| `custom-binary-stores.md`         | yes     | NOT READ       | against `extend/custom-providers.html`                                        |
+| `native-environment-adapter.md`   | yes     | NOT READ       | against `extend/custom-providers.html`; 438 lines, the largest unread         |
+| `local-k3s-environments.md`       | yes     | NOT READ       | against `operate/environments.html` + `deploy/kubernetes.html`                |
+| `initiative-presets.md`           | yes     | NOT READ       | against `guide/initiatives.html`                                              |
+| `github-integration.md`           | yes     | NOT READ       | against `deploy/github-app.html`                                              |
+| `github-operations.md`            | yes     | NOT READ       | the runbook stays; setup already moved                                        |
+| `kubernetes-topology.md`          | yes     | NOT READ       | against `deploy/kubernetes.html`                                              |
 
-**"Not assessed" is the honest state and it is not "done".** Twelve rows have had a section-by-section
-read against the live page; twelve have a pointer over prose nobody has compared. That is a weaker
-position than the reduced rows and a stronger one than where this item started, where the pointer
-itself was missing. The next pass takes them in the order above and writes its verdict into the row,
-including "nothing to cut", which `llm-telemetry.md` shows is a real answer.
+**A verdict of "no reduction warranted" is a real outcome and it is not the same as "not
+assessed".** `llm-telemetry.md`, `storage-and-retention.md` and `reports.md` were read against their
+pages and keep everything: all three are design records (sink and rollup design, D1 constraints, the
+decisions behind a reports surface) whose user-facing halves the site already owns in full. The rows
+that still say "not read" are debt, and they are named as debt.
+
+### What "closed" got wrong the first time
+
+Item 15 was ticked with the five reductions listed above and fourteen docs carrying **unchanged
+prose under a fresh pointer**. The numbers at that moment: five docs reduced by 614 lines, nine docs
+grown by 40 (the pointer itself), and 1,139 lines of NEW website pages. The material had been
+ADDED to the site rather than moved off the repo, which is two parallel full accounts with a link
+between them: the precise failure rule 1 exists to prevent, re-made inside the slice written to end
+it.
+
+Three things let it happen, and each is a check worth running before ticking this item again:
+
+- **A pointer is cheap and reads as progress.** Nine pointers in one change looks like nine docs
+  handled. Count LINES REMOVED, not docs touched.
+- **"Not assessed" was recorded as a state, and then counted as done.** It was honest in the table
+  and invisible in the checkbox. A per-doc verdict is the unit; the checkbox may not lead it.
+- **Growing the site is the easy half.** Writing a good page is satisfying and lands cleanly; cutting
+  the doc it duplicates is fiddly, breaks inbound anchors, and is where the value is. The website PR
+  merging first is the ordering rule, and it makes it structurally easy to stop after the easy half.
+
+The follow-up pass that fixed it found the two biggest offenders were exactly the two docs nobody had
+opened: `mcp-tool-servers.md` (723 lines against 65 on the site) and `debug-api.md` (433 against 25).
+Both needed a new website page before anything could be cut, which is the same shape as item 17 and
+is now the expected shape rather than a surprise: **where a repo doc is many times its page, the
+reduction is blocked on a page that does not exist yet, and finding that out is the assessment.**
 
 ### 15a. `custom-agents.md`: DONE (553 → 326 lines)
 
@@ -516,6 +542,54 @@ Claude Design is the interesting row: the WORKFLOW moved, and the reason there i
 STAYED, because a per-user-PAT Claude Design provider was built here and removed. That is a record
 of a rejected design, which is contributor material by definition, and deleting it would let the
 next iteration re-propose it.
+
+### 15i. `mcp-tool-servers.md`: DONE (723 → 347 lines)
+
+The largest single reduction of the initiative, and the clearest case of the pattern item 17 first
+exposed: 723 lines here against 65 on the site, inside a subsection of the custom-agents page. The
+reduction was therefore blocked on a page that did not exist, so `extend/tool-servers.md` was written
+first, and it takes the whole deployment-author path: registering, the harness support matrix, the
+credential rules, OAuth end to end, the Test button's nine verdicts, operating a `stdio` server, the
+security posture, the worked Slack runbook and the adoption checklist.
+
+What stayed is the shape to copy for the remaining reductions. Not a summary of the page: a table of
+WHERE each decision is resolved and why there, plus the four OAuth choices the obvious implementation
+would get wrong (the redirect landing on the SPA rather than the backend, the sealed rather than
+signed `state`, `secrets.manage` re-resolved at STORE time, and refusing the token endpoint's
+redirects), plus the enforcement facts (three layers per floor, the two credential names of which
+only one is a boundary, a deployment resolver replacing the chain for every subject).
+
+One coupling the cut had to carry: the generated environment-variable page maps
+`mcp-tool-servers.md` onto a site link through the website's `sync-env-vars.mjs`, and it pointed at
+`custom-agents.html#skills-and-tool-servers`. Repointed at the new page and regenerated in the same
+change, or the reference page would have kept sending readers to the section this slice thinned.
+
+### 15j. `debug-api.md`: DONE (433 → 207 lines)
+
+The same shape at a smaller scale: 433 lines against about 25 spread over two pages, with the whole
+"Investigating a run" walkthrough (find it, follow the signal, grep for the cause, attribute the
+spend, read the conversation, export the bundle) sitting here where a caller with an API key and no
+checkout is exactly the reader. `operate/debugging-a-run.md` takes it, plus the endpoint table and
+the size ceilings.
+
+Kept: the one design constraint every endpoint obeys (a response's size is computable BEFORE the
+request), why the path is `/debug`, the auth model, where the code lives, and the mothership-mode
+routing. Plus two things the site cannot state for itself: why a `trajectory` page is not derivable
+from a `recent` one (`seq` restarts per dispatch and `jobId` sorts by agent-kind spelling), and why
+each signal's SEVERITY is what it is (`tool_calls_failed` as an `info` because a failing tool call is
+the ordinary shape of an agent loop).
+
+### 15k. `document-sources.md`: PARTLY (592 → 588 lines)
+
+The per-source connect instructions moved to the site's supported-sources table, and what stayed is
+the two facts that are about this codebase: GitHub stores no per-workspace credential and resolves an
+IMPLICIT connection, and its reads are tenant-scoped at the provider, which is a cross-tenant hole
+with no other guard behind it.
+
+**This one is honestly unfinished.** The import/plan/spawn machinery and the context picker's tier
+split were not read against the site, and the picker section in particular is 30 lines of behaviour a
+user sees (what a member is shown versus an admin) written as implementation. It is the largest
+remaining known duplication after the eleven unread docs.
 
 `llm-telemetry.md` is the model of a clean split and needs nothing: every section is an internal rule
 with no counterpart on the site. Copy its shape.

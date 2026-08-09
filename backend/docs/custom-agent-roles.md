@@ -263,9 +263,10 @@ combination is a boot error rather than an inert declaration.
 | `resource`                      | The RFC 8707 resource indicator. Defaults to the server's own url, which is right whenever the server is its own resource.                                                                                                                      |
 | `header` / `headerTemplate`     | Where the access token rides. Defaults to `Authorization` / `Bearer {value}`. A `secretKeys` entry naming the SAME header is a boot warning: the granted token wins, so the static credential reaches the server as nothing.                    |
 
-The operator-facing half (what a deployment configures, what a board sees, and the security
-properties of the grant flow) is in
-[`mcp-tool-servers.md` → OAuth](./mcp-tool-servers.md#oauth-connecting-an-oauth-protected-remote-server).
+The operator-facing half (what a deployment configures and what a board sees) is the website's
+[OAuth-protected servers](https://www.catfactory.ai/extend/tool-servers.html#oauth-protected-servers);
+why the flow is shaped the way it is, in
+[`mcp-tool-servers.md`](./mcp-tool-servers.md#oauth-the-four-decisions-that-are-not-obvious).
 
 ### What the agent actually sees
 
