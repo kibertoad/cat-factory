@@ -6,6 +6,7 @@ import {
   PUBLIC_SPEC_MAX_ISSUES,
   PUBLIC_SPEC_MAX_REQUIREMENTS,
   PUBLIC_SPEC_MAX_RULES,
+  type PublicRunSpec,
   type PublicServiceSpec,
   type PublicSpecAnchor,
   type PublicSpecFeatureFile,
@@ -198,6 +199,36 @@ function capIssues(issues: SpecReadIssue[]): {
   }
 }
 
+/** The tree, the Gherkin, the issues and the caps: everything both spec reads answer alike. */
+interface SpecBody {
+  spec: ReadSpecDoc | null
+  features: PublicSpecFeatureFile[]
+  issues: SpecReadIssue[]
+  truncations: PublicSpecTruncation[]
+}
+
+/**
+ * The bounded body of one read view, shared by both spec endpoints.
+ *
+ * One function rather than one per endpoint, because the caps are a property of the DOCUMENT and
+ * the two endpoints serve one document at two refs. A second copy is how the run read would come
+ * to bound the Gherkin differently from the service read of the same repository.
+ */
+function specBody(view: ServiceSpecView): SpecBody {
+  const capped = view.spec ? capTree(view.spec) : { spec: null, truncations: [] }
+  const features = capFeatures(view.features)
+  // An absent `diagnostics` means the producer diagnosed nothing, which on this path cannot
+  // happen (the reader always sets it) but is answered as "no issues found" rather than left to
+  // throw on a view assembled by hand.
+  const issues = capIssues(view.diagnostics?.issues ?? [])
+  return {
+    spec: capped.spec,
+    features: features.features,
+    issues: issues.issues,
+    truncations: [...capped.truncations, ...features.truncations, ...issues.truncations],
+  }
+}
+
 /**
  * Project a read view onto the wire, under `anchor`.
  *
@@ -212,19 +243,34 @@ export function toPublicServiceSpec(
   view: ServiceSpecView,
   provenance: PublicSpecProvenance,
 ): PublicServiceSpec {
-  const capped = view.spec ? capTree(view.spec) : { spec: null, truncations: [] }
-  const features = capFeatures(view.features)
-  // An absent `diagnostics` means the producer diagnosed nothing, which on this path cannot
-  // happen (the reader always sets it) but is answered as "no issues found" rather than left to
-  // throw on a view assembled by hand.
-  const issues = capIssues(view.diagnostics?.issues ?? [])
-  return {
-    serviceId,
-    anchor,
-    spec: capped.spec,
-    features: features.features,
-    provenance,
-    issues: issues.issues,
-    truncations: [...capped.truncations, ...features.truncations, ...issues.truncations],
+  return { serviceId, anchor, provenance, ...specBody(view) }
+}
+
+/**
+ * Project a RUN's read onto the wire. `view`/`provenance` are null exactly for `not_read`, the one
+ * anchor state that describes the run rather than the branch.
+ *
+ * They travel together for that reason: an anchor of `not_read` with a provenance would name a
+ * branch nothing was read from, and any other anchor without one would serve a tree that cannot say
+ * where it came from. The signature makes both unrepresentable rather than leaving it to the caller
+ * to pair them correctly.
+ */
+export function toPublicRunSpec(
+  runId: string,
+  read:
+    | { anchor: PublicSpecAnchor; view: ServiceSpecView; provenance: PublicSpecProvenance }
+    | { anchor: 'not_read' },
+): PublicRunSpec {
+  if (read.anchor === 'not_read') {
+    return {
+      runId,
+      anchor: 'not_read',
+      spec: null,
+      features: [],
+      provenance: null,
+      issues: [],
+      truncations: [],
+    }
   }
+  return { runId, anchor: read.anchor, provenance: read.provenance, ...specBody(read.view) }
 }

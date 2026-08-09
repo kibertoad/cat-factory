@@ -80,24 +80,11 @@ function companionTargets(companion: string): string[] {
 const isEnabledAt = (p: Pipeline, i: number) => p.enabled?.[i] !== false
 
 /**
- * Client-side mirror of the backend `validatePipelineShape` (companion adjacency + estimate
- * gating, over the ENABLED subset), collecting the first problem instead of throwing. Returns a
- * human message, or null when the shape is valid. Kept in step with
- * `backend/packages/orchestration/src/modules/pipelines/pipelineShape.ts`.
- *
- * A rule here must be keyed off vocabulary SHARED with that module (`@cat-factory/contracts`)
- * wherever one exists, never re-stated locally — see the gating note below for what a drifted copy
- * costs. Adding a rule to `assertValidGating` without adding it here is the milder half of the same
- * drift: a pipeline the engine refuses at save that this advisory calls healthy.
+ * Companion adjacency: an enabled companion's nearest preceding ENABLED step must be a producer it
+ * can review. Mirrors `assertValidCompanionPlacement`.
  */
-function shapeProblem(p: Pipeline): string | null {
+function companionProblem(p: Pipeline): string | null {
   const kinds = p.agentKinds
-  // No enabled steps ⇒ nothing would run.
-  if (kinds.length === 0 || !kinds.some((_, i) => isEnabledAt(p, i))) {
-    return 'No enabled steps — the pipeline has nothing to run.'
-  }
-  // Companion adjacency: an enabled companion's nearest preceding enabled step must be a
-  // producer it can review.
   for (let i = 0; i < kinds.length; i++) {
     const kind = kinds[i]
     if (!kind || !isProducerCompanion(kind) || !isEnabledAt(p, i)) continue
@@ -113,42 +100,116 @@ function shapeProblem(p: Pipeline): string | null {
       return `Companion '${kind}' must run immediately after an enabled step it can review (${targets.join(', ')}).`
     }
   }
-  // Estimate gating: an enabled gated step must be a GATABLE kind, must not also carry a human
-  // approval gate, must set ≥1 threshold, and must have an enabled task-estimator earlier in the
-  // chain. Gatability reads the SHARED `BUILTIN_GATABLE_KINDS` rather than a local rule, because
-  // this advisory auto-opens a modal over the board: a copy of the rule that drifts behind the
-  // engine's does not merely warn wrongly, it calls a pipeline the product SHIPS invalid and leaves
-  // the board unusable. A DEPLOYMENT-registered kind can override gatability for itself through the
-  // agent-kind registry, which the SPA cannot see, so the two are not perfectly symmetric: such a
-  // kind is reported here and accepted by the engine. That is the safe direction of the asymmetry —
-  // a dismissible advisory rather than a refused save — and the only one available without shipping
-  // the registry to the browser.
+  return null
+}
+
+/**
+ * The rule both SKIP AXES share: a step that may be absent from a run must be a kind whose result
+ * later steps read as context, and must not also carry a human approval gate (a skip may leave a
+ * checkpoint un-reached, never cancel one the author asked for). Returns the problem, or null.
+ *
+ * Shared by {@link gatingProblem} and {@link conditionProblem} rather than written twice, because
+ * the reason is identical and only the axis's name differs — which is exactly how the two would
+ * drift apart. `axis` supplies the naming, mirroring `assertValidGating` /
+ * `assertValidRunConditions`.
+ *
+ * Gatability reads the SHARED `BUILTIN_GATABLE_KINDS` rather than a local rule, because this
+ * advisory auto-opens a modal over the board: a copy of the rule that drifts behind the engine's
+ * does not merely warn wrongly, it calls a pipeline the product SHIPS invalid and leaves the board
+ * unusable. A DEPLOYMENT-registered kind can override gatability for itself through the agent-kind
+ * registry, which the SPA cannot see, so the two are not perfectly symmetric: such a kind is
+ * reported here and accepted by the engine. That is the safe direction of the asymmetry — a
+ * dismissible advisory rather than a refused save — and the only one available without shipping the
+ * registry to the browser.
+ */
+function skipAxisProblem(
+  p: Pipeline,
+  i: number,
+  axis: {
+    notGatable: (kind: string | undefined) => string
+    withHumanGate: (kind: string) => string
+  },
+): string | null {
+  const kind = p.agentKinds[i]
+  if (!kind || !isBuiltinGatableKind(kind)) return axis.notGatable(kind)
+  if (p.gates?.[i] === true) return axis.withHumanGate(kind)
+  return null
+}
+
+/**
+ * Estimate gating: the shared skip-axis rules, plus the two specific to an estimate — at least one
+ * axis threshold (with none the step would ALWAYS skip) and an enabled task-estimator earlier in
+ * the chain (or the gate has nothing to consult). Mirrors `assertValidGating`.
+ */
+function gatingProblem(p: Pipeline): string | null {
   const gating = p.gating
-  if (gating) {
-    for (let i = 0; i < kinds.length; i++) {
-      const g = gating[i] as StepGating | null | undefined
-      if (!g?.enabled || !isEnabledAt(p, i)) continue
-      const kind = kinds[i]
-      if (!kind || !isBuiltinGatableKind(kind)) {
-        return `Step '${kind}' may not be estimate-gated — its output is required by the rest of the run. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped on the estimate.`
-      }
-      // A human approval gate and an estimate gate on the same step contradict: the estimate may
-      // ADD a human checkpoint but never CANCEL a pause the pipeline author asked for.
-      if (p.gates?.[i] === true) {
-        return `Step '${kind}' carries a human approval gate, so it cannot also be estimate-gated — the estimate may add a human checkpoint but never remove one.`
-      }
-      if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
-        return `Step '${kind}' is estimate-gated but sets no threshold (complexity / risk / impact).`
-      }
-      const hasEstimator = kinds
-        .slice(0, i)
-        .some((k, j) => k === TASK_ESTIMATOR_KIND && isEnabledAt(p, j))
-      if (!hasEstimator) {
-        return `Step '${kind}' is gated on the estimate but no enabled '${TASK_ESTIMATOR_KIND}' runs before it.`
-      }
+  if (!gating) return null
+  const kinds = p.agentKinds
+  for (let i = 0; i < kinds.length; i++) {
+    const g = gating[i] as StepGating | null | undefined
+    if (!g?.enabled || !isEnabledAt(p, i)) continue
+    const shared = skipAxisProblem(p, i, {
+      notGatable: (kind) =>
+        `Step '${kind}' may not be estimate-gated — its output is required by the rest of the run. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped on the estimate.`,
+      withHumanGate: (kind) =>
+        `Step '${kind}' carries a human approval gate, so it cannot also be estimate-gated — the estimate may add a human checkpoint but never remove one.`,
+    })
+    if (shared) return shared
+    const kind = kinds[i]
+    if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
+      return `Step '${kind}' is estimate-gated but sets no threshold (complexity / risk / impact).`
+    }
+    const hasEstimator = kinds
+      .slice(0, i)
+      .some((k, j) => k === TASK_ESTIMATOR_KIND && isEnabledAt(p, j))
+    if (!hasEstimator) {
+      return `Step '${kind}' is gated on the estimate but no enabled '${TASK_ESTIMATOR_KIND}' runs before it.`
     }
   }
   return null
+}
+
+/**
+ * Run conditions: the SECOND skip axis, held to the shared rules and nothing more. A skip is a skip
+ * whichever axis caused it, so a condition on a non-gatable kind drops something the run needs.
+ * Mirrors `assertValidRunConditions`. A condition BESIDE an estimate gate is deliberately fine.
+ */
+function conditionProblem(p: Pipeline): string | null {
+  const stepOptions = p.stepOptions
+  if (!stepOptions) return null
+  for (let i = 0; i < p.agentKinds.length; i++) {
+    if (!stepOptions[i]?.condition || !isEnabledAt(p, i)) continue
+    const problem = skipAxisProblem(p, i, {
+      notGatable: (kind) =>
+        `Step '${kind}' may not carry a run condition — its output is required by the rest of the run, so a run outside the condition's scope would silently finish without it.`,
+      withHumanGate: (kind) =>
+        `Step '${kind}' carries a human approval gate, so it cannot also carry a run condition — a condition may leave a checkpoint un-reached but never remove one.`,
+    })
+    if (problem) return problem
+  }
+  return null
+}
+
+/**
+ * Client-side mirror of the backend `validatePipelineShape` (companion adjacency + both skip axes,
+ * over the ENABLED subset), collecting the first problem instead of throwing. Returns a human
+ * message, or null when the shape is valid. Kept in step with
+ * `backend/packages/orchestration/src/modules/pipelines/pipelineShape.ts`.
+ *
+ * One delegate per rule, in the order the backend checks them, so adding the next rule is a
+ * function beside these rather than another branch inside one that already carries three.
+ *
+ * A rule here must be keyed off vocabulary SHARED with that module (`@cat-factory/contracts`)
+ * wherever one exists, never re-stated locally — see {@link skipAxisProblem} for what a drifted
+ * copy costs. Adding a rule to `validatePipelineShape` without adding it here is the milder half of
+ * the same drift: a pipeline the engine refuses at save that this advisory calls healthy.
+ */
+function shapeProblem(p: Pipeline): string | null {
+  // No enabled steps ⇒ nothing would run.
+  if (p.agentKinds.length === 0 || !p.agentKinds.some((_, i) => isEnabledAt(p, i))) {
+    return 'No enabled steps — the pipeline has nothing to run.'
+  }
+  return companionProblem(p) ?? gatingProblem(p) ?? conditionProblem(p)
 }
 
 /**

@@ -4,10 +4,12 @@ import type {
   BinaryOutputArtifact,
   BinaryOutputConfig,
   BinaryOutputReport,
+  BinaryOutputSize,
 } from '@cat-factory/contracts'
 import {
   ASSET_STORAGE_CAPABILITY,
   GENERATION_CONTEXT_CAPABILITY,
+  MAX_BINARY_PIXEL_EXTENT,
   modalityOfMediaType,
 } from '@cat-factory/contracts'
 import {
@@ -284,10 +286,12 @@ function coerceArtifact(entry: unknown): BinaryOutputArtifact | null {
   // Lowercased like `service`, and for the same reason: registry ids are lower-kebab slugs, so a
   // model that capitalises one means the registered integration and must not be reported unknown.
   const generator = identityField(record.generator)?.toLowerCase()
+  const dimensions = dimensionsField(record.dimensions)
   if (entity) artifact.entity = entity
   if (contentType) artifact.contentType = contentType
   if (description) artifact.description = description
   if (generator) artifact.generator = generator
+  if (dimensions) artifact.dimensions = dimensions
   // The platform CLASSIFIES; the model only reports. An unrecognised media type leaves `modality`
   // ABSENT rather than guessing one — "we cannot tell what this is" is not "this is not an image".
   // So does an AMBIGUOUS one, which for 3D is every one of them: a `.glb` is one asset or a whole
@@ -296,6 +300,41 @@ function coerceArtifact(entry: unknown): BinaryOutputArtifact | null {
   const modality: BinaryModality | null = contentType ? modalityOfMediaType(contentType) : null
   if (modality) artifact.modality = modality
   return artifact
+}
+
+/**
+ * The reported pixel dimensions of one artifact, or null when the model did not report usable
+ * ones.
+ *
+ * A malformed `dimensions` does NOT invalidate the entry, unlike a malformed `service` or
+ * `location`: those identify the artifact, so a corrupt one leaves a record pointing nowhere,
+ * while this is one optional observation about an artifact whose identity is intact. Dropping it
+ * costs the size line and keeps everything else, which is the right trade in the direction this
+ * feature always takes it.
+ *
+ * Both members are required together. A width with no height describes nothing, and carrying half
+ * of it would let a size comparison downstream read one dimension as matching.
+ */
+function dimensionsField(value: unknown): BinaryOutputSize | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const { width, height } = value as Record<string, unknown>
+  if (!isPixelExtent(width) || !isPixelExtent(height)) return null
+  return { width, height }
+}
+
+/**
+ * A pixel extent as the schema bounds it: a positive integer within the sanity ceiling.
+ *
+ * Reads {@link MAX_BINARY_PIXEL_EXTENT} rather than repeating the number, so the read-back and
+ * the write boundary cannot end up disagreeing about what a legible dimension is.
+ */
+function isPixelExtent(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= MAX_BINARY_PIXEL_EXTENT
+  )
 }
 
 /** A field that IDENTIFIES something: required to be a non-empty string within the cap —

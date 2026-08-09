@@ -1,3 +1,4 @@
+import { ENVIRONMENT_ANALYST_AGENT_KIND } from '@cat-factory/contracts'
 import type { WizardContext } from './context'
 import { cloneRecipe } from './context'
 
@@ -34,7 +35,6 @@ export function createFlowActions(ctx: WizardContext) {
     trialError,
     trialStarted,
     repoContext,
-    analysisPipeline,
     merged,
   } = ctx
 
@@ -117,18 +117,23 @@ export function createFlowActions(ctx: WizardContext) {
     if (id) void detect()
   }
 
-  /** Fire the analyst-only pipeline against the frame (mirrors how bootstrap runs pl_blueprint). */
+  /**
+   * Run the analyst agent against the frame — a SINGLE-KIND run, the same seam the board's
+   * "Map service" action uses. `startAgentKind` reports a refusal by returning false (it has
+   * already surfaced the reason as a toast), so both halves of "it did not start" land on the
+   * wizard's own error state rather than only the thrown one.
+   */
   async function startAnalysis() {
     const id = frameId.value
-    const pipeline = analysisPipeline.value
-    if (!id || !pipeline) {
+    if (!id) {
       analysisError.value = true
       return
     }
     analysisError.value = false
     try {
-      await execution.start(id, pipeline)
-      analysisRequested.value = true
+      const started = await execution.startAgentKind(id, ENVIRONMENT_ANALYST_AGENT_KIND)
+      if (started) analysisRequested.value = true
+      else analysisError.value = true
     } catch {
       analysisError.value = true
     }

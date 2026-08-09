@@ -11,6 +11,7 @@ import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { runInputGateSchema } from './input-gate.js'
+import { stepSkipReasonSchema } from './step-conditions.js'
 import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
 import { foundationalServiceSelectionSchema } from './foundational-services.js'
@@ -892,11 +893,24 @@ export const pipelineStepSchema = v.object({
    */
   stepOptions: v.optional(v.nullable(stepOptionsSchema)),
   /**
-   * True when this step was skipped at runtime because its `gating` was not satisfied
-   * (the task estimate fell below the threshold). The step's `state` is `done` with no
-   * output; the UI renders it as "skipped (gated)". Absent ⇒ the step ran normally.
+   * True when this step was skipped at runtime rather than run. The step's `state` is `done`
+   * with no output; {@link skipReason} says which axis skipped it. Absent ⇒ the step ran
+   * normally.
    */
   skipped: v.optional(v.boolean()),
+  /**
+   * WHY a {@link skipped} step was skipped, as a machine-readable member the SPA maps to
+   * translated copy (`stepSkipReasonSchema`). Absent on a step that ran, and on a run that
+   * predates this field.
+   *
+   * A reason rather than a prose sentence, for two reasons that both bite. The backend does not
+   * localize prose, so a sentence composed here reaches every reader in English. And the only
+   * place a sentence could have lived is `output`, which is the step's PRODUCT: three separate
+   * aggregations select prior steps on `output` being non-empty and hand the text to a model
+   * (`priorOutputsFor`, the judge's prior-work fold, the doc interview's), so a skip note parked
+   * there is read downstream as the report of a step that never ran.
+   */
+  skipReason: v.optional(stepSkipReasonSchema),
   /**
    * Set `true` on a `spec-writer` step that determined the task is purely technical and
    * produced no business specs (its result's `noBusinessSpecs`). Recorded on the step so

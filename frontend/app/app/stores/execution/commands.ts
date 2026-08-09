@@ -41,10 +41,15 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
    * and nothing merges. It is a request, not a decision — the task's merge preset can sandbox a
    * role's runs whatever they asked for, so what the run got is read back off the run's own
    * `mode`, never assumed from what was sent here.
+   *
+   * Takes the id + name it actually sends and reports, not a whole {@link Pipeline}: a caller may
+   * legitimately hold neither, because a task can be pinned to an INTERNAL pipeline that the
+   * library withholds from every picker. Demanding the row there would force the caller to either
+   * fabricate one or silently start something else.
    */
   async function start(
     blockId: string,
-    pipeline: Pipeline,
+    pipeline: Pick<Pipeline, 'id' | 'name'>,
     options?: { mode?: RunMode },
   ): Promise<boolean> {
     const ws = useWorkspaceStore()
@@ -63,6 +68,25 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
           { pipelineId: pipeline.id, ...(options?.mode ? { mode: options.mode } : {}) },
           password,
         )
+        await ws.refresh()
+      })
+    } catch (e) {
+      runErrors.present(e, 'errors.action.startFailed')
+      return false
+    }
+  }
+
+  /**
+   * Start ONE agent kind against a block. The single-kind counterpart of {@link start}: same
+   * credential gate, same snapshot refresh, same false-on-refusal contract — only the thing being
+   * started is an agent rather than a pipeline.
+   */
+  async function startAgentKind(blockId: string, agentKind: string): Promise<boolean> {
+    const ws = useWorkspaceStore()
+    const personal = usePersonalSubscriptionsStore()
+    try {
+      return await personal.withCredential(async (password) => {
+        await api.startAgentKindExecution(ws.requireId(), blockId, agentKind, password)
         await ws.refresh()
       })
     } catch (e) {
@@ -237,6 +261,7 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
 
   return {
     start,
+    startAgentKind,
     resolveDecision,
     approveStep,
     requestStepChanges,

@@ -29,9 +29,11 @@ import {
   type AnswerOutcome,
   type DecisionListShape,
 } from './approvals.js'
+import { checkedArguments } from './arguments.js'
 import { GatekeeperError, PolicyError } from './errors.js'
 import type { Actor, KeyBroker } from './keys.js'
 import { applyMask } from './masking.js'
+import { HOOK_TOPICS, type HookRegistration, type HookTopic } from './os/hooks.js'
 import { fenced } from './markdown.js'
 import { describeBinding, type CompiledTier } from './policy/compile.js'
 import type { ApprovalCard, GatekeeperState, RunState } from './state.js'
@@ -51,7 +53,10 @@ const RESERVED_METHODS = [
   'approvals_list',
   'approvals_inspect',
   'approvals_answer',
+  'approvals_subscribe',
   'runs_watched',
+  'runs_subscribe',
+  'hooks_bound',
 ] as const
 
 /**
@@ -91,6 +96,15 @@ export interface SessionGovernance {
     args: Record<string, unknown>,
     perform: () => Promise<T>,
   ): Promise<T>
+  /**
+   * Register a callback the workspace will be pushed to, once it has approved the registration.
+   *
+   * On the seam rather than beside it because binding a hook is a request to the SAME queue every
+   * call passes through, and because the door with no queue is exactly the door with no hooks: a
+   * `/rpc` session has nowhere to hand a callback and nothing to authorize the deliveries against,
+   * so it refuses and names the projection it would have been accelerating.
+   */
+  subscribe(topic: HookTopic, callback: unknown): Promise<void>
   /**
    * The session is gone: release everything it was holding on the workspace's behalf.
    *
@@ -176,7 +190,7 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
     }
   }
 
-  const invoke = async (name: string, args: Record<string, unknown>): Promise<unknown> => {
+  const invoke = async (name: string, bag: Record<string, unknown>): Promise<unknown> => {
     const binding = granted.get(name)
     if (binding === undefined) {
       throw new GatekeeperError(
@@ -184,6 +198,11 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
         `Tier '${tier.name}' does not grant '${name}'.`,
       )
     }
+    // Ahead of the key broker and ahead of the queue, because a call that cannot succeed should
+    // mint no credential and spend no approval. An argument the operation does not declare is a
+    // REFUSAL rather than a drop: forwarded silently, it is a filter nobody applied and an answer
+    // that looks exactly like the right one.
+    const args = checkedArguments(binding, bag)
     const perform = async () =>
       await deps.keys.run(deps.actor, tier.keyScope, (client) => binding.invoke(client, args))
 
@@ -248,6 +267,46 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
   // `withheld()` is the degrade-loudly half: an agent that cannot tell "your policy hides this"
   // from "this deployment does not have it" reports the wrong one to whoever has to fix it.
   proto.withheld = () => tier.withheld
+
+  /**
+   * Bind a callback for one topic, or refuse in the terms of the door the caller came in by.
+   *
+   * The refusal is the interesting half. `/rpc` brings no approval queue, so there is nothing to
+   * register a hook with and nothing to authorize its deliveries against; answering with a
+   * silently-never-fires registration would be the worst available outcome, and answering
+   * "unsupported" without naming `approvals_list()` would send a caller looking for a feature
+   * rather than for the two methods that already answer the same question.
+   */
+  const subscribe = async (topic: HookTopic, callback: unknown): Promise<void> => {
+    const governance = deps.governance
+    if (governance === undefined) {
+      throw new GatekeeperError(
+        'hooks_unavailable',
+        `This session was opened on a door with no approval queue, so ${HOOK_TOPICS[topic].sessionMethod}() ` +
+          'has nowhere to register a callback and no way to authorize what it would push. Read ' +
+          '`approvals_list()` and `runs_watched()` instead: they carry exactly what a hook pushes.',
+      )
+    }
+    await governance.subscribe(topic, callback)
+  }
+
+  proto.approvals_subscribe = async (callback: unknown): Promise<void> =>
+    subscribe('approval_card', callback)
+
+  proto.runs_subscribe = async (callback: unknown): Promise<void> =>
+    subscribe('run_event', callback)
+
+  // What this account has enabled, and whether each one's live half survived. A hook that stopped
+  // firing is otherwise indistinguishable from a deployment where nothing happened, which is the
+  // reading a workspace must never be left to make on its own.
+  proto.hooks_bound = async (): Promise<HookRegistration[]> => {
+    const hooks: HookRegistration[] = await deps.state.listHooks(deps.actor.id)
+    await observeLocal(
+      'List the hooks bound for this account',
+      `${hooks.length} hook(s) this workspace enabled, with what each has been pushed and what it missed.`,
+    )
+    return hooks
+  }
 
   proto.approvals_list = async (): Promise<ApprovalCard[]> => {
     const cards = await deps.state.listCards()

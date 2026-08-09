@@ -6,18 +6,50 @@ import {
 } from '@cat-factory/contracts'
 import type { AgentKind, Block, BlockLevel, Pipeline } from '~/types/domain'
 
+/**
+ * Why a step in a preview might NOT run on a given task. A step is unconditional when both are
+ * absent, which is the ordinary case.
+ *
+ *  - `estimate`  — an estimate gate (`gating[i]`): the step runs only on a task the earlier
+ *                  `task-estimator` scores above its thresholds.
+ *  - `frontend` / `backend` — a run condition (`stepOptions[i].condition`): the step runs only
+ *                  where the task changes a service of that kind.
+ *
+ * They are DISTINCT rather than one `conditional` flag because a reader acts on them differently:
+ * an estimate gate is a knob on the pipeline (raise the bar, or clear it), while a service
+ * condition is a fact about the task, and nothing about the pipeline will change it.
+ */
+export type StepConditionKind = 'estimate' | 'frontend' | 'backend'
+
 /** One agent step of a pipeline as shown in a preview: its kind + whether it's a human-gated step. */
 export interface PipelineDisplayStep {
   kind: AgentKind
   /** A human approval gate pauses the run after this step (`gates[i]`). */
   gated: boolean
+  /** Every reason this step may be skipped on a given task; empty ⇒ it always runs. */
+  conditions: StepConditionKind[]
+}
+
+/** The reasons the step at `i` may be skipped, in the order a reader meets them. */
+export function stepConditionsAt(pipeline: Pipeline, i: number): StepConditionKind[] {
+  const conditions: StepConditionKind[] = []
+  if (pipeline.gating?.[i]?.enabled) conditions.push('estimate')
+  const scope = pipeline.stepOptions?.[i]?.condition?.serviceScope
+  if (scope) conditions.push(scope)
+  return conditions
 }
 
 /**
  * The steps a pipeline preview should render: the ENABLED steps in order (a step disabled by
  * default — `enabled[i] === false` — is skipped at run, so it would misrepresent the pipeline to
- * list it), each flagged when it carries a human approval gate. Companions are included as their
- * own chips, mirroring how the run timeline lists every step.
+ * list it), each flagged when it carries a human approval gate and with every reason it may be
+ * skipped on a given task. Companions are included as their own chips, mirroring how the run
+ * timeline lists every step.
+ *
+ * A CONDITIONAL step is listed like any other, and says so, rather than being filtered out: which
+ * of them run is a fact about the task, and this preview is read while choosing a pipeline —
+ * before there is a task to answer it. Hiding them would understate what the pipeline does; a
+ * silent full list would overstate it.
  */
 export function pipelineDisplaySteps(pipeline: Pipeline): PipelineDisplayStep[] {
   return pipeline.agentKinds
@@ -25,9 +57,28 @@ export function pipelineDisplaySteps(pipeline: Pipeline): PipelineDisplayStep[] 
       kind,
       enabled: pipeline.enabled?.[i] !== false,
       gated: pipeline.gates?.[i] === true,
+      conditions: stepConditionsAt(pipeline, i),
     }))
     .filter((s) => s.enabled)
-    .map(({ kind, gated }) => ({ kind, gated }))
+    .map(({ kind, gated, conditions }) => ({ kind, gated, conditions }))
+}
+
+/**
+ * The marker each condition renders as: its own icon and its own i18n key. Not one shared
+ * "conditional" badge, because the two causes send a reader to different places — an estimate gate
+ * is a knob on the pipeline, a service condition is a fact about the task — and a merged badge
+ * would name neither. Lives here rather than in a component so the builder library and the picker
+ * preview cannot label the same step differently.
+ */
+export const CONDITION_MARKERS: Record<StepConditionKind, { icon: string; key: string }> = {
+  estimate: { icon: 'i-lucide-gauge', key: 'pipeline.preview.conditionEstimate' },
+  frontend: { icon: 'i-lucide-monitor', key: 'pipeline.preview.conditionFrontend' },
+  backend: { icon: 'i-lucide-server', key: 'pipeline.preview.conditionBackend' },
+}
+
+/** How many of a pipeline's displayed steps are conditional (the preview's headline count). */
+export function pipelineConditionalCount(pipeline: Pipeline): number {
+  return pipelineDisplaySteps(pipeline).filter((s) => s.conditions.length > 0).length
 }
 
 /**

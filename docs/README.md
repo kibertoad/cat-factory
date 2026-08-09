@@ -29,8 +29,8 @@ published tarball (it has to be self-contained), generated reference such as
 reads** ([`environment-variables.md`](./environment-variables.md) is the worked case: the guard's
 value is that it fires in the PR that adds the variable, so the doc has to live in that PR's repo).
 
-The full model, the audit and the remaining slices:
-[`initiatives/documentation-revamp.md`](./initiatives/documentation-revamp.md).
+The full model, its named exceptions and the findings behind them:
+[ADR 0051](../backend/docs/adr/0051-documentation-repo-website-split.md).
 
 ## The split inside this directory
 

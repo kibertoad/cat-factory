@@ -186,6 +186,9 @@ export class OneShotStepController {
       const remaining = instance.steps[i]
       if (!remaining) continue
       remaining.skipped = true
+      // Nothing about THIS step decided it: the run ended above it. Recorded so the surfaces do
+      // not fall back to the bare "did not run" line, which reads as a step whose reason was lost.
+      remaining.skipReason = 'run_complete'
       remaining.output = ''
       remaining.progress = 1
       remaining.subtasks = undefined

@@ -77,9 +77,11 @@ describe('seedPipelines — named-gate lowering', () => {
   })
 
   it('omits gates/enabled/gating for a plain all-enabled, gate-less pipeline', () => {
-    // `pl_simple` is the ladder rung with nothing declared on any step, so the lowering must emit
-    // BARE `agentKinds` — no empty `gates`/`enabled`/`gating` arrays alongside it. That keeps a
-    // hand-authored preset and a `definePipeline`d one byte-identical when neither declares a flag.
+    // `pl_simple` is the ladder rung with nothing GATED on any step, so the lowering must emit no
+    // `gates`/`enabled`/`gating` arrays alongside `agentKinds`. That keeps a hand-authored preset
+    // and a `definePipeline`d one byte-identical when neither declares one. `stepOptions` IS
+    // emitted, because the tester pair declares run conditions — the assertion below is what says
+    // an emitted array is one a step actually asked for.
     const simple = byId().get('pl_simple')!
     expect(simple.gates).toBeUndefined()
     expect(simple.enabled).toBeUndefined()
@@ -89,11 +91,35 @@ describe('seedPipelines — named-gate lowering', () => {
       'reviewer',
       'deployer',
       'tester-api',
+      'tester-ui',
       'conflicts',
       'ci',
       'merger',
       'disposer',
     ])
+  })
+
+  it('gives every build rung the CONDITIONAL tester pair, and nothing else a condition', () => {
+    // One assertion over the whole catalog rather than a per-preset list: what must hold is the
+    // RELATION (a condition belongs to a tester, and the two testers ask for opposite scopes), not
+    // a count of presets that would need re-pinning on every catalog change.
+    for (const pipeline of seedPipelines()) {
+      pipeline.agentKinds.forEach((kind, i) => {
+        const condition = pipeline.stepOptions?.[i]?.condition
+        if (!condition) return
+        expect(
+          kind,
+          `${pipeline.id} step ${i} carries a run condition on a non-tester kind`,
+        ).toMatch(/^tester-(api|ui)$/)
+        expect(condition.serviceScope).toBe(kind === 'tester-ui' ? 'frontend' : 'backend')
+      })
+    }
+    // And each build rung carries BOTH halves, so no rung silently verifies only one side.
+    for (const id of ['pl_build', 'pl_simple', 'pl_full', 'pl_complex']) {
+      const rung = byId().get(id)!
+      expect(rung.agentKinds, id).toContain('tester-api')
+      expect(rung.agentKinds, id).toContain('tester-ui')
+    }
   })
 
   it('seeds the PR-review pipeline and defaults a review task to it', () => {
@@ -117,6 +143,7 @@ describe('seedPipelines — named-gate lowering', () => {
       'reviewer',
       'deployer',
       'tester-api',
+      'tester-ui',
       'conflicts',
       'ci',
       'human-review',
@@ -126,7 +153,7 @@ describe('seedPipelines — named-gate lowering', () => {
     // The gating array is index-aligned with agentKinds, so a step inserted above can never shift a
     // threshold onto its neighbour — the whole point of the named-step seed form.
     const estimateGated = full.agentKinds.filter((_k, i) => full.gating?.[i]?.enabled)
-    expect(estimateGated).toEqual(['architect', 'tester-api', 'human-review'])
+    expect(estimateGated).toEqual(['architect', 'tester-api', 'tester-ui', 'human-review'])
     expect(full.gating![full.agentKinds.indexOf('architect')]).toMatchObject({
       minComplexity: 0.4,
     })

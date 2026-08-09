@@ -425,6 +425,18 @@ export const startExecutionSchema = v.object({
 })
 export type StartExecutionInput = v.InferOutput<typeof startExecutionSchema>
 
+/**
+ * Start ONE agent kind against a block — a run with no pipeline behind it (the board's "Map
+ * service" action, the environment wizard's deep analysis). A SEPARATE body from
+ * {@link startExecutionSchema} rather than an either/or field on it: the two name different
+ * things to run, and a single endpoint taking whichever of two mutually exclusive keys was
+ * supplied is a shape every client has to get right and no schema can state.
+ */
+export const startAgentKindExecutionSchema = v.object({
+  agentKind: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+})
+export type StartAgentKindExecutionInput = v.InferOutput<typeof startAgentKindExecutionSchema>
+
 // NOTE: the personal password that unlocks a run's individual-usage credential
 // (Claude / GLM / Codex) is NOT a body field on any of the run endpoints below
 // (start / retry / resolve-decision / approve / request-changes). It is an ambient

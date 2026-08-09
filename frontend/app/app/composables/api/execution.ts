@@ -15,6 +15,7 @@ import {
   resolveStepExceededContract,
   restartExecutionContract,
   resumeSpendContract,
+  startAgentKindExecutionContract,
   startExecutionContract,
 } from '@cat-factory/contracts'
 import type { RequestStepChangesInput, RunMode } from '@cat-factory/contracts'
@@ -39,6 +40,24 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { blockId },
         body,
+      }),
+
+    /**
+     * Start ONE agent kind against a block — a run with no pipeline behind it (the service
+     * frame's "Map service" action, the environment wizard's deep analysis). Gated on the
+     * personal password exactly as a pipeline start is: the kind leases a personal subscription
+     * the same way a pipeline step does.
+     */
+    startAgentKindExecution: (
+      workspaceId: string,
+      blockId: string,
+      agentKind: string,
+      password?: string,
+    ) =>
+      sendWith(pwHeaders(password), startAgentKindExecutionContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { blockId },
+        body: { agentKind },
       }),
 
     cancelExecution: (workspaceId: string, blockId: string) =>

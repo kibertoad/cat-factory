@@ -237,6 +237,8 @@ export function describeCapability(capability: BinaryGeneratorCapability): strin
       return 'a fixed seed'
     case 'aspect-ratio':
       return 'an explicit aspect ratio'
+    case 'exact-size':
+      return 'exact output dimensions in pixels'
     case 'candidate-batch':
       return 'returning several candidates from one call'
     case 'upscale':
@@ -467,6 +469,12 @@ function generationOptionLines(
     )
   }
   if (generation.aspectRatio) lines.push(`- Aspect ratio: ${generation.aspectRatio}`)
+  if (generation.outputSize) {
+    const { width, height } = generation.outputSize
+    lines.push(
+      `- Output size: EXACTLY ${width}x${height} pixels, for every artifact measured in pixels (images and video; it says nothing about audio, 3D or documents). This is a requirement of the deliverable, not a preference, and it is stated as a size because the size is what the step is for: generating larger and downscaling is a different asset, not the same one delivered carefully. Ask for these dimensions on the call. If the integration you are calling cannot be asked for them, or rejects them (a maximum, a grid it rounds to, a range tied to the style), say so in your report and declare the size you actually delivered rather than substituting one silently.`,
+    )
+  }
   if (generation.upscale !== undefined) {
     lines.push(`- Upscale the result ${generation.upscale}x where the integration offers it.`)
   }

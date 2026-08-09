@@ -17,7 +17,7 @@
 // behind.
 
 import { WorkerEntrypoint } from 'cloudflare:workers'
-import type { GatekeeperEnv } from '../env.js'
+import { stateFor, type GatekeeperEnv } from '../env.js'
 import { Gatekeeper } from '../gatekeeper.js'
 import type { GatekeeperPolicy } from '../policy/compile.js'
 import type { AccountProps } from './account.js'
@@ -103,7 +103,13 @@ export function createGatekeeperVendor(options: {
       const props: AccountProps = { accountId: mintAccountId() }
       // Resolved before the account is handed back, so a deployment missing the export is refused
       // at the call that would have created the account rather than at the first use of it.
-      return loopbackExport<unknown>(this.ctx.exports, 'account', props)
+      const account = loopbackExport<unknown>(this.ctx.exports, 'account', props)
+      // The one thing recorded about an account, and it is recorded HERE because this is the only
+      // moment the fact exists: minting is what makes an id one of ours, and `addObserver` has no
+      // other way to tell a viewer holding one from a viewer naming one. It lands before the stub
+      // does, so an account the workspace can use is never one this Gatekeeper would disown.
+      await stateFor(this.env).recordAccount(props.accountId, Date.now())
+      return account
     }
   }
 }

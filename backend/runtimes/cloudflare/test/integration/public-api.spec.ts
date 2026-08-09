@@ -72,7 +72,7 @@ describe('public API — break down an initiative', () => {
     const nonPublic = await app.call(
       'POST',
       '/api/v1/jobs',
-      { pipelineId: 'pl_blueprint', input: 'x' },
+      { pipelineId: 'pl_simple', input: 'x' },
       auth,
     )
     expect(nonPublic.status).toBe(400)

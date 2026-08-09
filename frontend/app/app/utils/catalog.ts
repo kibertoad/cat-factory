@@ -8,6 +8,7 @@ import type {
   TaskTypeMeta,
 } from '~/types/domain'
 import type { BadgeColor } from '~/utils/badge'
+import { isBuiltinGatableKind } from '@cat-factory/contracts'
 
 /** Simple unique id helper (fine for a client-only prototype). */
 export function uid(prefix = 'id'): string {
@@ -153,8 +154,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     // Authors the service's in-repo specification from the clarified requirements, so it sits
     // beside the design kinds and ahead of the architect that reads what it wrote. Registered on
     // the backend so it also arrives via the workspace manifest, and modelled statically here for
-    // the same reason `pr-reviewer` is: a `pl_bugfix` / `pl_spec` timeline must name the step
-    // before the manifest hydrates. Mirrors the backend `presentation` in `spec-blueprints.ts`.
+    // the same reason `pr-reviewer` is: a `pl_bugfix` timeline must name the step before the
+    // manifest hydrates. Mirrors the backend `presentation` in `spec-blueprints.ts`.
     kind: 'spec-writer',
     tier: 'intermediate',
     label: 'Spec Writer',
@@ -180,8 +181,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     // Refreshes the service → modules map the board projects. Statically modelled beside its
-    // backend `presentation` for the same reason the Spec Writer is: `pl_blueprint` timelines
-    // render before the manifest hydrates.
+    // backend `presentation` for the same reason the Spec Writer is: the single-kind run behind
+    // the board's "Map service" action renders its timeline before the manifest hydrates.
     kind: 'blueprints',
     tier: 'intermediate',
     label: 'Blueprinter',
@@ -862,6 +863,22 @@ export function agentKindMeta(kind: string): AgentArchetype {
     SYSTEM_AGENT_META[kind] ??
     customAgentKindMeta.value[kind] ?? { kind: kind as AgentKind, ...FALLBACK_AGENT_META }
   )
+}
+
+/**
+ * Whether the builder may offer a SKIP AXIS (an estimate gate, a run condition) on this kind:
+ * false only where this build KNOWS the answer is no.
+ *
+ * A built-in kind is answered by the shared `BUILTIN_GATABLE_KINDS`. A DEPLOYMENT-registered kind
+ * carries its own `gatable` flag in the agent-kind registry, which the SPA cannot see, so it is
+ * offered rather than withheld — the same direction the pipeline-health advisory takes the
+ * asymmetry, and for the sharper reason: over-offering costs a 422 with an explanatory message at
+ * save, while under-offering silently removes a capability the deployment declared, with no route
+ * to it and nothing on screen to say why.
+ */
+export function mayCarrySkipAxis(kind: string): boolean {
+  const isBuiltin = kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META
+  return isBuiltin ? isBuiltinGatableKind(kind) : true
 }
 
 /**

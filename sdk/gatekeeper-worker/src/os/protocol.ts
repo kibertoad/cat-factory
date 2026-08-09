@@ -120,6 +120,42 @@ export interface ObservationAuthorizer {
   authorizeObservation(description: ObservationDescription): Promise<void>
 }
 
+/** What an approver is told about a hook the workspace is being asked to enable. */
+export interface HookDescription {
+  title: string
+  description: string
+}
+
+/** Where an enabled hook's deliveries land, as the workspace names it. */
+export interface HookTargetMetadata {
+  workspaceId: string
+  gadgetId?: number
+}
+
+/**
+ * What the workspace turns a bound hook on and off through. Implemented on THIS side.
+ *
+ * A hook is not live when it is bound: the workspace may have to ask a person first, and it calls
+ * `enable` if and when they say yes. The initiator it hands over is the ONLY thing worth keeping,
+ * and `disable` means every trace of the registration goes.
+ */
+export interface HookController {
+  enable(initiator: HookInitiator, target: HookTargetMetadata): Promise<void>
+  disable(): Promise<void>
+}
+
+/**
+ * What an enabled hook is delivered THROUGH: a fresh callback per event, never a stored one.
+ *
+ * The callback handed to `bindHook` is a loan like every other parameter stub, so the contract
+ * gives the initiator instead: ask for a callback when there is something to deliver, and get an
+ * approval queue with it, because a delivery is a read of the paired deployment and has to be
+ * authorized exactly as `approvals_list()` is.
+ */
+export interface HookInitiator {
+  startHook(): Promise<{ callback: unknown; approvalQueue: ObservationAuthorizer }>
+}
+
 /**
  * What the OS hands to `startSession`: the chokepoint every operation passes through.
  *
@@ -129,6 +165,14 @@ export interface ObservationAuthorizer {
  */
 export interface ApprovalQueue extends ObservationAuthorizer {
   submitAction(action: number, description: ActionDescription): Promise<void>
+  /**
+   * Register a persistent callback, which the workspace holds and may not enable at once.
+   *
+   * The gatekeeper hands over a CONTROLLER of its own rather than keeping the callback: the
+   * callback is a parameter stub whose lifetime ends with this call, and what has to survive is
+   * the registration. Enabling arrives later on that controller.
+   */
+  bindHook(controller: unknown, callback: unknown, description: HookDescription): Promise<void>
 }
 
 // The three objects THIS Worker serves, declared as what it implements rather than left to

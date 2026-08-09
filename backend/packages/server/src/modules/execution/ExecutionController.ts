@@ -15,6 +15,7 @@ import {
   resolveDecisionContract,
   restartExecutionContract,
   resumeSpendContract,
+  startAgentKindExecutionContract,
   startExecutionContract,
   resolveStepExceededContract,
 } from '@cat-factory/contracts'
@@ -27,6 +28,7 @@ import { param } from '../../http/params.js'
 import { gateActor, runInitiatorRole } from '../../http/runAdmission.js'
 import {
   activateForInteraction,
+  personalGateForAgentKind,
   personalGateForBlock,
   personalGateForRun,
   readPersonalPassword,
@@ -68,6 +70,35 @@ export function executionController(): Hono<AppEnv> {
       ...(mode ? { mode } : {}),
       activate,
     })
+    return c.json(instance, 201)
+  })
+
+  // Start ONE agent kind against a block (the board's "Map service" action, the environment
+  // wizard's deep analysis). Same gates and same 201 as the pipeline start above; only the
+  // definition is synthesized (`adHocPipelineFor`).
+  buildHonoRoute(app, startAgentKindExecutionContract, async (c) => {
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const blockId = c.req.valid('param').blockId
+    const { agentKind } = c.req.valid('json')
+    const { initiatedBy, activate } = await personalGateForAgentKind(
+      container,
+      workspaceId,
+      blockId,
+      agentKind,
+      c.get('user'),
+      readPersonalPassword(c),
+    )
+    const instance = await container.executionService.startAgentKind(
+      workspaceId,
+      blockId,
+      agentKind,
+      {
+        initiatedBy,
+        initiatedByRole: runInitiatorRole(c),
+        activate,
+      },
+    )
     return c.json(instance, 201)
   })
 
