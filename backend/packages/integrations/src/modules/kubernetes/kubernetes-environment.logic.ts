@@ -4,6 +4,7 @@ import type {
   KubernetesProvisionConfig,
   KubernetesUrlSource,
 } from '@cat-factory/kernel'
+import { kubernetesProvisionConfigSchema, parseStoredProviderConfig } from '@cat-factory/contracts'
 import { parseAllDocuments } from 'yaml'
 import { apiBase, k8sName, labelValue } from './kubernetes.logic.js'
 
@@ -58,13 +59,18 @@ const RESOURCE_KINDS: Record<string, { plural: string; namespaced: boolean }> = 
 
 /**
  * Read the per-workspace Kubernetes config off the stored manifest's `providerConfig`.
- * The config was Valibot-validated at the connect controller boundary, so this trusts
- * the stored shape (a cast) rather than re-parsing (which would pull valibot in here).
+ *
+ * Re-validated against the same schema the connect controller admitted it through, rather than
+ * asserted — see {@link parseStoredProviderConfig} for why a stored config is re-read.
  */
 export function parseKubernetesEnvConfig(manifest: EnvironmentManifest): KubernetesProvisionConfig {
   const raw = manifest.providerConfig
   if (!raw) throw new Error('Kubernetes environment manifest is missing its providerConfig')
-  return raw as unknown as KubernetesProvisionConfig
+  return parseStoredProviderConfig(
+    kubernetesProvisionConfigSchema,
+    raw,
+    'Kubernetes environment manifest',
+  )
 }
 
 /** Build the stored manifest that carries a Kubernetes env config in its providerConfig. */
@@ -83,7 +89,7 @@ export function kubernetesConfigToManifest(
     provision: { method: 'POST', pathTemplate: '' },
     response: {},
     ...(config.defaultTtlMs ? { defaultTtlMs: config.defaultTtlMs } : {}),
-    providerConfig: config as unknown as Record<string, unknown>,
+    providerConfig: config,
   }
 }
 

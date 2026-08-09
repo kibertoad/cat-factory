@@ -332,7 +332,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     })
     return {
       ref: deploy.ref,
-      spec: spec as unknown as Record<string, unknown>,
+      spec,
       kind: 'deploy',
       options: { image: 'deploy' },
     }

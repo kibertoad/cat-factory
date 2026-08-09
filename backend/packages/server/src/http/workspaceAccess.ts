@@ -255,6 +255,25 @@ export interface MountedGate {
   gatesReads: boolean
 }
 
+/** A middleware viewed through the tag {@link mountGate} stamps on it — present only on one
+ *  this module mounted, so the property is optional and its value untyped. */
+type GateTaggedHandler = { readonly [MOUNTED_GATE]?: unknown }
+
+/**
+ * Whether a read-back tag really is a mount record.
+ *
+ * A guard rather than an assertion: `permissionGateOf` is handed an arbitrary handler off a
+ * composed Hono app, so "some non-null object lives under our symbol" is not the same fact as
+ * "this handler is one of our gates". Asserting instead would let an unrelated tagged object
+ * through as a gate carrying `undefined` for both fields, which is precisely the reading
+ * `permissionMounts.test.ts` derives its invariant from.
+ */
+function isMountedGate(value: unknown): value is MountedGate {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Partial<MountedGate>
+  return typeof candidate.permission === 'string' && typeof candidate.gatesReads === 'boolean'
+}
+
 /**
  * What a mounted gate enforces, or `undefined` for any other middleware.
  *
@@ -273,8 +292,8 @@ export interface MountedGate {
  */
 export function permissionGateOf(handler: unknown): MountedGate | undefined {
   if (typeof handler !== 'function') return undefined
-  const tagged = (handler as unknown as Record<symbol, unknown>)[MOUNTED_GATE]
-  return typeof tagged === 'object' && tagged !== null ? (tagged as MountedGate) : undefined
+  const tag = (handler as GateTaggedHandler)[MOUNTED_GATE]
+  return isMountedGate(tag) ? tag : undefined
 }
 
 /** Mount one gate on each prefix, bare and `/*` (Hono's `*` does not match the bare prefix). */

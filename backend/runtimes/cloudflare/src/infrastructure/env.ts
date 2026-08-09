@@ -817,3 +817,40 @@ export function requireDb(env: Env): D1Database {
   }
   return env.DB
 }
+
+/**
+ * The Worker bindings read as an opaque key→value bag, for a runtime-neutral consumer that
+ * looks up its own keys by name.
+ *
+ * `Env` is an `interface`, so it carries no implicit index signature and cannot widen to a
+ * record without an assertion. The assertion is confined here, and values stay `unknown`
+ * because a binding is routinely not a scalar: `DB` is a D1 database, `GITHUB_SYNC_QUEUE` a
+ * queue, `WORKSPACE_EVENTS` a Durable Object namespace.
+ */
+export function envBag(env: Env): Record<string, unknown> {
+  return env as unknown as Record<string, unknown>
+}
+
+/**
+ * One plain string VAR off the bindings, by name; `undefined` when it is unset OR when the
+ * binding under that name is not a string.
+ *
+ * The `typeof` check is the point. Asserting `Env` to `Record<string, string | undefined>` — the
+ * shape this replaced — claims every binding is a string, which is false for every non-var
+ * binding on it, so a caller reading a mistyped or misnamed key was handed a D1 database where
+ * it expected a token and only found out several frames later.
+ */
+export function envVar(env: Env, key: string): string | undefined {
+  const value = envBag(env)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+/** Every plain string VAR on the bindings, for a consumer that wants the whole bag at once.
+ *  Non-string bindings are omitted, for the reason {@link envVar} states. */
+export function envVars(env: Env): Record<string, string | undefined> {
+  const vars: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(envBag(env))) {
+    if (typeof value === 'string') vars[key] = value
+  }
+  return vars
+}

@@ -199,10 +199,7 @@ export class RunnerPoolConnectionService {
           ...Object.keys(values),
           ...storedSecretKeys,
         ]),
-        configTemplate: (storedConfig ?? backend.form.skeleton()) as unknown as Record<
-          string,
-          unknown
-        >,
+        configTemplate: storedConfig ?? backend.form.skeleton(),
         values,
       }
     }
@@ -231,7 +228,7 @@ export class RunnerPoolConnectionService {
       configFields,
       supportsTest: true,
       missingRequired: missingRequiredConfigKeys(configFields, storedKeys),
-      ...(manifest ? { savedManifest: manifest as unknown as Record<string, unknown> } : {}),
+      ...(manifest ? { savedManifest: manifest } : {}),
       ...(manifest && provider?.describeManifestTemplate
         ? { manifestTemplate: provider.describeManifestTemplate() as Record<string, unknown> }
         : {}),

@@ -2,6 +2,8 @@ import {
   CLOUDFLARE_DEFAULT_ENVIRONMENT_NAME_TEMPLATE,
   CLOUDFLARE_DEFAULT_WORKER_NAME_TEMPLATE,
   CLOUDFLARE_ENV_TOKEN_SECRET_KEY,
+  cloudflareEnvironmentConfigSchema,
+  parseStoredProviderConfig,
 } from '@cat-factory/contracts'
 import type {
   CloudflareEnvironmentConfig,
@@ -29,9 +31,11 @@ const PROVIDER_CONFIG_KEY = 'cloudflare'
 export const CLOUDFLARE_PROVIDER_ID = 'cloudflare'
 
 /**
- * Read the per-workspace Cloudflare config off the stored manifest's `providerConfig`. The
- * config was Valibot-validated at the connect controller boundary, so this trusts the stored
- * shape (a cast) rather than re-parsing — the same contract the Kubernetes backend keeps.
+ * Read the per-workspace Cloudflare config off the stored manifest's `providerConfig`.
+ *
+ * Re-validated against the schema the connect controller admitted it through, for the reason
+ * {@link parseStoredProviderConfig} states — the same treatment every native backend gives its
+ * own stored config.
  */
 export function parseCloudflareEnvConfig(
   manifest: EnvironmentManifest,
@@ -40,7 +44,11 @@ export function parseCloudflareEnvConfig(
   if (!raw || typeof raw !== 'object') {
     throw new Error('Cloudflare environment manifest is missing its providerConfig.cloudflare')
   }
-  return raw as unknown as CloudflareEnvironmentConfig
+  return parseStoredProviderConfig(
+    cloudflareEnvironmentConfigSchema,
+    raw,
+    'Cloudflare environment manifest',
+  )
 }
 
 /**
@@ -65,7 +73,7 @@ export function cloudflareConfigToManifest(
     teardown: { method: 'POST', pathTemplate: '/repos/{owner}/{repo}/deployments/{id}/statuses' },
     response: { urlPath: 'payload.url', externalIdPath: 'id' },
     ...(config.defaultTtlMs === undefined ? {} : { defaultTtlMs: config.defaultTtlMs }),
-    providerConfig: { [PROVIDER_CONFIG_KEY]: config as unknown as Record<string, unknown> },
+    providerConfig: { [PROVIDER_CONFIG_KEY]: config },
   }
 }
 

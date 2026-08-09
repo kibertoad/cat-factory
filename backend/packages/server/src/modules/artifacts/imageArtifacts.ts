@@ -74,3 +74,16 @@ export function blobResponseHeaders(storedContentType: string): Record<string, s
         'Cache-Control': 'private, max-age=86400',
       }
 }
+
+/**
+ * A stored blob's bytes as a `Response` body.
+ *
+ * A `Uint8Array` IS a valid body on both runtimes the package serves (workerd and Node/undici),
+ * but the ambient `BodyInit` this package compiles against is narrower than either, so the
+ * assignment needs an assertion. It lives here, once, rather than at each of the three routes
+ * that serve stored bytes: the assertion is about the lib typings, not about the value, and
+ * three copies of that reasoning is three places to get it wrong.
+ */
+export function blobResponseBody(bytes: Uint8Array): BodyInit {
+  return bytes as unknown as BodyInit
+}

@@ -7,6 +7,7 @@ import { param } from '../../http/params.js'
 import {
   MAX_REQUEST_BYTES,
   MAX_UPLOAD_BYTES,
+  blobResponseBody,
   blobResponseHeaders,
   exceedsRequestSizeLimit,
   normalizeImageContentType,
@@ -175,7 +176,7 @@ export function artifactController(): Hono<AppEnv> {
     // satisfies the narrower ambient BodyInit type this package compiles against. Headers
     // clamp the type to the image allow-list + send `nosniff` so the bytes can never be
     // sniffed/served as active content (defence-in-depth with the upload-time allow-list).
-    return new Response(got.bytes as unknown as BodyInit, {
+    return new Response(blobResponseBody(got.bytes), {
       status: 200,
       headers: blobResponseHeaders(got.record.contentType),
     })

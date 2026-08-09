@@ -1426,3 +1426,31 @@ export const detectServiceProvisioningSchema = v.object({
   currentManifestPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
 })
 export type DetectServiceProvisioningInput = v.InferOutput<typeof detectServiceProvisioningSchema>
+
+/**
+ * Re-validate a native backend's config read back off a stored {@link EnvironmentManifest}'s
+ * `providerConfig`, or throw naming what is wrong with it.
+ *
+ * `providerConfig` is `Record<string, unknown>` on the wire — deliberately, since it is the
+ * carrier for whatever settings a backend defines — so reading a config back out used to be an
+ * assertion. The connect controller does validate on the way IN, but the value has been through
+ * storage since: a config written before a schema change, or edited in the database, would flow
+ * on as a fake-valid object and only misbehave deep inside a provision. Parsing here names the
+ * offending field at the boundary instead, and every native backend re-reads its config the
+ * same way rather than each picking its own wording.
+ */
+export function parseStoredProviderConfig<T>(
+  schema: v.GenericSchema<unknown, T>,
+  raw: unknown,
+  label: string,
+): T {
+  const parsed = v.safeParse(schema, raw)
+  if (parsed.success) return parsed.output
+  const detail = parsed.issues
+    .map((issue) => {
+      const path = issue.path?.map((segment) => String(segment.key)).join('.')
+      return path ? `${path}: ${issue.message}` : issue.message
+    })
+    .join('; ')
+  throw new Error(`${label} has an invalid stored providerConfig: ${detail}`)
+}
