@@ -3,8 +3,10 @@ import type {
   BinaryArtifactStore,
   DesignImage,
   DocumentRepository,
+  Logger,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
+import { describeError, noopLogger } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { DESIGN_IMAGES_TRAIT, hasTrait } from '@cat-factory/agents'
 import { resolveBlockReferences } from './block-reference-set.js'
@@ -36,6 +38,7 @@ export interface RunImageDeps {
   documents?: DocumentRepository
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   agentKindRegistry: AgentKindRegistry
+  logger?: Logger
 }
 
 /** The two image partials, spread-ready (the `validationChecksFor` shape). */
@@ -67,12 +70,34 @@ export async function resolveRunImages(
   const builds = hasTrait(agentKind, DESIGN_IMAGES_TRAIT, deps.agentKindRegistry)
   const resolveStore = deps.resolveBinaryArtifactStore
   if (!resolveStore || (!captures && !builds)) return {}
-  const store: BinaryArtifactStore | null = await resolveStore(workspaceId)
-  if (!store) return {}
-  const { references } = await resolveBlockReferences(deps.documents, store, workspaceId, blockId)
-  return {
-    ...(captures ? captureSet(references) : {}),
-    ...(builds ? designSet(references) : {}),
+  try {
+    const store: BinaryArtifactStore | null = await resolveStore(workspaceId)
+    if (!store) return {}
+    const { references } = await resolveBlockReferences(deps.documents, store, workspaceId, blockId)
+    return {
+      ...(captures ? captureSet(references) : {}),
+      ...(builds ? designSet(references) : {}),
+    }
+  } catch (error) {
+    // An image read must never wedge a run. Resolving the store reads the ACCOUNT's
+    // content-storage settings, and that repository decrypts inside itself, so it is one a
+    // mothership node deliberately cannot reach: left to propagate, this fails EVERY dispatch of
+    // every building kind there, and every capturing one everywhere the store is briefly down.
+    // Degrading to "no images" is exactly the unconfigured-storage behaviour, so the run proceeds
+    // as it did before the feature existed rather than stopping.
+    //
+    // Degrade LOUDLY to the operator, and DELIBERATELY silently to the agent. The two are not the
+    // same audience: an operator can act on "this deployment cannot read its artifact store", and
+    // an agent cannot act on anything here, because a read that failed cannot say whether the task
+    // had a picture at all. Claiming a withheld design we never confirmed exists would be the
+    // worse error, so the prompt stays as it is for a task that links none.
+    ;(deps.logger ?? noopLogger).warn('Run image read failed; dispatching with no images', {
+      workspaceId,
+      blockId,
+      agentKind,
+      ...describeError(error),
+    })
+    return {}
   }
 }
 
