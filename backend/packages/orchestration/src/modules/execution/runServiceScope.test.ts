@@ -20,7 +20,13 @@ function block(over: Partial<Block> & Pick<Block, 'id'>): Block {
   } as Block
 }
 
-/** A board with a frontend frame, a backend frame connected to it, and a task under each. */
+/**
+ * A board the product could actually save: a frontend frame, two connected SERVICE frames, and a
+ * task under each. The connection runs service→service on purpose — `serviceConnectionsError`
+ * refuses any other target and the patch narrowing drops the field on any other owner, so a
+ * frontend frame has no connection in either direction and can never be an involved service. A
+ * fixture that connected `frame_api` to `frame_ui` would assert a scope no board can produce.
+ */
 function board(): Block[] {
   return [
     block({ id: 'frame_ui', type: 'frontend', level: 'frame' }),
@@ -28,8 +34,9 @@ function board(): Block[] {
       id: 'frame_api',
       type: 'service',
       level: 'frame',
-      serviceConnections: [{ serviceBlockId: 'frame_ui' }],
+      serviceConnections: [{ serviceBlockId: 'frame_billing' }],
     }),
+    block({ id: 'frame_billing', type: 'service', level: 'frame' }),
     block({ id: 'task_ui', parentId: 'frame_ui' }),
     block({ id: 'task_api', parentId: 'frame_api' }),
     block({ id: 'orphan' }),
@@ -56,22 +63,42 @@ describe('resolveScopeForRun', () => {
   })
 
   it('resolves an EMPTY scope for a task under no frame at all', async () => {
-    // `frameOf` returns the parent-less block itself, which IS the task here — a leaf that is its
-    // own top, not a service. The scope still reads as backend-only rather than empty, so this
-    // asserts what actually happens rather than what would be convenient: what matters is that
-    // nothing throws and a scope comes back for every block shape the board can hold.
+    // `frameOf` does not answer null here: with no frame ancestor it falls back to the parent-less
+    // block, which IS this task. Classifying that by its own `type` would read an orphan as a
+    // backend service and silently drop the UI pass, so the resolved ancestor is checked to be a
+    // frame and an unclassifiable task gets the empty scope that runs BOTH passes.
     const orphan = board().find((b) => b.id === 'orphan')!
-    const scope = await resolveScopeForRun(listBlocks, WS, orphan)
-    expect(scope.frontend || scope.backend).toBe(true)
+    expect(await resolveScopeForRun(listBlocks, WS, orphan)).toEqual({
+      frontend: false,
+      backend: false,
+    })
   })
 
-  it('sets BOTH halves when a frontend task names an involved backend service', async () => {
-    // This is the case the conditional tester pair exists for: one task, both verification passes.
-    // The involved peer has to be a CONNECTED service frame or the stale filter drops it, which is
-    // why `frame_api` declares the connection.
-    const task = block({ id: 'task_ui', parentId: 'frame_ui', involvedServiceIds: ['frame_api'] })
+  it('resolves an EMPTY scope when the parent chain stops on a module', async () => {
+    // The other shape `frameOf` returns a non-frame for: a broken link, where the walk ends on the
+    // last block it could reach. Same fail-safe rather than a module classified as a service.
+    const blocks = [
+      ...board(),
+      block({ id: 'module_orphan', level: 'module', parentId: 'frame_missing' }),
+    ]
+    const task = block({ id: 'task_in_module', parentId: 'module_orphan' })
+    expect(await resolveScopeForRun(async () => [...blocks, task], WS, task)).toEqual({
+      frontend: false,
+      backend: false,
+    })
+  })
+
+  it('keeps the backend scope when a service task names an involved service peer', async () => {
+    // Every involved peer is a `service` frame by construction (only a service frame may declare or
+    // be named by a connection), so the peer term can confirm `backend` and never introduce
+    // `frontend`. Asserted so a future widening of the connection model shows up here as a change.
+    const task = block({
+      id: 'task_api',
+      parentId: 'frame_api',
+      involvedServiceIds: ['frame_billing'],
+    })
     expect(await resolveScopeForRun(listBlocks, WS, task)).toEqual({
-      frontend: true,
+      frontend: false,
       backend: true,
     })
   })

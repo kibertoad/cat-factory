@@ -4432,6 +4432,13 @@
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
       "prReview": {
         "review": "Befunde prüfen"
+      },
+      "skipped": {
+        "gated": "Übersprungen: Die Aufgabenschätzung lag unter den Schwellenwerten dieses Schritts.",
+        "conditionFrontend": "Übersprungen: Diese Aufgabe ändert keinen Frontend-Dienst, es gibt also keine Oberfläche zu prüfen.",
+        "conditionBackend": "Übersprungen: Diese Aufgabe ändert nur einen Frontend-Dienst, es gibt also keine API dahinter zu prüfen.",
+        "producerSkipped": "Übersprungen: Der geprüfte Schritt wurde übersprungen, es gibt nichts zu bewerten.",
+        "unknown": "Übersprungen: Dieser Schritt wurde nicht ausgeführt."
       }
     },
     "health": {

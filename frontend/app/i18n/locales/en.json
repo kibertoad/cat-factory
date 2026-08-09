@@ -5022,6 +5022,13 @@
       "elapsedTooltip": "Elapsed time on this step",
       "prReview": {
         "review": "Review findings"
+      },
+      "skipped": {
+        "gated": "Skipped: the task estimate was below this step’s thresholds.",
+        "conditionFrontend": "Skipped: this task changes no frontend service, so there is no UI to exercise.",
+        "conditionBackend": "Skipped: this task changes only a frontend service, so there is no API behind it to exercise.",
+        "producerSkipped": "Skipped: the step it reviews was skipped, so there is nothing to grade.",
+        "unknown": "Skipped: this step did not run."
       }
     },
     "health": {

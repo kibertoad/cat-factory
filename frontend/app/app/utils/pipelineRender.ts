@@ -3,6 +3,7 @@
 // in one place rather than being re-derived as inline ternaries per component.
 
 import type { AgentState, ExecutionInstance, PipelineStep } from '~/types/execution'
+import { isStepSkipReason } from '@cat-factory/contracts'
 
 /**
  * Visual state of a conditionally-run companion attached to a gate step (today the
@@ -264,6 +265,46 @@ export function containerPhaseLabel(
   if (!phase) return null
   const key = `panels.stepMeta.container.phase.${phase}`
   return i18n.te(key) ? i18n.t(key) : phase
+}
+
+/**
+ * The i18n key naming WHY a skipped step was skipped, or null when the step ran.
+ *
+ * The engine records a machine-readable {@link StepSkipReason} rather than a sentence, so the
+ * sentence is composed here where it can be translated. The `condition` case narrows further off
+ * the step's own `stepOptions.condition.serviceScope` — the condition stays on the step, so the
+ * copy and the scope it names are read from one place and cannot drift.
+ *
+ * An UNRECOGNISED reason (a stored run naming a member this bundle no longer knows, or a browser
+ * older than the member it reads) falls back to the bare "skipped" line rather than rendering
+ * nothing or guessing onto a current member: what a reader must not lose is that the step did not
+ * run. A `skipped` step with NO reason is the same case — runs predating the field.
+ */
+export function stepSkipReasonKey(step: PipelineStep): string | null {
+  if (!step.skipped) return null
+  if (!isStepSkipReason(step.skipReason)) return 'pipeline.progress.skipped.unknown'
+  switch (step.skipReason) {
+    case 'gated':
+      return 'pipeline.progress.skipped.gated'
+    case 'producer_skipped':
+      return 'pipeline.progress.skipped.producerSkipped'
+    case 'condition':
+      return step.stepOptions?.condition?.serviceScope === 'frontend'
+        ? 'pipeline.progress.skipped.conditionFrontend'
+        : 'pipeline.progress.skipped.conditionBackend'
+    default:
+      return describeUnhandledSkipReason(step.skipReason)
+  }
+}
+
+/**
+ * The `never` sink that keeps {@link stepSkipReasonKey}'s switch total: adding a member to
+ * `stepSkipReasonSchema` fails the build here until it has copy, while the runtime narrowing above
+ * still renders a RETIRED member honestly.
+ */
+function describeUnhandledSkipReason(reason: never): string {
+  void reason
+  return 'pipeline.progress.skipped.unknown'
 }
 
 /**

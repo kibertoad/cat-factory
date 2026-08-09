@@ -4432,6 +4432,13 @@
       "elapsedTooltip": "Tempo trascorso su questo passaggio",
       "prReview": {
         "review": "Esamina i rilievi"
+      },
+      "skipped": {
+        "gated": "Saltato: la stima dell’attività è rimasta sotto le soglie di questo passo.",
+        "conditionFrontend": "Saltato: questa attività non modifica alcun servizio frontend, quindi non c’è un’interfaccia da provare.",
+        "conditionBackend": "Saltato: questa attività modifica solo un servizio frontend, quindi non c’è un’API dietro da provare.",
+        "producerSkipped": "Saltato: il passo che revisiona è stato saltato, quindi non c’è nulla da valutare.",
+        "unknown": "Saltato: questo passo non è stato eseguito."
       }
     },
     "health": {

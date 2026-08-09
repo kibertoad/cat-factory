@@ -41,10 +41,15 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
    * and nothing merges. It is a request, not a decision — the task's merge preset can sandbox a
    * role's runs whatever they asked for, so what the run got is read back off the run's own
    * `mode`, never assumed from what was sent here.
+   *
+   * Takes the id + name it actually sends and reports, not a whole {@link Pipeline}: a caller may
+   * legitimately hold neither, because a task can be pinned to an INTERNAL pipeline that the
+   * library withholds from every picker. Demanding the row there would force the caller to either
+   * fabricate one or silently start something else.
    */
   async function start(
     blockId: string,
-    pipeline: Pipeline,
+    pipeline: Pick<Pipeline, 'id' | 'name'>,
     options?: { mode?: RunMode },
   ): Promise<boolean> {
     const ws = useWorkspaceStore()

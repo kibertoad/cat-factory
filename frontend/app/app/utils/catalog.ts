@@ -8,6 +8,7 @@ import type {
   TaskTypeMeta,
 } from '~/types/domain'
 import type { BadgeColor } from '~/utils/badge'
+import { isBuiltinGatableKind } from '@cat-factory/contracts'
 
 /** Simple unique id helper (fine for a client-only prototype). */
 export function uid(prefix = 'id'): string {
@@ -862,6 +863,22 @@ export function agentKindMeta(kind: string): AgentArchetype {
     SYSTEM_AGENT_META[kind] ??
     customAgentKindMeta.value[kind] ?? { kind: kind as AgentKind, ...FALLBACK_AGENT_META }
   )
+}
+
+/**
+ * Whether the builder may offer a SKIP AXIS (an estimate gate, a run condition) on this kind:
+ * false only where this build KNOWS the answer is no.
+ *
+ * A built-in kind is answered by the shared `BUILTIN_GATABLE_KINDS`. A DEPLOYMENT-registered kind
+ * carries its own `gatable` flag in the agent-kind registry, which the SPA cannot see, so it is
+ * offered rather than withheld — the same direction the pipeline-health advisory takes the
+ * asymmetry, and for the sharper reason: over-offering costs a 422 with an explanatory message at
+ * save, while under-offering silently removes a capability the deployment declared, with no route
+ * to it and nothing on screen to say why.
+ */
+export function mayCarrySkipAxis(kind: string): boolean {
+  const isBuiltin = kind in AGENT_BY_KIND || kind in SYSTEM_AGENT_META
+  return isBuiltin ? isBuiltinGatableKind(kind) : true
 }
 
 /**

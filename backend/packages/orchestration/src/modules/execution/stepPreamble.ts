@@ -1,5 +1,9 @@
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
-import { type RunServiceScope, stepConditionSatisfied } from '@cat-factory/contracts'
+import {
+  type RunServiceScope,
+  type StepSkipReason,
+  stepConditionSatisfied,
+} from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { AdvanceResult } from './advance.js'
 import type { InputGateController } from './InputGateController.js'
@@ -40,13 +44,13 @@ export interface StepPreambleDeps {
     instance: ExecutionInstance,
     step: PipelineStep,
   ) => Promise<boolean>
-  /** `RunDispatcher.skipGatedStep` — finishes an estimate-gated-out step as `skipped`. */
+  /** `RunDispatcher.skipGatedStep` — finishes a skipped step as `skipped`, stating which axis did it. */
   skipGatedStep: (
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
-    note?: string,
+    reason: StepSkipReason,
   ) => Promise<AdvanceResult>
   /**
    * The run's frontend/backend service scope, for the steps that declare a run CONDITION
@@ -159,9 +163,14 @@ export async function runStepPreamble(
     gatedOut ||
     producerWasSkipped(instance.steps, instance.currentStep, deps.agentKindRegistry)
   ) {
+    // The two reasons are recorded APART even though either alone is sufficient, because the fix
+    // differs: `gated` points the reader at this step's own thresholds, `producer_skipped` at the
+    // step before it. The estimate gate wins the label when both hold — it is the reason THIS step
+    // carries, and a companion whose producer was gated out is downstream of the same decision.
+    const reason: StepSkipReason = gatedOut ? 'gated' : 'producer_skipped'
     return {
       kind: 'stop',
-      result: await deps.skipGatedStep(workspaceId, instance, step, isFinalStep),
+      result: await deps.skipGatedStep(workspaceId, instance, step, isFinalStep, reason),
     }
   }
 
@@ -172,23 +181,17 @@ export async function runStepPreamble(
   // Evaluated here, beside the estimate gate, rather than at run start where the answer is already
   // knowable: the two skips must look identical from every surface that reads a run (the step is
   // present and `skipped`, not silently absent from the chain), and one skip path is how they stay
-  // that way. Unlike the estimate gate it carries a NOTE, because "skipped" alone would leave a
-  // reader of a frontend task's run to guess why the API tester did nothing.
+  // that way. It records its own REASON rather than sharing the estimate gate's, because "skipped"
+  // alone would leave a reader of a frontend task's run to guess why the API tester did nothing —
+  // and the specific sentence is composed by the SPA off `condition.serviceScope`, which stays on
+  // the step, so the reason and the scope it names cannot drift apart.
   const condition = step.stepOptions?.condition
   if (condition) {
     const scope = await deps.serviceScopeOf(workspaceId, block)
     if (!stepConditionSatisfied(condition, scope)) {
       return {
         kind: 'stop',
-        result: await deps.skipGatedStep(
-          workspaceId,
-          instance,
-          step,
-          isFinalStep,
-          condition.serviceScope === 'frontend'
-            ? 'Skipped: this task changes no frontend service, so there is no UI to exercise.'
-            : 'Skipped: this task changes only a frontend service, so there is no API behind it to exercise.',
-        ),
+        result: await deps.skipGatedStep(workspaceId, instance, step, isFinalStep, 'condition'),
       }
     }
   }

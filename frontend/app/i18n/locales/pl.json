@@ -4871,6 +4871,13 @@
       "elapsedTooltip": "Czas, który upłynął na tym kroku",
       "prReview": {
         "review": "Przejrzyj ustalenia"
+      },
+      "skipped": {
+        "gated": "Pominięto: oszacowanie zadania było poniżej progów tego kroku.",
+        "conditionFrontend": "Pominięto: to zadanie nie zmienia żadnej usługi frontendowej, więc nie ma interfejsu do sprawdzenia.",
+        "conditionBackend": "Pominięto: to zadanie zmienia tylko usługę frontendową, więc nie ma za nią API do sprawdzenia.",
+        "producerSkipped": "Pominięto: krok, który ocenia, został pominięty, więc nie ma czego oceniać.",
+        "unknown": "Pominięto: ten krok nie został wykonany."
       }
     },
     "health": {

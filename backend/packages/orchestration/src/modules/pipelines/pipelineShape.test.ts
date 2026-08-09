@@ -7,6 +7,7 @@ import {
   assertValidBinaryOutputSteps,
   assertValidCompanionPlacement,
   assertValidGating,
+  assertValidRunConditions,
   assertValidAgentVariants,
   assertValidSkillSteps,
   assertValidTesterQualityGating,
@@ -26,9 +27,12 @@ describe('validatePipelineShape', () => {
           enabled: p.enabled,
           // `gates` rides along so the built-in catalog is checked against the human-gate /
           // estimate-gate exclusivity rule too — a preset declaring both would otherwise ship and
-          // fail only at run start.
+          // fail only at run start. `stepOptions` rides along for the same reason, so the RUN
+          // CONDITIONS the build rungs carry are held to the gatability rule here rather than at a
+          // user's run door.
           gates: p.gates,
           gating: p.gating,
+          stepOptions: p.stepOptions,
         }),
       ).not.toThrow()
     }
@@ -437,6 +441,81 @@ describe('assertPipelineLaunchable', () => {
         true,
       ]),
     ).toThrow()
+  })
+})
+
+describe('assertValidRunConditions', () => {
+  /** A step-options bag carrying only a run condition, so only the rule under test can fail. */
+  const conditional = (serviceScope: 'frontend' | 'backend') => ({ condition: { serviceScope } })
+
+  it('accepts a condition on a gatable kind', () => {
+    // The tester pair is the case the axis exists for, and both halves are gatable kinds.
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['coder', 'tester-api', 'tester-ui'],
+        stepOptions: [null, conditional('backend'), conditional('frontend')],
+      }),
+    ).not.toThrow()
+  })
+
+  it('refuses a condition on a kind that may not be skipped', () => {
+    // A condition on `merger` drops the merge on every run outside its scope while the pipeline
+    // still reports success — the same failure the estimate gate refuses, reached by the other axis.
+    for (const kind of ['merger', 'coder', 'ci', 'conflicts']) {
+      expect(() =>
+        assertValidRunConditions({
+          agentKinds: [kind],
+          stepOptions: [conditional('frontend')],
+        }),
+      ).toThrow(/cannot carry a run condition/)
+    }
+  })
+
+  it('refuses a condition on a step that also carries a human approval gate', () => {
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['tester-ui'],
+        gates: [true],
+        stepOptions: [conditional('frontend')],
+      }),
+    ).toThrow(/never remove one/)
+  })
+
+  it('ACCEPTS a condition beside an estimate gate: the two axes compose', () => {
+    // Deliberately not refused — "does this step apply to this kind of change" and "is this change
+    // big enough" are different questions, and a UI pass wanted only on frontend work above a
+    // complexity floor is coherent. Asserted so the pair is never refused by accident.
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['task-estimator', 'tester-ui'],
+        gating: [null, gated],
+        stepOptions: [null, conditional('frontend')],
+      }),
+    ).not.toThrow()
+  })
+
+  it('imposes no requirement on a DISABLED conditional step', () => {
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['merger'],
+        enabled: [false],
+        stepOptions: [conditional('frontend')],
+      }),
+    ).not.toThrow()
+  })
+
+  it("honours a DEPLOYMENT-registered kind's own gatable flag", () => {
+    // Same registry asymmetry the estimate gate has: a deployment that registers a kind owns the
+    // answer for it, so a registered gatable kind is accepted here as it is there.
+    const registry = new AgentKindRegistry()
+    registry.register({ kind: 'org:auditor', gatable: true, spec: { track: 'reviewing' } } as never)
+    expect(() =>
+      assertValidRunConditions({
+        agentKinds: ['org:auditor'],
+        stepOptions: [conditional('frontend')],
+        agentKindRegistry: registry,
+      }),
+    ).not.toThrow()
   })
 })
 

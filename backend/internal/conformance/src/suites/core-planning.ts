@@ -4,6 +4,7 @@ import {
   type PipelineSchedule,
   type WorkspaceSnapshot,
   PipelineRegistry,
+  offeredPipelines,
   seedPipelines,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -780,12 +781,23 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
 
       // The snapshot advertises the current built-in catalog versions, keyed by id, so the
-      // SPA can flag a stale persisted copy and offer a reseed.
+      // SPA can flag a stale persisted copy and offer a reseed. OFFERED entries only: the SPA
+      // reads these keys as "the built-ins that exist" and derives its new-built-ins advisory as
+      // that set minus the rows it can see, and it can never see an INTERNAL one — so an internal
+      // id here is reported as new on every board forever, with no reseed able to clear it.
+      const catalog = seedPipelines()
       const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
       const expectedVersions = Object.fromEntries(
-        seedPipelines().map((p) => [p.id, p.version ?? 0]),
+        offeredPipelines(catalog, catalog).map((p) => [p.id, p.version ?? 0]),
       )
       expect(snap.body.pipelineCatalogVersions).toEqual(expectedVersions)
+      // Derived from the catalog rather than pinned to a count, and asserted as the two structural
+      // properties that matter: an internal entry is withheld from the map the advisory reads, and
+      // still NAMED in the display dictionary, because a task pinned to one has a card to render.
+      for (const internal of catalog.filter((p) => p.internal)) {
+        expect(snap.body.pipelineCatalogVersions).not.toHaveProperty(internal.id)
+        expect(snap.body.pipelineCatalogNames?.[internal.id]).toBe(internal.name)
+      }
       // A seeded built-in carries its version, persisted + round-tripped through the store.
       const seededFull = snap.body.pipelines.find((p) => p.id === 'pl_full')!
       expect(seededFull.version).toBe(expectedVersions.pl_full)

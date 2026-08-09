@@ -69,14 +69,30 @@ const depLabel = (dep: Block) => labelDep(dep, task.value?.parentId)
  * the Adaptive one in advanced). The workspace's positional first pipeline remains the last
  * resort, for a board whose catalog does not carry the rung (an older seed, or a deployment that
  * retired it).
+ *
+ * A PIN is honoured even when the library holds no row for it, and that branch is the whole reason
+ * this returns a descriptor rather than a `Pipeline`. An INTERNAL pipeline is withheld from the
+ * library on purpose (the platform starts it on its own behalf, so no picker may offer it), and a
+ * task can legitimately be pinned to one — the docs-refresh preset spawns its tasks onto
+ * `pl_code_comments`. Resolving that pin through the library alone answers undefined, and the
+ * fallback below then starts a FULL BUILD on a comment-only task while the button still reads as
+ * an ordinary Start. The fallback chain exists for a task with NO pin; a pin the library cannot
+ * show is still the task's answer, and the backend resolves the id for the run.
  */
-const defaultPipeline = computed(() => {
-  const pinned = task.value?.pipelineId ? pipelines.getPipeline(task.value.pipelineId) : undefined
-  return (
-    pinned ??
-    pipelines.getPipeline(defaultBuildPipelineId(uiMode.isAdvanced)) ??
-    pipelines.pipelines[0]
-  )
+const defaultPipeline = computed<{ id: string; name: string } | undefined>(() => {
+  const pinnedId = task.value?.pipelineId
+  if (pinnedId) {
+    return (
+      pipelines.getPipeline(pinnedId) ?? {
+        id: pinnedId,
+        // The catalog NAME map spans the whole catalog (unlike the versions map), so an internal
+        // pin still names itself here; the generic label covers a pin to something this build's
+        // catalog does not know at all.
+        name: pipelines.catalogNames[pinnedId] ?? t('board.task.pipelineFallback'),
+      }
+    )
+  }
+  return pipelines.getPipeline(defaultBuildPipelineId(uiMode.isAdvanced)) ?? pipelines.pipelines[0]
 })
 
 /** The PR the implementer agent opened for this task, if any. */

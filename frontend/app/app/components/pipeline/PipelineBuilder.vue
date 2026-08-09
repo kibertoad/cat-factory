@@ -25,6 +25,7 @@ import {
   companionForProducer,
   isConsensusEligibleKind,
   isTesterKind,
+  mayCarrySkipAxis,
 } from '~/utils/catalog'
 import type { ConsensusStrategy } from '~/types/consensus'
 
@@ -624,8 +625,14 @@ async function clone(p: Pipeline) {
                      states (see `cycleDraftStepCondition`). Shown in BOTH interface tiers, and
                      not behind `showOverrideField`: cloning a built-in carries the tester pair's
                      conditions in, so a control that hid them by default would leave a basic-mode
-                     editor saving a step whose "when does this run" they were never shown. -->
+                     editor saving a step whose "when does this run" they were never shown.
+
+                     Offered only where the step MAY be skipped at all. A condition is a skip axis,
+                     so the engine holds it to the same gatability rule as an estimate gate
+                     (`assertValidRunConditions`) — without this the builder invited a condition on
+                     `merger` and answered the save with a 422. -->
                   <UButton
+                    v-if="mayCarrySkipAxis(unit.kind)"
                     :icon="CONDITION_ICONS[pipelines.draftStepCondition(unit.index) ?? 'always']"
                     :color="pipelines.draftStepCondition(unit.index) ? 'info' : 'neutral'"
                     variant="ghost"

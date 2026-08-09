@@ -164,6 +164,43 @@ describe('usePipelineHealth', () => {
     expect(invalid.value[0]!.problems.some((p) => p.type === 'shape')).toBe(true)
   })
 
+  // The RUN CONDITION is the second skip axis, and the advisory has to mirror it for the same
+  // reason it mirrors the estimate gate: a rule the engine enforces at save that this scan calls
+  // healthy leaves the author to discover it as a 422.
+  it('accepts a run condition on a kind the shared gatable set allows', () => {
+    const conditional = builtin(['coder', 'reviewer', 'tester-ui'], {
+      stepOptions: [null, null, { condition: { serviceScope: 'frontend' } }],
+    })
+    expect(scan([conditional]).hasIssues.value).toBe(false)
+  })
+
+  it('flags a run condition on a kind the run structurally needs (merger)', () => {
+    const conditionalMerger = builtin(['coder', 'merger'], {
+      stepOptions: [null, { condition: { serviceScope: 'frontend' } }],
+    })
+    const { invalid } = scan([conditionalMerger])
+    expect(invalid.value).toHaveLength(1)
+    expect(invalid.value[0]!.problems.some((p) => p.type === 'shape')).toBe(true)
+  })
+
+  it('flags a step carrying BOTH a human approval gate and a run condition (shape)', () => {
+    const both = builtin(['coder', 'tester-ui'], {
+      gates: [false, true],
+      stepOptions: [null, { condition: { serviceScope: 'frontend' } }],
+    })
+    const { invalid } = scan([both])
+    expect(invalid.value).toHaveLength(1)
+    expect(invalid.value[0]!.problems.some((p) => p.type === 'shape')).toBe(true)
+  })
+
+  it('accepts a run condition BESIDE an estimate gate: the axes compose', () => {
+    const both = builtin(['task-estimator', 'coder', 'tester-ui'], {
+      gating: [null, null, { enabled: true, minComplexity: 0.4, onMissingEstimate: 'run' }],
+      stepOptions: [null, null, { condition: { serviceScope: 'frontend' } }],
+    })
+    expect(scan([both]).hasIssues.value).toBe(false)
+  })
+
   it('flags a step carrying BOTH a human approval gate and an estimate gate (shape)', () => {
     const both = builtin(['task-estimator', 'architect'], {
       gates: [false, true],

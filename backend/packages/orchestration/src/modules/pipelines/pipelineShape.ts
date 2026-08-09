@@ -67,6 +67,9 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *    structurally), must not also carry a human approval gate, must set at least one axis
  *    threshold (or it would always skip), and needs a `task-estimator` to have run before it (or
  *    the gate has nothing to consult).
+ *  - {@link assertValidRunConditions}: a step carrying a RUN CONDITION must satisfy the two
+ *    structural rules an estimate gate satisfies — a gatable kind, and no human approval gate on
+ *    the same step — because a skip is a skip whichever of the two axes caused it.
  *  - {@link assertValidAgentVariants}: a step selecting a registered agent-kind VARIANT must name
  *    one that exists and that varies THIS step's kind — an unknown id would silently fall back to
  *    the shipped prompt, and a mismatched one would run the step under another role's prompt.
@@ -119,6 +122,7 @@ export interface PipelineShape {
 export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidCompanionPlacement(pipeline)
   assertValidGating(pipeline)
+  assertValidRunConditions(pipeline)
   assertValidTesterQualityGating(pipeline)
   assertValidSkillSteps(pipeline)
   assertValidAgentVariants(pipeline)
@@ -429,6 +433,58 @@ export function assertValidGating({
     if (!hasEstimator) {
       throw new ValidationError(
         `Step '${kind}' is gated on the task estimate but no enabled '${TASK_ESTIMATOR_AGENT_KIND}' step runs before it. Add a task-estimator earlier in the pipeline.`,
+      )
+    }
+  }
+}
+
+/**
+ * Validate every ENABLED step carrying a RUN CONDITION (`stepOptions[i].condition`).
+ *
+ * A run condition is the SECOND axis that can skip a step, and a skip is a skip whichever axis
+ * caused it — so the two structural rules that keep the estimate gate from removing something the
+ * run needs bind here verbatim, and for the same reasons:
+ *
+ *  1. The kind must be GATABLE. Gatability answers "may this step be absent from a run at all",
+ *     which is a property of what the kind produces and who reads it, not of the reason for the
+ *     absence. Without this, a condition on `merger` silently drops the merge on every run outside
+ *     its scope and the pipeline finishes reporting success; on `coder`, the run reviews and merges
+ *     an unchanged branch. `isGatableKind` is asked with the registry so a DEPLOYMENT-registered
+ *     kind's own flag is honoured, exactly as the estimate gate asks it.
+ *  2. It must NOT also carry a human approval gate (`gates[i]`), for the reason the estimate gate
+ *     refuses the pair: a condition may leave a checkpoint un-reached, never CANCEL a pause the
+ *     author asked for. That the scope is computed rather than modelled makes it worse here, not
+ *     better — nobody chose it per run.
+ *
+ * Deliberately NOT refused: a condition BESIDE an enabled estimate gate. Those two compose
+ * (skip if either says no) and answer genuinely different questions — "does this step apply to this
+ * kind of change" and "is this change big enough to be worth it" — so a UI pass that runs only on
+ * frontend work and only above a complexity floor is a coherent thing to author.
+ *
+ * This lives in the shape validation rather than in `validatePipelineAuthoring` because it states
+ * what is BROKEN, not what is incomplete, so the RUN door refuses it too. Nothing stored predates
+ * the rule: run conditions ship with it.
+ */
+export function assertValidRunConditions({
+  agentKinds,
+  enabled,
+  gates,
+  stepOptions,
+  agentKindRegistry,
+}: PipelineShape): void {
+  if (!stepOptions) return
+  const isEnabled = (i: number) => enabled?.[i] !== false
+  for (let i = 0; i < agentKinds.length; i++) {
+    if (!stepOptions[i]?.condition || !isEnabled(i)) continue
+    const kind = agentKinds[i]
+    if (kind === undefined || !isGatableKind(kind, agentKindRegistry)) {
+      throw new ValidationError(
+        `Step '${kind}' cannot carry a run condition — its output is required by the rest of the run, so a run outside the condition's scope would silently finish without it. Only a step whose result later steps read as context (a design, a review, an extra verification pass) may be skipped.`,
+      )
+    }
+    if (gates?.[i] === true) {
+      throw new ValidationError(
+        `Step '${kind}' carries a human approval gate, so it cannot also carry a run condition — a condition may leave a checkpoint un-reached but never remove one the pipeline author asked for. Drop the approval gate to make the step conditional, or drop the condition to keep it unconditional.`,
       )
     }
   }

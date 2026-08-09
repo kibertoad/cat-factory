@@ -4871,6 +4871,13 @@
       "elapsedTooltip": "Bu adımda geçen süre",
       "prReview": {
         "review": "Bulguları incele"
+      },
+      "skipped": {
+        "gated": "Atlandı: görev tahmini bu adımın eşiklerinin altında kaldı.",
+        "conditionFrontend": "Atlandı: bu görev hiçbir frontend servisini değiştirmiyor, dolayısıyla denenecek bir arayüz yok.",
+        "conditionBackend": "Atlandı: bu görev yalnızca bir frontend servisini değiştiriyor, dolayısıyla arkasında denenecek bir API yok.",
+        "producerSkipped": "Atlandı: incelediği adım atlandı, dolayısıyla değerlendirilecek bir şey yok.",
+        "unknown": "Atlandı: bu adım çalışmadı."
       }
     },
     "health": {

@@ -115,6 +115,17 @@ export function isGatableKind(kind: AgentKind, registry?: AgentKindRegistry): bo
 `registry.get(kind)?.gatable` alone would return `undefined` for every built-in: the trap to avoid
 when extending this.
 
+**Gatability governs every SKIP AXIS, not just the estimate gate.** WS6's run condition is the
+second one, and it reaches the identical failure by a different route: a condition on `merger` drops
+the merge on every run outside its scope while the pipeline still reports success. So
+`assertValidRunConditions` asks the same `isGatableKind` and enforces the same human-gate
+exclusivity, and the answer is mirrored in all three places the estimate gate is: the run door and
+the save door (`validatePipelineShape`), the SPA's health advisory, and what the builder OFFERS
+(`mayCarrySkipAxis`, which allows a deployment-registered kind the browser cannot answer for, since
+over-offering costs a 422 and under-offering silently removes a declared capability). A third axis
+added later inherits this list. What is deliberately NOT refused is a condition BESIDE an estimate
+gate: they compose, and answer different questions.
+
 ### The cascade is a LOCAL rule, not lookahead
 
 When a gated producer is skipped, its companion must be skipped too, or the companion grades whatever
@@ -227,27 +238,33 @@ explicitly rather than papered over.
       added, and the mechanism that made most of the withdrawals possible.
 
       **The mechanism.** A step can now carry a RUN CONDITION (`stepOptions[i].condition`, a
-          service scope) beside its estimate gate, and the two answer different questions: the estimate
-          asks "is this task big enough to be worth the step", the condition asks "does this step apply
-          to a change of this shape at all". Every build rung carries BOTH testers, each conditional —
-          the browser pass where the change touches a frontend service, the API pass where it touches
-          anything else, both on a full-stack task. Run admission drops the condition-excluded steps
-          before its gates, so one preset carrying `tester-ui` is not refused on every backend service.
+              service scope) beside its estimate gate, and the two answer different questions: the estimate
+              asks "is this task big enough to be worth the step", the condition asks "does this step apply
+              to a change of this shape at all". Every build rung carries BOTH testers, each conditional —
+              the browser pass where the change touches a frontend service, the API pass where it touches
+              anything else. Run admission drops the condition-excluded steps before its gates, so one
+              preset carrying `tester-ui` is not refused on every backend service.
 
-          **Retired:** `pl_frontend` (a near-duplicate of the ladder that existed only because
-          `tester-ui` could not say "not on this run"), `pl_tech_debt` (the build tail behind an
-          `analysis` + `tracker` head — a schedule pointed at a rung, not a preset), `pl_blueprint` and
-          `pl_environment_analysis` and `pl_spec` (one step each; see WS3b).
+              `RunServiceScope` can express a task in BOTH scopes at once, but no board state produces
+              one today: an involved service must be a connection neighbour, and only a `service`-type
+              frame may declare or be named by a connection, so a frontend frame has no peers in either
+              direction. Widening that is a change to the CONNECTION model, not to the condition, and is
+              not in this slice; the reduction stays general so it is the one place that would change.
 
-          **Added:** `pl_complex` — the requirements-review conversation and a `researcher` pass in
-          front of `pl_build`, for work whose SCOPE is the risky part. It is the one thing no amount of
-          estimate-gating can add to `pl_full`: an estimator scores the task as written, and a task
-          written vaguely enough to need that conversation is the one it scores wrong.
+              **Retired:** `pl_frontend` (a near-duplicate of the ladder that existed only because
+              `tester-ui` could not say "not on this run"), `pl_tech_debt` (the build tail behind an
+              `analysis` + `tracker` head — a schedule pointed at a rung, not a preset), `pl_blueprint` and
+              `pl_environment_analysis` and `pl_spec` (one step each; see WS3b).
 
-          **Also:** an interface-mode default (`defaultBuildPipelineId` — basic gets the fixed
-          `pl_build`, advanced the adaptive `pl_full`), the builder showing per-step conditions in both
-          the draft chain and the library, and `presentation.internal` keeping the environment analyst
-          out of the palette now that nothing places it.
+              **Added:** `pl_complex` — the requirements-review conversation and a `researcher` pass in
+              front of `pl_build`, for work whose SCOPE is the risky part. It is the one thing no amount of
+              estimate-gating can add to `pl_full`: an estimator scores the task as written, and a task
+              written vaguely enough to need that conversation is the one it scores wrong.
+
+              **Also:** an interface-mode default (`defaultBuildPipelineId` — basic gets the fixed
+              `pl_build`, advanced the adaptive `pl_full`), the builder showing per-step conditions in both
+              the draft chain and the library, and `presentation.internal` keeping the environment analyst
+              out of the palette now that nothing places it.
 
 ## Gotchas the first slice surfaced
 
