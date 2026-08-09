@@ -108,6 +108,21 @@ So "the bindings" are data, "the worker" is machinery, and "the template" is the
 operator really writes (`policy.config.ts`). Docs: each package's README; design record:
 `docs/initiatives/cloudflare-os-gatekeeper.md`.
 
+Three more pairs of words are routinely confused inside that Worker, and each pair is two things:
+
+- **The two DOORS.** A Cloudflare OS workspace arrives on a service binding to the
+  `GatekeeperVendor` entrypoint (native Workers RPC, and holding the binding is the authorization);
+  everything else arrives at `ALL /rpc` (Cap'n Web over HTTP, behind `OS_SHARED_TOKEN`). Cap'n Web
+  is NOT the Cloudflare OS protocol, and prose calling `/rpc` "the endpoint the OS talks to" is
+  wrong.
+- **The two APPROVAL directions.** The approvals INBOX carries the platform's parked runs OUTWARD,
+  so a person in the workspace can answer them. The approval QUEUE carries the workspace's
+  governance INWARD over every call an agent makes. A Gatekeeper needs both, and neither substitutes
+  for the other.
+- **The two DEFAULT tiers.** `defaultTier` is what an actor named on `/rpc` gets; `autoProvisionedTier`
+  is what a Cloudflare OS account gets. They do not inherit from each other, because an account is
+  minted with no identity a `grants` entry could ever have named.
+
 ## Concept indexes, where the cross-cutting things live
 
 Short "where X lives" pointers for concepts that are spread across many files with no single

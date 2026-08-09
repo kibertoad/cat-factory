@@ -41,6 +41,14 @@ const DELIVERY_LOOP = [
 export const FIXTURE_POLICY: GatekeeperPolicy = {
   defaultTier: null,
 
+  // The Cloudflare OS door's own default, exercised by `os.spec.ts`. It is a FOURTH tier rather
+  // than one of the three above because the two doors name callers differently: the three above are
+  // resolved from `grants` by an identity the OS asserts, and an auto-provisioned account has no
+  // such identity to be granted by. `workspace` is the write tier plus one telemetry read, which is
+  // the smallest set that can tell the governed paths apart (a plain read, an unshareable read, a
+  // non-destructive write and a destructive one).
+  autoProvisionedTier: 'workspace',
+
   tiers: {
     observer: {
       description: 'Read the board, runs, notifications and telemetry. Changes nothing.',
@@ -59,6 +67,17 @@ export const FIXTURE_POLICY: GatekeeperPolicy = {
       description: 'Everything an operator can do, plus answering a run’s parked decisions.',
       keyScope: 'decide',
       allow: [...DELIVERY_LOOP, 'notifications_dismiss', ...DECISION_BINDINGS],
+    },
+
+    workspace: {
+      description:
+        'What a Cloudflare OS workspace agent gets: the delivery loop, a run’s parked decisions, ' +
+        'and one look at its model calls.',
+      keyScope: 'write',
+      // `decisions_list` is here because `approvals_inspect` is a RESERVED method every capability
+      // carries and it reads the run's live decision list through the same `invoke`: a tier that
+      // does not grant it ships an inbox method that refuses on the operation it was built on.
+      allow: [...DELIVERY_LOOP, 'decisions_list', 'debug_list_llm_calls'],
     },
   },
 

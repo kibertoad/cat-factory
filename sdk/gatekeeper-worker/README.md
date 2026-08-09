@@ -3,10 +3,23 @@
 ## What it is
 
 The Cloudflare Worker machinery behind a cat-factory **Gatekeeper**: a credential-holding front
-end that lets a [Cloudflare OS](https://github.com/cloudflare/cloudflare-os) workspace (or any
-agent runtime speaking Cap'n Web) drive cat-factory without an agent ever seeing a credential.
-Agents hold an object-capability whose methods are exactly what policy granted; the keys stay in
-Worker secrets and Durable Object storage.
+end that lets a [Cloudflare OS](https://github.com/cloudflare/cloudflare-os) workspace drive
+cat-factory without an agent ever seeing a credential. Agents hold an object-capability whose
+methods are exactly what policy granted; the keys stay in Worker secrets and Durable Object
+storage.
+
+It serves TWO doors onto the same rooms, and which one a caller comes in by decides how it is
+authorized:
+
+| Door                              | Who comes in by it                                               | Authorization       |
+| --------------------------------- | ---------------------------------------------------------------- | ------------------- |
+| The `GatekeeperVendor` entrypoint | A Cloudflare OS workspace, over a `GATEKEEPER_*` service binding | Holding the binding |
+| `ALL /rpc` (Cap'n Web over HTTP)  | Any other agent runtime that speaks Cap'n Web                    | `OS_SHARED_TOKEN`   |
+
+The published Cloudflare OS contract reaches a gatekeeper over native Workers RPC to a
+`WorkerEntrypoint` export named `GatekeeperVendor`; Cap'n Web is that workspace's browser-to-backend
+and gadget-side protocol, which shares the semantics and not the wire. So `/rpc` is the door for
+everything that is NOT a Cloudflare OS deployment, and nothing here is Cloudflare-OS-only.
 
 It is the machinery half of the Gatekeeper family:
 
@@ -83,9 +96,20 @@ version has to be the consumer's.
 
 ## What it does
 
-- **Object-capability bindings over Cap'n Web.** An agent holds an object whose METHODS are the
-  operations policy granted it. There is no allow-list consulted per call, because there is nothing
-  to consult: an operation the tier does not carry is not a method that refuses, it is absent.
+- **Object-capability bindings.** An agent holds an object whose METHODS are the operations policy
+  granted it. There is no allow-list consulted per call, because there is nothing to consult: an
+  operation the tier does not carry is not a method that refuses, it is absent.
+- **The Cloudflare OS object model, as a facade over all of it.** `GatekeeperVendor` →
+  `CatFactoryAccount` → `CatFactoryResource` → session, with `describe()`,
+  `getSupportedResources()` and `getTypeScriptTypes()` all PROJECTIONS of the operation table
+  rather than transcriptions of it. A resource is the paired cat-factory workspace, named by a
+  URLPattern over the deployment origin: one Gatekeeper serves one workspace, because the
+  provisioning key it holds is scoped to one.
+- **The workspace's approval queue, in front of every call.** On the entrypoint path each read is
+  authorized before it is MADE, and each write is SUBMITTED and performed only when
+  the workspace applies it. Reads that serve captured agent text are marked unshareable, actions
+  carry the consequence the table states, and nothing is offered for unattended auto-approval while
+  the surface annotates no write as safe. The tier policy underneath stays the floor.
 - **Per-actor credentials.** Each caller gets their own cat-factory key, minted through
   `POST /api/v1/keys` at the tier's scope and stamped with your identity for that person
   (`externalIdentity`), so a run traces back to a human and role-scoped merge policy stays real.
@@ -138,14 +162,36 @@ The Worker serves five routes:
 | Route                          | Auth              | What it is                                                    |
 | ------------------------------ | ----------------- | ------------------------------------------------------------- |
 | `POST /webhook`                | delivery HMAC     | The platform's outbound deliveries. Verified over raw bytes.  |
-| `ALL /rpc`                     | `OS_SHARED_TOKEN` | The Cap'n Web endpoint the OS deployment talks to.            |
+| `ALL /rpc`                     | `OS_SHARED_TOKEN` | Cap'n Web, for an agent runtime that is not a Cloudflare OS.  |
 | `POST /admin/enroll`           | `OS_SHARED_TOKEN` | Re-assert the webhook registration. Also runs hourly on cron. |
 | `POST /admin/retire?actorId=…` | `OS_SHARED_TOKEN` | Offboarding: revoke every key minted for one OS user.         |
-| `GET /health`                  | none              | Green only when every binding is set and the policy compiles. |
+| `GET /health`                  | none              | Green when every binding is set and the policy compiles.      |
 
-`/rpc` is bearer-gated even though the intended path is a Worker service binding, which never
-traverses the internet: a Worker with a route attached is reachable by anyone who finds it, and a
-capability surface whose only defence is obscurity is not one.
+`/rpc` is bearer-gated because a Worker with a route attached is reachable by anyone who finds it,
+and a capability surface whose only defence is obscurity is not one. The Cloudflare OS path does not
+come through here at all: it arrives on a service binding, which never traverses the internet and
+which only that deployment's operator can write, so holding it IS the authorization and a second
+secret in front of it would protect nothing.
+
+### `/health` also reports whether a Cloudflare OS could install this
+
+Two things decide that, and neither has a request path of its own: the entry module must export the
+four names the object model resolves (`GatekeeperVendor`, `CatFactoryAccount`,
+`CatFactoryResource`, `CatFactoryVerifier`), and the policy must name an `autoProvisionedTier`. A
+workspace that finds either missing does not get an error anyone monitors; it never finishes
+installing. So a green response carries the answer beside `ok`:
+
+```json
+{ "ok": true, "os": { "discoverable": true, "blockers": [] } }
+```
+
+It is REPORTED, never folded into the status, because a Gatekeeper serving `/rpc` and nothing else
+is a supported deployment: this package promises that door to consumers that are not a Cloudflare
+OS, and turning their liveness red on a version bump would be this route answering a question
+nobody asked it. A deployment that wants discovery keys a monitor on `os.discoverable`; each entry
+in `blockers` carries a `reason` (`missing_exports`, `no_auto_provisioned_tier`) and a `detail`
+naming the fix, and both are reported in one pass so a half-wired deployment is not wired one
+redeploy at a time.
 
 ## What to customize: the policy
 

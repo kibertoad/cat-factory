@@ -260,9 +260,10 @@ key-scope floors, mutation and transport metadata, invoke thunks over the TypeSc
 credential-holding front-ends such as a Cloudflare OS Gatekeeper; see the
 [initiative tracker](./docs/initiatives/cloudflare-os-gatekeeper.md). `sdk/gatekeeper-worker` is
 the one member here that is hand-written rather than projected: the **Gatekeeper Worker
-machinery** a deployment installs (Cap'n Web capabilities compiled from that table, per-actor key
-minting, the verified webhook receiver and the approval inbox), leaving `deploy/gatekeeper` as a
-template holding only the policy and the bindings. Design notes, the Java/Kotlin story and the
+machinery** a deployment installs (capabilities compiled from that table, the Cloudflare OS object
+model and approval queue in front of them, per-actor key minting, the verified webhook receiver and
+the approval inbox), leaving `deploy/gatekeeper` as a template holding only the policy and the
+bindings. Design notes, the Java/Kotlin story and the
 release process: [`sdk/README.md`](./sdk/README.md).
 
 | Path                                               | Package                                   | Registry                                    |

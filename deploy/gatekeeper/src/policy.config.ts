@@ -57,6 +57,19 @@ export const POLICY: GatekeeperPolicy = {
   // your OS deployment's own membership is the access decision you want to rely on.
   defaultTier: null,
 
+  // THE ONE LINE THAT TURNS CLOUDFLARE OS DISCOVERY ON, and it is `null` here on purpose.
+  //
+  // A Cloudflare OS workspace does not name your people: it auto-provisions one account per user
+  // through `createAccount()`, which the contract defines as carrying no identity at all. So no
+  // account minted that way can ever match a `grants` line, and `defaultTier` is deliberately not
+  // consulted for them (sharing the knob would mean that opting into OS discovery silently handed
+  // every unrostered `/rpc` caller a capability too).
+  //
+  // Name a tier here when you want a paired OS workspace to work, and choose it as if every agent
+  // in that workspace held it, because they will. To raise ONE account above it afterwards, read
+  // its id from the account's own description in the workspace and add that id to `grants`.
+  autoProvisionedTier: null,
+
   tiers: {
     // Read-only oversight: what a status Gadget needs to render a board and a run, and nothing
     // that spends money or changes state. `'*'` is safe here precisely because the key cannot

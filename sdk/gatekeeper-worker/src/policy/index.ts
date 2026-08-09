@@ -10,8 +10,10 @@
 // import from one place.
 
 export {
+  autoProvisionedTier,
   compilePolicy,
   describeBinding,
+  tierForAccount,
   tierForActor,
   type CompiledPolicy,
   type CompiledTier,

@@ -7,6 +7,11 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "erasableSyntaxOnly": true,
+    // Explicit resource management on top of the repo's ES2022 baseline. It is not a target bump:
+    // workerd's RPC lifecycle IS `Symbol.dispose` (a stub is released by disposing it, and a
+    // disposed `RpcTarget` has its disposer called), so a package whose whole job is holding other
+    // people's stubs cannot describe its own lifetimes without the type.
+    "lib": ["ES2022", "ESNext.Disposable"],
     // Unlike its `sdk/*` siblings this package runs in ONE place, a Worker isolate, so the
     // Cloudflare globals (`DurableObjectStub`, `ExportedHandler`, the `cloudflare:workers` module)
     // are part of the surface it compiles against rather than an ambient extra.
