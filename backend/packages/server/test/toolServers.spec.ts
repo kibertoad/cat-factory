@@ -8,6 +8,7 @@ import { handleError } from '../src/http/errorHandler.js'
 import { collectDeclaredToolServers } from '../src/modules/toolServers/declaredToolServers.js'
 import { probeToolServer } from '../src/modules/toolServers/probeToolServer.js'
 import { toolServerController } from '../src/modules/toolServers/ToolServerController.js'
+import { MCP_OAUTH_CALLBACK_PATH } from '../src/modules/toolServers/mcpOAuthRedirect.js'
 
 // The tool-server OPERABILITY surface: the inventory projection, the probe's own judgements, and the
 // controller's gate.
@@ -338,6 +339,39 @@ describe('probeToolServer', () => {
     expect(logger.lines.some((line) => line.msg.includes('reserved credential key'))).toBe(true)
   })
 
+  it('refuses a credential with no header to ride, rather than probing unauthenticated', async () => {
+    // The probe answers what a DISPATCH would do without spending a run to find out, so it has to
+    // drop exactly what the dispatch drops. Sending the request anyway would let the endpoint
+    // answer 401 and be reported as a WRONG credential, where the value was never sent at all.
+    const logger = createRecordingLogger()
+    const registry = registryWith((r) =>
+      r.registerToolServer({
+        ...HTTP_SERVER,
+        secretKeys: [{ key: 'ACME_TRACKER_TOKEN', envName: 'ACME_TRACKER_TOKEN' }],
+      }),
+    )
+    const doFetch = (async () => {
+      throw new Error('the probe must not call a server it cannot authenticate')
+    }) as unknown as typeof fetch
+
+    const result = await probeToolServer({
+      agentKindRegistry: registry,
+      workspaceId: 'ws_1',
+      serverId: 'issues',
+      // A resolver that WOULD answer it: what is wrong is the declaration, not the value.
+      resolveToolSecrets: resolverFor({ ACME_TRACKER_TOKEN: 'tok' }),
+      logger,
+      probe: { fetch: doFetch },
+    })
+
+    expect(result).toEqual({
+      serverId: 'issues',
+      status: 'credential_unusable',
+      unusableCredentials: ['ACME_TRACKER_TOKEN'],
+    })
+    expect(logger.lines.some((line) => line.msg.includes('cannot ride its transport'))).toBe(true)
+  })
+
   it('refuses a stdio server by name rather than pretending to reach it', async () => {
     const registry = registryWith((r) => r.registerToolServer(STDIO_SERVER))
 
@@ -608,7 +642,7 @@ describe('toolServerController', () => {
       const res = await build({
         agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
         mcpOAuth: fakeOAuth(),
-        mcpOAuthRedirectUrl: 'https://app.example.com/mcp-oauth-callback',
+        mcpOAuthRedirectUrl: `https://app.example.com${MCP_OAUTH_CALLBACK_PATH}`,
       }).request('/workspaces/ws_1/tool-servers/linear/oauth/authorize', { method: 'POST' })
 
       expect(res.status).toBe(200)
@@ -631,7 +665,7 @@ describe('toolServerController', () => {
       const res = await build({
         agentKindRegistry: registryWith((r) => r.registerToolServer(HTTP_SERVER)),
         mcpOAuth: fakeOAuth(),
-        mcpOAuthRedirectUrl: 'https://app.example.com/mcp-oauth-callback',
+        mcpOAuthRedirectUrl: `https://app.example.com${MCP_OAUTH_CALLBACK_PATH}`,
       }).request('/workspaces/ws_1/tool-servers/issues/oauth/authorize', { method: 'POST' })
 
       expect(res.status).toBe(422)

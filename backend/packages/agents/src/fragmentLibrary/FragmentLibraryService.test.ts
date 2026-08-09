@@ -79,6 +79,9 @@ class FakeFragmentRepo implements PromptFragmentRepository {
   async listBySource(sourceId: string) {
     return [...this.rows.values()].filter((r) => r.sourceId === sourceId)
   }
+  async softDeleteBySource(sourceId: string, at: number) {
+    for (const r of this.rows.values()) if (r.sourceId === sourceId) r.deletedAt = at
+  }
 }
 
 const workspaces = {

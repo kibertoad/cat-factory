@@ -266,11 +266,23 @@ that the tree served is the one the verdicts were made against, and before that 
 consulted no tree. That is the same fact `requirements.spec: "not_read"` on the run's outcome
 already states. `provenance` is null there, and only there.
 
-1.37.0, not 1.36.0: one new section, `environments`, on the run outcome summary
+1.37.0: one new value, `unusable_secret`, on the `reason` of a step's unavailable tool servers
+(carried by the run reads that project `toolServers`). It says a credential the server declares
+named a channel its transport does not have (a header on a `stdio` child process, no header on a
+remote url), so the value resolved and reached nothing. Additive, and the SDKs tolerate unknown
+members by design, so a consumer built against 1.36.0 keeps parsing every response it already
+understood and sees a value it cannot classify rather than a wrong one.
+
+It is a new member rather than a fold onto `missing_secret` or `reserved_secret` because those
+two are what a consumer would act on wrongly: nothing is missing (the value resolved) and nothing
+was refused (the platform withheld no key). Only a member of its own points at the declaration,
+which is the one thing that has to change.
+
+1.38.0, not 1.37.0: one new section, `environments`, on the run outcome summary
 (`GET /api/v1/runs/{runId}/outcome`), plus the `version` field of that payload moving to 3. It
 carries the throwaway environments the run stood up: where each one is, where it stands, when
 its TTL lapses, and whether the run declared that it outlives the run. Additive: no path, shape,
-scope floor or error vocabulary moves, and a consumer built against 1.36.0 keeps parsing every
+scope floor or error vocabulary moves, and a consumer built against 1.37.0 keeps parsing every
 response it already understood.
 
 The rule the section commits to is worth stating, because it is what a consumer may rely on: a
@@ -282,6 +294,8 @@ is served as an instant rather than folded into `state`, because the reduction i
 that the app composing it live and the endpoint composing it server-side cannot disagree about
 one run, so a `live` row whose TTL has passed is not a URL to hand anyone either.
 
-The number moved because main published 1.36.0 for the run spec read above while this branch was
-in flight, the same collision the note higher up warns about. Nothing about the section changed
-with it.
+The number has now moved twice, both times for the same reason: main published 1.36.0 for the run
+spec read while this branch was in flight, and then 1.37.0 for `unusable_secret` above. The second
+move arrived exactly as the note higher up describes it, with the VERSION line itself auto-merging
+byte-identically and only the prose beside it conflicting. Nothing about the section changed with
+either move.

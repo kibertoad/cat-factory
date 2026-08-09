@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import {
+  type LibrarySourceEntity,
+  type LibrarySourceOwnerLookup,
   type PersistenceRegistry,
   type PersistenceRpcRequest,
   dispatchPersistenceCall,
@@ -69,6 +71,16 @@ export function persistenceController(): Hono<AppEnv> {
     const blockRepository = registry.blockRepository
     const serviceRepository = registry.serviceRepository
     const skillSourceRepository = registry.skillSourceRepository
+    // The owner-pair content-library source tables, keyed by the `LibrarySourceEntity` the rule
+    // names, so one resolver answers for both (and a new library is one row here). Keyed by the
+    // UNION rather than by `string`: a member added to `LibrarySourceEntity` must fail to compile
+    // here rather than resolve to nothing, which the stored-half check would otherwise be entitled
+    // to read as "no such row" and admit.
+    const librarySourceRepos: Record<LibrarySourceEntity, PersistenceRegistry[string] | undefined> =
+      {
+        fragmentSource: registry.fragmentSourceRepository,
+        foundationalServiceSource: registry.foundationalServiceSourceRepository,
+      }
     const resolveAccountId = (workspaceId: string) =>
       (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
       Promise.resolve(undefined)
@@ -96,6 +108,23 @@ export function persistenceController(): Hono<AppEnv> {
     const blockFindByIds = memoizeRead((ids) => blockRepository?.findByIds?.(ids as string[]))
     const serviceListByIds = memoizeRead((ids) => serviceRepository?.listByIds?.(ids as string[]))
     const skillSourceGet = memoizeRead((id) => skillSourceRepository?.get?.(id as string))
+    // One memo per source TABLE, keyed by entity: the resolver and the dispatched `get` of the same
+    // library then share a read, exactly as `skillSourceGet` does for skills. A table whose `get`
+    // this deployment does not wire gets NO reader rather than one answering `undefined`, so the
+    // resolver below can report `unreadable` instead of the absence that would admit an upsert.
+    const librarySourceReader = (entity: LibrarySourceEntity) => {
+      const repo = librarySourceRepos[entity]
+      if (typeof repo?.get !== 'function') return undefined
+      // Called through the repository so a class-implemented `get` keeps its receiver.
+      return memoizeRead((id) => repo.get!(id as string))
+    }
+    const librarySourceGets: Record<
+      LibrarySourceEntity,
+      ((id: unknown) => Promise<unknown>) | undefined
+    > = {
+      fragmentSource: librarySourceReader('fragmentSource'),
+      foundationalServiceSource: librarySourceReader('foundationalServiceSource'),
+    }
     // For the self-keyed reads, point the dispatcher's own call at the memo so it hits the
     // resolver's already-resolved result. Only the one dispatched method is overridden; the rest
     // of the registry is untouched. Keyed `repo.method` so a new self-keyed read is one row here
@@ -110,6 +139,25 @@ export function persistenceController(): Hono<AppEnv> {
       // The `skillSource` scope resolves a source's account by reading the source; when the
       // dispatched call IS that read (the sync service's `get`), reuse the resolver's result.
       'skillSourceRepository.get': { skillSourceRepository: { get: skillSourceGet } },
+      // The same self-keyed read for the two owner-pair libraries' source tables. Contributed only
+      // where a reader exists: a table whose `get` is unwired has nothing to memoise, and the
+      // dispatcher's own wiring check answers that call with `... is not wired` regardless.
+      ...(librarySourceGets.fragmentSource
+        ? {
+            'fragmentSourceRepository.get': {
+              fragmentSourceRepository: { get: librarySourceGets.fragmentSource },
+            },
+          }
+        : {}),
+      ...(librarySourceGets.foundationalServiceSource
+        ? {
+            'foundationalServiceSourceRepository.get': {
+              foundationalServiceSourceRepository: {
+                get: librarySourceGets.foundationalServiceSource,
+              },
+            },
+          }
+        : {}),
     }
     // Substitute ONLY for a method the real registry actually wires. `memoizeRead` returns a
     // function unconditionally — it closes over an optional-chained call — so overriding an ABSENT
@@ -168,6 +216,24 @@ export function persistenceController(): Hono<AppEnv> {
       resolveSkillSourceAccountId: async (sourceId) => {
         const source = (await skillSourceGet(sourceId)) as { accountId?: string } | null | undefined
         return source?.accountId
+      },
+      // The owner-PAIR libraries' equivalent: a fragment / foundational-service source is owned by
+      // an `(ownerKind, ownerId)` tier rather than an account, so project the pair and let the rule
+      // resolve it the way it resolves a positional owner. A source that does not exist answers
+      // `absent`, which the sourceId-keyed rules fail closed on (404) exactly like a missing
+      // block/service, and which `ownerFieldUpsert` alone reads as a create.
+      resolveLibrarySourceOwner: async (entity, sourceId): Promise<LibrarySourceOwnerLookup> => {
+        const read = librarySourceGets[entity]
+        // No reader for that table: nothing is known about the id, so say so. Answering `absent`
+        // here would let an id-keyed upsert through on its DECLARED owner alone.
+        if (!read) return { status: 'unreadable' }
+        const source = (await read(sourceId)) as
+          | { ownerKind?: unknown; ownerId?: unknown }
+          | null
+          | undefined
+        return source
+          ? { status: 'found', owner: { ownerKind: source.ownerKind, ownerId: source.ownerId } }
+          : { status: 'absent' }
       },
       // The member-display scope (`user`/`userList`): a userId is in scope iff a co-member of an
       // in-scope account, so resolve each in-scope account's roster to userIds. Bounded by the

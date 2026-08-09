@@ -503,7 +503,7 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
 
 - [x] **Live URL on the outcome card.** The run's environments are a section of the outcome
       summary (`environments`, contracts' `run-outcome.ts`), so "click and look" sits next to the
-      captured views on the card and on `GET /api/v1/runs/:runId/outcome` (surface 1.37.0, outcome
+      captured views on the card and on `GET /api/v1/runs/:runId/outcome` (surface 1.38.0, outcome
       `version` 3) rather than in step detail.
       **The section reports a STATE, not a URL**, which is the decision the plan above did not
       make. A deploy row is terminal at provision time and never moves again, so the URL alone

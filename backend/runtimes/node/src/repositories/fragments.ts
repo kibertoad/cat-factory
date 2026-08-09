@@ -172,6 +172,13 @@ export class DrizzlePromptFragmentRepository implements PromptFragmentRepository
       .where(and(eq(promptFragments.source_id, sourceId), isNull(promptFragments.deleted_at)))
     return rows.map(rowToFragment)
   }
+
+  async softDeleteBySource(sourceId: string, at: number): Promise<void> {
+    await this.db
+      .update(promptFragments)
+      .set({ deleted_at: at, updated_at: at })
+      .where(and(eq(promptFragments.source_id, sourceId), isNull(promptFragments.deleted_at)))
+  }
 }
 
 // ---- generated briefs -----------------------------------------------------

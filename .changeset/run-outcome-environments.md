@@ -8,7 +8,7 @@
 '@cat-factory/gatekeeper-bindings': minor
 ---
 
-Put a run's live environments on the outcome summary (spec 1.37.0, outcome `version` 3). Additive.
+Put a run's live environments on the outcome summary (spec 1.38.0, outcome `version` 3). Additive.
 
 The outcome summary gains an `environments` section: one row per throwaway environment the run
 stood up, carrying its URL, its state, the TTL instant when the platform recorded one, the service

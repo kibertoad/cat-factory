@@ -18,6 +18,7 @@ public enum DebugUnavailableToolServerReason {
     TRANSPORT_UNSUPPORTED("transport_unsupported"),
     MISSING_SECRET("missing_secret"),
     RESERVED_SECRET("reserved_secret"),
+    UNUSABLE_SECRET("unusable_secret"),
     OAUTH_NOT_CONNECTED("oauth_not_connected"),
     OAUTH_TOKEN_FAILED("oauth_token_failed"),
     OVER_BUDGET("over_budget"),

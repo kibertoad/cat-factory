@@ -234,9 +234,9 @@
   decrypt-inside connection repo and so stay off). Node routes the two fragment repos through the
   `if (remoteRepos)` seam ONLY when the library is configured (else setting `promptFragmentRepository`
   would spuriously turn the module on and force fragment resolution on every run). The `sourceId`-keyed
-  `promptFragmentRepository.listBySource` + `fragmentSourceRepository.get`/`updateSyncState`/`softDelete`
-  stay off: they back the repo-SYNC the mothership owns (its source service needs a GitHub client a
-  mothership node lacks). (2) The two member-level **account onboarding reads** the SPA's
+  sync methods stayed off here on the premise that a mothership node has no GitHub client; token
+  delegation retired it and the library-sync slice below opened them. (2) The two member-level
+  **account onboarding reads** the SPA's
   members/email-settings panels drive: `invitationRepository.listByAccount` (pending invites) and
   `emailConnectionRepository.getByAccount` (the email connection, its provider key a SEALED
   `apiKeyCipher` blob; the repo never decrypts), both via the `account` rule. The account-lifecycle
@@ -290,7 +290,8 @@
   so nothing positional binds them. It resolves the source's owning account server-side through a
   new `resolveSkillSourceAccountId` dispatch resolver (memoised beside the block/service resolvers,
   and the dispatched `skillSourceRepository.get` is routed through the SAME memo so the scope check
-  is not a second read). The sibling libraries can adopt it when their own sync surface lands.
+  is not a second read). The sibling libraries have since adopted it in its owner-PAIR form,
+  `librarySource` (see the library-sync slice below).
   Allow-listed: `accountSkillRepository` `listByAccount`/`get` (the `account` rule),
   `upsert` (`accountField`), `softDelete` (`account`), `listBySource`/`softDeleteBySource`
   (`skillSource`); `skillSourceRepository` `listByAccount` (`account`),
@@ -310,11 +311,12 @@
   alone. Its sibling `accountSkillRepository.upsert` keeps plain `accountField` because that write
   conflicts on `(account_id, skill_id)`, so the bound account is part of the key.
 
-  > **Open gap this rule does NOT close.** `fragmentSourceRepository.upsert` (`ownerField`) has the
-  > same id-keyed conflict shape and the same exposure. Closing it needs the `ownerField` analogue:
-  > a source → owner-PAIR resolver (`(ownerKind, ownerId)`, not a bare accountId): plus its own
-  > round-trip tests, so it is tracked here rather than folded into the skills slice. Until then, do
-  > not copy `ownerField`/`accountField` onto a new id-keyed upsert.
+  > **Open gap this rule did NOT close** (CLOSED by the library-sync slice below).
+  > `fragmentSourceRepository.upsert` (`ownerField`) has the same id-keyed conflict shape and the
+  > same exposure. Closing it needed the `ownerField` analogue: a source → owner-PAIR resolver
+  > (`(ownerKind, ownerId)`, not a bare accountId): plus its own round-trip tests, so it was tracked
+  > here rather than folded into the skills slice. It is now `ownerFieldUpsert`, and it is what a new
+  > id-keyed library upsert must use: do not copy `ownerField`/`accountField` onto one.
 
   **Also new: `githubInstallationRepository.listActiveForAccount`** (`account` rule), a real port
   addition rather than an allow-list line. The account-tier installation lookup every repo-sourced
@@ -332,6 +334,88 @@
   `fragmentLibrary.enabled`: the mothership folds the skill repos into its reflected registry only
   when its own library is configured, exactly as it does for fragments, so a node with the library on
   against a mothership with it off gets a clean `... is not wired`.
+
+- **Owner-pair library SYNC + the parked-review writeback markers**: thirteen methods across three
+  surfaces, and the shape worth copying is that all three were already REACHABLE on a node and
+  broken, rather than simply absent.
+  - **Both owner-pair content libraries' repo-SYNC surfaces go remote** (prompt fragments,
+    foundational services), on the premise the skills slice already retired: a mothership-mode node
+    HAS a GitHub client, so its `FragmentSourceService` / `FoundationalServiceSourceService` assemble
+    and their link / sync / unlink routes were live and failing. Allow-listed:
+    `promptFragmentRepository` `listBySource`/`softDeleteBySource`, `fragmentSourceRepository`
+    `get`/`updateSyncState`/`softDelete`, `foundationalServiceRepository`
+    `listBySource`/`softDeleteBySource`, `foundationalServiceSourceRepository`
+    `get`/`updateSyncState`/`softDelete`.
+
+    `promptFragmentRepository.softDeleteBySource` is NEW to the port, added with this slice on both
+    runtimes plus a `defineFragmentLibrarySuite` parity assertion: unlink retired a source's set with
+    a per-fragment `softDelete` loop, which going remote turns into one HTTPS round trip per
+    fragment. Both sibling repo-sourced libraries already retired by source.
+
+    Introduces **`librarySource`**, `skillSource` generalised from an accountId to an
+    `(ownerKind, ownerId)` PAIR (a fragment source can be owned by a workspace as well as an
+    account), resolving through one new `resolveLibrarySourceOwner` dispatch resolver keyed by a
+    closed `LibrarySourceEntity`. **The discriminator is load-bearing, not bookkeeping**: without it
+    a resolver would have to try both source tables, so one library's ids would bind the other's
+    methods. One resolver rather than one per table, for the reason the sealed-source table gives:
+    a second near-identical option is how a new library lands with a rule and no resolver.
+
+  - **`ownerFieldUpsert` closes the gap the skills slice named**, applied to BOTH source repos'
+    `upsert`. Each conflicts on the `id` alone and never re-`SET`s its owner columns, so plain
+    `ownerField` bound only the DECLARED owner: an in-scope caller naming a foreign source id could
+    repoint another tenant's link at a repo it controls, whose Markdown bodies the victim's next sync
+    folds into their prompts as standards. Same rule, same argument and same create-passes-on-the-
+    declared-half behaviour as `accountFieldUpsert`.
+
+    **"No such row" is an ADMISSION here, so it may never be the answer to a question that was not
+    asked.** `resolveLibrarySourceOwner` therefore answers `found` / `absent` / `unreadable` rather
+    than a nullable owner, and only `absent` earns the create. A nullable owner made a table this
+    deployment cannot read (a facade wiring a source repo's `upsert` without its `get`, or a library
+    added to `LibrarySourceEntity` with no resolver row) indistinguishable from a free id, which
+    silently drops the stored half and hands back the very repoint the rule exists to close. Its
+    `accountFieldUpsert` twin gets the same guarantee from a `switch` over the entity with a `never`
+    default; the entity → source-table map in `PersistenceController` is keyed by the UNION for the
+    same reason, so a new library fails to compile until it names its table.
+
+  - **`reviewQuestionPostRepository` `claim`/`settle`/`get`** (the `workspaceField` rule, since the
+    marker key carries its own `workspaceId`). This one is the quietest failure the initiative has
+    recorded: the ENGINE writes the marker, `claim` answered `unknown_method`, and the caller's
+    DELIBERATE fallback reads a store failure as "someone else holds the claim". So every parked
+    review on a local run silently skipped its ticket comment: the reporter is never asked the
+    question, the run parks waiting for an answer to something nobody was told about, and the only
+    trace is one `warn`. Its inbound sibling (`trackerCommentIngestRepository`) stays off
+    permanently: a delivery reaches the deployment holding the public URL, so a laptop has nothing
+    to claim.
+  - **Two Node ROUTING gaps found while scoping it, and they matter more than the allow-list lines.**
+    `foundationalServiceRepository` / `apiContractRepository` /
+    `foundationalServiceSourceRepository` and `fragmentBriefRepository` were built directly over the
+    absent `db` and never re-pointed by `applyMothershipRemoteRepos`, so the allow-list had named
+    them remote while only the Cloudflare facade could reach them. **An un-ROUTED repo is worse than
+    an un-allow-listed one**: it is a `TypeError` on the run path (an architect dispatch resolves the
+    merged catalog; an implementer dispatch resolves a generated brief) rather than a clean
+    `unknown_method` naming what is not callable.
+
+    So the slice adds the guard that makes this class structural rather than reviewer-caught:
+    `mothership-repo-source.spec.ts` asserts a RELATION over two derived sets, that every repository
+    a content-library sub-helper BUILDS and the allow-list NAMES as remote is re-pointed. Both sides
+    come from the code under test (the helper's own returned keys, the allow-list's own table), so a
+    new library repo joins the assertion by existing. It also pins the deliberate asymmetry: the
+    two gated libraries are routed only when already present (setting the repo alone would switch
+    their module ON), while the ungated foundational-services catalog is routed unconditionally.
+
+  - **Still off, and now with a real reason rather than a bare `pending`: `serviceRepository.insert`,
+    which a mothership-mode node needs to create a service frame AT ALL.** It cannot ride an
+    allow-list line, because no existing rule binds it soundly. `accountField` (the record's own
+    `accountId`) leaves `frameBlockId` unbound, and `getByFrameBlock` resolves by frame block id
+    ALONE (the unique index is `(account_id, frame_block_id)`, so two accounts may hold a service for
+    one frame id and the walk answers with an arbitrary one, as `mountProjection.frameMount` already
+    works around), so a caller could plant a service on another org's frame block and redirect its
+    runs' `resolveRepoTarget` at a repo it controls. Binding the frame block instead is unavailable:
+    `registerServiceForFrame` inserts the service BEFORE the block row exists, so the resolver would
+    find nothing and refuse every legitimate frame creation. Opening it needs an account-scoped
+    `getByFrameBlock` or a port carrying the frame's workspace: its own slice, with the frame-DELETE
+    cascade (`serviceRepository.deleteMany` + `workspaceMountRepository.removeByServices`, both
+    `serviceList`-bindable and safe) riding along, since both belong to service CRUD.
 
 **Secrets delegation (the residual every earlier slice deferred to)**
 
@@ -1198,8 +1282,12 @@ never remotely invocable (mothership-internal cron).
 | `slackConnectionRepository`              | ✅ done | connect/disconnect (sealed `tokenCipher`); `getByTeam` inbound-OAuth internal                      |
 | `slackSettingsRepository`                | ✅ done | per-workspace routing (no secrets)                                                                 |
 | `slackMemberMappingRepository`           | ✅ done | per-account mention map (no secrets)                                                               |
-| `promptFragmentRepository`               | ◑ part  | owner-scoped library mgmt; `listBySource` (repo-sync) pending                                      |
-| `fragmentSourceRepository`               | ◑ part  | owner-scoped list + link; id-keyed sync mgmt pending                                               |
+| `promptFragmentRepository`               | ✅ done | owner-scoped library mgmt + the source-keyed sync pair (`librarySource`)                           |
+| `fragmentSourceRepository`               | ✅ done | owner-scoped list + link + id-keyed sync mgmt; `upsert` binds the stored row (`ownerFieldUpsert`)  |
+| `fragmentBriefRepository`                | ✅ done | owner-scoped generated briefs, read + written on the run path                                      |
+| `foundationalServiceRepository`          | ✅ done | owner-scoped catalog CRUD (run path) + the source-keyed sync pair                                  |
+| `apiContractRepository`                  | ✅ done | owner-scoped contract manifest + per-service replace/delete                                        |
+| `foundationalServiceSourceRepository`    | ✅ done | owner-scoped list + link + id-keyed sync mgmt; `listStale`/`listByRepo` internal                   |
 | `accountSkillRepository`                 | ✅ done | whole repo: catalog reads (run path) + the source-keyed sync writes                                |
 | `skillSourceRepository`                  | ✅ done | account list + link + the id-keyed sync mgmt; global `listByRepo` internal                         |
 | `documentRepository`                     | ✅ done | whole repo: run-path context reads + import/link writes + the WS1 role-link surface                |
@@ -1207,7 +1295,7 @@ never remotely invocable (mothership-internal cron).
 | `taskRepository`                         | ✅ done | whole repo: run-path context reads + import/link writes + the atomic `claimBlockLink`              |
 | `taskConnectionRepository`               | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)        |
 | `taskSourceSettingsRepository`           | ✅ done | the per-workspace source on/off toggles (no secrets)                                               |
-| `reviewQuestionPostRepository`           | ⬜ todo | engine-written park writeback markers; claim/settle/get pending a scope rule                       |
+| `reviewQuestionPostRepository`           | ✅ done | engine-written park writeback markers: claim/settle/get on `workspaceField`                        |
 | `trackerCommentIngestRepository`         | n/a     | inbound webhook dedupe: written where a delivery ARRIVES, which is never a node                    |
 | `githubInstallationRepository`           | ◑ part  | `getByWorkspace` + `listActiveForAccount` run-path reads; id-keyed / sync writes pending           |
 | `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal            |

@@ -40,6 +40,7 @@ const STATUS_LABELS = computed<Record<ToolServerProbeStatus, string>>(() => ({
   ok: t('settings.toolServers.status.ok'),
   credentials_missing: t('settings.toolServers.status.credentialsMissing'),
   credential_refused: t('settings.toolServers.status.credentialRefused'),
+  credential_unusable: t('settings.toolServers.status.credentialUnusable'),
   oauth_not_connected: t('settings.toolServers.status.oauthNotConnected'),
   oauth_token_failed: t('settings.toolServers.status.oauthTokenFailed'),
   unreachable: t('settings.toolServers.status.unreachable'),
@@ -344,6 +345,16 @@ async function runProbe(id: string) {
           {{
             t('settings.toolServers.refusedCredentials', {
               keys: resultFor(server.id)!.refusedCredentials!.join(', '),
+            })
+          }}
+        </p>
+        <p
+          v-if="resultFor(server.id)!.unusableCredentials?.length"
+          class="text-[11px] text-red-400"
+        >
+          {{
+            t('settings.toolServers.unusableCredentials', {
+              keys: resultFor(server.id)!.unusableCredentials!.join(', '),
             })
           }}
         </p>
