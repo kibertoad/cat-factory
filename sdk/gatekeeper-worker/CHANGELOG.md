@@ -1,5 +1,13 @@
 # @cat-factory/gatekeeper-worker
 
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [83764b5]
+  - @cat-factory/sdk@0.30.0
+  - @cat-factory/gatekeeper-bindings@0.12.0
+
 ## 0.6.0
 
 ### Minor Changes
