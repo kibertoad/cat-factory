@@ -70,13 +70,13 @@ The descriptor's shape (`fields`, `defaultFragmentIds`, `defaultPipelineId`, `pr
 along with what a deployment author writes in each. Where each one is READ is here, because that is
 the part a change in this repository has to keep true:
 
-| Descriptor field     | Read at            | By                                                                            |
-| -------------------- | ------------------ | ----------------------------------------------------------------------------- |
-| `fields`             | creation, dispatch | `BoardService.addTask` validates; `describeCustomTaskType` labels the values  |
-| `defaultFragmentIds` | creation only      | `board/taskTypeCreationDefaults.ts` unions them onto the new task             |
-| `defaultPipelineId`  | run resolution     | `pipelineIdFor`, then `pipelineAdoption.adoptForRun`                          |
-| `presentation`       | snapshot           | the board projection, and the SPA's grouped create picker                     |
-| `formPanel`          | creation           | stands the platform's field validation DOWN: the panel owns the whole bag     |
+| Descriptor field     | Read at            | By                                                                           |
+| -------------------- | ------------------ | ---------------------------------------------------------------------------- |
+| `fields`             | creation, dispatch | `BoardService.addTask` validates; `describeCustomTaskType` labels the values |
+| `defaultFragmentIds` | creation only      | `board/taskTypeCreationDefaults.ts` unions them onto the new task            |
+| `defaultPipelineId`  | run resolution     | `pipelineIdFor`, then `pipelineAdoption.adoptForRun`                         |
+| `presentation`       | snapshot           | the board projection, and the SPA's grouped create picker                    |
+| `formPanel`          | creation           | stands the platform's field validation DOWN: the panel owns the whole bag    |
 
 Only the fragment id SET freezes at creation; the BODIES live-resolve per run against the merged
 builtin ⊕ account ⊕ workspace catalog, so editing a guideline reaches every future run of an
