@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress; items 1, 2, 3, 4, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 21, 23 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress; items 1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 21, 23 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice · board RAF loops driven by an activity pulse) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -59,7 +59,7 @@ symmetric" (CLAUDE.md).
 | 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ✅ done | branch `claude/performance-initiative-next-phase-i3mtxw`  |
 | 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
 | 10  | P2  | frontend     | Shared `useBlockQueries` index invalidates ALL BlockNodes on every execution event                                                  | ⬜ todo |                                                           |
-| 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ⬜ todo |                                                           |
+| 11  | P2  | frontend     | Two unconditional 60fps RAF loops doing DOM measurement while idle                                                                  | ✅ done | branch `claude/frontend-performance-iteration-mal14b`     |
 | 12  | P2  | integrations | `GitHubSyncService`: serial per-workspace fan-out + serial resource syncs                                                           | ✅ done | branch `claude/performance-tracker-next-phase-kky9ny`     |
 | 13  | P2  | engine       | `AgentContextBuilder` re-walks block ancestry per resolver, sequentially                                                            | ✅ done | branch `claude/performance-initiative-next-phase-exeew1`  |
 | 14  | P2  | events       | `FanOutEventPublisher` forwards to N mounted workspaces serially                                                                    | ✅ done | branch `claude/performance-tracker-next-phase-kky9ny`     |
@@ -215,6 +215,28 @@ board the step outputs dominate snapshot bytes.
 the by-id endpoint the overlays already use. This is a wire-shape change: pre-1.0, no
 back-compat shim (CLAUDE.md); land contracts + backend projection + SPA consumption
 together. Couples naturally with item 3's `detail`-free list projection.
+
+**Premise correction (2026-08, while landing item 11): "the by-id endpoint the overlays already
+use" does not exist.** `execution.getInstance` (`stores/execution.ts`) is a pure `byId` lookup over
+the hydrated cache, not a fetch, and neither runtime serves an `executions/:executionId` instance
+route. The SPA has exactly two sources for an `ExecutionInstance`, the snapshot and the live
+`execution` event, and the event carries the FULL instance. So this item is not the one-sided
+projection it reads as; it is three things, and the first two have to land before the third:
+
+1. a real by-id endpoint plus the store action and loading state the detail overlays would fetch through;
+2. a store reconcile that carries the heavy fields forward when a lean instance arrives. `hydrate`
+   and `upsert` are monotonic by `rev` ALONE and a projection does not bump `rev`, so a lean
+   snapshot at equal `rev` currently REPLACES a full event-delivered instance and would blank an
+   open overlay mid-read. `withPreservedMetrics` is the shape to copy;
+3. the projection itself. Two traps found in the audit: `output` is read on the BOARD as a
+   truthiness flag (`TaskPipelineMini`, `PipelineProgress`, `TaskExecution`), so omitting it
+   silently drops the has-output affordance unless the projection carries an explicit
+   `hasOutput`; and the heavy fields live INSIDE the `detail` JSON blob, so this is a JS
+   projection over `rowToExecution`, not a narrower `SELECT`.
+
+The finding also under-counts what is heavy: `prReview`, `judge`, `ralph`, `validation` and
+`reproduction` all carry histories or captured output, while `outputHistory` is on the INSTANCE
+rather than the step. `step.metrics` must stay out of scope (live-only, never persisted; see item 1).
 
 ### 6. Coarse `board` events force full refreshes the payload could avoid (P1) — LANDED
 
@@ -389,6 +411,38 @@ which rebuild over all runs × steps per event (kept in item 20 if split).
 **Fix:** drive edge recompute from actual change signals (viewport change, drag, resize,
 store edge/frame changes) coalesced into a RAF that idles when nothing is animating; or
 short-circuit when neither inputs nor viewport changed since the last frame.
+
+**Landed (branch `claude/frontend-performance-iteration-mal14b`).** Both drivers now pair a
+signal source with a self-parking frame loop, because neither half works alone. `createSettlingLoop`
+(pure, injected scheduler) runs while its `compute` reports it changed something visible and parks
+after a short tail of unchanged frames; `provideBoardActivity` publishes the canvas pulse that wakes
+it. An idle board schedules no frames at all.
+
+Three things the finding did not anticipate:
+
+- **A change signal fires one frame BEFORE the transition it starts produces any geometry.** The
+  first measured frame after a wake therefore routinely reports "nothing moved", so parking on it
+  would stop every animation dead at its first frame. The settle TAIL (four frames, ~66ms) is what
+  makes a signal-driven loop correct, and it is why the finding's alternative phrasing
+  ("short-circuit when neither inputs nor viewport changed") cannot stand alone: the inputs to a CSS
+  height transition do not change while it runs.
+- **The signal set is a DOM `MutationObserver` over the canvas, not the enumerated list above.**
+  Enumerating causes (viewport, drag, resize, store edges) leaves out every card that reflows because
+  its own content changed, which on a live board is most of them. Watching structure plus
+  `style`/`class` under the canvas catches every Vue-driven render including Vue Flow's camera, and
+  the `attributeFilter` is what keeps a driver from pulsing itself awake forever: the edge overlay
+  writes geometry attributes, which are outside it. The camera is ALSO pulsed explicitly, so the
+  overlays do not depend on which DOM strategy Vue Flow uses to apply a pan.
+- **Dependency links can change with no card changing**, so the DOM pulse genuinely cannot see
+  them; those keep an explicit `watch`.
+
+A second win fell out of making the loop report honestly: the overlay used to assign a new
+(equal-valued) segment array every frame, re-rendering the whole SVG 60 times a second on a still
+board. `commitSegments` publishes only a list that actually moved, and the four lists moved to
+`shallowRef`, so the segment objects are no longer deep-proxied.
+
+Not caught by the pulse, and accepted: a reflow with no mutation and no gesture (a late-loading
+image or font resizing a card) leaves an arrow stale until the next pulse of any kind.
 
 ### 12. `GitHubSyncService` serial fan-out and serial resource syncs (P2)
 

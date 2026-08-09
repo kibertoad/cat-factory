@@ -56,13 +56,20 @@ export type PullRequestRef = v.InferOutput<typeof pullRequestRefSchema>
  * clones every involved service's repo as a sibling checkout and opens one PR per repo it
  * actually changed. The task's OWN-service PR stays on {@link blockSchema.pullRequest}
  * (singular); this array carries the PRs opened in the PEER repos, each attributed to the
- * repo (`owner/name`) and the involved service frame it belongs to.
+ * repo (`owner/name`) and the involved service frames it belongs to.
  */
 export const peerPullRequestSchema = v.object({
   /** The peer repo the PR was opened in, `owner/name`. */
   repo: v.string(),
-  /** The involved service frame's block id this repo resolved from, when known. */
-  frameId: v.optional(v.string()),
+  /**
+   * The involved service frames this PR carries the changes of, when known.
+   *
+   * A SET rather than one id, because the fan-out checks out one repo per REPO, not per
+   * frame: several involved services living in the same monorepo share a checkout, a work
+   * branch and therefore this single pull request. Recording only one of them would leave
+   * every other frame's change looking as though no pull request had opened for it.
+   */
+  frameIds: v.optional(v.array(v.string())),
   /** The PR link itself, same shape as the own-service {@link pullRequestRefSchema}. */
   ref: pullRequestRefSchema,
 })
@@ -480,15 +487,21 @@ export type Block = v.InferOutput<typeof blockSchema>
  * repos (service-connections phase 3). The single source of truth for callers that must
  * act across ALL of a multi-repo task's PRs (phase-4 CI aggregation / merge-all); every
  * single-repo reader keeps reading {@link Block.pullRequest} directly. The own-service
- * entry carries no `repo`/`frameId` (its repo is the task's own service); peers carry both.
+ * entry carries no `repo`/`frameIds` (its repo is the task's own service); peers carry both,
+ * and a peer's `frameIds` holds EVERY involved frame co-located in that repo (a monorepo
+ * hosting several of them opens one shared pull request, see {@link peerPullRequestSchema}).
  */
 export function allPullRequests(
   block: Pick<Block, 'pullRequest' | 'peerPullRequests'>,
-): { repo?: string; frameId?: string; ref: PullRequestRef }[] {
-  const out: { repo?: string; frameId?: string; ref: PullRequestRef }[] = []
+): { repo?: string; frameIds?: string[]; ref: PullRequestRef }[] {
+  const out: { repo?: string; frameIds?: string[]; ref: PullRequestRef }[] = []
   if (block.pullRequest) out.push({ ref: block.pullRequest })
   for (const peer of block.peerPullRequests ?? []) {
-    out.push({ repo: peer.repo, ...(peer.frameId ? { frameId: peer.frameId } : {}), ref: peer.ref })
+    out.push({
+      repo: peer.repo,
+      ...(peer.frameIds?.length ? { frameIds: peer.frameIds } : {}),
+      ref: peer.ref,
+    })
   }
   return out
 }

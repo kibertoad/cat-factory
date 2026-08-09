@@ -4138,6 +4138,9 @@
       "monorepoBrowseHint": "Explora el repositorio y selecciona los directorios de los servicios que quieres añadir, de cualquier carpeta. Los agentes que trabajen en un servicio se ejecutarán dentro de su subdirectorio.",
       "selectedServices": "Servicios seleccionados",
       "noServicesSelected": "Aún no hay servicios seleccionados. Elige directorios arriba.",
+      "frontendLabel": "Aplicación frontend (opcional)",
+      "frontendHint": "Marca uno de los directorios seleccionados como el frontend de los demás. Se añade como aplicación frontend anclada a ese subdirectorio y se enlaza con cada servicio backend añadido junto a él. Después, asigna en el inspector del frontend el nombre de cada variable de entorno con la URL del backend.",
+      "frontendNone": "Ninguno: todas las selecciones son servicios backend",
       "addServices": "Añadir {count} servicio | Añadir {count} servicios",
       "removeService": "Quitar {directory}",
       "addedConfigure": "{title} añadido, configúralo",
@@ -4151,7 +4154,9 @@
         "addedDescription": "{title} está en el tablero, configúralo abajo.",
         "addFailedTitle": "No se pudo añadir el servicio",
         "servicesAddedTitle": "Servicios añadidos",
-        "servicesAddedDescription": "{count} servicio añadido al tablero. | {count} servicios añadidos al tablero."
+        "servicesAddedDescription": "{count} servicio añadido al tablero. | {count} servicios añadidos al tablero.",
+        "frontendLinkedNote": "{directory} se añadió como frontend y se enlazó con los demás. Asigna el nombre de sus variables de entorno con las URL de backend en su inspector.",
+        "frontendWiringFailedNote": "Los ajustes del frontend no se guardaron. Abre el inspector de cada aplicación frontend para definir su subdirectorio y sus servicios backend."
       },
       "repoType": "Tipo de repositorio",
       "repoTypeHint": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes)."
@@ -4804,6 +4809,9 @@
       "binaryCapabilityUnknown": "{capability} (una capacidad que esta instalación no define)",
       "binaryCapabilityUnsupported": "Ninguna integración seleccionada admite {capabilities}, que las opciones de generación de este paso solicitan. Quita la opción o selecciona una integración que declare la capacidad.",
       "binaryCapabilityUnverifiable": "Ninguna integración seleccionada declara admitir {capabilities}, pero una de ellas no declara capacidad alguna, así que no se pudo comprobar. El paso arranca igualmente; confírmalo en la API de la integración.",
+      "binaryOptionValueUnaccepted": "Ninguna integración seleccionada acepta {option} de {requested}. Entre todas aceptan: {accepted}. Pide uno de esos valores o selecciona una integración que genere este.",
+      "binaryOptionValuePartial": "{generators} no acepta {option} de {requested}, pero otra integración seleccionada sí. El paso se inicia igualmente: envía esta opción solo a las integraciones que la aceptan, o quita las que no.",
+      "binaryOptionValueUnverifiable": "Una integración seleccionada indica los valores que acepta y no acepta lo que pide este paso ({options}), mientras que otra no indica ninguno, así que no se pudo comprobar. El paso se inicia igualmente y solo algunas de tus integraciones lo atenderán.",
       "binaryReferenceImages": "Imágenes de referencia",
       "binaryReferenceImagesPlaceholder": "rol{'|'}ubicación{'|'}servicio, una por línea",
       "binaryReferenceImagesUnusable": "No se guardaron como referencia: {entries}. Cada línea debe ser rol{'|'}ubicación, con el rol style, subject, composition o base.",

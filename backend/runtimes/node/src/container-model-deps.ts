@@ -22,7 +22,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { Clock, IdGenerator, ResolveBinaryArtifactStore } from '@cat-factory/kernel'
 import {
   type AppConfig,
   createInlineInstrumentation,
@@ -109,6 +109,12 @@ export interface NodeModelDepsInput {
    * and inline calls fall back to the trace sink alone.
    */
   llmCallMetricRepository?: LlmCallMetricRepository
+  /**
+   * The account's binary-artifact store, for the design pictures an inline dispatch attaches to
+   * its model call. Absent ⇒ an inline kind's prompt states that the pictures could not be
+   * delivered rather than pretending the task holds none.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
 }
 
 /**
@@ -140,6 +146,7 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     caches,
     workspaceSettingsRepository,
     llmCallMetricRepository,
+    resolveBinaryArtifactStore,
   } = input
 
   // The direct-provider API-key pool + the per-scope model-provider resolver, shared by
@@ -308,6 +315,7 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
     agentKindRegistry,
+    ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
   })
 
   return {

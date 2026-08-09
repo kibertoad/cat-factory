@@ -1,5 +1,69 @@
 # @cat-factory/sdk
 
+## 0.31.0
+
+### Minor Changes
+
+- 2428b6b: Attribute a cross-service run's pull request to every involved service frame whose changes ride
+  it, not just the first.
+
+  The multi-repo fan-out checks out one repo per REPO, so several involved services living in one
+  monorepo already shared a checkout, a work branch and a single pull request. Only the RECORD was
+  singular, which left every frame but the first looking like a service the run had opened no pull
+  request for. The attribution is now a set (`frameIds`) from the dispatch through the harness echo
+  to `block.peerPullRequests`, the merge order, and the verification report. The own-service report
+  carries it too, naming the involved services co-located in the task's own repo: those open no pull
+  request of their own, so that report is the only place their change is reported. A peer checkout
+  also stops inheriting one co-located service's `serviceDirectory`: it is whole-repo, as the primary
+  already was, so the services that resolved second are reachable.
+
+  A recorded peer pull request is now ADDRESSED by its repo rather than by its frames, which is what
+  a checkout is identified by, and one the platform cannot resolve is named to the merger instead of
+  being dropped from the combined diff it scores.
+
+  Internal break: `peerPullRequestSchema.frameId`, `allPullRequests`, `MergePrEntry.frameId`,
+  `PrReportTarget.frameId` and the harness `peerRepos`/`peerPullRequests` wire fields are replaced
+  by `frameIds`. Peer PRs recorded on a block before this ship lose their frame attribution (the
+  pull requests themselves are untouched). Public `/api/v1` is additive only: `PrReportScope` gains
+  `frameIds` and keeps `frameId` as its head (surface version 1.40.0). `frameId` is no longer always
+  null on an own-service report: it names a co-located involved service when there is one.
+
+  The runner image moves to `cat-factory-executor:1.109.0`.
+
+## 0.30.1
+
+### Patch Changes
+
+- 3ff215a: Slice 9 of the `mcp-maturation.md` tracker: a consensus-diverted step now states the tool servers
+  (MCP) it cannot reach, instead of losing them in silence.
+
+  A panel runs its participants as inline model calls with no checkout and no agent CLI, so there is
+  nowhere to wire an MCP server. Nothing said so. Boot validation's `tool_servers_without_container`
+  warning keys on the kind's declared surface, which is a container for nearly every consensus-eligible
+  kind (architect, analysis, the reviewers), and that is exactly the set a deployment attaches a
+  read-only research server to; the container executor, which owns the whole unavailability vocabulary,
+  is not on this path at all. So the prompt promised nothing, the step recorded nothing, and a diverted
+  step read exactly like a kind that had declared no tool servers.
+
+  The panel now reports it in both channels a container dispatch uses. The participants' system prompt
+  carries the same `toolServersSection` a container run composes, after the surface statement, so a
+  model planning around the vendor tool its instructions name learns it is absent. And the step carries
+  the resolution: `AgentExecutor.previewToolServers` is the inline counterpart of
+  `AgentJobHandle.toolServers`, answered at dispatch and stamped with the dispatched kind by the engine
+  through the same helper the container fold uses, so an executor still cannot label a resolution with
+  a kind other than the one that ran. A preview rather than a field on the result for the reason the
+  container path records off the handle: a step that later fails keeps its record, where a
+  result-carried field would be absent on exactly the runs a reader needs it for. A kind that declared
+  no servers records nothing at all, because an inline surface wires nothing by construction and an
+  all-empty record would claim a resolution where none was possible.
+
+  PUBLIC API, additive (OpenAPI `1.39.0`): the unavailable-tool-server `reason` vocabulary gains
+  `consensus_panel`, carried by the run reads that project `toolServers`. A member of its own rather
+  than `harness_unsupported` because no harness is involved: the kind's standard surface may serve the
+  server perfectly and the same step with consensus off would have got it, so a consumer acting on the
+  harness reason would go widening a list that was never the constraint. The four generated clients and
+  both projections carry the new member, so they bump with the surface.
+
 ## 0.30.0
 
 ### Minor Changes

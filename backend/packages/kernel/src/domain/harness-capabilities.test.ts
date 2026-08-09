@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   HARNESS_BODY_CAPABILITIES,
+  type HarnessBodyCapability,
   describeHarnessBodyCapability,
   harnessCapabilityUnsupportedMessage,
   isHarnessBodyCapability,
@@ -53,9 +54,32 @@ describe('requiredHarnessCapabilities', () => {
     expect(requiredHarnessCapabilities({})).toEqual([])
   })
 
+  it('sees an object-shaped capability, not only the list-shaped ones', () => {
+    // The regression this pins: `designImages` is a manifest, not a list, so the populated-list
+    // test the other capabilities share read it as absent. The handshake then never fired for it,
+    // and an image predating the field ignored the manifest while the prompt named a directory
+    // nothing wrote, which is exactly the blind run the handshake exists to refuse.
+    expect(
+      requiredHarnessCapabilities({
+        designImages: { url: 'https://x/y', token: 't', files: [{ artifactId: 'a' }] },
+      }),
+    ).toEqual(['designImages'])
+    // A manifest with no files promises the agent nothing, exactly as an empty server list does.
+    expect(
+      requiredHarnessCapabilities({ designImages: { url: 'https://x/y', files: [] } }),
+    ).toEqual([])
+  })
+
   it('covers every capability, because the name IS the body field', () => {
-    const body = Object.fromEntries(HARNESS_BODY_CAPABILITIES.map((c) => [c, [{}]]))
-    expect(requiredHarnessCapabilities(body)).toEqual(HARNESS_BODY_CAPABILITIES)
+    // One POPULATED body per capability, typed as an exhaustive `Record` so a new member cannot be
+    // added without stating what carrying it looks like. Built from wire shapes rather than from
+    // the predicates the code reads, so a predicate loosened to accept anything still fails here.
+    const populated: Record<HarnessBodyCapability, unknown> = {
+      mcpServers: [{ id: 'docs' }],
+      skills: [{ id: 'house-style' }],
+      designImages: { url: 'https://x/y', token: 't', files: [{ artifactId: 'a' }] },
+    }
+    expect(requiredHarnessCapabilities(populated)).toEqual(HARNESS_BODY_CAPABILITIES)
   })
 })
 

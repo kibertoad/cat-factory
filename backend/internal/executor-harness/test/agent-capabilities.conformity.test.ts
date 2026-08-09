@@ -164,6 +164,11 @@ describe('harness body-capability list conforms to kernel', () => {
       },
       mcpServers: [{ id: 'docs', transport: 'http', url: 'https://mcp.example.com/mcp' }],
       skills: [{ name: 'triage', description: 'd', instructions: 'do the thing' }],
+      designImages: {
+        url: 'https://proxy.example.com/v1/artifacts/reference',
+        token: 'sess',
+        files: [{ artifactId: 'art1', fileName: 'checkout.png', view: 'Checkout' }],
+      },
     })
     for (const capability of HARNESS_BODY_CAPABILITIES) {
       expect((job as unknown as Record<string, unknown>)[capability]).toBeDefined()

@@ -4138,6 +4138,9 @@
       "monorepoBrowseHint": "Depoyu inceleyin ve eklemek istediğiniz servislerin dizinlerini herhangi bir klasörden seçin. Bir servis üzerinde çalışan ajanlar onun alt dizininde çalışır.",
       "selectedServices": "Seçili servisler",
       "noServicesSelected": "Henüz servis seçilmedi. Yukarıdan dizin seçin.",
+      "frontendLabel": "Frontend uygulaması (isteğe bağlı)",
+      "frontendHint": "Seçtiğiniz dizinlerden birini diğerlerinin frontend uygulaması olarak işaretleyin. O alt dizine sabitlenmiş bir frontend uygulaması olarak eklenir ve yanında eklenen her backend servisine bağlanır. Backend URL ortam değişkenlerinin adlarını sonrasında frontend’in inspector’ında girin.",
+      "frontendNone": "Yok: tüm seçimler backend servisidir",
       "addServices": "{count} servis ekle | {count} servis ekle",
       "removeService": "{directory} öğesini kaldır",
       "addedConfigure": "{title} eklendi, yapılandırın",
@@ -4151,7 +4154,9 @@
         "addedDescription": "{title} panoda, aşağıdan yapılandırın.",
         "addFailedTitle": "Servis eklenemedi",
         "servicesAddedTitle": "Servisler eklendi",
-        "servicesAddedDescription": "{count} servis panoya eklendi. | {count} servis panoya eklendi."
+        "servicesAddedDescription": "{count} servis panoya eklendi. | {count} servis panoya eklendi.",
+        "frontendLinkedNote": "{directory} frontend olarak eklendi ve diğerlerine bağlandı. Backend URL ortam değişkenlerinin adlarını inspector’ında girin.",
+        "frontendWiringFailedNote": "Frontend ayarları kaydedilmedi. Alt dizinini ve backend servislerini ayarlamak için her frontend uygulamasının inspector’ını açın."
       },
       "repoType": "Depo türü",
       "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."
@@ -4804,6 +4809,9 @@
       "binaryCapabilityUnknown": "{capability} (bu kurulumun tanımlamadığı bir yetenek)",
       "binaryCapabilityUnsupported": "Seçili entegrasyonların hiçbiri, bu adımın üretim seçeneklerinin istediği {capabilities} desteğini sunmuyor. Seçeneği kaldırın ya da yeteneği bildiren bir entegrasyon seçin.",
       "binaryCapabilityUnverifiable": "Seçili entegrasyonların hiçbiri {capabilities} desteğini bildirmiyor, ancak biri hiç yetenek bildirmiyor, bu yüzden bu doğrulanamadı. Adım yine de başlar; entegrasyonun API’sinden teyit edin.",
+      "binaryOptionValueUnaccepted": "Seçili entegrasyonların hiçbiri {requested} değerinde {option} kabul etmiyor. Hepsi birlikte şunları kabul ediyor: {accepted}. Bunlardan birini isteyin ya da bu değeri üretebilen bir entegrasyon seçin.",
+      "binaryOptionValuePartial": "{generators} {requested} değerindeki {option} seçeneğini kabul etmiyor, ancak seçili başka bir entegrasyon kabul ediyor. Adım yine de başlar: bu seçeneği yalnızca kabul eden entegrasyonlara gönderin ya da kabul etmeyenleri seçimden çıkarın.",
+      "binaryOptionValueUnverifiable": "Seçili bir entegrasyon kabul ettiği değerleri bildiriyor ve bu adımın istediğini ({options}) kabul etmiyor; bir diğeri ise hiç değer bildirmiyor, bu yüzden kesin bir sonuca varılamadı. Adım yine de başlar ve yalnızca bazı entegrasyonlarınız onu karşılar.",
       "binaryReferenceImages": "Referans görseller",
       "binaryReferenceImagesPlaceholder": "rol{'|'}konum{'|'}servis, her satıra bir tane",
       "binaryReferenceImagesUnusable": "Referans olarak kaydedilmedi: {entries}. Her satır rol{'|'}konum biçiminde olmalı; rol style, subject, composition veya base olabilir.",

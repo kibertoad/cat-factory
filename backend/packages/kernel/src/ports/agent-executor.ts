@@ -4,6 +4,7 @@ import type {
   BlockType,
   CloudProvider,
   ConsensusStepConfig,
+  DesignImageSet,
   DocumentOrigin,
   EnvironmentAccessHandle,
   EnvironmentStatus,
@@ -30,6 +31,7 @@ import type {
   UnavailableToolServer,
 } from '../domain/agent-capabilities.js'
 import type { ResolvedBinaryGenerator } from '../domain/binary-generators.js'
+import type { DesignImageDelivery } from '../domain/design-image-delivery.js'
 import type { DocumentFreshness } from '../domain/document-freshness.js'
 import type { OwnServiceContext } from '../domain/block-tree.js'
 import type { CustomTaskTypeContext } from '../domain/task-type-context.js'
@@ -456,6 +458,32 @@ export interface AgentRunContext {
    */
   referenceScreenshots?: ReferenceScreenshotSet
   /**
+   * The pictures of this task's designs, for a kind that BUILDS or PLANS from one (the
+   * `design-images` trait). The frames the task's linked designs retained plus the images a person
+   * attached to it: the same reference set the capture path reads, put to the opposite use.
+   *
+   * Resolved by the ENGINE, which knows what the task holds. Whether they can actually reach the
+   * model is a DISPATCH fact (the harness and the resolved model), so it lands separately on
+   * {@link designImageDelivery} rather than gating this: the set has to survive an un-attachable
+   * dispatch, or the prompt has nothing to name when it states what was withheld.
+   *
+   * Absent when the kind carries no such trait, when the deployment stores no binaries, or when
+   * the task links no design.
+   */
+  designImages?: DesignImageSet
+  /**
+   * What THIS dispatch could do with {@link designImages}: attached, or refused with the cause.
+   *
+   * Set by the executor rather than the context builder, because both halves of the answer are
+   * resolved at dispatch (the harness the job runs on, the model the step resolved to) and neither
+   * is knowable while the context is being built. The same shape as `toolServers` /
+   * `unavailableToolServers`: the engine states the intent, the dispatch states what became of it.
+   *
+   * Never absent while `designImages` is present. A run holding pictures its agent was not shown
+   * must SAY so, or the agent reads the textual design description as everything the platform had.
+   */
+  designImageDelivery?: DesignImageDelivery
+  /**
    * A live ephemeral environment a deployer step provisioned earlier in this run
    * (resolved from the run's block). Present only when the environment
    * integration is wired and a deployer step has produced a ready environment —
@@ -595,15 +623,19 @@ export interface AgentRunContext {
    */
   aprioriBranches?: AprioriBranch[]
   /**
-   * For a `conflict-resolver` the conflicts gate dispatched on a PEER-repo conflict
-   * (a multi-repo, service-connections task), which of the block's repos the resolver
-   * must target — set by the engine from the gate's `step.gate.conflictTarget` when the
-   * conflict is on a connected involved service's repo (`frameId` present). The container
-   * executor resolves THAT frame's repo (not the task's own service) and clones its PR
-   * (work) branch. Absent ⇒ the own-service repo (the single-repo default). Only the
+   * For a `conflict-resolver` the conflicts gate dispatched on a multi-repo
+   * (service-connections) task, which of the block's repos conflicted, set by the engine from
+   * the gate's `step.gate.conflictTarget`. The container executor resolves THAT repo and clones
+   * its PR (work) branch when it is a peer, and leaves the resolver on the own service when it
+   * is the own repo. Absent ⇒ the own-service repo (the single-repo default). Only the
    * conflict-resolver reads it; every other kind ignores it.
+   *
+   * `repo` is what ADDRESSES the checkout and is always set. `frameId` rides along as
+   * attribution when the conflicted pull request recorded one, and seeds the repo resolution;
+   * nothing decides own-versus-peer on its presence, since a peer pull request recorded without
+   * its frames would then read as an own-repo conflict.
    */
-  conflictTarget?: { repo: string; frameId: string }
+  conflictTarget?: { repo: string; frameId?: string }
   /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.

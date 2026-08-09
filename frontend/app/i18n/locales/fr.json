@@ -4138,6 +4138,9 @@
       "monorepoBrowseHint": "Parcourez le dépôt et sélectionnez les répertoires des services que vous voulez ajouter, depuis n'importe quel dossier. Les agents travaillant sur un service s'exécutent dans son sous-répertoire.",
       "selectedServices": "Services sélectionnés",
       "noServicesSelected": "Aucun service sélectionné pour le moment. Choisissez des répertoires ci-dessus.",
+      "frontendLabel": "Application frontend (facultatif)",
+      "frontendHint": "Désignez l'un des répertoires sélectionnés comme le frontend des autres. Il est ajouté en tant qu'application frontend rattachée à ce sous-répertoire et relié à chaque service backend ajouté à ses côtés. Nommez ensuite chaque variable d'environnement d'URL backend dans l'inspecteur du frontend.",
+      "frontendNone": "Aucun : toutes les sélections sont des services backend",
       "addServices": "Ajouter {count} service | Ajouter {count} services",
       "removeService": "Retirer {directory}",
       "addedConfigure": "{title} ajouté, configurez-le",
@@ -4151,7 +4154,9 @@
         "addedDescription": "{title} est sur le tableau, configurez-le ci-dessous.",
         "addFailedTitle": "Impossible d'ajouter le service",
         "servicesAddedTitle": "Services ajoutés",
-        "servicesAddedDescription": "{count} service ajouté au tableau. | {count} services ajoutés au tableau."
+        "servicesAddedDescription": "{count} service ajouté au tableau. | {count} services ajoutés au tableau.",
+        "frontendLinkedNote": "{directory} a été ajouté comme frontend et relié aux autres. Nommez ses variables d'environnement d'URL backend dans son inspecteur.",
+        "frontendWiringFailedNote": "Les réglages du frontend n'ont pas été enregistrés. Ouvrez l'inspecteur de chaque application frontend pour définir son sous-répertoire et ses services backend."
       },
       "repoType": "Type de dépôt",
       "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
@@ -4804,6 +4809,9 @@
       "binaryCapabilityUnknown": "{capability} (une capacité que ce déploiement ne définit pas)",
       "binaryCapabilityUnsupported": "Aucune intégration sélectionnée ne prend en charge {capabilities}, que les options de génération de cette étape demandent. Retirez l’option ou sélectionnez une intégration qui déclare la capacité.",
       "binaryCapabilityUnverifiable": "Aucune intégration sélectionnée ne déclare prendre en charge {capabilities}, mais l’une d’elles ne déclare aucune capacité, la vérification est donc impossible. L’étape démarre quand même ; confirmez-le dans l’API de l’intégration.",
+      "binaryOptionValueUnaccepted": "Aucune intégration sélectionnée n'accepte {option} de {requested}. Ensemble, elles acceptent : {accepted}. Demandez l'une de ces valeurs ou sélectionnez une intégration capable de produire celle-ci.",
+      "binaryOptionValuePartial": "{generators} n'accepte pas {option} de {requested}, contrairement à une autre intégration sélectionnée. L'étape démarre quand même : n'envoyez cette option qu'aux intégrations qui l'acceptent, ou retirez les autres.",
+      "binaryOptionValueUnverifiable": "Une intégration sélectionnée indique les valeurs qu'elle accepte et refuse ce que demande cette étape ({options}), tandis qu'une autre n'en indique aucune : impossible de trancher. L'étape démarre quand même, et seule une partie de vos intégrations la servira.",
       "binaryReferenceImages": "Images de référence",
       "binaryReferenceImagesPlaceholder": "rôle{'|'}emplacement{'|'}service, une par ligne",
       "binaryReferenceImagesUnusable": "Non enregistrées comme référence : {entries}. Chaque ligne doit être rôle{'|'}emplacement, le rôle étant style, subject, composition ou base.",

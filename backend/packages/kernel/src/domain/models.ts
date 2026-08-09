@@ -152,6 +152,8 @@ export interface BedrockVariant {
   baseModelId: string
   /** Context window at Bedrock, when known (often differs from the vendor's own API). */
   contextTokens?: number
+  /** Whether Bedrock serves this model with image input. See {@link ModelRef.acceptsImages}. */
+  acceptsImages?: boolean
 }
 
 /**
@@ -217,6 +219,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
       provider: 'workers-ai',
       model: '@cf/meta/llama-4-scout-17b-16e-instruct',
       contextTokens: 131_072,
+      acceptsImages: true,
     },
   },
   {
@@ -439,7 +442,12 @@ export const MODEL_CATALOG: SelectableModel[] = [
       "Anthropic's most capable model — run via Claude Code on your Claude subscription, " +
       'or pay-as-you-go through OpenRouter (billed at Anthropic rates).',
     openrouter: {
-      ref: { provider: 'openrouter', model: 'anthropic/claude-fable-5', contextTokens: 1_000_000 },
+      ref: {
+        provider: 'openrouter',
+        model: 'anthropic/claude-fable-5',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
@@ -449,6 +457,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
         model: 'claude-fable-5',
         harness: 'claude-code',
         contextTokens: 1_000_000,
+        acceptsImages: true,
       },
       vendor: 'claude',
     },
@@ -462,7 +471,12 @@ export const MODEL_CATALOG: SelectableModel[] = [
       'same price, run via Claude Code on your Claude subscription, or pay-as-you-go ' +
       'through OpenRouter (billed at Anthropic rates).',
     openrouter: {
-      ref: { provider: 'openrouter', model: 'anthropic/claude-opus-5', contextTokens: 1_000_000 },
+      ref: {
+        provider: 'openrouter',
+        model: 'anthropic/claude-opus-5',
+        contextTokens: 1_000_000,
+        acceptsImages: true,
+      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
@@ -472,6 +486,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
         model: 'claude-opus-5',
         harness: 'claude-code',
         contextTokens: 1_000_000,
+        acceptsImages: true,
       },
       vendor: 'claude',
     },
@@ -489,6 +504,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
         model: 'claude-sonnet-5',
         harness: 'claude-code',
         contextTokens: 1_000_000,
+        acceptsImages: true,
       },
       vendor: 'claude',
     },
@@ -506,7 +522,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
     // would silently run 4.8 for a block pinned to 5. No `contextTokens`: Bedrock's window
     // for this model is per-account and we have none verified, and an invented number would
     // cap the proxy's output budget against a limit nobody measured.
-    bedrock: { baseModelId: 'anthropic.claude-opus-4-8' },
+    bedrock: { baseModelId: 'anthropic.claude-opus-4-8', acceptsImages: true },
   },
   // The GPT-5.6 tiers are what Codex actually serves today: `sol` (flagship), `terra`
   // (balanced everyday) and `luna` (cheapest). The model id IS the Codex `--model` slug —
@@ -520,12 +536,23 @@ export const MODEL_CATALOG: SelectableModel[] = [
       "OpenAI's flagship for complex coding and research — run via Codex on your ChatGPT " +
       'subscription, or pay-as-you-go through OpenRouter (billed at OpenAI rates).',
     openrouter: {
-      ref: { provider: 'openrouter', model: 'openai/gpt-5.6-sol', contextTokens: 1_050_000 },
+      ref: {
+        provider: 'openrouter',
+        model: 'openai/gpt-5.6-sol',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
     subscription: {
-      ref: { provider: 'openai', model: 'gpt-5.6-sol', harness: 'codex', contextTokens: 1_050_000 },
+      ref: {
+        provider: 'openai',
+        model: 'gpt-5.6-sol',
+        harness: 'codex',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
       vendor: 'codex',
     },
   },
@@ -537,7 +564,12 @@ export const MODEL_CATALOG: SelectableModel[] = [
       "OpenAI's balanced everyday model — GPT-5.5-class capability at a fraction of the cost. " +
       'The migration target for GPT-5.4, which Codex retires on 31 Aug 2026.',
     openrouter: {
-      ref: { provider: 'openrouter', model: 'openai/gpt-5.6-terra', contextTokens: 1_050_000 },
+      ref: {
+        provider: 'openrouter',
+        model: 'openai/gpt-5.6-terra',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
@@ -547,6 +579,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
         model: 'gpt-5.6-terra',
         harness: 'codex',
         contextTokens: 1_050_000,
+        acceptsImages: true,
       },
       vendor: 'codex',
     },
@@ -559,7 +592,12 @@ export const MODEL_CATALOG: SelectableModel[] = [
       "OpenAI's fastest, cheapest GPT-5.6 tier — for clear, repeatable tasks. The migration " +
       'target for GPT-5.4 mini.',
     openrouter: {
-      ref: { provider: 'openrouter', model: 'openai/gpt-5.6-luna', contextTokens: 1_050_000 },
+      ref: {
+        provider: 'openrouter',
+        model: 'openai/gpt-5.6-luna',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
@@ -569,6 +607,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
         model: 'gpt-5.6-luna',
         harness: 'codex',
         contextTokens: 1_050_000,
+        acceptsImages: true,
       },
       vendor: 'codex',
     },
@@ -582,14 +621,25 @@ export const MODEL_CATALOG: SelectableModel[] = [
       'ChatGPT subscription, pay-as-you-go through OpenRouter (billed at OpenAI rates), or ' +
       'on AWS Bedrock. The newest OpenAI generation Bedrock serves: the GPT-5.6 tiers are ' +
       'Codex/OpenRouter only.',
-    bedrock: { baseModelId: 'openai.gpt-5.5', contextTokens: 1_050_000 },
+    bedrock: { baseModelId: 'openai.gpt-5.5', contextTokens: 1_050_000, acceptsImages: true },
     openrouter: {
-      ref: { provider: 'openrouter', model: 'openai/gpt-5.5', contextTokens: 1_050_000 },
+      ref: {
+        provider: 'openrouter',
+        model: 'openai/gpt-5.5',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
     subscription: {
-      ref: { provider: 'openai', model: 'gpt-5.5', harness: 'codex', contextTokens: 1_050_000 },
+      ref: {
+        provider: 'openai',
+        model: 'gpt-5.5',
+        harness: 'codex',
+        contextTokens: 1_050_000,
+        acceptsImages: true,
+      },
       vendor: 'codex',
     },
   },
@@ -618,6 +668,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
         provider: 'openrouter',
         model: 'google/gemini-3.1-pro-preview',
         contextTokens: 1_048_576,
+        acceptsImages: true,
       },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
@@ -631,7 +682,12 @@ export const MODEL_CATALOG: SelectableModel[] = [
       "Google's newest model and its positioned workhorse — 1M-token context at a fraction of " +
       'Pro pricing. Via OpenRouter, billed at Google rates.',
     openrouter: {
-      ref: { provider: 'openrouter', model: 'google/gemini-3.6-flash', contextTokens: 1_048_576 },
+      ref: {
+        provider: 'openrouter',
+        model: 'google/gemini-3.6-flash',
+        contextTokens: 1_048_576,
+        acceptsImages: true,
+      },
       keyEnv: 'OPENROUTER_API_KEY',
       providerLabel: 'OpenRouter',
     },
@@ -924,6 +980,9 @@ const FLAVOR_HANDLERS: Record<ModelFlavor, FlavorHandler> = {
         // deployment that hasn't configured Bedrock, which is most of them.
         model: resolveBedrockModelId(m.bedrock!.baseModelId, caps) ?? m.bedrock!.baseModelId,
         ...(m.bedrock!.contextTokens ? { contextTokens: m.bedrock!.contextTokens } : {}),
+        ...(m.bedrock!.acceptsImages === undefined
+          ? {}
+          : { acceptsImages: m.bedrock!.acceptsImages }),
       },
       flavor: 'bedrock',
       providerLabel: 'AWS Bedrock',

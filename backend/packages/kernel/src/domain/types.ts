@@ -743,3 +743,45 @@ export interface ReferenceScreenshotSet {
   /** The view names the cap dropped, in that same order. Empty when nothing was dropped. */
   omitted: string[]
 }
+
+/**
+ * One picture of a task's design, named for delivery to the MODEL rather than to a capture.
+ *
+ * The sibling of {@link ReferenceScreenshot}, and the distinction between them is the
+ * DISPOSITION, not the artifact: both are drawn from the same reference set (an import's retained
+ * frames plus a person's uploads), but a capturing kind reads them off disk to compare its own
+ * screenshots against, while a BUILDING kind is meant to look at them. Kept as its own shape
+ * because that consumer needs the stored content type (an inline caller hands the bytes to the
+ * model with their media type, which a file path never carries) and because folding the two would
+ * make every later field on one of them arrive on the other for no reason.
+ *
+ * Bytes do not ride this shape, for the same reason they do not ride the capture manifest: a job
+ * body is JSON that crosses every transport and is persisted with the dispatch, and an agent
+ * context is snapshotted. Only the artifact's IDENTITY travels; each delivery path fetches the
+ * bytes through the seam it already holds a credential for.
+ */
+export interface DesignImage {
+  /** The view this picture is of, in the same vocabulary the visual-confirmation gate pairs on. */
+  view: string
+  artifactId: string
+  /** The stored image's MIME type: the media type an inline attachment declares. */
+  contentType: string
+  /** The single safe path segment a container delivery writes this view under. */
+  fileName: string
+}
+
+/**
+ * The design pictures resolved for one dispatch, and the views it is NOT given.
+ *
+ * `omitted` exists because the set is CAPPED far tighter than the capture set: every attached image
+ * spends input tokens on every turn, so a run is handed the few that inform the work rather than a
+ * design system's whole frame list. A cap that merely shortened the list would be the silent kind,
+ * since a screen nobody mentioned and a screen the design does not have look identical from inside
+ * the run.
+ */
+export interface DesignImageSet {
+  /** The pictures this dispatch is handed, in the order the reference set was resolved in. */
+  files: DesignImage[]
+  /** The view names the cap dropped, in that same order. Empty when nothing was dropped. */
+  omitted: string[]
+}

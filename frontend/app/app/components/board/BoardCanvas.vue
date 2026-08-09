@@ -7,6 +7,7 @@ import TaskDependencyEdges from './TaskDependencyEdges.vue'
 import DependencyConnectOverlay from './DependencyConnectOverlay.vue'
 import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
 import { BOARD_FLOW_ID, BOARD_MIN_ZOOM, BOARD_MAX_ZOOM } from '~/composables/useBoardFlow'
+import { provideBoardActivity } from '~/composables/useBoardActivity'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
@@ -46,7 +47,10 @@ const panOnDrag = computed<boolean | number[]>(() => boardPanMode(hasTouch.value
 // centre-most of any that would overlap (see useTaskExpansion). Service frames have no
 // such gate — they are always expanded to their task canvas.
 const boardEl = ref<HTMLElement | null>(null)
-useTaskExpansion(boardEl)
+// The canvas owns the "something may have moved" pulse both DOM-measuring drivers run off:
+// this one directly, the dependency-edge overlay by injection. See useBoardActivity.
+const boardActivity = provideBoardActivity(boardEl)
+useTaskExpansion(boardEl, boardActivity)
 
 // Only frames are board nodes. Dependencies live on tasks (rendered inside the
 // frames), so there are no frame-to-frame edges on the canvas.
@@ -100,6 +104,10 @@ onNodeDragStop(({ node }) => {
 
 onViewportChange((vp) => {
   ui.zoom = vp.zoom
+  // Pan and zoom move every card on screen. Vue Flow does that by restyling its transform
+  // pane, which the pulse's observer would also catch, but the camera is too load-bearing for
+  // the overlays to depend on which DOM strategy Vue Flow uses to apply it.
+  boardActivity.pulse()
 })
 
 function onNodeClick({ node }: NodeMouseEvent) {

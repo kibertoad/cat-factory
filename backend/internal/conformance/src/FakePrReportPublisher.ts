@@ -87,14 +87,14 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
   }
 
   /** Seed a block's peer PR (the multi-repo case), returning the target it will resolve. */
-  addPeer(blockId: string, repo: string, prNumber: number, frameId?: string): PrReportTarget {
+  addPeer(blockId: string, repo: string, prNumber: number, ...frameIds: string[]): PrReportTarget {
     const target: PrReportTarget = {
       prNumber,
       repo,
       provider: 'github',
       connection: CONNECTION,
       role: 'peer',
-      frameId: frameId ?? null,
+      ...(frameIds.length ? { frameIds } : {}),
       url: `https://github.test/${repo}/pull/${prNumber}`,
     }
     this.peers.set(blockId, [...(this.peers.get(blockId) ?? []), target])
@@ -154,7 +154,6 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
       provider: 'github',
       connection: CONNECTION,
       role: 'own',
-      frameId: null,
       url: `https://github.test/${OWN_REPO}/pull/${prNumber}`,
     }
     this.ownByBlock.set(blockId, target)

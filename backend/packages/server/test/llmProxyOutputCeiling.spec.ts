@@ -1,6 +1,9 @@
-import { contextWindowFor } from '@cat-factory/kernel'
+import { contextWindowFor, redactImagePayloads } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { workersAiOutputCeiling } from '../src/modules/llmProxy/LlmProxyController.js'
+import {
+  forwardedInputChars,
+  workersAiOutputCeiling,
+} from '../src/modules/llmProxy/LlmProxyController.js'
 
 // The LLM proxy floors every workers-ai container call's `max_tokens` to 32K, then caps
 // it against the model's context window so input + output fits. Regression guard for the
@@ -52,5 +55,34 @@ describe('workersAiOutputCeiling', () => {
     expect(workersAiOutputCeiling({ asked: 0, contextWindow: 32_768, inputChars: 200_000 })).toBe(
       FLOOR,
     )
+  })
+})
+
+// What the ceiling MEASURES, which is a separate question from what the telemetry RECORDS. The two
+// used to share one serialized string, and the moment image redaction landed on the recording half
+// it silently shrank the measurement too.
+describe('forwardedInputChars', () => {
+  const image = `data:image/png;base64,${'A'.repeat(50_000)}`
+  const payload = {
+    messages: [
+      { role: 'user', content: [{ type: 'image_url', image_url: { url: image } }] },
+    ] as unknown[],
+  }
+
+  it('measures the picture the request is actually sending', () => {
+    expect(forwardedInputChars(payload)).toBeGreaterThan(50_000)
+  })
+
+  it('is not the redacted copy the telemetry stores', () => {
+    // The regression, stated as the relation rather than as a pinned number: a described payload is
+    // orders of magnitude smaller than the bytes going upstream, so measuring the record would
+    // under-reserve window room by the whole size of every attached picture.
+    const recorded = JSON.stringify(redactImagePayloads(payload.messages)).length
+    expect(recorded).toBeLessThan(forwardedInputChars(payload))
+  })
+
+  it('counts the tool definitions beside the messages', () => {
+    const withTools = { ...payload, tools: [{ name: 'edit_file', description: 'x'.repeat(1_000) }] }
+    expect(forwardedInputChars(withTools)).toBeGreaterThan(forwardedInputChars(payload) + 1_000)
   })
 })

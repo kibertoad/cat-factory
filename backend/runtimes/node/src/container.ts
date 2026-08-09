@@ -32,7 +32,7 @@ import {
 // below, then wires each gate's provider.
 import { applyGateProviders, warnUnwiredGates } from '@cat-factory/gates'
 import { GitLabIdentityResolver } from '@cat-factory/gitlab'
-import type { VcsIdentityRegistry } from '@cat-factory/kernel'
+import type { ResolveBinaryArtifactStore, VcsIdentityRegistry } from '@cat-factory/kernel'
 
 import { selectNodeGitHubDeps } from './container-github-deps.js'
 import { buildNodeModelDeps } from './container-model-deps.js'
@@ -707,7 +707,32 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
  * {@link buildNodeContainer} (a function-size ratchet split — behaviour AND side-effect order are
  * identical), taking every local the composition root built as a single typed bundle.
  */
+/**
+ * The one-slot holder this root publishes the binary-artifact store into.
+ *
+ * The store is composed from the per-account settings stack, which this root builds AFTER the
+ * model stack that constructs the inline agent executor — and that executor needs the store to
+ * read the bytes of a task's design pictures. The orderings are not negotiable in either
+ * direction (the account stack registers gate providers that must land before
+ * `applyGateProviders`; the model stack must exist before the run platform that composes the
+ * executors), so the two are bound by a DEFERRED READ rather than by moving either.
+ *
+ * The same class of problem `applyNodePostAssemblyWiring` exists for, and handled the same way:
+ * explicitly, in the root, with the read failing SAFE. An inline dispatch that runs before the
+ * slot is filled (there is no such path today; nothing dispatches during assembly) resolves no
+ * store, and its prompt then states that the pictures could not be delivered — which is the honest
+ * answer for a deployment with no storage too.
+ */
+interface ArtifactStoreLateBinding {
+  resolve?: ResolveBinaryArtifactStore
+}
+
 interface NodeContainerFinalizeBundle {
+  /**
+   * Where this root publishes the binary-artifact store once it exists, for the collaborators
+   * built BEFORE it. See {@link ArtifactStoreLateBinding}.
+   */
+  artifactStore: ArtifactStoreLateBinding
   config: AppConfig
   options: NodeContainerOptions
   env: NodeJS.ProcessEnv
@@ -782,6 +807,7 @@ interface NodeContainerFinalizeBundle {
 
 function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerContainer {
   const {
+    artifactStore,
     config,
     options,
     env,
@@ -894,6 +920,8 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     binaryStoreRegistry: options.binaryStoreRegistry,
     caches: options.caches,
   })
+  // Hand the store to the collaborators this root built BEFORE it (the inline agent executor).
+  artifactStore.resolve = resolveBinaryArtifactStore
 
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
   // allow-list); absent => strict public-https.
@@ -1063,6 +1091,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // local-model-endpoint + user-secret + OpenRouter + subscription + personal-subscription
   // stores, the trace sink, the model-provider resolver, and the inline executor), lifted into
   // `container-model-deps.ts` so this composition root stays within the file-size budget.
+  // See {@link ArtifactStoreLateBinding}: the store is built further down this function, and the
+  // inline executor below needs to read through it.
+  const artifactStore: ArtifactStoreLateBinding = {}
   const models = buildNodeModelDeps({
     env,
     config,
@@ -1083,6 +1114,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     caches: options.caches,
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
     llmCallMetricRepository: repos.llmCallMetricRepository,
+    // The inline executor reads the bytes of a task's design pictures through the same account
+    // store the container path serves them from, so an inline kind sees the design its container
+    // sibling does. Deferred, because that store is composed later in this function.
+    resolveBinaryArtifactStore: (workspaceId) =>
+      artifactStore.resolve?.(workspaceId) ?? Promise.resolve(null),
   })
 
   // Everything the engine needs to actually RUN a block: repo resolution, the runner transport +
@@ -1107,6 +1143,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   return finalizeNodeContainer({
     // The run-platform bundle, forwarded as a unit (see `platform` above).
     ...platform,
+    artifactStore,
     config,
     options,
     env,

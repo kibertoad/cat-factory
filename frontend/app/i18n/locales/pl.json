@@ -4138,6 +4138,9 @@
       "monorepoBrowseHint": "Przeglądaj repozytorium i wybierz katalogi usług, które chcesz dodać — z dowolnego folderu. Agenci pracujący nad usługą działają w obrębie jej podkatalogu.",
       "selectedServices": "Wybrane usługi",
       "noServicesSelected": "Nie wybrano jeszcze żadnych usług. Wybierz katalogi powyżej.",
+      "frontendLabel": "Aplikacja frontendowa (opcjonalnie)",
+      "frontendHint": "Oznacz jeden z wybranych katalogów jako frontend dla pozostałych. Zostanie dodany jako aplikacja frontendowa przypięta do tego podkatalogu i powiązany z każdą usługą backendową dodaną obok. Nazwy zmiennych środowiskowych z adresami URL backendów uzupełnij następnie w inspektorze frontendu.",
+      "frontendNone": "Brak: wszystkie wybrane pozycje to usługi backendowe",
       "addServices": "Dodaj {count} usługę | Dodaj {count} usługi | Dodaj {count} usług",
       "removeService": "Usuń {directory}",
       "addedConfigure": "Dodano {title}, skonfiguruj",
@@ -4151,7 +4154,9 @@
         "addedDescription": "{title} jest na tablicy, skonfiguruj ją poniżej.",
         "addFailedTitle": "Nie udało się dodać usługi",
         "servicesAddedTitle": "Dodano usługi",
-        "servicesAddedDescription": "Dodano {count} usługę do tablicy. | Dodano {count} usługi do tablicy. | Dodano {count} usług do tablicy."
+        "servicesAddedDescription": "Dodano {count} usługę do tablicy. | Dodano {count} usługi do tablicy. | Dodano {count} usług do tablicy.",
+        "frontendLinkedNote": "{directory} dodano jako frontend i powiązano z pozostałymi. Nazwy jego zmiennych środowiskowych z adresami URL backendów uzupełnij w inspektorze.",
+        "frontendWiringFailedNote": "Ustawienia frontendu nie zostały zapisane. Otwórz inspektor każdej aplikacji frontendowej, aby ustawić jej podkatalog i usługi backendowe."
       },
       "repoType": "Typ repozytorium",
       "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."
@@ -4804,6 +4809,9 @@
       "binaryCapabilityUnknown": "{capability} (możliwość, której ta instalacja nie definiuje)",
       "binaryCapabilityUnsupported": "Żadna wybrana integracja nie obsługuje {capabilities}, o co proszą opcje generowania tego kroku. Usuń opcję albo wybierz integrację, która deklaruje tę możliwość.",
       "binaryCapabilityUnverifiable": "Żadna wybrana integracja nie deklaruje obsługi {capabilities}, ale jedna z nich nie deklaruje żadnych możliwości, więc nie dało się tego sprawdzić. Krok i tak wystartuje; potwierdź to w API integracji.",
+      "binaryOptionValueUnaccepted": "Żadna z wybranych integracji nie przyjmuje {option} o wartości {requested}. Łącznie przyjmują: {accepted}. Poproś o jedną z tych wartości albo wybierz integrację, która wygeneruje tę.",
+      "binaryOptionValuePartial": "{generators} nie przyjmuje {option} o wartości {requested}, ale przyjmuje ją inna wybrana integracja. Krok i tak się uruchomi: wysyłaj tę opcję tylko do integracji, które ją przyjmują, albo usuń pozostałe.",
+      "binaryOptionValueUnverifiable": "Jedna z wybranych integracji podaje przyjmowane wartości i nie przyjmuje tej, o którą prosi ten krok ({options}), a inna nie podaje żadnych, więc nie dało się tego rozstrzygnąć. Krok i tak się uruchomi, a obsłuży go tylko część integracji.",
       "binaryReferenceImages": "Obrazy referencyjne",
       "binaryReferenceImagesPlaceholder": "rola{'|'}lokalizacja{'|'}usługa, po jednym w wierszu",
       "binaryReferenceImagesUnusable": "Nie zapisano jako referencji: {entries}. Każdy wiersz musi mieć postać rola{'|'}lokalizacja, gdzie rola to style, subject, composition albo base.",

@@ -1,5 +1,39 @@
 # @cat-factory/app
 
+## 0.260.1
+
+### Patch Changes
+
+- Updated dependencies [2428b6b]
+  - @cat-factory/contracts@0.291.0
+
+## 0.260.0
+
+### Minor Changes
+
+- 3ebafb2: Monorepo import can mark one selected directory as the frontend for the rest: it is created as a `frontend` frame pinned to its subdirectory and bound to every backend service added beside it, so the frontend to service board links exist the moment the import finishes. Every frontend frame a monorepo import creates now records its subdirectory on `frontendConfig`, marked or not, so the harness builds that tree instead of the repo root.
+
+### Patch Changes
+
+- ce32911: Stop the board's two DOM-measuring drivers from running every animation frame while nothing is
+  moving. The dependency-edge overlay and the task-expansion driver now wake on a canvas activity
+  pulse and park once their output settles, and the overlay publishes a segment list only when it
+  actually moved. An idle board schedules no frames at all.
+
+## 0.259.3
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+
+## 0.259.2
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/contracts@0.289.1
+
 ## 0.259.1
 
 ### Patch Changes

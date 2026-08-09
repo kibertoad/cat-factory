@@ -1016,5 +1016,10 @@ function namedSubject(issue: BinaryGeneratorSelectionIssue): Record<string, stri
       return { mediaType: issue.mediaType }
     case 'capability_unsupported':
       return { capability: issue.capability }
+    case 'option_value_unaccepted':
+      // TWO fields, because neither half is the subject on its own: the option says which control
+      // is wrong and the value says what about it. A client keying on `option` alone would report
+      // "the aspect ratio is unsupported" about an option every selected integration supports.
+      return { option: issue.value.option, requestedValue: issue.value.requested }
   }
 }

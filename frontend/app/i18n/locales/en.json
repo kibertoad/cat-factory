@@ -4271,6 +4271,9 @@
       "monorepoBrowseHint": "Browse the repository and select the directories of the services you want to add — from any folder. Agents working on a service run within its subdirectory.",
       "selectedServices": "Selected services",
       "noServicesSelected": "No services selected yet. Pick directories above.",
+      "frontendLabel": "Frontend app (optional)",
+      "frontendHint": "Mark one of the selected directories as the frontend for the rest. It is added as a frontend app pinned to that subdirectory and linked to every backend service added beside it. Name each backend URL environment variable afterwards in the frontend's inspector.",
+      "frontendNone": "None: every selection is a backend service",
       "addServices": "Add {count} service | Add {count} services",
       "@addServices": {
         "description": "Count-driven button label; resolved via t(key, { count }, count) so {count} also drives the plural choice. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
@@ -4290,7 +4293,9 @@
         "servicesAddedDescription": "{count} service added to the board. | {count} services added to the board.",
         "@servicesAddedDescription": {
           "description": "Count-driven toast; resolved via t(key, { count }, count) so {count} also drives the plural choice. Provide ALL plural forms your language needs (Polish/Ukrainian need 3 - one/few/many)."
-        }
+        },
+        "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector.",
+        "frontendWiringFailedNote": "The frontend settings did not save. Open each frontend app's inspector to set its subdirectory and its backend services."
       }
     },
     "repoTree": {
@@ -4955,6 +4960,9 @@
       "binaryCapabilityUnknown": "{capability} (a capability this deployment does not define)",
       "binaryCapabilityUnsupported": "No selected integration supports {capabilities}, which this step's generation options ask for. Remove the option, or select an integration that declares the capability.",
       "binaryCapabilityUnverifiable": "No selected integration declares support for {capabilities}, but one of them declares no capabilities at all, so this could not be checked. The step still starts; confirm it from the integration’s API.",
+      "binaryOptionValueUnaccepted": "No selected integration accepts {option} of {requested}. Between them they accept: {accepted}. Ask for one of those, or select an integration that renders this one.",
+      "binaryOptionValuePartial": "{generators} do not accept {option} of {requested}, but another selected integration does. The step still starts: send this option only to the integrations that accept it, or drop the ones that do not.",
+      "binaryOptionValueUnverifiable": "A selected integration states the values it accepts and does not accept what this step asks for ({options}), while another states none at all, so this could not be settled. The step still starts, and only some of your integrations will serve it.",
       "binaryReferenceImages": "Reference images",
       "binaryReferenceImagesPlaceholder": "role{'|'}location{'|'}service, one per line",
       "binaryReferenceImagesUnusable": "Not stored as references: {entries}. Each line must be role{'|'}location, where role is style, subject, composition or base.",

@@ -1,13 +1,4 @@
-import type {
-  AgentRunContext,
-  BinaryArtifactStore,
-  DocumentRepository,
-  ReferenceScreenshot,
-  ReferenceScreenshotSet,
-  ResolveBinaryArtifactStore,
-} from '@cat-factory/kernel'
-import type { AgentKindRegistry } from '@cat-factory/agents'
-import { resolveBlockReferences } from './block-reference-set.js'
+import type { ReferenceScreenshot } from '@cat-factory/kernel'
 import type { BlockReference } from './block-reference-set.js'
 
 // ---------------------------------------------------------------------------
@@ -53,7 +44,7 @@ function slugify(view: string): string {
  * deterministic, and the prompt states which view each file is, so the suffix never has to be
  * interpreted.
  */
-export function nameReferenceFiles(references: readonly BlockReference[]): ReferenceScreenshot[] {
+export function assignFileNames(references: readonly BlockReference[]): string[] {
   const used = new Set<string>()
   return references.map((reference) => {
     const extension = EXTENSIONS[reference.contentType] ?? 'png'
@@ -61,8 +52,18 @@ export function nameReferenceFiles(references: readonly BlockReference[]): Refer
     let candidate = `${base}.${extension}`
     for (let n = 2; used.has(candidate); n += 1) candidate = `${base}-${n}.${extension}`
     used.add(candidate)
-    return { view: reference.view, artifactId: reference.artifactId, fileName: candidate }
+    return candidate
   })
+}
+
+/** {@link assignFileNames}, projected onto the capture manifest's own shape. */
+export function nameReferenceFiles(references: readonly BlockReference[]): ReferenceScreenshot[] {
+  const names = assignFileNames(references)
+  return references.map((reference, index) => ({
+    view: reference.view,
+    artifactId: reference.artifactId,
+    fileName: names[index]!,
+  }))
 }
 
 /**
@@ -79,7 +80,13 @@ export function nameReferenceFiles(references: readonly BlockReference[]): Refer
 export const MAX_REFERENCE_SCREENSHOTS = 24
 
 /**
- * Apply {@link MAX_REFERENCE_SCREENSHOTS}, choosing what to DROP rather than truncating.
+ * Apply a `limit` to a reference set, choosing what to DROP rather than truncating.
+ *
+ * The limit is the CALLER's, because the two consumers of a task's references bound themselves for
+ * different reasons and by different amounts: a capture spends transfer time per image
+ * ({@link MAX_REFERENCE_SCREENSHOTS}), while an attachment spends input tokens on every turn
+ * ({@link MAX_DESIGN_IMAGES}), which is far tighter. One shared number would have to be the
+ * smaller, silently starving the capture set.
  *
  * A plain prefix would fall on the uploads, because {@link mergeBlockReferences} emits the design
  * frames first and appends the views only the uploads introduce. That is exactly backwards: the
@@ -90,17 +97,20 @@ export const MAX_REFERENCE_SCREENSHOTS = 24
  * Emission order is the original one either way, so a caller rendering the set still shows each
  * design's frames contiguously and the file names stay in gallery order.
  */
-export function capReferences(references: readonly BlockReference[]): {
+export function capReferences(
+  references: readonly BlockReference[],
+  limit: number,
+): {
   kept: BlockReference[]
   omitted: string[]
 } {
-  if (references.length <= MAX_REFERENCE_SCREENSHOTS) {
+  if (references.length <= limit) {
     return { kept: [...references], omitted: [] }
   }
   const keep = new Set<BlockReference>()
   for (const pass of ['upload', 'design'] as const) {
     for (const reference of references) {
-      if (keep.size >= MAX_REFERENCE_SCREENSHOTS) break
+      if (keep.size >= limit) break
       if (reference.origin === pass) keep.add(reference)
     }
   }
@@ -108,41 +118,4 @@ export function capReferences(references: readonly BlockReference[]): {
     kept: references.filter((reference) => keep.has(reference)),
     omitted: references.filter((reference) => !keep.has(reference)).map((r) => r.view),
   }
-}
-
-/** What {@link resolveReferenceScreenshots} reads through; all of it already on the engine. */
-export interface ReferenceScreenshotDeps {
-  documents?: DocumentRepository
-  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
-  agentKindRegistry: AgentKindRegistry
-}
-
-/**
- * Resolve the reference files for a dispatch that CAPTURES views, as a SPREAD-READY partial (the
- * `validationChecksFor` shape), so the hot context builder gains no branch of its own.
- *
- * The gate is the running kind's declared `ui` image, the same fact the executor routes the job
- * by: only a browser-driven kind captures screenshots, and only a capture has a reference to be
- * compared against. It lives HERE rather than at the call site so a deployment's own capturing
- * kind is served by the same rule, and so every other kind never triggers the two reads.
- *
- * ABSENT and EMPTY are different answers and both are reachable: absent means this dispatch never
- * asked (a kind that captures nothing, a deployment with no artifact storage), an empty `files`
- * means it asked and the task holds no reference at all. A tester with no references names its own
- * views, which is the documented fallback, so neither is a failure.
- */
-export async function resolveReferenceScreenshots(
-  deps: ReferenceScreenshotDeps,
-  agentKind: string,
-  workspaceId: string,
-  blockId: string,
-): Promise<Pick<AgentRunContext, 'referenceScreenshots'>> {
-  const resolveStore = deps.resolveBinaryArtifactStore
-  if (!resolveStore || deps.agentKindRegistry.agentStep(agentKind)?.image !== 'ui') return {}
-  const store: BinaryArtifactStore | null = await resolveStore(workspaceId)
-  if (!store) return {}
-  const { references } = await resolveBlockReferences(deps.documents, store, workspaceId, blockId)
-  const { kept, omitted } = capReferences(references)
-  const set: ReferenceScreenshotSet = { files: nameReferenceFiles(kept), omitted }
-  return { referenceScreenshots: set }
 }

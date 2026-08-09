@@ -211,7 +211,7 @@ describe('materializeReferenceScreenshots', () => {
     expect(outcome.written).toHaveLength(2)
     // A cap the agent is not told about is indistinguishable from a design with no such screen.
     expect(outcome.missing).toEqual([
-      { view: 'Settings', reason: 'not sent to this container (reference limit)' },
+      { view: 'Settings', reason: 'not sent to this container (image limit)' },
     ])
   })
 
@@ -256,8 +256,8 @@ describe('materializeReferenceScreenshots', () => {
 
     expect(outcome.written).toEqual([])
     expect(outcome.missing.map((f) => f.reason)).toEqual([
-      'reference exceeds size limit',
-      'reference exceeds size limit',
+      'image exceeds size limit',
+      'image exceeds size limit',
     ])
     // The stream is cancelled as it crosses the line rather than drained: a hard bound on what an
     // endless body can cost, per image and across the pass's concurrency.
@@ -283,8 +283,8 @@ describe('materializeReferenceScreenshots', () => {
     const outcome = await materializeReferenceScreenshots(dir, manifest, { fetchImpl })
 
     expect(outcome.missing.map((f) => f.reason)).toEqual([
-      'reference exceeds size limit',
-      'reference exceeds size limit',
+      'image exceeds size limit',
+      'image exceeds size limit',
     ])
     // Counting to the 16 MiB ceiling would take sixteen chunks per image; the stream is left
     // where its own construction parked it instead.

@@ -1025,3 +1025,134 @@ describe('generation options', () => {
     expect(lines).toContain('unknown rather than settled')
   })
 })
+
+describe('generation option VALUES', () => {
+  const bucketed = generator({
+    id: 'grok-imagine',
+    capabilities: ['aspect-ratio'],
+    accepts: { aspectRatios: ['1:1', '16:9', '9:16'] },
+  })
+  const anyRatio = generator({ id: 'flux', capabilities: ['aspect-ratio'] })
+
+  // The fourth refusal axis, and the failure it exists for: the option is supported, so the call
+  // succeeds and comes back cropped to whatever the vendor's picklist rounded to. Every check
+  // downstream passes.
+  it('refuses a value every declaring integration enumerated away', () => {
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'store',
+          generatorIds: ['grok-imagine'],
+          generation: { aspectRatio: '7:3' },
+        },
+        [bucketed],
+      ),
+    ).toEqual([
+      {
+        problem: 'option_value_unaccepted',
+        value: { option: 'aspectRatio', requested: '7:3', accepted: ['1:1', '16:9', '9:16'] },
+      },
+    ])
+  })
+
+  // The state that keeps this from retroactively refusing working selections: an integration
+  // that declared the capability and no set has said nothing about this value, so the step is
+  // admitted and the gap is reported to the agent instead.
+  it('admits a value a silent declarer might still serve', () => {
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'store',
+          generatorIds: ['grok-imagine', 'flux'],
+          generation: { aspectRatio: '7:3' },
+        },
+        [bucketed, anyRatio],
+      ),
+    ).toEqual([])
+  })
+
+  it('names the value and what IS accepted in words an operator can act on', () => {
+    const message = describeBinaryGeneratorSelectionIssues('imager', [
+      {
+        problem: 'option_value_unaccepted',
+        value: { option: 'outputSize', requested: '96x96', accepted: ['1024x1024'] },
+      },
+    ])
+    expect(message).toContain('an output size of 96x96')
+    expect(message).toContain('1024x1024')
+    expect(message).not.toContain('undefined')
+  })
+
+  // On the integration's own entry rather than only under the step's options, because an agent
+  // holding two image APIs picks per artifact and this is the kind of fact that decides.
+  it('states each integration’s accepted sets beside its formats', () => {
+    const lines = renderBinaryGeneratorSection({
+      selection: {
+        selected: [
+          generator({
+            id: 'recraft',
+            capabilities: ['exact-size', 'upscale'],
+            accepts: { outputSizes: [{ width: 1024, height: 1024 }], upscaleFactors: [2] },
+          }),
+        ],
+        unresolvedIds: [],
+      },
+      requestedModalities: [],
+    }).join('\n')
+    expect(lines).toContain('Renders at these exact sizes and no others: 1024x1024.')
+    expect(lines).toContain('Accepts these upscale factors and no others: 2.')
+  })
+
+  // Admission let the step through on the strength of the silent integration, so the agent is the
+  // party that has to route around the one that refuses the value, and it can only do that if it
+  // is told which fact it is holding.
+  it('tells the agent when one integration refuses the value and another has not said', () => {
+    const lines = renderBinaryGeneratorSection({
+      selection: { selected: [bucketed, anyRatio], unresolvedIds: [] },
+      requestedModalities: [],
+      generation: { aspectRatio: '7:3' },
+    }).join('\n')
+    expect(lines).toContain('does NOT accept what this step asks for (an aspect ratio)')
+  })
+
+  // The state every registration is in until an endpoint is audited. A brief paragraph fired here
+  // would ride nearly every step carrying an aspect ratio, which is how a line stops being read.
+  it('says nothing when no selected integration states a set', () => {
+    const lines = renderBinaryGeneratorSection({
+      selection: { selected: [anyRatio], unresolvedIds: [] },
+      requestedModalities: [],
+      generation: { aspectRatio: '7:3' },
+    }).join('\n')
+    expect(lines).not.toContain('does NOT accept what this step asks for')
+  })
+
+  // Two enumerating endpoints where only one takes the value: the step is servable, so admission
+  // stays out of it, and the providers list directly above names BOTH as honouring the option.
+  // Naming the one that will crop is the whole remedy, because routing is the agent's call.
+  it('names the integration that enumerated the value away when another accepts it', () => {
+    const wide = generator({
+      id: 'nano-banana',
+      capabilities: ['aspect-ratio'],
+      accepts: { aspectRatios: ['7:3', '1:1'] },
+    })
+    const lines = renderBinaryGeneratorSection({
+      selection: { selected: [wide, bucketed], unresolvedIds: [] },
+      requestedModalities: [],
+      generation: { aspectRatio: '7:3' },
+    }).join('\n')
+    expect(lines).toContain('`grok-imagine` states the values it accepts')
+    expect(lines).toContain('does NOT accept the 7:3 this step asks for')
+    expect(lines).not.toContain('`nano-banana` states the values it accepts')
+    // Servable by part of the selection, so it is a brief paragraph and not a refusal.
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'store',
+          generatorIds: ['nano-banana', 'grok-imagine'],
+          generation: { aspectRatio: '7:3' },
+        },
+        [wide, bucketed],
+      ),
+    ).toEqual([])
+  })
+})

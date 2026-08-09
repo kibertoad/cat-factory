@@ -3403,6 +3403,9 @@
       "monorepoBrowseHint": "Durchsuchen Sie das Repository und wählen Sie die Verzeichnisse der Services aus, die Sie hinzufügen möchten – aus jedem beliebigen Ordner. Agents, die an einem Service arbeiten, laufen innerhalb seines Unterverzeichnisses.",
       "selectedServices": "Ausgewählte Services",
       "noServicesSelected": "Noch keine Services ausgewählt. Wählen Sie oben Verzeichnisse aus.",
+      "frontendLabel": "Frontend-App (optional)",
+      "frontendHint": "Markieren Sie eines der ausgewählten Verzeichnisse als Frontend für die übrigen. Es wird als Frontend-App angelegt, auf dieses Unterverzeichnis festgelegt und mit jedem daneben hinzugefügten Backend-Service verknüpft. Die Umgebungsvariablen für die Backend-URLs benennen Sie anschließend im Inspector des Frontends.",
+      "frontendNone": "Keines: alle Auswahlen sind Backend-Services",
       "addServices": "{count} Service hinzufügen | {count} Services hinzufügen",
       "removeService": "{directory} entfernen",
       "addedConfigure": "{title} hinzugefügt, konfigurieren Sie es",
@@ -3416,7 +3419,9 @@
         "addedDescription": "{title} ist auf dem Board, konfigurieren Sie es unten.",
         "addFailedTitle": "Service konnte nicht hinzugefügt werden",
         "servicesAddedTitle": "Services hinzugefügt",
-        "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt."
+        "servicesAddedDescription": "{count} Service zum Board hinzugefügt. | {count} Services zum Board hinzugefügt.",
+        "frontendLinkedNote": "{directory} wurde als Frontend hinzugefügt und mit den übrigen verknüpft. Benennen Sie die Umgebungsvariablen für die Backend-URLs im Inspector.",
+        "frontendWiringFailedNote": "Die Frontend-Einstellungen wurden nicht gespeichert. Öffnen Sie den Inspector jeder Frontend-App, um ihr Unterverzeichnis und ihre Backend-Services zu setzen."
       }
     },
     "repoTree": {
@@ -4365,6 +4370,9 @@
       "binaryCapabilityUnknown": "{capability} (eine Fähigkeit, die diese Installation nicht definiert)",
       "binaryCapabilityUnsupported": "Keine ausgewählte Integration unterstützt {capabilities}, was die Generierungsoptionen dieses Schritts verlangen. Entferne die Option oder wähle eine Integration, die die Fähigkeit deklariert.",
       "binaryCapabilityUnverifiable": "Keine ausgewählte Integration deklariert Unterstützung für {capabilities}, aber eine von ihnen deklariert überhaupt keine Fähigkeiten, daher konnte das nicht geprüft werden. Der Schritt startet trotzdem; prüfe es in der API der Integration.",
+      "binaryOptionValueUnaccepted": "Keine der ausgewählten Integrationen akzeptiert {option} von {requested}. Zusammen akzeptieren sie: {accepted}. Fordern Sie einen dieser Werte an oder wählen Sie eine Integration, die diesen Wert rendert.",
+      "binaryOptionValuePartial": "{generators} akzeptiert {option} von {requested} nicht, eine andere ausgewählte Integration jedoch schon. Der Schritt startet trotzdem: Senden Sie diese Option nur an die Integrationen, die sie akzeptieren, oder entfernen Sie die übrigen.",
+      "binaryOptionValueUnverifiable": "Eine ausgewählte Integration nennt die Werte, die sie akzeptiert, und akzeptiert nicht, was dieser Schritt verlangt ({options}); eine andere nennt gar keine, deshalb ließ sich das nicht klären. Der Schritt startet trotzdem, und nur ein Teil Ihrer Integrationen wird ihn bedienen.",
       "binaryReferenceImages": "Referenzbilder",
       "binaryReferenceImagesPlaceholder": "Rolle{'|'}Ort{'|'}Dienst, eine pro Zeile",
       "binaryReferenceImagesUnusable": "Nicht als Referenz gespeichert: {entries}. Jede Zeile muss Rolle{'|'}Ort sein, wobei die Rolle style, subject, composition oder base ist.",

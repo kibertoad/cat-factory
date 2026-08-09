@@ -1,5 +1,69 @@
 # @cat-factory/local-server
 
+## 0.125.16
+
+### Patch Changes
+
+- Updated dependencies [22b2459]
+- Updated dependencies [2428b6b]
+  - @cat-factory/kernel@0.285.0
+  - @cat-factory/agents@0.125.0
+  - @cat-factory/server@0.268.0
+  - @cat-factory/executor-harness@1.110.0
+  - @cat-factory/integrations@0.154.0
+  - @cat-factory/orchestration@0.256.0
+  - @cat-factory/contracts@0.291.0
+  - @cat-factory/gitlab@0.19.13
+  - @cat-factory/prompt-fragments@1.0.46
+  - @cat-factory/node-server@0.196.1
+
+## 0.125.15
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+  - @cat-factory/agents@0.124.0
+  - @cat-factory/orchestration@0.255.0
+  - @cat-factory/server@0.267.0
+  - @cat-factory/executor-harness@1.108.0
+  - @cat-factory/node-server@0.196.0
+  - @cat-factory/gitlab@0.19.12
+  - @cat-factory/integrations@0.153.12
+  - @cat-factory/prompt-fragments@1.0.45
+
+## 0.125.14
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+  - @cat-factory/kernel@0.283.0
+  - @cat-factory/orchestration@0.254.0
+  - @cat-factory/server@0.266.0
+  - @cat-factory/agents@0.123.6
+  - @cat-factory/gitlab@0.19.11
+  - @cat-factory/integrations@0.153.11
+  - @cat-factory/prompt-fragments@1.0.44
+  - @cat-factory/node-server@0.195.14
+  - @cat-factory/executor-harness@1.106.0
+
+## 0.125.13
+
+### Patch Changes
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/orchestration@0.253.1
+  - @cat-factory/contracts@0.289.1
+  - @cat-factory/kernel@0.282.1
+  - @cat-factory/agents@0.123.5
+  - @cat-factory/server@0.265.1
+  - @cat-factory/node-server@0.195.13
+  - @cat-factory/gitlab@0.19.10
+  - @cat-factory/integrations@0.153.10
+  - @cat-factory/prompt-fragments@1.0.43
+  - @cat-factory/executor-harness@1.106.0
+
 ## 0.125.12
 
 ### Patch Changes

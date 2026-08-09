@@ -56,7 +56,7 @@ export interface KindBodyParts {
    * snapshot. Present only for the tester kinds when the service frame has secrets configured.
    */
   testSecretEnv?: { key: string; value: string }[]
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
   /**
    * The backend-rendered "Multi-repo workspace" system-prompt section (which repo is primary,
    * where each involved service lives, how the checkouts are laid out). Appended to the coding
@@ -328,7 +328,7 @@ function buildCodingRepoLegs(
   const peerRepos = parts.peerRepos?.length
     ? parts.peerRepos.map((p) => ({
         repo: p.repo,
-        ...(p.frameId ? { frameId: p.frameId } : {}),
+        ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
         newBranch: workBranch,
         ...(opensPr ? { pr } : {}),
       }))
@@ -526,12 +526,12 @@ function buildExploreAgentBody(
   // `bug-investigator`) clones each connected involved-service repo as a SIBLING checkout so
   // it can read across every repo the bug touches. Unlike the coding path there is no
   // `newBranch`/`pr` — the peers are read, never pushed — so the harness's read-only
-  // `runMultiRepoExplore` just clones them (`{ repo, frameId }`) and runs the agent at the
+  // `runMultiRepoExplore` just clones them (`{ repo, frameIds }`) and runs the agent at the
   // workspace root. The layout section names each repo/subdir + role.
   const explorePeers = parts.peerRepos?.length
     ? parts.peerRepos.map((p) => ({
         repo: p.repo,
-        ...(p.frameId ? { frameId: p.frameId } : {}),
+        ...(p.frameIds?.length ? { frameIds: p.frameIds } : {}),
         // The merger pins each read-only peer to its PR branch so the combined diff sees the PR
         // change; the bug-investigator omits it (cloned at the repo's default branch).
         ...(p.cloneBranch ? { cloneBranch: p.cloneBranch } : {}),
@@ -693,9 +693,16 @@ export function renderMultiRepoWorkspaceSection(
  * harness's `siblingDir`) and the exact per-repo diff command, and instructs the agent to weigh the
  * whole cross-repo change as ONE assessment. Distinct from {@link renderMultiRepoWorkspaceSection}
  * (which is for a coding fan-out — "commit inside each, one PR per repo"); the merger writes nothing.
+ *
+ * `unaddressable` names the repos of recorded pull requests the platform could NOT resolve to a
+ * checkout, so none of their diff is in front of the agent. It is stated rather than dropped
+ * because the alternative is a merger scoring a partial change while reading its evidence as
+ * whole, which is the one way this section can produce a confident merge of something nobody
+ * looked at.
  */
 export function renderMergerMultiRepoSection(
   repos: { owner: string; name: string; baseBranch: string }[],
+  unaddressable: string[] = [],
 ): string {
   const lines = [
     '## Multi-repo pull request',
@@ -714,6 +721,15 @@ export function renderMergerMultiRepoSection(
       `- \`${r.owner}/${r.name}\` → \`${dir}/\` (base \`${r.baseBranch}\`): ` +
         `\`cd ${dir} && git fetch origin ${r.baseBranch} && git diff origin/${r.baseBranch}...HEAD\``,
     )
+  }
+  if (unaddressable.length) {
+    lines.push(
+      '',
+      'NOT CHECKED OUT: this task also opened a pull request in the repositories below, and the',
+      'platform could not resolve them, so NONE of their changes are in front of you. Treat the',
+      'combined change as INCOMPLETE and say so in your assessment rather than scoring it as whole.',
+    )
+    for (const repo of unaddressable) lines.push(`- \`${repo}\``)
   }
   return lines.join('\n')
 }

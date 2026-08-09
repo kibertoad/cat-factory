@@ -82,7 +82,10 @@ function composeForTarget(
     provider: target?.provider ?? null,
     scope: {
       role: target?.role ?? 'own',
-      frameId: target?.frameId ?? null,
+      // Every frame whose changes ride this pull request, plus the singular `frameId` the
+      // published `/api/v1` shape still carries (the first of them, see `prReportScopeSchema`).
+      ...(target?.frameIds?.length ? { frameIds: target.frameIds } : {}),
+      frameId: target?.frameIds?.[0] ?? null,
       // Only a PEER's copy points elsewhere: on the own-service report this would name the
       // very pull request the reader already has open.
       ownPullRequest: target?.role === 'peer' ? ownPullRequest : null,
