@@ -43,9 +43,24 @@ const catalogs = new Map(
   [SOURCE_LOCALE, ...LOCALES].map((locale) => [locale, loadCatalog(locale)] as const),
 )
 
+/**
+ * A pipe written as vue-i18n LITERAL INTERPOLATION (`{'|'}`) is a character the message renders,
+ * not a form separator: the compiler parses such a message as a plain Message rather than a
+ * Plural. So it is stripped before the split, or a message that legitimately shows a pipe (the
+ * reference-image field describes a `role|location|service` line) is measured as forms it does
+ * not have.
+ *
+ * Getting this wrong is not merely a false positive. Counting the escaped pipes made a two-pipe
+ * message read as three forms, which is a LEGAL count for every locale here, so the sibling key
+ * that happened to carry one pipe failed while the more visible one passed silently. A guard that
+ * mis-measures does not fail honestly; it fails somewhere else.
+ */
+const LITERAL_INTERPOLATION = /\{\s*'(?:[^'\\]|\\.)*'\s*\}/g
+
 /** Pipe-separated plural entries only; a message with no pipe never reaches a selector. */
 function pluralEntries(locale: string): [string, string[]][] {
   return [...catalogs.get(locale)!]
+    .map(([key, value]) => [key, value.replace(LITERAL_INTERPOLATION, '')] as const)
     .filter(([, value]) => value.includes('|'))
     .map(([key, value]) => [key, value.split('|')])
 }
