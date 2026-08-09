@@ -164,6 +164,57 @@ describe('createSettlingLoop', () => {
     expect(frames).toBe(5)
   })
 
+  it('parks a throwing compute so a later poke still wakes it', () => {
+    const clock = fakeScheduler()
+    let frames = 0
+    let broken = true
+    const loop = createSettlingLoop({
+      compute: () => {
+        frames++
+        if (broken) throw new Error('measured a card that just unmounted')
+        return false
+      },
+      scheduler: clock.scheduler,
+      settleFrames: 3,
+    })
+
+    // The frame the throw escaped from is already spent. Staying awake would leave the loop
+    // holding a stream it can never schedule on again, and every later poke a no-op.
+    loop.poke()
+    expect(() => clock.flush()).toThrow('measured a card that just unmounted')
+    expect(loop.awake()).toBe(false)
+    expect(clock.pending()).toBe(0)
+
+    broken = false
+    loop.poke()
+    clock.flush()
+    expect(frames).toBe(2)
+    expect(loop.awake()).toBe(true)
+  })
+
+  it('stays parked when the compute stops the loop', () => {
+    const clock = fakeScheduler()
+    let frames = 0
+    // A compute whose store write unmounts the board runs `stop()` from inside the frame it
+    // is halfway through. The frame it was about to schedule must not resurrect it.
+    const loop = createSettlingLoop({
+      compute: () => {
+        frames++
+        loop.stop()
+        return true
+      },
+      scheduler: clock.scheduler,
+      settleFrames: 3,
+    })
+
+    loop.poke()
+    clock.flush()
+    expect(loop.awake()).toBe(false)
+    expect(clock.pending()).toBe(0)
+    clock.flush()
+    expect(frames).toBe(1)
+  })
+
   it('drops the pending frame on stop', () => {
     const clock = fakeScheduler()
     let frames = 0

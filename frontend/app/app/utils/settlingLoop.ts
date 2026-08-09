@@ -27,7 +27,11 @@ export type SettlingLoop = {
   poke: () => void
   /** Park the loop and drop the pending frame. Idempotent. */
   stop: () => void
-  /** Whether a frame is currently scheduled. */
+  /**
+   * Whether the loop still owns the frame stream: a frame is scheduled, or `compute()` is
+   * running right now. The two are deliberately not the same fact, and only this one decides
+   * whether a `poke()` has to schedule anything.
+   */
   awake: () => boolean
 }
 
@@ -47,27 +51,51 @@ export function createSettlingLoop(options: {
 }): SettlingLoop {
   const { compute, scheduler } = options
   const settleFrames = options.settleFrames ?? DEFAULT_SETTLE_FRAMES
-  let handle: number | null = null
+  /** The scheduled frame's handle, and ONLY that: null the whole time `compute()` runs. */
+  let pending: number | null = null
+  /** Whether the loop owns the frame stream, which stays true across `compute()`. */
+  let isAwake = false
   let unchangedFrames = 0
 
   function frame() {
-    // `handle` deliberately stays set across `compute()`: a poke triggered by the compute's
-    // own store write (a watcher, a re-render) must reset the countdown without also
-    // scheduling a second frame beside the one this function is about to schedule.
-    const changed = compute()
+    // This callback's own handle is spent the moment it runs, so nothing may cancel it later;
+    // `isAwake` is what carries "the loop is running" across the compute below.
+    pending = null
+    let changed: boolean
+    try {
+      changed = compute()
+    } catch (error) {
+      // Park before letting the error reach the frame callback, where the browser reports it.
+      // Staying awake with no frame scheduled would make every later `poke()` a no-op, so one
+      // throwing frame would freeze the board for the rest of the session; rescheduling would
+      // be worse still, since a compute that threw on this frame throws on the next one too
+      // and a 60Hz error storm costs more than an arrow that waits for the next pulse.
+      isAwake = false
+      throw error
+    }
+    // A `stop()` that ran during `compute()` (an unmount driven by the compute's own store
+    // write) parks the loop for good: it must not be resurrected by the frame below.
+    if (!isAwake) return
     unchangedFrames = changed ? 0 : unchangedFrames + 1
-    handle = unchangedFrames < settleFrames ? scheduler.schedule(frame) : null
+    if (unchangedFrames < settleFrames) pending = scheduler.schedule(frame)
+    else isAwake = false
   }
 
   return {
     poke() {
       unchangedFrames = 0
-      if (handle === null) handle = scheduler.schedule(frame)
+      // A poke triggered by the compute's own store write (a watcher, a re-render) resets the
+      // countdown and nothing more: `isAwake` is still set, so it cannot schedule a second
+      // frame beside the one `frame()` is about to schedule itself.
+      if (isAwake) return
+      isAwake = true
+      pending = scheduler.schedule(frame)
     },
     stop() {
-      if (handle !== null) scheduler.cancel(handle)
-      handle = null
+      isAwake = false
+      if (pending !== null) scheduler.cancel(pending)
+      pending = null
     },
-    awake: () => handle !== null,
+    awake: () => isAwake,
   }
 }

@@ -90,6 +90,11 @@ stated in terms of what the user can see rather than what the function did. And 
 watches `style`/`class` attributes but not the geometry attributes the overlay itself writes,
 because a driver whose own output pulsed it awake would never settle.
 
+A `compute` that THROWS parks the loop and lets the error reach the frame callback, so the next
+pulse of any kind is what restarts it. Retrying the frame instead would turn one bad measurement
+into a 60Hz error storm, and staying awake with no frame scheduled would make every later poke a
+no-op and freeze the board for the session.
+
 What the pulse cannot see is a reflow with no mutation and no gesture, a late-loading image or
 font resizing a card. That leaves an arrow stale until the next pulse of any kind, which is the
 deliberate trade: firing too often costs a handful of frames, and the alternative is the loop
