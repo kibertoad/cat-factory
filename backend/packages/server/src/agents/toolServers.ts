@@ -13,8 +13,10 @@ import type {
 import {
   TOOL_SERVER_BUDGET,
   isValidMcpToolName,
+  mcpCredentialChannel,
   mcpHarnessServesTransport,
   mcpServerSupportsHarness,
+  mcpTransportCarriesCredential,
   noopLogger,
   runBestEffort,
 } from '@cat-factory/kernel'
@@ -280,19 +282,69 @@ function reportUnknown(input: ResolveToolServersInput, unknown: readonly string[
 /** Either the resolved credential map, or the reason the server must be dropped. */
 type SecretResolution =
   | { ok: true; values: Record<string, string> }
-  | { ok: false; reason: 'missing_secret' | 'reserved_secret' }
+  | { ok: false; reason: SecretRefusal }
+
+type SecretRefusal = 'missing_secret' | 'reserved_secret' | 'unusable_secret'
+
+/**
+ * The declared credentials this dispatch may resolve, or the reason a REQUIRED one forces the
+ * whole server to be dropped. Two floors, applied BEFORE the resolver is asked.
+ *
+ * That ordering is the point in both cases. A floor must hold whatever a facade wired, so it
+ * cannot live inside the env-backed default resolver, and a key nothing downstream can use is one
+ * whose value costs a round trip and materialises a secret for no reader.
+ *
+ * Both are re-applied here having already been refused at boot, because a mothership-mode node
+ * boot-validates nothing it resolves: the definitions arrive per dispatch from a process one build
+ * ahead of it, so a declaration this build would refuse still reaches this one.
+ *
+ * The disposition is the same for both and follows the DECLARATION rather than the fault: a
+ * REQUIRED key drops the server under its own reason, an OPTIONAL one costs only that key, exactly
+ * as an optional key that did not resolve does. So neither floor adds a second way for a server to
+ * disappear.
+ */
+function admitCredentials(
+  input: ResolveToolServersInput,
+  definition: McpServerDefinition,
+  declared: McpSecretRef[],
+): { keys: McpSecretRef[] } | { reason: SecretRefusal } {
+  const keys: McpSecretRef[] = []
+  for (const key of declared) {
+    if (isReservedPlatformEnvKey(key.key)) {
+      input.logger?.warn('tool server declares a reserved credential key; refusing to resolve it', {
+        toolServerId: definition.id,
+        credentialKey: key.key,
+        detail: reservedEnvKeyMessage(key.key),
+      })
+      if (key.required !== false) return { reason: 'reserved_secret' }
+      continue
+    }
+    // The channel floor: a credential naming a channel its transport does not have (a header on a
+    // stdio child process, no header on a remote url) resolves fine and is then folded into
+    // nothing by the projection that builds the job body, leaving the server wired, advertised in
+    // the prompt, and running unauthenticated. Stating it is the whole point: the value is not
+    // missing and the key is not refused, so both neighbouring reasons would send an operator
+    // somewhere the fix is not.
+    if (!mcpTransportCarriesCredential(definition.transport.kind, key)) {
+      input.logger?.warn('tool server credential cannot ride its transport; refusing to send it', {
+        toolServerId: definition.id,
+        credentialKey: key.key,
+        transport: definition.transport.kind,
+        declaredChannel: mcpCredentialChannel(key),
+      })
+      if (key.required !== false) return { reason: 'unusable_secret' }
+      continue
+    }
+    keys.push(key)
+  }
+  return { keys }
+}
 
 /**
  * Resolve a server's declared credentials. Returns a REASON instead of a map when a REQUIRED
  * secret cannot be supplied — the caller then drops the server, because handing an agent a tool
  * whose first call will 401 is worse than telling it the tool is absent. A server with no
  * declared secrets resolves trivially (an empty record) without consulting the resolver at all.
- *
- * A key naming a platform configuration variable is dropped BEFORE the resolver is asked, and
- * that ordering is the point: the floor must hold whatever a facade wired, so it cannot live
- * inside the env-backed default. Boot validation already refused such a declaration, but a
- * mothership-mode node boot-validates nothing it resolves — the definitions arrive per dispatch
- * from a process one build ahead of it.
  */
 async function resolveSecrets(
   input: ResolveToolServersInput,
@@ -300,19 +352,9 @@ async function resolveSecrets(
 ): Promise<SecretResolution> {
   const declared = definition.secretKeys ?? []
   if (!declared.length) return { ok: true, values: {} }
-  const reserved = declared.filter((key) => isReservedPlatformEnvKey(key.key))
-  for (const key of reserved) {
-    input.logger?.warn('tool server declares a reserved credential key; refusing to resolve it', {
-      toolServerId: definition.id,
-      credentialKey: key.key,
-      detail: reservedEnvKeyMessage(key.key),
-    })
-    // A reserved REQUIRED key drops the server under its own reason. An optional one only costs
-    // that key, exactly as an optional key that did not resolve does — the disposition follows
-    // the DECLARATION, so this rule adds no second way for a server to disappear.
-    if (key.required !== false) return { ok: false, reason: 'reserved_secret' }
-  }
-  const keys = reserved.length ? declared.filter((key) => !reserved.includes(key)) : declared
+  const admitted = admitCredentials(input, definition, declared)
+  if ('reason' in admitted) return { ok: false, reason: admitted.reason }
+  const keys = admitted.keys
   const resolver = input.resolveToolSecrets
   const resolved =
     resolver && keys.length
@@ -488,7 +530,7 @@ function secretKeyNames(credentials: Record<string, string>): { secretKeys?: str
 }
 
 /**
- * Secrets destined for the server process's environment (every key that named no header).
+ * Secrets destined for the server process's environment (every key on the `env` channel).
  *
  * Keyed by the INJECTION name, which is `envName` when the declaration split it from the lookup
  * key. The resolver was asked for, and answered under, the lookup key; from here on only the
@@ -496,6 +538,10 @@ function secretKeyNames(credentials: Record<string, string>): { secretKeys?: str
  * variable is dropped rather than injected, because the value would reconfigure the process
  * instead of authenticating a call. Registration already refuses one, so this is the mothership
  * case: a definition authored elsewhere, boot-validated by nobody this process ran.
+ *
+ * The channel test is the SAME predicate `admitCredentials` refused on, so a key that reaches here
+ * with a value is one this transport can carry. It stays because it is what makes this the env
+ * HALF of a split rather than a filter that happens to agree with one.
  */
 function envSecrets(
   keys: McpSecretRef[] | undefined,
@@ -504,7 +550,7 @@ function envSecrets(
   const out: Record<string, string> = {}
   for (const key of keys ?? []) {
     const value = resolved[key.key]
-    if (!value || key.header) continue
+    if (!value || mcpCredentialChannel(key) !== 'env') continue
     const name = key.envName ?? key.key
     if (isToolchainEnvName(name)) continue
     out[name] = value

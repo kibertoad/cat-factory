@@ -283,7 +283,19 @@ const API_PREFIX = '/api/v1'
 // that the tree served is the one the verdicts were made against, and before that the platform has
 // consulted no tree. That is the same fact `requirements.spec: "not_read"` on the run's outcome
 // already states. `provenance` is null there, and only there.
-const API_VERSION = '1.36.0'
+//
+// 1.37.0: one new value, `unusable_secret`, on the `reason` of a step's unavailable tool servers
+// (carried by the run reads that project `toolServers`). It says a credential the server declares
+// named a channel its transport does not have (a header on a `stdio` child process, no header on a
+// remote url), so the value resolved and reached nothing. Additive, and the SDKs tolerate unknown
+// members by design, so a consumer built against 1.36.0 keeps parsing every response it already
+// understood and sees a value it cannot classify rather than a wrong one.
+//
+// It is a new member rather than a fold onto `missing_secret` or `reserved_secret` because those
+// two are what a consumer would act on wrongly: nothing is missing (the value resolved) and nothing
+// was refused (the platform withheld no key). Only a member of its own points at the declaration,
+// which is the one thing that has to change.
+const API_VERSION = '1.37.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

@@ -351,11 +351,13 @@ What to know about it:
 - **Stateless, and it answers JSON.** No session to establish or tear down, so `GET` (the
   server-to-client event stream) and `DELETE` (end a session) are answered `405`. Watching a run
   means polling `tasks_get_run` / `jobs_get`, the same as on the stdio path.
-- **A JSON-RPC batch is one request that fans out.** The protocol permits an array of calls in one
-  `POST`, and each becomes its own `/api/v1` request, so a batch costs the deployment in proportion
-  to its length rather than to the one HTTP call it arrived as. Sized like any other public-API
-  usage: the per-tool result ceiling still applies to each entry, and the key's scope still gates
-  each one.
+- **A JSON-RPC batch still fans out, and is compatibility rather than contract.** The 2025-06-18
+  protocol revision, the one this server negotiates, REMOVED batching, so a current client never
+  sends an array. The transport still accepts one from a client on an older revision, and each
+  entry then becomes its own `/api/v1` request, so such a request costs the deployment in
+  proportion to its length rather than to the one HTTP call it arrived as; the per-tool result
+  ceiling and the key's scope still apply to each entry. Send one call per `POST`: the acceptance
+  is the transport's backwards compatibility, not a promise this section makes.
 - **The endpoint is public surface** under the stability contract above, from its first release. It
   is deliberately NOT in [`docs/openapi.json`](../../docs/openapi.json): a JSON-RPC endpoint has no
   operation shape to describe, and describing it would mint an SDK method in four languages for a
@@ -395,9 +397,11 @@ path adds per-host filters on top (`CAT_FACTORY_MCP_GROUPS`, `CAT_FACTORY_MCP_TO
 are a convenience rather than a boundary, since the key still carries whatever scope it was minted
 with.
 
-The two SSE endpoints are deliberately not tools on either path (a tool call has no streaming
-channel), so watching a run from a host means polling `tasks_get_run` / `jobs_get`, which the server's
-instructions say in so many words. The env-var table and a worked flow (create, start, poll, decide):
+Three operations are deliberately not tools on either path, and the server's instructions say so in
+so many words: the two SSE endpoints (a tool call has no streaming channel, so watching a run from a
+host means polling `tasks_get_run` / `jobs_get`) and the artifact byte download (a tool result is
+text or a declared content block, so list with `evidence_list_artifacts` and fetch the bytes over
+HTTP or an SDK). The env-var table and a worked flow (create, start, poll, decide):
 [`sdk/mcp/README.md`](../../sdk/mcp/README.md).
 
 Everything below still applies: the SDKs are a typed skin over exactly these endpoints, and the
@@ -406,6 +410,8 @@ error codes, scopes and paging rules are the same whichever you use.
 ## Reference
 
 Scope column = the minimum rung. Refusal codes are in the [conventions table](#the-error-envelope).
+One route is deliberately in no table below and not in the spec: `POST /api/v1/mcp`, the JSON-RPC
+endpoint with no operation shape to describe; [From an MCP host](#from-an-mcp-host) carries it.
 
 **Read this beside the generated
 [API Endpoint Reference](https://www.catfactory.ai/extend/api-reference.html), which owns the

@@ -82,12 +82,13 @@ describe('prompt-fragment library management surface (owner-scoped)', () => {
   })
 
   // The record-based `upsert(record)` binds on the record's `(ownerKind, ownerId)` FIELDS (the
-  // `ownerField` rule): a fragment/source row can only ever land under an in-scope owner.
-  const UPSERTS = [
-    'promptFragmentRepository',
-    'fragmentSourceRepository',
-    'fragmentBriefRepository',
-  ]
+  // `ownerField` rule): a fragment or brief row can only ever land under an in-scope owner.
+  //
+  // `fragmentSourceRepository.upsert` is deliberately NOT in this loop: it conflicts on the `id`
+  // alone, so it binds through `ownerFieldUpsert` (declared owner AND stored row's owner) and a
+  // record with no `id` is refused where these three accept it. Its coverage is the repo-sync
+  // describe below, beside the sibling library whose upsert has the same shape.
+  const UPSERTS = ['promptFragmentRepository', 'fragmentBriefRepository']
 
   for (const repo of UPSERTS) {
     it(`forwards ${repo}.upsert when the record targets an in-scope workspace owner`, async () => {
@@ -118,18 +119,163 @@ describe('prompt-fragment library management surface (owner-scoped)', () => {
       ).rejects.toMatchObject({ code: 'not_found' })
     })
   }
-
-  it('still refuses the sourceId-keyed sync reads (off the allow-list)', async () => {
-    // `promptFragmentRepository.listBySource` + `fragmentSourceRepository.get` are the repo-sync
-    // reads the mothership owns — never remotely callable from a mothership node.
-    await expect(remoteRegistry().promptFragmentRepository!.listBySource!('src_1')).rejects.toThrow(
-      /not callable/,
-    )
-    await expect(remoteRegistry().fragmentSourceRepository!.get!('src_1')).rejects.toThrow(
-      /not callable/,
-    )
-  })
 })
+
+// The two owner-PAIR libraries' repo-SYNC surfaces, driven off one table because the rule, the
+// resolver and every property under test are shared: a sync method carries a source id and nothing
+// else, so `librarySource` resolves that source's owning `(ownerKind, ownerId)` pair server-side.
+// `entity` is what keeps the two source TABLES apart, and the cross-table case below is the
+// assertion that pins it.
+describe.each([
+  {
+    library: 'prompt-fragment',
+    inWs: 'fragsrc_ws_in',
+    inAcc: 'fragsrc_acc_in',
+    out: 'fragsrc_out',
+    missing: 'fragsrc_missing',
+    foreignId: 'fndsrc_ws_in',
+    sourceRepo: 'fragmentSourceRepository',
+    methods: [
+      { repo: 'promptFragmentRepository', method: 'listBySource', extra: [] as unknown[] },
+      { repo: 'promptFragmentRepository', method: 'softDeleteBySource', extra: [0] as unknown[] },
+      { repo: 'fragmentSourceRepository', method: 'get', extra: [] as unknown[] },
+      { repo: 'fragmentSourceRepository', method: 'updateSyncState', extra: ['abc123', 0] },
+      { repo: 'fragmentSourceRepository', method: 'softDelete', extra: [0] },
+    ],
+  },
+  {
+    library: 'foundational-services',
+    inWs: 'fndsrc_ws_in',
+    inAcc: 'fndsrc_acc_in',
+    out: 'fndsrc_out',
+    missing: 'fndsrc_missing',
+    foreignId: 'fragsrc_ws_in',
+    sourceRepo: 'foundationalServiceSourceRepository',
+    methods: [
+      { repo: 'foundationalServiceRepository', method: 'listBySource', extra: [] as unknown[] },
+      {
+        repo: 'foundationalServiceRepository',
+        method: 'softDeleteBySource',
+        extra: [0] as unknown[],
+      },
+      { repo: 'foundationalServiceSourceRepository', method: 'get', extra: [] as unknown[] },
+      {
+        repo: 'foundationalServiceSourceRepository',
+        method: 'updateSyncState',
+        extra: ['abc123', 0],
+      },
+      { repo: 'foundationalServiceSourceRepository', method: 'softDelete', extra: [0] },
+    ],
+  },
+])(
+  '$library repo-sync surface (source-scoped via librarySource)',
+  ({ inWs, inAcc, out, missing, foreignId, sourceRepo, methods }) => {
+    for (const { repo, method, extra } of methods) {
+      it(`forwards ${repo}.${method} for a source owned by an in-scope WORKSPACE`, async () => {
+        // Reaching the repo at all (rather than a 404) is the assertion, so a refusal fails by
+        // throwing. Both owner kinds are exercised because a source here, unlike a skill source,
+        // can be owned by either tier.
+        await remoteRegistry()[repo]![method]!(inWs, ...extra)
+      })
+
+      it(`forwards ${repo}.${method} for a source owned by an in-scope ACCOUNT`, async () => {
+        await remoteRegistry()[repo]![method]!(inAcc, ...extra)
+      })
+
+      it(`rejects ${repo}.${method} for a source owned by another tenant (404, no leak)`, async () => {
+        await expect(remoteRegistry()[repo]![method]!(out, ...extra)).rejects.toMatchObject({
+          code: 'not_found',
+        })
+      })
+
+      it(`rejects ${repo}.${method} for a source that does not exist (fails closed)`, async () => {
+        await expect(remoteRegistry()[repo]![method]!(missing, ...extra)).rejects.toMatchObject({
+          code: 'not_found',
+        })
+      })
+
+      it(`rejects ${repo}.${method} for a non-string source id (fails closed)`, async () => {
+        await expect(remoteRegistry()[repo]![method]!(undefined, ...extra)).rejects.toMatchObject({
+          code: 'not_found',
+        })
+      })
+
+      it(`rejects ${repo}.${method} for a source id belonging to the OTHER library (fails closed)`, async () => {
+        // What `entity` buys: the id names a real, in-scope row — in the sibling library's table.
+        // Resolving it against this rule's table finds nothing, and "found nothing" must refuse
+        // rather than fall back to trying both tables (which would let one library's ids bind the
+        // other's methods and make the discriminator decorative).
+        await expect(remoteRegistry()[repo]![method]!(foreignId, ...extra)).rejects.toMatchObject({
+          code: 'not_found',
+        })
+      })
+    }
+
+    // `upsert(record)` takes `ownerFieldUpsert`, NOT the plain `ownerField` its sibling library rows
+    // use, because the write conflicts on the `id` ALONE and never re-`SET`s the owner columns — the
+    // row it lands on is chosen by the id, not by the declared owner. So BOTH the declared owner and
+    // the STORED row's owner are bound, and a create (no such row yet) passes on the declared half.
+    describe(`${sourceRepo}.upsert binds the stored row, not just the declared owner`, () => {
+      it('forwards a CREATE: an id no row holds yet, under an in-scope owner', async () => {
+        await expect(
+          remoteRegistry()[sourceRepo]!.upsert!({
+            id: missing,
+            ownerKind: 'account',
+            ownerId: ACCOUNT,
+          }),
+        ).resolves.toBeUndefined()
+      })
+
+      it("forwards an UPDATE of the caller's own existing source", async () => {
+        await expect(
+          remoteRegistry()[sourceRepo]!.upsert!({
+            id: inWs,
+            ownerKind: 'workspace',
+            ownerId: 'ws_in',
+          }),
+        ).resolves.toBeUndefined()
+      })
+
+      // The regression this rule exists for. Declaring an in-scope owner satisfies the field check,
+      // but the id names ANOTHER tenant's row — and because the upsert does not re-`SET` the owner
+      // columns, forwarding it would repoint that tenant's source at a repo the caller chose, whose
+      // Markdown bodies their next sync folds into their prompts as standards.
+      it('rejects an in-scope owner claiming ANOTHER tenant’s source id (404)', async () => {
+        await expect(
+          remoteRegistry()[sourceRepo]!.upsert!({
+            id: out,
+            ownerKind: 'account',
+            ownerId: ACCOUNT,
+          }),
+        ).rejects.toMatchObject({ code: 'not_found' })
+      })
+
+      it('rejects a record declaring another tenant outright (404)', async () => {
+        await expect(
+          remoteRegistry()[sourceRepo]!.upsert!({
+            id: out,
+            ownerKind: 'account',
+            ownerId: OTHER_ACCOUNT,
+          }),
+        ).rejects.toMatchObject({ code: 'not_found' })
+      })
+
+      it('rejects a record with no owner fields (404, fail-closed)', async () => {
+        await expect(remoteRegistry()[sourceRepo]!.upsert!({ id: inWs })).rejects.toMatchObject({
+          code: 'not_found',
+        })
+      })
+
+      // No usable conflict key ⇒ the record cannot be bound to the row it would write, so it is
+      // refused rather than admitted on the declared half alone.
+      it('rejects a record with no id (404, fail-closed)', async () => {
+        await expect(
+          remoteRegistry()[sourceRepo]!.upsert!({ ownerKind: 'account', ownerId: ACCOUNT }),
+        ).rejects.toMatchObject({ code: 'not_found' })
+      })
+    })
+  },
+)
 
 describe('Claude Skills library surface (account- and source-scoped)', () => {
   // Skills live in ONE tier (the account), so the catalog + link reads bind positionally on an
@@ -355,18 +501,12 @@ describe('foundational-services catalog surface (owner-scoped)', () => {
     ).resolves.toBeUndefined()
   })
 
-  it('still refuses the sync surface (source- and repo-keyed, off the allow-list)', async () => {
-    // These carry no (ownerKind, ownerId) pair for a rule to bind and back work a mothership node
-    // cannot do anyway: the resync fan-outs and the push-webhook repo lookup.
-    const repos = remoteRegistry()
-    await expect(repos.foundationalServiceRepository!.listBySource!('fndsrc_1')).rejects.toThrow(
-      /not callable/,
-    )
+  it('still refuses the push-webhook repo lookup (off the allow-list)', async () => {
+    // The source-keyed sync methods are remote now (see the repo-sync table below), but this one
+    // spans every tier by construction — a delivery names a repo, not an owner — so no rule can
+    // bind it, and it runs where the webhook ARRIVES, which is never a laptop.
     await expect(
-      repos.foundationalServiceRepository!.softDeleteBySource!('fndsrc_1', 0),
-    ).rejects.toThrow(/not callable/)
-    await expect(
-      repos.foundationalServiceSourceRepository!.listByRepo!('acme', 'contracts'),
+      remoteRegistry().foundationalServiceSourceRepository!.listByRepo!('acme', 'contracts'),
     ).rejects.toThrow(/not callable/)
   })
 })

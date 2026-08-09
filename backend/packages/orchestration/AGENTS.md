@@ -212,11 +212,13 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   severities are the design: an unresolvable pipeline id is an `error` because the created task
   would silently fall back to the positional default, while a task type's unresolvable
   `defaultFragmentIds` is a `warn` naming both causes, since an account/workspace-tier fragment
-  merges per workspace at run time and boot structurally cannot see one. The generative-integration
-  section lives beside it in `binaryGeneratorRegistrations.ts`, because it is the one section with a
-  rule spanning DEFINITIONS: two integrations may share an injected variable only when they look the
-  value up under the same key, and different keys behind one name is refused here rather than
-  arbitrated at dispatch.
+  merges per workspace at run time and boot structurally cannot see one. Two sections of that check
+  live beside it. `validateToolServers.ts`: a kind's declared MCP servers, their per-dispatch
+  budget, and the credential rules, which are the sharpest here because a tool-server declaration
+  names both the key it wants and the endpoint that key is sent to. And
+  `binaryGeneratorRegistrations.ts`, the one section with a rule spanning DEFINITIONS: two
+  generative integrations may share an injected variable only when they look the value up under the
+  same key, and different keys behind one name is refused here rather than arbitrated at dispatch.
 
 Two top-level helpers sit beside `modules/` because every INLINE LLM caller shares them, and both
 are about resolving ONE thing consistently rather than about any one feature:

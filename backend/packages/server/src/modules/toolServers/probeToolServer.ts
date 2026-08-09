@@ -5,7 +5,13 @@ import type {
   McpServerDefinition,
   ToolSecretResolver,
 } from '@cat-factory/kernel'
-import { NotFoundError, isValidMcpToolName, noopLogger, runBestEffort } from '@cat-factory/kernel'
+import {
+  NotFoundError,
+  isValidMcpToolName,
+  mcpTransportCarriesCredential,
+  noopLogger,
+  runBestEffort,
+} from '@cat-factory/kernel'
 import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from '@cat-factory/contracts'
 import type { ToolServerProbeResult } from '@cat-factory/contracts'
 import { MCP_PROBE_TOOL_NAME_CAP } from '@cat-factory/contracts'
@@ -223,21 +229,22 @@ type CredentialResolution =
       ok: false
       failure: Pick<
         ToolServerProbeResult,
-        'status' | 'unresolvedCredentials' | 'refusedCredentials'
+        'status' | 'unresolvedCredentials' | 'refusedCredentials' | 'unusableCredentials'
       >
     }
 
 /**
  * Resolve the declared credentials into request headers, or report why the probe cannot proceed.
  *
- * This mirrors `resolveToolServers`'s `resolveSecrets` deliberately, including the ORDER: reserved
- * keys are dropped BEFORE the resolver is asked, because the floor must hold whatever a facade
+ * This mirrors `resolveToolServers`'s `admitCredentials` deliberately, including the ORDER: both
+ * floors are applied BEFORE the resolver is asked, because a floor must hold whatever a facade
  * wired. It reports the offending KEY NAMES rather than a sentence, so the surface can point at the
  * row in the credential checklist that needs a value.
  *
- * An `http` server's credential goes to a HEADER. A declaration that named only `envName` has
- * nothing to send over HTTP, so it contributes no header — and it is not a probe failure, because
- * such a declaration would resolve to nothing on a dispatch too (boot validation warns about it).
+ * Keeping the two in step is the point of the mirror, not a tidiness preference. A probe exists to
+ * answer what a DISPATCH would do without spending a run to find out, so a probe that proceeded
+ * where the dispatch drops the server would report the one state the surface must never invent: a
+ * capability that works, for a run that will not get it.
  */
 async function resolveCredentials(
   input: ProbeToolServerInput,
@@ -265,7 +272,34 @@ async function resolveCredentials(
     }
   }
 
-  const keys = declared.filter((secret) => !reserved.includes(secret))
+  // An http server's credential rides a HEADER, so one that named none has nowhere to go: it would
+  // resolve, be folded into nothing, and the request would go out unauthenticated for the endpoint
+  // to answer 401, which this probe would then report as a WRONG credential. Boot validation
+  // refuses the declaration, so reaching this means the definition was authored by a process that
+  // did not boot this build.
+  const unusable = declared.filter(
+    (secret) => !mcpTransportCarriesCredential(definition.transport.kind, secret),
+  )
+  const requiredUnusable = unusable.filter((secret) => secret.required !== false)
+  for (const secret of unusable) {
+    input.logger?.warn('tool server credential cannot ride its transport; refusing to send it', {
+      toolServerId: definition.id,
+      credentialKey: secret.key,
+      transport: definition.transport.kind,
+    })
+  }
+  if (requiredUnusable.length) {
+    return {
+      ok: false,
+      failure: {
+        status: 'credential_unusable',
+        unusableCredentials: requiredUnusable.map((secret) => secret.key),
+      },
+    }
+  }
+
+  const skipped = new Set([...reserved, ...unusable])
+  const keys = declared.filter((secret) => !skipped.has(secret))
   const resolver = input.resolveToolSecrets
   const resolved =
     resolver && keys.length
