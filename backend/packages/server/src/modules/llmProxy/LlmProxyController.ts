@@ -10,6 +10,7 @@ import {
   type ApiKeyProvider,
   contextWindowFor,
   normalizeCallPhase,
+  redactImagePayloads,
   runBestEffort,
 } from '@cat-factory/kernel'
 import { openAiCompatibleBaseUrlError } from '../../agents/providerErrors.js'
@@ -731,7 +732,10 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
   // (e.g. the Workers AI floor), so the recorded metric reflects what actually
   // applied, not just what the client asked for.
   let requestMaxTokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : null
-  const promptText = JSON.stringify(payload.messages ?? [])
+  // Serialised with any image payload described rather than included: an OpenAI-shape multimodal
+  // turn carries the picture inline as a `data:` URL, and recording it verbatim would put a
+  // base64 copy of every attached image into the telemetry store on every turn that carried one.
+  const promptText = JSON.stringify(redactImagePayloads(payload.messages ?? []))
 
   // Correlate every proxied call with its run so a bootstrap/execution can be
   // traced end to end. We log the tool count explicitly: an agent (Pi) that gets

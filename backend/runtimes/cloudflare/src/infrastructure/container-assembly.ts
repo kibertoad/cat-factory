@@ -479,6 +479,7 @@ function selectWorkerAgentExecutor(
     personalSubscriptions,
     agentContextObservability,
     executorPackageRegistries,
+    resolveBinaryArtifactStore,
     webSearchAccountSettings,
     toolSecretChain,
     mcpOAuthService,
@@ -506,6 +507,7 @@ function selectWorkerAgentExecutor(
           personalSubscriptions,
           agentContextObservability,
           resolvePackageRegistries: executorPackageRegistries,
+          resolveBinaryArtifactStore,
           webSearchAccountSettings,
           resolveToolSecrets: toolSecretChain.resolver,
           // The OAuth half of the same seam: the sealed grant store plus the chain above, which is

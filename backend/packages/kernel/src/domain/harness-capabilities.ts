@@ -26,18 +26,25 @@ import type { RunnerDispatchAck, RunnerJobStopOutcome } from '../ports/runner-tr
  * (`packageRegistries`, `validation`) needs no handshake, because an older image simply does less and
  * the run reports what it did. Adding a member here is a claim that the PROMPT would lie.
  *
+ * That is also why `designImages` is a member and `referenceScreenshots` is not, though they are the
+ * same wire shape: the capture block is composed BY the harness out of what actually landed, so an
+ * image that ignores the field simply says nothing, while the design block is composed by the
+ * BACKEND (only it knows the delivery verdict and the views no container was sent) and would name a
+ * directory an older image never wrote.
+ *
  * Keyed as an exhaustive `Record` so the list below cannot drift from the union, and mirrored
  * byte-for-byte by the harness's own `HARNESS_BODY_CAPABILITIES` (the image is built from `src/`
  * plus typescript alone, so it can depend on no workspace package). The pairing is pinned by the
  * harness's `test/agent-capabilities.conformity.test.ts`, the same copy-plus-pin arrangement the
  * id/tool-name patterns use.
  */
-export type HarnessBodyCapability = 'mcpServers' | 'skills'
+export type HarnessBodyCapability = 'mcpServers' | 'skills' | 'designImages'
 
 /** Operator-facing prose for each capability: what the body carried, in words. */
 const HARNESS_BODY_CAPABILITY_LABELS: Record<HarnessBodyCapability, string> = {
   mcpServers: 'tool servers (MCP)',
   skills: 'skills',
+  designImages: 'design pictures',
 }
 
 /** Every capability the handshake covers. Derived, so it cannot drift from the union. */

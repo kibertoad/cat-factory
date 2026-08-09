@@ -79,7 +79,7 @@ import {
 } from './builder-context-files.js'
 import { type FoundationalServiceResolver } from './run-foundational-services.js'
 import { CatalogRunContext } from './run-catalog-context.js'
-import { resolveReferenceScreenshots } from './run-reference-screenshots.js'
+import { resolveRunImages } from './run-images.js'
 import { buildBlockPayload } from './builder-block-payload.js'
 import { getFragment, withDesignContextFragment } from '@cat-factory/prompt-fragments'
 import {
@@ -504,10 +504,9 @@ export class AgentContextBuilder {
       // failure policy and (on a mothership-mode node) a transport, so the collaborator owns
       // the fan-out and the shared reads inside it; see `CatalogRunContext.sliceFor`.
       catalogSlice,
-      // The reference design images this task already holds, named as the files a CAPTURING kind
-      // reads under `.cat-context/reference-screenshots/`. A spread-ready partial, empty for every
-      // kind that captures nothing, which is what keeps the two reads off their dispatch path.
-      referenceScreenshots,
+      // The task's images, from ONE read of its reference set (see `resolveRunImages`): a
+      // spread-ready partial, empty for a kind that wants neither half.
+      runImages,
     ] = await Promise.all([
       linked.linkedContext,
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -537,7 +536,7 @@ export class AgentContextBuilder {
       // step costs one extra batched query and nothing else.
       this.resolveConsensusConfig(workspaceId, step, block),
       this.catalogContext().sliceFor(workspaceId, agentKind, step, instance),
-      resolveReferenceScreenshots(this.deps, agentKind, workspaceId, block.id),
+      resolveRunImages(this.deps, agentKind, workspaceId, block.id),
     ])
     const agentConfig = block.agentConfig
     const customTaskType = this.customTaskTypeFor(block)
@@ -647,9 +646,7 @@ export class AgentContextBuilder {
       ...(catalogSlice.binaryGenerators.length
         ? { binaryGenerators: catalogSlice.binaryGenerators }
         : {}),
-      // The task's reference designs, as the files the container downloads them into (empty when
-      // this dispatch asked and the task holds none; absent when it never asked).
-      ...referenceScreenshots,
+      ...runImages,
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)

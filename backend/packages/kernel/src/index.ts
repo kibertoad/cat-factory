@@ -728,6 +728,15 @@ export {
 } from './domain/agent-capabilities.js'
 
 export {
+  type DesignImageChannel,
+  type DesignImageDelivery,
+  type DesignImageUnavailableReason,
+  HARNESS_IMAGE_INPUT,
+  harnessAcceptsImages,
+  resolveDesignImageDelivery,
+} from './domain/design-image-delivery.js'
+
+export {
   type ServiceRegistrationDeps,
   registerServiceForFrame,
 } from './domain/service-registration.js'
@@ -784,6 +793,7 @@ export {
   redactSecrets,
   redactSecretsDeep,
 } from './shared/redact-secrets.logic.js'
+export { redactImagePayloads } from './shared/redact-image-payloads.logic.js'
 export { describeProcessExit } from './shared/process-exit.logic.js'
 export {
   composePostMortem,

@@ -256,7 +256,16 @@ the `ui` image resolves the task's reference set, the job body carries it as a M
 harness downloads the images into `.cat-context/reference-screenshots/` before the agent's first
 turn. The tester is told each file's view name, so what it captures pairs with what the gate holds.
 
-### 4. Non-redundant capture heuristic
+### 4. Design pictures for the BUILDING kinds: DONE
+
+The same retained frames now also reach the kinds that build or plan a screen (the `design-images`
+trait: implementer, architect, fixer), which is the other half of "the pixels reach somebody". It is
+a separate delivery, not an extension of this one: `.cat-context/design-renders/`, capped far
+tighter (an attached image costs input tokens every turn, where a capture reference costs one
+transfer), and gated on the dispatch's harness AND model being able to carry an image at all. Model:
+[`figma-design-support.md`](../../docs/initiatives/figma-design-support.md).
+
+### 5. Non-redundant capture heuristic
 
 The "one screenshot per distinct view" dedup is prompt-driven; it'll want iteration on real apps
 (hash-based dedup of near-identical views).

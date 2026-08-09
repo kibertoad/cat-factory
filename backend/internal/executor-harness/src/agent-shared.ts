@@ -1,10 +1,4 @@
-import type {
-  AgentJob,
-  AgentResult,
-  McpServerSpec,
-  ReferenceScreenshotsSpec,
-  SkillSpec,
-} from './job.js'
+import type { AgentJob, AgentResult, McpServerSpec, ImageManifestSpec, SkillSpec } from './job.js'
 import type { EffortReport } from './effort.js'
 
 // Small helpers shared by every agent MODE (explore / coding / bootstrap / preview). They live
@@ -33,11 +27,13 @@ export function mergeEffort(
 export function agentCapabilities(job: AgentJob): {
   skills?: SkillSpec[]
   mcpServers?: McpServerSpec[]
-  referenceScreenshots?: ReferenceScreenshotsSpec
+  referenceScreenshots?: ImageManifestSpec
+  designImages?: ImageManifestSpec
 } {
   return {
     ...(job.skills?.length ? { skills: job.skills } : {}),
     ...(job.mcpServers?.length ? { mcpServers: job.mcpServers } : {}),
     ...(job.referenceScreenshots ? { referenceScreenshots: job.referenceScreenshots } : {}),
+    ...(job.designImages ? { designImages: job.designImages } : {}),
   }
 }

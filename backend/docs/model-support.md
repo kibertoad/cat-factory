@@ -72,6 +72,23 @@ Each flavour supplies its `declared`/`usable`/`build` arms through an exhaustive
 `Record<ModelFlavor, …>`, so **adding a route fails to compile until every arm is
 handled**.
 
+### Two per-flavour facts, both declared and never inferred
+
+A `ModelRef` carries `contextTokens` and `acceptsImages` beside the provider/model pair, and both
+are per FLAVOUR rather than per entry: what a serving provider does with a model is a fact about
+where it runs, not only about the model. The same catalog model can be served with a smaller window
+on one route than another, and can be served with image input on one and without on another.
+
+**Absent is a third answer for both, and `acceptsImages` is the one where it does work.** A flavour
+whose modality this catalog has not declared does NOT get a run's design pictures, and the refusal
+is reported under its own reason (`unknown_model_image_input`) rather than as "this model is
+text-only": the two send a reader to opposite places, and collapsing them would let an undeclared
+multimodal model read as a text-only one forever with nothing saying the platform never asked. So
+`acceptsImages: true` is set only where the serving provider documents image input for that model
+id; everything else is left absent, which is honest and self-correcting. The pairing with the
+harness (a CLI that cannot read an image refuses first, whatever the model does) lives in kernel's
+`resolveDesignImageDelivery`.
+
 ### The order is a per-preset choice
 
 That table is the DEFAULT order. A **model preset** can state its own
