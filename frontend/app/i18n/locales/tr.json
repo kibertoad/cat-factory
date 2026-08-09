@@ -1548,6 +1548,8 @@
       "priorDocHint": "Önceki incelemeden. Bir temel olarak kullanın: yukarıdaki açıklamayı düzenleyip yeniden gönderin.",
       "bootstrapping": "Önyükleniyor…",
       "viewRequirements": "Gereksinimleri Görüntüle",
+      "mapService": "Servisi haritala",
+      "mapServiceNoRepo": "Önce bu servise bir depo bağlayın — henüz haritalanacak bir şey yok.",
       "reRun": "Yeniden çalıştır",
       "run": "Çalıştır",
       "focus": "Odaklan",
@@ -4603,7 +4605,11 @@
     "preview": {
       "stepCount": "{count} adım | {count} adım",
       "gateCount": "{count} onay | {count} onay",
-      "gated": "Bu adımdan sonra insan onayı"
+      "gated": "Bu adımdan sonra insan onayı",
+      "conditionalCount": "{count} koşullu adım | {count} koşullu adım",
+      "conditionEstimate": "Yalnızca görev tahmini bu adımın eşiklerini aştığında çalışır",
+      "conditionFrontend": "Yalnızca görev bir ön uç servisini değiştirdiğinde çalışır",
+      "conditionBackend": "Yalnızca görev ön uç olmayan bir servisi değiştirdiğinde çalışır"
     },
     "picker": {
       "noneHint": "Varsayılan pipeline yok. Görevi çalıştırırken birini seçersin.",
@@ -4689,6 +4695,11 @@
       "edit": "Bu pipeline'ı düzenle",
       "delete": "Bu pipeline'ı sil",
       "disabledStepTooltip": "Devre dışı, çalıştırmada atlanır",
+      "condition": {
+        "always": "Her görevde çalışır — koşullu yapmak için tıklayın",
+        "frontend": "Yalnızca ön uç servisini değiştiren görevlerde çalışır",
+        "backend": "Yalnızca ön uç olmayan bir servisi değiştiren görevlerde çalışır"
+      },
       "cancelEdit": "Düzenlemeyi iptal et",
       "clear": "Temizle",
       "update": "Pipeline'ı güncelle",
@@ -4866,6 +4877,14 @@
       "elapsedTooltip": "Bu adımda geçen süre",
       "prReview": {
         "review": "Bulguları incele"
+      },
+      "skipped": {
+        "gated": "Atlandı: görev tahmini bu adımın eşiklerinin altında kaldı.",
+        "conditionFrontend": "Atlandı: bu görev hiçbir frontend servisini değiştirmiyor, dolayısıyla denenecek bir arayüz yok.",
+        "conditionBackend": "Atlandı: bu görev yalnızca bir frontend servisini değiştiriyor, dolayısıyla arkasında denenecek bir API yok.",
+        "producerSkipped": "Atlandı: incelediği adım atlandı, dolayısıyla değerlendirilecek bir şey yok.",
+        "runComplete": "Atlandı: çalışma bu adımdan önce sona erdi, yapılacak bir şey kalmadı.",
+        "unknown": "Atlandı: bu adım çalışmadı."
       }
     },
     "health": {

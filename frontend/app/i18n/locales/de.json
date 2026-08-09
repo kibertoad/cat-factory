@@ -2116,6 +2116,8 @@
       "priorDocHint": "Aus der vorherigen Prüfung. Verwende es als Basis: bearbeite die Beschreibung oben und reiche erneut ein.",
       "bootstrapping": "Wird initialisiert…",
       "viewRequirements": "Anforderungen anzeigen",
+      "mapService": "Service kartieren",
+      "mapServiceNoRepo": "Verknüpfen Sie zuerst ein Repository mit diesem Service — es gibt noch nichts zu kartieren.",
       "reRun": "Erneut ausführen",
       "run": "Ausführen",
       "focus": "Fokussieren",
@@ -4164,7 +4166,11 @@
     "preview": {
       "stepCount": "{count} Schritt | {count} Schritte",
       "gateCount": "{count} Freigabe | {count} Freigaben",
-      "gated": "Manuelle Freigabe nach diesem Schritt"
+      "gated": "Manuelle Freigabe nach diesem Schritt",
+      "conditionalCount": "{count} bedingter Schritt | {count} bedingte Schritte",
+      "conditionEstimate": "Läuft nur, wenn die Aufwandsschätzung die Schwellenwerte dieses Schritts erreicht",
+      "conditionFrontend": "Läuft nur, wenn die Aufgabe einen Frontend-Service ändert",
+      "conditionBackend": "Läuft nur, wenn die Aufgabe einen Nicht-Frontend-Service ändert"
     },
     "picker": {
       "noneHint": "Keine Standard-Pipeline. Du wählst beim Ausführen der Aufgabe eine aus.",
@@ -4254,6 +4260,11 @@
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
       },
       "disabledStepTooltip": "Deaktiviert, wird beim Lauf übersprungen",
+      "condition": {
+        "always": "Läuft bei jeder Aufgabe — klicken, um eine Bedingung zu setzen",
+        "frontend": "Läuft nur bei Aufgaben, die einen Frontend-Service ändern",
+        "backend": "Läuft nur bei Aufgaben, die einen Nicht-Frontend-Service ändern"
+      },
       "cancelEdit": "Bearbeitung abbrechen",
       "clear": "Leeren",
       "update": "Pipeline aktualisieren",
@@ -4427,6 +4438,14 @@
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
       "prReview": {
         "review": "Befunde prüfen"
+      },
+      "skipped": {
+        "gated": "Übersprungen: Die Aufgabenschätzung lag unter den Schwellenwerten dieses Schritts.",
+        "conditionFrontend": "Übersprungen: Diese Aufgabe ändert keinen Frontend-Dienst, es gibt also keine Oberfläche zu prüfen.",
+        "conditionBackend": "Übersprungen: Diese Aufgabe ändert nur einen Frontend-Dienst, es gibt also keine API dahinter zu prüfen.",
+        "producerSkipped": "Übersprungen: Der geprüfte Schritt wurde übersprungen, es gibt nichts zu bewerten.",
+        "runComplete": "Übersprungen: Der Lauf endete vor diesem Schritt, es blieb nichts zu tun.",
+        "unknown": "Übersprungen: Dieser Schritt wurde nicht ausgeführt."
       }
     },
     "health": {

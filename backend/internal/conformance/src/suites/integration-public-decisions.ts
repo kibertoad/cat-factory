@@ -481,7 +481,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     expect(initiative.headlessStartable).toBe(true)
 
     // A container/repo pipeline is never headless-startable, whatever the caller's scope.
-    const build = listed.body.pipelines.find((p) => !p.public && p.pipelineId !== 'pl_blueprint')
+    const build = listed.body.pipelines.find((p) => !p.public)
     expect(build?.headlessStartable).toBe(false)
   })
 

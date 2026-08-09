@@ -164,6 +164,31 @@ export async function personalGateForBlock(
   )
 }
 
+/** Gate for starting a SINGLE-KIND run (the "Map service" action, the wizard's deep analysis). */
+export async function personalGateForAgentKind(
+  container: ServerContainer,
+  workspaceId: string,
+  blockId: string,
+  agentKind: string,
+  user: SessionPayload | undefined,
+  password: string | undefined,
+): Promise<PersonalCredentialGate> {
+  const vendors = await container.executionService.individualVendorsForAgentKind(
+    workspaceId,
+    blockId,
+    agentKind,
+    await resolvePersonalVendorPredicate(container, user),
+  )
+  // See personalGateForBlock: drop only the vendors native mode serves ambiently.
+  const ambient = ambientVendors(container)
+  return gate(
+    container,
+    vendors.filter((v) => !ambient.has(v)),
+    user,
+    password,
+  )
+}
+
 /** Gate for RETRYING a failed run. */
 export async function personalGateForRun(
   container: ServerContainer,

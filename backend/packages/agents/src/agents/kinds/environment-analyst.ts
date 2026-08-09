@@ -136,6 +136,11 @@ export const ENVIRONMENT_ANALYST_AGENT_KINDS: AgentKindDefinition[] = [
       // Analyses how a service runs and reports findings: research, or the groundwork for a build.
       purposes: ['build', 'research'],
       tier: 'advanced',
+      // INTERNAL: the setup wizard runs this kind on demand and merges its draft into the recipe
+      // under review. A step of it in a hand-built pipeline emits a structured recommendation with
+      // nothing on the other end to receive it, so the palette does not offer it. It keeps its
+      // label / icon / result view because the wizard's run still has to RENDER as a step.
+      internal: true,
       // The structured draft opens in the shared generic viewer (no bespoke window); the wizard
       // reads it off the step and merges it over the deterministic recommendation.
       resultView: 'generic-structured',

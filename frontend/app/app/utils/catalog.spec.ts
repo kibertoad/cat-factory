@@ -12,6 +12,7 @@ import {
   SYSTEM_AGENT_META,
   agentKindMeta,
   blockTypeMeta,
+  mayCarrySkipAxis,
   uid,
 } from '~/utils/catalog'
 
@@ -211,5 +212,28 @@ describe('catalog', () => {
   it('uid produces prefixed, unique-ish ids', () => {
     expect(uid('blk')).toMatch(/^blk_[a-z0-9]+$/)
     expect(uid('blk')).not.toBe(uid('blk'))
+  })
+})
+
+describe('mayCarrySkipAxis', () => {
+  it('refuses the kinds the run structurally needs', () => {
+    // The builder offers a run condition off this predicate, and the engine refuses the same set
+    // (`assertValidRunConditions`). A condition on `merger` would drop the merge on every run
+    // outside its scope while the pipeline still finished reporting success.
+    for (const kind of ['merger', 'coder', 'ci', 'conflicts', 'deployer']) {
+      expect(mayCarrySkipAxis(kind), kind).toBe(false)
+    }
+  })
+
+  it('allows the kinds whose result later steps read as context', () => {
+    for (const kind of ['tester-ui', 'tester-api', 'architect', 'reviewer']) {
+      expect(mayCarrySkipAxis(kind), kind).toBe(true)
+    }
+  })
+
+  it('allows a DEPLOYMENT-registered kind, whose flag this build cannot see', () => {
+    // Over-offering costs a 422 with an explanatory message; under-offering silently removes a
+    // capability the deployment declared, with nothing on screen to say why.
+    expect(mayCarrySkipAxis('org:auditor')).toBe(true)
   })
 })

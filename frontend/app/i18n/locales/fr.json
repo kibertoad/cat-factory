@@ -1548,6 +1548,8 @@
       "priorDocHint": "Issu de la revue précédente. Utilisez-le comme base : modifiez la description ci-dessus et resoumettez.",
       "bootstrapping": "Initialisation…",
       "viewRequirements": "Voir les exigences",
+      "mapService": "Cartographier le service",
+      "mapServiceNoRepo": "Liez d'abord un dépôt à ce service : il n'y a encore rien à cartographier.",
       "reRun": "Relancer",
       "run": "Exécuter",
       "focus": "Cibler",
@@ -4603,7 +4605,11 @@
     "preview": {
       "stepCount": "{count} étape | {count} étapes",
       "gateCount": "{count} validation | {count} validations",
-      "gated": "Validation humaine après cette étape"
+      "gated": "Validation humaine après cette étape",
+      "conditionalCount": "{count} étape conditionnelle | {count} étapes conditionnelles",
+      "conditionEstimate": "S'exécute uniquement si l'estimation de la tâche dépasse les seuils de cette étape",
+      "conditionFrontend": "S'exécute uniquement si la tâche modifie un service frontend",
+      "conditionBackend": "S'exécute uniquement si la tâche modifie un service non frontend"
     },
     "picker": {
       "noneHint": "Aucun pipeline par défaut. Vous en choisissez un au lancement de la tâche.",
@@ -4689,6 +4695,11 @@
       "edit": "Modifier ce pipeline",
       "delete": "Supprimer ce pipeline",
       "disabledStepTooltip": "Désactivée, ignorée à l'exécution",
+      "condition": {
+        "always": "S'exécute pour chaque tâche — cliquez pour le rendre conditionnel",
+        "frontend": "S'exécute uniquement pour les tâches qui modifient un service frontend",
+        "backend": "S'exécute uniquement pour les tâches qui modifient un service non frontend"
+      },
       "cancelEdit": "Annuler la modification",
       "clear": "Effacer",
       "update": "Mettre à jour le pipeline",
@@ -4866,6 +4877,14 @@
       "elapsedTooltip": "Temps écoulé sur cette étape",
       "prReview": {
         "review": "Examiner les remarques"
+      },
+      "skipped": {
+        "gated": "Étape ignorée : l’estimation de la tâche est restée sous les seuils de cette étape.",
+        "conditionFrontend": "Étape ignorée : cette tâche ne modifie aucun service frontend, il n’y a donc pas d’interface à tester.",
+        "conditionBackend": "Étape ignorée : cette tâche ne modifie qu’un service frontend, il n’y a donc pas d’API derrière à tester.",
+        "producerSkipped": "Étape ignorée : l’étape qu’elle relit a été ignorée, il n’y a rien à évaluer.",
+        "runComplete": "Étape ignorée : l’exécution s’est terminée avant elle, sans rien à faire.",
+        "unknown": "Étape ignorée : elle n’a pas été exécutée."
       }
     },
     "health": {

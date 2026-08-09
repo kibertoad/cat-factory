@@ -28,6 +28,16 @@ import { loadCode } from './coverageScan.js'
 const ROOTS: Record<string, string> = { server: join(import.meta.dirname, '..', 'src') }
 
 /**
+ * How a run start is spelled on an HTTP route. Both belong here for the same reason: a single-kind
+ * start (`startAgentKind`) goes through the identical admission and takes the identical
+ * `initiatedByRole` off `RunStartOptions`, so a route using only that spelling is exactly as able
+ * to mint a policy-escaping run as one using `start` — and would be invisible to this scan. Kept
+ * in step with the sibling `intakeOrigin.coverage.spec.ts`, which classifies the same call sites
+ * for the other silent field.
+ */
+const START_CALLS = ['executionService.start(', 'executionService.startAgentKind(']
+
+/**
  * Routes that start a run ON BEHALF OF A SIGNED-IN PERSON acting on their own board. Each must
  * pass `initiatedByRole`, and the value must come from `runInitiatorRole` rather than a hand-rolled
  * read of the gate's context — one authority for membership (ADR 0025), one shape to audit.
@@ -53,11 +63,11 @@ const UNATTRIBUTED: Record<string, string> = {
 describe('run-start routes classify their initiator role', () => {
   const code = loadCode(ROOTS)
   const starters = [...code.entries()]
-    .filter(([, source]) => source.includes('executionService.start('))
+    .filter(([, source]) => START_CALLS.some((call) => source.includes(call)))
     .map(([key]) => key)
 
   it('finds the start routes at all (the scan itself must not silently match nothing)', () => {
-    // A rename of `executionService.start` would otherwise turn every assertion below vacuous.
+    // A rename of either spelling would otherwise turn every assertion below vacuous.
     expect(starters.length).toBeGreaterThanOrEqual(3)
   })
 

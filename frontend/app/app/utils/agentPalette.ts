@@ -44,14 +44,19 @@ export interface NarrowedAgentPalette<T> {
  * nothing behaves, and none of them is a reason to drop it from the catalog.
  */
 export function narrowAgentPalette<
-  T extends Pick<AgentArchetype, 'tier' | 'category' | 'purposes'>,
+  T extends Pick<AgentArchetype, 'tier' | 'category' | 'purposes' | 'internal'>,
 >(archetypes: readonly T[], purpose: PipelinePurpose, tier: AgentTier): NarrowedAgentPalette<T> {
+  // INTERNAL kinds are removed BEFORE either dial, and are counted by neither. They are not
+  // hidden, they are not placeable at all: the platform dispatches them for a flow of its own
+  // (the environment analyst hands its draft to the setup wizard), so counting one as
+  // "3 more at the widest tier" would send a reader to a dial that will never reveal it.
+  const placeable = archetypes.filter((a) => !a.internal)
   const relevant = (a: T) => purposeSuggestsAgentKind(purpose, a)
   const inTier = (a: T) => agentTierVisibleAt(a.tier, tier)
   return {
-    offered: archetypes.filter((a) => relevant(a) && inTier(a)),
-    hiddenByPurpose: archetypes.filter((a) => inTier(a) && !relevant(a)).length,
-    hiddenByTier: archetypes.filter((a) => relevant(a) && !inTier(a)).length,
+    offered: placeable.filter((a) => relevant(a) && inTier(a)),
+    hiddenByPurpose: placeable.filter((a) => inTier(a) && !relevant(a)).length,
+    hiddenByTier: placeable.filter((a) => relevant(a) && !inTier(a)).length,
   }
 }
 

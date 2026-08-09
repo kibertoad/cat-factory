@@ -7,6 +7,8 @@ import {
   type PreflightResult,
   type ProvisioningRecommendation,
   type StackRecipe,
+  ENVIRONMENT_ANALYST_AGENT_KIND,
+  adHocPipelineIdFor,
   analystRecipeDraftSchema,
   mergeAnalystRecipeDraft,
 } from '@cat-factory/contracts'
@@ -15,7 +17,6 @@ import { useBoardStore } from '~/stores/board'
 import { useExecutionStore } from '~/stores/execution'
 import { useGitHubStore } from '~/stores/github'
 import { useInfraConfigStore } from '~/stores/infraConfig'
-import { usePipelinesStore } from '~/stores/pipelines'
 import { usePreflightsStore } from '~/stores/preflights'
 import { useServicesStore } from '~/stores/services'
 import type { WizardContext } from '~/stores/environmentWizard/context'
@@ -43,10 +44,11 @@ import { createSaveActions } from '~/stores/environmentWizard/save'
 // recipe / save) that close over the shared reactive {@link WizardContext} assembled here — a
 // size-only extraction following the `board` store idiom, behaviour is unchanged.
 
-/** The seeded analyst-only pipeline the "run deep analysis" trigger starts against the frame. */
-const ANALYSIS_PIPELINE_ID = 'pl_environment_analysis'
-/** The analyst agent kind whose `result.custom` carries the drafted recipe. */
-const ANALYST_AGENT_KIND = 'environment-analyst'
+// The "run deep analysis" trigger starts the analyst agent as a SINGLE-KIND run — one step, no
+// pipeline — and reads the drafted recipe off that step's `result.custom`. Both the kind and the
+// id its run reports come from the shared contract, so the wizard cannot go looking for a run
+// under a name the backend stopped using.
+const ANALYSIS_PIPELINE_ID = adHocPipelineIdFor(ENVIRONMENT_ANALYST_AGENT_KIND)
 
 /** The analyst run's lifecycle as the wizard surfaces it. */
 export type AnalysisStatus = 'idle' | 'running' | 'ready' | 'failed'
@@ -57,7 +59,6 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
   const services = useServicesStore()
   const infra = useInfraConfigStore()
   const execution = useExecutionStore()
-  const pipelines = usePipelinesStore()
   const preflights = usePreflightsStore()
 
   // ---- Target frame -------------------------------------------------------
@@ -124,9 +125,10 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
 
   const hasRepo = computed(() => repoContext.value !== undefined)
 
-  /** The seeded analyst pipeline, when present in the workspace (else deep analysis is unavailable). */
-  const analysisPipeline = computed(() => pipelines.getPipeline(ANALYSIS_PIPELINE_ID))
-  const canAnalyze = computed(() => hasRepo.value && analysisPipeline.value !== undefined)
+  // Deep analysis needs only a repo to read: the agent is started by KIND, so there is no
+  // catalog row for the workspace to be missing (which is what the old `pl_environment_analysis`
+  // lookup guarded against).
+  const canAnalyze = computed(() => hasRepo.value)
 
   /** The analyst run for this frame (newest matching instance), read live from the execution store.
    *  Filters the full instance list (not the collapsing `getByBlock`, which returns a single run per
@@ -153,7 +155,7 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
   const analystDraft = computed<AnalystRecipeDraft | null>(() => {
     const run = analystRun.value
     if (!run) return null
-    const analystStep = run.steps.find((s) => s.agentKind === ANALYST_AGENT_KIND)
+    const analystStep = run.steps.find((s) => s.agentKind === ENVIRONMENT_ANALYST_AGENT_KIND)
     if (!analystStep || analystStep.state !== 'done' || analystStep.custom === undefined)
       return null
     const parsed = v.safeParse(analystRecipeDraftSchema, analystStep.custom)
@@ -207,7 +209,6 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     trialError,
     trialStarted,
     repoContext,
-    analysisPipeline,
     merged,
   }
   const flow = createFlowActions(context)

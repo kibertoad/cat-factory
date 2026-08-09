@@ -13,6 +13,7 @@ import { serviceProvisioningSchema } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
 import { frontendConfigSchema } from './frontend.js'
 import { stepGateConfigSchema } from './gate-config.js'
+import { stepRunConditionSchema } from './step-conditions.js'
 import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
@@ -854,6 +855,16 @@ export const stepOptionsSchema = v.object({
    * defaults.
    */
   gateConfig: v.optional(stepGateConfigSchema),
+  /**
+   * This step's RUN CONDITION: what has to be true of the run for the step to apply at all (see
+   * {@link stepRunConditionSchema}). Distinct from the estimate `gating` array, which asks whether
+   * the task is BIG enough; this asks whether the step is RELEVANT — a UI test on a run that
+   * changes no frontend is not an expensive test, it is a test of nothing.
+   *
+   * Evaluated at the step's own turn against the run's service scope; an unsatisfied condition
+   * finishes the step as `skipped` exactly as an unmet estimate gate does. Absent ⇒ unconditional.
+   */
+  condition: v.optional(stepRunConditionSchema),
 })
 export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
 
@@ -996,8 +1007,24 @@ export const pipelineSchema = v.object({
    * unnameable classifier means) before indexing anything by it.
    */
   purpose: pipelinePurposeSchema,
+  /**
+   * When true the pipeline is INTERNAL: the platform starts it by id for a flow of its own, and no
+   * user-facing surface offers it. It is filtered out of the workspace snapshot, the pipeline list,
+   * the task/recurring pickers and the builder library, so it can be neither picked, cloned nor
+   * edited — but it still resolves for a run, which is the whole point.
+   *
+   * The distinction it draws is between a pipeline that is a PRODUCT CHOICE (everything in the
+   * catalog) and one that is an IMPLEMENTATION DETAIL of a feature elsewhere in the app (the
+   * chain an initiative preset spawns its tasks onto). Retiring the second kind would break the
+   * feature that starts it; leaving it in the catalog offers the user a pipeline whose only
+   * sensible caller is the platform.
+   *
+   * Absent / false ⇒ an ordinary, offered pipeline.
+   */
+  internal: v.optional(v.boolean()),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
+
 export type PipelineAvailability = NonNullable<Pipeline['availability']>
 
 export const workspaceSchema = v.object({

@@ -1666,6 +1666,8 @@
       "priorDocHint": "From the previous review. Use it as a base: edit the description above and resubmit.",
       "bootstrapping": "Bootstrapping…",
       "viewRequirements": "View Requirements",
+      "mapService": "Map service",
+      "mapServiceNoRepo": "Link a repository to this service first — there is nothing to map yet.",
       "reRun": "Re-run",
       "run": "Run",
       "focus": "Focus",
@@ -4746,7 +4748,11 @@
     "preview": {
       "stepCount": "{count} step | {count} steps",
       "gateCount": "{count} approval gate | {count} approval gates",
-      "gated": "Human approval gate after this step"
+      "gated": "Human approval gate after this step",
+      "conditionalCount": "{count} conditional step | {count} conditional steps",
+      "conditionEstimate": "Runs only when the task estimate clears this step's thresholds",
+      "conditionFrontend": "Runs only when the task changes a frontend service",
+      "conditionBackend": "Runs only when the task changes a non-frontend service"
     },
     "picker": {
       "noneHint": "No default pipeline. You choose one when you run the task.",
@@ -4842,6 +4848,11 @@
         "body": "\"{name}\" will be removed. This can't be undone."
       },
       "disabledStepTooltip": "Disabled, skipped at run",
+      "condition": {
+        "always": "Runs on every task — click to make it conditional",
+        "frontend": "Runs only on tasks that change a frontend service",
+        "backend": "Runs only on tasks that change a non-frontend service"
+      },
       "cancelEdit": "Cancel edit",
       "clear": "Clear",
       "update": "Update pipeline",
@@ -5017,6 +5028,14 @@
       "elapsedTooltip": "Elapsed time on this step",
       "prReview": {
         "review": "Review findings"
+      },
+      "skipped": {
+        "gated": "Skipped: the task estimate was below this step’s thresholds.",
+        "conditionFrontend": "Skipped: this task changes no frontend service, so there is no UI to exercise.",
+        "conditionBackend": "Skipped: this task changes only a frontend service, so there is no API behind it to exercise.",
+        "producerSkipped": "Skipped: the step it reviews was skipped, so there is nothing to grade.",
+        "runComplete": "Skipped: the run finished before this step, with nothing left to do.",
+        "unknown": "Skipped: this step did not run."
       }
     },
     "health": {

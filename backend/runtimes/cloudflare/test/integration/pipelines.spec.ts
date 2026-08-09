@@ -1,4 +1,4 @@
-import { type Pipeline, seedPipelines } from '@cat-factory/kernel'
+import { type Pipeline, offeredPipelines, seedPipelines } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { makeApp, type TestApp } from '../helpers'
 
@@ -12,12 +12,16 @@ describe('pipelines', () => {
     wsId = workspace.id
   })
 
-  it('lists the seeded pipelines', async () => {
+  it('lists the seeded pipelines, minus the internal ones', async () => {
     const res = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
-    // The endpoint returns exactly the built-in catalog the kernel seeds — assert
-    // against that source of truth rather than a hardcoded list, so adding or
-    // removing a built-in pipeline doesn't churn this test.
-    expect(res.body).toEqual(seedPipelines())
+    // The endpoint returns exactly the built-in catalog the kernel seeds, minus what a user-facing
+    // surface may not OFFER — asserted against those sources of truth rather than a hardcoded
+    // list, so adding or removing a built-in pipeline doesn't churn this test.
+    const catalog = seedPipelines()
+    expect(res.body).toEqual(offeredPipelines(catalog, catalog))
+    // The catalog HAS an internal entry, or this assertion passes by comparing two identical
+    // lists and proves nothing about the filter.
+    expect(catalog.some((p) => p.internal)).toBe(true)
   })
 
   it('seeds well-formed, usable pipelines', async () => {
@@ -93,9 +97,13 @@ describe('pipelines', () => {
   })
 
   it('defaults a clone name to "<source> (copy)"', async () => {
-    const res = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines/pl_spec/clone`, {})
+    const res = await app.call<Pipeline>(
+      'POST',
+      `/workspaces/${wsId}/pipelines/pl_review/clone`,
+      {},
+    )
     expect(res.status).toBe(201)
-    expect(res.body.name).toBe('Write spec (copy)')
+    expect(res.body.name).toBe('Review a pull request (copy)')
   })
 
   it('refuses to edit a built-in pipeline (must clone first)', async () => {
@@ -135,7 +143,7 @@ describe('pipelines', () => {
   it('rejects an edit that disables every step', async () => {
     const clone = await app.call<Pipeline>(
       'POST',
-      `/workspaces/${wsId}/pipelines/pl_spec/clone`,
+      `/workspaces/${wsId}/pipelines/pl_review/clone`,
       {},
     )
     const res = await app.call('PATCH', `/workspaces/${wsId}/pipelines/${clone.body.id}`, {

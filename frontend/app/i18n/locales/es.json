@@ -1548,6 +1548,8 @@
       "priorDocHint": "De la revisión anterior. Úsalo como base: edita la descripción de arriba y reenvíala.",
       "bootstrapping": "Inicializando…",
       "viewRequirements": "Ver requisitos",
+      "mapService": "Mapear servicio",
+      "mapServiceNoRepo": "Vincula primero un repositorio a este servicio: todavía no hay nada que mapear.",
       "reRun": "Reejecutar",
       "run": "Ejecutar",
       "focus": "Enfocar",
@@ -4603,7 +4605,11 @@
     "preview": {
       "stepCount": "{count} paso | {count} pasos",
       "gateCount": "{count} aprobación | {count} aprobaciones",
-      "gated": "Aprobación humana después de este paso"
+      "gated": "Aprobación humana después de este paso",
+      "conditionalCount": "{count} paso condicional | {count} pasos condicionales",
+      "conditionEstimate": "Se ejecuta solo si la estimación de la tarea supera los umbrales de este paso",
+      "conditionFrontend": "Se ejecuta solo si la tarea modifica un servicio de frontend",
+      "conditionBackend": "Se ejecuta solo si la tarea modifica un servicio que no es de frontend"
     },
     "picker": {
       "noneHint": "Sin pipeline predeterminado. Eliges uno al ejecutar la tarea.",
@@ -4689,6 +4695,11 @@
       "edit": "Editar este pipeline",
       "delete": "Eliminar este pipeline",
       "disabledStepTooltip": "Desactivado, omitido al ejecutar",
+      "condition": {
+        "always": "Se ejecuta en todas las tareas: haz clic para condicionarlo",
+        "frontend": "Se ejecuta solo en tareas que modifican un servicio de frontend",
+        "backend": "Se ejecuta solo en tareas que modifican un servicio que no es de frontend"
+      },
       "cancelEdit": "Cancelar edición",
       "clear": "Limpiar",
       "update": "Actualizar pipeline",
@@ -4866,6 +4877,14 @@
       "elapsedTooltip": "Tiempo transcurrido en este paso",
       "prReview": {
         "review": "Revisar hallazgos"
+      },
+      "skipped": {
+        "gated": "Omitido: la estimación de la tarea quedó por debajo de los umbrales de este paso.",
+        "conditionFrontend": "Omitido: esta tarea no modifica ningún servicio de frontend, así que no hay interfaz que probar.",
+        "conditionBackend": "Omitido: esta tarea solo modifica un servicio de frontend, así que no hay API detrás que probar.",
+        "producerSkipped": "Omitido: el paso que revisa fue omitido, así que no hay nada que evaluar.",
+        "runComplete": "Omitido: la ejecución terminó antes de este paso y no quedaba nada que hacer.",
+        "unknown": "Omitido: este paso no se ejecutó."
       }
     },
     "health": {
