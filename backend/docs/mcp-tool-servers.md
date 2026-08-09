@@ -198,8 +198,8 @@ one whose post-mortem needs this most.
 A self-hosted runner pool that proxies the executor-harness verbatim should set
 `response.toolServersPath` to `toolServers` in its manifest. Leaving it unset costs the diagnostic
 and never manufactures a false one, which is exactly the trade the absent-vs-empty rule above buys.
-The mapping is written up for pool operators beside its sibling response paths in
-[`runner-pool-integration.md`](./runner-pool-integration.md#3-describe-your-scheduler-as-a-manifest-application-team).
+The mapping is written up for pool operators beside its sibling response paths on the website's
+[Integration Manifests](https://www.catfactory.ai/extend/manifests.html#response-mapping-notes).
 
 This is deliberately not the agent-context telemetry snapshot, which carried the same facts in its
 untyped `extras` bag. That snapshot is double-gated (`LLM_RECORD_PROMPTS` plus the per-workspace

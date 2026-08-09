@@ -1,5 +1,10 @@
 # Defining custom agent roles: prompt, skills, and tool servers
 
+> **Authoring a custom agent is on the website**:
+> [Custom Agents](https://www.catfactory.ai/extend/custom-agents.html) owns registering a
+> kind and declaring its capabilities. This page is the ROLE layer under it: what to write
+> in a prompt and what the platform composes around it.
+
 The authoring guide for the ROLE a custom agent kind carries: what to write in its system
 prompt and what the platform composes around it, how to author the skills (procedural
 playbooks) and tool servers (MCP) it declares, and the behaviour knobs beyond the prompt.

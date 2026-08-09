@@ -991,7 +991,7 @@ field to demand a person nobody has to send:
   parks on an ordinary approval, which arrives as a `decisions[]` entry; it is not also reported as
   unanswerable, so the two halves of one payload never contradict each other.
 
-The same blind spot applies one step earlier, at admission; see [Scopes](#scopes) below.
+The same blind spot applies one step earlier, at admission; see [Pick the right scope](#2-pick-the-right-scope) below.
 
 | Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                               |
 | ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

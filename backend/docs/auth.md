@@ -1,5 +1,11 @@
 # Authentication (SSO / GitHub / Google / password sign-in)
 
+> **Configuring sign-in is on the website**:
+> [Set Up Enterprise SSO](https://www.catfactory.ai/deploy/sso.html) owns the OIDC path end to end,
+> and [Configuration → Authentication](https://www.catfactory.ai/deploy/configuration.html#authentication)
+> owns the three consumer providers. This page is the DESIGN: the legs, what each one verifies, and
+> how a session is ended.
+
 cat-factory gates the API behind a sign-in. For an organisation the primary
 method is **enterprise SSO**: one generic OpenID Connect adapter pointed at the
 deployment's own identity provider (Okta, Microsoft Entra ID, Auth0, Keycloak,
@@ -142,47 +148,11 @@ Rule of thumb: reach for `AUTH_DEV_OPEN` when you only need the **API** open; re
 `TESTING_NO_AUTH` when you need the **SPA** to skip sign-in too (i.e. an end-to-end test of
 the assembled product). Neither runs in production.
 
-Register an OAuth app (a GitHub App's OAuth credentials work, or a classic OAuth
-App) with the callback URL `<worker-origin>/auth/callback`, then:
-
-```
-# wrangler.toml [vars]
-GITHUB_OAUTH_CLIENT_ID = "Iv1.abc123…"
-
-# secrets
-wrangler secret put GITHUB_OAUTH_CLIENT_SECRET
-wrangler secret put AUTH_SESSION_SECRET     # any high-entropy random string
-```
-
-Optional vars:
-
-| Var                         | Purpose                                                                                                            | Default                   |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------- |
-| `AUTH_SUCCESS_REDIRECT_URL` | Fixed SPA landing URL after login (recommended in production)                                                      | request-provided          |
-| `AUTH_CALLBACK_URL`         | Override `redirect_uri` when the public URL differs from origin                                                    | `<origin>/auth/callback`  |
-| `AUTH_SESSION_TTL_HOURS`    | Session lifetime in hours                                                                                          | `168` (7 days)            |
-| `AUTH_ALLOWED_LOGINS`       | Comma-separated GitHub logins permitted to sign in                                                                 | none (see access control) |
-| `AUTH_ALLOWED_ORGS`         | Comma-separated GitHub orgs whose members may sign in                                                              | none (see access control) |
-| `GITHUB_OAUTH_BASE`         | OAuth host (set for GitHub Enterprise)                                                                             | `https://github.com`      |
-| `AUTH_DEV_OPEN`             | Local/test ONLY: `true` runs the API open while unconfigured                                                       | unset (prod fails closed) |
-| `TESTING_NO_AUTH`           | Test ONLY: stronger `AUTH_DEV_OPEN` (open API + the SPA renders anonymously, no login gate). Used by the e2e suite | unset (prod refuses it)   |
-
-> **Production note:** set `AUTH_SUCCESS_REDIRECT_URL` to your SPA's URL. Without
-> it the post-login landing comes from the request's `redirect` query (dev
-> convenience), which is an open-redirect surface.
-
-### Additional login providers
-
-GitHub is not the only sign-in. Two more providers activate when configured, each
-sharing the same `AUTH_SESSION_SECRET`:
-
-| Var                          | Purpose                                                                | Default                         |
-| ---------------------------- | ---------------------------------------------------------------------- | ------------------------------- |
-| `GOOGLE_OAUTH_CLIENT_ID`     | Enables "Login with Google" (with the secret below)                    | unset (Google off)              |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret                                             | unset                           |
-| `GOOGLE_OAUTH_REDIRECT_URL`  | Override `redirect_uri` for Google                                     | `<origin>/auth/google/callback` |
-| `AUTH_PASSWORD_ENABLED`      | `true` enables email/password signup + login                           | unset (password off)            |
-| `AUTH_ALLOWED_EMAIL_DOMAINS` | Comma-separated email domains allowed to self-signup (Google/password) | none (invite-only)              |
+Registering the OAuth application and every variable a deployment sets are the site's
+[Configuration → Authentication](https://www.catfactory.ai/deploy/configuration.html#authentication);
+the variables themselves are in [`environment-variables.md`](../../docs/environment-variables.md).
+The callback URL is `<worker-origin>/auth/callback` and the Google leg's is
+`<worker-origin>/auth/google/callback`, both derived from the request origin unless overridden.
 
 `/auth/config` reports which providers are live (`providers.github` /
 `providers.password` / `providers.google` / `providers.sso`) so the SPA shows only
@@ -254,74 +224,29 @@ What each leg does:
 
 ### Configuration
 
-Register a **web / confidential** application with your provider, with the
-redirect URI `<backend-origin>/auth/sso/callback`, then:
+Setting SSO up (the application to register, the nine `AUTH_SSO_*` variables, the issuer URL per
+provider, and the four combinations that refuse to boot) is the site's
+[Set Up Enterprise SSO](https://www.catfactory.ai/deploy/sso.html).
 
-| Var                              | Purpose                                                                               | Default                      |
-| -------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------- |
-| `AUTH_SSO_ISSUER_URL`            | The provider's issuer URL. The `/.well-known/openid-configuration` suffix is optional | unset (SSO off)              |
-| `AUTH_SSO_CLIENT_ID`             | The application's client id                                                           | unset                        |
-| `AUTH_SSO_CLIENT_SECRET`         | The application's client secret                                                       | unset                        |
-| `AUTH_SSO_LABEL`                 | Sign-in button label, e.g. `Acme SSO`                                                 | `Single sign-on`             |
-| `AUTH_SSO_SCOPES`                | Space-separated scopes (`openid` is added when absent)                                | `openid profile email`       |
-| `AUTH_SSO_REDIRECT_URL`          | Override `redirect_uri` when the public URL differs from the request origin           | `<origin>/auth/sso/callback` |
-| `AUTH_SSO_ALLOWED_EMAIL_DOMAINS` | Optional narrowing: only these verified email domains may sign in                     | none (the IdP is the gate)   |
-| `AUTH_SSO_GROUPS_CLAIM`          | The claim carrying group memberships                                                  | `groups`                     |
-| `AUTH_SSO_REQUIRED_GROUPS`       | Optional narrowing: the user must be in at least one of these groups                  | none                         |
+The repo-side halves of that:
 
-Issuer URLs by provider, for reference: Okta
-`https://<org>.okta.com/oauth2/default`; Entra ID
-`https://login.microsoftonline.com/<tenant-id>/v2.0`; Auth0
-`https://<tenant>.eu.auth0.com`; Keycloak `https://<host>/realms/<realm>`; Google
-Workspace `https://accounts.google.com`; a Shibboleth IdP with the OIDC OP plugin
-`https://<idp-host>` (the plugin serves its
-`/.well-known/openid-configuration`).
+- **The four refusals are BOOT-time config validation**, not runtime guards, which is what makes
+  them safe to state absolutely: a partial variable set, a non-https issuer on a non-loopback host,
+  a weak `AUTH_SESSION_SECRET`, and dev-open alongside SSO each abort the boot with the variable
+  named. Adding a fifth belongs there, beside them, and gains a row on that page in the same change.
+- **Plain `http` is accepted for loopback** (`localhost`, `127.0.0.0/8`, `::1`) so a Keycloak or Dex
+  container on a developer's own machine works. That exemption is the reason the check is written
+  against the resolved host rather than against the scheme alone.
 
-**Four combinations refuse to boot** rather than resolving to a deployment that
-looks configured and is not. Each lands on the misconfiguration screen naming the
-variable and its remedy:
+### Why SSO is not UI-configurable
 
-1. **Partially configured** — any of the three required variables set without the
-   others. Disabling quietly would leave an operator who believes SSO is live on the
-   consumer logins they adopted SSO to replace.
-2. **A non-https issuer** on a non-loopback host (the code and ID token would cross
-   the network in clear). Plain `http` is accepted for `localhost` / `127.0.0.0/8` /
-   `::1`, so a Keycloak or Dex container on a developer's own machine works.
-3. **A weak `AUTH_SESSION_SECRET`.** SSO decides _who_ signs in; the session it
-   mints is the same HMAC bearer, so a brute-forceable secret makes the IdP's
-   guarantees irrelevant.
-4. **`AUTH_DEV_OPEN` (or `TESTING_NO_AUTH`) alongside SSO.** Dev-open serves every
-   protected route anonymously. A deployment that configured SSO to satisfy a
-   security review must not have a variable combination that opens the API, and an
-   operator cannot be relied on to notice they set both, so the pair is refused
-   rather than one silently winning.
-
-### Why SSO is configured by ENVIRONMENT, not in the UI
-
-Every other integration this product talks to (trackers, document sources, model
-providers, runner pools, email senders) is onboarded in the UI and stored sealed in
-the database, per account. SSO deliberately is not, for three reasons:
-
-- **It is the deployment's trust root, not tenant configuration.** Whoever can edit
-  the SSO provider can point it at an IdP they control and then sign in as anybody.
-  A UI-editable identity provider turns "workspace admin" into a path to every
-  account on the deployment, a privilege-escalation seam no per-field permission
-  really closes.
-- **The bootstrap is circular.** SSO gates who reaches the UI at all, so configuring
-  it from inside the UI needs a second, already-working login to exist first, which
-  is precisely the consumer login an org adopting SSO wants gone.
-- **The refusals above are BOOT-time.** "SSO and dev-open cannot both be on" and
-  "the session secret must be strong enough to sign what SSO mints" belong where the
-  process starts, not on a form submission that could leave a running deployment in
-  the refused state.
-
-The trade is real: rotating a client secret means a config change and a restart
-rather than a form. If a UI surface is wanted later, the honest shape is a
-**deployment-operator** surface (not a workspace-admin one) with the boot refusals
-re-expressed as runtime guards; it is a separate slice, recorded in the initiative
-tracker.
-
----
+The reasoning (it is the deployment's trust root, the bootstrap is circular, and the refusals are
+boot-time) is on the site's
+[Set Up Enterprise SSO](https://www.catfactory.ai/deploy/sso.html#why-sso-is-configured-in-the-environment-not-in-the-ui).
+It binds a change here: if a UI surface is ever wanted, the honest shape is a
+**deployment-operator** surface rather than a workspace-admin one, with every boot refusal above
+re-expressed as a runtime guard. A per-field permission on the existing workspace-admin surface is
+not a smaller version of that; it is the privilege-escalation seam the reasoning rules out.
 
 ## Access control
 
@@ -349,31 +274,24 @@ minted, the SPA (FE) past its login gate.
 
 ### SSO: the directory is the allowlist
 
-SSO is the one method that **admits by default**, and that is the feature rather
-than an oversight. With SSO configured, who may sign in is expressed by which
-people the application is assigned to in the directory: that is what makes
-onboarding and — the one that matters — **offboarding** a directory action instead
-of an edit to a list here. Contrast the GitHub path, which fails closed with both
-its lists empty, because there nothing else expresses who is allowed.
+SSO is the one method that **admits by default**, and that is the feature rather than an oversight:
+who may sign in is expressed by which people the application is assigned to in the directory, which
+is what makes offboarding a directory action. Contrast the GitHub path, which fails closed with both
+its lists empty, because there nothing else expresses who is allowed. The two optional narrowings
+(`AUTH_SSO_REQUIRED_GROUPS`, then `AUTH_SSO_ALLOWED_EMAIL_DOMAINS`) are on the site's
+[Set Up Enterprise SSO](https://www.catfactory.ai/deploy/sso.html#who-is-allowed-in).
 
-Two optional narrowings exist for orgs whose IdP serves more than the population
-that should reach this deployment, checked in that order:
+Two implementation facts they rest on:
 
-1. **`AUTH_SSO_REQUIRED_GROUPS`** — the user must be in at least one named
-   directory group (read from `AUTH_SSO_GROUPS_CLAIM`; the reader tolerates every
-   shape providers ship groups in, since an unread claim would refuse the whole org).
-   The list is comma-separated, so **a group name may contain spaces**
-   (`Domain Admins,Platform Engineering`): an array claim's entries are taken whole,
-   and only a bare space-separated string value is split.
-2. **`AUTH_SSO_ALLOWED_EMAIL_DOMAINS`** — their **verified** email's domain must be
-   listed. A configured domain gate with no email released is **refused**
-   (`email_required`), not admitted: admitting would silently void a rule the
-   operator wrote, and releasing the claim is their fix.
+- **The groups reader tolerates every shape providers ship groups in**, because an unread claim
+  would refuse the whole org. The configured list is comma-separated, so a group name may contain
+  spaces: an array claim's entries are taken whole and only a bare space-separated string is split.
+- **A configured domain gate with no email released is REFUSED** (`email_required`) rather than
+  admitted. Admitting would silently void a rule the operator wrote.
 
-Group memberships are read on **every** sign-in, so removing someone from a group
-blocks their next login, and their existing sessions are ended too (see
-[Session revocation](#session-revocation) below, including why a refusal caused by a
-claim that simply never arrived is deliberately not treated as an offboarding).
+Group memberships are read on **every** sign-in, and a refusal can end the sessions the person
+already holds: which refusals do, and which deliberately do not, is
+[Session revocation](#session-revocation) below.
 
 ### GitHub: login + org allowlists
 

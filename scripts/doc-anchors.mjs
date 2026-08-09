@@ -20,6 +20,23 @@
 // Pure: the caller supplies the files, so the fixtures need no tmpdir.
 
 /**
+ * Inline markup a slugifier never sees, because GitHub slugs the RENDERED heading text.
+ *
+ * Only two forms actually change the answer. A LINK's target would otherwise contribute its own
+ * characters. And an emphasis marker that survives the punctuation drop is `_`, which the slug
+ * KEEPS (`AUTH_SSO_ISSUER_URL` is `auth_sso_issuer_url`), so a heading ending
+ * `_(Application team)_` would slug with two stray underscores and every live deep-link to it would
+ * read as broken. `*` and `` ` `` are dropped by the character class anyway.
+ */
+export function stripInlineMarkup(heading) {
+  return heading
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/(^|[\s(])__?(?=\S)/g, '$1')
+    .replace(/(?<=\S)__?($|[\s).,;:!?])/g, '$1')
+}
+
+/**
  * GitHub's heading slug: lowercase, drop everything that is not a letter, digit, space, hyphen or
  * underscore, then turn each space into a hyphen.
  *
@@ -29,7 +46,7 @@
  * they are still right.
  */
 export function headingSlug(heading) {
-  return heading
+  return stripInlineMarkup(heading)
     .trim()
     .toLowerCase()
     .replace(/[^\p{L}\p{N} \-_]/gu, '')

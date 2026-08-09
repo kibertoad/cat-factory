@@ -1,5 +1,12 @@
 # Document sources
 
+> **Connecting and using a source is on the website**:
+> [Connect Issue & Document Sources](https://www.catfactory.ai/guide/issue-sources.html)
+> owns connecting one and linking material to a task, and
+> [Feed Design Context to Agents](https://www.catfactory.ai/guide/design-context.html) owns
+> the design sources that ride this integration. This page is the PROVIDER port and the
+> import/link machinery behind them.
+
 Link requirements, RFCs and PRDs from external document sources to a workspace's
 board: import a page, expand it into board structure (services → modules →
 tasks), or attach it to a task as extra context the agents read during

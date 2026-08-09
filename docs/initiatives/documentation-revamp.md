@@ -1,24 +1,22 @@
 # Documentation revamp: the repo ⇄ website split
 
-Status: **executing, with more open than the checklist read on 2026-08-09.** A review pass that
-re-checked every claim against both checkouts found three things the tracker asserted and the tree
-does not support, so the remaining scope is bigger than "15c, item 16, item 12":
+Status: **executing; items 12 and 16 are what is left.** The 2026-08-09 revision found the
+remaining scope bigger than the checklist read, and the phase that followed closed most of it: item
+17 decided manifest ownership, the website's phase E landed the four destinations that decision and
+the audit's repo-only row were waiting on, every one of the ten pointerless docs gained its pointer,
+the three reductions blocked on a missing page ran, and items 16 and 18 turned the whole
+markdown-link class from unguarded into CI-enforced in both repositories.
 
-- **Ten of the 24 "mixed" docs carry no website pointer at all**, where the classification says each
-  one opens with a pointer. The inventory is in [Slice 15 reductions](#slice-15-reductions).
-- **15c is blocked on the same question 15b handed back**, not merely queued: the site's
-  runner-pool manifest section stops above the field level exactly as its environment-provider one
-  does, so cutting toward it would repeat the mistake 15b exists to record. Both blocks resolve
-  together, in the new item 17.
-- **The audit's "no website page today" row is stale in the direction the table warns about.**
-  `debug-api.md` and `reports.md` were given pointers to pages that already own their reader; the
-  repo-only set is now `auth.md` (enterprise SSO), `reusable-operations.md` and
-  `figma-claude-design-context.md`.
+What is open, and neither is blocked on anything:
+
+- **Item 12**, rendering the `/api/v1` reference from `docs/openapi.json` onto the site, on the
+  `sync-env-vars.mjs` machinery both repos already trust.
+- **Item 16's follow-on judgement**: the guard is green and the twelve dangling links are fixed, but
+  the CHANGELOG exclusion is a decision recorded in code rather than one anybody has revisited.
 
 The sibling tracker is
 [`planning/documentation-revamp.md`](https://github.com/kibertoad/cat-factory-website/blob/main/planning/documentation-revamp.md)
-in the website repo. It reads **complete** while holding the four destinations these blocks need,
-so it reopens with a phase E rather than staying closed against work it owes.
+in the website repo, reopened with a phase E for the four destinations it owed.
 
 ## Goal and rationale
 
@@ -120,7 +118,7 @@ senior partner because it has more sections.
 
 | Topic                            | Repo doc                                                                                          | Website page                                                                | Proposed authority                                                                                                                                                                                                                                                                              |
 | -------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Custom agents                    | `backend/docs/custom-agents.md`, `custom-agent-roles.md`, `custom-agent-gate-ergonomics.md`       | `extend/custom-agents.md`, `extend/custom-gates.md`                         | Website owns authoring how-to; repo keeps engine design (registries, the three stages).                                                                                                                                                                                                         |
+| Custom agents                    | `backend/docs/custom-agents.md`, `custom-agent-roles.md`, `custom-agent-gate-ergonomics.md`       | `extend/custom-agents.md`, `extend/custom-gates.md`                         | Website owns authoring how-to; repo keeps engine design (registries, the three stages). All three now open with a pointer.                                                                                                                                                                      |
 | Public API                       | `backend/docs/public-api.md`                                                                      | `extend/public-api.md`                                                      | Website owns endpoint/scope/webhook usage; repo keeps the stability policy (ADR 0034) and the contracts → spec → SDK chain.                                                                                                                                                                     |
 | Model support                    | `backend/docs/model-support.md`                                                                   | `guide/model-providers.md`                                                  | Website owns configuration and usage; repo keeps provisioning internals. Pilot slice.                                                                                                                                                                                                           |
 | Runner pools                     | `backend/docs/runner-pool-integration.md`                                                         | `operate/runner-pools.md`                                                   | Website owns operating a pool; repo keeps the integration protocol.                                                                                                                                                                                                                             |
@@ -133,9 +131,12 @@ senior partner because it has more sections.
 | Repository layout                | root `README.md` tables                                                                           | `reference/packages.md`                                                     | Website owns the orientation map; the repo tables stay, pinned by `check-package-catalog.mjs`.                                                                                                                                                                                                  |
 | VCS support                      | `backend/docs/vcs-providers.md`, `gitlab-parity.md`                                               | `reference/vcs-support-matrix.md`                                           | Website owns the parity matrix and provider setup; repo keeps the provider-layer map and the accepted-gap log. Landed in slice 9.                                                                                                                                                               |
 | SDKs and MCP                     | `sdk/README.md`, `sdk/mcp/README.md`                                                              | `extend/sdks.md`, `extend/mcp-server.md`                                    | Website owns consuming a client; the READMEs keep the generation chain, the smoketest and releases. Landed in slice 7.                                                                                                                                                                          |
-| Integration manifests (BOTH)     | `runner-pool-integration.md` §3, `environments-integration.md` "The manifest"                     | `extend/manifests.md` (OVERVIEW ONLY)                                       | UNDECIDED, and it blocks two reductions: see item 17. The page carries the shared building blocks and a three-row operations table per manifest; neither field schema, auth-scheme table, worked example nor response-mapping rule exists there.                                                |
+| Integration manifests (BOTH)     | `runner-pool-integration.md` §3, `environments-integration.md` "The manifest"                     | `extend/manifests.md` (OWNS the format)                                     | DECIDED (item 17, outcome a): the website owns the field level for both manifests, and the shared auth-scheme table is stated there ONCE rather than per manifest. Both repo sections reduced to a pointer plus what a change HERE has to keep true (the Valibot schema's location, the derivation of `{{input.*}}`). |
 | Debug API and reports            | `backend/docs/debug-api.md`, `backend/docs/reports.md`                                            | `extend/public-api.md`, `operate/observability.md`                          | Resolved without new pages: both readers were already served, so each doc points at the page that owns its reader and keeps the design. Was a "none" row; this is the rot the paragraph above describes, caught on the 2026-08-09 re-check.                                                     |
-| Repo-only, no website page today | `backend/docs/auth.md`, `reusable-operations.md`, `figma-claude-design-context.md`                | none                                                                        | Website gains the user-facing account. The sharpest of the three is enterprise SSO: the site's `deploy/configuration.md#authentication` names three sign-in providers and never mentions OIDC, and the only trace of SSO on the site is a GENERATED env-var row linking back into this repo.    |
+| Enterprise SSO                   | `backend/docs/auth.md`                                                                            | `deploy/sso.md` (owns setup + admission)                                    | CLOSED. Was the sharpest repo-only row: the site named three sign-in providers and never mentioned OIDC. The page owns registering the application, the nine variables, the four boot refusals and the directory-as-allowlist model; the doc keeps the legs, what each verifies, and revocation.  |
+| Reusable operations              | `backend/docs/reusable-operations.md`                                                             | `extend/reusable-operations.md`                                             | CLOSED. The reader is a deployment author writing their own package against published seams, which is the Extend audience. The doc keeps the engine side: no `switch(taskType)`, the fold's three emit points, the drift guards, the mothership position.                                        |
+| Design context                   | `backend/docs/figma-claude-design-context.md`                                                     | `guide/design-context.md`                                                   | CLOSED. Was a tip box on `guide/issue-sources.md`. The page owns connecting a source, what the agent receives, what each cap asks the reader to DO, and the freshness verdicts; the doc keeps the source-neutral model and the ladder's cost model.                                              |
+| Repo-only, no website page today | none                                                                                              | n/a                                                                         | Empty for the first time since this table was written. Re-derive it, rather than trusting this cell, on the next audit pass: it is the row the "a `none` cell rots in one direction" note above is about, and an empty one rots the same way.                                                    |
 
 ## Classification (slice 1)
 
@@ -152,7 +153,7 @@ because a per-file table of 160 rows rots faster than the docs it describes.
 | `docs/initiatives/*` (64 files)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | contributor          | Describes a target state that may be partly built. Never a user-facing source.                                                                                                                            |
 | `docs/internal/*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | contributor          | This repository's own process.                                                                                                                                                                            |
 | Engine flow docs: `agent-prompt-overrides`, `bug-hunt`, `bug-triage-pipeline`, `concurrency-and-redis`, `consensus-panels`, `container-reaping`, `env-lifecycle`, `execution-state-machine`, `gitlab-parity`, `individual-subscription-usage`, `infrastructure-providers-window`, `logging`, `per-service-provisioning`, `pipeline-catalog-lifecycle`, `pipeline-pr-descriptions`, `prompt-caching`, `ralph-loop`, `requirements-review`, `review-debt-friction`, `service-connections`, `visual-confirmation`                   | contributor          | Each describes a seam, an invariant or a flow the code implements. The product behaviour they produce is described on the website by the page that owns that feature, and none of these is that page.     |
-| `model-support`, `security-model`, `storage-and-retention`, `llm-telemetry`, `custom-agents`, `custom-agent-roles`, `custom-agent-gate-ergonomics`, `mcp-tool-servers`, `custom-binary-stores`, `github-integration`, `github-operations`, `vcs-providers`, `environments-integration`, `local-k3s-environments`, `native-environment-adapter`, `kubernetes-topology`, `runner-pool-integration`, `document-sources`, `auth`, `reports`, `debug-api`, `reusable-operations`, `initiative-presets`, `figma-claude-design-context` | mixed                | Split by depth. FOURTEEN of the 24 open with a pointer naming the website page that owns the user-facing account; ten carry none, and the reduction has run on seven. Per-doc state: item 15's inventory. |
+| `model-support`, `security-model`, `storage-and-retention`, `llm-telemetry`, `custom-agents`, `custom-agent-roles`, `custom-agent-gate-ergonomics`, `mcp-tool-servers`, `custom-binary-stores`, `github-integration`, `github-operations`, `vcs-providers`, `environments-integration`, `local-k3s-environments`, `native-environment-adapter`, `kubernetes-topology`, `runner-pool-integration`, `document-sources`, `auth`, `reports`, `debug-api`, `reusable-operations`, `initiative-presets`, `figma-claude-design-context` | mixed                | Split by depth. All 24 now open with a pointer naming the website page that owns the user-facing account, and the reduction has run on twelve. Per-doc state: item 15's inventory.                        |
 | `docs/environment-variables.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | user-facing, stays   | A CI guard reads it. The website RENDERS it.                                                                                                                                                              |
 | `docs/glossary.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | contributor          | Code-level naming map; the product vocabulary is the website's glossary.                                                                                                                                  |
 | `docs/README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `AGENTS.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | contributor          | This repository's own orientation and process.                                                                                                                                                            |
@@ -246,30 +247,33 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       checked-in copy of the site's page list, which is a second routing table to keep in step and
       rots in the direction that matters most, since a page deleted from the site would stay listed
       and keep passing.
-- [ ] 15. **Finish the reductions the pointers only announced.** A pointer at the top of a doc is
+- [x] 15. **Finish the reductions the pointers only announced.** A pointer at the top of a doc is
       not the split; it is the promise of one, and on a checklist the promise reads as done. Slices
       2 to 11 reduced five things: `sdk/README.md` (-92 lines), `security-model.md` (-60),
       `vcs-providers.md` (-24), the root `README.md` (-13) and `model-support.md` §6-§8. Every other
       doc in the "mixed" row was believed to have gained a pointer over unchanged prose, which is the
-      two-parallel-full-accounts state rule 1 exists to end. One doc per PR, each section checked
-      against the LIVE page before it is cut. **15a and 15b have landed. What keeps this item open is
-      not one more reduction**: ten mixed docs have no pointer, seven of the 24 have been reduced,
-      and 15c is blocked on item 17. The per-doc state and the per-slice dispositions are their own
-      section: [Slice 15 reductions](#slice-15-reductions).
-- [ ] 16. **Guard the relative links BETWEEN repo docs**, the hole the gotcha below names: no guard
-      opens a markdown file under `backend/docs/` or `docs/`, so deleting or renaming a linked doc
-      reds nothing. It is not hypothetical rot to prevent, it is rot to clear: a scan of `main` on
-      2026-08-09 finds 43 dangling relative targets, 33 of them in generated `CHANGELOG`s and 10 in
-      live docs. Those 10 are the reason this is a slice rather than a rider on a reduction PR.
-      Three (`custom-initiative-definitions.md`) point at trackers that converted to ADRs 0013, 0016
-      and 0028 and were `git rm`ed, which is exactly the failure mode 15a's judges link is queued to
-      repeat; three more (`initiative-presets.md`) point at the same three trackers AND with the
-      wrong `../` depth; two ADRs (0033, 0038) have the depth wrong on targets that do exist;
-      `model-support.md` names a moved source file; `frontend/app/app/docs/architecture.md` names a
-      `README.md` that is not there. Each needs a judgement about what the link should now say, and
-      the same PR decides whether a generated `CHANGELOG` is in scope at all (they are frozen
-      history, correctly naming what was true when written, and already on `.oxfmtrc.json`'s ignore
-      list) before the guard can be turned on green.
+      two-parallel-full-accounts state rule 1 exists to end. Each section checked
+      against the LIVE page before it is cut. CLOSED: all 24 mixed docs open with a pointer and
+      twelve have been reduced. The three that had nothing to point AT (`auth`,
+      `reusable-operations`, `figma-claude-design-context`) got their destinations in the website's
+      phase E and were reduced in the same change, and 15b's parked half and 15c both ran once item
+      17 landed. The per-doc state and the per-slice dispositions are their own section:
+      [Slice 15 reductions](#slice-15-reductions).
+- [x] 16. **Guard the relative links BETWEEN repo docs.** `scripts/check-doc-links.mjs` (detection
+      in `doc-links.mjs`, fixtures beside it) resolves every relative markdown link to a path and,
+      where it deep-links one, a heading. Generated `CHANGELOG`s are OUT of scope, stated in the
+      guard: they are frozen history correctly naming what was true when written, and rewriting one
+      to chase a moved file would falsify the record. That is 33 of the 43 dangling targets the scan
+      found; the other 10 were fixed, and reading anchors as well as paths turned up two more the
+      path-only scan could not see. Three notes for whoever touches it:
+      **(a)** it reuses `linkTargets` / `isRelativePath` from the shipped-doc guard and
+      `documentAnchors` from the anchor guard, so there is no third copy of either rule to drift.
+      **(b)** `headingSlug` gained inline-markup stripping in the same change, because `_` survives
+      GitHub's punctuation drop, so a heading ending `_(Application team)_` slugged with two stray
+      underscores and every live link to it read as broken.
+      **(c)** a link inside a FENCE is an illustration, and reading one as real produced both halves
+      of a bad guard: it misses nothing real, and a PowerShell `[Net.ServicePointManager]::…` line
+      parses as a reference definition, failing a document nobody could fix.
 - [x] 13. The website's page-quality pass (its phase D) landed in
       [cat-factory-website#24](https://github.com/kibertoad/cat-factory-website/pull/24): the
       opening/closing shape on the pages that predate the revamp, task-oriented titles on the how-to
@@ -277,7 +281,7 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       split that matters here is `extend/custom-agents.md`, which shed gates, step-completion
       resolvers and judges to `extend/custom-gates.html`, so a repo doc reducing a JUDGE section
       points at that page rather than the agents one.
-- [ ] 17. **Decide who owns the MANIFEST FORMAT, because two reductions are parked on it.** A
+- [x] 17. **Decide who owns the MANIFEST FORMAT, because two reductions are parked on it.** A
       manifest is authored by a user, in the app, with no checkout, so rule 1's reader test puts the
       format on the website. The site's `extend/manifests.md` was scoped as an overview and stops at
       the shared building blocks plus a three-row operations table per manifest, which is why 15b
@@ -287,20 +291,27 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       reduce to a pointer; **(b)** the format joins the named exceptions of rule 4 alongside
       `environment-variables.md`, the repo owns it, and both reductions stop being planned. What is
       NOT admissible is leaving it undecided while slices keep scoping cuts toward a page that
-      cannot receive them. Recommended: (a), because nothing about a manifest needs the code open,
-      and (b) would put the one format a non-contributor edits by hand behind a checkout.
-- [ ] 18. **Guard the repo → website links from the WEBSITE repo**, which is the option item 14 did
+      cannot receive them. LANDED AS (a), because nothing about a manifest needs the code open,
+      and (b) would put the one format a non-contributor edits by hand behind a checkout. The site's
+      page gained the field level for both manifests and states that it is the authority for the
+      format; the shared auth-scheme table is stated there ONCE rather than duplicated per manifest,
+      which neither repo doc could do. 15b's parked half and 15c then ran, each keeping only what a
+      change in THIS repo has to hold: where the Valibot schema lives, and that a field added there
+      is a field the website page gains in the same change.
+- [x] 18. **Guard the repo → website links from the WEBSITE repo**, which is the option item 14 did
       not consider. It rejected a checked-in page list for rotting in the deletion direction, and
       that objection is right; it does not apply to a check that runs where the pages ARE. The site
       repo already reaches into this one on a schedule for `sync-env-vars.mjs --check`, so the same
       job resolves every `catfactory.ai` URL in the code repo to a page file AND a heading, with no
-      second routing table and no network dependence on the live site. Measured on 2026-08-09: 44
-      distinct URLs, all resolving. Two traps for whoever writes it. The slug rule is
-      **`@mdit-vue/shared`'s, not GitHub's**: it maps every punctuation run to `-`, so
-      `## When the manifest isn't enough` is `#when-the-manifest-isn-t-enough`, and a GitHub-style
-      slugifier reports that live link as broken. And the coupling runs BOTH ways, since the
-      generated env-var page links `auth.md#enterprise-sso-generic-oidc` in this repo, so a repo
-      heading is load-bearing from the site and the same job should resolve the reverse direction.
+      second routing table and no network dependence on the live site. LANDED as `scripts/check-repo-links.mjs` there, on a weekly
+      `cross-repo-links.yml`, resolving both directions in one pass. Both predicted traps were real
+      and are handled: the slug rule is **`@mdit-vue/shared`'s, not GitHub's** (it maps every
+      punctuation run to `-`, so `## When the manifest isn't enough` is
+      `#when-the-manifest-isn-t-enough`), and the coupling runs BOTH ways, since the generated
+      env-var page links `auth.md#enterprise-sso-generic-oidc` here. A third turned up in writing it:
+      a REDIRECTED URL still resolves for a reader, so the guard reads each page's own
+      `redirectFrom` frontmatter rather than keeping a list, which is the same reason a moved page
+      carries its redirect in the first place.
 
 ## Slice 15 reductions
 
@@ -317,39 +328,41 @@ Item 17 is the follow-on that trap earned: the page it points at does not hold a
 
 ### Per-doc state of the "mixed" row
 
-Re-derived from both checkouts on 2026-08-09, because the checklist's prose had drifted from the
-tree. `pointer` means the doc opens by naming the website page that owns its user-facing account.
+Re-derived from both checkouts, because the checklist's prose had drifted from the tree once
+already. `pointer` means the doc opens by naming the website page that owns its user-facing account.
 
-| Doc                               | Pointer | Reduced     | What it still owes                                                                      |
-| --------------------------------- | ------- | ----------- | --------------------------------------------------------------------------------------- |
-| `model-support.md`                | yes     | yes (§6-§8) | nothing                                                                                 |
-| `security-model.md`               | yes     | yes (-60)   | nothing                                                                                 |
-| `vcs-providers.md`                | yes     | yes (-24)   | nothing                                                                                 |
-| `custom-agents.md`                | yes     | yes (15a)   | nothing                                                                                 |
-| `environments-integration.md`     | yes     | yes (15b)   | the manifest half, parked on item 17                                                    |
-| `llm-telemetry.md`                | yes     | not needed  | nothing: the clean-split model to copy                                                  |
-| `runner-pool-integration.md`      | yes     | BLOCKED     | §3, parked on item 17; everything else stays                                            |
-| `storage-and-retention.md`        | yes     | unassessed  | a read against `operate/upgrades-and-retention.html`                                    |
-| `github-integration.md`           | yes     | unassessed  | a read against `deploy/github-app.html`                                                 |
-| `github-operations.md`            | yes     | unassessed  | the runbook stays; setup already moved                                                  |
-| `kubernetes-topology.md`          | yes     | unassessed  | a read against `deploy/kubernetes.html`                                                 |
-| `mcp-tool-servers.md`             | yes     | unassessed  | a read against `extend/mcp-server.html` and the custom-agents anchor                    |
-| `debug-api.md`                    | yes     | unassessed  | a read against `extend/public-api.html`                                                 |
-| `reports.md`                      | yes     | unassessed  | a read against `operate/observability.html`                                             |
-| `custom-agent-roles.md`           | NO      | no          | pointer at `extend/custom-agents.html`                                                  |
-| `custom-agent-gate-ergonomics.md` | NO      | no          | pointer at `extend/custom-gates.html`                                                   |
-| `custom-binary-stores.md`         | NO      | no          | pointer at `extend/custom-providers.html`, which already links BACK to this doc         |
-| `native-environment-adapter.md`   | NO      | no          | pointer at `extend/custom-providers.html`                                               |
-| `local-k3s-environments.md`       | NO      | no          | pointer at `operate/environments.html` plus `deploy/kubernetes.html`                    |
-| `document-sources.md`             | NO      | no          | pointer at `guide/documents.html`; the heaviest remaining UI how-to in `backend/docs`   |
-| `initiative-presets.md`           | NO      | no          | pointer at `guide/initiatives.html`, which already covers presets including custom ones |
-| `auth.md`                         | NO      | no          | a website destination for enterprise SSO first: see the audit's repo-only row           |
-| `reusable-operations.md`          | NO      | no          | a website destination first: the site has no page for it at all                         |
-| `figma-claude-design-context.md`  | NO      | no          | a website destination first: design context is a passing mention on two pages           |
+| Doc                               | Pointer | Reduced        | What it still owes                                                            |
+| --------------------------------- | ------- | -------------- | ----------------------------------------------------------------------------- |
+| `model-support.md`                | yes     | yes (§6-§8)    | nothing                                                                       |
+| `security-model.md`               | yes     | yes (-60)      | nothing                                                                       |
+| `vcs-providers.md`                | yes     | yes (-24)      | nothing                                                                       |
+| `custom-agents.md`                | yes     | yes (15a)      | nothing                                                                       |
+| `environments-integration.md`     | yes     | yes (15b + 15e) | nothing: the manifest half went once item 17 landed                          |
+| `runner-pool-integration.md`      | yes     | yes (15c)      | nothing: §3 is a pointer, 701 → 520 lines                                     |
+| `auth.md`                         | yes     | yes (15f)      | nothing                                                                       |
+| `reusable-operations.md`          | yes     | yes (15g)      | nothing                                                                       |
+| `figma-claude-design-context.md`  | yes     | yes (15h)      | nothing                                                                       |
+| `llm-telemetry.md`                | yes     | not needed     | nothing: the clean-split model to copy                                        |
+| `custom-agent-roles.md`           | yes     | not assessed   | a read against `extend/custom-agents.html`                                    |
+| `custom-agent-gate-ergonomics.md` | yes     | not assessed   | a read against `extend/custom-gates.html`                                     |
+| `custom-binary-stores.md`         | yes     | not assessed   | a read against `extend/custom-providers.html`                                 |
+| `native-environment-adapter.md`   | yes     | not assessed   | a read against `extend/custom-providers.html`                                 |
+| `local-k3s-environments.md`       | yes     | not assessed   | a read against `operate/environments.html` + `deploy/kubernetes.html`         |
+| `document-sources.md`             | yes     | not assessed   | a read against `guide/issue-sources.html`; the heaviest remaining UI how-to   |
+| `initiative-presets.md`           | yes     | not assessed   | a read against `guide/initiatives.html`                                       |
+| `storage-and-retention.md`        | yes     | not assessed   | a read against `operate/upgrades-and-retention.html`                          |
+| `github-integration.md`           | yes     | not assessed   | a read against `deploy/github-app.html`                                       |
+| `github-operations.md`            | yes     | not assessed   | the runbook stays; setup already moved                                        |
+| `kubernetes-topology.md`          | yes     | not assessed   | a read against `deploy/kubernetes.html`                                       |
+| `mcp-tool-servers.md`             | yes     | not assessed   | a read against `extend/mcp-server.html` and the custom-agents anchor          |
+| `debug-api.md`                    | yes     | not assessed   | a read against `extend/public-api.html`                                       |
+| `reports.md`                      | yes     | not assessed   | a read against `operate/observability.html`                                   |
 
-The ten pointerless rows are not one PR. Seven need only a pointer and can ride together; three
-(`auth`, `reusable-operations`, `figma-claude-design-context`) have nothing to point AT, so they wait
-on the website's phase E and the ordering rule forbids writing the link first.
+**"Not assessed" is the honest state and it is not "done".** Twelve rows have had a section-by-section
+read against the live page; twelve have a pointer over prose nobody has compared. That is a weaker
+position than the reduced rows and a stronger one than where this item started, where the pointer
+itself was missing. The next pass takes them in the order above and writes its verdict into the row,
+including "nothing to cut", which `llm-telemetry.md` shows is a real answer.
 
 ### 15a. `custom-agents.md`: DONE (553 → 326 lines)
 
@@ -406,24 +419,100 @@ Every heading survived the cut on purpose: five of them are deep-linked from els
 file (six links, one heading targeted twice), and per the gotcha below nothing would have gone red
 had one been renamed.
 
-### 15c. `runner-pool-integration.md` (701 lines): BLOCKED on item 17
+### 15c. `runner-pool-integration.md`: DONE (701 → 520 lines)
 
-The MILD case and the one most likely to be over-cut. `operate/runner-pools.html` (119 lines) has
-four sections; almost everything here is genuinely deeper. The runner image and job protocol (117),
-the k3s/Nomad mapping (48), the trust boundary (41) and scaling (25) all stay, as planned.
+The MILD case and the one most likely to be over-cut. `operate/runner-pools.html` has four sections;
+almost everything here is genuinely deeper. The runner image and job protocol, the k3s/Nomad
+mapping, the trust boundary and scaling all stayed, as planned.
 
-**The one section the plan assigned away cannot be cut, and it fails the same check 15b ran.**
-`## 3. Describe your scheduler as a manifest` (203 lines: template variables, two worked examples,
-the auth-scheme table, the response-mapping notes) was assigned to
-`extend/manifests.html#runner-pool-manifest`. That section is a three-row operations table, a
-variable list and one sentence about response mapping. Cutting toward it would delete both worked
-examples and the auth-scheme detail with nothing receiving them, which is 15b's finding re-made on
-the sibling manifest.
+**`## 3. Describe your scheduler as a manifest` (203 lines) was the one section the plan assigned
+away, and it could not be cut until item 17 landed**, for the reason 15b recorded on the sibling
+manifest: the page it was assigned to was a three-row operations table. With the website owning the
+field level it reduces to a pointer plus two facts that are about THIS repository rather than about
+authoring a manifest: the Valibot schema's location (so a field added there is a field the page
+gains in the same change), and that the interpreter is one generic provider with no per-scheduler
+code path, so a shape the manifest cannot express is a custom runner backend rather than a special
+case.
 
-Two for two is a pattern, not an accident, so the fix belongs upstream of this slice: item 17
-decides manifest ownership, and 15c runs after. If item 17 lands (a), §3 reduces to a pointer and
-this doc drops to roughly 500 lines. If it lands (b), 15c closes with no reduction at all and says
-why.
+The heading survived the cut on purpose: `mcp-tool-servers.md` deep-linked it, and the section
+numbering is referenced in prose elsewhere in the file. That inbound link was repointed at the
+website page in the same change, because what it was sent for is no longer here: keeping the heading
+is what stops the link 404ing, and repointing it is what makes it useful.
+
+### 15d. The pointer sweep: seven docs, one change
+
+Seven of the ten pointerless docs needed nothing but the pointer, so they rode together rather than
+one PR each: `custom-agent-roles`, `custom-agent-gate-ergonomics`, `custom-binary-stores`,
+`native-environment-adapter`, `local-k3s-environments`, `document-sources` and `initiative-presets`.
+The other three had nothing to point AT and waited on the website's phase E, which is 15f to 15h.
+
+Two things the sweep settled that a reduction PR would have buried:
+
+- **A pointer names what THIS doc is, not only where the how-to went.** "Setting one up is on the
+  website" alone leaves the reader guessing whether anything here is still worth reading. Each of
+  the seven ends with a clause naming what it keeps ("this page is the ROLE layer under it", "the
+  CONTRACT for writing one adapter"), which is also what makes the later depth read possible: the
+  claim is now written down and can be checked against the file.
+- **Two of the seven point at a page that already links BACK.** `custom-binary-stores.md` and
+  `native-environment-adapter.md` are both reached from `extend/custom-providers.html`, so the pair
+  was one-directional until now, in the direction that helps the reader least: somebody in the
+  repository could not find the page, while somebody on the page could find the doc.
+
+### 15e. `environments-integration.md`: the parked manifest half (352 → 226 lines)
+
+15b kept `## The manifest` and said in the doc why. Item 17 removed the reason. What stays is three
+facts, and the shape of them is the model for the next reduction of this kind: not a summary of the
+page, but the things a change in this repository has to keep true. Where the schema lives. That
+`{{input.*}}` on a `deployer` step is DERIVED by the engine from the block and its open pull
+request, which is why an explicit request input winning is a design decision rather than a fallback.
+And that a dot-path is the deliberate boundary of the integration, so a platform that outgrows it
+gets the code-adapter seam rather than an expression language.
+
+### 15f. `auth.md` (523 → 440 lines)
+
+Cut: the OAuth application registration recipe, the two variable tables, the SSO configuration
+table, the issuer URLs by provider, the four boot refusals in operator form, and the three reasons
+SSO is not UI-configurable. All of it is what an operator sets, and all of it is now on
+`deploy/sso.html`.
+
+Kept, and worth naming because the cut looks bigger than it is: every leg of every flow, what each
+one verifies (the issuer-qualified subject, asymmetric-only ID tokens, the single JWKS refetch, the
+userinfo subject match, the separate cookie audience), and the whole of session revocation including
+the `directory` versus `indeterminate` evidence distinction. That distinction is the sharpest thing
+in the file and it is engine behaviour, not configuration: acting on the second as if it were the
+first turns a configuration regression into a deployment-wide forced sign-out.
+
+Two couplings the cut had to carry. `docs/environment-variables.md` deep-links
+`#enterprise-sso-generic-oidc`, so that heading stays. And `enterprise-sso-oidc.md` deep-linked the
+section this slice renamed, which is exactly the breakage item 16's guard was written for: the guard
+caught it in the same run.
+
+### 15g. `reusable-operations.md` (675 → 481 lines)
+
+The largest single reduction of the initiative, and the one where the split line was clearest.
+Everything an author DOES (which vehicle, the descriptor's fields, the form vocabulary, the
+boot-validation codes, the composition-root walkthrough, what users see, suppression, public-API
+discovery) went to `extend/reusable-operations.html`. Everything the ENGINE guarantees stayed: no
+`switch(taskType)` anywhere, the fold's three emit points, the value-authoritative drift rule, the
+three drift guards behind the facade dependency rule, adoption on the run path, and the mothership
+position.
+
+The bundle section is the pattern to copy when the two halves are genuinely about the same fields:
+rather than summarising the descriptor, the table now says where each field is READ, which is the
+half a change here has to keep true and the half the page has no reason to carry.
+
+### 15h. `figma-claude-design-context.md` (357 → 341 lines)
+
+The smallest reduction, and deliberately so. Most of this doc is integration internals (the
+source-neutral `DesignContext` model, why each cap is shaped the way it is, the freshness ladder's
+cost model, the per-provider endpoint shapes) that no user-facing page should carry. What moved was
+the problem statement, the cap table in the form that tells a reader what to DO about each one, and
+the Claude Design workflow.
+
+Claude Design is the interesting row: the WORKFLOW moved, and the reason there is no provider
+STAYED, because a per-user-PAT Claude Design provider was built here and removed. That is a record
+of a rejected design, which is contributor material by definition, and deleting it would let the
+next iteration re-propose it.
 
 `llm-telemetry.md` is the model of a clean split and needs nothing: every section is an internal rule
 with no counterpart on the site. Copy its shape.
@@ -510,15 +599,15 @@ converts.
   the inbound links in the same PR. Slice 7 took the second route for `#pointing-an-sdk-at-localhost-or-a-mock`
   and slice 2 took the first, because `model-support.md`'s anchors are linked from RUNTIME ERROR
   MESSAGES (`agents/src/providers/docs.ts`), where a stale link reaches an operator with no way back.
-- **A relative link between two REPO docs is unguarded, and it is easy to believe otherwise, because
-  the two guards that sound like they cover it each cover something adjacent.**
-  `check-shipped-doc-links.mjs` walks the published package directories only, so it never opens a
-  file under `backend/docs/` or `docs/`; `check-doc-anchors.mjs` resolves only the URLs that CODE
-  builds. Nothing reads an ordinary markdown link, so `git rm`ing a doc, renaming one, or getting the
-  `../` depth wrong is green. That matters most where this repo deletes docs ON PURPOSE: CLAUDE.md
-  says a completed initiative tracker converts to an ADR and the tracker is `git rm`ed in the same
-  PR, which dangles every repo doc that linked it. Assume no guard, repoint by hand in the PR that
-  moves the file, and see item 16 for closing the class.
+- **A relative link between two REPO docs is GUARDED now (item 16), and the belief that it already
+  was is what let the class grow.** Two guards sound like they cover it and each covers something
+  adjacent: `check-shipped-doc-links.mjs` walks the published package directories only, so it never
+  opens a file under `backend/docs/` or `docs/`, and `check-doc-anchors.mjs` resolves only the URLs
+  that CODE builds. `check-doc-links.mjs` reads the ordinary markdown link. It matters most where
+  this repo deletes docs ON PURPOSE: CLAUDE.md says a completed initiative tracker converts to an
+  ADR and is `git rm`ed in the same PR, which dangles every doc that linked it, and six of the
+  twelve live breakages were exactly that. **Still repoint by hand in the PR that moves a file**:
+  the guard tells you the link is dead, and only you know what it should now say.
 - **An anchor linked from CODE is a different coupling from one linked in markdown, and slice 9
   broke it.** Reducing `vcs-providers.md` deleted `## Setup`, which the GitLab webhook-rejection
   warning deep-linked as `DOCS.vcsProviders('setup')`: an operator following it from the logs landed
@@ -530,16 +619,17 @@ converts.
   `check-doc-anchors.mjs` resolves every such target. **Before reducing a doc, grep `config/docs.ts`,
   `vcs-errors.ts` and `providers/docs.ts` for it**; a remedy whose instruction the website now owns moves to `SITE_DOCS`,
   and one about this repo's internals keeps its heading.
-- **The ordering rule cuts both ways across two repositories.** "Land the website page FIRST" is
-  right, but the two repos merge independently and neither CI can see the other, so a link is not
-  self-evidently correct at review time and a reviewer cannot be asked to hold the site's deploy
-  state in their head. It stays a human step in THIS repo (LOAD the page before you link it, and say
-  in the PR that you did), but "there is no guard for this" was too strong a reading of item 14's
-  rejection: it ruled out a page list checked in HERE, not a check run in the repo that holds the
-  pages. Item 18 is that check.
-- **A repo → website link is CHEAP to write and the count is now the exposure.** 44 distinct
-  `catfactory.ai` URLs are built from this repo (docs, code and shipped READMEs), all resolving on
-  2026-08-09, and every reduction adds more, since the pointer IS the deliverable. The reader who
+- **The ordering rule cuts both ways across two repositories, and the guard for it is
+  DELIBERATELY not a pull-request gate.** "Land the website page FIRST" is right, but the two repos
+  merge independently and neither CI can see the other, so for the life of a paired change one side
+  legitimately leads. Item 18's `check-repo-links.mjs` runs WEEKLY in the website repo for exactly
+  that reason: as a gate it would go red on the reviewing repo for a reason that pull request cannot
+  fix, which is how a guard gets ignored and then deleted. So it stays a human step here (LOAD the
+  page before you link it, and say in the PR that you did) with a scheduled net underneath, and a
+  paired change can confirm itself by running that workflow against the branch.
+- **A repo → website link is CHEAP to write and the count is now the exposure.** Over a hundred
+  `catfactory.ai` links are built from this repo (docs, code and shipped READMEs), and every
+  reduction adds more, since the pointer IS the deliverable. Item 18 is what resolves them. The reader who
   loses is the one following a pointer out of a doc that no longer carries the content, which is the
   worst failure the split can produce: the material exists nowhere the reader can reach.
 - **`check-reserved-env-keys.mjs` is a SAME-REPO coupling, not a file-path one.** It reads
