@@ -8,8 +8,10 @@ the seams. The worked reference is `backend/internal/example-custom-agent`.
 > **Authoring one is documented on the website**:
 > [Custom Agents & Gates](https://www.catfactory.ai/extend/custom-agents.html) walks an author
 > through registering a kind, a gate or a judge from a deployment repository, with
-> [Integration Manifests](https://www.catfactory.ai/extend/manifests.html) beside it. This page is
-> the ENGINE design behind those seams: the three stages, what each registry owns, and the
+> [Integration Manifests](https://www.catfactory.ai/extend/manifests.html) beside it. That page
+> owns the registration example, the `AgentKindDefinition` field table, the surfaces, the
+> structured-output schema story, packaging and boot validation. This page is the ENGINE design
+> behind those seams: what each registry owns, how the hooks are bound and run, and the
 > invariants a new capability has to keep.
 
 > For the ergonomics layered on these seams: provider tokens, schema-driven structured
@@ -35,91 +37,24 @@ agent.
 
 ## The three stages
 
-Every agent decomposes into three stages; the container runs only the middle one:
-
-1. **`preOps`**: deterministic backend TypeScript run BEFORE the agent step. Reads a
-   targeted, known subset of the repo (and may commit) over the checkout-free
-   [`RepoFiles`](../packages/kernel/src/ports/repo-files.ts) port: **no checkout**.
-2. **`agent`**: an optional LLM step on one of three surfaces:
-   - `inline`: a one-shot LLM call over the block context; no repo, no container.
-   - `container-explore`: a read-only clone; returns prose, or (for
-     `output.kind === 'structured'`) a parsed JSON object surfaced as `result.custom`.
-   - `container-coding`: clones, edits a working tree, commits + pushes (optionally
-     opens a PR).
-3. **`postOps`**: deterministic backend TypeScript run AFTER the agent returns. Parses
-   the structured output (`ctx.result.custom`), renders artifact files and commits them
-   via `RepoFiles`.
-
-`preOps`/`postOps` are plain functions (`RepoOp`), so a custom agent ships its mechanical
-logic as ordinary backend code that runs identically on every runtime facade (Cloudflare
-Worker, Node, local): `RepoFiles` talks only HTTP (the GitHub Git Data + contents API),
-so the Worker's lack of a filesystem never matters.
+`preOps` (backend TS, before the LLM step) → `agent` (the optional LLM step, on an `inline`,
+`container-explore` or `container-coding` surface) → `postOps` (backend TS, after it returns).
+The container runs only the middle stage. The website's
+[mental model](https://www.catfactory.ai/extend/custom-agents.html#the-mental-model-three-stages)
+is the account to read; what matters here is the port the hooks run over:
+[`RepoFiles`](../packages/kernel/src/ports/repo-files.ts), which talks only HTTP (the GitHub Git
+Data + contents API). That is why a hook is runtime-neutral by construction and the Worker's lack
+of a filesystem never enters the design.
 
 ## The seams
 
 A deployment registers a kind by reference on the facade's app-owned registries at startup
 (the same app-owned-DI seam as the model-provider `CompositeModelProvider`): a deployment
 news the registries, registers its extensions on them, and injects the SAME instances into
-`buildContainer`/`createApp`/`start()`:
-
-```ts
-import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { PipelineRegistry } from '@cat-factory/kernel'
-
-// The `agentKindRegistry` / `pipelineRegistry` here are the instances the facade injects.
-agentKindRegistry.register({
-  kind: 'security-auditor',
-  systemPrompt: 'You are a security auditor. … Return ONLY a JSON object { … }.',
-  // The optional LLM step's surface + output/clone spec.
-  agent: {
-    surface: 'container-explore',
-    output: { kind: 'structured', shapeHint: '{ "risk": number, "findings": [...] }' },
-    clone: { branch: 'pr' },
-  },
-  // Deterministic backend hooks (RepoOp[]) - run on the backend, never in the container.
-  // postOps consume `ctx.result.custom`, render files, and commit via `ctx.repo`.
-  postOps: [renderComplianceReportPostOp],
-  // Frontend display metadata → serialised into the workspace snapshot so the kind
-  // becomes a first-class palette block + result view.
-  presentation: {
-    label: 'Security Auditor',
-    icon: 'i-lucide-shield-check',
-    color: '#ef4444',
-    description: 'Read-only security audit; renders a compliance report into the repo.',
-    category: 'review',
-    // The pipeline purposes the palette offers the kind to, WITHIN the ones its category
-    // already admits. Omitted ⇒ the category alone decides, which is the normal case; declare
-    // it only to opt OUT of a purpose the section would admit. It can never widen (relevance
-    // stays inside what the save gate accepts), and an EMPTY list is refused at registration
-    // because the palette cannot tell one from declaring nothing.
-    purposes: ['build', 'review'],
-    // How specialist the kind is: `basic` puts it in the palette's default view, `advanced`
-    // only at the widest setting. Omitted ⇒ `intermediate` (see `DEFAULT_AGENT_TIER`).
-    tier: 'intermediate',
-    resultView: 'generic-structured',
-  },
-})
-
-pipelineRegistry.register({
-  id: 'pl_org_audit',
-  name: 'Org compliance audit',
-  agentKinds: ['org-reviewer', 'security-auditor'],
-})
-```
-
-### `AgentKindDefinition` (in `@cat-factory/agents`)
-
-| Field                                                 | Purpose                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`                                                | The free-form agent-kind id used in pipelines + steps.                                                                                                                                                                                                                                                                                                                     |
-| `systemPrompt`                                        | Role prompt (string, or a `(kind) => string` for a family).                                                                                                                                                                                                                                                                                                                |
-| `userPrompt?`                                         | Custom user-prompt builder; omitted ⇒ the generic block-context prompt.                                                                                                                                                                                                                                                                                                    |
-| `agent?`                                              | The LLM step's `AgentStepSpec` (`surface`, `output`, `clone`, `infra`). Omitted ⇒ pure pre/post-op work, no LLM.                                                                                                                                                                                                                                                           |
-| `preOps?` / `postOps?`                                | `RepoOp[]`: deterministic backend hooks over `RepoFiles`.                                                                                                                                                                                                                                                                                                                  |
-| `presentation?`                                       | Frontend `label`/`icon`/`color`/`category`/`purposes`/`tier`/`resultView`. Declaring it is what makes the kind a PLACEABLE palette block (it is the filter `snapshotCustomAgentKinds` applies); omit it only for a kind no one should add to a pipeline of their own.                                                                                                      |
-| `traits?`, `configContributions?`, `webResearchHint?` | Optional capability traits, task-level config params, web-search nudge.                                                                                                                                                                                                                                                                                                    |
-| `skills?` / `toolServers?`                            | The procedural playbooks the kind applies and the MCP tool servers it may call: see "Capabilities: skills and tools" below.                                                                                                                                                                                                                                                |
-| `standardsDelivery?`                                  | `'prompt'` (default) folds a `code-aware`/`doc-aware` kind's resolved standards into its system prompt; `'context-files'` skips that fold: the kind's own preOp MUST write them as `.cat-context/standard-<id>.md` files (see `pr-reviewer`). Right for a kind that DELEGATES review to subagents, so the delegating agent isn't charged for every standard on every turn. |
+`buildContainer`/`createApp`/`start()`. The registration shape and every `AgentKindDefinition`
+field are on the website's
+[registration seam](https://www.catfactory.ai/extend/custom-agents.html#the-registration-seam).
+Two things a field table cannot carry:
 
 **`standardsDelivery: 'context-files'`** is for a kind that fans work out to subagents. Because an
 agentic loop re-sends its whole prompt every turn, folding the standards into a delegating agent's
@@ -129,8 +64,9 @@ Declaring `'context-files'` stops the fold; the kind's preOp writes the standard
 agent at them. If that preOp does not run (e.g. GitHub unwired, so the engine skips the kind's repo
 hooks) the engine falls back to folding, so the standards are never lost through both channels.
 
-A `container-*` surface implies the container requirement automatically
-(`registeredKindRequiresContainer`), so `requiresContainer` need not be set alongside it.
+**A `container-*` surface implies the container requirement automatically**
+(`registeredKindRequiresContainer`), so `requiresContainer` is derived rather than declared: a kind
+cannot end up dispatching inline because its author forgot the flag.
 
 ## Variations of an EXISTING kind (alternate prompts, programmatically)
 
@@ -224,44 +160,12 @@ nothing does not enter the key at all: the key describes the text that ran.
 ## Capabilities: skills and tools
 
 Beyond its prompt, a kind declares WHAT IT KNOWS (skills: procedural playbooks) and WHAT IT CAN
-REACH (tool servers: MCP). Design record: [ADR 0029](./adr/0029-agent-kind-capabilities.md).
-Field-by-field authoring guidance for both (and for the role prompt they accompany):
-[`custom-agent-roles.md`](./custom-agent-roles.md).
-
-```ts
-// Reusable definitions register on the SAME injected registry, then any number of kinds
-// reference them by id. Register these BEFORE the kinds that name them - boot validation
-// reports an unresolved reference as a startup error.
-agentKindRegistry.registerSkill({
-  id: 'org-security-review',
-  name: 'org-security-review',
-  description: 'The org security-review playbook.',
-  instructions: '1. Start from the diff…', // the SKILL.md body
-  resources: [{ relPath: 'severity.md', content: '# Severity rubric…' }],
-})
-
-agentKindRegistry.registerToolServer({
-  id: 'org-advisories',
-  label: 'Org advisory database',
-  // Not decoration: an agent handed a tool it wasn't told the purpose of tends not to use it.
-  guidance: 'Look up a dependency here before judging whether a version bump is risky.',
-  transport: { kind: 'stdio', command: 'npx', args: ['-y', '@example-org/advisories-mcp'] },
-  allowedTools: ['lookup_advisory'], // omit ⇒ every tool the server exposes
-  secretKeys: [{ key: 'ORG_ADVISORY_TOKEN' }], // by NAME; the value is resolved at dispatch
-})
-
-agentKindRegistry.register({
-  kind: 'security-auditor',
-  systemPrompt: '…',
-  agent: { surface: 'container-explore' },
-  skills: ['org-security-review'],
-  toolServers: ['org-advisories'],
-})
-
-// Attach either to a BUILT-IN kind without redefining it - the `assignTraits` analogue.
-agentKindRegistry.assignSkills('coder', ['org-security-review'])
-agentKindRegistry.assignToolServers('pr-reviewer', ['org-advisories'])
-```
+REACH (tool servers: MCP). Both register on the same injected `AgentKindRegistry` and are referenced
+by id, or attached to a built-in kind with `assignSkills` / `assignToolServers`; the website's
+[skills and tool servers](https://www.catfactory.ai/extend/custom-agents.html#skills-and-tool-servers)
+section is the authoring account. Design record:
+[ADR 0029](./adr/0029-agent-kind-capabilities.md). Field-by-field authoring guidance for both (and
+for the role prompt they accompany): [`custom-agent-roles.md`](./custom-agent-roles.md).
 
 ### Skills
 
@@ -293,67 +197,27 @@ an AMBIENT claude-code run (which has no isolated config home to install into).
 ### Tool servers (MCP)
 
 A tool server is `stdio` (a child process in the run container) or `http` (a remote endpoint) an
-agent kind may call. **The full model lives in [`mcp-tool-servers.md`](./mcp-tool-servers.md)**:
-the no-fork registration path, harness and transport support, the unavailability vocabulary, the
-credential rules, the operability probe, the security posture, the current limits, and the Slack
-runbook. Field-by-field authoring:
-[`custom-agent-roles.md`](./custom-agent-roles.md#tool-servers-authoring-the-mcp-definition).
-What matters from THIS doc's altitude:
-
-- **Credentials are declared BY NAME** (`secretKeys`) and resolved at dispatch through the kernel
-  `ToolSecretResolver` port; the VALUE rides the job body's dedicated `mcpServers` field only,
-  never `AgentRunContext`, a prompt, or the telemetry snapshot. A workspace's own stored value
-  wins over the deployment's environment, per key
-  ([ADR 0041](./adr/0041-capability-credential-store.md)).
-- **A declared server that cannot be wired for a run is STATED to the agent** (a closed reason
-  vocabulary rendered in the prompt's tool-server section) and recorded on the run's context
-  snapshot, never silently dropped.
-- **`allowedTools` is SCOPING, never a security boundary.**
-- **A dispatch is budgeted** (`TOOL_SERVER_BUDGET`): the excess is dropped under `over_budget`,
-  and both budget dimensions warn at boot.
-
-The worked example (`backend/internal/example-custom-agent`) registers both capability families: a
-bundled `org-security-review` skill and an `org-advisories` tool server, declared on
-`security-auditor`.
+agent kind may call. **[`mcp-tool-servers.md`](./mcp-tool-servers.md) is the authority for all of
+it**: the no-fork registration path, harness and transport support, the unavailability vocabulary,
+the credential rules and their resolution order, the OAuth connect flow, the operability probe, the
+security posture, the current limits, and the Slack runbook. Read it before changing anything that
+declares, resolves or dispatches a server; from this doc's altitude the only thing to know is that a
+tool server is a capability on the same registry as a skill, resolved in the container EXECUTOR
+rather than the engine, because what is servable depends on the resolved harness.
 
 ### Binary-output generators (the `binary-output` trait)
 
-A kind whose deliverable is BINARY artifacts (an image generator is the canonical case) opts in
-with `registerAgentKind({ traits: ['binary-output'] })`. No built-in kind carries the trait. What
-it buys (full design: `docs/initiatives/binary-output-foundational-storage.md`):
+A kind whose deliverable is BINARY artifacts (an image generator is the canonical case) opts in with
+`registerAgentKind({ traits: ['binary-output'] })`; no built-in kind carries the trait. Two registries
+meet on such a step and keeping them apart is the design: WHERE the artifacts are stored is a
+**foundational service the step selects** (never the platform's own artifact store, which holds run
+evidence), and WHAT generates them is the deployment's own `BinaryGeneratorRegistry`. The full model
+(the injected `.cat-context/binary-output/` brief, the closed content-type vocabulary, the two
+separate admission refusals, the declared-outputs block and its degrade-loudly bookkeeping, and why
+a generator's credential is this feature's job where a storage service's is not) is
+[`binary-output-foundational-storage.md`](../../docs/initiatives/binary-output-foundational-storage.md).
 
-- **Storage is a FOUNDATIONAL SERVICE the step selects**, never the platform's own artifact
-  store (that store holds run evidence such as screenshots, not product deliverables). The pipeline
-  step sets `stepOptions.binaryOutput.storageServiceId` to a catalog service carrying the
-  `asset-storage` capability tag, plus optional `contextServiceIds`: catalog services the agent
-  consults for generation SCOPE (an entity inventory that knows what exists, what lacks an asset,
-  and how each thing is described).
-- **The engine injects `.cat-context/binary-output/`**: a brief naming the selected services and
-  one file per resolved API contract. A step with a missing/unresolvable selection is refused at
-  save + admission; a gap that appears mid-run (a catalog edit) is STATED in the brief, and an
-  absent brief itself means "storage could not be provided": the trait guidance tells the agent
-  to refuse and report rather than guess at an endpoint.
-- **What GENERATES the artifacts is a separate registry**, selected on the same step:
-  `stepOptions.binaryOutput.generatorIds` names integrations from the deployment's own
-  `BinaryGeneratorRegistry` (image / music / video APIs registered in CODE, like the agent-kind
-  registry itself), and `.modalities` states the content types the step must deliver. Admission
-  refuses an unregistered id or a content type nothing selected produces, under its OWN
-  `binary_output_generator_invalid` reason: kept apart from the storage refusal because that one
-  is fixed in the workspace catalog and this one in the deployment's build.
-- **The agent declares what it stored** in a fenced ` ```binary-outputs ` block (`none`, or a
-  JSON array of `{ service, location, generator?, entity?, contentType?, description? }`),
-  recorded onto `PipelineStep.binaryOutputs` with degrade-loudly bookkeeping (undeclared /
-  parse-failed / invalid / omitted / unknown-service and unknown-generator ids).
-- **The STORAGE service's credentials are not this feature's job**: the contract says HOW to call
-  it; a credential rides the existing capability seams (a tool server's named secret, test
-  secrets), and a missing one follows the standing rule: stated to the agent, reported as a named
-  omission. A GENERATIVE INTEGRATION's credential IS, because the agent writes that request
-  itself: it is declared by name on the registration, resolved per dispatch through the same
-  `ToolSecretResolver` port (with a `binary-generator` subject), and delivered as an environment
-  variable of that one job's agent process. The VALUE never reaches a prompt or the telemetry
-  snapshot: only the variable's NAME does, so the agent knows what to read.
-
-### How the engine runs the hooks
+## How the engine runs the hooks
 
 `ExecutionService` runs a registered kind's `preOps` before the agent step dispatches, and
 its `postOps` after the step's result is recorded: both over a per-run `RepoFiles` bound
@@ -363,22 +227,12 @@ container executor uses; see `makeResolveRunRepoContext` in `@cat-factory/server
 GitHub isn't connected (tests / no client wired) the hooks are skipped, so the engine runs
 unchanged without the feature.
 
-The `RepoOpContext` a hook receives:
+The `RepoOpContext` a hook receives, and the `RepoFiles` methods it may call, are documented on the
+website's [`RepoFiles` port](https://www.catfactory.ai/extend/custom-agents.html#the-repofiles-port)
+section; the port itself is
+[`packages/kernel/src/ports/repo-files.ts`](../packages/kernel/src/ports/repo-files.ts).
 
-```ts
-interface RepoOpContext {
-  repo: RepoFiles // checkout-free repo access, bound to the run's repo
-  context: AgentRunContext // run/block/task context (branch, block id, prior outputs)
-  branch: string // the resolved branch (base/pr/work) the op reads/writes
-  result?: AgentRunResult // the finished agent's result - present for postOps only
-}
-```
-
-`RepoFiles` exposes `getFile`, `listDirectory`, `headSha`, `createBranch`, `commitFiles`,
-`openPullRequest`: enough to read a baseline artifact (a pre-op) and render + commit
-files (a post-op) without ever cloning.
-
-### Frontend
+## Frontend
 
 The workspace snapshot carries `customAgentKinds` (kind + presentation + container flag).
 The SPA hydrates them as a per-workspace **remote capability manifest**
@@ -398,9 +252,9 @@ agents, overlays, notification kinds) is designed in
 ## Judges: an evaluator that can BLOCK or BOUNCE a run
 
 An agent kind produces work; a **judge** decides whether the work is acceptable. It is the
-fourth step-taxonomy bucket (agents / polling gates / one-shot engine steps / judges) and the
-seam to reach for when a deployment wants its own rubric-based evaluator over a run's output:
-scope adherence, house engineering standards, doc completeness.
+fourth step-taxonomy bucket (agents / polling gates / one-shot engine steps / judges), registered on
+the injected `JudgeRegistry` and driven by one generic engine machine that owns the state machine,
+the threshold comparison, the park, the bounce budget, persistence and emission.
 
 Why it is not one of the other seams: a `StepCompletionResolver` returns a `StepResolution`
 (reshape output / own terminal status) and **cannot park or loop the run**, and a
@@ -408,105 +262,24 @@ Why it is not one of the other seams: a `StepCompletionResolver` returns a `Step
 container to escalate to; neither shape fits "run an LLM assessment, compare the score to the
 task's tolerance, and act".
 
-A judge registration supplies ONLY its differentiators; the engine's one generic driver owns the
-state machine, the threshold comparison, the park, the bounce budget, persistence and emission:
-
-```ts
-import type { JudgeRegistry } from '@cat-factory/kernel'
-
-// The `judgeRegistry` here is the instance the facade injects (`CoreDependencies.judgeRegistry`).
-judgeRegistry.register('scope-adherence', () => ({
-  kind: 'scope-adherence',
-  rubric: {
-    id: 'rubric_scope_adherence',
-    name: 'Scope adherence',
-    body: 'Score how faithfully the change implements the task AS ASKED, and nothing beyond it. …',
-    // Optional: a workspace overrides the body by authoring a prompt-library fragment with this
-    // id - so a rubric needs no storage of its own.
-    fragmentId: 'frag_org_scope_adherence',
-  },
-  // Optional: your own valibot schema's parser (kernel carries no valibot dep). Defaults to the
-  // contract's `judgeVerdictSchema` (score + summary + findings).
-  parseVerdict: scopeVerdict.parse,
-  // Optional: the CATALOG MODEL ID this rubric was authored for. A default, not a seizure: a
-  // task's own pinned model and a preset row naming this kind both still win.
-  modelId: 'claude-opus',
-  // What a verdict BELOW the task's threshold does: park for a human, bounce the producing step
-  // with the findings as its rework brief, or fail the run.
-  onFail: 'bounce',
-  bounceTargets: ['coder'],
-  presentation: {
-    label: 'Scope Adherence',
-    icon: 'i-lucide-scale',
-    color: '#f59e0b',
-    description: '…',
-  },
-}))
-```
-
-What you do NOT write: the assessment call (the engine's `JudgeAssessor`, built from the
-model-provider deps the facade already wires), the threshold (the merge preset's `judgeMinScore`,
-so a TASK can relax it), the bounce budget (`judgeMaxBounces`), the park + its `judge_review`
-card, the persistence (all state rides `step.judge`, so it is runtime-symmetric with no table),
-the result window (the shared `judge` view), or the PR-report section.
-
-Four rules worth knowing before you register one:
-
-- **Unwired is a pass-through.** With no assessment model configured, every judge step records
-  `status: 'skipped'` with a note and advances, so adding a judge to a pipeline can never break
-  a deployment that has no model for it.
-- **A failing verdict never advances silently.** A bounce with a spent budget, or with no
-  preceding producing step to bounce to, degrades to a **park** and records why.
-- **An unreadable assessment is a FAILING verdict**, not a crashed run: a thrown parse or a
-  provider outage becomes a score-0 verdict that reaches a human. For a gate that blocks work,
-  "I could not tell" must land on the cautious side.
-- **The model resolves under YOUR kind, and your `modelId` is one layer of that**: the task's
-  pinned model, then a workspace preset override naming your kind (your judge is its own row in
-  the model-defaults panel), then your `modelId`, then the preset's base model. An id this
-  deployment cannot serve does not silently become the base model: the assessment runs on the
-  default and `step.judge.modelPin` records `unavailable`, which the judge window and the PR
-  report both call out.
-
-Full design + the deliberate non-goals (the `merger` is NOT rewritten onto this):
-[`../../docs/initiatives/judge-registry.md`](../../docs/initiatives/judge-registry.md).
+Registering one (the factory, the `JudgeDefinition` fields, the rubric-fragment override and the
+per-task threshold knobs) is on the website's
+[Custom judges](https://www.catfactory.ai/extend/custom-gates.html#custom-judges). The engine design
+and every decision behind it, including the model-pin precedence (D9: a task's pinned model, then a
+workspace preset override naming the judge's own kind, then the registration's `modelId`, then the
+preset's base model, with an unservable pin STATED as `unavailable` rather than swapped) and the
+deliberate non-goals (the `merger` is NOT rewritten onto this):
+[`judge-registry.md`](../../docs/initiatives/judge-registry.md).
 
 ## The worked example
 
-`backend/internal/example-custom-agent` (`@cat-factory/example-custom-agent`, private)
-registers:
-
-- **`org-reviewer`**: an `inline` policy reviewer (no repo, no container).
-- **`org:coder-tdd`**: a VARIANT of the built-in `coder` (not a new kind): a `promptAddition`
-  requiring a failing test before the fix, selected by the `pl_org_apply` pipeline's Coder step
-  through its `stepOptions`.
-- **`security-auditor`**: a `container-explore` structured auditor whose `postOp` renders
-  `compliance/REPORT.md` from the agent's JSON and commits it via `RepoFiles`, presenting
-  through `generic-structured`. It also declares both CAPABILITIES: a bundled
-  `org-security-review` skill (the org playbook, shipped in the package's own code) and an
-  `org-advisories` MCP tool server whose credential is resolved at dispatch.
-- **`org-researcher`**: a `container-coding` structured researcher (the producing kind of the
-  `preset_org_research` initiative preset) that returns a `GO`/`GO_WITH_CAVEATS`/`NO_GO` verdict
-  and whose `postOp` renders the canonical feasibility report onto the PR branch it opened. It is
-  `container-coding` (not `container-explore`) so it opens a real, mergeable PR: the only way a
-  post-op-rendered artifact reaches a later initiative phase's clone (see
-  [`initiative-presets.md`](./initiative-presets.md) → "Cross-phase artifacts").
-- **`scope-adherence`**: a rubric **judge** (`registerExampleScopeJudge`) that scores the Coder's
-  work against "implement what was asked and nothing else", sends it back to the Coder with the
-  findings as its rework brief on a miss, and parks a human once the task's rework budget is spent.
-- **`org:introduce-api`**: a REUSABLE OPERATION (`src/introduce-api.ts`), the vehicle for canned
-  work an org runs again and again with per-case input. It is a custom TASK TYPE carrying the
-  whole bundle: the small create form whose values reach every agent's prompt, the standing
-  context (`defaultFragmentIds`: the org's API guidelines, auth requirements and shared-services
-  map), and `defaultPipelineId: pl_org_introduce_api`, whose design + build steps run under the
-  `org:architect-api` / `org:coder-api` variants. That pipeline registers `builtin: true` with an
-  explicit `version`, the shape that makes it a read-only template the org can roll out and later
-  update ([`pipeline-catalog-lifecycle.md`](./pipeline-catalog-lifecycle.md)). The model, and the
-  boundary against initiative presets (which are the vehicle when the work must be PLANNED and
-  decomposed): [`reusable-operations.md`](./reusable-operations.md).
-- the **`pl_org_audit`**, **`pl_org_scope`**, **`pl_org_research`**, **`pl_org_apply`** and
-  **`pl_org_introduce_api`** pipelines chaining them, plus
-  the **`preset_org_audit`** and **`preset_org_research`** initiative presets (see
-  [`initiative-presets.md`](./initiative-presets.md)).
+`backend/internal/example-custom-agent` (`@cat-factory/example-custom-agent`, private) is the
+executable copy of this page and the place to read a real registration: an `inline` policy reviewer,
+a `container-explore` structured auditor whose `postOp` renders and commits a report (declaring both
+capability families: a bundled skill and an MCP tool server), a `container-coding` researcher, a
+VARIANT of the built-in `coder`, a rubric `scope-adherence` judge, a REUSABLE OPERATION bundling a
+task type with its own form, standing context and canned pipeline, plus the pipelines and initiative
+presets chaining them.
 
 A deployment opts in by importing it once for its side effect (e.g. from `deploy/local`):
 

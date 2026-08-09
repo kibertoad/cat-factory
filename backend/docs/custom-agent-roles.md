@@ -145,7 +145,8 @@ Two composition rules:
   planner that runs few turns benefits from the full standard text and should not.
 - **`standardsDelivery: 'context-files'` is orthogonal**: it stops the fold entirely and
   makes YOUR preOp responsible for writing the standards as `.cat-context/` files (the
-  delegating-agent case; see the `AgentKindDefinition` table in `custom-agents.md`).
+  delegating-agent case; see [`custom-agents.md` → The seams](./custom-agents.md#the-seams)
+  for why the fold is skipped and what happens when that preOp does not run).
 
 **A custom trait** is for a capability SEVERAL of your kinds share: register the
 definition once (`registry.registerTrait({ id, guidance })`; `guidance` may be a
