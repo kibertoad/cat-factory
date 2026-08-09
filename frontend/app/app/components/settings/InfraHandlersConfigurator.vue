@@ -12,7 +12,7 @@
 //                      per custom type (matched to a service's pinned `manifestId`).
 // In LOCAL mode each handler additionally offers a per-USER override (this-machine only),
 // written to the `/me/environment-handlers` endpoints. Drives the infraConfig store.
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type {
   CustomManifestType,
   EnvironmentHandlerView,
@@ -28,6 +28,7 @@ import KubernetesEngineForm from '~/components/settings/KubernetesEngineForm.vue
 import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor.vue'
 import CustomManifestTypeEditor from '~/components/settings/CustomManifestTypeEditor.vue'
 import CloudflareHandlerSection from '~/components/settings/CloudflareHandlerSection.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
@@ -90,6 +91,28 @@ watch(
   () => ui.k3sSetupPrefill,
   (prefill) => {
     if (prefill && kubeEngines.value.includes('local-k3s')) selectedKubeEngine.value = 'local-k3s'
+  },
+  { immediate: true },
+)
+
+// Deep-link anchor: the `cat-factory k3s` hand-off opens this window with the ui store's scroll
+// target set to `kubernetes`, so bring that section into view once rather than dropping the
+// operator at the top of the tab to hunt for the form the CLI just described.
+//
+// Watched together with `infra.available` rather than on the target alone (which the account
+// settings' equivalent can do): the whole configurator is behind `v-if="infra.available === true"`
+// and that probe resolves AFTER the deep link fires, so a target-only watch would run with nothing
+// rendered and silently do nothing.
+const kubeSection = ref<HTMLElement | null>(null)
+watch(
+  [() => ui.infrastructureScrollTarget, () => infra.available],
+  async ([target, available]) => {
+    if (target !== 'kubernetes' || available !== true) return
+    await nextTick()
+    const el = kubeSection.value
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    ui.clearInfrastructureScrollTarget()
   },
   { immediate: true },
 )
@@ -400,7 +423,11 @@ function notifyError(e: unknown) {
     <p class="text-xs text-slate-400">{{ t('settings.infrastructure.handler.intro') }}</p>
 
     <!-- kubernetes -->
-    <section class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
+    <section
+      ref="kubeSection"
+      class="space-y-2 rounded-lg border border-slate-700 bg-slate-900/40 p-3"
+      data-testid="infra-kubernetes-section"
+    >
       <h3 class="text-sm font-semibold text-slate-200">
         {{ t('inspector.testConfig.provisionTypes.kubernetes') }}
       </h3>
@@ -433,7 +460,7 @@ function notifyError(e: unknown) {
           {{ t('settings.infrastructure.handler.activeEngine') }}
           <span class="text-slate-200">{{ kubeHandlerEngineLabel }}</span>
         </p>
-        <div class="flex items-center gap-2 pl-7">
+        <div class="space-y-1.5 pl-7">
           <UButton
             color="neutral"
             variant="soft"
@@ -444,12 +471,7 @@ function notifyError(e: unknown) {
           >
             {{ t('settings.providerConnection.test.button') }}
           </UButton>
-          <span v-if="kubeSavedTestResult?.ok" class="text-xs text-emerald-400">
-            {{ kubeSavedTestResult.message ?? t('settings.providerConnection.test.ok') }}
-          </span>
-          <span v-else-if="kubeSavedTestResult" class="text-xs text-rose-400">
-            {{ kubeSavedTestResult.message ?? t('settings.providerConnection.test.failed') }}
-          </span>
+          <ConnectionTestVerdict :result="kubeSavedTestResult" />
         </div>
       </div>
       <p v-else class="flex items-center gap-1.5 text-[12px] text-slate-500">

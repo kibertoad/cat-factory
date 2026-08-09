@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import type { DocumentSourceKind, InfraSetupArea, TaskSourceKind } from '~/types/domain'
-import type { InfrastructureTab, ProviderConnectionKind } from '~/types/providerConnections'
+import type {
+  InfrastructureScrollTarget,
+  InfrastructureTab,
+  ProviderConnectionKind,
+} from '~/types/providerConnections'
 import type { PendingContext } from '~/composables/useContextLinking'
 import {
   infraSetupDismissalKey,
@@ -737,6 +741,13 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
   // `local-k3s` connection from it; the ServiceAccount token is deliberately NOT in the link (a
   // secret in a URL leaks into history/logs), so the user still pastes it before Test → Save.
   const k3sSetupPrefill = ref<K3sSetupPrefill | null>(null)
+  // A one-shot deep-link anchor into a SECTION of the open tab, mirroring
+  // `accountSettingsScrollTarget`. The Test-environments tab opens on the default-provision
+  // picker and the Compose wizard, with the per-type handler sections between them, so landing an
+  // operator at the top of it after a `cat-factory k3s` hand-off leaves them scrolling to find the
+  // very form the CLI just filled in. The owning panel scrolls the section into view once and
+  // then calls `clearInfrastructureScrollTarget`, so a later plain open doesn't re-scroll.
+  const infrastructureScrollTarget = ref<InfrastructureScrollTarget | null>(null)
   // Environment setup wizard (shared-stacks slice 7): the guided detect → review → preflight →
   // trial → save flow for a service frame's `docker-compose` provisioning. `environmentWizardOpen`
   // is the modal flag; `environmentWizardFrameId` preselects the service frame the flow targets
@@ -761,8 +772,14 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
   }
   function closeProviderConnection() {
     infrastructureOpen.value = false
-    // Drop any consumed CLI prefill so re-opening the window normally doesn't re-seed the form.
+    // Drop any consumed CLI prefill so re-opening the window normally doesn't re-seed the form,
+    // and the anchor with it: an unconsumed target (the window was closed before the section
+    // rendered) would otherwise scroll the next, unrelated open.
     k3sSetupPrefill.value = null
+    infrastructureScrollTarget.value = null
+  }
+  function clearInfrastructureScrollTarget() {
+    infrastructureScrollTarget.value = null
   }
   // Capture a `cat-factory k3s` deep-link (`?infraSetup=local-k3s&…`) on app load: stash the
   // non-secret connection values, open the Infrastructure window on the Test-environments tab so
@@ -786,6 +803,10 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
     }
     resetHubReturn()
     infrastructureTab.value = 'environment'
+    // The hand-off is about ONE form, so land on it: the Kubernetes section sits below the
+    // default-provision picker, far enough down the tab that an operator arriving from the CLI
+    // would otherwise have to go looking for the fields it just told them about.
+    infrastructureScrollTarget.value = 'kubernetes'
     infrastructureOpen.value = true
     for (const key of [
       'infraSetup',
@@ -840,6 +861,8 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
     infrastructureTab,
     openInfrastructure,
     k3sSetupPrefill,
+    infrastructureScrollTarget,
+    clearInfrastructureScrollTarget,
     consumeK3sSetupDeepLink,
     environmentWizardOpen,
     environmentWizardFrameId,

@@ -20,6 +20,7 @@ import { environmentManifestSchema, runnerPoolManifestSchema } from '@cat-factor
 import type { ConnectionTestResult } from '@cat-factory/contracts'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
 import ConnectionWarnings from '~/components/settings/ConnectionWarnings.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
 const props = defineProps<{
@@ -267,7 +268,7 @@ function onSave() {
       </UFormField>
     </div>
 
-    <div v-if="supportsTest" class="flex items-center gap-2">
+    <div v-if="supportsTest" class="space-y-1.5">
       <UButton
         color="neutral"
         variant="soft"
@@ -280,12 +281,7 @@ function onSave() {
       >
         {{ t('settings.providerConnection.test.button') }}
       </UButton>
-      <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
-      </span>
-      <span v-else-if="testResult" class="text-xs text-rose-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
-      </span>
+      <ConnectionTestVerdict :result="testResult" />
     </div>
 
     <ConnectionWarnings :warnings="testResult?.warnings" />

@@ -9,7 +9,7 @@ import type {
   TeardownProbe,
 } from '@cat-factory/kernel'
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
-import { getErrorMessage, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import { connectionFailureMessage, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 import { safeFetch } from '../shared/safe-fetch.js'
 import { assertSafePublicUrl } from '../shared/url-guard.js'
 
@@ -246,15 +246,22 @@ export function missingRequiredConfigKeys(
 /**
  * A minimal, side-effect-free connection probe: an authed GET against the pool/env
  * management `baseUrl`. Any HTTP response means the host is reachable; a 401/403
- * means the credentials were rejected. Never throws — a network failure is reported
+ * means the credentials were rejected. Never throws: a network failure is reported
  * as `{ ok:false }`. Shared by the generic providers' `testConnection`.
+ *
+ * `options.subject` names what is being reached, purely so the failure hint can say "the runner
+ * pool API is most likely not running" instead of "the server". The URL-policy refusals thrown by
+ * `assertSafeEnvironmentUrl` pass through {@link connectionFailureMessage} unchanged: they carry
+ * no error `code`, so they classify as unrecognised and are reported verbatim with no hint,
+ * which is right, since a refused host is a config decision and not a reachability problem.
  */
 export async function probeConnection(
   baseUrl: string,
   headers: Record<string, string>,
   policy: UrlSafetyPolicy = STRICT_URL_SAFETY_POLICY,
-  timeoutMs = 10_000,
+  options: { timeoutMs?: number; subject?: string } = {},
 ): Promise<ConnectionTestResult> {
+  const { timeoutMs = 10_000, subject } = options
   try {
     // Re-validate every redirect hop (not just the initial URL), so a permitted base
     // URL can't 302 the probe to an internal/metadata host with the creds attached.
@@ -273,7 +280,13 @@ export async function probeConnection(
     }
     return { ok: true, message: `Reachable (HTTP ${res.status})` }
   } catch (err) {
-    return { ok: false, message: getErrorMessage(err) }
+    return {
+      ok: false,
+      message: connectionFailureMessage(err, {
+        ...(subject ? { subject } : {}),
+        target: baseUrl,
+      }),
+    }
   }
 }
 

@@ -2759,6 +2759,11 @@
         "removed": "Conexión eliminada",
         "removeFailed": "No se pudo eliminar la conexión"
       },
+      "serviceAccountToken": {
+        "whitespace": "Este token contiene un espacio o un salto de línea, algo que nunca ocurre en un token de portador. Lo más probable es que se haya copiado a través de una línea ajustada en la terminal. Vuelve a copiarlo como una única línea continua.",
+        "base64Encoded": "Esto parece el valor en base64 del campo .data.token del Secret, no el token en sí. Descodifícalo primero, por ejemplo con base64 -d.",
+        "notAJwt": "Esto no parece un token de ServiceAccount, que es un JWT de tres partes separadas por puntos. Comprueba que has copiado el valor completo. Ignora este aviso si tu clúster usa tokens de portador estáticos."
+      },
       "kubernetesEnv": {
         "label": "Nombre",
         "labelPlaceholder": "Clúster de vista previa",

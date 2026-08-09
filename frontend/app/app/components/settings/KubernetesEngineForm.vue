@@ -9,6 +9,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 import SecretInput from '~/components/common/SecretInput.vue'
+import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
 import type {
   EnvironmentHandlerView,
   InfraEngine,
@@ -75,6 +76,13 @@ const form = reactive({
   urlScheme: 'default' as 'default' | 'http' | 'https',
 })
 const apiToken = ref('')
+// Flag a bad paste ON THE FIELD, before Test is ever clicked. The guided CLI flow ends with
+// "copy this token out of your terminal", and a terminal wraps: a token copied across that wrap
+// carries an invisible newline that survives `.trim()` and can never become an `authorization`
+// header. Left to the probe it comes back as an opaque transport failure minutes later.
+// Destructured at the top level so the template auto-unwraps the refs (a ref nested in a plain
+// object is not unwrapped in a template, only a top-level one is).
+const { blocking: tokenBlocking, message: tokenProblem } = useServiceAccountTokenProblem(apiToken)
 
 const urlSourceItems = computed(() => [
   {
@@ -210,6 +218,7 @@ const canSave = computed(
     !!form.label.trim() &&
     !!form.apiServerUrl.trim() &&
     (tokenStored.value || !!apiToken.value.trim()) &&
+    !tokenBlocking.value &&
     urlValid.value,
 )
 
@@ -232,6 +241,9 @@ const connectBlockedReason = computed(() => {
     missing.push(t('settings.infrastructure.kubernetesEngine.serviceName'))
   if (missing.length)
     return t('settings.providerConnection.form.missingFields', { fields: missing.join(', ') })
+  // Repeated from under the token field, so the disabled button is never left unexplained for a
+  // reader whose eye is on it rather than on the field above.
+  if (tokenBlocking.value) return tokenProblem.value
   return t('settings.infrastructure.kubernetesEngine.invalidPort')
 })
 
@@ -414,6 +426,16 @@ async function copyAutoSetupCommand() {
             : undefined
         "
       />
+      <!-- Rose when the paste is impossible (blocks Test/Save), amber when it is only suspicious
+           and the operator may legitimately overrule it. -->
+      <p
+        v-if="tokenProblem"
+        class="mt-1 text-[11px]"
+        :class="tokenBlocking ? 'text-rose-400' : 'text-amber-400'"
+        data-testid="service-account-token-problem"
+      >
+        {{ tokenProblem }}
+      </p>
     </UFormField>
 
     <!-- URL derivation: how the live environment URL is resolved once the service's
@@ -517,7 +539,7 @@ async function copyAutoSetupCommand() {
       />
     </UFormField>
 
-    <div v-if="supportsTest" class="flex items-center gap-2">
+    <div v-if="supportsTest" class="space-y-1.5">
       <UButton
         color="neutral"
         variant="soft"
@@ -529,12 +551,7 @@ async function copyAutoSetupCommand() {
       >
         {{ t('settings.providerConnection.test.button') }}
       </UButton>
-      <span v-if="testResult && testResult.ok" class="text-xs text-emerald-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.ok') }}
-      </span>
-      <span v-else-if="testResult" class="text-xs text-rose-400">
-        {{ testResult.message ?? t('settings.providerConnection.test.failed') }}
-      </span>
+      <ConnectionTestVerdict :result="testResult" />
     </div>
 
     <div class="flex items-center justify-end gap-3">

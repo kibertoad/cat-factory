@@ -20,6 +20,7 @@ import type {
   SecretResolver,
   TeardownProbe,
 } from '@cat-factory/kernel'
+import { connectionFailureMessage } from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
 import {
   apiBase,
@@ -271,7 +272,10 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       return {
         state: 'unknown',
         retryable: true,
-        reason: `Could not read namespace '${namespace}': ${err instanceof Error ? err.message : String(err)}`,
+        reason: `Could not read namespace '${namespace}': ${connectionFailureMessage(err, {
+          subject: 'the Kubernetes apiserver',
+          target: apiBase(config),
+        })}`,
       }
     }
     if (res.status === 404) return { state: 'gone' }
@@ -316,7 +320,16 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
         }),
       }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      // The apiserver never answered, so there is no status to map: the failure is the thrown
+      // transport error, whose real cause hangs off `.cause` and reads as a bare "fetch failed"
+      // if taken at face value.
+      return {
+        ok: false,
+        message: connectionFailureMessage(err, {
+          subject: 'the Kubernetes apiserver',
+          target: apiBase(config),
+        }),
+      }
     }
   }
 

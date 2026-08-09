@@ -18,8 +18,9 @@ one `llm-upstream` cause, image-bumped) · exhaustive execution failure-kind hin
 codified + string-fallback classifiers deleted (I7/I6/I5) · per-reason conflict-toast descriptions
 
 - jump actions across all locales (G1) · status-class-keyed generic failure copy + raw-detail
-  disclosure (G2; **sections A–G are now complete; only the H feature axis remains**) ·
-  **Owner:** core · **Started:** 2026-07-11
+  disclosure (G2) · connection-probe cause chains + per-cause remedies and ServiceAccount-token
+  paste validation (D5/D6; **sections A–G are complete apart from G4; only the H feature axis
+  remains**) · **Owner:** core · **Started:** 2026-07-11
 
 > This is the durable source of truth for a multi-PR initiative. Read it before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -164,12 +165,14 @@ issue.
 
 ### D. Container / runner dispatch & observability
 
-| #   | Failure / misconfiguration                        | Current behaviour                                                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                                                                                         | Doc URL to embed                     | Status  | PR      |
-| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------- | ------- |
-| D1  | `Container dispatch failed (HTTP 404)`            | Raw status (`CloudflareContainerTransport.ts:105`, `KubernetesRunnerTransport.ts:93`); the known cause is a stale harness image whose tag wasn't bumped | env     | P1  | On 404 specifically, append the stale-image explanation: the deployed container image predates this route, so republish with a fresh tag + `pnpm deploy` (per the release rules); land together with I2's `DispatchError` so the status is a field, not parsed prose | `CONTRIBUTING.md` / releases section | ✅ done | phase 8 |
-| D2  | Runner-pool HTTP / OAuth / manifest-secret errors | Raw `` `Runner pool ${method} → ${status}` ``, `Missing secret 'X'`, `OAuth token request → <status>` (`HttpRunnerPoolProvider.ts:208,248,312,326`)     | UI      | P2  | UI-first: point at Settings → Self-hosted runner pool (re-test connection there); manifest/secret naming as detail                                                                                                                                                   | `backend/docs/` runner-pool doc      | ✅ done | phase 9 |
-| D3  | `No runner backend available for workspace 'X'`   | Plain Error, terse-ish (`cloudflare container.ts:556`)                                                                                                  | UI      | P2  | UI-first: register a pool in Settings → Self-hosted runner pool, or enable Cloudflare Containers (deployment config); make it a `ConflictReason` (reuse `agent_backend_unconfigured`)                                                                                | `backend/docs/` runner-pool doc      | ✅ done | phase 9 |
-| D4  | Datadog auth failure                              | Raw `HTTP 403` (`DatadogClient.ts:193`); keys are UI-configured                                                                                         | UI      | P2  | On 401/403: "your Datadog API/Application keys were rejected; re-enter them in Integrations → Observability connection"; env vars not mentioned (they don't exist for this)                                                                                          | Datadog API-keys vendor URL          | ✅ done | phase 9 |
+| #   | Failure / misconfiguration                                                  | Current behaviour                                                                                                                                                                                                                                                                                                                                       | Surface | Sev | Proposed fix                                                                                                                                                                                                                                                         | Doc URL to embed                     | Status  | PR       |
+| --- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------- | -------- |
+| D1  | `Container dispatch failed (HTTP 404)`                                      | Raw status (`CloudflareContainerTransport.ts:105`, `KubernetesRunnerTransport.ts:93`); the known cause is a stale harness image whose tag wasn't bumped                                                                                                                                                                                                 | env     | P1  | On 404 specifically, append the stale-image explanation: the deployed container image predates this route, so republish with a fresh tag + `pnpm deploy` (per the release rules); land together with I2's `DispatchError` so the status is a field, not parsed prose | `CONTRIBUTING.md` / releases section | ✅ done | phase 8  |
+| D2  | Runner-pool HTTP / OAuth / manifest-secret errors                           | Raw `` `Runner pool ${method} → ${status}` ``, `Missing secret 'X'`, `OAuth token request → <status>` (`HttpRunnerPoolProvider.ts:208,248,312,326`)                                                                                                                                                                                                     | UI      | P2  | UI-first: point at Settings → Self-hosted runner pool (re-test connection there); manifest/secret naming as detail                                                                                                                                                   | `backend/docs/` runner-pool doc      | ✅ done | phase 9  |
+| D3  | `No runner backend available for workspace 'X'`                             | Plain Error, terse-ish (`cloudflare container.ts:556`)                                                                                                                                                                                                                                                                                                  | UI      | P2  | UI-first: register a pool in Settings → Self-hosted runner pool, or enable Cloudflare Containers (deployment config); make it a `ConflictReason` (reuse `agent_backend_unconfigured`)                                                                                | `backend/docs/` runner-pool doc      | ✅ done | phase 9  |
+| D4  | Datadog auth failure                                                        | Raw `HTTP 403` (`DatadogClient.ts:193`); keys are UI-configured                                                                                                                                                                                                                                                                                         | UI      | P2  | On 401/403: "your Datadog API/Application keys were rejected; re-enter them in Integrations → Observability connection"; env vars not mentioned (they don't exist for this)                                                                                          | Datadog API-keys vendor URL          | ✅ done | phase 9  |
+| D5  | Every "Test connection" button reports `fetch failed` when nothing answered | Each provider's `testConnection` catch rendered `err.message`, which on Node/undici is the wrapper `TypeError: fetch failed`; the real cause (`connect ECONNREFUSED`, `self-signed certificate`, `getaddrinfo ENOTFOUND`) hangs off `.cause` / an `AggregateError`, and a stopped cluster, an untrusted cert and a firewalled host all read identically | UI      | P1  | One shared kernel helper flattening the cause chain into the exact failure plus a per-cause remedy; wired into every probe (k8s env + runner, the shared HTTP `probeConnection` behind the manifest env/pool providers, Cloudflare, Compose)                         | (none)                               | ✅ done | phase 20 |
+| D6  | A pasted ServiceAccount token with a hidden line break                      | undici refuses the header with `TypeError: Invalid header value` at request time; the connect form said nothing and the operator had no way to tell it from a wrong token or a stopped cluster                                                                                                                                                          | UI      | P2  | Classify the paste in contracts, flag it ON THE FIELD before Test is clicked, and refuse the impossible case at the apiserver client (the one boundary every k8s call passes through)                                                                                | (none)                               | ✅ done | phase 20 |
 
 ### E. Crypto / credentials
 
@@ -591,6 +594,47 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
     toast (never a second one, which would leave two readings on screen disagreeing) and must pass
     `actions: []` explicitly, because `update` MERGES over the existing toast and would otherwise
     leave a now-dead button. No image bump, no backend behaviour change (types + SPA only).
+- **A probe that never got an ANSWER is described from the CAUSE CHAIN, not from `err.message`
+  (phase 20 reference: D5).** Every "Test connection" button ends in a `fetch` that either answered
+  (an HTTP status each provider already maps) or threw, and the threw half is now kernel's
+  `describeConnectionFailure` / `connectionFailureMessage`
+  (`kernel/src/shared/connection-failure.logic.ts`), the sibling of `describeVcsApiError` and kept
+  in kernel for the same reason: the probes live in packages that share only kernel. Four things
+  about it bind anything new:
+  - **`error.message` is the WRONG field on Node.** undici wraps every transport failure in a
+    generic `TypeError: fetch failed` and puts the real failure on `.cause`, or on an
+    `AggregateError`'s `.errors` when the host resolves to several addresses (`localhost` giving
+    both `::1` and `127.0.0.1` is the local-k3s norm, and "refused on one, never attempted on the
+    other" is a different diagnosis from "refused on both"). Both are walked; the `fetch failed`
+    wrapper is dropped whenever something more specific exists.
+  - **The DETAIL and the HINT are separate, and only the detail is unconditional.** The cause is a
+    closed union (`refused` / `dns` / `timeout` / `unreachable` / `reset` / the four TLS splits /
+    `invalid-header` / `unknown`) matched on the transport `code`, and `unknown` is a real member:
+    an unmatched chain is reported verbatim with NO hint, because a guessed remedy for an
+    unrecognised failure sends the operator somewhere wrong. Callers pass a `subject` noun so the
+    hint names what was probed rather than "the server".
+  - **Only a SCREAMING_SNAKE `code` is appended to the detail.** Our own `DomainError`s reach these
+    same catch blocks and carry a lowercase status class (`validation`), which identifies nothing
+    about a connection and rendered as a baffling `(validation)` glued onto a finished sentence.
+  - **`redactSecrets` will mangle a message ABOUT a token.** The scrub drops the run of characters
+    after a bare `token`/`bearer`, so a refusal whose own prose says "token contains …" comes out
+    with a `[REDACTED]` hole in the advice. Word around it (`token ('apiToken') contains …`) and
+    assert the real wording survives the scrub, as `connection-failure.logic.test.ts` does.
+- **A credential that cannot become a header is refused at the header boundary, and flagged on the
+  field first (phase 20 reference: D6).** The shape rule for a pasted k8s ServiceAccount token is
+  `classifyServiceAccountToken` in **contracts**, not kernel, because BOTH sides must agree about
+  the answer and the SPA cannot see kernel; the SPA owns the prose (three locale keys under
+  `settings.providerConnection.serviceAccountToken`), per the standing "backend never localizes"
+  rule. Two things generalize:
+  - **Severity is part of the verdict.** Whitespace INSIDE the token is impossible (no bearer token
+    has it, no HTTP header can carry it) so it blocks Test/Save and is refused server-side; a
+    still-base64 `.data.token` value and a non-JWT shape are only SUSPICIOUS (a `--token-auth-file`
+    apiserver accepts arbitrary static tokens) so they render as an overrulable amber hint. A check
+    that cannot be sure must never be the thing that blocks a legitimate cluster.
+  - **The enforcement point is `KubernetesApiClient.fetch`**, the single place the token becomes an
+    `authorization` header, so env + runner and probe + provision are all covered by one guard with
+    no new registry seam. It throws a `ValidationError` with a `service_account_token_whitespace`
+    reason rather than letting undici answer with an opaque `Invalid header value`.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`): batch all F-rows into one slice to pay that cost once.

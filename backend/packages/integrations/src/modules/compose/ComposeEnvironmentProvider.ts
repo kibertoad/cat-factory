@@ -12,6 +12,7 @@ import type {
   TeardownProbe,
 } from '@cat-factory/kernel'
 import type { PreflightRef, RecipeStepRecorder, StackRecipe } from '@cat-factory/kernel'
+import { getErrorMessage } from '@cat-factory/kernel'
 import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import {
   type ComposeEnvironmentConfig,
@@ -247,19 +248,19 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       if (version.code !== 0) {
         return {
           ok: false,
-          message: tailOutput(version.stderr || version.stdout) || 'docker compose unavailable',
+          message: `${tailOutput(version.stderr || version.stdout) || `\`docker compose version\` exited ${version.code} with no output`}. The Compose v2 CLI plugin could not be run at all: check that Docker is installed and on this host's PATH.`,
         }
       }
       // `version --short` is a client-only call and succeeds even with the daemon stopped, so it
-      // can't confirm reachability on its own. `compose ls` actually contacts the daemon — only a
-      // success there means a real provision could run.
+      // can't confirm reachability on its own. `compose ls` actually contacts the daemon, and only
+      // a success there means a real provision could run.
       const ls = await this.runtime.compose(['ls', '--format', 'json'], {
         timeoutMs: SHORT_TIMEOUT_MS,
       })
       if (ls.code !== 0) {
         return {
           ok: false,
-          message: tailOutput(ls.stderr || ls.stdout) || 'Docker daemon is not reachable',
+          message: `${tailOutput(ls.stderr || ls.stdout) || `\`docker compose ls\` exited ${ls.code} with no output`}. The Compose CLI ran but could not reach the Docker daemon: start Docker (Docker Desktop, colima, or the \`docker\` service), and check \`DOCKER_HOST\` if it points somewhere unusual.`,
         }
       }
       const v = version.stdout.trim()
@@ -268,7 +269,13 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         message: v ? `Docker Compose ${v} reachable.` : 'Docker Compose reachable.',
       }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      // A THROW here is the INVOCATION failing (no `docker` binary, the runtime adapter could not
+      // spawn it, the watchdog fired), which is a different fault from a compose command that ran
+      // and reported a problem: those are the non-zero branches above, read off stderr.
+      return {
+        ok: false,
+        message: `Could not run \`docker compose\`: ${getErrorMessage(err)}. Check that Docker (with the Compose v2 plugin) is installed, on this host's PATH, and running.`,
+      }
     }
   }
 

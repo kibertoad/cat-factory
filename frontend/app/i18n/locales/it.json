@@ -278,6 +278,11 @@
           "blurb": "Dove vengono eseguiti gli agenti di coding quando non si usano i Cloudflare Containers. Scegli un pool di runner self-hosted (il tuo scheduler) o un cluster Kubernetes, poi configura il suo endpoint e le sue credenziali."
         }
       },
+      "serviceAccountToken": {
+        "whitespace": "Questo token contiene uno spazio o un'interruzione di riga, cosa che un token bearer non ha mai. Probabilmente è stato copiato a cavallo di una riga mandata a capo nel terminale. Ricopialo come un'unica riga ininterrotta.",
+        "base64Encoded": "Sembra il valore base64 del campo .data.token del Secret, non il token vero e proprio. Decodificalo prima, ad esempio con base64 -d.",
+        "notAJwt": "Non sembra un token di ServiceAccount, che è un JWT composto da tre parti separate da punti. Verifica di aver copiato il valore completo. Ignora questo avviso se il tuo cluster usa token bearer statici."
+      },
       "kubernetesEnv": {
         "label": "Nome",
         "labelPlaceholder": "Cluster di anteprima",

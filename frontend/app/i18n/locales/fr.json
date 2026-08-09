@@ -2759,6 +2759,11 @@
         "removed": "Connexion supprimée",
         "removeFailed": "Impossible de supprimer la connexion"
       },
+      "serviceAccountToken": {
+        "whitespace": "Ce jeton contient une espace ou un saut de ligne, ce qu'un jeton porteur ne contient jamais. Il a probablement été copié à cheval sur un retour à la ligne du terminal. Recopiez-le sur une seule ligne ininterrompue.",
+        "base64Encoded": "Ceci ressemble à la valeur base64 du champ .data.token du Secret, et non au jeton lui-même. Décodez-la d'abord, par exemple avec base64 -d.",
+        "notAJwt": "Ceci ne ressemble pas à un jeton de ServiceAccount, qui est un JWT composé de trois parties séparées par des points. Vérifiez que la valeur a été copiée en entier. Ignorez cet avertissement si votre cluster utilise des jetons porteurs statiques."
+      },
       "kubernetesEnv": {
         "label": "Nom",
         "labelPlaceholder": "Cluster de prévisualisation",

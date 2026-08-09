@@ -8,6 +8,7 @@ import {
   provisionCluster,
   ProvisionError,
   type ResolvedConnection,
+  SERVICE_ACCOUNT_NAME,
 } from './k3s-provision.js'
 
 /** The k3s command's injectable dependencies (defaults to the real console IO + host shell). */
@@ -237,9 +238,17 @@ function printInstallGuidance(state: HostState, io: Io, platform: NodeJS.Platfor
 
 /**
  * Print the resolved connection so the user can wire it into the Settings → Infrastructure →
- * Local k3s form (Test → Save). The apiserver token is shown ONCE here (the user's own local
- * cluster credential, to paste) — it is never written to disk or a log by cat-factory. Slice 3
- * replaces this with a deep-linked, pre-filled form.
+ * Local k3s form (Test → Save), as the fallback for anyone who does not follow the deep-link
+ * {@link handOff} prints next. The apiserver token is shown ONCE here (the user's own local
+ * cluster credential, to paste); it is never written to disk or a log by cat-factory.
+ *
+ * The values are split into what the operator TYPES and what merely explains where the token came
+ * from. The ServiceAccount used to sit in the first list, which is wrong twice over: there is no
+ * such field on the form (the bearer token IS the identity, so the apiserver resolves the
+ * ServiceAccount from the token and nothing client-side ever names it), and someone who went
+ * looking for the field could only conclude the setup was incomplete. It is still worth printing,
+ * because it is the coordinate you need to mint a REPLACEMENT token later, so it is printed as
+ * exactly that.
  */
 function printConnectionSummary(connection: ResolvedConnection, io: Io): void {
   io.info(
@@ -255,13 +264,21 @@ function printConnectionSummary(connection: ResolvedConnection, io: Io): void {
       `  • Namespace template:      cf-env-{{pullNumber}}`,
       `  • Environment URL source:  Ingress host template`,
       `  • Host template:           {{branch}}.127.0.0.1.nip.io`,
-      `  • ServiceAccount:          ${CAT_FACTORY_NAMESPACE}/${CAT_FACTORY_NAMESPACE}`,
       '',
       'Then paste this ServiceAccount token into the "ServiceAccount token" field and click Test → Save:',
       '',
       `  ${connection.apiToken}`,
       '',
-      'Keep the token private — it grants access to your local cluster.',
+      'Paste it as ONE line: a token copied across a wrapped terminal line carries a hidden line',
+      'break, which the connect form rejects and no cluster would ever accept.',
+      '',
+      `The token belongs to ServiceAccount ${CAT_FACTORY_NAMESPACE}/${SERVICE_ACCOUNT_NAME}, which the form`,
+      'does not ask for (the token itself carries that identity). You need it only to mint a',
+      'replacement, either by re-running `cat-factory k3s` or with:',
+      '',
+      `  kubectl create token ${SERVICE_ACCOUNT_NAME} -n ${CAT_FACTORY_NAMESPACE} --duration=720h`,
+      '',
+      'Keep the token private: it grants access to your local cluster.',
     ].join('\n'),
   )
 }

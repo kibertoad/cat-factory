@@ -278,6 +278,11 @@
           "blurb": "Wo die Coding-Agenten laufen, wenn keine Cloudflare Containers verwendet werden. Wähle einen selbst gehosteten Runner-Pool (deinen eigenen Scheduler) oder einen Kubernetes-Cluster und konfiguriere dann dessen Endpunkt und Zugangsdaten."
         }
       },
+      "serviceAccountToken": {
+        "whitespace": "Dieses Token enthält ein Leerzeichen oder einen Zeilenumbruch, was bei einem Bearer-Token nie vorkommt. Vermutlich wurde es über einen Zeilenumbruch im Terminal hinweg kopiert. Kopieren Sie es erneut als eine einzige ununterbrochene Zeile.",
+        "base64Encoded": "Das sieht nach dem Base64-Wert aus dem Feld .data.token des Secrets aus, nicht nach dem Token selbst. Dekodieren Sie ihn zuerst, zum Beispiel mit base64 -d.",
+        "notAJwt": "Das sieht nicht nach einem ServiceAccount-Token aus, das ein JWT aus drei durch Punkte getrennten Teilen ist. Prüfen Sie, ob der gesamte Wert kopiert wurde. Ignorieren Sie diesen Hinweis, wenn Ihr Cluster statische Bearer-Token verwendet."
+      },
       "kubernetesEnv": {
         "label": "Name",
         "labelPlaceholder": "Preview-Cluster",
