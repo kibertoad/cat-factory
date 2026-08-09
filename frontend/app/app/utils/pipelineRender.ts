@@ -149,7 +149,7 @@ export function isCompanionKind(kind: string): boolean {
 export function dedicatedParkView(
   step: PipelineStep,
   instance: ExecutionInstance | null | undefined,
-): 'follow-ups' | 'fork-decision' | 'input-gate' | null {
+): 'follow-ups' | 'fork-decision' | 'binary-candidates' | 'input-gate' | null {
   // The PRE-DISPATCH INPUT GATE parks whatever step 0 happens to be, so it leaves nothing on the
   // STEP to recognise it by: its verdict is a fact about the RUN. Checked first, and off the
   // instance: approving it generically would mark the run's first working step done and skip
@@ -168,6 +168,9 @@ export function dedicatedParkView(
   // flight) still belongs to the fork window, which renders the pending reply.
   const fork = step.forkDecision?.status
   if (fork === 'awaiting_choice' || fork === 'answering') return 'fork-decision'
+  // A generating step parked between its candidate pass and its delivering pass. Approving it
+  // generically would mark a step done that has staged files and delivered nothing.
+  if (step.binaryCandidates?.status === 'awaiting_choice') return 'binary-candidates'
   // Follow-ups only own the park itself: while the coder is still WORKING (streaming
   // items, no approval raised) a step click should keep opening the ordinary detail.
   if (

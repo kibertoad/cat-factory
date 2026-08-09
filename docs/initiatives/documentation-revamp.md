@@ -212,41 +212,41 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       page before it is cut.
 
       **Trap that shapes all three: the site splits a feature from its MANIFEST.** A manifest schema
-          lives on `extend/manifests.html`, not on the feature's own page, so a repo doc reducing its
-          manifest section points THERE. Reducing it toward the feature page instead loses the schema
-          for every reader.
+                      lives on `extend/manifests.html`, not on the feature's own page, so a repo doc reducing its
+                      manifest section points THERE. Reducing it toward the feature page instead loses the schema
+                      for every reader.
 
-          15a. `custom-agents.md` (553 lines) against `extend/custom-agents.html`:
+                      15a. `custom-agents.md` (553 lines) against `extend/custom-agents.html`:
 
-          | Section                             | Lines | Disposition                                                                                             |
-          | ----------------------------------- | ----- | ------------------------------------------------------------------------------------------------------- |
-          | The governing principle             | 9     | KEEP. "Zero `switch(agentKind)` in the container" is an invariant a contributor breaks, not a how-to.   |
-          | The three stages                    | 22    | CUT. Near-verbatim of the site's "The mental model: three stages"; keep the `RepoFiles` source link.    |
-          | The seams                           | 77    | CUT ~55. Registration example and the `AgentKindDefinition` table are both on the site. KEEP the `standardsDelivery: 'context-files'` rationale (why a delegating kind must not fold) and `registeredKindRequiresContainer`. |
-          | Variations of an EXISTING kind      | 89    | KEEP. The site has four sentences; these lines are WHY a variant is not a kind, which is the safety property. |
-          | Capabilities → Skills               | 131   | KEEP most. Deeper than the site: the three ref forms, bundled vs catalog resolution, harness-aware install, the overlap with the built-in `skill` KIND. |
-          | Capabilities → Tool servers (MCP)   | 104   | CUT toward `mcp-tool-servers.md`, NOT the website. See the repo-to-repo finding below.                  |
-          | Capabilities → Binary generators    | 78    | Check against `binary-output-foundational-storage.md` first; likely the same repo-to-repo shape.        |
-          | Judges                              | 75    | Three-way overlap: the site's `extend/custom-gates.html#custom-judges` AND `docs/initiatives/judge-registry.md`. Resolve the repo-to-repo half first. |
-          | The worked example                  | 47    | CUT most; point at `backend/internal/example-custom-agent`, which is the executable copy.               |
-          | Status / scope                      | 33    | KEEP.                                                                                                    |
+                      | Section                             | Lines | Disposition                                                                                             |
+                      | ----------------------------------- | ----- | ------------------------------------------------------------------------------------------------------- |
+                      | The governing principle             | 9     | KEEP. "Zero `switch(agentKind)` in the container" is an invariant a contributor breaks, not a how-to.   |
+                      | The three stages                    | 22    | CUT. Near-verbatim of the site's "The mental model: three stages"; keep the `RepoFiles` source link.    |
+                      | The seams                           | 77    | CUT ~55. Registration example and the `AgentKindDefinition` table are both on the site. KEEP the `standardsDelivery: 'context-files'` rationale (why a delegating kind must not fold) and `registeredKindRequiresContainer`. |
+                      | Variations of an EXISTING kind      | 89    | KEEP. The site has four sentences; these lines are WHY a variant is not a kind, which is the safety property. |
+                      | Capabilities → Skills               | 131   | KEEP most. Deeper than the site: the three ref forms, bundled vs catalog resolution, harness-aware install, the overlap with the built-in `skill` KIND. |
+                      | Capabilities → Tool servers (MCP)   | 104   | CUT toward `mcp-tool-servers.md`, NOT the website. See the repo-to-repo finding below.                  |
+                      | Capabilities → Binary generators    | 78    | Check against `binary-output-foundational-storage.md` first; likely the same repo-to-repo shape.        |
+                      | Judges                              | 75    | Three-way overlap: the site's `extend/custom-gates.html#custom-judges` AND `docs/initiatives/judge-registry.md`. Resolve the repo-to-repo half first. |
+                      | The worked example                  | 47    | CUT most; point at `backend/internal/example-custom-agent`, which is the executable copy.               |
+                      | Status / scope                      | 33    | KEEP.                                                                                                    |
 
-          15b. `environments-integration.md` (442 lines). The site is BIGGER here (18 sections), so the
-          repo doc is the junior partner: `## The manifest` (152) belongs to
-          `extend/manifests.html#environment-provider-manifest`; `## Code-adapter seam` (126) is the one
-          to keep, being a code seam, but the site's `#when-the-manifest-isn-t-enough` covers the
-          choosing half; `## How it works` (18) and `## Registering a provider` (19) are on the site
-          verbatim. `## Reaching an internal / VPN-hosted platform`, `## Provisioning & discovery` and
-          `## Security notes` stay.
+                      15b. `environments-integration.md` (442 lines). The site is BIGGER here (18 sections), so the
+                      repo doc is the junior partner: `## The manifest` (152) belongs to
+                      `extend/manifests.html#environment-provider-manifest`; `## Code-adapter seam` (126) is the one
+                      to keep, being a code seam, but the site's `#when-the-manifest-isn-t-enough` covers the
+                      choosing half; `## How it works` (18) and `## Registering a provider` (19) are on the site
+                      verbatim. `## Reaching an internal / VPN-hosted platform`, `## Provisioning & discovery` and
+                      `## Security notes` stay.
 
-          15c. `runner-pool-integration.md` (701 lines) is the MILD case and the one most likely to be
-          over-cut. `operate/runner-pools.html` has four sections; almost everything here is genuinely
-          deeper. Exactly one section duplicates: `## 3. Describe your scheduler as a manifest` (203),
-          which `extend/manifests.html#runner-pool-manifest` owns. The runner image and job protocol
-          (117), the k3s/Nomad mapping (48), the trust boundary (41) and scaling (25) all stay.
+                      15c. `runner-pool-integration.md` (701 lines) is the MILD case and the one most likely to be
+                      over-cut. `operate/runner-pools.html` has four sections; almost everything here is genuinely
+                      deeper. Exactly one section duplicates: `## 3. Describe your scheduler as a manifest` (203),
+                      which `extend/manifests.html#runner-pool-manifest` owns. The runner image and job protocol
+                      (117), the k3s/Nomad mapping (48), the trust boundary (41) and scaling (25) all stay.
 
-          `llm-telemetry.md` is the model of a clean split and needs nothing: every section is an
-          internal rule with no counterpart on the site. Copy its shape.
+                      `llm-telemetry.md` is the model of a clean split and needs nothing: every section is an
+                      internal rule with no counterpart on the site. Copy its shape.
 
 - [ ] 13. The website's page-quality pass (its phase D): the opening/closing shape on the 41 pages
       that predate the revamp, task-oriented titles, and splitting the two pages that mix doc types.

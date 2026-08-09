@@ -42,6 +42,7 @@ export const RESULT_VIEW_IDS = [
   'initiative-planning',
   'doc-interview',
   'fork-decision',
+  'binary-candidates',
   'judge',
   'pr-review',
   'ralph-loop',

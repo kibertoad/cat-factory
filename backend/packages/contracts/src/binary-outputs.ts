@@ -1,4 +1,6 @@
 import * as v from 'valibot'
+import { binaryGenerationOptionsSchema } from './binary-capabilities.js'
+import { binaryCandidateComparisonSchema } from './binary-candidates.js'
 import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 
 // Wire vocabulary for BINARY-OUTPUT agent steps (docs/initiatives/binary-output-foundational-storage.md):
@@ -98,6 +100,34 @@ export const binaryOutputConfigSchema = v.object({
    * generator look like a change of requirements rather than a break.
    */
   mediaTypes: v.optional(v.array(mediaTypeSchema)),
+  /**
+   * The parameters every generation on this step carries: a reference image, an edit
+   * instruction, a seed, a negative prompt, a transparent background (see
+   * `binary-capabilities.ts`).
+   *
+   * A THIRD axis beside the two above, and the one that says what to ask FOR rather than what
+   * must come back. Each option is gated by the capability that makes it answerable, and the
+   * gate has the same three outcomes the format check does: an option nothing selected can do is
+   * refused at admission, an option nothing has DECLARED either way is admitted with the gap
+   * stated. That third state is what lets this exist at all without invalidating every
+   * integration registered before capabilities did.
+   *
+   * Absent ⇒ the step's prompt is the whole instruction, which stays the ordinary case. These
+   * are for the facts a prompt cannot carry: an agent told "match the reference" with no
+   * reference, or told to seed a run by an API that takes no seed, has been told nothing.
+   */
+  generation: v.optional(binaryGenerationOptionsSchema),
+  /**
+   * This step generates COMPARABLE CANDIDATES and parks for a human to keep one (or several
+   * under distinct ids) rather than letting the agent commit to one producer unobserved. See
+   * `binary-candidates.ts`.
+   *
+   * Absent ⇒ the step generates its deliverables directly, which is the ordinary case and stays
+   * it: a comparison costs a human interrupt and at least one extra generation per subject, and
+   * it is worth that exactly where the choice between two producers of one content type is a
+   * judgement somebody wants to make with the pictures in front of them.
+   */
+  comparison: v.optional(binaryCandidateComparisonSchema),
 })
 export type BinaryOutputConfig = v.InferOutput<typeof binaryOutputConfigSchema>
 

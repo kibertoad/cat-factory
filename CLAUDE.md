@@ -766,13 +766,13 @@ declaration", "empty declaration" and "unknown id" are three states needing diff
 `operationsAreIndexable` the one place the fourth (an unparseable format) lives. Doc:
 [ADR 0031](./backend/docs/adr/0031-foundational-services.md).
 
-**Binary-output steps**: a `binary-output`-trait kind generates binary artifacts and stores them through
-a foundational service its step SELECTS, never the platform's artifact store; what MAKES them is the
-separate `BinaryGeneratorRegistry`, read only through `BinaryGeneratorSource` (mothership rule). Traps:
-content type is a CLOSED vocabulary and a modality stops deciding at the SECOND producer of it (the
-platform states overlaps, ranks nothing); an unreachable source is a 503 refusal, never an empty set;
-the credential VALUE never reaches a prompt. Doc:
-[`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+**Binary-output steps**: a `binary-output`-trait kind generates binary artifacts and stores them through a
+foundational service its step SELECTS; what MAKES them is the separate `BinaryGeneratorRegistry`, read only
+through `BinaryGeneratorSource` (mothership rule), whose declared `capabilities` gate the per-step generation
+options and, past two producers, a human CANDIDATE park. Traps: content type is CLOSED and a modality stops
+deciding at the SECOND producer (the platform states overlaps, ranks nothing, and a capability gates an
+OPTION, never which producer to call); an UNDECLARED capability/format is unverifiable, never uncovered; an
+unreachable source is a 503 refusal; the credential VALUE never reaches a prompt. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
 (in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the

@@ -64,6 +64,7 @@ import { trackerSettingsController } from './modules/recurring/TrackerSettingsCo
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
 import { docInterviewController } from './modules/docInterview/DocInterviewController.js'
 import { followUpController } from './modules/followUp/FollowUpController.js'
+import { binaryCandidatesController } from './modules/binaryCandidates/BinaryCandidatesController.js'
 import { forkDecisionController } from './modules/forkDecision/ForkDecisionController.js'
 import { inputGateController } from './modules/inputGate/InputGateController.js'
 import { judgeController } from './modules/judge/JudgeController.js'
@@ -384,6 +385,11 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'docInterview', mount: WORKSPACE_MOUNT, build: () => docInterviewController() },
   { name: 'followUp', mount: WORKSPACE_MOUNT, build: () => followUpController() },
   { name: 'forkDecision', mount: WORKSPACE_MOUNT, build: () => forkDecisionController() },
+  {
+    name: 'binaryCandidates',
+    mount: WORKSPACE_MOUNT,
+    build: () => binaryCandidatesController(),
+  },
   { name: 'inputGate', mount: WORKSPACE_MOUNT, build: () => inputGateController() },
   { name: 'judge', mount: WORKSPACE_MOUNT, build: () => judgeController() },
   { name: 'prReview', mount: WORKSPACE_MOUNT, build: () => prReviewController() },

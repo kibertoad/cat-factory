@@ -23,12 +23,20 @@ import { computed, ref, watch } from 'vue'
 import {
   ASSET_STORAGE_CAPABILITY,
   GENERATION_CONTEXT_CAPABILITY,
+  isBinaryGeneratorCapability,
   isBinaryModality,
+  type BinaryGenerationOptions,
+  type BinaryGeneratorCapability,
   type BinaryModality,
   type BinaryOutputConfig,
 } from '@cat-factory/contracts'
 import { binaryOutputPickIssues, type BinaryOutputPickIssue } from '~/utils/binaryOutput'
-import { parseMediaTypeRequirement, sameFormats } from './BinaryOutputStepPicker.logic'
+import {
+  formatReferenceImages,
+  parseMediaTypeRequirement,
+  parseReferenceImages,
+  sameFormats,
+} from './BinaryOutputStepPicker.logic'
 
 const props = defineProps<{ index: number }>()
 
@@ -241,6 +249,149 @@ const overlapSummary = computed(() =>
     .join('; '),
 )
 
+/**
+ * The capability vocabulary, as STATIC literal `t()` keys: one per member, never assembled at
+ * runtime, so the typed-message-key check covers them (the standing rule for an enum-keyed set).
+ */
+const CAPABILITY_LABELS: Record<BinaryGeneratorCapability, () => string> = {
+  'reference-image': () => t('pipeline.builder.binaryCapability.reference-image'),
+  'multi-reference': () => t('pipeline.builder.binaryCapability.multi-reference'),
+  'instruction-edit': () => t('pipeline.builder.binaryCapability.instruction-edit'),
+  'mask-edit': () => t('pipeline.builder.binaryCapability.mask-edit'),
+  'negative-prompt': () => t('pipeline.builder.binaryCapability.negative-prompt'),
+  seed: () => t('pipeline.builder.binaryCapability.seed'),
+  'aspect-ratio': () => t('pipeline.builder.binaryCapability.aspect-ratio'),
+  'candidate-batch': () => t('pipeline.builder.binaryCapability.candidate-batch'),
+  upscale: () => t('pipeline.builder.binaryCapability.upscale'),
+  'transparent-background': () => t('pipeline.builder.binaryCapability.transparent-background'),
+  tileable: () => t('pipeline.builder.binaryCapability.tileable'),
+}
+
+/**
+ * A capability in the reader's language, INCLUDING one this build does not define.
+ *
+ * The `Record` is exhaustive over the union and the lookup is still not total: the integrations
+ * ride the workspace snapshot, and on a mothership-mode deployment that snapshot is served by a
+ * process which may be a build AHEAD of this one. A bare lookup on such a value is a `TypeError`
+ * on the surface where the selection is made. Same guard, same reason, as `modalityLabel`.
+ */
+function capabilityLabel(capability: BinaryGeneratorCapability): string {
+  return isBinaryGeneratorCapability(capability)
+    ? CAPABILITY_LABELS[capability]()
+    : t('pipeline.builder.binaryCapabilityUnknown', { capability: String(capability) })
+}
+
+/**
+ * What the SELECTED integrations declare they can be asked for.
+ *
+ * The gate on every generation control below. An integration that declares NOTHING contributes
+ * nothing here, which is deliberate and is why {@link capabilitiesUndeclared} exists beside it:
+ * with an undeclared integration selected the controls stay OFFERED (hiding one would claim it
+ * cannot be used, which nobody established) and the advisory line says the support is unconfirmed.
+ * Hiding is reserved for the case the platform actually knows about: every selected integration
+ * declared its capabilities and none of them has this one.
+ */
+const declaredCapabilities = computed(() => {
+  const byId = new Map(agents.binaryGenerators.map((generator) => [generator.id, generator]))
+  const selected = (config.value?.generatorIds ?? []).flatMap((id) => byId.get(id) ?? [])
+  return new Set(selected.flatMap((generator) => generator.capabilities ?? []))
+})
+
+/** True when a selected integration pinned none of its capabilities down. */
+const capabilitiesUndeclared = computed(() => {
+  const byId = new Map(agents.binaryGenerators.map((generator) => [generator.id, generator]))
+  const selected = (config.value?.generatorIds ?? []).flatMap((id) => byId.get(id) ?? [])
+  return selected.length === 0 || selected.some((g) => (g.capabilities ?? []).length === 0)
+})
+
+/**
+ * Whether to OFFER the control an option belongs to. See {@link declaredCapabilities}: offered
+ * while anything could support it, hidden only once the selection has collectively said it cannot.
+ */
+function offers(capability: BinaryGeneratorCapability): boolean {
+  return capabilitiesUndeclared.value || declaredCapabilities.value.has(capability)
+}
+
+const generation = computed<BinaryGenerationOptions>(() => config.value?.generation ?? {})
+
+/** The edit modes, as static literal keys: the enum-keyed-set rule again. */
+const editModeItems = computed(() => [
+  { label: t('pipeline.builder.binaryEditModeInstruction'), value: 'instruction' },
+  { label: t('pipeline.builder.binaryEditModeMask'), value: 'mask' },
+])
+
+/**
+ * Patch ONE generation option, dropping it when it is cleared.
+ *
+ * A cleared option is REMOVED rather than stored as an empty value, because the two are different
+ * requirements: an absent `seed` means the step does not pin one, while `seed: 0` is a pinned
+ * seed of zero, and admission judges the option's PRESENCE.
+ */
+function setGeneration(fields: Partial<BinaryGenerationOptions>) {
+  const next: Record<string, unknown> = { ...generation.value, ...fields }
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+      delete next[key]
+    }
+  }
+  patch({
+    generation: Object.keys(next).length > 0 ? (next as BinaryGenerationOptions) : undefined,
+  })
+}
+
+/** The reference-image field's text, and the lines it refused (see `parseReferenceImages`). */
+const referenceText = ref(formatReferenceImages(config.value?.generation?.referenceImages))
+const unusableReferences = ref<string[]>([])
+
+watch(
+  () => config.value?.generation?.referenceImages,
+  (references) => {
+    referenceText.value = formatReferenceImages(references)
+  },
+)
+
+function setReferences(text: string) {
+  const { usable, unusable } = parseReferenceImages(text)
+  unusableReferences.value = unusable
+  referenceText.value = formatReferenceImages(usable)
+  setGeneration({ referenceImages: usable })
+}
+
+/**
+ * Turn the candidate comparison on or off. Off DROPS the whole bag rather than storing a disabled
+ * one: the presence of `comparison` is what the engine reads, so a saved "off" object would be a
+ * configuration describing a behaviour the run does not have.
+ */
+function setComparison(on: boolean) {
+  patch({ comparison: on ? (config.value?.comparison ?? {}) : undefined })
+}
+
+function setPerGenerator(value: number) {
+  const current = config.value?.comparison
+  if (!current) return
+  patch({ comparison: { ...current, perGenerator: value } })
+}
+
+function setMultiSelect(on: boolean) {
+  const current = config.value?.comparison
+  if (!current) return
+  patch({
+    comparison: on ? { ...current, multiSelect: true } : { perGenerator: current.perGenerator },
+  })
+}
+
+/**
+ * Whether the step could actually produce a comparison: the SAME rule
+ * `assertComparableCandidates` refuses at save, stated here where it is fixable. Without it a
+ * step saves clean, starts, and keeps its only candidate without ever asking anyone.
+ */
+const comparisonUnreachable = computed(() => {
+  const comparison = config.value?.comparison
+  if (!comparison) return false
+  if ((comparison.perGenerator ?? 1) > 1) return false
+  return (config.value?.generatorIds?.length ?? 0) < 2
+})
+
 /** What the SELECTED integrations say they emit — the discoverable half of the free-text field. */
 const declaredFormats = computed(() => {
   const byId = new Map(agents.binaryGenerators.map((generator) => [generator.id, generator]))
@@ -347,6 +498,199 @@ const declaredFormats = computed(() => {
       }}
     </p>
 
+    <!-- GENERATION OPTIONS. Each control is gated on a capability the selected integrations
+         declare, so a step cannot ask for a reference image from an endpoint that takes no image
+         input. While nothing has DECLARED its capabilities every control stays offered and the
+         advisory line below says the support is unconfirmed: hiding one would be a claim about a
+         vendor's API that nobody established. Both tiers, like the rest of this picker: an
+         option nobody stated is an option the run does not apply. -->
+    <template v-if="config?.storageServiceId">
+      <div v-if="offers('reference-image')" class="flex items-start gap-2">
+        <span class="mt-1 text-[10px] text-slate-500">{{
+          t('pipeline.builder.binaryReferenceImages')
+        }}</span>
+        <UTextarea
+          class="w-56"
+          :rows="2"
+          size="xs"
+          :model-value="referenceText"
+          :placeholder="t('pipeline.builder.binaryReferenceImagesPlaceholder')"
+          data-testid="binary-output-reference-input"
+          @update:model-value="referenceText = String($event)"
+          @change="setReferences(referenceText)"
+        />
+      </div>
+      <p
+        v-if="unusableReferences.length"
+        class="ms-1 text-[10px] text-amber-400"
+        data-testid="binary-output-reference-unusable"
+      >
+        {{
+          t('pipeline.builder.binaryReferenceImagesUnusable', {
+            entries: unusableReferences.join('; '),
+          })
+        }}
+      </p>
+
+      <div v-if="offers('instruction-edit') || offers('mask-edit')" class="flex items-center gap-2">
+        <span class="text-[10px] text-slate-500">{{ t('pipeline.builder.binaryEditMode') }}</span>
+        <USelect
+          class="w-56"
+          size="xs"
+          :model-value="generation.edit?.mode ?? ''"
+          :items="editModeItems"
+          value-key="value"
+          :placeholder="t('pipeline.builder.binaryEditModeNone')"
+          data-testid="binary-output-edit-mode"
+          @update:model-value="
+            setGeneration({
+              edit: $event
+                ? { ...generation.edit, mode: $event as 'instruction' | 'mask' }
+                : undefined,
+            })
+          "
+        />
+      </div>
+      <div v-if="generation.edit" class="flex items-center gap-2">
+        <span class="text-[10px] text-slate-500">{{
+          t('pipeline.builder.binaryEditInstruction')
+        }}</span>
+        <UInput
+          class="w-56"
+          size="xs"
+          :model-value="generation.edit.instruction ?? ''"
+          :placeholder="t('pipeline.builder.binaryEditInstructionPlaceholder')"
+          data-testid="binary-output-edit-instruction"
+          @change="
+            setGeneration({
+              edit: { ...generation.edit!, instruction: ($event.target as HTMLInputElement).value },
+            })
+          "
+        />
+      </div>
+
+      <div v-if="offers('negative-prompt')" class="flex items-center gap-2">
+        <span class="text-[10px] text-slate-500">{{
+          t('pipeline.builder.binaryNegativePrompt')
+        }}</span>
+        <UInput
+          class="w-56"
+          size="xs"
+          :model-value="generation.negativePrompt ?? ''"
+          :placeholder="t('pipeline.builder.binaryNegativePromptPlaceholder')"
+          data-testid="binary-output-negative-prompt"
+          @change="
+            setGeneration({ negativePrompt: ($event.target as HTMLInputElement).value.trim() })
+          "
+        />
+      </div>
+
+      <div v-if="offers('aspect-ratio')" class="flex items-center gap-2">
+        <span class="text-[10px] text-slate-500">{{
+          t('pipeline.builder.binaryAspectRatio')
+        }}</span>
+        <UInput
+          class="w-56"
+          size="xs"
+          :model-value="generation.aspectRatio ?? ''"
+          :placeholder="t('pipeline.builder.binaryAspectRatioPlaceholder')"
+          data-testid="binary-output-aspect-ratio"
+          @change="setGeneration({ aspectRatio: ($event.target as HTMLInputElement).value.trim() })"
+        />
+      </div>
+
+      <div v-if="offers('seed')" class="flex items-center gap-2">
+        <span class="text-[10px] text-slate-500">{{ t('pipeline.builder.binarySeed') }}</span>
+        <UInput
+          class="w-56"
+          type="number"
+          size="xs"
+          :model-value="generation.seed === undefined ? '' : String(generation.seed)"
+          :placeholder="t('pipeline.builder.binarySeedPlaceholder')"
+          data-testid="binary-output-seed"
+          @change="
+            setGeneration({
+              seed: ($event.target as HTMLInputElement).value
+                ? Number(($event.target as HTMLInputElement).value)
+                : undefined,
+            })
+          "
+        />
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <label v-if="offers('transparent-background')" class="flex items-center gap-1.5">
+          <UCheckbox
+            :model-value="generation.transparentBackground === true"
+            data-testid="binary-output-transparent"
+            @update:model-value="
+              setGeneration({ transparentBackground: $event ? true : undefined })
+            "
+          />
+          <span class="text-[10px] text-slate-500">{{
+            t('pipeline.builder.binaryTransparent')
+          }}</span>
+        </label>
+        <label v-if="offers('tileable')" class="flex items-center gap-1.5">
+          <UCheckbox
+            :model-value="generation.tileable === true"
+            data-testid="binary-output-tileable"
+            @update:model-value="setGeneration({ tileable: $event ? true : undefined })"
+          />
+          <span class="text-[10px] text-slate-500">{{ t('pipeline.builder.binaryTileable') }}</span>
+        </label>
+        <label v-if="offers('upscale')" class="flex items-center gap-1.5">
+          <UCheckbox
+            :model-value="generation.upscale !== undefined"
+            data-testid="binary-output-upscale"
+            @update:model-value="setGeneration({ upscale: $event ? 2 : undefined })"
+          />
+          <span class="text-[10px] text-slate-500">{{ t('pipeline.builder.binaryUpscale') }}</span>
+        </label>
+      </div>
+
+      <!-- CANDIDATE COMPARISON: generate several and let a person choose, rather than letting the
+           agent commit to one producer unobserved. -->
+      <label class="flex items-center gap-1.5">
+        <UCheckbox
+          :model-value="config.comparison !== undefined"
+          data-testid="binary-output-comparison"
+          @update:model-value="setComparison($event === true)"
+        />
+        <span class="text-[10px] text-slate-500">{{ t('pipeline.builder.binaryComparison') }}</span>
+      </label>
+      <div v-if="config.comparison" class="ms-6 flex flex-wrap items-center gap-3">
+        <span class="text-[10px] text-slate-500">{{
+          t('pipeline.builder.binaryPerGenerator')
+        }}</span>
+        <USelect
+          class="w-20"
+          size="xs"
+          :model-value="config.comparison.perGenerator ?? 1"
+          :items="[1, 2, 3, 4]"
+          data-testid="binary-output-per-generator"
+          @update:model-value="setPerGenerator(Number($event))"
+        />
+        <label class="flex items-center gap-1.5">
+          <UCheckbox
+            :model-value="config.comparison.multiSelect === true"
+            data-testid="binary-output-multi-select"
+            @update:model-value="setMultiSelect($event === true)"
+          />
+          <span class="text-[10px] text-slate-500">{{
+            t('pipeline.builder.binaryMultiSelect')
+          }}</span>
+        </label>
+      </div>
+      <p
+        v-if="comparisonUnreachable"
+        class="text-[10px] text-amber-400"
+        data-testid="binary-output-comparison-unreachable"
+      >
+        {{ t('pipeline.builder.binaryComparisonUnreachable') }}
+      </p>
+    </template>
+
     <!-- Every refusal this step would hit, named where it is fixable. Each is its own line
          with its own remedy: an unreachable catalog is not an empty one, a lost service is not
          an untagged one, and a lost CONTEXT service is not a lost storage target. -->
@@ -447,6 +791,32 @@ const declaredFormats = computed(() => {
       data-testid="binary-output-generator-overlap"
     >
       {{ t('pipeline.builder.binaryOutputGeneratorOverlap', { overlaps: overlapSummary }) }}
+    </p>
+    <p
+      v-if="has('capability_unsupported')"
+      class="text-[10px] text-amber-400"
+      data-testid="binary-output-capability-unsupported"
+    >
+      {{
+        t('pipeline.builder.binaryCapabilityUnsupported', {
+          capabilities: pick.unsupportedCapabilities.map(capabilityLabel).join(', '),
+        })
+      }}
+    </p>
+    <!-- ADVISORY, grouped with the other two: an integration that declared no capabilities has
+         said only that they are unknown, and every integration registered before this axis
+         existed is in exactly that state. Styling it as a refusal would flag most working
+         selections in the product. -->
+    <p
+      v-if="has('capability_unverifiable')"
+      class="text-[10px] text-slate-500"
+      data-testid="binary-output-capability-unverifiable"
+    >
+      {{
+        t('pipeline.builder.binaryCapabilityUnverifiable', {
+          capabilities: pick.unverifiableCapabilities.map(capabilityLabel).join(', '),
+        })
+      }}
     </p>
     <p
       v-if="unusableMediaTypes.length"

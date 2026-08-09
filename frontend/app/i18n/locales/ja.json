@@ -4766,7 +4766,45 @@
         "3d-model": "3D モデル",
         "3d-scene": "3D シーン",
         "document": "ドキュメント"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "参照画像",
+        "multi-reference": "複数の参照画像",
+        "instruction-edit": "指示による編集",
+        "mask-edit": "マスク編集",
+        "negative-prompt": "ネガティブプロンプト",
+        "seed": "固定シード",
+        "aspect-ratio": "アスペクト比",
+        "candidate-batch": "1回の呼び出しで複数の候補",
+        "upscale": "アップスケール",
+        "transparent-background": "背景の透過",
+        "tileable": "シームレスなタイル"
+      },
+      "binaryCapabilityUnknown": "{capability}（このデプロイでは定義されていない機能）",
+      "binaryCapabilityUnsupported": "このステップの生成オプションが要求する {capabilities} に対応した連携が選択されていません。オプションを外すか、その機能を宣言している連携を選択してください。",
+      "binaryCapabilityUnverifiable": "選択された連携のどれも {capabilities} への対応を宣言していませんが、そのうち一つは機能を一切宣言していないため確認できませんでした。ステップは開始されます。連携の API で確認してください。",
+      "binaryReferenceImages": "参照画像",
+      "binaryReferenceImagesPlaceholder": "役割|場所|サービス（1行に1件）",
+      "binaryReferenceImagesUnusable": "参照として保存されませんでした: {entries}。各行は 役割|場所 の形式で、役割は style / subject / composition / base のいずれかです。",
+      "binaryEditMode": "既存を編集",
+      "binaryEditModeNone": "新規に生成",
+      "binaryEditModeInstruction": "指示から",
+      "binaryEditModeMask": "マスク領域",
+      "binaryEditInstruction": "変更内容",
+      "binaryEditInstructionPlaceholder": "例: 空を差し替える",
+      "binaryNegativePrompt": "ネガティブプロンプト",
+      "binaryNegativePromptPlaceholder": "避けたい要素",
+      "binaryAspectRatio": "アスペクト比",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binarySeed": "シード",
+      "binarySeedPlaceholder": "固定シード",
+      "binaryTransparent": "背景を透過",
+      "binaryTileable": "シームレスなタイル",
+      "binaryUpscale": "結果をアップスケール",
+      "binaryComparison": "納品前に候補を比較する",
+      "binaryPerGenerator": "連携ごとの候補数",
+      "binaryMultiSelect": "複数を残せるようにする",
+      "binaryComparisonUnreachable": "このステップは対象ごとに候補を1つしか作れないため、比較するものがなく、その1つが確認なしで採用されます。2つ目の連携を選ぶか、連携ごとの候補数を増やしてください。"
     },
     "progress": {
       "status": {
@@ -6265,7 +6303,12 @@
       "unknownGenerators": "このデプロイメントが登録していない生成統合が指定されました: {ids}。エントリは申告どおり保持されます。統合はこのワークスペースではなくデプロイメントのコードで登録します。",
       "generatorsUnverified": "ステップの完了時にこのデプロイメントの生成系インテグレーションを読み取れなかったため、以下に記載されたインテグレーションは照合されていません。エントリは申告どおり保持されます。"
     },
-    "unknownGeneratorBadge": "未登録"
+    "unknownGeneratorBadge": "未登録",
+    "candidates": {
+      "automatic": "候補が {total} 件生成され、確認なしで自動的に採用されました。",
+      "chosen": "生成された {total} 件の候補のうち {kept} 件が採用されました。",
+      "awaiting": "{total} 件の候補が生成され、比較を待っています。"
+    }
   },
   "sandbox": {
     "title": "Sandbox: プロンプトとモデルのテスト",
@@ -7550,6 +7593,33 @@
       "unresolved": "このツールは現在のワークスペース向けのアドレスを返しませんでした。",
       "resolverFailed": "このツールはアドレスの算出中にエラーが発生しました。原因はブラウザーのコンソールに出力されています (このデプロイメントの管理者向け)。",
       "unsafeUrl": "このツールが返したアドレスはウェブリンクではないため、開きませんでした。"
+    }
+  },
+  "binaryCandidates": {
+    "title": "生成された候補",
+    "titleWithBlock": "生成された候補: {title}",
+    "subtitle": "各連携が生成したものを比較し、残すものを選びます",
+    "automatic": "候補が1つしか生成されなかったため、自動的に採用されました。誰も確認していません。",
+    "unlabelledSubject": "対象の申告なし",
+    "noPreview": "プレビューはありません",
+    "fromGenerator": "{generator} から",
+    "unattributed": "連携の記録なし",
+    "kept": "採用",
+    "keptAs": "{id} として採用",
+    "storeAsPlaceholder": "この ID で保存",
+    "notePlaceholder": "保存時に変更してほしいこと（任意）",
+    "missingAlias": "採用する候補それぞれに固有の ID を付けてください。付けないとすべて同じ名前で保存されます。",
+    "duplicateAlias": "採用した候補のうち2つで ID が重複しています。同じ場所にある2つの成果物は1つです。",
+    "keepAction": "{count} 件を採用",
+    "warning": {
+      "omitted": "上限を超えた候補が {count} 件破棄されたため、この一覧は先頭部分だけです。",
+      "invalid": "申告された {count} 件の項目が読み取れず、ここには含まれていません。",
+      "previews": "{count} 件のプレビューリンクが拒否されたため、それらの候補は画像なしで表示されます。"
+    },
+    "noChoice": {
+      "undeclared": "このステップは候補を申告しなかったため、比較するものがありませんでした。実行は続行されました。",
+      "parseFailed": "このステップの候補の申告を読み取れなかったため、比較するものがありませんでした。実行は続行されました。",
+      "noCandidates": "このステップは候補を用意しなかったため、比較するものがありませんでした。実行は続行されました。"
     }
   }
 }

@@ -1,4 +1,8 @@
-import type { BinaryOutputConfig, FoundationalServiceSelection } from '@cat-factory/contracts'
+import type {
+  BinaryCandidateStepState,
+  BinaryOutputConfig,
+  FoundationalServiceSelection,
+} from '@cat-factory/contracts'
 import type {
   BinaryGeneratorSource,
   FoundationalCatalogView,
@@ -129,6 +133,10 @@ export class FoundationalServiceRunResolver {
     workspaceId: string,
     config: BinaryOutputConfig | undefined,
     generatorSource?: BinaryGeneratorSource,
+    // The step's live CANDIDATE state, which is what tells a comparison step's two passes apart.
+    // Passed through rather than resolved here: this resolver holds catalogs and registries, and
+    // the phase is a fact about the RUN that only the dispatch site has.
+    candidates?: BinaryCandidateStepState | null,
   ): Promise<InjectedContextFile[]> {
     if (!config) {
       return [
@@ -180,6 +188,7 @@ export class FoundationalServiceRunResolver {
           contextServices,
           unresolvedContextIds,
           generators,
+          ...(candidates ? { candidates } : {}),
         }),
       },
       ...(await generatorContractFiles(generators, generatorSource)),

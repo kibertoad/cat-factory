@@ -4766,7 +4766,45 @@
         "3d-model": "Modele 3D",
         "3d-scene": "Sceny 3D",
         "document": "Dokumenty"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "Obraz referencyjny",
+        "multi-reference": "Kilka obrazów referencyjnych",
+        "instruction-edit": "Edycja na podstawie instrukcji",
+        "mask-edit": "Edycja z maską",
+        "negative-prompt": "Prompt negatywny",
+        "seed": "Stałe ziarno",
+        "aspect-ratio": "Proporcje obrazu",
+        "candidate-batch": "Kilka kandydatów na wywołanie",
+        "upscale": "Powiększanie",
+        "transparent-background": "Przezroczyste tło",
+        "tileable": "Bezszwowe kafelkowanie"
+      },
+      "binaryCapabilityUnknown": "{capability} (możliwość, której ta instalacja nie definiuje)",
+      "binaryCapabilityUnsupported": "Żadna wybrana integracja nie obsługuje {capabilities}, o co proszą opcje generowania tego kroku. Usuń opcję albo wybierz integrację, która deklaruje tę możliwość.",
+      "binaryCapabilityUnverifiable": "Żadna wybrana integracja nie deklaruje obsługi {capabilities}, ale jedna z nich nie deklaruje żadnych możliwości, więc nie dało się tego sprawdzić. Krok i tak wystartuje; potwierdź to w API integracji.",
+      "binaryReferenceImages": "Obrazy referencyjne",
+      "binaryReferenceImagesPlaceholder": "rola|lokalizacja|usługa, po jednym w wierszu",
+      "binaryReferenceImagesUnusable": "Nie zapisano jako referencji: {entries}. Każdy wiersz musi mieć postać rola|lokalizacja, gdzie rola to style, subject, composition albo base.",
+      "binaryEditMode": "Edytuj istniejące",
+      "binaryEditModeNone": "Generuj nowe",
+      "binaryEditModeInstruction": "Z instrukcji",
+      "binaryEditModeMask": "Obszar maski",
+      "binaryEditInstruction": "Co zmienić",
+      "binaryEditInstructionPlaceholder": "np. wymienić niebo",
+      "binaryNegativePrompt": "Prompt negatywny",
+      "binaryNegativePromptPlaceholder": "czego unikać",
+      "binaryAspectRatio": "Proporcje obrazu",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binarySeed": "Ziarno",
+      "binarySeedPlaceholder": "stałe ziarno",
+      "binaryTransparent": "Przezroczyste tło",
+      "binaryTileable": "Bezszwowe kafelkowanie",
+      "binaryUpscale": "Powiększ wynik",
+      "binaryComparison": "Porównaj kandydatów przed dostarczeniem",
+      "binaryPerGenerator": "Kandydaci na integrację",
+      "binaryMultiSelect": "Pozwól zachować więcej niż jednego",
+      "binaryComparisonUnreachable": "Ten krok może wytworzyć tylko jednego kandydata na temat, więc nie byłoby czego porównywać, a ten jeden zostałby zachowany bez pytania. Wybierz drugą integrację albo zwiększ liczbę kandydatów na integrację."
     },
     "progress": {
       "status": {
@@ -6265,7 +6303,12 @@
       "unknownGenerators": "Wskazano integrację generatywną, której ta instalacja nie rejestruje: {ids}. Wpis zostaje zachowany zgodnie z deklaracją; integrację rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracje generatywne, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym. | Wskazano integracji generatywnych, których ta instalacja nie rejestruje: {ids}. Ich wpisy zostają zachowane zgodnie z deklaracją; integracje rejestruje się w kodzie instalacji, a nie w tym obszarze roboczym.",
       "generatorsUnverified": "Nie udało się odczytać integracji generatywnych tego wdrożenia przy zamykaniu kroku, więc wymienione poniżej integracje nie zostały z nimi porównane. Wpisy są zachowane w takiej postaci, w jakiej je zgłoszono."
     },
-    "unknownGeneratorBadge": "Niezarejestrowana"
+    "unknownGeneratorBadge": "Niezarejestrowana",
+    "candidates": {
+      "automatic": "Wygenerowano {total} kandydata i zachowano go automatycznie, bez przeglądu.",
+      "chosen": "Zachowano {kept} z {total} wygenerowanych kandydatów.",
+      "awaiting": "Wygenerowano {total} kandydatów i czekają na porównanie."
+    }
   },
   "sandbox": {
     "title": "Piaskownica: testowanie promptów i modeli",
@@ -7550,6 +7593,33 @@
       "unresolved": "To narzędzie nie zwróciło adresu dla bieżącej przestrzeni roboczej.",
       "resolverFailed": "To narzędzie napotkało błąd podczas ustalania swojego adresu. Przyczyna znajduje się w konsoli przeglądarki, dla osób utrzymujacych to wdrożenie.",
       "unsafeUrl": "To narzędzie zwróciło adres, który nie jest odnośnikiem internetowym, więc nie został otwarty."
+    }
+  },
+  "binaryCandidates": {
+    "title": "Wygenerowani kandydaci",
+    "titleWithBlock": "Wygenerowani kandydaci: {title}",
+    "subtitle": "Porównaj, co wytworzyła każda integracja, i zachowaj to, co chcesz",
+    "automatic": "Wygenerowano tylko jednego kandydata, więc zachowano go automatycznie. Nikt go nie przejrzał.",
+    "unlabelledSubject": "Nie zadeklarowano tematu",
+    "noPreview": "Brak podglądu",
+    "fromGenerator": "Z {generator}",
+    "unattributed": "Nie zapisano integracji",
+    "kept": "Zachowany",
+    "keptAs": "Zachowany jako {id}",
+    "storeAsPlaceholder": "zapisz pod tym id",
+    "notePlaceholder": "Co zmienić przy zapisie (opcjonalnie)",
+    "missingAlias": "Nadaj każdemu zachowanemu kandydatowi własne id, inaczej wszystkie zapisałyby się pod tą samą nazwą.",
+    "duplicateAlias": "Dwaj zachowani kandydaci mają to samo id. Dwa artefakty w jednym miejscu to jeden artefakt.",
+    "keepAction": "Zachowaj {count}",
+    "warning": {
+      "omitted": "{count} kandydatów odrzucono powyżej limitu, więc ta lista to tylko początek. ",
+      "invalid": "{count} zadeklarowanych wpisów było nieczytelnych i ich tu brakuje. ",
+      "previews": "{count} linków podglądu odrzucono, więc ci kandydaci są pokazani bez obrazu."
+    },
+    "noChoice": {
+      "undeclared": "Krok nigdy nie zadeklarował kandydatów, więc nie było czego porównywać. Przebieg trwał dalej.",
+      "parseFailed": "Nie dało się odczytać deklaracji kandydatów tego kroku, więc nie było czego porównywać. Przebieg trwał dalej.",
+      "noCandidates": "Krok nie przygotował żadnych kandydatów, więc nie było czego porównywać. Przebieg trwał dalej."
     }
   }
 }

@@ -62,9 +62,13 @@ describe('resolveBinaryOutputContext', () => {
       foundationalServiceResolver: deps,
     })
     expect(files.map((f) => f.path)).toEqual([BINARY_OUTPUT_BRIEF_FILE])
+    // The fourth argument is the step's CANDIDATE state, which tells a comparison step's two
+    // passes apart. A step that does not compare carries none, and the brief renderer treats that
+    // as "no comparison" rather than as a first pass.
     expect(deps.binaryOutputContextFilesFor).toHaveBeenCalledWith(
       'ws',
       { storageServiceId: 'asset-store' },
+      undefined,
       undefined,
     )
   })

@@ -7,6 +7,7 @@ import type {
   StepOptions,
   TesterQualityConfig,
 } from '@cat-factory/kernel'
+import type { BinaryOutputConfig } from '@cat-factory/contracts'
 import { validateDescriptorFields } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
@@ -222,13 +223,43 @@ export function assertValidBinaryOutputSteps({
     const kind = agentKinds[i]
     if (kind === undefined || !isEnabled(i)) continue
     if (!hasTrait(kind, BINARY_OUTPUT_TRAIT, agentKindRegistry)) continue
-    if (!stepOptions?.[i]?.binaryOutput?.storageServiceId?.trim()) {
+    const config = stepOptions?.[i]?.binaryOutput
+    if (!config?.storageServiceId?.trim()) {
       throw new ValidationError(
         `Step '${kind}' generates binary outputs but selects no storage service — pick the ` +
           "foundational service it stores them through in the step's options.",
       )
     }
+    assertComparableCandidates(kind, config)
   }
+}
+
+/**
+ * A step that COMPARES candidates must be able to produce more than one of them.
+ *
+ * There are exactly two ways to get a comparison, and a step needs one of them: several
+ * integrations rendering the same subject, or one integration asked for several candidates. A
+ * step with a single producer and `perGenerator: 1` yields one candidate per subject, which the
+ * engine auto-keeps rather than parking on, so the human review the comparison was configured for
+ * silently never happens.
+ *
+ * Structural, so it lands at pipeline SAVE alongside the missing-storage refusal above rather
+ * than at run start: both halves are readable off the step, neither depends on workspace state,
+ * and a comparison that cannot compare is a mis-configured step whatever the catalog says. What
+ * this deliberately does not check is whether the selected ids RESOLVE, which is admission's job
+ * and reads a registry this function has no business holding.
+ */
+function assertComparableCandidates(kind: string, config: BinaryOutputConfig): void {
+  const comparison = config.comparison
+  if (!comparison) return
+  if ((comparison.perGenerator ?? 1) > 1) return
+  if ((config.generatorIds?.length ?? 0) >= 2) return
+  throw new ValidationError(
+    `Step '${kind}' is configured to compare generated candidates, but it can only produce one ` +
+      'per subject: select a second generative integration, or raise the candidates-per-' +
+      'integration count. With one candidate there is nothing to choose between, so the run ' +
+      'would keep it without asking.',
+  )
 }
 
 /**

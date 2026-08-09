@@ -1,4 +1,9 @@
-import { mediaTypeSchema, normalizeMediaType } from '@cat-factory/contracts'
+import {
+  binaryReferenceImageSchema,
+  mediaTypeSchema,
+  normalizeMediaType,
+  type BinaryReferenceImage,
+} from '@cat-factory/contracts'
 import * as v from 'valibot'
 
 // The pure half of BinaryOutputStepPicker: reading a free-text FORMAT requirement, and telling
@@ -52,4 +57,53 @@ export function sameFormats(
   b: readonly string[] | undefined,
 ): boolean {
   return (a ?? []).join(',') === (b ?? []).join(',')
+}
+
+/** A parsed reference-image list: what the step will carry, and what was refused on the way in. */
+export interface ParsedReferenceImages {
+  /** Well-formed entries, in the order typed: exactly what gets stored. */
+  usable: BinaryReferenceImage[]
+  /** Lines that are not `role|location[|service]`, kept VERBATIM so the warning can quote them. */
+  unusable: string[]
+}
+
+/**
+ * Read a reference-image list from the one-per-line `role|location[|service]` text the builder
+ * accepts.
+ *
+ * Free TEXT rather than a picker, for the reason the format requirement beside it is: what a
+ * reference points at is an object in the org's own storage or a URL, and neither is a set the
+ * platform can enumerate. The three fields are positional because the shape is small and a
+ * three-input row per reference would dominate a step row that is already dense; the ROLE comes
+ * first because it is the constrained field, so a typo lands on the half the parser can name.
+ *
+ * A refused line is REPORTED, never quietly dropped, exactly as a refused format is: a reference
+ * someone typed and the step does not carry is a generation that silently ignores it.
+ */
+export function parseReferenceImages(text: string): ParsedReferenceImages {
+  const usable: BinaryReferenceImage[] = []
+  const unusable: string[] = []
+  for (const line of text
+    .split('\n')
+    .map((part) => part.trim())
+    .filter(Boolean)) {
+    const [role, location, service] = line.split('|').map((part) => part.trim())
+    const parsed = v.safeParse(binaryReferenceImageSchema, {
+      role,
+      location,
+      ...(service ? { service } : {}),
+    })
+    if (parsed.success) usable.push(parsed.output)
+    else unusable.push(line)
+  }
+  return { usable, unusable }
+}
+
+/** Render a stored reference list back into the text the field shows. */
+export function formatReferenceImages(
+  references: readonly BinaryReferenceImage[] | undefined,
+): string {
+  return (references ?? [])
+    .map((ref) => [ref.role, ref.location, ref.service].filter(Boolean).join('|'))
+    .join('\n')
 }

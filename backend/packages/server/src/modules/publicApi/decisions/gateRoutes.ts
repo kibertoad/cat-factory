@@ -45,10 +45,12 @@ export function registerPrReviewDecisionRoutes(app: Hono<AppEnv>): void {
     // fallbacks the internal schema declares are applied here.
     const { action, findingIds } = c.req.valid('json')
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
-      c.get('container').executionService.resolvePrReview(workspaceId, scoped.execution.id, {
-        action: action ?? 'finish',
-        findingIds: findingIds ?? [],
-      }),
+      c
+        .get('container')
+        .executionService.decisions.resolvePrReview(workspaceId, scoped.execution.id, {
+          action: action ?? 'finish',
+          findingIds: findingIds ?? [],
+        }),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
@@ -64,7 +66,11 @@ export function registerPrReviewDecisionRoutes(app: Hono<AppEnv>): void {
     const { workspaceId, scoped } = gated
     await c
       .get('container')
-      .executionService.dismissPrReviewFinding(workspaceId, scoped.execution.id, findingId)
+      .executionService.decisions.dismissPrReviewFinding(
+        workspaceId,
+        scoped.execution.id,
+        findingId,
+      )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
 
@@ -80,7 +86,7 @@ export function registerPrReviewDecisionRoutes(app: Hono<AppEnv>): void {
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
-        .executionService.challengePrReviewFinding(
+        .executionService.decisions.challengePrReviewFinding(
           workspaceId,
           scoped.execution.id,
           findingId,

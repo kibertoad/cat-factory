@@ -329,6 +329,22 @@ export type {
   ForkChatRequestInput,
   ChooseForkInput,
   ForkProposal,
+  // Generated-candidate comparison shapes on a binary-output step: the candidates a first pass
+  // stages, the live step state the engine parks on, and the human's keep/discard decision.
+  BinaryCandidate,
+  BinaryCandidateComparison,
+  BinaryCandidateChoice,
+  BinaryCandidateKeep,
+  BinaryCandidateNoChoiceReason,
+  BinaryCandidateStatus,
+  BinaryCandidateStepState,
+  KeepBinaryCandidatesInput,
+  // Generative-integration capability shapes: what an integration can be ASKED FOR while
+  // generating, and the per-step generation options each capability unlocks.
+  BinaryGeneratorCapability,
+  BinaryGenerationOptions,
+  BinaryAssetRef,
+  BinaryReferenceImage,
   // Judge shapes (the fourth step-taxonomy bucket): the rubric verdict an assessment
   // returns + the live step state the engine parks/bounces on + the human's resolution.
   JudgeFindingSeverity,
