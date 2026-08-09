@@ -39,9 +39,9 @@ export type { BinaryGeneratorDefinition }
  * and its contracts SUMMARISED (operation names, sizes) — never the document bodies, which the
  * brief renderer fetches separately for exactly the ids a step selected.
  *
- * The credential appears here as its DECLARATION only (a key name and how to present it). The
- * value is resolved per dispatch, on the container executor's side of the seam, and travels on
- * the job body alone.
+ * Credentials appear here as their DECLARATION only (a key name and how to present it). Values are
+ * resolved per dispatch, on the container executor's side of the seam, and travel on the job body
+ * alone.
  */
 export interface BinaryGeneratorView {
   id: string
@@ -59,7 +59,13 @@ export interface BinaryGeneratorView {
   capabilities: BinaryGeneratorCapability[]
   endpoint?: string
   guidance?: string
-  credential?: BinaryGeneratorCredential
+  /**
+   * What it authenticates with. EMPTY means the definition declared nothing, so the integration is
+   * called unauthenticated: projected as an array for the same reason {@link mediaTypes} and
+   * {@link capabilities} are, so every reader folds over one shape instead of branching on a
+   * nullable first.
+   */
+  credentials: BinaryGeneratorCredential[]
   contracts: ApiContractSummary[]
 }
 
@@ -143,7 +149,7 @@ export class BinaryGeneratorRegistry {
         capabilities: [...(definition.capabilities ?? [])],
         ...(definition.endpoint ? { endpoint: definition.endpoint } : {}),
         ...(definition.guidance ? { guidance: definition.guidance } : {}),
-        ...(definition.credential ? { credential: definition.credential } : {}),
+        credentials: [...(definition.credentials ?? [])],
         contracts: summarized.map((c) => c.summary),
       })
       documents.set(

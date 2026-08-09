@@ -2,6 +2,7 @@ import type {
   AgentRunContext,
   Logger,
   ResolvedBinaryGenerator,
+  ResolvedBinaryGeneratorCredential,
   ToolSecretResolver,
 } from '@cat-factory/kernel'
 import { noopLogger, runBestEffort } from '@cat-factory/kernel'
@@ -84,17 +85,18 @@ export async function resolveBinaryGeneratorSecrets(
   // shared-account case (one vendor behind an image and a music endpoint), since a shared lookup
   // key with no `envName` shares its injection name too.
   const seen = new Set<string>()
-  const wanted = generators.flatMap((generator) => {
-    const key = generator.credentialKey
-    if (!key) return []
-    const envName = generator.credentialEnvName ?? key
-    if (seen.has(envName)) return []
-    seen.add(envName)
-    return [{ generator, key, envName }]
-  })
+  const wanted = generators.flatMap((generator) =>
+    generator.credentials.flatMap((credential) => {
+      const key = credential.key
+      const envName = credential.envName ?? key
+      if (seen.has(envName)) return []
+      seen.add(envName)
+      return [{ generator, credential, key, envName }]
+    }),
+  )
   const resolved = await Promise.all(
-    wanted.map(async ({ generator, key, envName }) => {
-      const value = await resolveOne(input, resolver, generator, key, envName)
+    wanted.map(async ({ generator, credential, key, envName }) => {
+      const value = await resolveOne(input, resolver, generator, credential, key, envName)
       return value === undefined ? null : { key: envName, value }
     }),
   )
@@ -105,6 +107,7 @@ async function resolveOne(
   input: ResolveBinaryGeneratorSecretsInput,
   resolver: ToolSecretResolver,
   generator: ResolvedBinaryGenerator,
+  credential: ResolvedBinaryGeneratorCredential,
   key: string,
   envName: string,
 ): Promise<string | undefined> {
@@ -164,7 +167,7 @@ async function resolveOne(
   // A required key that did not resolve is a misconfiguration that will cost this step its
   // integration; an optional one is a state the deployment declared as normal, so reporting it as
   // a warning would be crying wolf about a working endpoint.
-  if (generator.credentialRequired === false) {
+  if (credential.required === false) {
     input.logger?.debug(
       'binary-generator optional credential did not resolve; the agent is told to call it unauthenticated',
       { binaryGeneratorId: generator.id, credentialKey: key },

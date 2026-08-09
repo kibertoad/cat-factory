@@ -24,7 +24,7 @@ function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGenerato
     mediaTypes: ['image/png'],
     capabilities: [],
     endpoint: 'https://api.retrodiffusion.ai/v1',
-    credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token request header' },
+    credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token request header' }],
     contracts: [],
     ...overrides,
   }
@@ -36,7 +36,7 @@ const music = generator({
   summary: 'Instrumental music generation.',
   modalities: ['audio'],
   mediaTypes: ['audio/mpeg'],
-  credential: { key: 'STUDIO_KEY' },
+  credentials: [{ key: 'STUDIO_KEY' }],
 })
 
 describe('BinaryGeneratorRegistry', () => {
@@ -347,12 +347,49 @@ describe('renderBinaryGeneratorSection', () => {
     const section = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(
         { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [generator({ credential: { key: 'ACME_RD_TOKEN', envName: 'GITHUB_MODELS_TOKEN' } })],
+        [generator({ credentials: [{ key: 'ACME_RD_TOKEN', envName: 'GITHUB_MODELS_TOKEN' }] })],
       ),
       requestedModalities: [],
     }).join('\n')
     expect(section).toContain('`GITHUB_MODELS_TOKEN`')
     expect(section).not.toContain('ACME_RD_TOKEN')
+  })
+
+  it('names SEVERAL credentials as parts of one, so a key pair is never tried by halves', () => {
+    // Two credential paragraphs on their own read as two independent keys, and the agent has no
+    // reason not to try the first alone. For a Basic-auth pair that is a 401 it would then report
+    // as a bad key, with the half it never sent invisible in the report.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [
+              { key: 'SCENARIO_API_KEY', usage: 'the Basic-auth username half' },
+              { key: 'SCENARIO_API_SECRET', usage: 'the Basic-auth password half' },
+            ],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`SCENARIO_API_KEY`, `SCENARIO_API_SECRET`')
+    expect(section).toContain('never call the integration with a subset')
+    // Each half still carries its own usage, which is what tells the agent how to combine them.
+    expect(section).toContain('the Basic-auth username half')
+    expect(section).toContain('the Basic-auth password half')
+  })
+
+  it('leaves a SINGLE credential unqualified, so the ordinary case gains no confusing plural', () => {
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [generator({ credentials: [{ key: 'RD_TOKEN' }] })],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).not.toContain('separate values')
+    expect(section).toContain('`RD_TOKEN`')
   })
 
   it('tells an OPTIONAL credential’s agent to call the integration anyway when it is unset', () => {
@@ -362,7 +399,7 @@ describe('renderBinaryGeneratorSection', () => {
     const section = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(
         { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
-        [generator({ credential: { key: 'RD_TOKEN', required: false } })],
+        [generator({ credentials: [{ key: 'RD_TOKEN', required: false }] })],
       ),
       requestedModalities: [],
     }).join('\n')
@@ -597,13 +634,13 @@ describe('dispatchBinaryGenerators', () => {
         id: 'retro-diffusion',
         label: 'Retro Diffusion',
         modalities: ['image'],
-        credentialKey: 'RD_TOKEN',
+        credentials: [{ key: 'RD_TOKEN' }],
       },
       {
         id: 'studio-music',
         label: 'Studio Music',
         modalities: ['audio'],
-        credentialKey: 'STUDIO_KEY',
+        credentials: [{ key: 'STUDIO_KEY' }],
       },
     ])
     // An unresolved id contributes nothing here: it is the BRIEF that says what to do about one,

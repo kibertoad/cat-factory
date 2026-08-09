@@ -38,13 +38,21 @@ const slug = v.pipe(
 )
 
 /**
- * A credential a generative integration needs, declared by NAME only — never a value.
+ * ONE credential a generative integration needs, declared by NAME only, never a value.
  *
  * The value is resolved per dispatch through the facade-wired `ToolSecretResolver` port (the
  * same port a tool server's credentials go through) and written straight onto the job body,
  * where the harness injects it into THIS JOB's agent environment. It never reaches
- * `AgentRunContext`, a prompt, or the telemetry snapshot — only the key NAME does, because the
+ * `AgentRunContext`, a prompt, or the telemetry snapshot: only the key NAME does, because the
  * agent has to know which variable to read.
+ *
+ * An integration declares a LIST of these ({@link binaryGeneratorDefinitionSchema}'s
+ * `credentials`), because a vendor's account is not always one string. HTTP Basic over a
+ * key/secret pair is the ordinary case that breaks a single field, and it is common enough to be
+ * a shape rather than one vendor's eccentricity. Under one field the two halves have to be
+ * colon-joined into a single variable, which rotates them together, hands the operator one
+ * checklist row where their vendor console shows two values, and turns a mis-joined value into a
+ * 401 indistinguishable from a wrong key.
  */
 export const binaryGeneratorCredentialSchema = v.object({
   /**
@@ -112,6 +120,34 @@ export const binaryGeneratorCredentialSchema = v.object({
 export type BinaryGeneratorCredential = v.InferOutput<typeof binaryGeneratorCredentialSchema>
 
 /**
+ * The environment variable one credential arrives as: its {@link BinaryGeneratorCredential.envName}
+ * when it declares one, else its lookup key.
+ *
+ * The ONE place that fallback is written, because three layers apply it (the schema's uniqueness
+ * check below, the dispatch projection, and the brief that tells the agent which variable to read)
+ * and a copy that drifted would name a variable that is never set: an integration reported as
+ * unavailable on every run, with nothing to see at either end.
+ */
+export function binaryCredentialInjectionName(credential: BinaryGeneratorCredential): string {
+  return credential.envName ?? credential.key
+}
+
+/**
+ * Whether every credential in a declaration arrives as its own variable.
+ *
+ * Exported so the boot check and the schema share one implementation rather than agreeing by
+ * hand. Duplicate LOOKUP keys are deliberately allowed: an integration wanting one stored value
+ * delivered under two names is odd but honest, and nothing is lost. A duplicate INJECTION name
+ * loses a value, which is why only that one is refused.
+ */
+export function uniqueCredentialInjectionNames(
+  credentials: readonly BinaryGeneratorCredential[],
+): boolean {
+  const names = credentials.map(binaryCredentialInjectionName)
+  return new Set(names).size === names.length
+}
+
+/**
  * A generative binary integration a deployment registers in code.
  *
  * Shaped like a foundational service on purpose — identity, prose, and API contracts in the
@@ -169,7 +205,34 @@ export const binaryGeneratorDefinitionSchema = v.object({
    * deployment puts the knowledge that would otherwise be discovered once per run.
    */
   guidance: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(20_000))),
-  credential: v.optional(binaryGeneratorCredentialSchema),
+  /**
+   * The credentials it authenticates with, by name. Absent or empty ⇒ the integration is called
+   * unauthenticated, which the brief states as such rather than leaving the agent to guess.
+   *
+   * A LIST rather than one, because a vendor account is not always one string: HTTP Basic over a
+   * key/secret pair needs both halves, and every other layer this travels through was already
+   * plural (the `ToolSecretResolver` port takes `keys`, a tool server declares `credentials`, the
+   * checklist keys its rows by `(subject, id, key)`, and the job body carries pairs). The single
+   * field was the one singular link in that chain, and it bought nothing.
+   *
+   * INJECTION NAMES must be distinct, which is what {@link uniqueCredentialInjectionNames}
+   * refuses. The job body is keyed by the variable each value arrives as, so two entries naming
+   * one variable do not conflict loudly: one silently wins, and the integration authenticates
+   * with half of a pair.
+   */
+  credentials: v.optional(
+    v.pipe(
+      v.array(binaryGeneratorCredentialSchema),
+      v.maxLength(8),
+      // Wrapped rather than passed by reference: the helper takes a `readonly` array (it is the
+      // shape every other caller holds) and valibot infers a check's input as the pipe's own
+      // mutable item type, which will not accept it.
+      v.check(
+        (credentials) => uniqueCredentialInjectionNames(credentials),
+        'each credential must arrive as its own environment variable',
+      ),
+    ),
+  ),
   /**
    * The integration's API contract documents, in the same formats the foundational catalog
    * accepts. Injected as `.cat-context/` files beside the brief, so the agent calls the

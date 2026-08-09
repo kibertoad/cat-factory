@@ -22,7 +22,7 @@ function generatorRegistry() {
     summary: 'Pixel-art image generation.',
     description: '',
     modalities: ['image'],
-    credential: { key: 'RD_TOKEN' },
+    credentials: [{ key: 'RD_TOKEN' }],
   })
   return generators
 }
@@ -253,7 +253,7 @@ describe('dispatchBinaryGeneratorsFor', () => {
         id: 'retro-diffusion',
         label: 'Retro Diffusion',
         modalities: ['image'],
-        credentialKey: 'RD_TOKEN',
+        credentials: [{ key: 'RD_TOKEN' }],
       },
     ])
   })

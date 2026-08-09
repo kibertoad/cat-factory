@@ -72,7 +72,7 @@ describe('createWorker', () => {
       // Plain http off loopback, with a credential riding every request — the registration that
       // would otherwise put that key on the wire from inside a run container.
       endpoint: 'http://api.retrodiffusion.ai/v1',
-      credential: { key: 'RD_TOKEN' },
+      credentials: [{ key: 'RD_TOKEN' }],
     })
     const worker = createWorker({ overrides: { binaryGeneratorRegistry } })
     await expect(

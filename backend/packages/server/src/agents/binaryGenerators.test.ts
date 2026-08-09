@@ -39,7 +39,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     id: 'retro-diffusion',
     label: 'Retro Diffusion',
     modalities: ['image' as const],
-    credentialKey: 'RD_TOKEN',
+    credentials: [{ key: 'RD_TOKEN' }],
   }
 
   it('resolves each declared credential into a job-body env pair', async () => {
@@ -76,7 +76,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
   })
 
   it('reports an unresolved OPTIONAL credential below warn, so it is not crying wolf', async () => {
-    // `credentialRequired: false` is a state the deployment DECLARED as normal — the endpoint
+    // `required: false` is a state the deployment DECLARED as normal: the endpoint
     // works unauthenticated, and the brief tells the agent to call it anyway. Reporting that at
     // the same severity as a required key that failed to resolve would train an operator to
     // ignore the one that actually costs a step its integration.
@@ -84,7 +84,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const { resolver } = recordingResolver({})
     expect(
       await resolveBinaryGeneratorSecrets({
-        context: context([{ ...retro, credentialRequired: false }]),
+        context: context([{ ...retro, credentials: [{ key: 'RD_TOKEN', required: false }] }]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
         logger,
@@ -114,8 +114,18 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const secrets = await resolveBinaryGeneratorSecrets({
       context: context([
         retro,
-        { id: 'studio-music', label: 'Studio', modalities: ['audio'], credentialKey: 'STUDIO_KEY' },
-        { id: 'reel-video', label: 'Reel', modalities: ['video'], credentialKey: 'REEL_KEY' },
+        {
+          id: 'studio-music',
+          label: 'Studio',
+          modalities: ['audio'],
+          credentials: [{ key: 'STUDIO_KEY' }],
+        },
+        {
+          id: 'reel-video',
+          label: 'Reel',
+          modalities: ['video'],
+          credentials: [{ key: 'REEL_KEY' }],
+        },
       ]),
       workspaceId: 'ws1',
       resolveToolSecrets: resolver,
@@ -149,7 +159,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
           id: 'retro-music',
           label: 'Retro Music',
           modalities: ['audio'],
-          credentialKey: 'RD_TOKEN',
+          credentials: [{ key: 'RD_TOKEN' }],
         },
       ]),
       workspaceId: 'ws1',
@@ -170,7 +180,9 @@ describe('resolveBinaryGeneratorSecrets', () => {
     ).toEqual([])
     expect(
       await resolveBinaryGeneratorSecrets({
-        context: context([{ id: 'open-gen', label: 'Open', modalities: ['image'] }]),
+        context: context([
+          { id: 'open-gen', label: 'Open', modalities: ['image'], credentials: [] },
+        ]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
       }),
@@ -193,7 +205,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const { resolver, subjects } = recordingResolver({ ENCRYPTION_KEY: 'master-key' })
     const logger = createRecordingLogger()
     const secrets = await resolveBinaryGeneratorSecrets({
-      context: context([{ ...retro, credentialKey: 'ENCRYPTION_KEY' }]),
+      context: context([{ ...retro, credentials: [{ key: 'ENCRYPTION_KEY' }] }]),
       workspaceId: 'ws1',
       resolveToolSecrets: resolver,
       logger,
@@ -211,7 +223,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     const { resolver, subjects } = recordingResolver({ harness_shared_secret: 'shh' })
     expect(
       await resolveBinaryGeneratorSecrets({
-        context: context([{ ...retro, credentialKey: 'harness_shared_secret' }]),
+        context: context([{ ...retro, credentials: [{ key: 'harness_shared_secret' }] }]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
       }),
@@ -222,12 +234,12 @@ describe('resolveBinaryGeneratorSecrets', () => {
   // A credential has two names, and only the lookup one is a boundary. See
   // `contracts/src/reserved-env-keys.ts` for why keeping them apart is what makes both rules
   // affordable.
-  it('looks the value up under `credentialKey` and injects it under `credentialEnvName`', async () => {
+  it('looks the value up under a credential `key` and injects it under its `envName`', async () => {
     const { resolver } = recordingResolver({ ACME_IMAGE_TOKEN: 'tok' })
     expect(
       await resolveBinaryGeneratorSecrets({
         context: context([
-          { ...retro, credentialKey: 'ACME_IMAGE_TOKEN', credentialEnvName: 'GITHUB_MODELS_KEY' },
+          { ...retro, credentials: [{ key: 'ACME_IMAGE_TOKEN', envName: 'GITHUB_MODELS_KEY' }] },
         ]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
@@ -242,13 +254,66 @@ describe('resolveBinaryGeneratorSecrets', () => {
     expect(
       await resolveBinaryGeneratorSecrets({
         context: context([
-          { ...retro, id: 'one', credentialKey: 'FIRST_KEY', credentialEnvName: 'VENDOR_KEY' },
-          { ...retro, id: 'two', credentialKey: 'SECOND_KEY', credentialEnvName: 'VENDOR_KEY' },
+          { ...retro, id: 'one', credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
+          { ...retro, id: 'two', credentials: [{ key: 'SECOND_KEY', envName: 'VENDOR_KEY' }] },
         ]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
       }),
     ).toEqual([{ key: 'VENDOR_KEY', value: 'a' }])
+  })
+
+  it('resolves EVERY credential one integration declares, so a key pair arrives whole', async () => {
+    // A vendor authenticating with HTTP Basic needs both halves in the same process. Resolving
+    // only the first would hand the agent a variable that looks set and a call that 401s, which
+    // is indistinguishable from a wrong key at every layer that could report it.
+    const { resolver, subjects } = recordingResolver({
+      SCENARIO_API_KEY: 'kk',
+      SCENARIO_API_SECRET: 'ss',
+    })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          {
+            ...retro,
+            credentials: [{ key: 'SCENARIO_API_KEY' }, { key: 'SCENARIO_API_SECRET' }],
+          },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+      }),
+    ).toEqual([
+      { key: 'SCENARIO_API_KEY', value: 'kk' },
+      { key: 'SCENARIO_API_SECRET', value: 'ss' },
+    ])
+    // Both looked up under ONE subject: the integration is what a per-workspace store scopes by,
+    // and a second subject for the same integration would split its rows in that store.
+    expect(subjects).toEqual([
+      { kind: 'binary-generator', id: 'retro-diffusion' },
+      { kind: 'binary-generator', id: 'retro-diffusion' },
+    ])
+  })
+
+  it('judges each credential of one integration by its OWN `required`', async () => {
+    // The disposition is per credential, not per integration: an optional second value that did
+    // not resolve is a declared-normal state, and reporting it at the severity the required first
+    // one earns would train an operator to ignore both.
+    const { resolver } = recordingResolver({ SCENARIO_API_KEY: 'kk' })
+    const logger = createRecordingLogger()
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          {
+            ...retro,
+            credentials: [{ key: 'SCENARIO_API_KEY' }, { key: 'SCENARIO_ORG_ID', required: false }],
+          },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger,
+      }),
+    ).toEqual([{ key: 'SCENARIO_API_KEY', value: 'kk' }])
+    expect(logger.lines.filter((line) => line.level === 'warn')).toEqual([])
   })
 
   it('refuses a TOOLCHAIN injection name, which would reconfigure the run instead of authenticating', async () => {
@@ -257,7 +322,7 @@ describe('resolveBinaryGeneratorSecrets', () => {
     expect(
       await resolveBinaryGeneratorSecrets({
         context: context([
-          { ...retro, credentialKey: 'ACME_IMAGE_TOKEN', credentialEnvName: 'NODE_OPTIONS' },
+          { ...retro, credentials: [{ key: 'ACME_IMAGE_TOKEN', envName: 'NODE_OPTIONS' }] },
         ]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,

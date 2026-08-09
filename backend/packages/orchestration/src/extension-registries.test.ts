@@ -1248,7 +1248,7 @@ describe('generative binary integration registry validation', () => {
     modalities: ['image' as const],
     mediaTypes: ['image/png'],
     endpoint: 'https://api.retrodiffusion.ai/v1',
-    credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token header' },
+    credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token header' }],
   }
 
   it('passes a well-formed registration', () => {
@@ -1258,7 +1258,7 @@ describe('generative binary integration registry validation', () => {
   it('fails boot on a credential key that is not a usable environment variable name', () => {
     // The failure it replaces: the harness drops the malformed name at parse and the integration
     // 401s mid-run, naming nothing that points back at the registration.
-    const problems = problemsFor([{ ...valid, credential: { key: 'x-rd-token' } }])
+    const problems = problemsFor([{ ...valid, credentials: [{ key: 'x-rd-token' }] }])
     expect(problems[0]?.message).toContain('environment variable name')
   })
 
@@ -1266,11 +1266,59 @@ describe('generative binary integration registry validation', () => {
     // A definition names both the key it wants and the endpoint that key is sent to, so this is a
     // registration that booted clean and shipped the deployment's master sealing key to a third
     // party. Enforced by the credential SCHEMA, so it reaches boot through the same parse.
-    const problems = problemsFor([{ ...valid, credential: { key: 'ENCRYPTION_KEY' } }])
+    const problems = problemsFor([{ ...valid, credentials: [{ key: 'ENCRYPTION_KEY' }] }])
     expect(problems[0]?.code).toBe('binary_generator_invalid')
     expect(problems[0]?.message).toContain('the platform')
     // Case-insensitively, because `process.env` lookup is on Windows.
-    expect(problemsFor([{ ...valid, credential: { key: 'encryption_key' } }])).toHaveLength(1)
+    expect(problemsFor([{ ...valid, credentials: [{ key: 'encryption_key' }] }])).toHaveLength(1)
+  })
+
+  it('accepts the KEY PAIR a Basic-auth vendor needs, as two declared credentials', () => {
+    // The shape this field became a list for: an API key and an API secret are two values the
+    // vendor's own console issues separately, and colon-joining them into one variable rotates
+    // them together and turns a mis-joined value into a 401 that reads as a wrong key.
+    expect(
+      problemsFor([
+        {
+          ...valid,
+          credentials: [
+            { key: 'SCENARIO_API_KEY', usage: 'the Basic-auth username half' },
+            { key: 'SCENARIO_API_SECRET', usage: 'the Basic-auth password half' },
+          ],
+        },
+      ]),
+    ).toEqual([])
+  })
+
+  it('fails boot when two credentials would arrive as ONE environment variable', () => {
+    // The job body is keyed by the injection name, so a collision does not conflict loudly: one
+    // value silently wins and the integration authenticates with half a pair. Refused where the
+    // declaration is, since neither the resolver nor the agent can tell afterwards which half it
+    // got. The LOOKUP keys differ here, which is what makes the collision easy to write by hand.
+    const problems = problemsFor([
+      {
+        ...valid,
+        credentials: [
+          { key: 'SCENARIO_API_KEY', envName: 'SCENARIO_AUTH' },
+          { key: 'SCENARIO_API_SECRET', envName: 'SCENARIO_AUTH' },
+        ],
+      },
+    ])
+    expect(problems[0]?.code).toBe('binary_generator_invalid')
+    expect(problems[0]?.message).toContain('its own environment variable')
+    // The same collision through the FALLBACK: an entry with no `envName` arrives as its lookup
+    // key, so this pair collides too and a check reading `envName` alone would pass it.
+    expect(
+      problemsFor([
+        {
+          ...valid,
+          credentials: [
+            { key: 'SCENARIO_AUTH' },
+            { key: 'SCENARIO_API_SECRET', envName: 'SCENARIO_AUTH' },
+          ],
+        },
+      ]),
+    ).toHaveLength(1)
   })
 
   it('fails boot on a cleartext endpoint off loopback, because the credential rides it', () => {

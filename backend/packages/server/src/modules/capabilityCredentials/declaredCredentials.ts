@@ -108,16 +108,19 @@ export async function collectDeclaredCapabilityCredentials(
     () => input.binaryGenerators.views(),
   )
   for (const view of views ?? []) {
-    const credential = view.credential
-    if (!credential) continue
-    push({
-      subject: 'binary-generator',
-      id: view.id,
-      label: view.name,
-      key: credential.key,
-      ...(credential.usage ? { usage: credential.usage } : {}),
-      required: credential.required !== false,
-    })
+    // Every credential the integration declares, not one: a vendor authenticating with a
+    // key/secret pair gives the operator two values in its own console, and a checklist offering
+    // one row for them is a form that cannot be filled in correctly.
+    for (const credential of view.credentials) {
+      push({
+        subject: 'binary-generator',
+        id: view.id,
+        label: view.name,
+        key: credential.key,
+        ...(credential.usage ? { usage: credential.usage } : {}),
+        required: credential.required !== false,
+      })
+    }
   }
   return { declared, incomplete: views === undefined }
 }
