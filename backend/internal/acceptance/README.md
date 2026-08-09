@@ -129,22 +129,22 @@ cluster (a public package, or an `imagePullSecret` you have already installed).
 
 ## Configuration
 
-| Variable                               | Required | What it is                                                                                        |
-| -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves both `/api/v1` and the app API.              |
-| `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (spec 03 also needs the `decide` rung it includes).           |
-| `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                   |
-| `ACCEPTANCE_REPO_OWNER`                | yes      | GitHub owner the bootstrapped repositories are created under.                                     |
-| `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                     |
-| `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                  |
-| `ACCEPTANCE_K3S_CA_PEM`                | one of   | The cluster CA in PEM. Wins over the insecure flag when both are set.                             |
-| `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                               |
-| `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS.                                     |
-| `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                  |
-| `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Set it per-person when an org is shared: repository names collide account-wide. |
-| `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a vitest timeout; see below.                                 |
-| `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                  |
-| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass. Unset starts a new one.             |
+| Variable                               | Required | What it is                                                                                                                                                                         |
+| -------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves both `/api/v1` and the app API.                                                                                               |
+| `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (spec 03 also needs the `decide` rung it includes).                                                                                            |
+| `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                                                                                                    |
+| `ACCEPTANCE_REPO_OWNER`                | yes      | GitHub owner the bootstrapped repositories are created under.                                                                                                                      |
+| `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                                                                                                      |
+| `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                                                                                                   |
+| `ACCEPTANCE_K3S_CA_PEM`                | one of   | The cluster CA in PEM. Wins over the insecure flag when both are set.                                                                                                              |
+| `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                                                                                                                |
+| `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS. Also the host the bootstrap briefs ask each service's Ingress to serve, so overriding it moves both halves together. |
+| `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                                                                                                   |
+| `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Set it per-person when an org is shared: repository names collide account-wide.                                                                                  |
+| `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a vitest timeout; see below.                                                                                                                  |
+| `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                                                                                                   |
+| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass. Unset starts a new one.                                                                                              |
 
 Missing configuration is reported **all at once**, with what each variable is for. The suite
 refuses rather than guessing, because it creates real repositories.
@@ -159,6 +159,10 @@ and a second command reduces the two into an answer:
 pnpm --filter @cat-factory/acceptance run status          # the most recent pass
 pnpm --filter @cat-factory/acceptance run status 20260809175530
 ```
+
+A phase re-entered by a later attempt at the same run id is re-opened and re-timed from that
+entry, so what the report shows is the CURRENT pass rather than a phase that reads `done` under
+yesterday's message with an elapsed time spanning the night between them.
 
 It reports each phase with how long it has been in it, the last thing that phase observed,
 anything the pass created (services, runs, pull requests), any bootstrap started but not settled,
@@ -200,7 +204,10 @@ Every one of those states is recorded the moment it is entered rather than when 
 the window a crash can land in is as small as the ledger write. The one thing recorded that is not
 an id is the set of decision kinds the suite ANSWERED, because a settled decision is
 indistinguishable afterwards from one nobody had to make, and spec 03's claim that it drove a human
-gate over `/api/v1` has to survive the process that made it.
+gate over `/api/v1` has to survive the process that made it. It travels with the TASK it was
+recorded against and no further: a task the board no longer has is re-filed as new work, and
+inheriting the deleted run's answers would let spec 03 claim it drove a gate the replacement run
+never reached.
 
 **Nothing is cleaned up on failure.** The run, its pull request and any provisioned namespace are
 left in place to be inspected, and the failure message says so. Successful passes reclaim their
@@ -223,11 +230,20 @@ derives its verdicts in code from captured facts, so `reproduction.verdict`, `en
 `ci.verdict` and `merge.outcome` are stable claims. `src/evidence.ts` reduces them, and is itself
 unit-tested: a bug in a grader reports green and nothing else notices.
 
-**2. Never auto-answer a decision the suite was not designed for.** `src/decisions.ts` answers
-exactly two kinds and hard-fails on every other, naming it. The tempting shape is a loop that
-settles whatever it finds so the run keeps moving; that produces a green suite that proves nothing,
-because a `pr-review` gate auto-resolved and a `fork` auto-picked are decisions a person was
-supposed to make.
+**2. Never auto-answer a decision the suite was not designed for, or one that is in flight.**
+`src/decisions.ts` answers exactly two kinds and hard-fails on every other, naming it. The tempting
+shape is a loop that settles whatever it finds so the run keeps moving; that produces a green suite
+that proves nothing, because a `pr-review` gate auto-resolved and a `fork` auto-picked are
+decisions a person was supposed to make.
+
+Being LISTED is not being answerable, and that is a second way to auto-settle by accident. The
+decision list deliberately keeps showing a review the driver is mid-cycle on (`incorporating`,
+`reviewing`) so a poller can see its answers are in flight. `isActionable` decides per kind from
+the status the platform reports, and both the answering path and the poll wait read it: without
+it, the suite waives the clarity gate one poll after answering it, racing the incorporation of the
+very answers it gave, while the run still reaches `done` and the ledger still records the gate as
+answered. A review parked at its ITERATION CAP (`exceeded`) is refused rather than pushed past,
+for the same reason a `fork` is: the choice belongs to a person.
 
 **3. A wait that expires must say what it last saw.** The vitest timeout is disabled on purpose so
 that `src/deadline.ts` fires first: "timed out after 5400000ms" is true and useless, where "step 3
@@ -275,7 +291,7 @@ nothing, and `src/prerequisites.ts` is their only caller.
 | `src/publicApi.ts`           | SDK client, run observation, the polling wait.                                   |
 | `src/resume.ts`              | File a task, or adopt / re-attach to what a previous pass left.                  |
 | `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.        |
-| `src/decisions.ts`           | The two decision kinds this suite answers, and the refusal for everything else.  |
+| `src/decisions.ts`           | The two kinds this suite answers, what is answerable NOW, and the refusals.      |
 | `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                    |
 | `src/instructions.ts`        | The briefs, and the reasoning behind the planted defect.                         |
 | `src/k3s.ts`                 | The engine connection and the per-service manifest source.                       |

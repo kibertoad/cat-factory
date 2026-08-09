@@ -112,9 +112,15 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
     )
   }
 
-  const runBudget = readPositiveInt(env.ACCEPTANCE_RUN_BUDGET_MS)
-  if (env.ACCEPTANCE_RUN_BUDGET_MS !== undefined && runBudget === null) {
-    problems.push('ACCEPTANCE_RUN_BUDGET_MS must be a positive integer of milliseconds')
+  // Blank is ABSENT here as it is for every other variable: an `ACCEPTANCE_RUN_BUDGET_MS=` line
+  // left in a `.env` states no budget, and refusing it as a malformed integer would send an
+  // operator hunting for a value they deliberately did not set.
+  const budgetText = trimmed(env.ACCEPTANCE_RUN_BUDGET_MS)
+  const runBudget = budgetText === null ? null : readPositiveInt(budgetText)
+  if (budgetText !== null && runBudget === null) {
+    problems.push(
+      `ACCEPTANCE_RUN_BUDGET_MS ('${budgetText}') must be a positive integer of milliseconds`,
+    )
   }
 
   if (problems.length > 0) return { ok: false, problems }
@@ -178,9 +184,8 @@ function readBoolean(value: string | undefined): boolean {
   return trimmed(value)?.toLowerCase() === 'true'
 }
 
-function readPositiveInt(value: string | undefined): number | null {
-  const raw = trimmed(value)
-  if (raw === null) return null
+/** Takes an already-trimmed, non-empty value, so its `null` means MALFORMED and never absent. */
+function readPositiveInt(raw: string): number | null {
   const parsed = Number(raw)
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 }

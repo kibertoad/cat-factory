@@ -10,6 +10,7 @@ import { CatFactoryClient } from '@cat-factory/sdk'
 import type { PublicDecisionList, PublicIdentity, PublicRun, PublicService } from '@cat-factory/sdk'
 import type { AcceptanceConfig } from './config.ts'
 import { waitFor } from './deadline.ts'
+import { isActionable } from './decisions.ts'
 import type { Journal } from './journal.ts'
 
 export type { PublicDecisionList, PublicRun, PublicService }
@@ -74,15 +75,36 @@ export function describeRun(run: PublicRun): string {
   return `run ${run.runId} status=${run.status}, ${where}${pr}${failure}`
 }
 
-/** Describe what a run is asking for, for the same audience as `describeRun`. */
+/**
+ * Describe what a run is asking for, for the same audience as `describeRun`.
+ *
+ * The listed kinds are split by whether the suite may act on one NOW, because that is the
+ * distinction a person watching a long wait needs: a `clarity-review` sitting in the in-flight
+ * column is the driver folding in answers and is the run working, where the same kind in the
+ * answerable column with nothing happening is the suite failing to answer a park.
+ */
 export function describeDecisions(decisions: PublicDecisionList): string {
-  const answerable = decisions.decisions.map((decision) => decision.kind).join(', ') || 'none'
+  const listed = decisions.decisions
+  const answerable = listed.filter(isActionable)
+  const inFlight = listed.filter((decision) => !isActionable(decision))
   const blocked = decisions.unanswerable.map((wait) => wait.reason).join(', ') || 'none'
-  return `answerable: [${answerable}], unanswerable: [${blocked}]`
+  return (
+    `answerable: [${kinds(answerable)}], in flight: [${kinds(inFlight)}], ` +
+    `unanswerable: [${blocked}]`
+  )
+}
+
+function kinds(decisions: PublicDecisionList['decisions']): string {
+  return decisions.map((decision) => decision.kind).join(', ') || 'none'
 }
 
 /**
- * Wait until the run is parked on a decision this API can answer, or settles without asking.
+ * Wait until the run is parked on a decision this suite can answer NOW, or settles without asking.
+ *
+ * Readiness is `isActionable`, never a non-empty list. A listed decision the driver still owns (a
+ * clarity review mid-incorporation, a follow-up set whose every item is settled) is the run
+ * WORKING, and returning on it would spin this loop against the deployment at full speed for as
+ * long as the driver took, answering nothing and pushing writes at a review nobody handed over.
  *
  * Polling rather than the SSE stream, deliberately. The stream is the better channel for a UI
  * and this suite is not one: an hour-long wait over one long-lived connection has to handle
@@ -108,7 +130,7 @@ export function waitForDecisionOrSettled(options: {
       // is answerable while the run is still working, so gating this read on `status === blocked`
       // would wait out a decision that was already there.
       const decisions = await client.decisions.list(runId)
-      const ready = isTerminal(run.status) || decisions.decisions.length > 0
+      const ready = isTerminal(run.status) || decisions.decisions.some(isActionable)
       return ready
         ? { done: true, value: { run, decisions } }
         : { done: false, state: `${describeRun(run)}; ${describeDecisions(decisions)}` }

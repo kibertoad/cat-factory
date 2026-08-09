@@ -31,6 +31,7 @@ import {
   checkMergeDecision,
   checkNotTruncated,
   checkReproductionProof,
+  retainedEnvironmentUrl,
 } from '../src/evidence.ts'
 import { bugReportBrief } from '../src/instructions.ts'
 import { fileAndDrive } from '../src/resume.ts'
@@ -61,17 +62,18 @@ describe('bug lifecycle: investigate the shipped defect and fix it', () => {
       journal,
       existing: world.value.bugfix,
       label: 'the paging bug report',
-      // The environment spec 02 stood up is long gone (its `disposer` reclaimed the namespace,
-      // which spec 02 asserted), so the report names a live URL only when one is still recorded.
-      // An absent URL is stated as "reproduce locally" rather than omitted: a bug report that
-      // silently drops its "where" reads to an investigator like one whose reporter never had an
-      // environment. Resolved inside the callback because a resumed pass that adopts the already
-      // filed task must not spend two evidence reads composing a description nobody will use.
+      // The report names an environment only when the platform says one OUTLIVED its run. Under
+      // this suite's own pipeline none does (spec 02 asserts each `disposer` reclaimed its
+      // namespace), so this normally resolves to null and the report says "reproduce locally",
+      // which is the truth. It is derived rather than assumed because the alternative reading, a
+      // `ready` entry in a settled report, is a deploy-time fact that would send the investigator
+      // to a dead host. Resolved inside the callback because a resumed pass that adopts the
+      // already filed task must not spend two evidence reads composing a description nobody uses.
       createTask: async () =>
         client.tasks.create(frontend.serviceId, {
           title: 'Paging repeats the last item of the previous page',
           taskType: 'bug',
-          description: bugReportBrief(await lastKnownEnvironmentUrl()),
+          description: bugReportBrief(await liveEnvironmentUrl()),
         }),
       onRecord: (record) => world.patch({ bugfix: record }),
       pipelineId: PIPELINE,
@@ -130,16 +132,13 @@ describe('bug lifecycle: investigate the shipped defect and fix it', () => {
     ).toBeGreaterThan(0)
   })
 
-  /** The most recent environment URL either feature run recorded, or null if none survives. */
-  async function lastKnownEnvironmentUrl(): Promise<string | null> {
+  /** An environment either feature run left STANDING, or null when both were reclaimed. */
+  async function liveEnvironmentUrl(): Promise<string | null> {
     for (const key of ['featureFrontend', 'featureBackend'] as const) {
       const record = world.value[key]
       if (!record?.runId) continue
-      const report = await client.evidence.getReport(record.runId)
-      const ready = report.environments.entries.find(
-        (entry) => entry.status === 'ready' && entry.url,
-      )
-      if (ready?.url) return ready.url
+      const url = retainedEnvironmentUrl(await client.evidence.getReport(record.runId))
+      if (url) return url
     }
     return null
   }

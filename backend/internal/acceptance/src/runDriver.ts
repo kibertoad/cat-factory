@@ -15,7 +15,12 @@ import type { CatFactoryClient, PublicRun } from '@cat-factory/sdk'
 import { type AnsweredDecision, answerDecisions } from './decisions.ts'
 import { formatDuration } from './deadline.ts'
 import type { Journal } from './journal.ts'
-import { describeRun, isTerminal, waitForDecisionOrSettled } from './publicApi.ts'
+import {
+  describeDecisions,
+  describeRun,
+  isTerminal,
+  waitForDecisionOrSettled,
+} from './publicApi.ts'
 
 export type DriveOptions = {
   client: CatFactoryClient
@@ -65,9 +70,10 @@ export async function driveRun(options: DriveOptions & { runId: string }): Promi
     })
     if (isTerminal(run.status)) return { run, answered }
 
-    // Reaching here means the run is asking for something. `answerDecisions` throws on any kind
-    // this suite is not designed for, which is what stops the loop from driving a run past a
-    // decision a person was meant to make.
+    // Reaching here means the run is asking for something ANSWERABLE: the wait returns on
+    // `isActionable`, so a decision the driver still owns leaves this loop sleeping rather than
+    // pushing writes at it. `answerDecisions` throws on any kind this suite is not designed for,
+    // which is what stops the loop from driving a run past a decision a person was meant to make.
     const justAnswered = await answerDecisions({ client, runId, steer }, decisions)
     for (const entry of justAnswered) {
       journal.say(
@@ -77,13 +83,18 @@ export async function driveRun(options: DriveOptions & { runId: string }): Promi
     }
     answered.push(...justAnswered)
 
-    // A decision list whose every item was already settled would spin this loop against the
-    // backend with nothing changing. Treat it as the stall it is rather than burning the budget.
+    // The wait promised something actionable and answering it produced nothing, so the predicate
+    // the wait used and the answer path disagree. Refusing here is what keeps that a loud bug
+    // rather than this loop spinning against the deployment until the budget runs out.
+    // `every` over nothing is `true`, which is the case where the wait promised an actionable
+    // decision and the filter kept none: the same disagreement, and it lands in the same message.
     if (justAnswered.every((entry) => entry.actions.length === 0)) {
       throw new Error(
-        `Run ${runId} reports ${decisions.decisions.length} decision(s) ` +
-          `(${decisions.decisions.map((decision) => decision.kind).join(', ')}) but every item in ` +
-          `them is already settled, so answering changes nothing and the run is not advancing.\n` +
+        `Run ${runId} was reported as having an answerable decision among ` +
+          `${decisions.decisions.length} listed (${describeDecisions(decisions)}), but answering ` +
+          `took no action, so the run is not advancing.\n` +
+          `That is a disagreement between isActionable() and the answering path in ` +
+          `src/decisions.ts rather than a problem with the run.\n` +
           `Last observed: ${describeRun(run)}`,
       )
     }

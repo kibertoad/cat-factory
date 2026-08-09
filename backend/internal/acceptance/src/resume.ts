@@ -70,9 +70,13 @@ export type FileAndDriveResult = DriveResult & {
  */
 export async function fileAndDrive(options: FileAndDriveOptions): Promise<FileAndDriveResult> {
   const { journal, existing, label, onRecord } = options
-  const carried = existing?.answeredKinds ?? []
 
   const adopted: Adoption = existing?.taskId ? await adopt(options, existing) : { kind: 'gone' }
+  // Carried only onto work the ledger's own task still names. On the `gone` path the recorded task
+  // is being re-filed, and its predecessor's gate answers are a fact about a run the board no
+  // longer has: inheriting them would let spec 03 claim it drove the clarity gate on a run that
+  // never reached it, which is the one claim the ledger carries this set to make.
+  const carried = adopted.kind === 'gone' ? [] : (existing?.answeredKinds ?? [])
   if (adopted.kind === 'settled') {
     journal.say(
       'milestone',

@@ -16,8 +16,9 @@ import type { RunRecord, ServiceRecord, World } from './world.ts'
 
 export type PhaseStatus = {
   phase: string
+  /** When the phase was last ENTERED, so a resumed pass measures this attempt and not the gap. */
   startedAt: number
-  /** The `phase-finished` message, or null while the phase is still open. */
+  /** The `phase-finished` message when that was the phase's last word, else null. */
   finished: string | null
   /** The most recent event of any kind, which is what says whether it is moving. */
   lastMessage: string
@@ -66,16 +67,30 @@ export function summarisePass(input: {
  * Grouped rather than keyed on the `phase-started` event, because a journal is routinely read
  * mid-write and while a pass is resuming: a phase whose start line is in an earlier pass's tail
  * still has observations worth showing, and dropping it would report a working spec as absent.
+ *
+ * The journal accumulates across every attempt at one run id, so a phase is routinely entered
+ * more than once and routinely goes on after finishing (spec 02 finishes a phase per service).
+ * Two rules keep the report about NOW rather than about the file:
+ *
+ *   - **`phase-started` re-opens the phase**, re-anchoring `startedAt`. Left at the first entry,
+ *     the elapsed time a resumed pass shows spans the night between two attempts, which answers
+ *     nothing anyone asks of it.
+ *   - **`finished` is the phase's LAST word, not a latch.** A phase that finished and then wrote
+ *     again is still working, and rendering it `done` beside a message from before the resume is
+ *     the one reading that sends someone away believing the spec passed.
  */
 function reducePhases(events: readonly JournalEvent[]): readonly PhaseStatus[] {
   const byPhase = new Map<string, PhaseStatus>()
   for (const event of events) {
     const existing = byPhase.get(event.phase)
-    if (!existing) {
+    const finished = event.kind === 'phase-finished' ? event.message : null
+    // `Map.set` on a key it already holds keeps the original insertion order, so re-entering a
+    // phase re-anchors it without reordering the report.
+    if (!existing || event.kind === 'phase-started') {
       byPhase.set(event.phase, {
         phase: event.phase,
         startedAt: event.at,
-        finished: event.kind === 'phase-finished' ? event.message : null,
+        finished,
         lastMessage: event.message,
         lastAt: event.at,
       })
@@ -83,7 +98,7 @@ function reducePhases(events: readonly JournalEvent[]): readonly PhaseStatus[] {
     }
     existing.lastMessage = event.message
     existing.lastAt = event.at
-    if (event.kind === 'phase-finished') existing.finished = event.message
+    existing.finished = finished
   }
   return [...byPhase.values()]
 }

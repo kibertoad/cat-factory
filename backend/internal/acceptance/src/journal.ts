@@ -58,12 +58,17 @@ export class Journal {
     return this.#path
   }
 
-  /** Bind subsequent events to a spec. Returned so a caller can restore the previous one. */
-  enterPhase(phase: string): string {
-    const previous = this.#phase
+  /**
+   * Bind every subsequent event to a spec.
+   *
+   * There is deliberately no way to restore the previous phase. A binding that can be swapped
+   * back invites a shared helper to enter a phase of its own to do some work and hand the journal
+   * back, and the phase it holds while doing so is the one every concurrent write lands under.
+   * Only a spec enters a phase, and it does so once (`acceptance/fixtures.ts`).
+   */
+  enterPhase(phase: string): void {
     this.#phase = phase
     this.record('phase-started', `entered ${phase}`)
-    return previous
   }
 
   finishPhase(message: string): void {

@@ -41,8 +41,15 @@ export function frontendRepoName(prefix: string, runId: string): string {
  * `{{image}}`, `{{namespace}}` and `{{branch}}` are rendered by the platform at provision time
  * (see `backend/docs/local-k3s-environments.md`); the agent must emit them VERBATIM rather than
  * resolving them, which is the instruction agents most often improve on unprompted.
+ *
+ * **The Ingress host is the CONFIGURED template**, never a literal. The platform derives an
+ * environment's URL from the same `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` it hands the engine
+ * (`k3s.ts`), so a brief naming a different host ships manifests serving one name behind a URL
+ * built from another: an environment that never answers, on a deployment whose only fault was
+ * overriding a documented variable. Nothing would fail: spec 02 asserts the URL sits under the
+ * configured suffix, and it would.
  */
-function manifestBrief(servicePort: number): string {
+function manifestBrief(servicePort: number, ingressHostTemplate: string): string {
   return `
 Ship per-PR Kubernetes manifests in \`${MANIFEST_DIR}/\` as plain YAML documents (a Deployment, a
 Service and an Ingress). They are applied directly to the API server without any kustomize or helm
@@ -53,7 +60,7 @@ Rules that are NOT negotiable, because the platform renders them:
   image reference; the platform substitutes it per environment.
 - Use the literal placeholder \`{{namespace}}\` wherever the namespace appears, and do not set a
   hard-coded \`namespace:\` on any resource.
-- The Ingress host must be exactly \`{{namespace}}.127.0.0.1.nip.io\`.
+- The Ingress host must be exactly \`${ingressHostTemplate}\`, placeholders included and unresolved.
 - The Service must expose port ${servicePort} and the container must listen on ${servicePort}.
 - Give the Deployment a readiness probe on \`/health\`, and keep replicas at 1.
 
@@ -62,7 +69,7 @@ to any branch, tagged with the commit SHA, so a branch always has an image to pu
 }
 
 /** The backend brief. Note the 1-based \`offset\`: one half of the planted mismatch. */
-export function backendBootstrapInstructions(): string {
+export function backendBootstrapInstructions(ingressHostTemplate: string): string {
   return `
 Create a small, production-shaped HTTP backend service in TypeScript on Node 22, using Fastify.
 
@@ -78,11 +85,14 @@ Engineering expectations:
 - A README documenting every route with an example request and response.
 - Lint and typecheck scripts that pass.
 
-${manifestBrief(3000)}`.trim()
+${manifestBrief(3000, ingressHostTemplate)}`.trim()
 }
 
 /** The frontend brief. Deliberately says nothing about pagination yet; the feature adds it. */
-export function frontendBootstrapInstructions(backendRepo: string): string {
+export function frontendBootstrapInstructions(
+  backendRepo: string,
+  ingressHostTemplate: string,
+): string {
   return `
 Create a small single-page web frontend in TypeScript using Vite and plain TypeScript (no UI
 framework), which renders the catalog served by the companion backend service (\`${backendRepo}\`).
@@ -100,7 +110,7 @@ Engineering expectations:
 - A README documenting how to run it and which environment variables it reads.
 - Lint and typecheck scripts that pass.
 
-${manifestBrief(8080)}`.trim()
+${manifestBrief(8080, ingressHostTemplate)}`.trim()
 }
 
 /**
@@ -167,10 +177,15 @@ Cover the offset arithmetic and the button states with unit tests.`.trim()
  * those would hand the `bug-investigator` its own conclusion and reduce the step to a formality.
  * What makes this a fair test is that everything needed to diagnose it is discoverable in the two
  * repositories, and none of it is in this text.
+ *
+ * `liveEnvironmentUrl` is a URL the caller has established is still STANDING
+ * (`retainedEnvironmentUrl` in `evidence.ts`), never merely one a settled report recorded. Absent
+ * is stated as "reproduce locally" rather than omitted: a report that silently drops its "where"
+ * reads to an investigator like one whose reporter never had an environment at all.
  */
-export function bugReportBrief(frontendUrl: string | null): string {
-  const where = frontendUrl
-    ? `The environment the feature shipped to is at ${frontendUrl}.`
+export function bugReportBrief(liveEnvironmentUrl: string | null): string {
+  const where = liveEnvironmentUrl
+    ? `The environment the feature shipped to is at ${liveEnvironmentUrl}.`
     : 'Reproduce it against a locally running pair of the two services.'
   return `
 Paging through the catalog shows me the same item twice.

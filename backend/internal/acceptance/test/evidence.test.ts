@@ -8,6 +8,7 @@ import {
   checkMergeDecision,
   checkNotTruncated,
   checkReproductionProof,
+  retainedEnvironmentUrl,
 } from '../src/evidence.ts'
 
 // These reductions decide whether an acceptance run passes, so a bug in one reports green and
@@ -247,5 +248,55 @@ describe('assertChecks', () => {
 
   it('says nothing when every claim holds', () => {
     expect(() => assertChecks('a run', [check('ok', true, 'fine')])).not.toThrow()
+  })
+})
+
+describe('retainedEnvironmentUrl', () => {
+  const withEnvironments = (
+    teardown: PrVerificationReport['environments']['teardown'],
+    entries: PrVerificationReport['environments']['entries'],
+  ) => report({ environments: { ...report().environments, status: 'reported', teardown, entries } })
+
+  it('withholds the URL of an environment the run reclaimed', () => {
+    // The trap: a settled report keeps saying `ready`, because that is what the entry was at
+    // DEPLOY time. Reading it as a live address puts a dead host in front of an investigator,
+    // who then concludes the reporter's environment is the fault and stops looking.
+    const url = retainedEnvironmentUrl(
+      withEnvironments('confirmed', [
+        { frameId: 'blk_1', status: 'ready', url: 'http://cf-acc-1.127.0.0.1.nip.io' },
+      ]),
+    )
+    expect(url).toBeNull()
+  })
+
+  it('withholds it when the reclaim never settled, which is not the same as retained', () => {
+    for (const teardown of ['unconfirmed', 'pending', 'failed', 'not_applicable'] as const) {
+      expect(
+        retainedEnvironmentUrl(
+          withEnvironments(teardown, [
+            { frameId: 'blk_1', status: 'ready', url: 'http://cf-acc-1.127.0.0.1.nip.io' },
+          ]),
+        ),
+        `teardown=${teardown} is an unsettled reclaim, not a declaration that it outlives the run`,
+      ).toBeNull()
+    }
+  })
+
+  it('offers the URL only when the platform says the environment outlives its run', () => {
+    const url = retainedEnvironmentUrl(
+      withEnvironments('retained', [
+        { frameId: 'blk_1', status: 'failed', error: 'ImagePullBackOff' },
+        { frameId: 'blk_2', status: 'ready', url: 'http://cf-acc-2.127.0.0.1.nip.io' },
+      ]),
+    )
+    expect(url).toBe('http://cf-acc-2.127.0.0.1.nip.io')
+  })
+
+  it('withholds a retained environment that never came up', () => {
+    expect(
+      retainedEnvironmentUrl(
+        withEnvironments('retained', [{ frameId: 'blk_1', status: 'failed', error: 'boom' }]),
+      ),
+    ).toBeNull()
   })
 })

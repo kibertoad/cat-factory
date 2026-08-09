@@ -49,6 +49,57 @@ describe('summarisePass', () => {
     expect(status.phases[1]?.finished).toBeNull()
   })
 
+  it('re-opens a phase a later pass entered again, rather than leaving it done', () => {
+    // The journal accumulates across attempts at one run id, so this is what the status command
+    // shows all day on a resumed pass: a spec that finished yesterday, was re-entered this
+    // morning and is working now would otherwise render `done` under yesterday's message.
+    const status = summarise({
+      events: [
+        event({
+          phase: '02-feature',
+          kind: 'phase-finished',
+          message: 'backend shipped',
+          at: at(0),
+        }),
+        event({ phase: '02-feature', kind: 'phase-started', message: 'entered', at: at(90_000) }),
+        event({ phase: '02-feature', message: 'coder working', at: at(120_000) }),
+      ],
+    })
+    expect(status.phases[0]?.finished).toBeNull()
+    // Re-anchored to the re-entry: an elapsed time spanning the gap between two passes answers
+    // nothing that anyone reads this report to find out.
+    expect(status.phases[0]?.startedAt).toBe(at(90_000))
+  })
+
+  it('re-opens a phase that finished and then kept writing', () => {
+    // Spec 02 finishes a phase per service, so this is the ordinary shape rather than an edge:
+    // between the two, the phase is working and must not read as done.
+    const status = summarise({
+      events: [
+        event({
+          phase: '02-feature',
+          kind: 'phase-finished',
+          message: 'backend shipped',
+          at: at(0),
+        }),
+        event({ phase: '02-feature', message: 'frontend coder working', at: at(60_000) }),
+      ],
+    })
+    expect(status.phases[0]?.finished).toBeNull()
+    expect(status.phases[0]?.lastMessage).toBe('frontend coder working')
+  })
+
+  it('keeps the report in first-seen order when a phase is re-entered', () => {
+    const status = summarise({
+      events: [
+        event({ phase: '01-bootstrap', kind: 'phase-started', message: 'entered', at: at(0) }),
+        event({ phase: '02-feature', kind: 'phase-started', message: 'entered', at: at(100) }),
+        event({ phase: '01-bootstrap', kind: 'phase-started', message: 'entered', at: at(200) }),
+      ],
+    })
+    expect(status.phases.map((phase) => phase.phase)).toEqual(['01-bootstrap', '02-feature'])
+  })
+
   it('reports a phase whose start line it never saw', () => {
     // A journal is read mid-write and across resumes, so a phase can be present only through its
     // observations. Dropping it would report a working spec as absent, which is the opposite fact.

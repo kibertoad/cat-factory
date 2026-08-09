@@ -83,6 +83,27 @@ export function checkEphemeralEnvironment(report: PrVerificationReport): Check[]
 }
 
 /**
+ * An environment URL from this report that is still worth putting in front of a person, or null.
+ *
+ * A `ready` entry is a fact about DEPLOY time, not about now, and a settled report is history: by
+ * the time anything reads one, the run's `disposer` has been and gone. `teardown` is the platform's
+ * own verdict on what is left standing, and only `retained` says the environment was DECLARED to
+ * outlive its run. Everything else is either a confirmed reclaim or an unsettled one, and a URL
+ * that may or may not answer is worse in a bug report than no URL at all: an investigator who gets
+ * a connection refused concludes the reporter's environment is the fault and stops looking.
+ *
+ * This is the shape of the trap it exists to close. Spec 02 asserts `teardown === 'confirmed'` for
+ * both feature runs, so every URL those reports hold is dead by construction, and reading one off
+ * a `ready` entry sent spec 03's investigator to a host that answers nothing while the honest
+ * "reproduce locally" fallback could never fire.
+ */
+export function retainedEnvironmentUrl(report: PrVerificationReport): string | null {
+  if (report.environments.teardown !== 'retained') return null
+  const ready = report.environments.entries.find((entry) => entry.status === 'ready' && entry.url)
+  return ready?.url ?? null
+}
+
+/**
  * The bugfix run proved the defect: RED on the pre-fix tree, GREEN on the pushed tree.
  *
  * Only `reproduced` is proof. The other two verdicts are honest outcomes the platform is

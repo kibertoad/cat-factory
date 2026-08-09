@@ -40,9 +40,13 @@ particular file exists):
    the resume path skips. An unreadable probe is its own verdict, never read as "unmet".
 1. **Assert on evidence the platform COMPUTED, never on agent prose.** `src/evidence.ts` reduces
    the verification report; grepping a coder's reply tests the model's phrasing, not the product.
-2. **Never auto-answer an unplanned decision.** `src/decisions.ts` answers `follow-ups` and
-   `clarity-review` and hard-fails on everything else, naming the kind. A loop that settles
-   whatever it finds drives a run past decisions a person was meant to make and still ends `done`.
+2. **Never auto-answer an unplanned decision, and never answer one in FLIGHT.**
+   `src/decisions.ts` answers `follow-ups` and `clarity-review` and hard-fails on everything else,
+   naming the kind. Which of those two may be acted on NOW is `isActionable`, read off the status
+   the platform reports and shared with the poll wait: the list keeps showing a review the driver
+   is mid-cycle on, and reading "listed" as "answer me" waives the gate one poll after answering
+   it. A loop that settles whatever it finds drives a run past decisions a person was meant to make
+   and still ends `done`.
 3. **A wait that expires states its last observation.** The vitest timeout is off so
    `src/deadline.ts` fires first.
 4. **Report every failing claim, not just the first.** A pass costs an afternoon.

@@ -60,7 +60,7 @@ describe('bootstrap: two empty repositories become two provisioned board service
       title: titles.backend,
       repoName: backendRepoName(config.namePrefix, world.value.runId),
       type: 'service',
-      instructions: backendBootstrapInstructions(),
+      instructions: backendBootstrapInstructions(config.cluster.ingressHostTemplate),
     })
     world.patch({ backend: record })
     expect(record.blockId).toBeTruthy()
@@ -73,7 +73,10 @@ describe('bootstrap: two empty repositories become two provisioned board service
       title: titles.frontend,
       repoName: frontendRepoName(config.namePrefix, world.value.runId),
       type: 'frontend',
-      instructions: frontendBootstrapInstructions(backend.repoName),
+      instructions: frontendBootstrapInstructions(
+        backend.repoName,
+        config.cluster.ingressHostTemplate,
+      ),
     })
     world.patch({ frontend: record })
     expect(record.blockId).toBeTruthy()

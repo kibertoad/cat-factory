@@ -27,12 +27,12 @@ describe('Journal', () => {
   it('binds later events to the phase most recently entered', () => {
     const dir = scratch()
     const journal = new Journal(dir, 'run-1', 'suite')
-    const previous = journal.enterPhase('02-feature')
+    journal.record('observation', 'before any spec')
+    journal.enterPhase('02-feature')
     journal.record('observation', 'still working')
 
-    expect(previous).toBe('suite')
     const events = readJournal(journal.path)
-    expect(events.at(-1)?.phase).toBe('02-feature')
+    expect(events.map((event) => event.phase)).toEqual(['suite', '02-feature', '02-feature'])
   })
 
   it('survives an unwritable state directory rather than killing the pass', () => {

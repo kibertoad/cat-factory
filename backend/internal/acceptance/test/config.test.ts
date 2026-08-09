@@ -83,6 +83,17 @@ describe('resolveConfig', () => {
     expect(problems[0]).toContain('ACCEPTANCE_RUN_BUDGET_MS')
   })
 
+  it('treats a blank run budget as unset, the way every other variable treats blank', () => {
+    // An `ACCEPTANCE_RUN_BUDGET_MS=` line left in a `.env` states no budget. Refusing it as a
+    // malformed integer sends an operator hunting for a value they deliberately did not set, and
+    // it is the one variable that read `undefined` rather than "empty after trimming".
+    for (const blank of ['', '   ']) {
+      expect(expectOk({ ...COMPLETE, ACCEPTANCE_RUN_BUDGET_MS: blank }).runBudgetMs).toBe(
+        90 * 60 * 1000,
+      )
+    }
+  })
+
   it('applies the defaults an operator does not have to think about', () => {
     const config = expectOk(COMPLETE)
     expect(config.namePrefix).toBe('cf-acc')
