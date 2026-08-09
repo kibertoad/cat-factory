@@ -6,16 +6,24 @@ dashboard that reads spend. Every route is the external counterpart of a service
 already makes (same behaviour, same arbitration), projected through deliberately small public
 resources (`publicTask`, `publicRun`, `publicPipeline`, …) rather than the raw internal entities.
 
-> **Where this sits after the documentation split**: the website's
-> [Public API](https://www.catfactory.ai/extend/public-api.html) owns the account an integrator
-> reads first (what the surface is for, keys and scopes, the webhook contract), and the
-> [SDKs](https://www.catfactory.ai/extend/sdks.html) and
-> [MCP server](https://www.catfactory.ai/extend/mcp-server.html) pages own driving it. This file
-> stays the endpoint-by-endpoint REFERENCE, because it is the prose companion to the generated
-> `docs/openapi.json` and several of its anchors are linked from published package READMEs and from
-> error messages in code. Moving that reference to the website is deliberately deferred: see the
-> documentation-revamp tracker. Until then, a change to a route updates the reference here AND
-> whichever website page states its behaviour.
+> **Where this sits after the documentation split.** Three surfaces, and the line between them is
+> now drawn by what each one CAN state rather than by who reads it:
+>
+> - The website's [Public API](https://www.catfactory.ai/extend/public-api.html) owns the account an
+>   integrator reads first (what the surface is for, keys and scopes, the webhook contract), with
+>   [SDKs](https://www.catfactory.ai/extend/sdks.html) and
+>   [MCP server](https://www.catfactory.ai/extend/mcp-server.html) owning how to drive it.
+> - The
+>   [API Endpoint Reference](https://www.catfactory.ai/extend/api-reference.html) is GENERATED from
+>   `docs/openapi.json` and owns every operation's SHAPE: path, method, minimum scope, parameters,
+>   request body and response schemas, field by field. It cannot drift, so nothing here should
+>   restate a field name or a payload shape.
+> - This file keeps what the spec structurally cannot express and a generated page therefore cannot
+>   carry: the refusal codes behind each `4XX`, the caps and quotas, the ordering and idempotency
+>   rules, the worked walkthroughs, and the judgement about which exit a caller is expected to take.
+>
+> A change to a route updates the spec (which re-renders the reference page), the behaviour stated
+> here, and whichever website page describes it.
 
 This is the **how-to and reference**. Its siblings each own a different slice:
 
@@ -398,6 +406,15 @@ error codes, scopes and paging rules are the same whichever you use.
 ## Reference
 
 Scope column = the minimum rung. Refusal codes are in the [conventions table](#the-error-envelope).
+
+**Read this beside the generated
+[API Endpoint Reference](https://www.catfactory.ai/extend/api-reference.html), which owns the
+shapes.** Every table below states a `Behaviour` rather than a payload: the cap, the refusal code,
+the mapping, the exit. The spec collapses every client failure into one `4XX` with a shared
+`ErrorResponse`, so `429 too_many_active_runs` and the five-in-flight limit that raises it exist on
+no generated page and are the reason these tables were not replaced by one. Where a cell still
+spells a request or response body, the generated page is the authority and this is the copy that
+can go stale.
 
 ### Jobs (headless runs)
 
@@ -1185,7 +1202,10 @@ key acts within, which is what a multi-tenant integration should log alongside i
 [`docs/openapi.json`](../../docs/openapi.json), generated from the route contracts by
 `pnpm gen:openapi` and CI-guarded against drift. Prefer it over the repo file whenever the two can
 differ, which is exactly the case that matters: a deployment a release behind describes the
-operations it actually has. It is deliberately **not** an operation in the spec it serves (an
+operations it actually has. That is also why the website's
+[API Endpoint Reference](https://www.catfactory.ai/extend/api-reference.html), rendered from the
+committed file, states the surface version it was rendered at: it describes THIS repository's
+`main`, and a deployment behind it should read its own `/openapi.json` instead. It is deliberately **not** an operation in the spec it serves (an
 "any JSON object" response would mint an untyped method in four generated SDKs and an MCP tool that
 pours the whole schema into a model's context), so it is documented here instead, and it is public
 surface under the stability commitment all the same. Like `POST /api/v1/mcp`, it is authenticated:
