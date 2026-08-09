@@ -46,8 +46,18 @@ export type GatekeeperReason =
   | 'session_ended'
   /** The URL the workspace asked for is not one this Gatekeeper serves. */
   | 'no_such_resource'
-  /** Sharing an observation onward was refused, which is this Gatekeeper's default. */
+  /** Sharing an observation onward was refused: the observer could not read all of it directly. */
   | 'sharing_refused'
+  /** Sharing was refused because the observer could not be identified at all. */
+  | 'sharing_unverifiable'
+  /** The call carries an argument the operation does not declare, so it would have been dropped. */
+  | 'undeclared_argument'
+  /** The call omits an argument the operation requires. */
+  | 'missing_argument'
+  /** This door serves no hooks: it has no approval queue to register one with. */
+  | 'hooks_unavailable'
+  /** The workspace's own side did not take a hook binding, and said why. */
+  | 'hook_bind_refused'
   /** The deployment's entry module does not export something the OS object model needs. */
   | 'missing_export'
 
@@ -60,4 +70,16 @@ export class GatekeeperError extends Error {
     this.name = 'GatekeeperError'
     this.reason = reason
   }
+}
+
+/**
+ * A failure as a refusal or a record carries it: one line, never an object nothing can render.
+ *
+ * Here rather than beside each caller because three of them (a hook push, a bind the workspace did
+ * not take, a verifier that could not be questioned) fold a cause into prose a person reads, and
+ * three copies of the same two lines is how they drift into disagreeing about what an
+ * `AggregateError` or a thrown string looks like.
+ */
+export function describeError(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error)
 }

@@ -88,7 +88,10 @@ describe('GET /health', () => {
   it('is green when every binding is set, and says the OS door is open too', async () => {
     const response = await health(configured())
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ ok: true, os: { discoverable: true, blockers: [] } })
+    expect(await response.json()).toEqual({
+      ok: true,
+      os: { discoverable: true, blockers: [], limitations: [] },
+    })
   })
 
   // The two the assembly reads on its own (`CAT_FACTORY_BASE_URL`, `PROVISIONING_KEY`) were the

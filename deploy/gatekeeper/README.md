@@ -95,6 +95,8 @@ Two things on this side have to be true, and `GET /health` reports on both under
 - **`src/index.ts` exports all four names the object model resolves** (`GatekeeperVendor`,
   `CatFactoryAccount`, `CatFactoryResource`, `CatFactoryVerifier`). They are resolved by name at
   runtime, so a renamed export is a Worker a workspace can never finish installing.
+  `CatFactoryHookController` is resolved the same way and is reported apart from those, under
+  `os.limitations`: without it the Gatekeeper installs and serves, and only the hooks refuse.
 - **Your policy names an `autoProvisionedTier`.** A workspace mints one account per user with no
   identity attached, by design, so no account can ever match a `grants` entry. Naming a tier there
   is what turns discovery on. It is deliberately not `defaultTier`: sharing one knob would mean
@@ -179,6 +181,28 @@ for (const card of await cat.approvals_list()) {
 
 await cat.runs_watched() // [{ runId, event: 'run.completed', terminal: true, run }, …]
 ```
+
+Both projections can be PUSHED instead of polled, from a Cloudflare OS session (the `/rpc` door has
+no approval queue to register a hook with, and says so):
+
+```js
+// The workspace holds the registration and may ask a person before enabling it, so binding is not
+// receiving: nothing arrives until it is enabled.
+await cat.approvals_subscribe(myCallback) // myCallback.onApprovalCard(card)
+await cat.runs_subscribe(myOtherCallback) // myOtherCallback.onRunEvent(state)
+
+// What is enabled, and what each hook has taken. `live: false` with a rising `missed` is a hook
+// that stopped receiving: bind again, and read `approvals_list()` for what it missed. Binding
+// again from the same gadget re-arms THAT hook and keeps its counters, rather than adding a second.
+await cat.hooks_bound()
+```
+
+A hook is an accelerator over the two reads, never a replacement for them: they stay the truth, so
+a workspace that missed a push has lost a notification rather than a card. That is also why the
+fan-out runs behind the delivery's acknowledgement, with a deadline on each push: a workspace whose
+callback hangs costs its own notification and never the platform's retry of a card already
+recorded. A card is pushed on every transition it makes, including the settlement a terminal run
+event gives it, so an inbox rendered from pushes alone stops offering decisions nobody can answer.
 
 `connect()` takes the identity your OS deployment authenticated (plus an optional display
 `label`), and NOTHING else the caller sends picks a tier: an agent that could name its own tier
