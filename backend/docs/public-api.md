@@ -1711,7 +1711,13 @@ Reach for the service read when the question is about the SERVICE (what is it co
 does its board declare); reach for this one whenever the answer is paired with a run.
 
 `provenance.ref` is the branch it read, and `commit` the head it was at, so a caller can see which
-of the two trees it got rather than infer it.
+of the two trees it got rather than infer it. Read it rather than assume the pull request's head:
+once a run merges, its head branch is usually deleted, and the read then answers the default branch,
+which by then carries the very requirements the run added. A pull request closed WITHOUT merging and
+then deleted is the one case where that tree is not what the run was judged against, and `ref` is
+what makes it visible. Only a branch the host confirms does not exist moves the read; a host that
+will not answer for the ref leaves it where it was, so a provider incident never quietly swaps the
+tree under a caller.
 
 The refusals are the service read's, with one addition and one omission. The addition is a fourth
 `anchor` value, `not_read`: nothing was read, and `provenance` is `null`. That is not an empty spec
@@ -1721,6 +1727,10 @@ rewrites this very branch as soon as the tester settles); before that gate opens
 consulted no tree, which is the same fact `requirements.spec: "not_read"` on the run's own outcome
 already states. Both endpoints answer it from ONE read for that reason: a spec fetched here and a
 coverage count fetched there can never disagree about the tree they describe.
+
+`not_read` outranks the `vcs_not_configured` refusal, so a run answers it whatever the deployment
+wired: a read that was never due stopped at the gate and never reached the resolver. That ordering is
+what stops one unchanged deployment answering `200` early in a run and `503` later in it.
 
 The omission is `422`: a service with no linked repository cannot be reached down this path, because
 a run resolved a repository to push to before it could exist. A repository that becomes unreadable

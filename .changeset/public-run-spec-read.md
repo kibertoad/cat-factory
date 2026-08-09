@@ -31,4 +31,14 @@ that a run was judged against a service declaring no requirements.
 
 The read also resolves the branch head before walking, which adds one repository call per run
 (memoised with the tree, so a later reader gets the commit the tester ruled at rather than one
-resolved afterwards).
+resolved afterwards). That resolution now carries a second job: a run keeps naming its pull
+request's head branch after the branch is deleted, which is the ordinary sequel to a merge, so a
+read that finds neither a head nor an anchor there falls back to the repository default and names it
+in `provenance.ref`. Without it the post-hoc audit this endpoint exists for was the one case that
+answered a permanent `503`. Only a confirmed missing branch moves the read; a host that will not
+answer for the ref leaves it alone, so an incident cannot swap the tree.
+
+Between the two wiring refusals and the `not_read` gate, the gate now goes first: before a tester
+reports, a run answers `not_read` whatever the deployment wired. Ranked by what was cheap to check,
+an unwired deployment and an unconnected workspace behaved differently for the same run, one
+answering `503` throughout and the other flipping from `200` to `503` partway through.

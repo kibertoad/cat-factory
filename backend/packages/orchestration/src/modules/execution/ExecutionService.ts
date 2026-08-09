@@ -547,9 +547,11 @@ export class ExecutionService {
   }
 
   /**
-   * The three run-EVIDENCE reads, resolved by run id: the verification report, the outcome
-   * summary, and the `spec/` they join against. Thin delegates onto {@link RunEvidenceReads},
-   * which owns the one thing they must never disagree about (what "this run" resolves to).
+   * The run-EVIDENCE reads, resolved by run id: the verification report, the outcome summary, and
+   * the `spec/` they join against, that last one both folded (for the SPA's card) and with the
+   * outcome of the read kept (for `GET /api/v1/runs/:runId/spec`). Thin delegates onto
+   * {@link RunEvidenceReads}, which owns the one thing they must never disagree about (what "this
+   * run" resolves to).
    */
   private readonly evidenceReads = new RunEvidenceReads({
     getInstance: (workspaceId, executionId) =>

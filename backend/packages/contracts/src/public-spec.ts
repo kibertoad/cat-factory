@@ -98,6 +98,10 @@ export const PUBLIC_SPEC_MAX_ISSUES = 200
  * than the one named. A null means the head could not be resolved at all: the tree below is still
  * what the branch held, we simply cannot name the commit.
  *
+ * Shared by both reads, which is why `ref` is the field a caller must actually look at rather than
+ * assume: WHICH branch each one answers is the distinction between them (see
+ * {@link publicRunSpecSchema}).
+ *
  * There is no `directory` here, and its absence is the fact: the `spec/` tree is anchored at the
  * REPOSITORY ROOT, so two services carved out of one monorepo share one spec. Naming a
  * subdirectory would imply a scoping the reader does not apply.
@@ -108,7 +112,13 @@ export const publicSpecProvenanceSchema = v.object({
   owner: v.string(),
   /** The repository's name. */
   repo: v.string(),
-  /** The branch the spec was read from: the repository's default branch. */
+  /**
+   * The branch the spec was read from, named rather than implied because the two reads answer at
+   * different refs: the repository's default branch for a service read, and the branch the run
+   * pushed its work to for a run read. A run read names the default branch when the run opened no
+   * pull request, and when the one it opened has had its head branch deleted (the usual sequel to
+   * a merge), which is the same tree under its surviving name.
+   */
   ref: v.string(),
   /** The head commit of `ref` at read time, or null when it could not be resolved. */
   commit: v.nullable(v.string()),

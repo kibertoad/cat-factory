@@ -4,6 +4,7 @@ import type {
   ExecutionInstance,
   RepoFiles,
   ResolveRunRepoContext,
+  RunRepoContext,
   SpecDoc,
 } from '@cat-factory/kernel'
 import type { PublicSpecProvenance, ServiceSpecView } from '@cat-factory/contracts'
@@ -62,22 +63,39 @@ export function specDocOf(view: ServiceSpecView | null): SpecDoc | null {
 export type RunSpecRead =
   /** The run's block is gone: there is nothing to read a spec FOR. */
   | { status: 'no_block' }
-  /** This deployment wired no run-repo resolver at all. */
-  | { status: 'vcs_unwired' }
-  /** Wired, but this workspace has connected no version control (the resolver answered null). */
-  | { status: 'no_connection' }
   /**
    * Nothing was read, because no tester has reported yet.
    *
    * Not a failure and not an empty spec. The read is gated on a tester report so the tree served is
    * the one the verdicts were made against (see {@link RunEvidenceLoader}), so before that point
    * the platform has consulted no tree and the run's own outcome summary says `spec: 'not_read'`.
+   *
+   * It outranks both wiring states below, and the ordering is the whole answer to "where did this
+   * read stop": a read that was never DUE stopped at the gate, and it never reached the resolver to
+   * discover whether one was wired. Ranked the other way the two wiring faults behaved differently
+   * for the same run, because one of them is free to check and the other costs a resolve: an
+   * unwired DEPLOYMENT was reported from a run's first settlement while an unconnected WORKSPACE
+   * waited for the tester, so one condition answered `503` throughout and the other flipped from
+   * `200` to `503` mid-run without anything about the deployment changing.
    */
   | { status: 'not_read' }
+  /** This deployment wired no run-repo resolver at all. */
+  | { status: 'vcs_unwired' }
+  /** Wired, but this workspace has connected no version control (the resolver answered null). */
+  | { status: 'no_connection' }
   /** The repository could not be read. Retry: the spec may well be there. */
   | { status: 'read_failed' }
   /** A tree, an empty branch, or a corrupt anchor: the reader's own view, plus where it came from. */
   | { status: 'read'; view: ServiceSpecView; provenance: PublicSpecProvenance }
+
+/** What resolving a branch's head established. See {@link RunEvidenceLoader.headSha}. */
+type HeadProbe =
+  /** The branch is there, at this commit. */
+  | { state: 'resolved'; sha: string }
+  /** The branch does not exist: a definite 404 on the ref itself, which cannot mean anything else. */
+  | { state: 'absent' }
+  /** The provider would not answer for the ref. Says nothing about whether the branch exists. */
+  | { state: 'unproven' }
 
 /** The memoised half of a settled read: the view, and the snapshot it describes. */
 interface MemoisedSpec {
@@ -155,7 +173,6 @@ export class RunEvidenceLoader {
    * The service's in-repo `spec/`, reassembled from the run's branch for the requirement →
    * evidence join, and WHERE the read stopped when there is no tree to hand back.
    *
-
    * GATED, then MEMOISED, because this is the only repo-reading path either reduction has and
    * the PR-report hook fires on EVERY settled step:
    *  - Gate: nothing is read until a tester step has actually produced a report. Before that the
@@ -181,35 +198,24 @@ export class RunEvidenceLoader {
     instance: ExecutionInstance,
     block: Block,
   ): Promise<RunSpecRead> {
-    const resolve = this.deps.resolveRunRepoContext
-    if (!resolve) return { status: 'vcs_unwired' }
     const testerReported = instance.steps.some(
       (s) => isTesterKind(s.agentKind) && s.test?.lastReport != null,
     )
     if (!testerReported) return { status: 'not_read' }
     const cached = this.specByRun.get(instance.id)
     if (cached) return { status: 'read', ...cached }
+    const resolve = this.deps.resolveRunRepoContext
+    if (!resolve) return { status: 'vcs_unwired' }
     try {
       const ctx = await resolve(workspaceId, instance.blockId)
       if (!ctx) return { status: 'no_connection' }
-      // Read the RUN's branch, not the repo default: the spec increment this task wrote is on
-      // the PR branch and has not merged yet, so the default branch would be missing exactly
-      // the requirements the tester just ruled on. The rule is `runSpecBranch` rather than a
-      // local `??` because the SPA answers the same question and the two had already drifted.
-      const ref = runSpecBranch(block, ctx.baseBranch)
-      // Resolved BEFORE the walk, so the commit named is one the tree is at least as new as, and
-      // memoised with it: a later reader of this run gets the snapshot the tester ruled against
-      // rather than a commit resolved long afterwards. It is also the only POSITIVE evidence the
-      // read has that the branch resolves at all, which is what lets a reporting caller tell an
-      // empty branch from an unreachable repository (both answer 404 for the anchor).
-      const commit = await this.headSha(ctx.repo, ref)
-      const view = await readServiceSpec(ctx.repo, ref)
+      const attempt = await this.walkSpec(ctx, block)
       // The reader is TOTAL, so a provider outage arrives as a returned value rather than a throw:
       // without this line the `catch` below covered only a throwing resolver, and one flaky read
       // was memoised as the run's answer for the rest of its life. The reader's own anchor is the
       // discriminator. Every other state IS an answer and is cached: a tree, a branch with no
       // `spec/`, and a corrupt anchor, which re-reading cannot improve.
-      if (view.diagnostics?.anchor === 'read_failed') return { status: 'read_failed' }
+      if (attempt.view.diagnostics?.anchor === 'read_failed') return { status: 'read_failed' }
       const provenance: PublicSpecProvenance = {
         provider: ctx.provider ?? 'github',
         // The resolver's owner/name are optional for back-compat with older fakes; the real
@@ -217,11 +223,11 @@ export class RunEvidenceLoader {
         // that did not.
         owner: ctx.owner ?? '',
         repo: ctx.name ?? '',
-        ref,
-        commit,
+        ref: attempt.ref,
+        commit: attempt.commit,
       }
-      this.rememberSpec(instance.id, { view, provenance })
-      return { status: 'read', view, provenance }
+      this.rememberSpec(instance.id, { view: attempt.view, provenance })
+      return { status: 'read', view: attempt.view, provenance }
     } catch {
       // Best-effort for the two reductions: an unreadable spec is reported as such by each
       // consumer, never fails a run, and is re-attempted on the next settlement. The reporting
@@ -231,20 +237,82 @@ export class RunEvidenceLoader {
   }
 
   /**
-   * The head of the branch the spec is read from, or null when it cannot be resolved.
+   * Walk the spec at the branch this run pushed to, falling back to the repo default when that
+   * branch is demonstrably GONE.
    *
-   * Null is "unproven", not "unimportant": a provider degraded only on refs still answers the
-   * tree, and refusing there would drop an answer we hold. What it may never do is fail the read,
-   * which is why it is swallowed here rather than left to the outer `catch` (that one means the
-   * spec itself could not be read).
+   * The primary ref is the RUN's branch, not the repo default: the spec increment this task wrote
+   * is on the pull request's head and has not merged yet, so the default branch would be missing
+   * exactly the requirements the tester just ruled on. The rule is `runSpecBranch` rather than a
+   * local `??` because the SPA answers the same question and the two had already drifted.
+   *
+   * The fallback exists because `block.pullRequest` is never cleared and a merged pull request's
+   * head branch is routinely deleted (GitHub deletes it automatically when the repository is
+   * configured that way). Left un-handled, the run named a branch nobody can read for the rest of
+   * the block's life: no head, every file a 404, and a reporting caller refused with a permanent
+   * `spec_ref_unresolved`. That makes the post-hoc audit, which is the case this read exists for,
+   * the one case that cannot be served. It is also the case `runSpecBranch` already describes as
+   * resolved: once the pull request merges, the two branches carry the same requirements, so the
+   * default branch is not a substitute for the run's tree but the same tree under its surviving
+   * name.
+   *
+   * Two conditions gate it TOGETHER, and both are needed:
+   *  - the ref probe came back a definite 404 (the branch does not exist), never a throw, which is
+   *    an outage and must not be allowed to switch trees mid-incident;
+   *  - the walk itself found no anchor. A provider degraded only on refs still answers the tree,
+   *    and re-reading elsewhere would discard an answer we hold.
+   * Together they are the same discriminator the public read refuses on ("unresolved plus absent
+   * is unproven"), applied one layer earlier, where there is still something to be done about it.
+   *
+   * What it does NOT do is hide which tree was served: `provenance.ref` names the branch actually
+   * read. A pull request CLOSED without merging and then deleted is the one case where the
+   * fallback answers with a tree the run was not judged against, and naming the ref is what keeps
+   * that legible rather than silent.
    */
-  private async headSha(repo: RepoFiles, ref: string): Promise<string | null> {
+  private async walkSpec(
+    ctx: RunRepoContext,
+    block: Block,
+  ): Promise<{ ref: string; commit: string | null; view: ServiceSpecView }> {
+    const ref = runSpecBranch(block, ctx.baseBranch)
+    // Resolved BEFORE the walk, so the commit named is one the tree is at least as new as, and
+    // memoised with it: a later reader of this run gets the snapshot the tester ruled against
+    // rather than a commit resolved long afterwards. It is also the only POSITIVE evidence the
+    // read has that the branch resolves at all, which is what lets a reporting caller tell an
+    // empty branch from an unreachable repository (both answer 404 for the anchor).
+    const head = await this.headSha(ctx.repo, ref)
+    const view = await readServiceSpec(ctx.repo, ref)
+    const anchor = view.diagnostics?.anchor
+    if (ref === ctx.baseBranch || head.state !== 'absent' || anchor !== 'absent') {
+      return { ref, commit: head.state === 'resolved' ? head.sha : null, view }
+    }
+    const fallbackHead = await this.headSha(ctx.repo, ctx.baseBranch)
+    return {
+      ref: ctx.baseBranch,
+      commit: fallbackHead.state === 'resolved' ? fallbackHead.sha : null,
+      view: await readServiceSpec(ctx.repo, ctx.baseBranch),
+    }
+  }
+
+  /**
+   * What resolving a branch's head PROVED, in the three states the callers above act on
+   * differently.
+   *
+   * A bare `string | null` folded the last two together, and the fold is what made a deleted
+   * branch indistinguishable from a provider that would not answer: both left `commit: null`,
+   * both read as "unproven", and only one of them can be repaired by reading somewhere else.
+   * `RepoFiles.headSha` already draws the line (its contract answers null for a branch that does
+   * not exist and throws for everything else), so keeping it costs nothing but the naming.
+   *
+   * `unproven` may never fail the read, which is why the throw is swallowed here rather than left
+   * to the caller's outer `catch` (that one means the spec itself could not be read).
+   */
+  private async headSha(repo: RepoFiles, ref: string): Promise<HeadProbe> {
     try {
-      return await repo.headSha(ref)
+      const sha = await repo.headSha(ref)
+      return sha ? { state: 'resolved', sha } : { state: 'absent' }
     } catch {
       // silent-catch-ok: an unresolvable ref is a VALUE this read reports (`commit: null`), and
       // the anchor's own bytes decide whether an empty answer is trustworthy.
-      return null
+      return { state: 'unproven' }
     }
   }
 

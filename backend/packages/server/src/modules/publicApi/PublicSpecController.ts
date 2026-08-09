@@ -54,7 +54,10 @@ import { toPublicRunSpec, toPublicServiceSpec } from './specProjection.js'
 //     outcome rather than a shade of the last one, because it is the case the provider REFUSES to
 //     distinguish: a renamed, transferred or deleted repository, a stale default branch and a lost
 //     installation all answer 404 exactly as an absent file does. Distinct because the fix is
-//     distinct: the deployment's repo link is wrong, and no amount of retrying repairs it.
+//     distinct: the deployment's repo link is wrong, and no amount of retrying repairs it. On the
+//     RUN read, a deleted pull-request head branch is deliberately not one of these: the loader
+//     reads the default branch instead and says so in `provenance.ref`, because a merged run whose
+//     branch was cleaned up is the ordinary end state rather than a misconfiguration.
 //  4. **No spec on the default branch** → `200`, `anchor: "absent"`. A real, common, final answer,
 //     and one only reached with the ref resolved, so it is a statement about the branch rather
 //     than about our luck reaching it.
@@ -239,6 +242,11 @@ export function publicSpecController(): Hono<AppEnv> {
  * run's outcome summary already reports), while an unwired integration and an unreadable repository
  * are outages that must never reach a body: served as an empty spec they would tell an integrator
  * that a run was judged against no requirements at all.
+ *
+ * Which of them a run gets is the LOADER's ordering, not this switch's, and the two wiring states
+ * arrive only once a read is actually due: before the tester reports, every run answers `not_read`
+ * whatever the deployment wired. That is what keeps one unchanged deployment from answering `200`
+ * and `503` at different points of one run.
  *
  * Exhaustive over `RunSpecRead` through a `never`, so a state added to the loader fails the build
  * here rather than surfacing as an unmapped value on `/api/v1`.
