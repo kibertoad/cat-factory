@@ -33,6 +33,7 @@ import type { GatekeeperBinding } from '@cat-factory/gatekeeper-bindings'
 import type { SessionGovernance } from '../capability.js'
 import { GatekeeperError } from '../errors.js'
 import { describeAction, describeObservation, type CallSubject } from './descriptions.js'
+import { describeHook, type HookControllerProps } from './hooks.js'
 import type { ApprovalQueue } from './protocol.js'
 
 /** One submitted action waiting on the workspace's decision. */
@@ -228,6 +229,14 @@ export function queueGovernance(deps: {
   queue: ApprovalQueue
   ledger: LedgerSession
   subject: CallSubject
+  /**
+   * Build the controller for one hook, which is this Worker's own `CatFactoryHookController`
+   * export imbued with the registration's identity.
+   *
+   * Supplied by the caller rather than built here because only the resource object can reach
+   * `ctx.exports`, and a session that could not build one is a session on a door with no hooks.
+   */
+  controllerFor: (props: HookControllerProps) => unknown
 }): SessionGovernance {
   return {
     async observe(binding: GatekeeperBinding, args: Record<string, unknown>): Promise<void> {
@@ -262,6 +271,38 @@ export function queueGovernance(deps: {
         throw error
       }
       return (await settled) as T
+    },
+
+    /**
+     * Hand the workspace a controller and the callback, and keep NEITHER.
+     *
+     * Everything about the registration rides the controller's props, so this call leaves no
+     * state behind: the workspace may take days to approve the hook, or never approve it, and a
+     * row written here would be a registration for something nobody enabled. What comes back is
+     * nothing at all, because there is nothing to report yet; `hooks_bound()` answers once the
+     * workspace has enabled it.
+     */
+    async subscribe(topic, callback): Promise<void> {
+      if (typeof deps.queue.bindHook !== 'function') {
+        throw new GatekeeperError(
+          'hooks_unavailable',
+          'The approval queue this session was opened with offers no bindHook(), so this ' +
+            'workspace cannot hold a callback for us. Read `approvals_list()` and ' +
+            '`runs_watched()` instead: they carry exactly what a hook would push.',
+        )
+      }
+      const props: HookControllerProps = {
+        hookId: `hook_${crypto.randomUUID().replaceAll('-', '')}`,
+        topic,
+        accountId: deps.subject.accountId,
+        tier: deps.subject.tier,
+        deployment: deps.subject.deployment,
+      }
+      await deps.queue.bindHook(
+        deps.controllerFor(props),
+        callback,
+        describeHook(topic, deps.subject),
+      )
     },
 
     close(): void {

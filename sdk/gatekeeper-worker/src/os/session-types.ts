@@ -71,6 +71,34 @@ const RESERVED_MEMBERS: readonly string[] = [
   `  /** Every run this Gatekeeper has been pushed lifecycle events for. */
   runs_watched(): Promise<unknown[]>
 `,
+  `  /**
+   * Be pushed each approval card as it is raised or settled, instead of polling
+   * \`approvals_list()\`. The callback needs one method:
+   * \`onApprovalCard(card): Promise<void>\`.
+   *
+   * The workspace holds the registration and may ask a person before enabling it, so binding is
+   * not receiving: nothing arrives until it is enabled, and \`hooks_bound()\` is where that shows.
+   */
+  approvals_subscribe(callback: unknown): Promise<void>
+`,
+  `  /**
+   * Be pushed each run lifecycle transition, instead of polling \`runs_watched()\`. The callback
+   * needs one method: \`onRunEvent(state): Promise<void>\`.
+   */
+  runs_subscribe(callback: unknown): Promise<void>
+`,
+  `  /**
+   * Every hook this account has enabled, with what each has been pushed (\`deliveries\`), what it
+   * could not be pushed (\`missed\`), what the workspace's own side refused (\`failures\`) and
+   * whether it is still \`live\`.
+   *
+   * A hook goes quiet when this Gatekeeper's durable object is evicted between deliveries, since
+   * the workspace's callback source cannot be stored. That reads as \`live: false\` with a rising
+   * \`missed\`, and the remedy is to bind again; what was missed is still in
+   * \`approvals_list()\` and \`runs_watched()\`, which is why they remain the truth.
+   */
+  hooks_bound(): Promise<unknown[]>
+`,
 ]
 
 /** Render the session `.d.ts` for one compiled tier. */

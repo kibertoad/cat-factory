@@ -123,6 +123,21 @@ version has to be the consumer's.
   caller's own key.
 - **Run lifecycle without polling.** `run.started` / `run.completed` / `run.failed` land as a
   `runs_watched()` projection, and a terminal event settles that run's open cards.
+- **Hooks, so the workspace is pushed rather than asked.** A session binds a callback through the
+  workspace's own `bindHook`, the workspace enables it when it is ready to, and each card or run
+  transition is then pushed: a fresh callback per delivery, authorized as the observation it is.
+  What a hook pushes is exactly what `approvals_list()` and `runs_watched()` answer, which stay the
+  truth: a delivery a hook missed is still readable there, and `hooks_bound()` reports the miss
+  rather than leaving it to be inferred from a quiet inbox.
+- **Sharing that is verified, not assumed.** A workspace user shared onto a bound resource is
+  admitted only when their OWN account's tier reaches everything the resource's tier reaches, and
+  masks no more; a tier that can read captured agent text is never shareable at all. Anything the
+  Gatekeeper cannot answer (an observer with no verifier, an account this policy does not tier) is
+  a refusal that says which it is.
+- **Arguments checked against what each operation declares.** An argument no operation reads used
+  to be dropped on the way through, so a filter nobody applied came back as an answer shaped like a
+  filtered one. It is now a refusal naming what the operation does take, made before a key is
+  minted or an approval is spent.
 - **Self-enrolment and offboarding.** The endpoint registers itself under a caller-chosen webhook
   id, hourly and idempotently. `POST /admin/retire?actorId=…` revokes every key minted for one
   person, upstream first and then here.
@@ -182,8 +197,13 @@ workspace that finds either missing does not get an error anyone monitors; it ne
 installing. So a green response carries the answer beside `ok`:
 
 ```json
-{ "ok": true, "os": { "discoverable": true, "blockers": [] } }
+{ "ok": true, "os": { "discoverable": true, "blockers": [], "limitations": [] } }
 ```
+
+`limitations` is the same report for what does NOT stop an install. `CatFactoryHookController` is
+reached only when a session binds a hook, so a deployment missing it installs, serves and answers
+exactly as before and refuses `approvals_subscribe()`; calling that a blocker would turn a working
+deployment red, and omitting it would leave the gap to be discovered from an agent's failed call.
 
 It is REPORTED, never folded into the status, because a Gatekeeper serving `/rpc` and nothing else
 is a supported deployment: this package promises that door to consumers that are not a Cloudflare
@@ -237,7 +257,7 @@ path that matches nothing is not an error, because result shapes legitimately va
 `connect({ actorId, label? })` on the `/rpc` session resolves the actor's tier and returns the
 capability. `actorId` is the OS's own authenticated identity for the person, and it is the ONLY
 claim the Gatekeeper trusts: nothing the caller sends picks a tier. Beyond the granted operation
-methods, every capability carries seven reserved methods:
+methods, every capability carries ten reserved methods:
 
 - `tier()`: who the caller is acting as (actor, tier name, description, key scope).
 - `bindings()`: the granted operations, each with its scope floor, consequence (cautious default
@@ -251,6 +271,16 @@ methods, every capability carries seven reserved methods:
 - `approvals_list()`, `approvals_inspect(cardId)`, `approvals_answer(cardId, input)`: the
   approval inbox; see the template README for the flow and the three answer outcomes.
 - `runs_watched()`: the run-lifecycle projection built from the `run.*` webhook events.
+- `approvals_subscribe(callback)`, `runs_subscribe(callback)`: bind a hook, so the two projections
+  above are PUSHED. The callback needs one method (`onApprovalCard(card)` / `onRunEvent(state)`).
+  Both refuse on the `/rpc` door, which brings no approval queue to register a hook with and
+  nothing to authorize a delivery against; the refusal names the two reads that answer the same
+  question.
+- `hooks_bound()`: what this account has enabled, with what each hook has been pushed
+  (`deliveries`), what it could not be pushed (`missed`), what the workspace refused (`failures`)
+  and whether it is still `live`. A hook goes quiet when the durable object is evicted between
+  deliveries, because the workspace's callback source is a stub and cannot be stored; that reads as
+  `live: false` with a rising `missed`, and the remedy is to bind again.
 
 Refusals from a live Gatekeeper are `GatekeeperError`s carrying a machine-readable `reason`
 (`unknown_actor`, `card_not_found`, `ambiguous_park`, …), the same role the platform's own

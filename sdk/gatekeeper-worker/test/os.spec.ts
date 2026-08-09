@@ -30,6 +30,7 @@ import {
 import type {
   AccountEntrypoint,
   ActionDescription,
+  HookDescription,
   ObservationDescription,
   VendorEntrypoint,
 } from '../src/os/protocol.js'
@@ -64,6 +65,7 @@ function vendor(): VendorEntrypoint {
 class RecordingQueue {
   observations: ObservationDescription[] = []
   actions: { id: number; description: ActionDescription }[] = []
+  hooks: { controller: unknown; callback: unknown; description: HookDescription }[] = []
   /** Set to refuse the next read, the way a workspace policy would. */
   refuseObservations = false
 
@@ -74,6 +76,14 @@ class RecordingQueue {
 
   async submitAction(action: number, description: ActionDescription): Promise<void> {
     this.actions.push({ id: action, description })
+  }
+
+  async bindHook(
+    controller: unknown,
+    callback: unknown,
+    description: HookDescription,
+  ): Promise<void> {
+    this.hooks.push({ controller, callback, description })
   }
 }
 
@@ -100,6 +110,8 @@ class StubQueue extends RecordingQueue {
     // copy nobody reads.
     copy.authorizeObservation = (description) => this.authorizeObservation(description)
     copy.submitAction = (action, description) => this.submitAction(action, description)
+    copy.bindHook = (controller, callback, description) =>
+      this.bindHook(controller, callback, description)
     copy.onDispose = () => {
       this.disposed += 1
     }
@@ -127,7 +139,13 @@ async function connectResource(): Promise<{ resource: ResourceCore; accountId: s
   // Bound through the account first, so the spec drives the same admission the workspace does; the
   // core is then built from the props that bind leaves the resource with.
   await account.getGatekeeperClassFor(`${DEPLOYMENT}/w/ws_1`)
-  return { resource: new ResourceCore(env, FIXTURE_POLICY, { accountId }), accountId }
+  // The exports bag is what the Durable Object shell hands the core, and it is the REAL one: a
+  // hook's controller is resolved by name against it, so a spec supplying its own map would test
+  // an arrangement no deployment has.
+  return {
+    resource: new ResourceCore(env, FIXTURE_POLICY, { accountId }, { exports: exportsOfWorker() }),
+    accountId,
+  }
 }
 
 /** Open a governed session on a fresh resource. */
@@ -229,7 +247,12 @@ describe('vendor discovery', () => {
   it('reports every missing export at once, so a deployment is wired in one pass', () => {
     const partial = { [OS_EXPORTS.vendor]: () => undefined }
 
-    expect(missingOsExports(partial)).toEqual(['account', 'resource', 'verifier'])
+    // Derived from the roles themselves rather than pinned: a role added to the object model
+    // belongs in this answer, and a spec listing yesterday's names would fail for being complete.
+    const everythingElse = (Object.keys(OS_EXPORTS) as (keyof typeof OS_EXPORTS)[]).filter(
+      (role) => role !== 'vendor',
+    )
+    expect(missingOsExports(partial)).toEqual(everythingElse)
     // The Worker under test is the arrangement the template documents, so it is missing none.
     expect(missingOsExports(exportsOfWorker())).toEqual([])
   })
@@ -546,10 +569,26 @@ describe('the session lifetime', () => {
 })
 
 describe('sharing', () => {
-  it('refuses to add an observer rather than letting an unverified viewer in', async () => {
+  it('refuses a viewer it cannot identify, rather than reading it as one it may refuse', async () => {
     const { resource } = await connectResource()
 
-    await expect(resource.addObserver('someone-else', {})).rejects.toThrow(/refuses the share/)
+    // Unverifiable and unauthorised are the same outcome and opposite facts, so the refusal says
+    // which it is: nothing here has a tier to compare against.
+    await expect(resource.addObserver('someone-else', {})).rejects.toThrow(
+      /no verifier this Gatekeeper can question/,
+    )
+  })
+
+  it('refuses a verified observer while the bound tier can read captured agent text', async () => {
+    const { resource } = await connectResource()
+    const { accountId: observer } = await connectAccount()
+
+    // Both accounts hold the same tier here, and that is the point: `prohibitAllSharing` is a
+    // statement about the DATA rather than about the viewer, and the fixture's OS tier holds one
+    // telemetry read.
+    await expect(
+      resource.addObserver('someone-else', { describe: async () => ({ accountId: observer }) }),
+    ).rejects.toThrow(/not shareable onward whatever the viewer holds/)
   })
 
   it('forgets an observer it never had, because the contract asks for idempotence', async () => {

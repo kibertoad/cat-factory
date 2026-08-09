@@ -10,9 +10,10 @@
 
 import { CatFactoryClient } from '@cat-factory/sdk'
 import { buildCapability, type SessionGovernance } from './capability.js'
-import { requireVar, type GatekeeperEnv } from './env.js'
+import { requireVar, stateFor, type GatekeeperEnv } from './env.js'
 import { GatekeeperError } from './errors.js'
 import { KeyBroker, type Actor } from './keys.js'
+import type { HookDispatchReport } from './os/hooks.js'
 import {
   autoProvisionedTier,
   compilePolicy,
@@ -52,6 +53,15 @@ export type DeliveryOutcome =
       handled: 'accepted'
       deliveryId: string
       effect: 'opened' | 'superseded' | 'run-event' | 'none'
+      /**
+       * What pushing it to the enabled hooks did, reported rather than merely attempted.
+       *
+       * On the response because this is the one place the platform's own delivery log can carry
+       * it: a hook whose workspace refused the push, or one whose live half was lost to an
+       * eviction, is a fact about THIS delivery, and the alternative is an operator comparing an
+       * inbox against a Gadget to discover it.
+       */
+      hooks: HookDispatchReport
     }
 
 export class Gatekeeper {
@@ -67,10 +77,7 @@ export class Gatekeeper {
     const clientFor = (apiKey: string) =>
       new CatFactoryClient({ baseUrl, apiKey, userAgent: USER_AGENT })
 
-    // One durable object per PAIRED DEPLOYMENT, named for the origin it is paired with. The name
-    // is the pairing's own identity, so pointing this Worker at a different cat-factory gets a
-    // different object rather than inheriting the previous one's cards and minted keys.
-    this.#state = env.STATE.get(env.STATE.idFromName(baseUrl))
+    this.#state = stateFor(env)
     this.#keys = new KeyBroker({
       state: this.#state,
       provisioning: clientFor(requireVar(env, 'PROVISIONING_KEY')),
@@ -283,13 +290,17 @@ export class Gatekeeper {
     const delivery = readDelivery(parsed)
     if (delivery === null) return { handled: 'unparseable' }
 
-    const applied = await this.#state.applyDelivery(
-      delivery.deliveryId,
-      cardEffectOf(delivery),
-      now,
-    )
+    const effect = cardEffectOf(delivery)
+    const applied = await this.#state.applyDelivery(delivery.deliveryId, effect, now)
     if (!applied.applied) return { handled: 'duplicate', deliveryId: delivery.deliveryId }
-    return { handled: 'accepted', deliveryId: delivery.deliveryId, effect: applied.effect }
+
+    // AFTER the write, never as part of it. The card is the durable truth and the push is the
+    // accelerator over it, so an outbound call that hangs or is refused costs a notification and
+    // never the record of what the deployment reported. It is also why a redelivery of this
+    // message is a `duplicate` that pushes nothing: the platform's retry exists to protect the
+    // write, which already committed.
+    const hooks = await this.#state.dispatchHooks(effect, now)
+    return { handled: 'accepted', deliveryId: delivery.deliveryId, effect: applied.effect, hooks }
   }
 }
 

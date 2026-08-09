@@ -70,8 +70,30 @@ export {
   type AccountProps,
 } from './os/account.js'
 export { createGatekeeperResource } from './os/resource.js'
-export { ResourceCore, type ResourceProps } from './os/resource-core.js'
-export { OS_EXPORTS, missingOsExports, type OsExportRole } from './os/exports.js'
+export { ResourceCore, type ResourceDependencies, type ResourceProps } from './os/resource-core.js'
+export { createGatekeeperHookController, type HookControllerProps } from './os/hook-controller.js'
+export {
+  describeHook,
+  describeHookDelivery,
+  holdInitiator,
+  HOOK_TOPICS,
+  HOOK_TOPIC_NAMES,
+  pushToHook,
+  type HookDispatchReport,
+  type HookPayload,
+  type HookRecord,
+  type HookRegistration,
+  type HookTopic,
+} from './os/hooks.js'
+export { assertObserverMaySee, identifyObserver } from './os/sharing.js'
+export { checkedArguments, declaredArguments } from './arguments.js'
+export {
+  OS_EXPORTS,
+  OS_EXPORT_REQUIREMENT,
+  missingOsExports,
+  type OsExportRequirement,
+  type OsExportRole,
+} from './os/exports.js'
 export {
   describeDiscoverability,
   type DiscoverabilityReport,
@@ -95,6 +117,10 @@ export type {
   ActionKind,
   ApprovalQueue,
   AvatarImage,
+  HookController,
+  HookDescription,
+  HookInitiator,
+  HookTargetMetadata,
   ObservationAuthorizer,
   ObservationDescription,
   ResourceDescription,

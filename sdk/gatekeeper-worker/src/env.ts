@@ -117,6 +117,19 @@ function isSet(env: GatekeeperEnv, binding: Binding): boolean {
   return typeof value === 'string' && value.length > 0
 }
 
+/**
+ * The durable object holding everything this pairing knows, addressed the ONE way.
+ *
+ * Named for the deployment it is paired with, so pointing this Worker at a different cat-factory
+ * gets a different object rather than inheriting the previous one's cards, hooks and minted keys.
+ * It is a function rather than a line inside `Gatekeeper` because the hook controller reaches the
+ * same object without assembling a Gatekeeper at all, and a second spelling of the name would be
+ * a second object holding half the state.
+ */
+export function stateFor(env: GatekeeperEnv): DurableObjectStub<GatekeeperState> {
+  return env.STATE.get(env.STATE.idFromName(requireVar(env, 'CAT_FACTORY_BASE_URL')))
+}
+
 /** The refusal an operator can act on: every unset binding, each with how to set it. */
 export function describeMissingBindings(missing: readonly Binding[]): string {
   const remedies = missing.map((binding) => `${binding} (${howToSet(binding)})`).join('; ')

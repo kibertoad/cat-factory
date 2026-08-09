@@ -108,7 +108,7 @@ So "the bindings" are data, "the worker" is machinery, and "the template" is the
 operator really writes (`policy.config.ts`). Docs: each package's README; design record:
 `docs/initiatives/cloudflare-os-gatekeeper.md`.
 
-Three more pairs of words are routinely confused inside that Worker, and each pair is two things:
+Four more pairs of words are routinely confused inside that Worker, and each pair is two things:
 
 - **The two DOORS.** A Cloudflare OS workspace arrives on a service binding to the
   `GatekeeperVendor` entrypoint (native Workers RPC, and holding the binding is the authorization);
@@ -122,6 +122,11 @@ Three more pairs of words are routinely confused inside that Worker, and each pa
 - **The two DEFAULT tiers.** `defaultTier` is what an actor named on `/rpc` gets; `autoProvisionedTier`
   is what a Cloudflare OS account gets. They do not inherit from each other, because an account is
   minted with no identity a `grants` entry could ever have named.
+- **The WEBHOOK and the HOOK.** The webhook is cat-factory's outbound delivery INTO the Gatekeeper,
+  signed and deduped, and it is what makes the durable projection. A hook is the Gatekeeper's push
+  OUT to a workspace callback, registered through the workspace's own `bindHook`. The first is the
+  ingestion path and the truth; the second is an accelerator over what `approvals_list()` and
+  `runs_watched()` already answer.
 
 ## Concept indexes, where the cross-cutting things live
 

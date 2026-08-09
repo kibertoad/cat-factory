@@ -46,8 +46,16 @@ export type GatekeeperReason =
   | 'session_ended'
   /** The URL the workspace asked for is not one this Gatekeeper serves. */
   | 'no_such_resource'
-  /** Sharing an observation onward was refused, which is this Gatekeeper's default. */
+  /** Sharing an observation onward was refused: the observer could not read all of it directly. */
   | 'sharing_refused'
+  /** Sharing was refused because the observer could not be identified at all. */
+  | 'sharing_unverifiable'
+  /** The call carries an argument the operation does not declare, so it would have been dropped. */
+  | 'undeclared_argument'
+  /** The call omits an argument the operation requires. */
+  | 'missing_argument'
+  /** This door serves no hooks: it has no approval queue to register one with. */
+  | 'hooks_unavailable'
   /** The deployment's entry module does not export something the OS object model needs. */
   | 'missing_export'
 
