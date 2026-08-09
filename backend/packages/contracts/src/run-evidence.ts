@@ -1,5 +1,6 @@
 import type { Block } from './entities.js'
-import type { PipelineStep } from './execution.js'
+import type { EnvironmentStatus } from './environments.js'
+import type { PipelineStep, RunEnvironment } from './execution.js'
 import type { VisualConfirmPair } from './human-verdict-gates.js'
 import type { RequirementPriority, RequirementState, SpecDoc } from './spec.js'
 import type { RequirementVerdict, RequirementVerdictStatus, TestReport } from './testing.js'
@@ -34,6 +35,20 @@ import { UI_TESTER_AGENT_KIND } from './visual-pipeline.js'
 
 /** The API tester gate's agent kind. */
 export const TESTER_AGENT_KIND = 'tester-api'
+
+/**
+ * The agent kind that PROVISIONS a run's ephemeral environments, the sole provisioner.
+ * `pipeline-environment-lifecycle.ts` states its authoring rules relative to it and re-exports
+ * it (see the note there for why the definition lives on this side).
+ */
+export const DEPLOYER_AGENT_KIND = 'deployer'
+
+/**
+ * The agent kind that RECLAIMS them again, the deployer's counterpart at the other end of the
+ * lifecycle. It tears down by the environment ids the deployer RECORDED on its own step, so it
+ * has nothing whatsoever to do without one earlier in the chain.
+ */
+export const DISPOSER_AGENT_KIND = 'disposer'
 
 /**
  * Whether an agent kind is one of the tester gate kinds (API or UI).
@@ -292,4 +307,82 @@ export function countCapturedViews(pairs: readonly VisualConfirmPair[]): number 
   let captured = 0
   for (const pair of pairs) if (pair.actualArtifactId) captured += 1
   return captured
+}
+
+// ---- The run's ephemeral environments --------------------------------------
+//
+// A run that provisions throwaway infrastructure is read twice as well: the verification
+// report proves the three-leg lifecycle (up, exercised, reclaimed) for a reviewer, and the
+// outcome summary answers the one question a designer has, which is whether there is something
+// standing to click. Both start from the same four producers on the run's own steps, so which
+// step each is read off, and which recorded states mean the environment is gone, are stated
+// here rather than on either side.
+
+/** The lifecycle states that mean an environment is no longer standing. */
+const GONE_ENVIRONMENT_STATUSES = new Set<EnvironmentStatus>(['torn_down', 'expired', 'failed'])
+
+/**
+ * Whether a recorded lifecycle status means the environment is no longer standing.
+ *
+ * `tearing_down` is deliberately NOT one of them: a teardown that has been asked for is not a
+ * teardown that happened, and the two surfaces reading this need to keep them apart (the report
+ * because an unfinished reclaim is not proof of one, the summary because it is a different thing
+ * to tell a person than "it is gone").
+ */
+export function isEnvironmentGone(status: EnvironmentStatus): boolean {
+  return GONE_ENVIRONMENT_STATUSES.has(status)
+}
+
+/**
+ * The deployer step whose per-frame outcomes (`step.deployEnvs`) a section reads: the last one
+ * that recorded any, else the first deployer step (see {@link selectEvidenceStep}).
+ */
+export function selectDeployStep(steps: readonly PipelineStep[]): PipelineStep | undefined {
+  return selectEvidenceStep(
+    steps,
+    (step) => step.agentKind === DEPLOYER_AGENT_KIND,
+    (step) => Object.keys(step.deployEnvs ?? {}).length > 0,
+  )
+}
+
+/**
+ * The disposer step whose per-frame reclaim outcomes (`step.disposeEnvs`) a section reads, the
+ * mirror of {@link selectDeployStep} at the other end of the lifecycle.
+ */
+export function selectDisposeStep(steps: readonly PipelineStep[]): PipelineStep | undefined {
+  return selectEvidenceStep(
+    steps,
+    (step) => step.agentKind === DISPOSER_AGENT_KIND,
+    (step) => Object.keys(step.disposeEnvs ?? {}).length > 0,
+  )
+}
+
+/**
+ * Whether the run's deployer step DECLARED that the environments it provisions outlive the run
+ * (`StepOptions.retainEnvironment`).
+ *
+ * Read off the step the run actually dispatched rather than off the pipeline definition, which
+ * can be edited after the run started: every consumer of this is describing what THIS run did.
+ * It is what separates an environment still standing because that was the point from one still
+ * standing because the reclaim never happened, which is the difference between a preview URL a
+ * reviewer is meant to keep clicking and a leak.
+ */
+export function declaresRetainedEnvironment(steps: readonly PipelineStep[]): boolean {
+  return steps.some(
+    (step) =>
+      step.agentKind === DEPLOYER_AGENT_KIND && step.stepOptions?.retainEnvironment === true,
+  )
+}
+
+/**
+ * The environment projections the run's own steps carry, in pipeline order.
+ *
+ * The WEAKEST of the environment signals and the one every consumer has to handle with the same
+ * caveat: it is written by the run's polls and is never refreshed once the run settles, so an
+ * environment the TTL sweep reclaimed afterwards keeps a `ready` projection forever. What it is
+ * good for is the state of an environment WHILE the run is in flight, which is exactly when a
+ * terminal per-frame outcome does not exist yet.
+ */
+export function runEnvironmentProjections(steps: readonly PipelineStep[]): RunEnvironment[] {
+  return steps.flatMap((step) => (step.environment ? [step.environment] : []))
 }

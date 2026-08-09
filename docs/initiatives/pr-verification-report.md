@@ -244,6 +244,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 | 14  | **Phase 2**; machine reachability: the report names the run's auditable TRAJECTORY and serves itself live over `/api/v1`                                                                                 | 🟩 done    | this |
 | 15  | **Phase 2**; one evidence reduction: the outcome summary served over `/api/v1` and composed from this report's shared rules and shared loader                                                            | 🟩 done    | this |
 | 16  | **Phase 2**; context sources: which linked documents the run's agents read and at which revision, owned by the Figma initiative's Track C ([`figma-design-support.md`](./figma-design-support.md))       | 🟩 done    | this |
+| 17  | **Phase 2**; the run's live environments on the outcome summary, owned by the Figma initiative's Track E ([`figma-design-support.md`](./figma-design-support.md))                                        | 🟩 done    | this |
 
 ### Phase-2 notes (slices 9 + 10, as landed)
 

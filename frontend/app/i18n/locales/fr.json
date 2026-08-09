@@ -5822,6 +5822,30 @@
         "none_captured": "L'interface devait être capturée, mais aucune vue ne l'a été."
       }
     },
+    "environments": {
+      "title": "Environnement en ligne",
+      "open": "Ouvrir l'environnement en ligne",
+      "retained": "Cet environnement doit survivre à l'exécution, le lien reste donc valable.",
+      "expires": "Expire le {date}",
+      "state": {
+        "live": "En ligne",
+        "provisioning": "En cours de création",
+        "failed": "Jamais démarré",
+        "reclaiming": "En cours de suppression",
+        "reclaimed": "Supprimé",
+        "expired": "Expiré"
+      },
+      "origin": {
+        "deployer": "Créé par cette exécution",
+        "human_test": "Créé pour le test manuel",
+        "projected": "L'exécution est toujours en cours, cela peut encore changer"
+      },
+      "gap": {
+        "no_environment_step": "Rien dans ce pipeline ne crée d'environnement, il n'y a donc rien à ouvrir.",
+        "not_provisioned": "Un environnement devait être créé et aucun n'a encore été enregistré.",
+        "infraless": "Ce service ne déclare aucun environnement propre, rien n'a donc été créé."
+      }
+    },
     "checks": {
       "title": "Contrôles",
       "row": "{kind} : {state}",

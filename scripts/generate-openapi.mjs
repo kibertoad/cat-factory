@@ -266,7 +266,20 @@ const API_PREFIX = '/api/v1'
 // consumer sees a value it cannot classify rather than a wrong one. That is the whole reason the
 // state is new instead of folded into `pending` — `pending` is a teardown still expected, and
 // reporting one that is never coming is the misreport the section exists to avoid.
-const API_VERSION = '1.35.0'
+//
+// 1.36.0: one new section, `environments`, on the run outcome summary
+// (`GET /api/v1/runs/{runId}/outcome`), plus the `version` field of that payload moving to 3. It
+// carries the throwaway environments the run stood up: where each one is, where it stands, when
+// its TTL lapses, and whether the run declared that it outlives the run. Additive: no path, shape,
+// scope floor or error vocabulary moves, and a consumer built against 1.35.0 keeps parsing every
+// response it already understood.
+//
+// The rule the section commits to is worth stating, because it is what a consumer may rely on: a
+// `live` state is the ONLY one that means the URL is worth opening. Every other state still
+// carries the URL it had (an operator greps for it, and it says which environment the row is
+// about), so a client that renders the URL without reading the state beside it offers a link to
+// something that is no longer there.
+const API_VERSION = '1.36.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -976,7 +989,7 @@ const OPERATION_DOCS = {
     tag: 'Evidence',
     summary: "Get a run's outcome summary",
     description:
-      'What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.',
+      'What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, the throwaway environments it stood up (`state: "live"` is the only one worth opening, and every other row still carries its URL), and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.',
   },
   listPublicRunArtifacts: {
     tag: 'Evidence',

@@ -1,4 +1,4 @@
-import { TESTER_AGENT_KIND } from './run-evidence.js'
+import { DEPLOYER_AGENT_KIND, DISPOSER_AGENT_KIND, TESTER_AGENT_KIND } from './run-evidence.js'
 import { UI_TESTER_AGENT_KIND } from './visual-pipeline.js'
 
 // ---------------------------------------------------------------------------
@@ -31,18 +31,19 @@ import { UI_TESTER_AGENT_KIND } from './visual-pipeline.js'
 // ---------------------------------------------------------------------------
 
 /**
- * The agent kind that PROVISIONS a run's ephemeral environments, the sole provisioner, which
- * is why every consumer below is stated relative to it. The canonical slug also backs
- * integrations' `DEPLOYER_AGENT_KIND` (re-exported there).
+ * The two slugs this module is stated relative to: the kind that PROVISIONS a run's ephemeral
+ * environments (the sole provisioner) and the kind that RECLAIMS them again at the other end of
+ * the lifecycle.
+ *
+ * DEFINED in `run-evidence.ts` and re-exported here, which is the opposite direction from the
+ * rest of this package's slugs and is a load-bearing detail rather than a tidiness one. The
+ * evidence reductions read the same two steps (which one recorded the per-frame outcomes, which
+ * one recorded the reclaims), and that module has to stay a LEAF: it already supplies this one's
+ * `TESTER_AGENT_KIND`, so a second edge back would close an import cycle whose only symptom is a
+ * TDZ `ReferenceError` at module load, in the spec generator rather than in a test.
+ * `DEPLOYER_AGENT_KIND` also backs integrations' re-export of the same name.
  */
-export const DEPLOYER_AGENT_KIND = 'deployer'
-
-/**
- * The agent kind that RECLAIMS them again, the deployer's counterpart at the other end of the
- * lifecycle. It tears down by the environment ids the deployer RECORDED on its own step, so it
- * has nothing whatsoever to do without one earlier in the chain.
- */
-export const DISPOSER_AGENT_KIND = 'disposer'
+export { DEPLOYER_AGENT_KIND, DISPOSER_AGENT_KIND } from './run-evidence.js'
 
 /**
  * The agent kind of the human-testing gate: it parks for a person to validate the change in the

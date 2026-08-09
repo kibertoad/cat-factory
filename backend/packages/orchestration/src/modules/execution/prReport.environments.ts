@@ -10,7 +10,12 @@ import type {
   ProvisioningLogRecord,
 } from '@cat-factory/kernel'
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
-import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
+import {
+  declaresRetainedEnvironment,
+  isEnvironmentGone,
+  runEnvironmentProjections,
+  selectDeployStep,
+} from '@cat-factory/contracts'
 import { isTesterKind } from './ci.logic.js'
 import { absentNote, findStep } from './prReport.steps.js'
 
@@ -105,9 +110,6 @@ type Capper = <T>(items: readonly T[], label: string) => T[]
 function scrub(value: string | null | undefined): string | null {
   return value == null ? null : (redactSecrets(value) ?? null)
 }
-
-/** The lifecycle states that mean an environment is no longer standing. */
-const GONE_STATUSES = new Set(['torn_down', 'expired', 'failed'])
 
 /** The human-readable rendering of each way the timeline can come back empty. */
 const TIMELINE_GAP_NOTES: Record<PrReportTimelineGap, string> = {
@@ -284,10 +286,8 @@ function foldLifecycle(read: ProvisioningLifecycleRead): LoggedLifecycle {
  * confirm a teardown nobody observed.
  */
 function projectionsAllGone(instance: ExecutionInstance): boolean {
-  const projections = instance.steps.filter((s) => s.environment != null)
-  return (
-    projections.length > 0 && projections.every((s) => GONE_STATUSES.has(s.environment!.status))
-  )
+  const projections = runEnvironmentProjections(instance.steps)
+  return projections.length > 0 && projections.every((env) => isEnvironmentGone(env.status))
 }
 
 /**
@@ -323,7 +323,7 @@ function teardownState(
   // that would answer `pending` answers `retained` instead when the deployer said so, and only
   // those: a DECLARED retention says nothing about a teardown that was attempted and failed, or
   // one that ran and could not be verified. Those are still the facts they always were.
-  const standing = declaresRetainedEnvironment(instance) ? 'retained' : 'pending'
+  const standing = declaresRetainedEnvironment(instance.steps) ? 'retained' : 'pending'
   // No log to read: fall back to the run's own step projections, the weaker signal. This one
   // still yields `confirmed`, because with no log there is no verify row to be missing — the
   // projection is the only evidence there is, and it is the evidence this branch is for.
@@ -344,38 +344,12 @@ function teardownState(
     : 'unconfirmed'
 }
 
-/**
- * Whether the run's deployer step DECLARED that the environments it provisions outlive the run
- * ({@link StepOptions.retainEnvironment}). Read off the step the run actually dispatched, not off
- * the pipeline definition, because the definition can be edited after the run started and the
- * report is about what THIS run did.
- *
- * It is deliberately the same fact the save boundary reads: an environment left standing with no
- * declaration is refused at authoring time, so on a pipeline saved since that rule the two states
- * this splits are "declared retained" and "the reclaim did not happen", which is exactly the
- * distinction a reviewer needs and the one `pending` alone could not make.
- */
-function declaresRetainedEnvironment(instance: ExecutionInstance): boolean {
-  return instance.steps.some(
-    (s) => s.agentKind === DEPLOYER_AGENT_KIND && s.stepOptions?.retainEnvironment === true,
-  )
-}
-
 /** The tester step whose report the evidence leg reads. */
 function testerStep(instance: ExecutionInstance): PipelineStep | undefined {
   return findStep(
     instance,
     (s) => isTesterKind(s.agentKind),
     (s) => s.test?.lastReport != null,
-  )
-}
-
-/** The deployer step whose per-frame outcomes the "up" leg reads. */
-function deployerStep(instance: ExecutionInstance): PipelineStep | undefined {
-  return findStep(
-    instance,
-    (s) => s.agentKind === DEPLOYER_AGENT_KIND,
-    (s) => Object.keys(s.deployEnvs ?? {}).length > 0,
   )
 }
 
@@ -551,7 +525,7 @@ export function composeEnvironments(
 ): PrVerificationReport['environments'] {
   const { timeline, logged } = foldLifecycle(inputs.provisioning)
   const evidence = composeEvidence(instance, inputs, cap)
-  const step = deployerStep(instance)
+  const step = selectDeployStep(instance.steps)
   const absent = (note: string): PrVerificationReport['environments'] => ({
     status: 'absent',
     note,

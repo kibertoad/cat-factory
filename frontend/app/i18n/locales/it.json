@@ -6382,6 +6382,30 @@
         "none_captured": "L'interfaccia doveva essere catturata, ma non è stata catturata alcuna vista."
       }
     },
+    "environments": {
+      "title": "Ambiente attivo",
+      "open": "Apri l'ambiente attivo",
+      "retained": "Questo ambiente deve sopravvivere all'esecuzione, quindi il link resta valido.",
+      "expires": "Scade il {date}",
+      "state": {
+        "live": "Attivo",
+        "provisioning": "In avvio",
+        "failed": "Mai avviato",
+        "reclaiming": "In dismissione",
+        "reclaimed": "Dismesso",
+        "expired": "Scaduto"
+      },
+      "origin": {
+        "deployer": "Avviato da questa esecuzione",
+        "human_test": "Avviato per il test manuale",
+        "projected": "L'esecuzione è ancora in corso, quindi può ancora cambiare"
+      },
+      "gap": {
+        "no_environment_step": "In questa pipeline nulla avvia un ambiente, quindi non c'è niente da aprire.",
+        "not_provisioned": "Doveva essere avviato un ambiente e finora non ne è stato registrato nessuno.",
+        "infraless": "Questo servizio non dichiara un ambiente proprio, quindi non è stato avviato nulla."
+      }
+    },
     "checks": {
       "title": "Controlli",
       "row": "{kind}: {state}",

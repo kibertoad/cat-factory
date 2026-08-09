@@ -1384,10 +1384,35 @@ unaffected.
 reader: the report is a reviewer's bundle (every failing check by name, every captured log tail, the
 merge assessment), and the outcome is the product-language answer for someone reporting what shipped:
 `disposition`, the requester's own `ask`, every pull request the run opened, requirement coverage,
-the tester's verdict and concerns, the views it captured, the linked pages its agents built from,
-and the machine checks that recorded a verdict. It is the reduction the app's outcome card renders,
+the tester's verdict and concerns, the views it captured, the environments it stood up, the linked
+pages its agents built from, and the machine checks that recorded a verdict. It is the reduction the app's outcome card renders,
 served verbatim for the same reason the report is: one deployment answering a question two ways is
 how the app and an integration come to disagree about what a run did.
+
+`environments` is where the summary answers the one question the pull request cannot: is there
+something RUNNING to look at. One row per throwaway environment the run stood up, each carrying its
+`url`, an `expiresAt` when the platform recorded a TTL, the service `frameId` it belongs to, the
+`environmentId` an operator greps the logs for, the producer's verbatim `detail` where there is one,
+and `retained`, which says the run's deployer DECLARED that this environment outlives the run (so a
+link that keeps working is the design rather than a leak). Its `gap` when absent is
+`no_environment_step` (nothing in the pipeline provisions one), `not_provisioned` (something was
+meant to and nothing has been recorded yet), `infraless` (every frame declares no environment of its
+own) or `run_unavailable`. Added in 1.36.0 (outcome `version` 3).
+
+**`state` is the field to read, and `live` is the only one that means the URL is worth opening.**
+The other five (`provisioning`, `failed`, `reclaiming`, `reclaimed`, `expired`) still carry whatever
+URL the row had, because it is what names the environment and what an operator greps for, so a
+client that renders the URL without the state beside it offers a link to something that is no longer
+there. `reclaimed` is deliberately one word for both "the run's disposer tore it down" and "the
+disposer went looking and found nothing live": who took it is recorded nowhere the reduction can
+read, and the reader's next move is the same either way. A reclaim that FAILED is not one of them:
+the environment is still standing and its URL still works, which is why that case stays `live` with
+the provider's cause in `detail` and is reported as a teardown gap by the verification report
+instead. `origin` says which producer the row came from (`deployer`, `human_test`, or `projected`,
+the in-flight row read off the run's own step projection because no terminal outcome exists yet).
+A lapsed `expiresAt` is NOT folded into `state`: the reduction is clock-free so that the app
+composing it live and this endpoint cannot disagree about one run, and the instant itself says the
+same thing.
 
 `sources` is the outcome's half of the report's `context`, reduced from the same per-dispatch
 records by the same code, so the card, this endpoint and the pull request cannot disagree about
@@ -1417,8 +1442,8 @@ so a cut can never leave half a credential in the payload.
 
 Every outcome section is `{ status: "reported" } | { status: "absent", gap }` where
 `gap` is a machine-readable CODE (`no_tester_step`, `tester_not_reported`, `no_verdicts`,
-`no_requirements`, `none_linked`, `run_unavailable`) rather than prose, since the platform does not
-localize:
+`no_requirements`, `none_linked`, `no_environment_step`, `not_provisioned`, `infraless`,
+`run_unavailable`) rather than prose, since the platform does not localize:
 `requirements.spec` says whether coverage was counted against the service's `spec/` (`joined`) or
 only against the ids the tester reported (`not_read`, a narrower denominator), and
 `unmatchedVerdicts` counts rulings the spec could not place, on both endpoints. A spec that

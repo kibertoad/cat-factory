@@ -5822,6 +5822,30 @@
         "none_captured": "Arayüzün yakalanması gerekiyordu ama hiçbir görünüm yakalanmadı."
       }
     },
+    "environments": {
+      "title": "Canlı ortam",
+      "open": "Canlı ortamı aç",
+      "retained": "Bu ortamın çalışma bittikten sonra da ayakta kalması amaçlanıyor, bağlantı çalışmaya devam eder.",
+      "expires": "{date} tarihinde sona eriyor",
+      "state": {
+        "live": "Canlı",
+        "provisioning": "Ayağa kalkıyor",
+        "failed": "Hiç ayağa kalkmadı",
+        "reclaiming": "Kaldırılıyor",
+        "reclaimed": "Kaldırıldı",
+        "expired": "Süresi doldu"
+      },
+      "origin": {
+        "deployer": "Bu çalışma tarafından ayağa kaldırıldı",
+        "human_test": "Elle yapılan test için ayağa kaldırıldı",
+        "projected": "Çalışma sürüyor, bu yüzden bu durum değişebilir"
+      },
+      "gap": {
+        "no_environment_step": "Bu hatta ortam ayağa kaldıran bir adım yok, açılacak bir şey de yok.",
+        "not_provisioned": "Bir ortam ayağa kaldırılacaktı, ancak henüz hiçbiri kaydedilmedi.",
+        "infraless": "Bu servis kendine ait bir ortam tanımlamıyor, bu yüzden hiçbir şey ayağa kaldırılmadı."
+      }
+    },
     "checks": {
       "title": "Denetimler",
       "row": "{kind}: {state}",
