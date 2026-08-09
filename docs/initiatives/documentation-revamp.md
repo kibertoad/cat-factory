@@ -18,10 +18,11 @@ rule decides which surface owns a topic, so three problems have accumulated:
   custom agents, the public API, model support, runner pools, ephemeral environments, the GitHub
   App, environment variables, the glossary, the agent trust model, storage and retention, and the
   repository layout. The audit below pairs each with its live website page.
-- **Some user-facing material is repo-only.** `backend/docs/vcs-providers.md`,
+- **Some user-facing material is repo-only.** As written: `backend/docs/vcs-providers.md`,
   `backend/docs/debug-api.md`, `backend/docs/reports.md`, `sdk/README.md` and `sdk/mcp/README.md`
   serve integrators and operators, none of whom should need a checkout to read them, and the site's
-  navigation carries no page for any of them.
+  navigation carried no page for any of them. Slices 7 and 9 closed three; `debug-api.md` and
+  `reports.md` are what is left.
 - **The root README restates the website.** Its Feature guide and parts of the Documentation
   index duplicate the site's guide section instead of pointing at it.
 
@@ -78,7 +79,7 @@ Five rules follow:
 
 ## Current duplication and misplacement
 
-The audit so far, checked against the site's live navigation on 2026-08-08 and to be completed by
+The audit so far, re-checked against the site's live navigation on 2026-08-09 and to be completed by
 slice 1. **Assume the website already covers a topic until its navigation says otherwise**: the
 first draft of this table recorded "none" for four topics the site already documents, which scoped
 their slices as moves into a gap rather than as the reconciliations they are. Website cells name
@@ -87,20 +88,29 @@ the extension pages under `extend/` and the operating pages under `operate/` and
 half. A cell here is the first thing the next slice reads, so a path left at where the page used to
 be is the rot this table exists to prevent.
 
-| Topic                            | Repo doc                                                                                                                      | Website page                                                    | Proposed authority                                                                                                                                     |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Custom agents                    | `backend/docs/custom-agents.md`, `custom-agent-roles.md`, `custom-agent-gate-ergonomics.md`                                   | `extend/custom-agents.md`, `extend/custom-gates.md`             | Website owns authoring how-to; repo keeps engine design (registries, the three stages).                                                                |
-| Public API                       | `backend/docs/public-api.md`                                                                                                  | `extend/public-api.md`                                          | Website owns endpoint/scope/webhook usage; repo keeps the stability policy (ADR 0034) and the contracts → spec → SDK chain.                            |
-| Model support                    | `backend/docs/model-support.md`                                                                                               | `guide/model-providers.md`                                      | Website owns configuration and usage; repo keeps provisioning internals. Pilot slice.                                                                  |
-| Runner pools                     | `backend/docs/runner-pool-integration.md`                                                                                     | `operate/runner-pools.md`                                       | Website owns operating a pool; repo keeps the integration protocol.                                                                                    |
-| Environments                     | `backend/docs/environments-integration.md`, `local-k3s-environments.md`, `kubernetes-topology.md`                             | `operate/environments.md`, `deploy/kubernetes.md`               | Website owns setup and operation; repo keeps provider integration design.                                                                              |
-| GitHub App                       | `backend/docs/github-integration.md`, `github-operations.md`                                                                  | `deploy/github-app.md`                                          | Website owns setup and the operations runbook; repo keeps integration design.                                                                          |
-| Environment variables            | `docs/environment-variables.md`                                                                                               | `deploy/configuration.md`                                       | Website owns the operator-facing reference; the repo file stays as the canonical list its guard reads.                                                 |
-| Glossary                         | `docs/glossary.md`                                                                                                            | `reference/glossary.md`, `guide/core-concepts.md`               | Website owns the product vocabulary; the repo glossary keeps the code-level naming map (dir ⇄ package names, internal seams).                          |
-| Agent trust model                | `backend/docs/security-model.md`                                                                                              | `reference/agent-isolation.md`, `reference/security-model.md`   | Website owns the operator-facing account of what an adversarial agent can reach; repo keeps the full layer-by-layer boundary and the write-path rules. |
-| Storage and retention            | `backend/docs/storage-and-retention.md`, `llm-telemetry.md`                                                                   | `operate/observability.md`, `operate/upgrades-and-retention.md` | Website owns retention windows and what is kept; repo keeps the table/rollup design.                                                                   |
-| Repository layout                | root `README.md` tables                                                                                                       | `reference/packages.md`                                         | Website owns the orientation map; the repo tables stay, pinned by `check-package-catalog.mjs`.                                                         |
-| Repo-only, no website page today | `backend/docs/vcs-providers.md`, `backend/docs/debug-api.md`, `backend/docs/reports.md`, `sdk/README.md`, `sdk/mcp/README.md` | none                                                            | Website gains the user-facing account (its tracker names the target section per doc); repo keeps internals where any remain.                           |
+**A "none" cell rots in one direction and it is the expensive one.** A slice that lands a website
+page does not come back to unset it, so the row keeps claiming a gap that has been filled and the
+next slice re-scopes the topic as a move rather than a reconciliation: the exact mistake the first
+draft made, re-made. Three of the original "no website page today" entries had gained pages by
+slices 7 and 9 and are now their own rows. So the "none" row is re-read against the live navigation
+on every audit pass, and a slice that lands a page moves its topic out of it in the same PR.
+
+| Topic                            | Repo doc                                                                                          | Website page                                                                | Proposed authority                                                                                                                                                                                                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Custom agents                    | `backend/docs/custom-agents.md`, `custom-agent-roles.md`, `custom-agent-gate-ergonomics.md`       | `extend/custom-agents.md`, `extend/custom-gates.md`                         | Website owns authoring how-to; repo keeps engine design (registries, the three stages).                                                                                                                                                                                                   |
+| Public API                       | `backend/docs/public-api.md`                                                                      | `extend/public-api.md`                                                      | Website owns endpoint/scope/webhook usage; repo keeps the stability policy (ADR 0034) and the contracts → spec → SDK chain.                                                                                                                                                               |
+| Model support                    | `backend/docs/model-support.md`                                                                   | `guide/model-providers.md`                                                  | Website owns configuration and usage; repo keeps provisioning internals. Pilot slice.                                                                                                                                                                                                     |
+| Runner pools                     | `backend/docs/runner-pool-integration.md`                                                         | `operate/runner-pools.md`                                                   | Website owns operating a pool; repo keeps the integration protocol.                                                                                                                                                                                                                       |
+| Environments                     | `backend/docs/environments-integration.md`, `local-k3s-environments.md`, `kubernetes-topology.md` | `operate/environments.md`, `deploy/kubernetes.md`                           | Website owns setup and operation; repo keeps provider integration design.                                                                                                                                                                                                                 |
+| GitHub App                       | `backend/docs/github-integration.md`, `github-operations.md`                                      | `deploy/github-app.md`                                                      | Website owns setup and the operations runbook; repo keeps integration design.                                                                                                                                                                                                             |
+| Environment variables            | `docs/environment-variables.md`                                                                   | `reference/environment-variables.md` (GENERATED), `deploy/configuration.md` | The repo file is canonical: `check-reserved-env-keys.mjs` reads it and the site RENDERS it into the reference page, so that page is the one item 3's `--check` guards. `deploy/configuration.md` narrates by hand the subset an operator sets, and links the generated page for the rest. |
+| Glossary                         | `docs/glossary.md`                                                                                | `reference/glossary.md`, `guide/core-concepts.md`                           | Website owns the product vocabulary; the repo glossary keeps the code-level naming map (dir ⇄ package names, internal seams).                                                                                                                                                             |
+| Agent trust model                | `backend/docs/security-model.md`                                                                  | `reference/agent-isolation.md`, `reference/security-model.md`               | Website owns the operator-facing account of what an adversarial agent can reach; repo keeps the full layer-by-layer boundary and the write-path rules.                                                                                                                                    |
+| Storage and retention            | `backend/docs/storage-and-retention.md`, `llm-telemetry.md`                                       | `operate/observability.md`, `operate/upgrades-and-retention.md`             | Website owns retention windows and what is kept; repo keeps the table/rollup design.                                                                                                                                                                                                      |
+| Repository layout                | root `README.md` tables                                                                           | `reference/packages.md`                                                     | Website owns the orientation map; the repo tables stay, pinned by `check-package-catalog.mjs`.                                                                                                                                                                                            |
+| VCS support                      | `backend/docs/vcs-providers.md`, `gitlab-parity.md`                                               | `reference/vcs-support-matrix.md`                                           | Website owns the parity matrix and provider setup; repo keeps the provider-layer map and the accepted-gap log. Landed in slice 9.                                                                                                                                                         |
+| SDKs and MCP                     | `sdk/README.md`, `sdk/mcp/README.md`                                                              | `extend/sdks.md`, `extend/mcp-server.md`                                    | Website owns consuming a client; the READMEs keep the generation chain, the smoketest and releases. Landed in slice 7.                                                                                                                                                                    |
+| Repo-only, no website page today | `backend/docs/debug-api.md`, `backend/docs/reports.md`                                            | none                                                                        | Website gains the user-facing account (its tracker names the target section per doc); repo keeps internals where any remain.                                                                                                                                                              |
 
 ## Classification (slice 1)
 
@@ -210,52 +220,22 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       `vcs-providers.md` (-24), the root `README.md` (-13) and `model-support.md` §6-§8. Every other
       doc in the "mixed" row gained a pointer over unchanged prose, which is the two-parallel-full-
       accounts state rule 1 exists to end. One doc per PR, each section checked against the LIVE
-      page before it is cut. **15a has landed; 15b and 15c are what keeps this item open.**
-
-      **Trap that shapes all three: the site splits a feature from its MANIFEST.** A manifest schema
-                  lives on `extend/manifests.html`, not on the feature's own page, so a repo doc reducing its
-                  manifest section points THERE. Reducing it toward the feature page instead loses the schema
-                  for every reader.
-
-                  **15a. `custom-agents.md`: DONE (553 → 326 lines).** Every section was checked against the
-                  live page before it was cut, and the plan held except where the last column says otherwise.
-
-                  | Section                             | Disposition                                                                                             |
-                  | ----------------------------------- | ------------------------------------------------------------------------------------------------------- |
-                  | The governing principle             | KEPT. "Zero `switch(agentKind)` in the container" is an invariant a contributor breaks, not a how-to.   |
-                  | The three stages                    | CUT to the stage names plus the `RepoFiles` source link, pointing at the site's "The mental model".     |
-                  | The seams                           | CUT: the registration example and the `AgentKindDefinition` table are both on the site, and the site's table is the LONGER one (`tuning`, `gatable`, `fanOutMultiRepo`). Kept the `standardsDelivery: 'context-files'` rationale and `registeredKindRequiresContainer`. |
-                  | Variations of an EXISTING kind      | KEPT. The site has four sentences; these lines are WHY a variant is not a kind, which is the safety property. |
-                  | Capabilities → Skills               | KEPT. Deeper than the site: the three ref forms, bundled vs catalog resolution, harness-aware install, the overlap with the built-in `skill` KIND. Cut only the registration snippet the site carries. |
-                  | Capabilities → Tool servers (MCP)   | CUT to one paragraph naming `mcp-tool-servers.md` as the authority. The four "altitude" bullets it kept were four facts that doc states in full.  |
-                  | Capabilities → Binary generators    | CUT to the two-registries split (storage is a selected foundational service, generation is the deployment's own registry) plus the link. Verified: `binary-output-foundational-storage.md` owns every other line of it. |
-                  | Judges                              | CUT to why it is the fourth bucket and why neither other seam fits, with the registration on the site and the design (D9's model-pin precedence included) in `judge-registry.md`. |
-                  | The worked example                  | CUT to one paragraph naming what `backend/internal/example-custom-agent` registers, which is the executable copy. |
-                  | Status / scope                      | KEPT.                                                                                                    |
-
-                  Two couplings the cut had to carry, both invisible from the page itself:
-                  `agent-prompt-overrides.md` deep-links `#variations-of-an-existing-kind-alternate-prompts-programmatically`
-                  and `custom-agent-roles.md` deep-links `#capabilities-skills-and-tools`, so both headings are
-                  load-bearing and stay. `custom-agent-roles.md` also pointed AT the `AgentKindDefinition` table
-                  this slice deleted; it now points at the section that survived, in the same change.
-
-                  15b. `environments-integration.md` (442 lines). The site is BIGGER here (18 sections), so the
-                  repo doc is the junior partner: `## The manifest` (152) belongs to
-                  `extend/manifests.html#environment-provider-manifest`; `## Code-adapter seam` (126) is the one
-                  to keep, being a code seam, but the site's `#when-the-manifest-isn-t-enough` covers the
-                  choosing half; `## How it works` (18) and `## Registering a provider` (19) are on the site
-                  verbatim. `## Reaching an internal / VPN-hosted platform`, `## Provisioning & discovery` and
-                  `## Security notes` stay.
-
-                  15c. `runner-pool-integration.md` (701 lines) is the MILD case and the one most likely to be
-                  over-cut. `operate/runner-pools.html` has four sections; almost everything here is genuinely
-                  deeper. Exactly one section duplicates: `## 3. Describe your scheduler as a manifest` (203),
-                  which `extend/manifests.html#runner-pool-manifest` owns. The runner image and job protocol
-                  (117), the k3s/Nomad mapping (48), the trust boundary (41) and scaling (25) all stay.
-
-                  `llm-telemetry.md` is the model of a clean split and needs nothing: every section is an
-                  internal rule with no counterpart on the site. Copy its shape.
-
+      page before it is cut. **15a has landed; 15b and 15c are what keeps this item open.** The
+      per-slice dispositions are their own section: [Slice 15 reductions](#slice-15-reductions).
+- [ ] 16. **Guard the relative links BETWEEN repo docs**, the hole the gotcha below names: no guard
+      opens a markdown file under `backend/docs/` or `docs/`, so deleting or renaming a linked doc
+      reds nothing. It is not hypothetical rot to prevent, it is rot to clear: a scan of `main` on
+      2026-08-09 finds 43 dangling relative targets, 33 of them in generated `CHANGELOG`s and 10 in
+      live docs. Those 10 are the reason this is a slice rather than a rider on a reduction PR.
+      Three (`custom-initiative-definitions.md`) point at trackers that converted to ADRs 0013, 0016
+      and 0028 and were `git rm`ed, which is exactly the failure mode 15a's judges link is queued to
+      repeat; three more (`initiative-presets.md`) point at the same three trackers AND with the
+      wrong `../` depth; two ADRs (0033, 0038) have the depth wrong on targets that do exist;
+      `model-support.md` names a moved source file; `frontend/app/app/docs/architecture.md` names a
+      `README.md` that is not there. Each needs a judgement about what the link should now say, and
+      the same PR decides whether a generated `CHANGELOG` is in scope at all (they are frozen
+      history, correctly naming what was true when written, and already on `.oxfmtrc.json`'s ignore
+      list) before the guard can be turned on green.
 - [x] 13. The website's page-quality pass (its phase D) landed in
       [cat-factory-website#24](https://github.com/kibertoad/cat-factory-website/pull/24): the
       opening/closing shape on the pages that predate the revamp, task-oriented titles on the how-to
@@ -263,6 +243,62 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       split that matters here is `extend/custom-agents.md`, which shed gates, step-completion
       resolvers and judges to `extend/custom-gates.html`, so a repo doc reducing a JUDGE section
       points at that page rather than the agents one.
+
+## Slice 15 reductions
+
+The per-doc dispositions behind checklist item 15, one heading per sub-slice so the person running
+the next one reads only theirs. They sit here rather than nested under the checklist entry because
+a table indented under a list item is an indented CODE BLOCK: it renders as monospace pipe-art, and
+the formatter rejects the indentation that produces it, so the checklist is the wrong container for
+anything longer than a paragraph.
+
+**Trap that shapes all three: the site splits a feature from its MANIFEST.** A manifest schema lives
+on `extend/manifests.html`, not on the feature's own page, so a repo doc reducing its manifest
+section points THERE. Reducing it toward the feature page instead loses the schema for every reader.
+
+### 15a. `custom-agents.md`: DONE (553 → 326 lines)
+
+Every section was checked against the live page before it was cut, and the plan held except where
+the disposition says otherwise.
+
+| Section                           | Disposition                                                                                                                                                                                                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The governing principle           | KEPT. "Zero `switch(agentKind)` in the container" is an invariant a contributor breaks, not a how-to.                                                                                                                                                                   |
+| The three stages                  | CUT to the stage names plus the `RepoFiles` source link, pointing at the site's "The mental model".                                                                                                                                                                     |
+| The seams                         | CUT: the registration example and the `AgentKindDefinition` table are both on the site, and the site's table is the LONGER one (`tuning`, `gatable`, `fanOutMultiRepo`). Kept the `standardsDelivery: 'context-files'` rationale and `registeredKindRequiresContainer`. |
+| Variations of an EXISTING kind    | KEPT. The site has four sentences; these lines are WHY a variant is not a kind, which is the safety property.                                                                                                                                                           |
+| Capabilities → Skills             | KEPT. Deeper than the site: the three ref forms, bundled vs catalog resolution, harness-aware install, the overlap with the built-in `skill` KIND. Cut only the registration snippet the site carries.                                                                  |
+| Capabilities → Tool servers (MCP) | CUT to one paragraph naming `mcp-tool-servers.md` as the authority. The four "altitude" bullets it kept were four facts that doc states in full.                                                                                                                        |
+| Capabilities → Binary generators  | CUT to the two-registries split (storage is a selected foundational service, generation is the deployment's own registry) plus the link. Verified: `binary-output-foundational-storage.md` owns every other line of it.                                                 |
+| Judges                            | CUT to why it is the fourth bucket and why neither other seam fits, with the registration on the site and the design (D9's model-pin precedence included) in `judge-registry.md`.                                                                                       |
+| The worked example                | CUT to one paragraph naming what `backend/internal/example-custom-agent` registers, which is the executable copy.                                                                                                                                                       |
+| Status / scope                    | KEPT.                                                                                                                                                                                                                                                                   |
+
+Two couplings the cut had to carry, both invisible from the page itself: `agent-prompt-overrides.md`
+deep-links `#variations-of-an-existing-kind-alternate-prompts-programmatically` and
+`custom-agent-roles.md` deep-links `#capabilities-skills-and-tools`, so both headings are
+load-bearing and stay. `custom-agent-roles.md` also pointed AT the `AgentKindDefinition` table this
+slice deleted; it now points at the section that survived, in the same change.
+
+### 15b. `environments-integration.md` (442 lines)
+
+The site is BIGGER here (18 sections), so the repo doc is the junior partner: `## The manifest`
+(152) belongs to `extend/manifests.html#environment-provider-manifest`; `## Code-adapter seam` (126)
+is the one to keep, being a code seam, but the site's `#when-the-manifest-isn-t-enough` covers the
+choosing half; `## How it works` (18) and `## Registering a provider` (19) are on the site verbatim.
+`## Reaching an internal / VPN-hosted platform`, `## Provisioning & discovery` and
+`## Security notes` stay.
+
+### 15c. `runner-pool-integration.md` (701 lines)
+
+The MILD case and the one most likely to be over-cut. `operate/runner-pools.html` has four sections;
+almost everything here is genuinely deeper. Exactly one section duplicates:
+`## 3. Describe your scheduler as a manifest` (203), which `extend/manifests.html#runner-pool-manifest`
+owns. The runner image and job protocol (117), the k3s/Nomad mapping (48), the trust boundary (41)
+and scaling (25) all stay.
+
+`llm-telemetry.md` is the model of a clean split and needs nothing: every section is an internal rule
+with no counterpart on the site. Copy its shape.
 
 ## Docs added since this tracker was written
 
@@ -287,11 +323,11 @@ doc is the authority, and folding that into a website slice would hide it. All t
 `custom-agents.md` and all three were resolved by slice 15a, which is why the judgement is recorded
 per row rather than left to the next reader.
 
-| Restated in                                     | Already owned by                                         | Judgement                                                                                                                                                                                                                                                                                                                                                                               |
-| ----------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `custom-agents.md` → "Tool servers (MCP)"       | `mcp-tool-servers.md`                                    | Resolved: that doc is the authority and `custom-agents.md` now only says a tool server resolves in the container EXECUTOR rather than the engine, which is the one fact placing it in THIS doc's model.                                                                                                                                                                                 |
-| `custom-agents.md` → "Judges"                   | `docs/initiatives/judge-registry.md`                     | Resolved toward the live tracker, NOT deferred behind its ADR conversion: that conversion is due when the tracker's own slice 12 lands, and blocking a documentation slice on an unrelated engine slice would leave the duplicate standing meanwhile. The link moves to the ADR when the tracker converts, which is one edit `check-shipped-doc-links.mjs` would red if it were missed. |
-| `custom-agents.md` → "Binary-output generators" | `docs/initiatives/binary-output-foundational-storage.md` | Verified before cutting, and the shape WAS the same: the initiative doc states the brief, the closed content-type vocabulary, both admission refusals and the credential rule at greater depth than the section restating them.                                                                                                                                                         |
+| Restated in                                     | Already owned by                                         | Judgement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `custom-agents.md` → "Tool servers (MCP)"       | `mcp-tool-servers.md`                                    | Resolved: that doc is the authority and `custom-agents.md` now only says a tool server resolves in the container EXECUTOR rather than the engine, which is the one fact placing it in THIS doc's model.                                                                                                                                                                                                                                                                                         |
+| `custom-agents.md` → "Judges"                   | `docs/initiatives/judge-registry.md`                     | Resolved toward the live tracker, NOT deferred behind its ADR conversion: that conversion is due when the tracker's own slice 12 lands, and blocking a documentation slice on an unrelated engine slice would leave the duplicate standing meanwhile. The cost is one edit when the tracker converts, and NOTHING WOULD RED IF IT WERE MISSED: see the unguarded-repo-links gotcha. So the conversion PR, which `git rm`s the tracker per CLAUDE.md, is where the repoint has to be remembered. |
+| `custom-agents.md` → "Binary-output generators" | `docs/initiatives/binary-output-foundational-storage.md` | Verified before cutting, and the shape WAS the same: the initiative doc states the brief, the closed content-type vocabulary, both admission refusals and the credential rule at greater depth than the section restating them.                                                                                                                                                                                                                                                                 |
 
 **The rule this suggests, and it held on the second pass:** a doc that names another as "the full
 model" may not also contain that model. Say what the reader needs to decide whether to follow the
@@ -326,6 +362,15 @@ converts.
   the inbound links in the same PR. Slice 7 took the second route for `#pointing-an-sdk-at-localhost-or-a-mock`
   and slice 2 took the first, because `model-support.md`'s anchors are linked from RUNTIME ERROR
   MESSAGES (`agents/src/providers/docs.ts`), where a stale link reaches an operator with no way back.
+- **A relative link between two REPO docs is unguarded, and it is easy to believe otherwise, because
+  the two guards that sound like they cover it each cover something adjacent.**
+  `check-shipped-doc-links.mjs` walks the published package directories only, so it never opens a
+  file under `backend/docs/` or `docs/`; `check-doc-anchors.mjs` resolves only the URLs that CODE
+  builds. Nothing reads an ordinary markdown link, so `git rm`ing a doc, renaming one, or getting the
+  `../` depth wrong is green. That matters most where this repo deletes docs ON PURPOSE: CLAUDE.md
+  says a completed initiative tracker converts to an ADR and the tracker is `git rm`ed in the same
+  PR, which dangles every repo doc that linked it. Assume no guard, repoint by hand in the PR that
+  moves the file, and see item 16 for closing the class.
 - **An anchor linked from CODE is a different coupling from one linked in markdown, and slice 9
   broke it.** Reducing `vcs-providers.md` deleted `## Setup`, which the GitLab webhook-rejection
   warning deep-linked as `DOCS.vcsProviders('setup')`: an operator following it from the logs landed
