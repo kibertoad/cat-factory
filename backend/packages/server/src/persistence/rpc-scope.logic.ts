@@ -1,4 +1,4 @@
-import type { DispatchOptions, DispatchResult } from './rpc'
+import type { DispatchOptions, DispatchResult, LibrarySourceEntity } from './rpc'
 
 /**
  * Token-scope checks for the record/owner-pair {@link ScopeRule} kinds, split out of `rpc.ts` so the
@@ -99,4 +99,56 @@ export async function checkOwnerPairScope(
     return denied
   }
   return undefined
+}
+
+/**
+ * The `librarySource` kind: a repo-sourced content library's SYNC method carries a source id and
+ * nothing else, so resolve that source row's owning `(ownerKind, ownerId)` pair server-side and bind
+ * it exactly like `owner`. A non-string id, an absent resolver, and a source that does not exist all
+ * fail closed — an id that cannot be bound must never reach the method, and 404 (not 403) matches the
+ * existence-non-leak policy.
+ */
+export async function checkLibrarySourceScope(
+  entity: LibrarySourceEntity,
+  sourceId: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (typeof sourceId !== 'string' || !opts.resolveLibrarySourceOwner) return denied
+  const owner = await opts.resolveLibrarySourceOwner(entity, sourceId)
+  if (!owner) return denied
+  return checkOwnerPairScope(owner.ownerKind, owner.ownerId, opts, inScope, denied)
+}
+
+/**
+ * The `ownerFieldUpsert` kind: bind an id-keyed `upsert(record)` on BOTH the owner the record
+ * DECLARES and the owner of the row it would OVERWRITE. See the rule's entry on `ScopeRule` for why
+ * the declared half alone is not enough.
+ *
+ * The stored half is decided by row EXISTENCE: an absent row is a CREATE, which the declared half has
+ * already bound. A record with no usable conflict key cannot be bound to the row it would write, so it
+ * is refused rather than admitted on the declared half alone.
+ */
+export async function checkOwnerFieldUpsertScope(
+  entity: LibrarySourceEntity,
+  record: unknown,
+  opts: DispatchOptions,
+  inScope: (accountId: string | null | undefined) => boolean,
+  denied: DispatchResult,
+): Promise<DispatchResult | undefined> {
+  if (!record || typeof record !== 'object') return denied
+  const { ownerKind, ownerId, id } = record as {
+    ownerKind?: unknown
+    ownerId?: unknown
+    id?: unknown
+  }
+  // The declared half — identical to `ownerField`.
+  const denialForDeclared = await checkOwnerPairScope(ownerKind, ownerId, opts, inScope, denied)
+  if (denialForDeclared) return denialForDeclared
+  if (typeof id !== 'string' || !opts.resolveLibrarySourceOwner) return denied
+  // The stored half. No row ⇒ a create, already bound above. A row ⇒ its owner must be in scope too.
+  const stored = await opts.resolveLibrarySourceOwner(entity, id)
+  if (!stored) return undefined
+  return checkOwnerPairScope(stored.ownerKind, stored.ownerId, opts, inScope, denied)
 }

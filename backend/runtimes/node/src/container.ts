@@ -244,7 +244,7 @@ function wirePreviewModule(
  * returns a clean `unknown_method`, never a `db`-undefined `TypeError`. A no-op outside mothership
  * mode (`remoteRepos` undefined). Extracted from {@link buildNodeContainer} to keep it under budget.
  */
-function applyMothershipRemoteRepos(
+export function applyMothershipRemoteRepos(
   dependencies: CoreDependencies,
   remoteRepos: Record<string, unknown> | undefined,
 ): void {
@@ -272,10 +272,11 @@ function applyMothershipRemoteRepos(
     remoteRepos.customManifestTypeRepository as CoreDependencies['customManifestTypeRepository']
   // The prompt-fragment library (`FragmentLibraryService`, built directly over the absent `db`
   // by `selectNodeFragmentLibraryDeps`) — its management surface (list/create/update/delete
-  // fragments + list/link sources) is served remotely so the library panels are functional in
+  // fragments + list/link sources) AND, since the library-sync slice, its repo-SYNC surface are
+  // served remotely, so the library panels and the link/sync/unlink routes are functional in
   // mothership mode; rows carry no secrets, and the RPC allow-list gates each method by its
-  // `(ownerKind, ownerId)` scope. Repo-SYNC (the source service's GitHub reads) stays
-  // db-direct/off — the mothership owns GitHub sync.
+  // `(ownerKind, ownerId)` scope (`librarySource` for the sourceId-keyed sync methods). The node
+  // reaches the guideline repos through the delegated App token, like the skills library below.
   //
   // Route only when the library is ALREADY configured (`config.fragmentLibrary.enabled` — else
   // these are absent). UNLIKE the document/task/env repos above (whose modules need extra deps,
@@ -291,6 +292,15 @@ function applyMothershipRemoteRepos(
   if (dependencies.fragmentSourceRepository) {
     dependencies.fragmentSourceRepository =
       remoteRepos.fragmentSourceRepository as CoreDependencies['fragmentSourceRepository']
+  }
+  // The GENERATED brief store, built over the same absent `db` by the same helper. It is read AND
+  // written on the run path (an implementer dispatch resolves a brief alongside the body it
+  // condenses), so leaving it db-direct was a `TypeError` per dispatch rather than a blank panel —
+  // the same class of gap the routing guard in `mothership-repo-source.spec.ts` now closes
+  // structurally.
+  if (dependencies.fragmentBriefRepository) {
+    dependencies.fragmentBriefRepository =
+      remoteRepos.fragmentBriefRepository as CoreDependencies['fragmentBriefRepository']
   }
   // The Claude Skills library, same shape as the fragment library above: swap the (db-less,
   // broken) Drizzle repos for the remote ones, keeping the "module only when configured" gate.
@@ -309,6 +319,21 @@ function applyMothershipRemoteRepos(
     dependencies.skillSourceRepository =
       remoteRepos.skillSourceRepository as CoreDependencies['skillSourceRepository']
   }
+  // The foundational-services catalog (ADR 0031), its API-contract documents and its repo sources.
+  // Routed UNCONDITIONALLY, unlike the two libraries above: `selectNodeFoundationalServiceDeps` is
+  // deliberately UNGATED (a service's contracts can be uploaded with no repo source at all), so
+  // these three are always present and the "setting the repo would spuriously turn the module on"
+  // hazard does not apply — what applies instead is that the module is always ON, over a Drizzle
+  // repo built from an absent `db`. That is worse than an un-allow-listed method: it is a
+  // `TypeError` on the RUN path, since an architect dispatch resolves the merged catalog and a
+  // coder dispatch resolves the declared services' contracts. The allow-list has named this
+  // surface remote since the catalog slice; it was reachable only from the Cloudflare facade.
+  dependencies.foundationalServiceRepository =
+    remoteRepos.foundationalServiceRepository as CoreDependencies['foundationalServiceRepository']
+  dependencies.apiContractRepository =
+    remoteRepos.apiContractRepository as CoreDependencies['apiContractRepository']
+  dependencies.foundationalServiceSourceRepository =
+    remoteRepos.foundationalServiceSourceRepository as CoreDependencies['foundationalServiceSourceRepository']
 }
 
 interface PostAssemblyContext extends PreviewModuleContext {

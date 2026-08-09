@@ -69,6 +69,12 @@ export function persistenceController(): Hono<AppEnv> {
     const blockRepository = registry.blockRepository
     const serviceRepository = registry.serviceRepository
     const skillSourceRepository = registry.skillSourceRepository
+    // The owner-pair content-library source tables, keyed by the `LibrarySourceEntity` the rule
+    // names, so one resolver answers for both (and a new library is one row here).
+    const librarySourceRepos: Record<string, PersistenceRegistry[string] | undefined> = {
+      fragmentSource: registry.fragmentSourceRepository,
+      foundationalServiceSource: registry.foundationalServiceSourceRepository,
+    }
     const resolveAccountId = (workspaceId: string) =>
       (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
       Promise.resolve(undefined)
@@ -96,6 +102,14 @@ export function persistenceController(): Hono<AppEnv> {
     const blockFindByIds = memoizeRead((ids) => blockRepository?.findByIds?.(ids as string[]))
     const serviceListByIds = memoizeRead((ids) => serviceRepository?.listByIds?.(ids as string[]))
     const skillSourceGet = memoizeRead((id) => skillSourceRepository?.get?.(id as string))
+    // One memo per source TABLE, keyed by entity: the resolver and the dispatched `get` of the same
+    // library then share a read, exactly as `skillSourceGet` does for skills.
+    const librarySourceGets: Record<string, (id: unknown) => Promise<unknown>> = {
+      fragmentSource: memoizeRead((id) => librarySourceRepos.fragmentSource?.get?.(id as string)),
+      foundationalServiceSource: memoizeRead((id) =>
+        librarySourceRepos.foundationalServiceSource?.get?.(id as string),
+      ),
+    }
     // For the self-keyed reads, point the dispatcher's own call at the memo so it hits the
     // resolver's already-resolved result. Only the one dispatched method is overridden; the rest
     // of the registry is untouched. Keyed `repo.method` so a new self-keyed read is one row here
@@ -110,6 +124,15 @@ export function persistenceController(): Hono<AppEnv> {
       // The `skillSource` scope resolves a source's account by reading the source; when the
       // dispatched call IS that read (the sync service's `get`), reuse the resolver's result.
       'skillSourceRepository.get': { skillSourceRepository: { get: skillSourceGet } },
+      // The same self-keyed read for the two owner-pair libraries' source tables.
+      'fragmentSourceRepository.get': {
+        fragmentSourceRepository: { get: librarySourceGets.fragmentSource! },
+      },
+      'foundationalServiceSourceRepository.get': {
+        foundationalServiceSourceRepository: {
+          get: librarySourceGets.foundationalServiceSource!,
+        },
+      },
     }
     // Substitute ONLY for a method the real registry actually wires. `memoizeRead` returns a
     // function unconditionally — it closes over an optional-chained call — so overriding an ABSENT
@@ -168,6 +191,17 @@ export function persistenceController(): Hono<AppEnv> {
       resolveSkillSourceAccountId: async (sourceId) => {
         const source = (await skillSourceGet(sourceId)) as { accountId?: string } | null | undefined
         return source?.accountId
+      },
+      // The owner-PAIR libraries' equivalent: a fragment / foundational-service source is owned by
+      // an `(ownerKind, ownerId)` tier rather than an account, so project the pair and let the rule
+      // resolve it the way it resolves a positional owner. A source that does not exist yields
+      // null, which fails closed (404) exactly like a missing block/service.
+      resolveLibrarySourceOwner: async (entity, sourceId) => {
+        const source = (await librarySourceGets[entity]?.(sourceId)) as
+          | { ownerKind?: unknown; ownerId?: unknown }
+          | null
+          | undefined
+        return source ? { ownerKind: source.ownerKind, ownerId: source.ownerId } : null
       },
       // The member-display scope (`user`/`userList`): a userId is in scope iff a co-member of an
       // in-scope account, so resolve each in-scope account's roster to userIds. Bounded by the
