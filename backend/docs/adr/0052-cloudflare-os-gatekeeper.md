@@ -158,6 +158,17 @@ non-blocking has to mean for a lane whose subject is a repository we do not cont
 `continue-on-error` would make the job report a pass it did not earn, and a lane nobody can
 distinguish from green is a lane nobody reads.
 
+**Why the run is graded from the report AND the exit code, rather than either alone.** Neither is
+total. A suite that collected nothing exits 0, and so does one whose specs were every one of them
+skipped, which is why `scripts/grade-vitest-report.mjs` reads the per-assertion statuses. Reading
+only those is the same mistake mirrored: a file can fail with every assertion in it passing (this
+leg's no-unmocked-outbound-call invariant is an `afterAll`, and a module that throws on import
+collects nothing to read), and a run can die after its report was written. So the grader takes each
+file's own status, the report's verdict and the runner's exit code beside the assertions, and each
+of the four may be the only one that knows. The step therefore carries the exit code into the
+grader instead of discarding it with `|| true`, which would leave the lane graded more weakly than
+the bare exit code it replaced.
+
 **Rejected, and not to be re-proposed**: an `onBehalfOf` label on the start endpoints (attribution by
 assertion, with per-user keys already giving the real thing); a narrower `decide:own` scope rung (the
 Gatekeeper can filter to runs it tracks, and if it ever lands in core it must be an additive rung

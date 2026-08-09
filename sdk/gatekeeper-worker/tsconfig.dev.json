@@ -21,6 +21,13 @@
   // The OS leg imports Cloudflare OS's own test toolkit, which lives in a partner checkout this
   // repository does not vendor: `vitest.os.config.ts` aliases it at run time from
   // `GATEKEEPER_OS_DIR`. There is nothing for tsc to resolve on an ordinary checkout, so the leg is
-  // typechecked by the nightly run that has one, and by nothing else.
+  // typechecked NOWHERE, the nightly included, and its guard is the run rather than the compile.
+  //
+  // Rejected, so the next reader does not re-propose it as an oversight: a second config mapping
+  // `paths` into the checkout, typechecked by the nightly. It resolves, and it also pulls the
+  // partner's own TypeScript sources into our program, where a type error of theirs is red here
+  // and indistinguishable from drift of ours. That is the one thing this lane is designed not to
+  // become, and it would buy little: the leg's subject is the shapes crossing native RPC at run
+  // time, which no compile of either side can see.
   "exclude": ["test/os-live/**/*.ts"]
 }

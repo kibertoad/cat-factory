@@ -97,8 +97,10 @@ Which packages are covered, how to add one, and how to read a surviving mutant:
 ordinary PR should have to make, and a change on their side must never turn this
 repository red: it lives in its own non-blocking workflow
 (`.github/workflows/gatekeeper-os.yml`), like mutation testing. To run it on a branch,
-dispatch that workflow, or clone the partner repository and point `GATEKEEPER_OS_DIR`
-at it. What it covers and why:
+dispatch that workflow, or clone the partner repository INSIDE this one (at
+`.cloudflare-os`, which is gitignored, because wrangler's harness boots both Workers
+under one root) and point `GATEKEEPER_OS_DIR` at it. The recipe is in
+[`sdk/gatekeeper-worker/README.md`](./sdk/gatekeeper-worker/README.md). What it covers and why:
 [ADR 0052](./backend/docs/adr/0052-cloudflare-os-gatekeeper.md).
 
 **The Node and Local facade suites need a real Postgres, and Turbo will not pass

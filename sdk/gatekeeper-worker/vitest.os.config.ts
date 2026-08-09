@@ -1,4 +1,4 @@
-import { resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 // The OS LEG: this Worker's object model driven by a REAL Cloudflare OS workspace.
@@ -21,7 +21,31 @@ import { defineConfig } from 'vitest/config'
 // cadence in front of this package's build, which the initiative's CI rule refuses; a default would
 // let the suite boot against nothing and report the pass that "zero failures" always looks like.
 
-/** The partner checkout, which the caller supplies. A missing one names who supplies it. */
+/**
+ * This repository's root: `sdk/gatekeeper-worker` sits two levels below it.
+ *
+ * The same directory `test/os-live/os-leg.spec.ts` derives from its own location and hands
+ * `startHarness` as `root`. They are computed separately because a spec cannot read this config,
+ * and they have to stay the same answer: the check below is only about the root the harness is
+ * actually given.
+ */
+const REPO_ROOT = resolve(import.meta.dirname, '../..')
+
+/** Whether `candidate` is the same directory as `root` or somewhere below it. */
+function isInside(root: string, candidate: string): boolean {
+  const step = relative(root, candidate)
+  return step.length > 0 && !isAbsolute(step) && step !== '..' && !step.startsWith(`..${sep}`)
+}
+
+/**
+ * The partner checkout, which the caller supplies. A missing one names who supplies it.
+ *
+ * It has to sit INSIDE this repository, and that is a fact about wrangler rather than a
+ * housekeeping preference: its test harness boots both Workers under one root, and the root the
+ * suite hands it is this repository's, so a clone anywhere else is a Worker the harness cannot
+ * reach. Refused here, naming the rule. Left to the harness it arrives as a Worker that could not
+ * be found, which reads as a broken suite rather than as a checkout in the wrong place.
+ */
 function osCheckout(): string {
   const dir = process.env.GATEKEEPER_OS_DIR
   if (dir === undefined || dir.length === 0) {
@@ -32,7 +56,18 @@ function osCheckout(): string {
         'GATEKEEPER_OS_DIR at it.',
     )
   }
-  return resolve(dir)
+
+  const checkout = resolve(dir)
+  if (!isInside(REPO_ROOT, checkout)) {
+    throw new Error(
+      `GATEKEEPER_OS_DIR points at ${checkout}, which is outside this repository ` +
+        `(${REPO_ROOT}). Wrangler's test harness boots the partner's Worker and this one under a ` +
+        'single root, and the root this suite gives it is the repository, so a checkout beside it ' +
+        'cannot be booted. Clone it within, at `.cloudflare-os`, which is gitignored for exactly ' +
+        'this and is where the `Gatekeeper OS leg` workflow puts it.',
+    )
+  }
+  return checkout
 }
 
 const checkout = osCheckout()
@@ -56,8 +91,8 @@ export default defineConfig({
   },
   server: {
     // The checkout sits outside this package, so Vite has to be told it may serve source from
-    // there. Named explicitly rather than left to the workspace-root default, because where the
-    // clone lands is the caller's choice.
+    // there. Named explicitly rather than left to the workspace-root default, because which
+    // directory under the repository root the clone lands in is the caller's choice.
     fs: { allow: [resolve(import.meta.dirname), checkout] },
   },
   test: {

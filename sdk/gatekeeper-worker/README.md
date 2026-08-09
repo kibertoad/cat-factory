@@ -356,12 +356,23 @@ Cloudflare OS's own `@gadgets/integration-tests` toolkit boots the real `worksho
 this Worker under wrangler's test harness, so a real workspace discovers the vendor off a service
 binding, mints an account, binds the paired deployment as a resource and shares it. Nightly, pinned
 to a partner commit by `GATEKEEPER_OS_REF`, and non-blocking by living in a workflow of its own
-(`.github/workflows/gatekeeper-os.yml`). To run it yourself, clone the partner repository and point
-the suite at it:
+(`.github/workflows/gatekeeper-os.yml`). To run it yourself, clone the partner repository **inside
+this one** and point the suite at it, from the repository root:
 
 ```sh
-GATEKEEPER_OS_DIR=/path/to/cloudflare-os pnpm --filter @cat-factory/gatekeeper-worker test:os
+git clone https://github.com/cloudflare/cloudflare-os.git .cloudflare-os
+# The commit the nightly pins is GATEKEEPER_OS_REF in .github/workflows/gatekeeper-os.yml.
+# Running against a different one is fine; it is then your run that is unpinned, not the lane's.
+git -C .cloudflare-os checkout <that commit>
+(cd .cloudflare-os && pnpm install --frozen-lockfile --ignore-scripts \
+  && pnpm --filter @gadgets/workshop-backend run build:format-blueprints)
+GATEKEEPER_OS_DIR="$PWD/.cloudflare-os" pnpm --filter @cat-factory/gatekeeper-worker test:os
 ```
+
+The clone goes inside this repository because wrangler's test harness boots the partner's Worker and
+this one under a single root, and the root the suite hands it is this repository: a checkout beside
+it cannot be booted, and the config refuses one rather than letting the harness report a Worker it
+could not find. `.cloudflare-os` is gitignored for this.
 
 It exists for the three seams no other suite here structurally reaches: the entrypoint NAMES (the
 workspace resolves them and never asks this package what they are called), the stubs handed over

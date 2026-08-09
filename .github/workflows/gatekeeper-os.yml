@@ -25,9 +25,17 @@ on:
   # Nightly, off-peak, and offset from `mutation.yml` so the two do not compete for runners.
   schedule:
     - cron: '40 3 * * *'
-  # A change to this leg runs it on the PR making the change. `workflow_dispatch` only exists once a
-  # workflow sits on the default branch, so without this the flow could first be proven only AFTER
-  # merging it. An ordinary PR matches none of these paths and pays nothing.
+  # A change to this leg, OR to what it is the only check on, runs it on the PR making the change.
+  # `workflow_dispatch` only exists once a workflow sits on the default branch, so without this the
+  # flow could first be proven only AFTER merging it. An ordinary PR matches none of these paths and
+  # pays nothing.
+  #
+  # The second group is the point of the lane rather than its plumbing. The three seams no other
+  # suite structurally reaches (the entrypoint NAMES a workspace resolves off a binding, the stubs
+  # handed over, and the transcribed `src/os/protocol.ts`) all live in the Worker's own source, and
+  # the compatibility flags live in the template. A rename or a dropped flag there is invisible to
+  # every hermetic spec, so leaving those paths out would mean the two failures this leg exists to
+  # catch are caught only by the nightly, which is to say only after they have merged.
   pull_request:
     paths:
       - '.github/workflows/gatekeeper-os.yml'
@@ -35,6 +43,8 @@ on:
       - 'sdk/gatekeeper-worker/test/os-live/**'
       - 'sdk/gatekeeper-worker/test/wrangler.jsonc'
       - 'sdk/gatekeeper-worker/vitest.os.config.ts'
+      - 'sdk/gatekeeper-worker/src/**'
+      - 'deploy/gatekeeper/wrangler.toml'
   # Manual runs on any branch, so a change to the object model can be measured against a real
   # workspace before it merges, and so a candidate partner ref can be tried before the pin moves.
   workflow_dispatch:
@@ -109,18 +119,21 @@ jobs:
       # The report is removed first, so a run that dies before writing one is graded as the absence
       # it is rather than against whatever the last run left behind.
       #
-      # `|| true` is what lets the grader be the thing that speaks: it names each spec that failed
-      # or did not run, where a bare non-zero exit names none. The run's own output is above it in
-      # the log either way.
-      - name: Drive the object model
+      # The suite is allowed to exit non-zero without failing the step, so that the GRADER is the
+      # thing that speaks: it names each spec that failed or did not run, where a bare non-zero exit
+      # names none. The code is carried into it rather than discarded, though, and that is the whole
+      # reason these are one step: a plain `|| true` throws away the one signal that survives a
+      # report the runner never finished writing, and holding it in the shell that produced it beats
+      # passing it between steps through the environment.
+      #
+      # Grading the report and grading the exit code are both needed because neither is total. A
+      # suite that collected nothing exits 0, and so does one whose specs were every one of them
+      # skipped; a report, in the other direction, can be complete and consistent for a run that
+      # then died. The grader is handed both and names whichever one knows.
+      - name: Drive the object model, and grade what came back
         run: |
           rm -f sdk/gatekeeper-worker/os-leg-report.json
-          pnpm --filter @cat-factory/gatekeeper-worker run test:os || true
-
-      # The REPORT is graded, never the exit code: a suite that collected nothing exits 0, and so
-      # does one whose specs were every one of them skipped, which is the shape this lane must never
-      # report as a pass.
-      - name: Grade the run
-        run: >-
-          node scripts/grade-vitest-report.mjs sdk/gatekeeper-worker/os-leg-report.json
-          --label 'the Gatekeeper OS leg'
+          exit_code=0
+          pnpm --filter @cat-factory/gatekeeper-worker run test:os || exit_code=$?
+          node scripts/grade-vitest-report.mjs sdk/gatekeeper-worker/os-leg-report.json \
+            --label 'the Gatekeeper OS leg' --runner-exit "$exit_code"

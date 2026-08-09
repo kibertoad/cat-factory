@@ -119,6 +119,31 @@ async function withSession<T>(body: (api: Awaited<ReturnType<typeof connect>>) =
   }
 }
 
+type WorkspaceUser = Awaited<ReturnType<typeof signUp>>
+type Gadget = Awaited<ReturnType<WorkspaceUser['newGadget']>>
+
+/**
+ * Run `body` against a fresh gadget, disposing the stub afterwards whatever the body did.
+ *
+ * A case that can hold its gadget to the end says so with a `using` binding, and most here do. The
+ * sharing case cannot: it has to CLOSE the owner's gadget before the collaborator opens it, so the
+ * stub's life ends partway through the case rather than at its edge. Disposing in a `finally` is
+ * what keeps a failed assertion before that point from leaking the stub against the harness every
+ * case shares, which turns one red assertion into a teardown that waits out the 120s hook timeout
+ * and reports the leak instead of the failure.
+ */
+async function withGadget<T>(
+  user: WorkspaceUser,
+  body: (overseer: Gadget) => Promise<T>,
+): Promise<T> {
+  const overseer = await user.newGadget()
+  try {
+    return await body(overseer)
+  } finally {
+    overseer[Symbol.dispose]()
+  }
+}
+
 /**
  * Sign a fresh user up and let the workspace mint them a cat-factory account.
  *
@@ -216,13 +241,15 @@ describe('sharing a bound resource', () => {
       const owner = await newUserWithAccount(publicApi, 'owner')
       const viewer = await newUserWithAccount(publicApi, 'viewer')
 
-      const overseer = await owner.user.newGadget()
-      using bound = await overseer.newGatekeeper(owner.account.id, `${DEPLOYMENT}/w/shared`)
-      expect(bound).not.toBeNull()
-      const { id: gadgetId } = await overseer.getMetadata()
-      const collaborator = await overseer.addCollaborator(viewer.username, 'build')
-      if (!collaborator) throw new Error(`sharing the gadget with ${viewer.username} failed`)
-      overseer[Symbol.dispose]()
+      // The owner's gadget is closed at the end of this block, before the viewer opens it below.
+      const gadgetId = await withGadget(owner.user, async (overseer) => {
+        using bound = await overseer.newGatekeeper(owner.account.id, `${DEPLOYMENT}/w/shared`)
+        expect(bound).not.toBeNull()
+        const { id } = await overseer.getMetadata()
+        const collaborator = await overseer.addCollaborator(viewer.username, 'build')
+        if (!collaborator) throw new Error(`sharing the gadget with ${viewer.username} failed`)
+        return id
+      })
 
       // Opening as a collaborator is what drives `addObserver` on the resource object with the
       // viewer's own verifier. This tier can read captured agent text, which is described
