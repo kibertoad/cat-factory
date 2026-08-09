@@ -234,6 +234,16 @@ facts belong here, each because it is a place a change could quietly remove a fl
   which reads nothing of ours, so it carries the narrower `isToolchainEnvName` rule instead. Merging
   the two rules in either direction breaks something real: the strict one makes the GitHub and Slack
   servers unwireable, the loose one lets `ENCRYPTION_KEY` be read.
+- **The transport fixes a credential's CHANNEL; the declaration only states one.**
+  `mcpTransportCarriesCredential` (kernel) is the whole rule: a `stdio` server is a child process
+  with an environment and no request, an `http` server is a url with headers and no process, so a
+  header on the first and a header-less credential on the second each reach NOTHING. Both are boot
+  ERRORS, refused again at dispatch and at the probe for the mothership case, and the dispatch
+  states the drop as `unusable_secret`. That reason is deliberately neither `missing_secret` (the
+  value resolved) nor `reserved_secret` (nothing was withheld): only its own member points at the
+  declaration, which is the one thing that changes. The mismatch is silent by construction if
+  unrefused, because each projection SELECTS by channel and finds nothing to fold in, so the server
+  is wired, advertised in the prompt, and started unauthenticated.
 - **A deployment resolver REPLACES the chain, and gates every SUBJECT the port serves.** A
   `createToolSecretResolver` allow-list holding only `MCP_…` keys silently resolves nothing for a
   registered binary generator, which goes through the same `ToolSecretResolver` port. Anything new

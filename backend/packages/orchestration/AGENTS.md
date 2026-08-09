@@ -212,7 +212,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   severities are the design: an unresolvable pipeline id is an `error` because the created task
   would silently fall back to the positional default, while a task type's unresolvable
   `defaultFragmentIds` is a `warn` naming both causes, since an account/workspace-tier fragment
-  merges per workspace at run time and boot structurally cannot see one.
+  merges per workspace at run time and boot structurally cannot see one. One section of that check
+  lives beside it in `validateToolServers.ts`: a kind's declared MCP servers, their per-dispatch
+  budget, and the credential rules, which are the sharpest here because a tool-server declaration
+  names both the key it wants and the endpoint that key is sent to.
 
 Two top-level helpers sit beside `modules/` because every INLINE LLM caller shares them, and both
 are about resolving ONE thing consistently rather than about any one feature:

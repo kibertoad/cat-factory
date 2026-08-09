@@ -270,6 +270,8 @@ From the 2026-08-09 code audit (both sides verified against this tracker; every 
 | Finding (2026-08-09)                                                          | Disposition                 |
 | ----------------------------------------------------------------------------- | --------------------------- |
 | `stdio` + `header` credential silently dropped; server starts unauthenticated | Done (boot error, this PR)  |
+| Its `http` mirror, a credential naming no header, left open by the first pass | Done (boot error, this PR)  |
+| No dispatch or probe mirror of the boot refusal, so mothership skew slips it  | Done (this PR)              |
 | Consensus-diverted step gets no tool servers and is told nothing              | Slice 9                     |
 | Serving OAuth also needs the 401 `WWW-Authenticate` entry point               | Slice 7 (scope extended)    |
 | `public-api.md` promised JSON-RPC batching the 2025-06-18 revision removed    | Done (reworded, this PR)    |
@@ -363,6 +365,19 @@ Recorded so the next iteration does not re-propose them.
   tool is absent and that trying harder will not produce it. Two reasons deliberately render the
   SAME sentence (`harness_unsupported` / `transport_unsupported`) because the distinction is the
   operator's, carried by the log line and the boot warning.
+- **And it is a PUBLIC-API change, which slice 9's cost estimate omits.** The reason rides the run
+  reads under `/api/v1`, so the full price of a member is: the contracts picklist, the per-cause
+  reasoning on kernel's `UnavailableToolServer`, `UNAVAILABLE_REASONS`, the two SPA `Record`s, ten
+  locales, the website's reason table, AND an OpenAPI `info.version` minor with `pnpm gen:openapi &&
+pnpm gen:sdk` behind it (`unusable_secret` was 1.37.0). Additive, so it ships freely, but a member
+  added without the regeneration fails `check:sdk` rather than the typecheck that catches the rest.
+- **A boot refusal is HALF a rule; the dispatch is where a mothership node meets it.** Every
+  credential floor here exists twice on purpose, because a mothership-mode node boot-validates
+  nothing it resolves: the definitions arrive per dispatch from a process one build ahead. A new
+  refusal that lands at boot alone is unreachable in exactly the deployment shape that most needs
+  it, and the symptom is the silence the refusal was written to end. The probe is the third site,
+  and for a reason of its own: it answers what a dispatch WOULD do, so one that proceeds where the
+  dispatch drops reports a capability that works for a run that will not get it.
 - **The harness-side stdio-only skips are backstops now, not decisions.** `codexMcpConfigToml` still
   drops an `http` server, but the backend has already dropped it with a reason, so a change that
   makes the harness silently skip something is again the defect slice 1 closed.

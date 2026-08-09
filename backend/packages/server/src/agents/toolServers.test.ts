@@ -501,6 +501,107 @@ describe('reserved platform credential keys', () => {
   })
 })
 
+// The CHANNEL floor, the reserved one's sibling: a credential declaring a channel its transport
+// does not have resolves fine and is folded into nothing, leaving the server wired, advertised in
+// the prompt, and running unauthenticated. Boot validation refuses such a declaration, so reaching
+// dispatch means a definition this process never boot-validated: the mothership case, where a node
+// runs one build behind the mothership that authored it.
+describe('a credential whose channel its transport does not have', () => {
+  const stdioWithHeader: McpServerDefinition = {
+    id: 'issues',
+    transport: { kind: 'stdio', command: 'issue-mcp' },
+    secretKeys: [{ key: 'ISSUE_TOKEN', header: 'Authorization' }],
+  }
+  const httpWithoutHeader: McpServerDefinition = {
+    id: 'issues',
+    transport: { kind: 'http', url: 'https://mcp.example.com/sse' },
+    secretKeys: [{ key: 'ISSUE_TOKEN', envName: 'ISSUE_TOKEN' }],
+  }
+
+  it('drops the server under its OWN reason rather than starting it unauthenticated', async () => {
+    // The behaviour this floor replaced: the value resolved, the env projection skipped it for
+    // naming a header, and the server started with no credential at all while the prompt told the
+    // agent it was available.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(stdioWithHeader),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ISSUE_TOKEN: 'tok' }),
+    })
+    expect(result.mcpServers).toEqual([])
+    expect(result.toolServers).toEqual([])
+    expect(result.unavailableToolServers[0]?.reason).toBe('unusable_secret')
+  })
+
+  it('covers the http mirror, where the credential named no header', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(httpWithoutHeader),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ISSUE_TOKEN: 'tok' }),
+    })
+    expect(result.mcpServers).toEqual([])
+    expect(result.unavailableToolServers[0]?.reason).toBe('unusable_secret')
+  })
+
+  it('is kept apart from `missing_secret` and `reserved_secret`, which name other fixes', async () => {
+    // Nothing is missing (the value resolved) and nothing was refused (the platform withholds no
+    // key here), so either neighbour would send an operator somewhere the fix is not: to the
+    // credential checklist, where the row is filled in, or to the key's name, which is fine.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(stdioWithHeader),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ISSUE_TOKEN: 'tok' }),
+    })
+    expect(result.unavailableToolServers[0]?.reason).not.toBe('missing_secret')
+    expect(result.unavailableToolServers[0]?.reason).not.toBe('reserved_secret')
+  })
+
+  it('never even ASKS the resolver for it', async () => {
+    // Same argument as the reserved floor: nothing downstream can use the value, so fetching it
+    // spends a round trip on a facade-wired resolver and materialises a secret for no reader.
+    const asked: string[] = []
+    await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(stdioWithHeader),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: {
+        resolve: async ({ keys }) => {
+          asked.push(...keys.map((k) => k.key))
+          return {}
+        },
+      },
+    })
+    expect(asked).toEqual([])
+  })
+
+  it('costs an OPTIONAL one only that key, exactly as a missing one does', async () => {
+    // The disposition follows the DECLARATION, so this floor adds no second way for a server to
+    // disappear, only a new reason for the way that already existed.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith({
+        ...stdioWithHeader,
+        secretKeys: [
+          { key: 'STALE_TOKEN', header: 'Authorization', required: false },
+          { key: 'ISSUE_TOKEN' },
+        ],
+      }),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ STALE_TOKEN: 'stale', ISSUE_TOKEN: 'tok' }),
+    })
+    expect(result.unavailableToolServers).toEqual([])
+    expect(result.mcpServers[0]?.env).toEqual({ ISSUE_TOKEN: 'tok' })
+    expect(result.mcpServers[0]?.secretKeys).toEqual(['ISSUE_TOKEN'])
+  })
+})
+
 // A credential has two names, and only the LOOKUP one is a boundary. Splitting them is what lets
 // a server keep the variable name its own client reads even when a platform prefix family covers
 // it, without widening what may be read off the deployment's environment.

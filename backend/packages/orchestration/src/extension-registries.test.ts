@@ -962,9 +962,9 @@ describe('agent-capability validation: credentials', () => {
   })
 
   it('rejects a HEADER on a stdio server, whose value would reach nothing', () => {
-    // The mirror of the case above, and an error where that one is a warning: a stdio server has
-    // no request to carry a header, and the dispatch's env projection skips a header-bearing key,
-    // so the server would be wired and advertised while starting unauthenticated.
+    // An error where the case above is a warning: a stdio server is a child process with no
+    // request to carry a header, and the dispatch's env projection selects by channel, so the
+    // server would be wired and advertised while starting unauthenticated.
     registry.register({
       kind: 'auditor',
       systemPrompt: 'audit',
@@ -985,6 +985,59 @@ describe('agent-capability validation: credentials', () => {
     })
     const problem = problems.find((p) => p.code === 'unusable_credential_header')
     expect(problem?.severity).toBe('error')
+  })
+
+  it('still rejects a stdio HEADER when an envName is declared beside it', () => {
+    // The remedy the first spelling of this rule offered ("declare an envName instead") was not
+    // one: the check keys on the CHANNEL, and a key naming a header stays on the header channel
+    // however it is also named, so the dispatch would go on skipping it. Pinned here because the
+    // message is what an operator acts on, and a remedy that re-fires the error costs them the
+    // attempt as well as the diagnosis.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'docs',
+          transport: { kind: 'stdio', command: 'docs-mcp' },
+          secretKeys: [{ key: 'DOCS_TOKEN', header: 'Authorization', envName: 'DOCS_ENV' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
+    })
+    expect(problems.find((p) => p.code === 'unusable_credential_header')?.severity).toBe('error')
+  })
+
+  it('rejects an http credential that names NO header, the exact mirror', () => {
+    // The other direction of the same rule, and the one the first pass left open: an http server
+    // is a remote url with no process to inject a variable into, so a credential naming no header
+    // resolves, is folded into nothing, and the server is called unauthenticated. Its first
+    // evidence would be a 401 several minutes into a run the prompt promised the tool for.
+    registry.register({
+      kind: 'auditor',
+      systemPrompt: 'audit',
+      agent: { surface: 'container-explore' },
+      toolServers: [
+        {
+          id: 'docs',
+          transport: { kind: 'http', url: 'https://mcp.example.com/sse' },
+          secretKeys: [{ key: 'DOCS_TOKEN', envName: 'DOCS_ENV' }],
+        },
+      ],
+    })
+    const problems = collectRegistrationProblems({
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
+    })
+    expect(problems.find((p) => p.code === 'missing_credential_header')?.severity).toBe('error')
   })
 
   it('accepts an https endpoint, and a plain-http one on loopback', () => {
