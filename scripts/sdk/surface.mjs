@@ -31,6 +31,10 @@ const SURFACE = {
   // right (the join partner of `evidence.getReport`) and the group is where the phase-2 sibling
   // that serves the rendered Gherkin alone would land.
   getPublicServiceSpec: { group: 'spec', method: 'get' },
+  // `getForRun`, not `getRun`: the resource is still the SPEC, read at the run's ref. A caller
+  // reading `client.spec.getForRun(runId)` beside `client.spec.get(serviceId)` is choosing a ref,
+  // which is the choice these two exist to make explicit.
+  getPublicRunSpec: { group: 'spec', method: 'getForRun' },
 
   // ---- Repositories: what a service can be created against --------------------------------
   listPublicRepos: { group: 'repos', method: 'list' },

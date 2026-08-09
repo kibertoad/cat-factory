@@ -38,6 +38,8 @@ import { REPRODUCTION_STATUS_KEYS } from '~/utils/reproduction'
 import type { RequirementVerdictStatus, TestConcernSeverity } from '~/types/domain'
 import type { TestEnvironment } from '@cat-factory/contracts'
 import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
+import { useNowTick } from '~/composables/useStepTimer'
+import { readEnvironmentAgainstClock } from '~/components/outcome/OutcomeSummaryWindow.logic'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
@@ -50,6 +52,11 @@ const execution = useExecutionStore()
 const serviceSpec = useServiceSpecStore()
 const ui = useUiStore()
 const { t, d } = useI18n()
+
+// The wall clock this card reads a TTL against. Coarse on purpose: an environment's expiry is
+// the only thing here that moves with time, and a per-second tick would re-render the whole card
+// for a boundary that matters at minute granularity.
+const nowTick = useNowTick(30_000)
 
 // Per-window blob cache for the captured views; revoked on unmount so the (large) image bytes
 // don't outlive the card.
@@ -375,10 +382,11 @@ const sourceRows = computed(() => {
 /**
  * The environments the run stood up, with everything the row needs resolved once.
  *
- * A link is offered ONLY for a `live` row, which is the whole point of the section: an
- * environment that has been reclaimed, has expired or never came up still shows its URL (an
- * operator greps for it, and it says which environment the row is about) and must not be
- * something a designer clicks expecting to see the change.
+ * The TTL is applied HERE rather than in the reduction, and that division is deliberate: the
+ * payload is clock-free so the endpoint's answer and this card's live composition cannot
+ * disagree about one run, and this surface is the one with a clock to say what the instant it
+ * carries means now. The rule itself lives in `OutcomeSummaryWindow.logic.ts`, where it is
+ * asserted without mounting the card.
  *
  * The frame is named by its BLOCK title where the board has it. A frame id says nothing to the
  * person this card is for, so an unresolvable one renders as no label rather than as an id.
@@ -387,9 +395,8 @@ const environmentRows = computed(() => {
   const environments = outcome.value?.environments
   if (!environments || environments.status !== 'reported') return []
   return environments.entries.map((entry, index) => ({
-    ...entry,
+    ...readEnvironmentAgainstClock(entry, nowTick.value),
     key: `${index}:${entry.environmentId ?? entry.url ?? entry.frameId ?? 'env'}`,
-    openable: entry.state === 'live' && Boolean(entry.url),
     service: entry.frameId ? (board.getBlock(entry.frameId)?.title ?? null) : null,
   }))
 })
@@ -790,7 +797,11 @@ function openTestReport() {
               {{ t('outcome.environments.retained') }}
             </p>
             <p v-if="row.expiresAt" class="mt-1 text-[11px] text-slate-500">
-              {{ t('outcome.environments.expires', { date: d(new Date(row.expiresAt), 'long') }) }}
+              {{
+                row.lapsed
+                  ? t('outcome.environments.expired', { date: d(new Date(row.expiresAt), 'long') })
+                  : t('outcome.environments.expires', { date: d(new Date(row.expiresAt), 'long') })
+              }}
             </p>
             <p
               v-if="row.detail"

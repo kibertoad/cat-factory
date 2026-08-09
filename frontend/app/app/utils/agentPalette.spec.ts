@@ -33,6 +33,32 @@ const CATALOG: AgentArchetype[] = [
   archetype('acme-auditor'),
 ]
 
+describe('narrowAgentPalette — internal kinds', () => {
+  // An INTERNAL kind is one the platform dispatches for a flow of its own (the environment
+  // analyst, which hands its draft to the setup wizard). It is not hidden by a dial, it is not a
+  // palette block at all.
+  const internal: AgentArchetype = {
+    ...archetype('environment-analyst', 'design', 'basic'),
+    internal: true,
+  }
+  const catalog = [archetype('architect', 'design', 'basic'), internal]
+
+  it('never offers one, at any purpose or tier', () => {
+    for (const tier of ['basic', 'intermediate', 'advanced'] as const) {
+      const { offered } = narrowAgentPalette(catalog, 'build', tier)
+      expect(offered.map((a) => a.kind)).toEqual(['architect'])
+    }
+  })
+
+  it('counts one against NEITHER dial, so no hint promises a control that would reveal it', () => {
+    // The whole point of the counts is "relax THIS dial and you get n more". An internal kind is
+    // revealed by neither, so counting it would send a reader chasing a control that cannot help.
+    const { hiddenByPurpose, hiddenByTier } = narrowAgentPalette(catalog, 'review', 'basic')
+    expect(hiddenByPurpose).toBe(1) // the architect alone: a review pipeline designs nothing
+    expect(hiddenByTier).toBe(0)
+  })
+})
+
 describe('narrowAgentPalette', () => {
   it('narrows nothing for a build pipeline at the widest tier', () => {
     const { offered, hiddenByPurpose, hiddenByTier } = narrowAgentPalette(

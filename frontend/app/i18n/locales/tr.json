@@ -1548,6 +1548,8 @@
       "priorDocHint": "Önceki incelemeden. Bir temel olarak kullanın: yukarıdaki açıklamayı düzenleyip yeniden gönderin.",
       "bootstrapping": "Önyükleniyor…",
       "viewRequirements": "Gereksinimleri Görüntüle",
+      "mapService": "Servisi haritala",
+      "mapServiceNoRepo": "Önce bu servise bir depo bağlayın — henüz haritalanacak bir şey yok.",
       "reRun": "Yeniden çalıştır",
       "run": "Çalıştır",
       "focus": "Odaklan",
@@ -4603,7 +4605,11 @@
     "preview": {
       "stepCount": "{count} adım | {count} adım",
       "gateCount": "{count} onay | {count} onay",
-      "gated": "Bu adımdan sonra insan onayı"
+      "gated": "Bu adımdan sonra insan onayı",
+      "conditionalCount": "{count} koşullu adım | {count} koşullu adım",
+      "conditionEstimate": "Yalnızca görev tahmini bu adımın eşiklerini aştığında çalışır",
+      "conditionFrontend": "Yalnızca görev bir ön uç servisini değiştirdiğinde çalışır",
+      "conditionBackend": "Yalnızca görev ön uç olmayan bir servisi değiştirdiğinde çalışır"
     },
     "picker": {
       "noneHint": "Varsayılan pipeline yok. Görevi çalıştırırken birini seçersin.",
@@ -4689,6 +4695,11 @@
       "edit": "Bu pipeline'ı düzenle",
       "delete": "Bu pipeline'ı sil",
       "disabledStepTooltip": "Devre dışı, çalıştırmada atlanır",
+      "condition": {
+        "always": "Her görevde çalışır — koşullu yapmak için tıklayın",
+        "frontend": "Yalnızca ön uç servisini değiştiren görevlerde çalışır",
+        "backend": "Yalnızca ön uç olmayan bir servisi değiştiren görevlerde çalışır"
+      },
       "cancelEdit": "Düzenlemeyi iptal et",
       "clear": "Temizle",
       "update": "Pipeline'ı güncelle",
@@ -4778,6 +4789,7 @@
         "negative-prompt": "Negatif istem",
         "seed": "Sabit tohum",
         "aspect-ratio": "En boy oranı",
+        "exact-size": "Tam boyut",
         "candidate-batch": "Çağrı başına birden çok aday",
         "upscale": "Büyütme",
         "transparent-background": "Saydam arka plan",
@@ -4799,6 +4811,11 @@
       "binaryNegativePromptPlaceholder": "nelerden kaçınılacağı",
       "binaryAspectRatio": "En boy oranı",
       "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "Çıktı boyutu",
+      "binaryOutputSizeWidth": "Genişlik",
+      "binaryOutputSizeHeight": "Yükseklik",
+      "binaryOutputSizeIncomplete": "Kaydedilmedi: tam boyut için hem genişlik hem yükseklik gerekir.",
+      "binaryOutputSizeAmbiguous": "Tam çıktı boyutu {options} ile birlikte kullanılamaz: her biri teslim edilecek ölçüleri ikinci kez belirtir. Gereksinim olan hangisiyse onu bırakın.",
       "binarySeed": "Tohum",
       "binarySeedPlaceholder": "sabit tohum",
       "binaryTransparent": "Saydam arka plan",
@@ -4860,6 +4877,14 @@
       "elapsedTooltip": "Bu adımda geçen süre",
       "prReview": {
         "review": "Bulguları incele"
+      },
+      "skipped": {
+        "gated": "Atlandı: görev tahmini bu adımın eşiklerinin altında kaldı.",
+        "conditionFrontend": "Atlandı: bu görev hiçbir frontend servisini değiştirmiyor, dolayısıyla denenecek bir arayüz yok.",
+        "conditionBackend": "Atlandı: bu görev yalnızca bir frontend servisini değiştiriyor, dolayısıyla arkasında denenecek bir API yok.",
+        "producerSkipped": "Atlandı: incelediği adım atlandı, dolayısıyla değerlendirilecek bir şey yok.",
+        "runComplete": "Atlandı: çalışma bu adımdan önce sona erdi, yapılacak bir şey kalmadı.",
+        "unknown": "Atlandı: bu adım çalışmadı."
       }
     },
     "health": {
@@ -5825,8 +5850,9 @@
     "environments": {
       "title": "Canlı ortam",
       "open": "Canlı ortamı aç",
-      "retained": "Bu ortamın çalışma bittikten sonra da ayakta kalması amaçlanıyor, bağlantı çalışmaya devam eder.",
+      "retained": "Bu ortamın çalıştırma bittikten sonra da kalması amaçlanıyor.",
       "expires": "{date} tarihinde sona eriyor",
+      "expired": "{date} tarihinde süresi doldu",
       "state": {
         "live": "Canlı",
         "provisioning": "Ayağa kalkıyor",
@@ -6327,6 +6353,8 @@
       "unknownServices": "Katalogda bulunmayan bir hizmet adı verdi: {ids}. Kayıt bildirildiği gibi saklanır; kimliği pano kataloguyla karşılaştır. | Katalogda bulunmayan hizmet adları verdi: {ids}. Kayıtları bildirildiği gibi saklanır; kimlikleri pano kataloguyla karşılaştır.",
       "targetUnknown": "Katalog artık bu adımın kendi depolama hizmetini ({id}) içermiyor, bu yüzden aşağıdakilerin hiçbiri onunla karşılaştırılamadı. Hizmeti yeniden kaydet ya da adımı başka bir hizmete yönlendir.",
       "undeliveredMediaTypes": "Bu adım {formats} teslim etmeliydi ve aşağıdaki hiçbir ürün bu biçimi bildirmiyor. | Bu adım {formats} teslim etmeliydi ve aşağıdaki hiçbir ürün bu biçimleri bildirmiyor.",
+      "missized": "1 ürün {width}×{height} dışında bir boyutta teslim edildi. | {count} ürün {width}×{height} dışında bir boyutta teslim edildi.",
+      "sizeUnreported": "1 ürün boyut bildirmiyor, bu yüzden boyutu denetlenemedi. | {count} ürün boyut bildirmiyor, bu yüzden boyutları denetlenemedi.",
       "misdirected": "1 ürün {target} dışında bir hizmete gitti. | {count} ürün {target} dışında bir hizmete gitti.",
       "invalidEntries": "Bildirilen 1 kayıt düşürüldü: ne hizmet ne de konum belirtiyordu. | Bildirilen {count} kayıt düşürüldü: ne hizmet ne de konum belirtiyorlardı.",
       "omitted": "Raporun sınırının ötesinde 1 ürün daha bildirildi ve listede yer almıyor. | Raporun sınırının ötesinde {count} ürün daha bildirildi ve listede yer almıyor.",
@@ -6334,6 +6362,7 @@
       "generatorsUnverified": "Adım tamamlanırken bu dağıtımın üretken entegrasyonları okunamadı, bu yüzden aşağıda adı geçen entegrasyonlar bunlarla karşılaştırılmadı. Kayıtlar bildirildiği gibi saklanır."
     },
     "unknownGeneratorBadge": "Kayıtlı değil",
+    "missizedBadge": "Yanlış boyut",
     "candidates": {
       "automatic": "{total} aday üretildi ve inceleme olmadan otomatik olarak tutuldu.",
       "chosen": "Üretilen {total} adayın {kept} tanesi tutuldu.",

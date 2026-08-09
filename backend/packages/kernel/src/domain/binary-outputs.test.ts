@@ -301,6 +301,33 @@ describe('parseBinaryOutputDeclaration', () => {
     expect(report.stored).toEqual([{ service: 'asset-store', location: 'real.png' }])
     expect(report.undeclared).toBeUndefined()
   })
+
+  // The delivery-side half of an exact size requirement: what the artifact actually came back
+  // as. The same self-report `contentType` is, recorded on the same terms.
+  it('keeps reported dimensions, and drops an unusable pair without losing the entry', () => {
+    const stored = (dimensions: unknown) =>
+      parseBinaryOutputDeclaration(
+        declaration(
+          JSON.stringify([{ service: 'asset-store', location: 'icons/potion.png', dimensions }]),
+        ),
+        known,
+      ).stored[0]
+
+    expect(stored({ width: 96, height: 96 })?.dimensions).toEqual({ width: 96, height: 96 })
+    // A malformed measurement is NOT a malformed artifact: the identity fields are intact, so
+    // the record survives and only the observation is dropped. Counting it as an invalid entry
+    // would lose a stored artifact over a field nothing required.
+    for (const bad of [
+      { width: 96 },
+      { width: 0, height: 96 },
+      { width: '96', height: '96' },
+      96,
+    ]) {
+      const row = stored(bad)
+      expect(row?.location).toBe('icons/potion.png')
+      expect(row?.dimensions).toBeUndefined()
+    }
+  })
 })
 
 describe('describeBinaryOutputConfigIssues', () => {

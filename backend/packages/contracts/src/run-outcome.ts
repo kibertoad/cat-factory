@@ -7,21 +7,21 @@ import type {
   DisposeEnvState,
   ExecutionInstance,
   PipelineStep,
-  RunEnvironment,
 } from './execution.js'
-import type { HumanTestEnvironment } from './human-verdict-gates.js'
 import { reproductionStatusSchema } from './reproduction.js'
-import type { JoinedRequirement } from './run-evidence.js'
+import type { JoinedRequirement, RunEnvironmentObservation } from './run-evidence.js'
 import {
   countCapturedViews,
   declaresRetainedEnvironment,
+  deployedFrames,
+  deployerSteps,
+  disposedFrames,
   indexRequirementVerdicts,
+  isEnvironmentGone,
   isRequirementRegression,
   isTesterKind,
   joinSpecRequirements,
-  runEnvironmentProjections,
-  selectDeployStep,
-  selectDisposeStep,
+  runEnvironmentObservations,
   selectTesterReportStep,
   tallyRequirements,
   tallyTestOutcomes,
@@ -714,14 +714,31 @@ const ENVIRONMENT_STATE_BY_STATUS: Record<EnvironmentStatus, OutcomeEnvironmentS
 }
 
 /**
+ * Where an environment stands as the run last OBSERVED it: the recorded lifecycle status, unless
+ * a later deploy superseded the environment, which outranks whatever its last snapshot said.
+ *
+ * A superseded environment reports `reclaimed` for the same reason a disposer's `none` does: it
+ * is gone, and who took it (the supersede's teardown, or its tombstone) is not recorded anywhere
+ * this reduction can read. An already-terminal status is kept as it is, because `failed` and
+ * `expired` name why it is gone and `reclaimed` would flatten that away.
+ */
+function observedState(observed: RunEnvironmentObservation): OutcomeEnvironmentState {
+  if (observed.superseded && !isEnvironmentGone(observed.status)) return 'reclaimed'
+  return ENVIRONMENT_STATE_BY_STATUS[observed.status]
+}
+
+/**
  * Where one frame's environment stands, from the three producers that know something about it,
  * in strict precedence.
  *
- * The DISPOSE record wins, because it is written after the projection stops being refreshed: a
- * run's polls never revisit an environment once the run settles, so a reclaimed environment
- * keeps a `ready` projection forever. Below it the projection wins over the deployer's terminal
- * row for the mirror-image reason: the deploy row records the moment the environment came up and
- * never moves again, while the projection follows it for as long as the run is watching.
+ * The DISPOSE record wins, because it is written after the run stops observing the environment:
+ * a run's polls never revisit one once the run settles, so a reclaimed environment keeps a
+ * `ready` observation forever. Below it the observation wins over the deployer's terminal row for
+ * the mirror-image reason: the deploy row records the moment the environment came up and never
+ * moves again, while the run's steps follow it for as long as one is watching. That is also
+ * where the `human-test` gate's teardown enters, folded into the observation by identity: the
+ * gate destroys the environment it sent a person to and stamps its own record, and this row is
+ * for the same environment the deployer stood up.
  *
  * A reclaim that FAILED changes nothing here: the provider refused to tear the environment down,
  * so it is still standing and its URL still works. That it should not be is a fact about the
@@ -731,19 +748,62 @@ const ENVIRONMENT_STATE_BY_STATUS: Record<EnvironmentStatus, OutcomeEnvironmentS
 function environmentState(
   deployed: DeployEnvState,
   disposal: DisposeEnvState | undefined,
-  projection: RunEnvironment | undefined,
+  observed: RunEnvironmentObservation | undefined,
 ): OutcomeEnvironmentState {
   if (deployed.status === 'failed') return 'failed'
   // `none` means the disposer resolved this frame's environment and found nothing live: it is
   // gone, and the only thing separating that from a reclaim is who took it, which nothing
   // records. Reporting the deployer's terminal `ready` instead would hand out a dead URL.
   if (disposal && disposal.status !== 'failed') return 'reclaimed'
-  if (projection) return ENVIRONMENT_STATE_BY_STATUS[projection.status]
+  if (observed) return observedState(observed)
   return 'live'
 }
 
 /**
- * The rows for the frames a deployer step settled, beside the count of frames that declared no
+ * The keys one row is claimed under: the environments-registry id, and the URL that names the
+ * same environment for a producer that recorded no id.
+ *
+ * ONE definition, used by the join, the claim and the dedupe alike. The three previously spelled
+ * identity differently (the join read the id, the claim wrote both, the gate leg checked only the
+ * id), and every disagreement between them is a row that reads as a second environment or a row
+ * joined to nothing at all.
+ */
+function environmentKeys(entry: { environmentId?: string | null; url?: string | null }): string[] {
+  return [entry.environmentId, entry.url].filter((key): key is string => Boolean(key))
+}
+
+/**
+ * Look one environment up the way a deploy row names it: by the id it recorded, else by the URL
+ * it handed out.
+ *
+ * The URL leg is not a convenience. A deploy row predating `deployEnvs.environmentId` names its
+ * environment ONLY by that URL, so an id-keyed lookup alone leaves such a row joined to nothing
+ * while the observation carrying its real state sits one map away, and the row then reports the
+ * `live` floor for an environment the run watched being torn down.
+ */
+function observationLookup(
+  observations: readonly RunEnvironmentObservation[],
+): (entry: {
+  environmentId?: string | null
+  url?: string | null
+}) => RunEnvironmentObservation | undefined {
+  const byId = new Map<string, RunEnvironmentObservation>()
+  const byUrl = new Map<string, RunEnvironmentObservation>()
+  for (const observed of observations) {
+    byId.set(observed.id, observed)
+    if (observed.url) byUrl.set(observed.url, observed)
+  }
+  return (entry) => {
+    for (const key of environmentKeys(entry)) {
+      const found = byId.get(key) ?? byUrl.get(key)
+      if (found) return found
+    }
+    return undefined
+  }
+}
+
+/**
+ * The rows for the frames the run's deploys settled, beside the count of frames that declared no
  * environment at all.
  *
  * The `skipped` count travels with the rows rather than being derivable from them: a run whose
@@ -751,85 +811,68 @@ function environmentState(
  * recorded nothing would send a reader looking for a provisioning failure that never happened.
  */
 function deployedEnvironments(
-  deployStep: PipelineStep | undefined,
-  disposed: Record<string, DisposeEnvState>,
-  byEnvironmentId: ReadonlyMap<string, RunEnvironment>,
+  frames: ReadonlyMap<string, DeployEnvState>,
+  disposed: ReadonlyMap<string, DisposeEnvState>,
+  observationFor: ReturnType<typeof observationLookup>,
   retained: boolean,
 ): { entries: OutcomeEnvironment[]; skipped: number } {
   const entries: OutcomeEnvironment[] = []
   let skipped = 0
-  for (const [frameId, deployed] of Object.entries(deployStep?.deployEnvs ?? {})) {
+  for (const [frameId, deployed] of frames) {
     if (deployed.status === 'skipped') {
       skipped += 1
       continue
     }
-    const environmentId = deployed.environmentId ?? null
-    const projection = environmentId ? byEnvironmentId.get(environmentId) : undefined
-    const disposal = disposed[frameId]
+    const observed = observationFor(deployed)
+    const disposal = disposed.get(frameId)
     entries.push({
-      url: deployed.url ?? projection?.url ?? null,
-      state: environmentState(deployed, disposal, projection),
+      url: deployed.url ?? observed?.url ?? null,
+      state: environmentState(deployed, disposal, observed),
       origin: 'deployer',
-      expiresAt: projection?.expiresAt ?? null,
+      expiresAt: observed?.expiresAt ?? null,
       retained,
+      // The observation's id where the frame recorded none: a frame that FAILED records only the
+      // provider's cause, so without this the environment it broke on is nameless in the row that
+      // is about it, and is then listed a second time as an environment no frame accounts for.
       frameId,
-      environmentId,
-      detail: deployed.error ?? disposal?.error ?? projection?.lastError ?? null,
+      environmentId: deployed.environmentId ?? observed?.id ?? null,
+      detail: deployed.error ?? disposal?.error ?? observed?.lastError ?? null,
     })
   }
   return { entries, skipped }
 }
 
 /**
- * The environments no settled frame accounts for: the ones the run is running against right now
- * (read off its step projections) and the one a `human-test` gate stood up for a person.
+ * The environments no settled frame accounts for: the one the run is running against right now
+ * (no terminal frame row exists yet) and the one a `human-test` gate is holding for a person.
  *
- * Both are appended rather than folded into the deployer's rows, and both are LABELLED with their
- * producer. Without the projected rows the card goes silent for exactly as long as the run is
- * live, which is when a preview URL is most worth having; and a gate's environment belongs to no
- * frame, so nothing else would list it.
+ * Appended rather than folded into the deployer's rows, and LABELLED with the producer that
+ * observed them. Without them the card goes silent for exactly as long as the run is live, which
+ * is when a preview URL is most worth having.
  *
- * `claimed` carries what the deployer's rows already named, by id and by URL both: a deploy row
- * predating `environmentId` names its environment only by the URL it handed out, and listing one
- * environment twice under two origins reads as two.
+ * `claimed` carries what the deployer's rows already named, under the same keys everything else
+ * here uses: listing one environment twice under two origins reads as two.
  */
 function unclaimedEnvironments(
-  byEnvironmentId: ReadonlyMap<string, RunEnvironment>,
-  gateEnvironments: readonly HumanTestEnvironment[],
+  observations: readonly RunEnvironmentObservation[],
   claimed: ReadonlySet<string>,
 ): OutcomeEnvironment[] {
   const seen = new Set(claimed)
   const entries: OutcomeEnvironment[] = []
-  const add = (entry: OutcomeEnvironment) => {
-    entries.push(entry)
-    if (entry.environmentId) seen.add(entry.environmentId)
-    if (entry.url) seen.add(entry.url)
-  }
-  for (const projection of byEnvironmentId.values()) {
-    if (seen.has(projection.id) || (projection.url && seen.has(projection.url))) continue
-    add({
-      url: projection.url,
-      state: ENVIRONMENT_STATE_BY_STATUS[projection.status],
-      origin: 'projected',
-      expiresAt: projection.expiresAt ?? null,
+  for (const observed of observations) {
+    const keys = environmentKeys({ environmentId: observed.id, url: observed.url })
+    if (keys.some((key) => seen.has(key))) continue
+    for (const key of keys) seen.add(key)
+    entries.push({
+      url: observed.url,
+      state: observedState(observed),
+      origin: observed.source === 'human_test' ? 'human_test' : 'projected',
+      expiresAt: observed.expiresAt,
       // The retention declaration is the deployer's, and this row is not one of its settled frames.
       retained: false,
       frameId: null,
-      environmentId: projection.id,
-      detail: null,
-    })
-  }
-  for (const environment of gateEnvironments) {
-    if (seen.has(environment.id)) continue
-    add({
-      url: environment.url,
-      state: ENVIRONMENT_STATE_BY_STATUS[environment.status],
-      origin: 'human_test',
-      expiresAt: environment.expiresAt ?? null,
-      retained: false,
-      frameId: null,
-      environmentId: environment.id,
-      detail: null,
+      environmentId: observed.id,
+      detail: observed.lastError,
     })
   }
   return entries
@@ -843,32 +886,24 @@ function unclaimedEnvironments(
  * log, which is what DATES the lifecycle for the verification report; this section reports where
  * an environment stands, not when it got there, and the two surfaces share the rules they both
  * state through `run-evidence.ts` rather than sharing a read.
+ *
+ * Every deploy the run made is folded, not the last one alone: the frame rows report the
+ * environment each frame ended on, and the ones an earlier deploy stood up are accounted for as
+ * superseded rather than left to surface as a live preview nothing will refresh again.
  */
 function composeEnvironments(steps: readonly PipelineStep[]): OutcomeEnvironments {
-  const deployStep = selectDeployStep(steps)
-  const gateEnvironments = steps.flatMap((step) =>
-    step.humanTest?.environment ? [step.humanTest.environment] : [],
-  )
-  const projections = runEnvironmentProjections(steps)
-  if (!deployStep && gateEnvironments.length === 0 && projections.length === 0) {
+  const observations = runEnvironmentObservations(steps)
+  if (deployerSteps(steps).length === 0 && observations.length === 0) {
     return { status: 'absent', gap: 'no_environment_step' }
   }
-
-  // Latest wins: several steps project the same environment as it moves through its lifecycle,
-  // and the last of them is the state the run left it in.
-  const byEnvironmentId = new Map<string, RunEnvironment>()
-  for (const projection of projections) byEnvironmentId.set(projection.id, projection)
-
   const { entries, skipped } = deployedEnvironments(
-    deployStep,
-    selectDisposeStep(steps)?.disposeEnvs ?? {},
-    byEnvironmentId,
+    deployedFrames(steps),
+    disposedFrames(steps),
+    observationLookup(observations),
     declaresRetainedEnvironment(steps),
   )
-  const claimed = new Set(
-    entries.flatMap((entry) => [entry.environmentId, entry.url].filter((key) => key !== null)),
-  )
-  entries.push(...unclaimedEnvironments(byEnvironmentId, gateEnvironments, claimed))
+  const claimed = new Set(entries.flatMap(environmentKeys))
+  entries.push(...unclaimedEnvironments(observations, claimed))
 
   if (entries.length > 0) return { status: 'reported', entries }
   return { status: 'absent', gap: skipped > 0 ? 'infraless' : 'not_provisioned' }

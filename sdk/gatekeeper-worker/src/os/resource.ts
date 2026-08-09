@@ -39,7 +39,13 @@ export function createGatekeeperResource(options: {
     // ONE core for the object's lifetime, because the action ledger inside it is what a later
     // `applyAction` settles: a core rebuilt per call would have forgotten the action the decision
     // is about. Field initializers run after the base constructor, so `ctx` and `env` are set.
-    readonly #core = new ResourceCore(this.env, policy, this.ctx.props)
+    //
+    // The exports bag is handed down because this shell is the only thing that has one: a hook's
+    // controller is one of the Worker's own named exports, resolved against the DEPLOYMENT's entry
+    // module, and the core is deliberately drivable without a Durable Object at all.
+    readonly #core = new ResourceCore(this.env, policy, this.ctx.props, {
+      exports: this.ctx.exports,
+    })
 
     async describe(): Promise<ResourceDescription> {
       return this.#core.describe()

@@ -604,6 +604,32 @@ func (s *SpecService) Get(ctx context.Context, serviceID string) (*PublicService
 	return &out, nil
 }
 
+// GetForRun get the specification one run was judged against
+// The same in-repo specification the service read serves, read at the branch THIS RUN pushed its
+// work to rather than at the repository default. That is the tree a run’s verdicts were made
+// against: while its pull request is open, every requirement the run itself ADDED is absent from
+// the default branch, so joining `requirements` rows from `GET /api/v1/runs/{runId}/report` or
+// `…/outcome` against the service read leaves exactly those rows without a criterion.
+// `provenance` names the branch and the commit, so a caller can see which tree it got. `anchor`
+// carries one value the service read cannot answer, `not_read`: nothing was read, because the
+// run’s spec read is gated on a tester having reported so that the tree served is the one the
+// verdicts were made against, and `provenance` is null there and only there. The refusals are the
+// service read’s: a `503` with `reason: "spec_read_failed"` for a repository that could not be
+// read, `"spec_ref_unresolved"` for a branch that would not resolve, `"vcs_not_configured"` for a
+// deployment or workspace that wired no version control. An outage never reaches a `200`.
+// GET /api/v1/runs/{runId}/spec (operation getPublicRunSpec).
+func (s *SpecService) GetForRun(ctx context.Context, runID string) (*PublicRunSpec, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/spec", pathEscape(runID)),
+	}
+	var out PublicRunSpec
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ReposService the repositories this workspace can back a service with, and which service each already backs:
 // the discovery half of service creation.
 type ReposService struct {
@@ -2445,13 +2471,14 @@ func (s *EvidenceService) DownloadArtifact(ctx context.Context, artifactID strin
 // What the run changed and what backs that up, in product language, for a reader who will not
 // open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined
 // to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, the
-// throwaway environments it stood up (`state: "live"` is the only one worth opening, and every
-// other row still carries its URL), and the machine checks that ran. The same reduction the app’s
-// outcome card renders, over the same evidence the verification report is built from, so the two
-// cannot state different totals for one run. Nothing here is asserted by a model: every count is
-// derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full
-// bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent`
-// with a machine-readable gap code, and `truncations` names any list the response had to bound.
+// throwaway environments it stood up (`state: "live"` is the only one worth opening, and only
+// while its `expiresAt` is still ahead; every other row still carries its URL), and the machine
+// checks that ran. The same reduction the app’s outcome card renders, over the same evidence the
+// verification report is built from, so the two cannot state different totals for one run.
+// Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the
+// verification report when you need a reviewer’s full bundle; prefer this when you need to say
+// what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and
+// `truncations` names any list the response had to bound.
 // GET /api/v1/runs/{runId}/outcome (operation getPublicRunOutcome).
 func (s *EvidenceService) GetOutcome(ctx context.Context, runID string) (*GetPublicRunOutcomeResponse, error) {
 	req := requestSpec{

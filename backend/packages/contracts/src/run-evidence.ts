@@ -1,6 +1,6 @@
 import type { Block } from './entities.js'
 import type { EnvironmentStatus } from './environments.js'
-import type { PipelineStep, RunEnvironment } from './execution.js'
+import type { DeployEnvState, DisposeEnvState, PipelineStep } from './execution.js'
 import type { VisualConfirmPair } from './human-verdict-gates.js'
 import type { RequirementPriority, RequirementState, SpecDoc } from './spec.js'
 import type { RequirementVerdict, RequirementVerdictStatus, TestReport } from './testing.js'
@@ -314,9 +314,9 @@ export function countCapturedViews(pairs: readonly VisualConfirmPair[]): number 
 // A run that provisions throwaway infrastructure is read twice as well: the verification
 // report proves the three-leg lifecycle (up, exercised, reclaimed) for a reviewer, and the
 // outcome summary answers the one question a designer has, which is whether there is something
-// standing to click. Both start from the same four producers on the run's own steps, so which
-// step each is read off, and which recorded states mean the environment is gone, are stated
-// here rather than on either side.
+// standing to click. Both start from the same producers on the run's own steps, so which steps
+// each is folded from, which recorded states mean the environment is gone, and how the
+// observations of one environment are reconciled are stated here rather than on either side.
 
 /** The lifecycle states that mean an environment is no longer standing. */
 const GONE_ENVIRONMENT_STATUSES = new Set<EnvironmentStatus>(['torn_down', 'expired', 'failed'])
@@ -333,28 +333,48 @@ export function isEnvironmentGone(status: EnvironmentStatus): boolean {
   return GONE_ENVIRONMENT_STATUSES.has(status)
 }
 
-/**
- * The deployer step whose per-frame outcomes (`step.deployEnvs`) a section reads: the last one
- * that recorded any, else the first deployer step (see {@link selectEvidenceStep}).
- */
-export function selectDeployStep(steps: readonly PipelineStep[]): PipelineStep | undefined {
-  return selectEvidenceStep(
-    steps,
-    (step) => step.agentKind === DEPLOYER_AGENT_KIND,
-    (step) => Object.keys(step.deployEnvs ?? {}).length > 0,
-  )
+/** Every deployer step of a run, in pipeline order. */
+export function deployerSteps(steps: readonly PipelineStep[]): PipelineStep[] {
+  return steps.filter((step) => step.agentKind === DEPLOYER_AGENT_KIND)
 }
 
 /**
- * The disposer step whose per-frame reclaim outcomes (`step.disposeEnvs`) a section reads, the
- * mirror of {@link selectDeployStep} at the other end of the lifecycle.
+ * The per-frame deploy outcomes this run recorded, keyed by service-frame block id.
+ *
+ * Folded over EVERY deployer step rather than read off one of them, because a pipeline may
+ * deploy more than once (a re-deploy after a fix, a `human-test` gate looping back to rebuild
+ * the environment a person is testing), and a later deploy of the same frame WINS: it superseded
+ * the earlier environment, so its row is the live one and the earlier id is a tombstone.
+ *
+ * That is the rule the disposer has always reclaimed by, and it is stated here because the two
+ * evidence reductions read the same frames it tears down. Reading a single step instead drops
+ * every frame the earlier deploys settled, which does not merely lose rows: the superseded
+ * environment is then unaccounted for, and a summary that lists what no frame claims surfaces it
+ * again as a live preview URL pointing at something the re-deploy already replaced.
  */
-export function selectDisposeStep(steps: readonly PipelineStep[]): PipelineStep | undefined {
-  return selectEvidenceStep(
-    steps,
-    (step) => step.agentKind === DISPOSER_AGENT_KIND,
-    (step) => Object.keys(step.disposeEnvs ?? {}).length > 0,
-  )
+export function deployedFrames(steps: readonly PipelineStep[]): Map<string, DeployEnvState> {
+  const byFrame = new Map<string, DeployEnvState>()
+  for (const step of deployerSteps(steps)) {
+    for (const [frameId, state] of Object.entries(step.deployEnvs ?? {}))
+      byFrame.set(frameId, state)
+  }
+  return byFrame
+}
+
+/**
+ * The per-frame reclaim outcomes this run recorded, the mirror of {@link deployedFrames} at the
+ * other end of the lifecycle and folded the same way, for the same reason: a run that deployed
+ * twice disposes twice.
+ */
+export function disposedFrames(steps: readonly PipelineStep[]): Map<string, DisposeEnvState> {
+  const byFrame = new Map<string, DisposeEnvState>()
+  for (const step of steps) {
+    if (step.agentKind !== DISPOSER_AGENT_KIND) continue
+    for (const [frameId, state] of Object.entries(step.disposeEnvs ?? {})) {
+      byFrame.set(frameId, state)
+    }
+  }
+  return byFrame
 }
 
 /**
@@ -375,14 +395,125 @@ export function declaresRetainedEnvironment(steps: readonly PipelineStep[]): boo
 }
 
 /**
- * The environment projections the run's own steps carry, in pipeline order.
+ * What one of the run's steps last saw of one environment: the id it names, where it was, and
+ * the lifecycle status the observing step recorded.
  *
- * The WEAKEST of the environment signals and the one every consumer has to handle with the same
- * caveat: it is written by the run's polls and is never refreshed once the run settles, so an
- * environment the TTL sweep reclaimed afterwards keeps a `ready` projection forever. What it is
- * good for is the state of an environment WHILE the run is in flight, which is exactly when a
- * terminal per-frame outcome does not exist yet.
+ * `source` travels with it because the two producers are not equally strong and a consumer must
+ * never read one as the other. A `projection` is a poll's snapshot of a row the platform owns; a
+ * `human_test` observation is the gate's record of the environment a PERSON was sent to, and its
+ * `torn_down` is not a snapshot at all but the gate stating what IT did on the way past.
  */
-export function runEnvironmentProjections(steps: readonly PipelineStep[]): RunEnvironment[] {
-  return steps.flatMap((step) => (step.environment ? [step.environment] : []))
+export interface RunEnvironmentObservation {
+  /** The environments-registry id: the identity every producer of this run agrees on. */
+  id: string
+  url: string | null
+  status: EnvironmentStatus
+  expiresAt: number | null
+  /** The provider's own cause, where the observing producer recorded one. */
+  lastError: string | null
+  source: 'projection' | 'human_test'
+  /**
+   * True when a LATER deploy of the same service frame replaced this environment.
+   *
+   * Derived rather than observed, and it has to be: a superseded environment is the one thing no
+   * producer here ever revisits. The run's polls stop refreshing its projection the moment the
+   * frame moves on, so it keeps whatever status it last had (usually `ready`) forever, while the
+   * provisioning service has already torn it down or tombstoned its row on the way to standing
+   * the replacement up. Left underived it is the most convincing dead link a run can produce: a
+   * `ready` snapshot with a URL, of an environment nothing will ever refresh again.
+   */
+  superseded: boolean
+}
+
+/**
+ * Whether an observation describes an environment that is no longer standing, by either route:
+ * a recorded terminal status, or a later deploy having replaced it.
+ *
+ * The total form of {@link isEnvironmentGone} for a run's own observations, and the one both
+ * reductions ask. Reading the status alone answers "was it torn down", which is a strictly
+ * narrower question than "is it gone".
+ */
+export function isObservedEnvironmentGone(observed: RunEnvironmentObservation): boolean {
+  return observed.superseded || isEnvironmentGone(observed.status)
+}
+
+/**
+ * The environment identities an earlier deploy named that the run's CURRENT frame rows no longer
+ * do: the ids and URLs a later deploy of the same frame superseded.
+ *
+ * Both keys, because the two are how the same environment is named by producers that recorded it
+ * at different times: a deploy row predating `deployEnvs.environmentId` names its environment
+ * only by the URL it handed out.
+ */
+function supersededEnvironmentKeys(steps: readonly PipelineStep[]): Set<string> {
+  const live = new Set<string>()
+  for (const state of deployedFrames(steps).values()) {
+    if (state.environmentId) live.add(state.environmentId)
+    if (state.url) live.add(state.url)
+  }
+  const superseded = new Set<string>()
+  for (const step of deployerSteps(steps)) {
+    for (const state of Object.values(step.deployEnvs ?? {})) {
+      for (const key of [state.environmentId, state.url]) {
+        if (key && !live.has(key)) superseded.add(key)
+      }
+    }
+  }
+  return superseded
+}
+
+/** Narrow a producer's optional `expiresAt` / `lastError` to the observation's nullable shape. */
+function observation(
+  fields: {
+    id: string
+    url: string | null
+    status: EnvironmentStatus
+    expiresAt?: number | null
+    lastError?: string | null
+  },
+  source: RunEnvironmentObservation['source'],
+  superseded: ReadonlySet<string>,
+): RunEnvironmentObservation {
+  return {
+    id: fields.id,
+    url: fields.url,
+    status: fields.status,
+    expiresAt: fields.expiresAt ?? null,
+    lastError: fields.lastError ?? null,
+    source,
+    superseded: superseded.has(fields.id) || (fields.url != null && superseded.has(fields.url)),
+  }
+}
+
+/**
+ * Everything the run's own steps observed about the environments it stood up: one row per
+ * environment id, carrying the LAST observation of it, in the order the run first saw each one.
+ *
+ * Two producers write these and both have to be folded in, because they are the same
+ * environments seen at different moments. A step PROJECTION (`step.environment`) is the weakest
+ * signal there is: the run's polls write it and never refresh it once the run settles, so an
+ * environment the TTL sweep reclaimed afterwards keeps a `ready` projection forever. The
+ * `human-test` gate's own record (`step.humanTest.environment`) is written over the same
+ * environment (the gate no longer provisions one: it READS what the deployer stood up), and on
+ * the way past it stamps `torn_down` for the environment it destroyed when the person confirmed.
+ *
+ * Folding the two by IDENTITY, later-wins, is what makes that teardown visible. Kept apart, the
+ * deployer's step projection still says `ready` for the same id, and a consumer that reads only
+ * projections offers a link to an environment the gate destroyed. Kept as two lists, the same
+ * environment appears twice under two producers, which reads as two.
+ */
+export function runEnvironmentObservations(
+  steps: readonly PipelineStep[],
+): RunEnvironmentObservation[] {
+  const superseded = supersededEnvironmentKeys(steps)
+  const byId = new Map<string, RunEnvironmentObservation>()
+  for (const step of steps) {
+    const projected = step.environment
+    if (projected) byId.set(projected.id, observation(projected, 'projection', superseded))
+    // After the projection, not before: the two never land on one step today (the gate is not an
+    // env-projection kind), and where they ever do the gate's record is the later fact.
+    const tested = step.humanTest?.environment
+    if (tested) byId.set(tested.id, observation(tested, 'human_test', superseded))
+  }
+  return [...byId.values()]
 }

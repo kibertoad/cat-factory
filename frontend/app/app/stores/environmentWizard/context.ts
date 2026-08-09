@@ -9,7 +9,6 @@ import type { useBoardStore } from '~/stores/board'
 import type { useExecutionStore } from '~/stores/execution'
 import type { useGitHubStore } from '~/stores/github'
 import type { useInfraConfigStore } from '~/stores/infraConfig'
-import type { usePipelinesStore } from '~/stores/pipelines'
 import type { usePreflightsStore } from '~/stores/preflights'
 
 /**
@@ -47,7 +46,6 @@ export interface WizardContext {
   trialStarted: Ref<boolean>
   // ---- derived the actions read ----
   repoContext: ComputedRef<{ githubId: number; directory?: string | null } | undefined>
-  analysisPipeline: ComputedRef<ReturnType<ReturnType<typeof usePipelinesStore>['getPipeline']>>
   merged: ComputedRef<MergedRecipeDraft | null>
 }
 

@@ -16,6 +16,7 @@ import { DEFAULT_WORKSPACE_SETTINGS, describeError } from '@cat-factory/kernel'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import type { PrVerificationReport, RunOutcome, ServiceSpecView } from '@cat-factory/contracts'
 import { composeRunOutcome } from '@cat-factory/contracts'
+import type { RunSpecRead } from './RunEvidenceLoader.js'
 import { RunEvidenceLoader, specDocOf } from './RunEvidenceLoader.js'
 import { boundOutcomeForApi } from './runOutcome.boundary.js'
 import type { PrReportInputs } from './prReport.logic.js'
@@ -264,6 +265,14 @@ export class PrVerificationReportController {
    */
   async readRunSpec(workspaceId: string, instance: ExecutionInstance): Promise<ServiceSpecView> {
     return this.evidence.specViewForRun(workspaceId, instance)
+  }
+
+  /**
+   * The same read as {@link readRunSpec}, keeping WHERE it stopped: what
+   * `GET /api/v1/runs/:runId/spec` reports rather than folds. See {@link RunSpecRead}.
+   */
+  async readRunSpecOutcome(workspaceId: string, instance: ExecutionInstance): Promise<RunSpecRead> {
+    return this.evidence.runSpecRead(workspaceId, instance)
   }
 
   /**

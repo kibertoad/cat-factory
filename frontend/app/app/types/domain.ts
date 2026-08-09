@@ -164,6 +164,12 @@ export interface AgentArchetype {
    * which is every built-in kind.
    */
   binaryOutput?: boolean
+  /**
+   * The platform dispatches this kind for a flow of its own, so the builder palette never offers
+   * it as a placeable block (`narrowAgentPalette` drops it). It still resolves through
+   * `agentKindMeta`, because a run of it has to RENDER. Absent ⇒ an ordinary palette block.
+   */
+  internal?: boolean
 }
 
 /**

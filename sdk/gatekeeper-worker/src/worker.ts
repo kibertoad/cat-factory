@@ -154,7 +154,12 @@ export function createGatekeeperWorker(
 
         if (url.pathname === '/webhook') {
           if (request.method !== 'POST') return problem(405, 'method_not_allowed', 'POST only.')
-          const outcome = await gatekeeper.takeDelivery(request, Date.now())
+          // The hook fan-out rides `waitUntil` rather than the response: the platform is waiting
+          // on this acknowledgement with a retry behind it, and a workspace's own callback must
+          // never be in a position to spend that retry (see `takeDelivery`).
+          const outcome = await gatekeeper.takeDelivery(request, Date.now(), (work) =>
+            ctx.waitUntil(work),
+          )
           if (outcome.handled === 'rejected') {
             return problem(
               401,

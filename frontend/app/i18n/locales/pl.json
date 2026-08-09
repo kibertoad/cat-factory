@@ -1548,6 +1548,8 @@
       "priorDocHint": "Z poprzedniej recenzji. Użyj go jako bazy: edytuj opis powyżej i prześlij ponownie.",
       "bootstrapping": "Inicjowanie…",
       "viewRequirements": "Wyświetl wymagania",
+      "mapService": "Zmapuj usługę",
+      "mapServiceNoRepo": "Najpierw połącz repozytorium z tą usługą — nie ma jeszcze czego mapować.",
       "reRun": "Uruchom ponownie",
       "run": "Uruchom",
       "focus": "Skup",
@@ -4603,7 +4605,11 @@
     "preview": {
       "stepCount": "{count} krok | {count} kroki | {count} kroków",
       "gateCount": "{count} zatwierdzenie | {count} zatwierdzenia | {count} zatwierdzeń",
-      "gated": "Ręczne zatwierdzenie po tym kroku"
+      "gated": "Ręczne zatwierdzenie po tym kroku",
+      "conditionalCount": "{count} krok warunkowy | {count} kroki warunkowe | {count} kroków warunkowych",
+      "conditionEstimate": "Uruchamia się tylko wtedy, gdy oszacowanie zadania przekracza progi tego kroku",
+      "conditionFrontend": "Uruchamia się tylko wtedy, gdy zadanie zmienia usługę frontendową",
+      "conditionBackend": "Uruchamia się tylko wtedy, gdy zadanie zmienia usługę inną niż frontendowa"
     },
     "picker": {
       "noneHint": "Brak domyślnego pipeline'u. Wybierzesz go podczas uruchamiania zadania.",
@@ -4689,6 +4695,11 @@
       "edit": "Edytuj ten pipeline",
       "delete": "Usuń ten pipeline",
       "disabledStepTooltip": "Wyłączony, pomijany przy uruchomieniu",
+      "condition": {
+        "always": "Uruchamia się przy każdym zadaniu — kliknij, aby ustawić warunek",
+        "frontend": "Uruchamia się tylko przy zadaniach zmieniających usługę frontendową",
+        "backend": "Uruchamia się tylko przy zadaniach zmieniających usługę inną niż frontendowa"
+      },
       "cancelEdit": "Anuluj edycję",
       "clear": "Wyczyść",
       "update": "Zaktualizuj pipeline",
@@ -4778,6 +4789,7 @@
         "negative-prompt": "Prompt negatywny",
         "seed": "Stałe ziarno",
         "aspect-ratio": "Proporcje obrazu",
+        "exact-size": "Dokładny rozmiar",
         "candidate-batch": "Kilka kandydatów na wywołanie",
         "upscale": "Powiększanie",
         "transparent-background": "Przezroczyste tło",
@@ -4799,6 +4811,11 @@
       "binaryNegativePromptPlaceholder": "czego unikać",
       "binaryAspectRatio": "Proporcje obrazu",
       "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "Rozmiar wyjściowy",
+      "binaryOutputSizeWidth": "Szerokość",
+      "binaryOutputSizeHeight": "Wysokość",
+      "binaryOutputSizeIncomplete": "Nie zapisano: dokładny rozmiar wymaga szerokości i wysokości.",
+      "binaryOutputSizeAmbiguous": "Dokładnego rozmiaru wyjściowego nie można łączyć z {options}: każde z nich podaje dostarczone wymiary po raz drugi. Zostaw to, co jest wymaganiem.",
       "binarySeed": "Ziarno",
       "binarySeedPlaceholder": "stałe ziarno",
       "binaryTransparent": "Przezroczyste tło",
@@ -4860,6 +4877,14 @@
       "elapsedTooltip": "Czas, który upłynął na tym kroku",
       "prReview": {
         "review": "Przejrzyj ustalenia"
+      },
+      "skipped": {
+        "gated": "Pominięto: oszacowanie zadania było poniżej progów tego kroku.",
+        "conditionFrontend": "Pominięto: to zadanie nie zmienia żadnej usługi frontendowej, więc nie ma interfejsu do sprawdzenia.",
+        "conditionBackend": "Pominięto: to zadanie zmienia tylko usługę frontendową, więc nie ma za nią API do sprawdzenia.",
+        "producerSkipped": "Pominięto: krok, który ocenia, został pominięty, więc nie ma czego oceniać.",
+        "runComplete": "Pominięto: przebieg zakończył się przed tym krokiem, nie było nic do zrobienia.",
+        "unknown": "Pominięto: ten krok nie został wykonany."
       }
     },
     "health": {
@@ -5825,8 +5850,9 @@
     "environments": {
       "title": "Działające środowisko",
       "open": "Otwórz działające środowisko",
-      "retained": "To środowisko ma przetrwać po zakończeniu przebiegu, więc odnośnik pozostanie aktywny.",
+      "retained": "To środowisko ma istnieć dłużej niż samo uruchomienie.",
       "expires": "Wygasa {date}",
+      "expired": "Wygasło {date}",
       "state": {
         "live": "Działa",
         "provisioning": "Uruchamiane",
@@ -6327,6 +6353,8 @@
       "unknownServices": "Wskazał usługę, której nie ma w katalogu: {ids}. Wpis zachowano w zadeklarowanej postaci; sprawdź identyfikator w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy. | Wskazał usługi, których nie ma w katalogu: {ids}. Wpisy zachowano w zadeklarowanej postaci; sprawdź identyfikatory w katalogu tablicy.",
       "targetUnknown": "Katalog nie zawiera już własnej usługi przechowywania tego kroku ({id}), więc niczego poniżej nie dało się z nią porównać. Zarejestruj ją ponownie albo wskaż krokowi inną usługę.",
       "undeliveredMediaTypes": "Ten krok miał dostarczyć {formats}, a żaden artefakt poniżej nie zgłasza tego formatu. | Ten krok miał dostarczyć {formats}, a żaden artefakt poniżej nie zgłasza tych formatów. | Ten krok miał dostarczyć {formats}, a żaden artefakt poniżej nie zgłasza tych formatów.",
+      "missized": "1 artefakt dostarczono w rozmiarze innym niż {width}×{height}. | {count} artefakty dostarczono w rozmiarze innym niż {width}×{height}. | {count} artefaktów dostarczono w rozmiarze innym niż {width}×{height}.",
+      "sizeUnreported": "1 artefakt nie zgłasza wymiarów, więc nie można było sprawdzić jego rozmiaru. | {count} artefakty nie zgłaszają wymiarów, więc nie można było sprawdzić ich rozmiarów. | {count} artefaktów nie zgłasza wymiarów, więc nie można było sprawdzić ich rozmiarów.",
       "misdirected": "1 artefakt trafił do usługi innej niż {target}. | {count} artefakty trafiły do usługi innej niż {target}. | {count} artefaktów trafiło do usługi innej niż {target}.",
       "invalidEntries": "Odrzucono 1 zadeklarowany wpis: nie wskazywał usługi ani lokalizacji. | Odrzucono {count} zadeklarowane wpisy: nie wskazywały usługi ani lokalizacji. | Odrzucono {count} zadeklarowanych wpisów: nie wskazywały usługi ani lokalizacji.",
       "omitted": "Zadeklarowano jeszcze 1 artefakt ponad limit raportu i nie ma go na liście. | Zadeklarowano jeszcze {count} artefakty ponad limit raportu i nie ma ich na liście. | Zadeklarowano jeszcze {count} artefaktów ponad limit raportu i nie ma ich na liście.",
@@ -6334,6 +6362,7 @@
       "generatorsUnverified": "Nie udało się odczytać integracji generatywnych tego wdrożenia przy zamykaniu kroku, więc wymienione poniżej integracje nie zostały z nimi porównane. Wpisy są zachowane w takiej postaci, w jakiej je zgłoszono."
     },
     "unknownGeneratorBadge": "Niezarejestrowana",
+    "missizedBadge": "Zły rozmiar",
     "candidates": {
       "automatic": "Wygenerowano {total} kandydata i zachowano go automatycznie, bez przeglądu.",
       "chosen": "Zachowano {kept} z {total} wygenerowanych kandydatów.",

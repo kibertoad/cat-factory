@@ -15,6 +15,7 @@ import type { Block, Pipeline } from '~/types/domain'
 import {
   pipelineAllowedForManualStart,
   pipelineAllowedForSchedule,
+  pipelineConditionalCount,
   pipelineDisplaySteps,
   pipelineGateCount,
 } from '~/utils/pipeline'
@@ -43,10 +44,41 @@ describe('pipelineDisplaySteps', () => {
       gates: [false, true, false],
     })
     expect(pipelineDisplaySteps(p)).toEqual([
-      { kind: 'task-estimator', gated: false },
-      { kind: 'coder', gated: true },
-      { kind: 'reviewer', gated: false },
+      { kind: 'task-estimator', gated: false, conditions: [] },
+      { kind: 'coder', gated: true, conditions: [] },
+      { kind: 'reviewer', gated: false, conditions: [] },
     ])
+  })
+
+  it('names every reason a step may be skipped, on the step itself', () => {
+    // The two causes are reported separately because a reader acts on them differently: an
+    // estimate gate is a knob on the pipeline, a service condition is a fact about the task.
+    const p = pipeline({
+      agentKinds: ['task-estimator', 'tester-api', 'tester-ui'],
+      gating: [null, { enabled: true, minRisk: 0.3, onMissingEstimate: 'run' }, null],
+      stepOptions: [
+        null,
+        { condition: { serviceScope: 'backend' } },
+        { condition: { serviceScope: 'frontend' } },
+      ],
+    })
+    expect(pipelineDisplaySteps(p).map((s) => s.conditions)).toEqual([
+      [],
+      ['estimate', 'backend'],
+      ['frontend'],
+    ])
+    expect(pipelineConditionalCount(p)).toBe(2)
+  })
+
+  it('LISTS a conditional step rather than filtering it out', () => {
+    // Which conditional steps run is a fact about the TASK, and this preview is read while
+    // choosing a pipeline — before there is a task to answer it. Hiding them understates the
+    // pipeline; listing them silently overstates it, which is what `conditions` fixes.
+    const p = pipeline({
+      agentKinds: ['coder', 'tester-ui'],
+      stepOptions: [null, { condition: { serviceScope: 'frontend' } }],
+    })
+    expect(pipelineDisplaySteps(p).map((s) => s.kind)).toEqual(['coder', 'tester-ui'])
   })
 
   it('drops steps disabled by default — they never run, so listing them would misdescribe it', () => {

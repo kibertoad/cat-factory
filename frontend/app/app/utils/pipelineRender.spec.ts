@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { binaryCandidateStatusSchema } from '@cat-factory/contracts'
+import { binaryCandidateStatusSchema, stepSkipReasonSchema } from '@cat-factory/contracts'
 import type { ExecutionInstance, PipelineStep } from '~/types/execution'
 import { missingI18nKeys } from '../../test/i18nKeys'
-import { REDIRECT_PARK_PRESENTATION, dedicatedParkView } from './pipelineRender'
+import { REDIRECT_PARK_PRESENTATION, dedicatedParkView, stepSkipReasonKey } from './pipelineRender'
 
 /** A minimal coder step; the predicate only reads approval/followUps/forkDecision. */
 const step = (over: Partial<PipelineStep>): PipelineStep =>
@@ -151,5 +151,81 @@ describe('REDIRECT_PARK_PRESENTATION', () => {
   it('gives each park its own copy', () => {
     const notices = Object.values(REDIRECT_PARK_PRESENTATION).map((p) => p.noticeKey)
     expect(new Set(notices).size).toBe(notices.length)
+  })
+})
+
+describe('stepSkipReasonKey', () => {
+  const skipped = (over: Partial<PipelineStep>): PipelineStep =>
+    ({ agentKind: 'tester-ui', state: 'done', skipped: true, ...over }) as PipelineStep
+
+  it('answers null for a step that ran', () => {
+    expect(stepSkipReasonKey(step({ state: 'done' }))).toBeNull()
+  })
+
+  it('names the axis, and narrows a condition by the scope still on the step', () => {
+    expect(stepSkipReasonKey(skipped({ skipReason: 'gated' }))).toBe(
+      'pipeline.progress.skipped.gated',
+    )
+    expect(stepSkipReasonKey(skipped({ skipReason: 'producer_skipped' }))).toBe(
+      'pipeline.progress.skipped.producerSkipped',
+    )
+    // The condition case reads the scope off the step's own `stepOptions`, so the copy and the
+    // scope it names cannot disagree.
+    expect(
+      stepSkipReasonKey(
+        skipped({
+          skipReason: 'condition',
+          stepOptions: { condition: { serviceScope: 'frontend' } },
+        } as Partial<PipelineStep>),
+      ),
+    ).toBe('pipeline.progress.skipped.conditionFrontend')
+    expect(
+      stepSkipReasonKey(
+        skipped({
+          skipReason: 'condition',
+          stepOptions: { condition: { serviceScope: 'backend' } },
+        } as Partial<PipelineStep>),
+      ),
+    ).toBe('pipeline.progress.skipped.conditionBackend')
+  })
+
+  it('still states the SKIP for a reason this build does not know', () => {
+    // A stored run can name a member since retired, and a browser can be older than the member it
+    // reads. Losing the reason is acceptable; rendering nothing (so the step reads as one that ran
+    // and said nothing) is not, and neither is guessing onto a current member.
+    // Cast through `unknown`: the type is CLOSED, so a retired member is unrepresentable at compile
+    // time and only reachable from persisted data — which is exactly the case being pinned.
+    expect(
+      stepSkipReasonKey(
+        skipped({ skipReason: 'retired_axis' } as unknown as Partial<PipelineStep>),
+      ),
+    ).toBe('pipeline.progress.skipped.unknown')
+    expect(stepSkipReasonKey(skipped({}))).toBe('pipeline.progress.skipped.unknown')
+  })
+
+  it('every reason it can name has copy in the catalog', () => {
+    // Derived from the vocabulary the engine writes rather than a hand-listed set, so a member
+    // added to the picklist is covered here the day it lands instead of falling outside a stale
+    // literal list. The `condition` member fans out into two keys (one per service scope).
+    const keys = stepSkipReasonSchema.options.flatMap((reason) =>
+      reason === 'condition'
+        ? [
+            stepSkipReasonKey(
+              skipped({
+                skipReason: reason,
+                stepOptions: { condition: { serviceScope: 'frontend' } },
+              } as unknown as Partial<PipelineStep>),
+            )!,
+            stepSkipReasonKey(
+              skipped({
+                skipReason: reason,
+                stepOptions: { condition: { serviceScope: 'backend' } },
+              } as unknown as Partial<PipelineStep>),
+            )!,
+          ]
+        : [stepSkipReasonKey(skipped({ skipReason: reason }))!],
+    )
+    expect(keys).toHaveLength(stepSkipReasonSchema.options.length + 1)
+    expect(missingI18nKeys([...keys, 'pipeline.progress.skipped.unknown'])).toEqual([])
   })
 })

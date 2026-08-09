@@ -473,6 +473,7 @@ export class DeployerStepController {
     if (handle.status === 'failed') {
       return this.settleDeployerFailure(ctx, target, {
         url: handle.url,
+        environmentId: handle.id,
         error: handle.lastError ?? 'Provisioning failed.',
       })
     }
@@ -485,6 +486,7 @@ export class DeployerStepController {
       // is surfaced via the Environment projection, and the run proceeds as before.)
       return this.settleDeployerFailure(ctx, target, {
         url: handle.url,
+        environmentId: handle.id,
         error: `Environment not ready (status: ${handle.status}).`,
       })
     }
@@ -515,15 +517,31 @@ export class DeployerStepController {
     target: DeployTarget,
     failure: {
       url?: string | null
+      /**
+       * The environment the provision broke ON, where one was recorded before it broke. Kept
+       * beside the cause because it is what an operator greps the provider for, and because the
+       * run's own evidence reductions otherwise cannot tell that the failed environment their
+       * steps projected IS this frame's: unnamed, it reads as a second environment nothing
+       * accounts for.
+       */
+      environmentId?: string | null
       error: string
       /** Machine-readable cause (e.g. `deploy_runner_unwired`) carried to the failure record. */
       reason?: string
     },
   ): Promise<AdvanceResult> {
     const { workspaceId, instance, step } = ctx
-    const { url, error, reason } = failure
+    const { url, environmentId, error, reason } = failure
     const done = step.deployEnvs ?? {}
-    step.deployEnvs = { ...done, [target.frameId]: { status: 'failed', url: url ?? null, error } }
+    step.deployEnvs = {
+      ...done,
+      [target.frameId]: {
+        status: 'failed',
+        url: url ?? null,
+        environmentId: environmentId ?? null,
+        error,
+      },
+    }
     if (target.isPrimary) {
       return this.failDeployerStep(workspaceId, instance, step, target.frameId, error, reason)
     }

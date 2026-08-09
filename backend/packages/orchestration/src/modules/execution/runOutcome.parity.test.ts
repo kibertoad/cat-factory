@@ -252,6 +252,54 @@ describe('the run outcome summary and the PR verification report', () => {
     )
   })
 
+  // A run may deploy more than once (a re-deploy after a fix, a gate rebuilding the environment
+  // a person is testing), and the frames each deploy settled are not the same set. Reading one
+  // step gives each document a different answer to "which environments did this run stand up",
+  // and the one a reader would notice is the summary offering a preview URL for an environment
+  // the second deploy replaced.
+  it('name the same environments when the run deployed more than once', () => {
+    const redeployed = {
+      ...INSTANCE,
+      steps: [
+        ...INSTANCE.steps,
+        {
+          agentKind: 'deployer',
+          state: 'done',
+          progress: 1,
+          decision: null,
+          deployEnvs: {
+            frm_own: { status: 'ready', url: 'https://first.test', environmentId: 'env_1' },
+            frm_peer: { status: 'ready', url: 'https://peer.test', environmentId: 'env_p' },
+          },
+        },
+        {
+          agentKind: 'deployer',
+          state: 'done',
+          progress: 1,
+          decision: null,
+          deployEnvs: {
+            frm_own: { status: 'ready', url: 'https://second.test', environmentId: 'env_2' },
+          },
+        },
+      ],
+    } as unknown as ExecutionInstance
+    const report = composePrVerificationReport(redeployed, REPORT_INPUTS)
+    const outcome = composeRunOutcome({ block: BLOCK, instance: redeployed })
+    if (outcome.environments.status !== 'reported') throw new Error('expected environments')
+    if (report.environments.status !== 'reported') throw new Error('expected environments')
+    // The re-deployed frame reports the environment it ended on, and the peer the earlier deploy
+    // settled is not dropped by either document.
+    const byFrame = (rows: readonly { frameId: string | null; url?: string | null }[]) =>
+      Object.fromEntries(rows.map((row) => [row.frameId, row.url ?? null]))
+    expect(byFrame(report.environments.entries)).toEqual({
+      frm_own: 'https://second.test',
+      frm_peer: 'https://peer.test',
+    })
+    expect(
+      byFrame(outcome.environments.entries.filter((entry) => entry.origin === 'deployer')),
+    ).toEqual(byFrame(report.environments.entries))
+  })
+
   it('the report RENDERS the verdicts its join could not place, not only counts them', () => {
     // The count was computed for a reviewer and then shown to nobody, so a section reporting
     // fewer rulings than the tester made carried no explanation of the difference.

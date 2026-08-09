@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { binaryGenerationOptionsSchema } from './binary-capabilities.js'
+import { binaryGenerationOptionsSchema, binaryOutputSizeSchema } from './binary-capabilities.js'
 import { binaryCandidateComparisonSchema } from './binary-candidates.js'
 import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 
@@ -151,6 +151,22 @@ export const binaryOutputArtifactSchema = v.object({
   contentType: v.optional(v.string()),
   /** A one-line description of what was generated. */
   description: v.optional(v.string()),
+  /**
+   * The artifact's pixel dimensions as the agent reports them, for the steps that asked for an
+   * exact `generation.outputSize`.
+   *
+   * The same epistemic status as {@link contentType} beside it, and recorded on the same terms:
+   * it is the agent's own claim, the platform never holds the bytes, and a reader judges it. It
+   * earns its place because the size requirement is otherwise checked only at the grain of "can
+   * this integration be ASKED for dimensions" — admission's half — and the failure the
+   * requirement exists to catch is a DELIVERY fact. `undeliveredMediaTypes` is the same
+   * judgement one axis over, made from the same kind of self-report.
+   *
+   * ABSENT is a third state and not a pass: an artifact reporting no dimensions is not judged
+   * against the step's size, because "we were not told" and "it came back wrong" are different
+   * facts and only the second is evidence of anything.
+   */
+  dimensions: v.optional(binaryOutputSizeSchema),
   /**
    * The generative integration the agent says PRODUCED the artifact, lowercased on read-back
    * like {@link service}. Optional because a step may generate without a registered integration

@@ -24,6 +24,7 @@ import {
   frameProfile,
   isLocalRunner,
   pipelineHasVisualStep,
+  stepConditionSatisfied,
 } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
@@ -46,6 +47,7 @@ import type { SpendService } from '@cat-factory/spend'
 import { validatePipelineShape, type PipelineShape } from '../pipelines/pipelineShape.js'
 import { assertInitiativeShapeAllowed } from '../initiative/initiative.logic.js'
 import { isTesterKind } from './ci.logic.js'
+import { chainHasConditionalStep, resolveScopeForRun } from './runServiceScope.js'
 import {
   CONSUMER_ENVIRONMENT_FAULT_MESSAGES,
   consumerEnvironmentFault,
@@ -209,37 +211,37 @@ export class RunAdmission {
     // guard so start/retry/restart can't drift on it.
     assertInitiativeShapeAllowed(block, shape.agentKinds)
 
+    // Every gate below judges what will ACTUALLY run, so the steps this run's service scope
+    // conditions out are dropped first. Without this, one preset carrying both testers would be
+    // refused on every backend service — the `tester-ui` step it is never going to dispatch would
+    // demand a frontend to drive and an artifact store to upload screenshots to.
+    const { activeKinds, enabled } = await this.applyRunConditions(workspaceId, block, shape)
+
     // A chain with visual steps (`tester-ui` / `visual-confirmation`) needs a UI to exercise:
     // it can only run on a `frontend` frame or a frame a frontend links to — else a `tester-ui`
     // step has no app to drive.
-    await this.assertPipelineFrameTypeAllowed(workspaceId, block, shape.agentKinds)
+    await this.assertPipelineFrameTypeAllowed(workspaceId, block, activeKinds)
 
     // A chain with a Tester needs the service's declared provisioning to be runnable
     // (`infraless`/none = no infra; `docker-compose`/`kubernetes`/`custom` = a workspace handler).
-    if (shape.agentKinds.some(isTesterKind)) {
+    if (activeKinds.some(isTesterKind)) {
       await this.assertTesterInfraConfigured(workspaceId, block, initiatedBy)
     }
 
     // A `docker-compose`/`kubernetes`/`custom` service whose enabled chain reaches an env-consumer
     // (tester / human-test / playwright) with NO enabled `deployer` before it would dead-end inside
     // the consumer — nothing provisions the environment it reads. Fail fast with an actionable error.
-    await this.assertDeployerBeforeConsumer(workspaceId, block, shape.agentKinds, shape.enabled)
+    await this.assertDeployerBeforeConsumer(workspaceId, block, shape.agentKinds, enabled)
 
     // A chain that INCLUDES an enabled Deployer needs the service's provisioning config (the
     // "what/where") AND the workspace's infra handler (the "how") complete + correct — and, best
     // effort, the deployment integration's live connection working — so a misconfigured environment
     // fails loudly here with a fix-it pointer instead of an async failed env (or a silent no-op).
-    await this.assertDeployerConfigured(
-      workspaceId,
-      block,
-      shape.agentKinds,
-      shape.enabled,
-      initiatedBy,
-    )
+    await this.assertDeployerConfigured(workspaceId, block, shape.agentKinds, enabled, initiatedBy)
 
     // A chain carrying an agent that relies on binary-artifact storage (the UI Tester uploads
     // screenshots) needs the account to have storage configured.
-    await this.assertBinaryStorageConfigured(workspaceId, shape.agentKinds)
+    await this.assertBinaryStorageConfigured(workspaceId, activeKinds)
 
     // A chain carrying a BINARY-GENERATING step (the `binary-output` trait — a deployment's
     // image generator) needs each such step's selection to resolve: its foundational-service
@@ -247,12 +249,7 @@ export class RunAdmission {
     // its output; its GENERATIVE half against the deployment's integration registry, or it
     // dispatches with nothing to make the output WITH. (The selection's PRESENCE is a structural
     // fault validatePipelineShape refused above.)
-    await this.assertBinaryOutputSelected(
-      workspaceId,
-      shape.agentKinds,
-      shape.stepOptions,
-      shape.enabled,
-    )
+    await this.assertBinaryOutputSelected(workspaceId, shape.agentKinds, shape.stepOptions, enabled)
 
     // A workspace that delegates container agents to a runner pool needs that pool registered
     // (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and when delegation is off.
@@ -261,16 +258,50 @@ export class RunAdmission {
     // Every step's canonical model must have a usable provider — a container step needs any
     // usable flavour, an INLINE step needs an inline-usable one (a subscription-only model can't
     // run inline without an inline harness). This is the gate a retry used to skip.
-    await this.assertProvidersConfiguredForPipeline(
-      workspaceId,
-      block,
-      shape.agentKinds,
-      initiatedBy,
-    )
+    await this.assertProvidersConfiguredForPipeline(workspaceId, block, activeKinds, initiatedBy)
 
     // Refuse a metered run once the spend budget is reached (a clear error rather than a silent
     // mid-run pause). A local/subscription-only pipeline is exempt.
-    await this.assertBudgetAllowsPipeline(workspaceId, block, shape.agentKinds, initiatedBy)
+    await this.assertBudgetAllowsPipeline(workspaceId, block, activeKinds, initiatedBy)
+  }
+
+  /**
+   * Narrow a chain to the steps this run's SERVICE SCOPE admits: the enabled flags with every
+   * condition-excluded index turned off, and the kinds that survive both.
+   *
+   * The flags stay index-aligned (they are read by the ORIGINAL index everywhere) while the kind
+   * list is compacted, which is exactly how each downstream gate wants its input. A chain with no
+   * conditional step short-circuits before the block-list read, so the overwhelming majority of
+   * runs pay nothing for this.
+   *
+   * The verdict here is ADVISORY in one direction only: it can excuse a step from a gate, never
+   * add one. The engine re-evaluates each condition at the step's own turn (`runStepPreamble`),
+   * which is the decision that actually skips it; this exists so admission does not refuse a run
+   * over a step it can already tell will never dispatch.
+   */
+  private async applyRunConditions(
+    workspaceId: string,
+    block: Block,
+    shape: PipelineShape,
+  ): Promise<{ activeKinds: string[]; enabled: boolean[] | undefined }> {
+    const isEnabled = (i: number) => shape.enabled?.[i] !== false
+    if (!chainHasConditionalStep(shape.stepOptions)) {
+      return {
+        activeKinds: shape.agentKinds.filter((_, i) => isEnabled(i)),
+        enabled: shape.enabled,
+      }
+    }
+    const scope = await resolveScopeForRun(
+      (id) => this.blockRepository.listByWorkspace(id),
+      workspaceId,
+      block,
+    )
+    const admits = (i: number) =>
+      isEnabled(i) && stepConditionSatisfied(shape.stepOptions?.[i]?.condition, scope)
+    return {
+      activeKinds: shape.agentKinds.filter((_, i) => admits(i)),
+      enabled: shape.agentKinds.map((_, i) => admits(i)),
+    }
   }
 
   /**

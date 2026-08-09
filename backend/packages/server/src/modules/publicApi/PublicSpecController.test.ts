@@ -1,6 +1,8 @@
-import type { PublicServiceSpec } from '@cat-factory/contracts'
+import type { PublicRunSpec, PublicServiceSpec, ServiceSpecView } from '@cat-factory/contracts'
+import { readServiceSpec } from '@cat-factory/agents'
 import type { RepoContentEntry, RepoFiles, RunRepoContext } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
+import type { RunSpecRead } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { handleError } from '../../http/errorHandler.js'
@@ -257,6 +259,146 @@ describe('GET /api/v1/services/:serviceId/spec', () => {
       SERVICE_ID,
       'bad',
     )
+    expect(status).toBe(401)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The RUN read. The document is the same and so are the caps, so what is worth pinning here is
+// only what DIFFERS: which read it delegates to, and the fourth outcome the service read cannot
+// have. The read itself (the branch rule, the tester gate, the memo) belongs to the engine's
+// evidence loader and is pinned there; a controller that composed its own would be able to hand a
+// caller a tree the run's own outcome summary was never joined against.
+// ---------------------------------------------------------------------------
+
+const RUN_ID = 'exec_1'
+
+const PROVENANCE = {
+  provider: 'github' as const,
+  owner: 'acme',
+  repo: 'checkout',
+  ref: 'cat/add-login',
+  commit: 'commit-sha',
+}
+
+interface RunHarnessOptions {
+  /** What the engine's run-spec read answers. */
+  read: RunSpecRead | null
+  /** Ids the workspace resolves a run for; defaults to the one run. */
+  runs?: string[]
+}
+
+function runHarness(opts: RunHarnessOptions) {
+  const runs = new Set(opts.runs ?? [RUN_ID])
+  const container = {
+    executionRepository: {
+      get: async (_ws: string, runId: string) =>
+        runs.has(runId) ? { id: runId, blockId: 'blk_1' } : null,
+    },
+    boardService: {
+      getServiceTask: async () => ({ id: 'blk_1' }),
+      getInternalTask: async () => null,
+    },
+    executionService: {
+      readRunSpecOutcome: async () => opts.read,
+    },
+    publicApiKeys: {
+      authenticate: async (secret?: string) =>
+        secret === 'good' ? { workspaceId: 'ws_1', scope: 'read', keyId: 'k1' } : null,
+    },
+  } as unknown as ServerContainer
+
+  const app = new Hono<AppEnv>()
+  app.onError(handleError)
+  app.use('*', async (c, next) => {
+    c.set('container', container)
+    await next()
+  })
+  app.route('/', publicSpecController())
+
+  return async (runId = RUN_ID, key = 'good') => {
+    const res = await app.request(`/api/v1/runs/${runId}/spec`, {
+      headers: { authorization: `Bearer ${key}` },
+    })
+    return { status: res.status, body: (await res.json()) as never }
+  }
+}
+
+/** The reader's view of a repository that carries the fixture spec, as the loader hands it over. */
+async function fixtureView(files: Record<string, string> = SPEC_FILES): Promise<ServiceSpecView> {
+  return readServiceSpec(fakeRepo(files), PROVENANCE.ref)
+}
+
+describe('GET /api/v1/runs/:runId/spec', () => {
+  it("serves the tree at the RUN's branch, naming the ref and commit it was read at", async () => {
+    const view = await fixtureView()
+    const call = runHarness({ read: { status: 'read', view, provenance: PROVENANCE } })
+    const { status, body } = await call()
+    const spec = body as PublicRunSpec
+
+    expect(status).toBe(200)
+    expect(spec.anchor).toBe('present')
+    expect(spec.runId).toBe(RUN_ID)
+    expect(spec.spec?.modules?.[0]?.groups?.[0]?.requirements?.[0]?.id).toBe('req-total-positive')
+    // The whole reason this endpoint is a sibling of the service read rather than a flag on it:
+    // the ref is the run's own branch, which carries the requirements the run added and the
+    // default branch does not.
+    expect(spec.provenance).toEqual(PROVENANCE)
+  })
+
+  it('answers anchor: not_read, with no provenance, when the run has consulted no tree yet', async () => {
+    // The run-only outcome, and a 200 rather than a refusal: the platform has read no spec for
+    // this run, which is exactly what `requirements.spec: "not_read"` on the same run's outcome
+    // summary reports. Served as `absent` it would claim the branch holds no requirements, which
+    // is a statement nothing has checked.
+    const { status, body } = await runHarness({ read: { status: 'not_read' } })()
+    expect(status).toBe(200)
+    expect(body).toMatchObject({
+      runId: RUN_ID,
+      anchor: 'not_read',
+      spec: null,
+      features: [],
+      provenance: null,
+      issues: [],
+      truncations: [],
+    })
+  })
+
+  it('REFUSES with spec_read_failed rather than reporting a run judged against nothing', async () => {
+    const { status, body } = await runHarness({ read: { status: 'read_failed' } })()
+    expect(status).toBe(503)
+    expect(reasonOf(body)).toBe('spec_read_failed')
+  })
+
+  it('answers vcs_not_configured for an unwired deployment and an unconnected workspace alike', async () => {
+    const unwired = await runHarness({ read: { status: 'vcs_unwired' } })()
+    expect(unwired.status).toBe(503)
+    expect(reasonOf(unwired.body)).toBe('vcs_not_configured')
+
+    const unconnected = await runHarness({ read: { status: 'no_connection' } })()
+    expect(unconnected.status).toBe(503)
+    expect(reasonOf(unconnected.body)).toBe('vcs_not_configured')
+  })
+
+  it("REFUSES an empty branch whose ref would not resolve, sharing the service read's rule", async () => {
+    // Same judgement, same helper: a provider answers 404 for an absent file and for a repository
+    // nobody can reach, and only the resolved commit tells them apart.
+    const view = await fixtureView({})
+    const { status, body } = await runHarness({
+      read: { status: 'read', view, provenance: { ...PROVENANCE, commit: null } },
+    })()
+    expect(status).toBe(503)
+    expect(reasonOf(body)).toBe('spec_ref_unresolved')
+  })
+
+  it('404s a run this key may not read, before asking the engine for anything', async () => {
+    const { status, body } = await runHarness({ read: { status: 'not_read' }, runs: [] })()
+    expect(status).toBe(404)
+    expect(reasonOf(body)).toBe('run_not_found')
+  })
+
+  it('refuses an unauthenticated caller', async () => {
+    const { status } = await runHarness({ read: { status: 'not_read' } })(RUN_ID, 'bad')
     expect(status).toBe(401)
   })
 })

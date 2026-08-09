@@ -1548,6 +1548,8 @@
       "priorDocHint": "De la revisión anterior. Úsalo como base: edita la descripción de arriba y reenvíala.",
       "bootstrapping": "Inicializando…",
       "viewRequirements": "Ver requisitos",
+      "mapService": "Mapear servicio",
+      "mapServiceNoRepo": "Vincula primero un repositorio a este servicio: todavía no hay nada que mapear.",
       "reRun": "Reejecutar",
       "run": "Ejecutar",
       "focus": "Enfocar",
@@ -4603,7 +4605,11 @@
     "preview": {
       "stepCount": "{count} paso | {count} pasos",
       "gateCount": "{count} aprobación | {count} aprobaciones",
-      "gated": "Aprobación humana después de este paso"
+      "gated": "Aprobación humana después de este paso",
+      "conditionalCount": "{count} paso condicional | {count} pasos condicionales",
+      "conditionEstimate": "Se ejecuta solo si la estimación de la tarea supera los umbrales de este paso",
+      "conditionFrontend": "Se ejecuta solo si la tarea modifica un servicio de frontend",
+      "conditionBackend": "Se ejecuta solo si la tarea modifica un servicio que no es de frontend"
     },
     "picker": {
       "noneHint": "Sin pipeline predeterminado. Eliges uno al ejecutar la tarea.",
@@ -4689,6 +4695,11 @@
       "edit": "Editar este pipeline",
       "delete": "Eliminar este pipeline",
       "disabledStepTooltip": "Desactivado, omitido al ejecutar",
+      "condition": {
+        "always": "Se ejecuta en todas las tareas: haz clic para condicionarlo",
+        "frontend": "Se ejecuta solo en tareas que modifican un servicio de frontend",
+        "backend": "Se ejecuta solo en tareas que modifican un servicio que no es de frontend"
+      },
       "cancelEdit": "Cancelar edición",
       "clear": "Limpiar",
       "update": "Actualizar pipeline",
@@ -4778,6 +4789,7 @@
         "negative-prompt": "Prompt negativo",
         "seed": "Semilla fija",
         "aspect-ratio": "Relación de aspecto",
+        "exact-size": "Tamaño exacto",
         "candidate-batch": "Varios candidatos por llamada",
         "upscale": "Ampliación",
         "transparent-background": "Fondo transparente",
@@ -4799,6 +4811,11 @@
       "binaryNegativePromptPlaceholder": "qué evitar",
       "binaryAspectRatio": "Relación de aspecto",
       "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "Tamaño de salida",
+      "binaryOutputSizeWidth": "Ancho",
+      "binaryOutputSizeHeight": "Alto",
+      "binaryOutputSizeIncomplete": "No se guardó: un tamaño exacto necesita un ancho y un alto.",
+      "binaryOutputSizeAmbiguous": "Un tamaño de salida exacto no se puede combinar con {options}: cada uno indica las dimensiones entregadas por segunda vez. Conserva el que sea el requisito.",
       "binarySeed": "Semilla",
       "binarySeedPlaceholder": "semilla fija",
       "binaryTransparent": "Fondo transparente",
@@ -4860,6 +4877,14 @@
       "elapsedTooltip": "Tiempo transcurrido en este paso",
       "prReview": {
         "review": "Revisar hallazgos"
+      },
+      "skipped": {
+        "gated": "Omitido: la estimación de la tarea quedó por debajo de los umbrales de este paso.",
+        "conditionFrontend": "Omitido: esta tarea no modifica ningún servicio de frontend, así que no hay interfaz que probar.",
+        "conditionBackend": "Omitido: esta tarea solo modifica un servicio de frontend, así que no hay API detrás que probar.",
+        "producerSkipped": "Omitido: el paso que revisa fue omitido, así que no hay nada que evaluar.",
+        "runComplete": "Omitido: la ejecución terminó antes de este paso y no quedaba nada que hacer.",
+        "unknown": "Omitido: este paso no se ejecutó."
       }
     },
     "health": {
@@ -5825,8 +5850,9 @@
     "environments": {
       "title": "Entorno en vivo",
       "open": "Abrir el entorno en vivo",
-      "retained": "Este entorno debe sobrevivir a la ejecución, así que el enlace seguirá funcionando.",
+      "retained": "Este entorno está pensado para seguir existiendo después de la ejecución.",
       "expires": "Caduca el {date}",
+      "expired": "Caducó el {date}",
       "state": {
         "live": "En vivo",
         "provisioning": "Levantándose",
@@ -6327,6 +6353,8 @@
       "unknownServices": "Nombró un servicio que el catálogo no contiene: {ids}. La entrada se conserva tal como se declaró; comprueba el identificador con el catálogo del tablero. | Nombró servicios que el catálogo no contiene: {ids}. Sus entradas se conservan tal como se declararon; comprueba los identificadores con el catálogo del tablero.",
       "targetUnknown": "El catálogo ya no contiene el servicio de almacenamiento de este paso ({id}), así que nada de lo de abajo pudo comprobarse contra él. Vuelve a registrarlo, o apunta el paso a otro servicio.",
       "undeliveredMediaTypes": "Este paso debía entregar {formats} y ningún artefacto de abajo informa ese formato. | Este paso debía entregar {formats} y ningún artefacto de abajo informa esos formatos.",
+      "missized": "1 artefacto se entregó con un tamaño distinto de {width}×{height}. | {count} artefactos se entregaron con un tamaño distinto de {width}×{height}.",
+      "sizeUnreported": "1 artefacto no informa dimensiones, así que no se pudo comprobar su tamaño. | {count} artefactos no informan dimensiones, así que no se pudieron comprobar sus tamaños.",
       "misdirected": "1 artefacto fue a un servicio distinto de {target}. | {count} artefactos fueron a un servicio distinto de {target}.",
       "invalidEntries": "Se descartó 1 entrada declarada: no nombraba servicio ni ubicación. | Se descartaron {count} entradas declaradas: no nombraban servicio ni ubicación.",
       "omitted": "Se declaró 1 artefacto más por encima del límite del informe y no aparece en la lista. | Se declararon {count} artefactos más por encima del límite del informe y no aparecen en la lista.",
@@ -6334,6 +6362,7 @@
       "generatorsUnverified": "No se han podido leer las integraciones generativas de esta instalación al cerrarse el paso, así que las integraciones indicadas abajo no se han contrastado con ellas. Las entradas se conservan tal como se declararon."
     },
     "unknownGeneratorBadge": "No registrada",
+    "missizedBadge": "Tamaño incorrecto",
     "candidates": {
       "automatic": "Se generó {total} candidato y se conservó automáticamente, sin revisión.",
       "chosen": "Se conservaron {kept} de {total} candidatos generados.",

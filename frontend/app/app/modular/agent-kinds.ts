@@ -35,6 +35,11 @@ export function customKindToArchetype(kind: CustomAgentKind): AgentArchetype {
     // projection would fork the rule the moment the default changes.
     ...(p.tier ? { tier: p.tier } : {}),
     ...(p.resultView ? { resultView: p.resultView } : {}),
+    // The kind is the platform's to dispatch, not a block anyone places. Carried onto the
+    // archetype rather than dropped at the projection because the catalog is also the READ MODEL
+    // every run view resolves a step's label and icon through: filtering it out here would leave
+    // the wizard's own analyst run rendering as an unknown kind.
+    ...(p.internal ? { internal: true } : {}),
     // Not part of `presentation` on the wire — it is a fact about how the kind RUNS, projected
     // beside `container` — so it is lifted from the entry itself. Carried onto the archetype
     // because the pipeline builder resolves a step's meta through `agentKindMeta`, not through

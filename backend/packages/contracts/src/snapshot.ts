@@ -312,22 +312,32 @@ export const workspaceSnapshotSchema = v.object({
    * (or absent → treated as 0) means an update is available. Static, workspace-independent;
    * built by the shared `WorkspaceService.snapshot()` (so it is automatically symmetric across
    * runtimes), but optional on the wire for forward-compatibility.
+   *
+   * OFFERED entries only: an INTERNAL pipeline is withheld here for the same reason it is withheld
+   * from `pipelines`. This map is not merely a version lookup — the health advisory reads its keys
+   * as the set of built-ins that EXIST, and derives "new built-ins available" as those keys minus
+   * the rows the SPA can see. An internal entry is in the first set and never in the second, so
+   * listing it would advertise a pipeline nobody may pick, permanently and un-dismissably.
    */
   pipelineCatalogVersions: v.optional(v.record(v.string(), v.number())),
   /**
-   * The catalog's own NAME for each id in `pipelineCatalogVersions`: the companion map, built from
-   * the same `seedPipelines()` read.
+   * The catalog's own NAME for each catalog id: the companion map, built from the same
+   * `seedPipelines()` read.
    *
-   * It exists for the one moment a catalog id has no stored row to read a name off: the "new
-   * built-ins available" advisory. Without it the SPA humanised the id, which is passable for a
-   * shipped built-in (`pl_review` → "review") and wrong for the case that made this reachable, a
+   * It exists for the moments a catalog id has no stored row to read a name off. The first is the
+   * "new built-ins available" advisory. Without it the SPA humanised the id, which is passable for
+   * a shipped built-in (`pl_review` → "review") and wrong for the case that made this reachable, a
    * deployment's own registered pipeline behind a reusable operation: `pl_org_introduce_api`
    * rendered as "org introduce api", offering the operation's pipeline under a name that appears
-   * nowhere else in the product.
+   * nowhere else in the product. The second is a task PINNED to an INTERNAL pipeline (the
+   * docs-refresh preset spawns onto one): the card that starts it has no library row to name.
+   *
+   * So this is a SUPERSET of `pipelineCatalogVersions` — a display dictionary for any catalog id
+   * the SPA may hold, where that map is the narrower "what may be offered". Do not index one by
+   * the other's keys; ask each for what it answers.
    *
    * A separate map rather than widening the versions record, because that record is a
-   * `Record<string, number>` the SPA compares numerically; the ids are identical by construction
-   * (one source, one pass), so a reader indexes either by the other's key.
+   * `Record<string, number>` the SPA compares numerically.
    */
   pipelineCatalogNames: v.optional(v.record(v.string(), v.string())),
   /**

@@ -10,6 +10,7 @@ import {
   type TrackerSettings,
   type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
+import { adHocPipelineIdFor } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { FakeTaskSourceProvider } from '../FakeTaskSourceProvider.js'
 import { defineBugHuntConformance } from './bug-hunt.js'
@@ -661,6 +662,44 @@ function registerBugTriagePhaseTests(harness: ConformanceHarness): void {
       // pipeline is `document`, a full build is `build` — so the pickers can filter on it.
       expect(listed.body.find((p) => p.id === 'pl_document')?.purpose).toBe('document')
       expect(listed.body.find((p) => p.id === 'pl_full')?.purpose).toBe('build')
+    })
+  })
+
+  // SINGLE-KIND runs: one agent against a block, with no pipeline behind it. Two flows depend on
+  // this door (the post-bootstrap service mapping, the environment wizard's stack-recipe draft),
+  // and it is a run in every other respect — same persistence, same board projection — which is
+  // exactly what a cross-runtime assertion is for.
+  describe('single-kind agent runs', () => {
+    it('starts a run for one agent kind, with no catalog pipeline behind it', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      const start = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/task_login/agent-kind-executions`,
+        { agentKind: 'blueprints' },
+      )
+      expect(start.status).toBe(201)
+      expect(start.body.steps.map((step) => step.agentKind)).toEqual(['blueprints'])
+      // The synthesized id says there is no pipeline, rather than naming one nothing defines.
+      expect(start.body.pipelineId).toBe(adHocPipelineIdFor('blueprints'))
+
+      // It is an ORDINARY run from here: it persists, drives, and projects onto the board like
+      // any other, which is the reason it is a synthesized Pipeline rather than a bespoke path.
+      const runs = await app.drive(wsId)
+      expect(runs.find((r) => r.blockId === 'task_login')).toBeTruthy()
+    })
+
+    it('refuses an unknown agent kind, naming it', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const res = await app.call(
+        'POST',
+        `/workspaces/${workspace.id}/blocks/task_login/agent-kind-executions`,
+        { agentKind: 'org:does-not-exist' },
+      )
+      expect(res.status).toBe(422)
     })
   })
 

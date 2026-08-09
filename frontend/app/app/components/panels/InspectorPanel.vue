@@ -7,6 +7,7 @@ import { inspectorPanels } from '~/modular/panels/inspector.logic'
 import IconButton from '~/components/common/IconButton.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
+import { BLUEPRINT_AGENT_KIND } from '@cat-factory/contracts'
 import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
 
 const board = useBoardStore()
@@ -243,6 +244,22 @@ const runMenu = computed(() => {
     runnable,
   ]
 })
+
+// Mapping a service: one run of the mapping agent against this frame, started by KIND (no
+// pipeline). The button owns only its in-flight state — a refusal is already surfaced as a toast
+// by the command, and the run itself then reports through the ordinary board/run projection, so
+// there is nothing for this component to remember about it afterwards.
+const mappingService = ref(false)
+async function mapService() {
+  const id = block.value?.id
+  if (!id) return
+  mappingService.value = true
+  try {
+    await execution.startAgentKind(id, BLUEPRINT_AGENT_KIND)
+  } finally {
+    mappingService.value = false
+  }
+}
 
 // Delegate to the shared confirm-gated deletion so the button and the keyboard shortcut
 // (Delete/Backspace) follow the exact same prompt + optimistic-delete + rollback path.
@@ -513,6 +530,28 @@ const showOriginalDescription = ref(false)
       >
         {{ t('panels.inspector.viewRequirements') }}
       </UButton>
+
+      <!-- service (frame): (re)map the repository into the service → modules blueprint and
+           populate the board. A SINGLE-KIND run of the mapping agent, not a pipeline — the
+           preset that used to wrap this one step is retired. Needs a linked repo to read, so it
+           is disabled (with the reason) until the frame has one. -->
+      <UButton
+        v-if="isFrame"
+        block
+        color="neutral"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-map"
+        :loading="mappingService"
+        :disabled="!serviceRepo || mappingService"
+        :title="serviceRepo ? undefined : t('panels.inspector.mapServiceNoRepo')"
+        @click="mapService"
+      >
+        {{ t('panels.inspector.mapService') }}
+      </UButton>
+      <p v-if="isFrame && !serviceRepo" class="text-[11px] text-slate-500">
+        {{ t('panels.inspector.mapServiceNoRepo') }}
+      </p>
 
       <!-- The level/type-keyed inspector body: the `inspectorPanels` panel group
            (slice 4 of the modular-vue adoption). `<PanelsOutlet>` renders every

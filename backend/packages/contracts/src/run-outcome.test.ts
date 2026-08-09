@@ -859,6 +859,126 @@ describe('composeRunOutcome: where to go and look', () => {
     expect(byUrl).toHaveLength(1)
   })
 
+  // The gate READS the environment the deployer stood up and destroys it when the person
+  // confirms, so the deploy row and the gate's record are two producers on ONE environment and
+  // the gate's is the later fact. Reported off the deploy row alone, the card offers "Open the
+  // live environment" for an environment the gate tore down on the way past.
+  it('never reports an environment the hands-on gate tore down as live', () => {
+    const rows = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test', environmentId: 'env_1' } }),
+        step({
+          agentKind: 'human-test',
+          humanTest: {
+            phase: 'passed',
+            environment: { id: 'env_1', url: 'https://x.test', status: 'torn_down' },
+          },
+        } as Partial<PipelineStep>),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ state: 'reclaimed', origin: 'deployer', url: 'https://x.test' })
+  })
+
+  // A deploy row predating `deployEnvs.environmentId` names its environment ONLY by the URL it
+  // handed out. Joined by id alone it matches nothing, falls through to the `live` floor, and
+  // the observation carrying its real state is then dropped as a duplicate of it: the one
+  // producer that knew the environment was gone is discarded by the row that says it is up.
+  it('joins a deploy row that names its environment only by URL to what the run observed', () => {
+    const rows = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test' } }),
+        projecting({ id: 'env_1', url: 'https://x.test', status: 'torn_down' }),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      state: 'reclaimed',
+      origin: 'deployer',
+      // Named by the observation, since the frame recorded no id of its own.
+      environmentId: 'env_1',
+    })
+  })
+
+  // A frame that FAILED records the provider's cause; the environment it broke on is projected
+  // beside it. Unnamed by the frame, that projection is an environment nothing accounts for, and
+  // one failed provision renders as two rows both reading "never came up".
+  it('lists a failed provision once, naming the environment it broke on', () => {
+    const rows = entries(
+      run([
+        deployer({
+          frm_own: { status: 'failed', environmentId: 'env_1', error: 'helm release timed out' },
+        }),
+        projecting({
+          id: 'env_1',
+          url: null,
+          status: 'failed',
+          lastError: 'helm release timed out',
+        }),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      state: 'failed',
+      origin: 'deployer',
+      frameId: 'frm_own',
+      environmentId: 'env_1',
+      detail: 'helm release timed out',
+    })
+  })
+
+  // A run deploys twice (a re-deploy after a fix, or a gate rebuilding what a person is testing).
+  // The frame's row is the LATEST environment, and the first one is gone: the provisioning
+  // service superseded it on the way to standing the replacement up. Nothing ever refreshes its
+  // projection again, so left underived it is a `ready` snapshot with a URL that opens nothing.
+  it('reports the frame’s current environment, and never the one a re-deploy replaced', () => {
+    const rows = entries(
+      run([
+        deployer({
+          frm_own: { status: 'ready', url: 'https://first.test', environmentId: 'env_1' },
+        }),
+        projecting({ id: 'env_1', url: 'https://first.test', status: 'ready' }),
+        deployer({
+          frm_own: { status: 'ready', url: 'https://second.test', environmentId: 'env_2' },
+        }),
+        projecting({ id: 'env_2', url: 'https://second.test', status: 'ready' }),
+      ]),
+    )
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({
+      state: 'live',
+      origin: 'deployer',
+      frameId: 'frm_own',
+      environmentId: 'env_2',
+      url: 'https://second.test',
+    })
+    // Still listed (its URL is what an operator greps for) and never as something to open.
+    expect(rows[1]).toMatchObject({
+      state: 'reclaimed',
+      origin: 'projected',
+      environmentId: 'env_1',
+      url: 'https://first.test',
+    })
+  })
+
+  // The mirror of the above: a superseded environment whose last observation already named WHY
+  // it is gone keeps that word. `reclaimed` would flatten a failure into a tidy teardown.
+  it('keeps a superseded environment’s own terminal cause rather than flattening it', () => {
+    const rows = entries(
+      run([
+        deployer({
+          frm_own: { status: 'failed', environmentId: 'env_1', error: 'quota exceeded' },
+        }),
+        projecting({ id: 'env_1', url: null, status: 'failed', lastError: 'quota exceeded' }),
+        deployer({
+          frm_own: { status: 'ready', url: 'https://second.test', environmentId: 'env_2' },
+        }),
+      ]),
+    )
+    expect(rows).toHaveLength(2)
+    expect(rows[1]).toMatchObject({ state: 'failed', environmentId: 'env_1' })
+  })
+
   it('reports a gate’s own environment, which no deployer frame keys', () => {
     const rows = entries(
       run([

@@ -12,9 +12,10 @@ import type {
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
 import {
   declaresRetainedEnvironment,
-  isEnvironmentGone,
-  runEnvironmentProjections,
-  selectDeployStep,
+  deployedFrames,
+  deployerSteps,
+  isObservedEnvironmentGone,
+  runEnvironmentObservations,
 } from '@cat-factory/contracts'
 import { isTesterKind } from './ci.logic.js'
 import { absentNote, findStep } from './prReport.steps.js'
@@ -275,19 +276,19 @@ function foldLifecycle(read: ProvisioningLifecycleRead): LoggedLifecycle {
 }
 
 /**
- * Whether the run's own step projections POSITIVELY show every environment gone. This is the
- * WEAKER of the two teardown signals and is only consulted when there is no log to read: the
- * projection is written by the run's own polls and is never refreshed once the run settles, so
- * an environment reclaimed by the TTL sweep afterwards keeps a stale `ready` projection forever.
- * The log is what turns "we stopped watching" into "it was torn down at a time".
+ * Whether the run's OWN observations POSITIVELY show every environment gone. This is the WEAKER
+ * of the two teardown signals and is only consulted when there is no log to read: the run's steps
+ * write what they see and never refresh it once the run settles, so an environment reclaimed by
+ * the TTL sweep afterwards keeps a stale `ready` observation forever. The log is what turns "we
+ * stopped watching" into "it was torn down at a time".
  *
  * Phrased POSITIVELY (`every`, over a non-empty set) rather than as "nothing looks live",
- * because a run that projected no environment at all would satisfy the negative form and
- * confirm a teardown nobody observed.
+ * because a run that observed no environment at all would satisfy the negative form and confirm
+ * a teardown nobody observed.
  */
-function projectionsAllGone(instance: ExecutionInstance): boolean {
-  const projections = runEnvironmentProjections(instance.steps)
-  return projections.length > 0 && projections.every((env) => isEnvironmentGone(env.status))
+function observationsAllGone(instance: ExecutionInstance): boolean {
+  const observations = runEnvironmentObservations(instance.steps)
+  return observations.length > 0 && observations.every(isObservedEnvironmentGone)
 }
 
 /**
@@ -327,11 +328,11 @@ function teardownState(
   // No log to read: fall back to the run's own step projections, the weaker signal. This one
   // still yields `confirmed`, because with no log there is no verify row to be missing — the
   // projection is the only evidence there is, and it is the evidence this branch is for.
-  if (!logged) return projectionsAllGone(instance) ? 'confirmed' : standing
+  if (!logged) return observationsAllGone(instance) ? 'confirmed' : standing
   if (logged.stuck.size > 0) return 'failed'
   // A log that records no bring-up at all cannot speak to the teardown either way, so the
   // projection is consulted rather than concluding from the log's silence.
-  if (logged.provisioned.size === 0) return projectionsAllGone(instance) ? 'confirmed' : standing
+  if (logged.provisioned.size === 0) return observationsAllGone(instance) ? 'confirmed' : standing
   const outstanding = [...logged.provisioned].filter(
     (id) => !logged.reclaimed.has(id) && !logged.unconfirmed.has(id),
   )
@@ -514,9 +515,14 @@ function composeProof(
 }
 
 /**
- * Compose the test-environment lifecycle section. Reads the deployer step's per-frame outcomes,
- * the run's provisioning-log rows and the tester's report, all already resolved by the caller,
- * so nothing here re-probes a provider.
+ * Compose the test-environment lifecycle section. Reads the run's per-frame deploy outcomes, its
+ * provisioning-log rows and the tester's report, all already resolved by the caller, so nothing
+ * here re-probes a provider.
+ *
+ * The frames are folded over EVERY deploy the run made rather than read off one step, which is
+ * the same rule the disposer reclaims by and the outcome summary reports: a re-deploy supersedes
+ * the frame's earlier environment, and a section built from one step's map omits every frame the
+ * other deploys settled.
  */
 export function composeEnvironments(
   instance: ExecutionInstance,
@@ -525,7 +531,7 @@ export function composeEnvironments(
 ): PrVerificationReport['environments'] {
   const { timeline, logged } = foldLifecycle(inputs.provisioning)
   const evidence = composeEvidence(instance, inputs, cap)
-  const step = selectDeployStep(instance.steps)
+  const frames = deployedFrames(instance.steps)
   const absent = (note: string): PrVerificationReport['environments'] => ({
     status: 'absent',
     note,
@@ -536,18 +542,17 @@ export function composeEnvironments(
     proof: 'not_applicable',
     gaps: [],
   })
-  if (!step) {
+  if (deployerSteps(instance.steps).length === 0) {
     return absent('No deployer step in this pipeline, so no ephemeral environment was provisioned.')
   }
-  const entries: PrReportEnvironment[] = cap(
-    Object.entries(step.deployEnvs ?? {}),
-    'environments.entries',
-  ).map(([frameId, state]) => ({
-    frameId,
-    status: state.status,
-    url: state.url ?? null,
-    error: scrub(state.error),
-  }))
+  const entries: PrReportEnvironment[] = cap([...frames], 'environments.entries').map(
+    ([frameId, state]) => ({
+      frameId,
+      status: state.status,
+      url: state.url ?? null,
+      error: scrub(state.error),
+    }),
+  )
   if (entries.length === 0) {
     return absent(
       'The deployer step recorded no environment outcomes (it did not run to completion).',

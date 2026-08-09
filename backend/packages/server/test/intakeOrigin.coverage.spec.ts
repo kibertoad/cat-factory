@@ -39,8 +39,16 @@ const ROOTS: Record<string, string> = {
 /**
  * How a run start is spelled. Most callers hold the service; `PostMergeBoardController` takes the
  * start as an injected callback, which is a legitimate seam and still a start path.
+ *
+ * `startAgentKind` is the third spelling and belongs here for the reason this whole file exists.
+ * It is a run start in every sense the origin cares about — same admission, same live-run claim,
+ * same durable hand-off, and it takes the same `intakeOrigin` off `RunStartOptions` — so a caller
+ * that says nothing is asserting a human is watching, exactly as a `start` caller would be. When
+ * it shipped, the single-kind API took over a call site that had been classified here and the scan
+ * simply stopped seeing it: the classification did not become wrong, it became UNREACHED, which is
+ * the failure this guard is supposed to make impossible.
  */
-const START_CALLS = ['executionService.start(', 'deps.start(']
+const START_CALLS = ['executionService.start(', 'executionService.startAgentKind(', 'deps.start(']
 
 /**
  * Starts with NO human in the app, and the origin literals each file must actually pass.
@@ -88,7 +96,8 @@ const IN_APP: Record<string, string> = {
     'like any other board task.',
   'orchestration:container/engine-dependent-modules.ts':
     'the blueprint pass that maps a freshly bootstrapped repo onto the board. It runs the ' +
-    'blueprint-only pipeline, which has no requirements review and therefore no park to report.',
+    'blueprinter as a SINGLE-KIND run (the blueprint-only preset it used to name is retired), ' +
+    'so there is no requirements review in the chain and therefore no park to report.',
 }
 
 describe('run-start paths classify their intake origin', () => {

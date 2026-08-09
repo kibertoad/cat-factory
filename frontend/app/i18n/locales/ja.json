@@ -1548,6 +1548,8 @@
       "priorDocHint": "前回のレビューより。これをベースに、上の説明を編集して再送信してください。",
       "bootstrapping": "ブートストラップ中…",
       "viewRequirements": "要件を表示",
+      "mapService": "サービスをマッピング",
+      "mapServiceNoRepo": "先にこのサービスにリポジトリをリンクしてください。まだマッピングするものがありません。",
       "reRun": "再実行",
       "run": "実行",
       "focus": "フォーカス",
@@ -4603,7 +4605,11 @@
     "preview": {
       "stepCount": "{count}ステップ | {count}ステップ",
       "gateCount": "{count}件の承認 | {count}件の承認",
-      "gated": "このステップの後に人による承認"
+      "gated": "このステップの後に人による承認",
+      "conditionalCount": "条件付きステップ {count} 件 | 条件付きステップ {count} 件",
+      "conditionEstimate": "タスクの見積もりがこのステップのしきい値を超えた場合にのみ実行されます",
+      "conditionFrontend": "タスクがフロントエンドサービスを変更する場合にのみ実行されます",
+      "conditionBackend": "タスクがフロントエンド以外のサービスを変更する場合にのみ実行されます"
     },
     "picker": {
       "noneHint": "デフォルトのパイプラインはありません。タスクの実行時に選択します。",
@@ -4689,6 +4695,11 @@
       "edit": "このパイプラインを編集",
       "delete": "このパイプラインを削除",
       "disabledStepTooltip": "無効、実行時にスキップ",
+      "condition": {
+        "always": "すべてのタスクで実行されます。クリックすると条件付きになります",
+        "frontend": "フロントエンドサービスを変更するタスクでのみ実行されます",
+        "backend": "フロントエンド以外のサービスを変更するタスクでのみ実行されます"
+      },
       "cancelEdit": "編集をキャンセル",
       "clear": "クリア",
       "update": "パイプラインを更新",
@@ -4778,6 +4789,7 @@
         "negative-prompt": "ネガティブプロンプト",
         "seed": "固定シード",
         "aspect-ratio": "アスペクト比",
+        "exact-size": "正確なサイズ",
         "candidate-batch": "1回の呼び出しで複数の候補",
         "upscale": "アップスケール",
         "transparent-background": "背景の透過",
@@ -4799,6 +4811,11 @@
       "binaryNegativePromptPlaceholder": "避けたい要素",
       "binaryAspectRatio": "アスペクト比",
       "binaryAspectRatioPlaceholder": "16:9",
+      "binaryOutputSize": "出力サイズ",
+      "binaryOutputSizeWidth": "幅",
+      "binaryOutputSizeHeight": "高さ",
+      "binaryOutputSizeIncomplete": "幅と高さの両方がないと、正確なサイズは保存されません。",
+      "binaryOutputSizeAmbiguous": "正確な出力サイズは {options} と併用できません。どちらも納品される寸法を二重に指定します。要件であるほうだけを残してください。",
       "binarySeed": "シード",
       "binarySeedPlaceholder": "固定シード",
       "binaryTransparent": "背景を透過",
@@ -4860,6 +4877,14 @@
       "elapsedTooltip": "このステップの経過時間",
       "prReview": {
         "review": "指摘を確認"
+      },
+      "skipped": {
+        "gated": "スキップ：タスクの見積もりがこのステップのしきい値を下回りました。",
+        "conditionFrontend": "スキップ：このタスクはフロントエンドサービスを変更しないため、検証するUIがありません。",
+        "conditionBackend": "スキップ：このタスクはフロントエンドサービスのみを変更するため、背後に検証するAPIがありません。",
+        "producerSkipped": "スキップ：レビュー対象のステップがスキップされたため、評価するものがありません。",
+        "runComplete": "スキップ：このステップの前に実行が終了し、行う作業が残っていませんでした。",
+        "unknown": "スキップ：このステップは実行されませんでした。"
       }
     },
     "health": {
@@ -5825,8 +5850,9 @@
     "environments": {
       "title": "稼働中の環境",
       "open": "稼働中の環境を開く",
-      "retained": "この環境は実行の終了後も残る想定なので、リンクは引き続き利用できます。",
+      "retained": "この環境は実行の終了後も残るように設定されています。",
       "expires": "{date} に期限切れ",
+      "expired": "{date} に期限切れ",
       "state": {
         "live": "稼働中",
         "provisioning": "起動中",
@@ -6327,6 +6353,8 @@
       "unknownServices": "カタログにないサービスが指定されています: {ids}。宣言のまま保持されます。ボードのカタログで ID を確認してください。",
       "targetUnknown": "このステップ自身の保存サービス ({id}) がカタログにもうありません。このため下のどれも照合できませんでした。再登録するか、別のサービスを指定してください。",
       "undeliveredMediaTypes": "このステップは {formats} を提供するはずでしたが、下のどの成果物もそれを報告していません。",
+      "missized": "{count} 件の成果物が {width}×{height} 以外のサイズで提供されました。",
+      "sizeUnreported": "{count} 件の成果物が寸法を報告していないため、サイズを確認できませんでした。",
       "misdirected": "{count} 件の成果物が {target} 以外のサービスに保存されました。",
       "invalidEntries": "サービスと場所のどちらも示さない宣言項目 {count} 件を破棄しました。",
       "omitted": "レポートの上限を超えてさらに {count} 件が宣言されており、一覧には含まれていません。",
@@ -6334,6 +6362,7 @@
       "generatorsUnverified": "ステップの完了時にこのデプロイメントの生成系インテグレーションを読み取れなかったため、以下に記載されたインテグレーションは照合されていません。エントリは申告どおり保持されます。"
     },
     "unknownGeneratorBadge": "未登録",
+    "missizedBadge": "サイズ不一致",
     "candidates": {
       "automatic": "候補が {total} 件生成され、確認なしで自動的に採用されました。",
       "chosen": "生成された {total} 件の候補のうち {kept} 件が採用されました。",
