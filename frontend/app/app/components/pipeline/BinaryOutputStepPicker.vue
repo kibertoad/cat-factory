@@ -33,6 +33,7 @@ import {
 import { binaryOutputPickIssues, type BinaryOutputPickIssue } from '~/utils/binaryOutput'
 import {
   formatReferenceImages,
+  generationControlOffer,
   parseMediaTypeRequirement,
   parseReferenceImages,
   sameFormats,
@@ -281,38 +282,20 @@ function capabilityLabel(capability: BinaryGeneratorCapability): string {
     : t('pipeline.builder.binaryCapabilityUnknown', { capability: String(capability) })
 }
 
-/**
- * What the SELECTED integrations declare they can be asked for.
- *
- * The gate on every generation control below. An integration that declares NOTHING contributes
- * nothing here, which is deliberate and is why {@link capabilitiesUndeclared} exists beside it:
- * with an undeclared integration selected the controls stay OFFERED (hiding one would claim it
- * cannot be used, which nobody established) and the advisory line says the support is unconfirmed.
- * Hiding is reserved for the case the platform actually knows about: every selected integration
- * declared its capabilities and none of them has this one.
- */
-const declaredCapabilities = computed(() => {
-  const byId = new Map(agents.binaryGenerators.map((generator) => [generator.id, generator]))
-  const selected = (config.value?.generatorIds ?? []).flatMap((id) => byId.get(id) ?? [])
-  return new Set(selected.flatMap((generator) => generator.capabilities ?? []))
-})
-
-/** True when a selected integration pinned none of its capabilities down. */
-const capabilitiesUndeclared = computed(() => {
-  const byId = new Map(agents.binaryGenerators.map((generator) => [generator.id, generator]))
-  const selected = (config.value?.generatorIds ?? []).flatMap((id) => byId.get(id) ?? [])
-  return selected.length === 0 || selected.some((g) => (g.capabilities ?? []).length === 0)
-})
-
-/**
- * Whether to OFFER the control an option belongs to. See {@link declaredCapabilities}: offered
- * while anything could support it, hidden only once the selection has collectively said it cannot.
- */
-function offers(capability: BinaryGeneratorCapability): boolean {
-  return capabilitiesUndeclared.value || declaredCapabilities.value.has(capability)
-}
-
 const generation = computed<BinaryGenerationOptions>(() => config.value?.generation ?? {})
+
+/** The registered integrations this step has selected, in the order the step names them. */
+const selectedGenerators = computed(() => {
+  const byId = new Map(agents.binaryGenerators.map((generator) => [generator.id, generator]))
+  return (config.value?.generatorIds ?? []).flatMap((id) => byId.get(id) ?? [])
+})
+
+/**
+ * Whether to OFFER the control an option belongs to. The rule itself is pure and lives in the
+ * logic sibling, where its three cases (undeclared, declared, already-set) are testable without
+ * mounting this component.
+ */
+const offers = computed(() => generationControlOffer(selectedGenerators.value, generation.value))
 
 /** The edit modes, as static literal keys: the enum-keyed-set rule again. */
 const editModeItems = computed(() => [

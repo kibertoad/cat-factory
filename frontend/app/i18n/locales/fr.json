@@ -1109,6 +1109,7 @@
       },
       "chooseApproach": "Choisir l'approche",
       "triageFollowUps": "Trancher les suivis",
+      "chooseCandidates": "Trancher les candidats",
       "elapsedTooltip": "Temps écoulé sur cette étape",
       "reviewFindings": "Examiner les remarques",
       "dryRun": "Exécution à blanc",
@@ -1387,8 +1388,10 @@
       "decisionRequired": "Décision requise",
       "followUpsParked": "Le Coder a soulevé des suivis qui doivent être tranchés avant que l'exécution puisse continuer. Traitez chaque élément (créer, renvoyer, répondre ou écarter) dans la fenêtre des suivis.",
       "forkParked": "Cette étape du Coder attend le choix d'une approche d'implémentation avant d'écrire du code. Choisissez une approche proposée (ou saisissez la vôtre) dans la fenêtre de décision.",
+      "candidatesParked": "Cette étape a généré des candidats et attend que quelqu'un choisisse ceux à conserver avant de livrer quoi que ce soit. Comparez-les et conservez ceux que vous voulez dans la fenêtre des candidats.",
       "openFollowUps": "Ouvrir les suivis",
       "chooseApproach": "Choisir l'approche",
+      "chooseCandidates": "Choisir les candidats",
       "expandAll": "Développer toutes les sections",
       "collapseAll": "Réduire toutes les sections",
       "copyRawOutput": "Copier la sortie brute",
@@ -4850,6 +4853,9 @@
       "forkDecision": {
         "proposing": "Proposition d'approches…",
         "choose": "Choisir une approche"
+      },
+      "binaryCandidates": {
+        "choose": "Choisir des candidats"
       },
       "elapsedTooltip": "Temps écoulé sur cette étape",
       "prReview": {

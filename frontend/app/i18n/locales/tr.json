@@ -1109,6 +1109,7 @@
       },
       "chooseApproach": "Yaklaşım seç",
       "triageFollowUps": "Takipleri karara bağla",
+      "chooseCandidates": "Adayları karara bağla",
       "elapsedTooltip": "Bu adımda geçen süre",
       "reviewFindings": "Bulguları incele",
       "dryRun": "Prova çalışması",
@@ -1387,8 +1388,10 @@
       "decisionRequired": "Karar gerekli",
       "followUpsParked": "Coder, çalıştırmanın devam edebilmesi için karara bağlanması gereken takipler ortaya çıkardı. Her maddeyi takipler penceresinde ele alın (kaydet, geri gönder, yanıtla veya yok say).",
       "forkParked": "Bu Coder adımı, kod yazılmadan önce bir uygulama yaklaşımının seçilmesini bekliyor. Karar penceresinde önerilen bir yaklaşımı seçin (veya kendi yaklaşımınızı girin).",
+      "candidatesParked": "Bu adım adaylar üretti ve herhangi bir çıktı teslim etmeden önce hangilerinin saklanacağının seçilmesini bekliyor. Adaylar penceresinde karşılaştırın ve istediklerinizi saklayın.",
       "openFollowUps": "Takipleri aç",
       "chooseApproach": "Yaklaşım seç",
+      "chooseCandidates": "Adayları seç",
       "expandAll": "Tüm bölümleri genişlet",
       "collapseAll": "Tüm bölümleri daralt",
       "copyRawOutput": "Ham çıktıyı kopyala",
@@ -4850,6 +4853,9 @@
       "forkDecision": {
         "proposing": "Yaklaşımlar öneriliyor…",
         "choose": "Bir yaklaşım seçin"
+      },
+      "binaryCandidates": {
+        "choose": "Bir aday seçin"
       },
       "elapsedTooltip": "Bu adımda geçen süre",
       "prReview": {

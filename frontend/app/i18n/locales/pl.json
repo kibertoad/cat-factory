@@ -1109,6 +1109,7 @@
       },
       "chooseApproach": "Wybierz podejście",
       "triageFollowUps": "Rozstrzygnij działania następcze",
+      "chooseCandidates": "Rozstrzygnij kandydatów",
       "elapsedTooltip": "Czas, który upłynął na tym kroku",
       "reviewFindings": "Przejrzyj ustalenia",
       "dryRun": "Uruchomienie próbne",
@@ -1387,8 +1388,10 @@
       "decisionRequired": "Wymagana decyzja",
       "followUpsParked": "Coder zgłosił działania następcze, które wymagają rozstrzygnięcia, zanim uruchomienie będzie mogło kontynuować. Rozstrzygnij każdy element (utwórz, odeślij, odpowiedz lub odrzuć) w oknie działań następczych.",
       "forkParked": "Ten krok Codera czeka na wybór podejścia do implementacji, zanim powstanie kod. Wybierz zaproponowane podejście (lub wpisz własne) w oknie decyzji.",
+      "candidatesParked": "Ten krok wygenerował kandydatów i czeka, aż ktoś wybierze, których zachować, zanim cokolwiek dostarczy. Porównaj je i zachowaj wybrane w oknie kandydatów.",
       "openFollowUps": "Otwórz działania następcze",
       "chooseApproach": "Wybierz podejście",
+      "chooseCandidates": "Wybierz kandydatów",
       "expandAll": "Rozwiń wszystkie sekcje",
       "collapseAll": "Zwiń wszystkie sekcje",
       "copyRawOutput": "Kopiuj surowy wynik",
@@ -4850,6 +4853,9 @@
       "forkDecision": {
         "proposing": "Proponowanie podejść…",
         "choose": "Wybierz podejście"
+      },
+      "binaryCandidates": {
+        "choose": "Wybierz kandydata"
       },
       "elapsedTooltip": "Czas, który upłynął na tym kroku",
       "prReview": {

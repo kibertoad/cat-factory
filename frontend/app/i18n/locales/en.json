@@ -1196,6 +1196,7 @@
       "mergePr": "Merge PR",
       "chooseApproach": "Choose approach",
       "triageFollowUps": "Decide follow-ups",
+      "chooseCandidates": "Decide candidates",
       "elapsedTooltip": "Elapsed time on this step",
       "reviewFindings": "Review findings",
       "dryRun": "Dry run",
@@ -1478,8 +1479,10 @@
       "decisionRequired": "Decision required",
       "followUpsParked": "The Coder surfaced follow-up items that need a decision before the run can continue. Triage each item (file, send back, answer, or dismiss) in the follow-ups window.",
       "forkParked": "This Coder step is waiting for an implementation approach to be chosen before any code is written. Pick a proposed approach (or enter your own) in the fork-decision window.",
+      "candidatesParked": "This step generated candidates and is waiting for someone to choose which ones to keep before it delivers anything. Compare them and keep what you want in the candidates window.",
       "openFollowUps": "Open follow-ups",
       "chooseApproach": "Choose approach",
+      "chooseCandidates": "Choose candidates",
       "expandAll": "Expand all sections",
       "collapseAll": "Collapse all sections",
       "copyRawOutput": "Copy raw output",
@@ -5001,6 +5004,9 @@
       "forkDecision": {
         "proposing": "Proposing approaches…",
         "choose": "Choose an approach"
+      },
+      "binaryCandidates": {
+        "choose": "Choose candidates"
       },
       "elapsedTooltip": "Elapsed time on this step",
       "prReview": {

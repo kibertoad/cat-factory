@@ -1654,6 +1654,7 @@
       "mergePr": "PR mergen",
       "chooseApproach": "Ansatz wählen",
       "triageFollowUps": "Folgeaufgaben entscheiden",
+      "chooseCandidates": "Kandidaten entscheiden",
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
       "reviewFindings": "Befunde prüfen",
       "dryRun": "Probelauf",
@@ -1932,8 +1933,10 @@
       "decisionRequired": "Entscheidung erforderlich",
       "followUpsParked": "Der Coder hat Folgeaufgaben aufgeworfen, die entschieden werden müssen, bevor der Lauf fortgesetzt werden kann. Bearbeite jeden Punkt (anlegen, zurückgeben, beantworten oder verwerfen) im Folgeaufgaben-Fenster.",
       "forkParked": "Dieser Coder-Schritt wartet darauf, dass ein Implementierungsansatz gewählt wird, bevor Code geschrieben wird. Wähle einen vorgeschlagenen Ansatz (oder gib einen eigenen ein) im Entscheidungsfenster.",
+      "candidatesParked": "Dieser Schritt hat Kandidaten erzeugt und wartet darauf, dass jemand auswählt, welche behalten werden, bevor er etwas ausliefert. Vergleiche sie im Kandidatenfenster und behalte, was du möchtest.",
       "openFollowUps": "Folgeaufgaben öffnen",
       "chooseApproach": "Ansatz wählen",
+      "chooseCandidates": "Kandidaten wählen",
       "expandAll": "Alle Abschnitte ausklappen",
       "collapseAll": "Alle Abschnitte einklappen",
       "copyRawOutput": "Rohausgabe kopieren",
@@ -4411,6 +4414,9 @@
       "forkDecision": {
         "proposing": "Ansätze werden vorgeschlagen…",
         "choose": "Ansatz wählen"
+      },
+      "binaryCandidates": {
+        "choose": "Kandidaten wählen"
       },
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
       "prReview": {

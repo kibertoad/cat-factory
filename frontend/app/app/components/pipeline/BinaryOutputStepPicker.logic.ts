@@ -2,6 +2,9 @@ import {
   binaryReferenceImageSchema,
   mediaTypeSchema,
   normalizeMediaType,
+  requiredBinaryCapabilities,
+  type BinaryGenerationOptions,
+  type BinaryGeneratorCapability,
   type BinaryReferenceImage,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
@@ -106,4 +109,38 @@ export function formatReferenceImages(
   return (references ?? [])
     .map((ref) => [ref.role, ref.location, ref.service].filter(Boolean).join('|'))
     .join('\n')
+}
+
+/**
+ * Build the predicate that decides whether the control for a generation option is OFFERED, given
+ * what the step's selected integrations declare and what its stored options already require.
+ *
+ * Three rules, and the third is the one that is easy to miss:
+ *
+ *  - An integration that declares NOTHING pins nothing down, so while one is selected (or nothing
+ *    is) every control stays offered and the advisory line says the support is unconfirmed.
+ *    Hiding one would be a claim about a vendor's API that nobody established.
+ *  - Otherwise a control is offered exactly when something selected declares its capability.
+ *  - And a control whose option is ALREADY SET stays offered whatever the selection says. Changing
+ *    the selection does not clear options authored against the old one, so hiding the control on
+ *    the way past strands a stored requirement that refuses the run at admission, under an error
+ *    telling the reader to remove an option whose only control has just disappeared. The platform
+ *    will not silently drop an authored requirement, so the person who stated it needs the control
+ *    that withdraws it. This is the SPA's standing rule that a hidden field must leave behind
+ *    exactly the default it would have shown.
+ *
+ * Returned as a closure over ONE pass across the selection rather than recomputed per capability:
+ * the template asks it once per control, and the sets are the same for all of them.
+ */
+export function generationControlOffer(
+  selected: readonly { capabilities?: readonly BinaryGeneratorCapability[] }[],
+  options: BinaryGenerationOptions | undefined,
+): (capability: BinaryGeneratorCapability) => boolean {
+  const declared = new Set(selected.flatMap((generator) => generator.capabilities ?? []))
+  const undeclared =
+    selected.length === 0 || selected.some((g) => (g.capabilities ?? []).length === 0)
+  // The same derivation admission judges the step by, imported rather than re-implemented, so the
+  // control a person is offered and the requirement the run is refused for cannot disagree.
+  const required = new Set(requiredBinaryCapabilities(options))
+  return (capability) => undeclared || declared.has(capability) || required.has(capability)
 }

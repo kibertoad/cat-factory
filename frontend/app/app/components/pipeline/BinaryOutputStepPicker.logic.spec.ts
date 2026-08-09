@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatReferenceImages,
+  generationControlOffer,
   parseMediaTypeRequirement,
   parseReferenceImages,
   sameFormats,
@@ -87,5 +88,60 @@ describe('parseReferenceImages', () => {
   it('round-trips through the text the field shows', () => {
     const text = 'base|assets/hero.png|asset-store'
     expect(formatReferenceImages(parseReferenceImages(text).usable)).toBe(text)
+  })
+})
+
+describe('generationControlOffer', () => {
+  const declaring = (...capabilities: string[]) => ({ capabilities }) as never
+
+  it('offers everything while a selected integration has declared nothing', () => {
+    // An integration that pinned nothing down is not a denial: hiding a control would be a claim
+    // about a vendor's API that nobody established. The advisory line says it is unconfirmed.
+    const offers = generationControlOffer([declaring('seed'), declaring()], undefined)
+    expect(offers('seed')).toBe(true)
+    expect(offers('tileable')).toBe(true)
+  })
+
+  it('offers everything when nothing is selected yet', () => {
+    expect(generationControlOffer([], undefined)('upscale')).toBe(true)
+  })
+
+  it('hides a control once every selection has declared and none has the capability', () => {
+    const offers = generationControlOffer([declaring('seed'), declaring('aspect-ratio')], undefined)
+    expect(offers('seed')).toBe(true)
+    expect(offers('aspect-ratio')).toBe(true)
+    expect(offers('tileable')).toBe(false)
+  })
+
+  // The regression this pins. Changing the selection does not clear options authored against the
+  // old one, so a stored option whose capability nothing declares still REFUSES the run at
+  // admission. Hiding its control leaves the reader an error saying to remove an option and no
+  // control that removes it: a step that cannot be run and cannot be fixed from the surface that
+  // configures it.
+  it('keeps offering a control whose option is already SET, whatever the selection declares', () => {
+    const selection = [declaring('seed')]
+    expect(generationControlOffer(selection, {})('tileable')).toBe(false)
+    expect(generationControlOffer(selection, { tileable: true })('tileable')).toBe(true)
+  })
+
+  it('keeps the control for every option shape that carries a requirement', () => {
+    const selection = [declaring('seed')]
+    // Each of these is stored differently (a flag, a number that may be zero, a list, a mode), and
+    // the requirement is derived from the same helper admission uses rather than re-read here.
+    const offers = generationControlOffer(selection, {
+      seed: 0,
+      aspectRatio: '16:9',
+      negativePrompt: 'blurry',
+      edit: { mode: 'mask' },
+      referenceImages: [{ role: 'subject', location: 'assets/hero.png' }],
+    } as never)
+    for (const capability of [
+      'aspect-ratio',
+      'negative-prompt',
+      'mask-edit',
+      'reference-image',
+    ] as const) {
+      expect(offers(capability)).toBe(true)
+    }
   })
 })

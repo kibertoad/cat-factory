@@ -1109,6 +1109,7 @@
       },
       "chooseApproach": "בחר גישה",
       "triageFollowUps": "הכרע בהמשכים",
+      "chooseCandidates": "הכרע במועמדים",
       "elapsedTooltip": "הזמן שחלף בשלב זה",
       "reviewFindings": "עיין בממצאים",
       "dryRun": "הרצת יבש",
@@ -1387,8 +1388,10 @@
       "decisionRequired": "נדרשת החלטה",
       "followUpsParked": "ה-Coder העלה המשכים שדורשים הכרעה לפני שהריצה תוכל להמשיך. טפל בכל פריט (תייק, החזר, ענה או דחה) בחלון ההמשכים.",
       "forkParked": "שלב ה-Coder הזה ממתין לבחירת גישת מימוש לפני כתיבת קוד. בחר גישה מוצעת (או הזן גישה משלך) בחלון ההחלטה.",
+      "candidatesParked": "השלב הזה יצר מועמדים וממתין שמישהו יבחר אילו לשמור לפני שיספק דבר. השווה ביניהם ושמור את מה שתרצה בחלון המועמדים.",
       "openFollowUps": "פתח את ההמשכים",
       "chooseApproach": "בחר גישה",
+      "chooseCandidates": "בחר מועמדים",
       "expandAll": "הרחב את כל המקטעים",
       "collapseAll": "כווץ את כל המקטעים",
       "copyRawOutput": "העתק פלט גולמי",
@@ -4850,6 +4853,9 @@
       "forkDecision": {
         "proposing": "מציע גישות…",
         "choose": "בחר גישה"
+      },
+      "binaryCandidates": {
+        "choose": "בחר מועמדים"
       },
       "elapsedTooltip": "הזמן שחלף בשלב זה",
       "prReview": {

@@ -1109,6 +1109,7 @@
       },
       "chooseApproach": "Elegir enfoque",
       "triageFollowUps": "Decidir seguimientos",
+      "chooseCandidates": "Decidir candidatos",
       "elapsedTooltip": "Tiempo transcurrido en este paso",
       "reviewFindings": "Revisar hallazgos",
       "dryRun": "Ejecución de prueba",
@@ -1387,8 +1388,10 @@
       "decisionRequired": "Se requiere una decisión",
       "followUpsParked": "El Coder planteó seguimientos que necesitan una decisión antes de que la ejecución pueda continuar. Resuelve cada elemento (crear, devolver, responder o descartar) en la ventana de seguimientos.",
       "forkParked": "Este paso del Coder espera a que se elija un enfoque de implementación antes de escribir código. Elige un enfoque propuesto (o introduce el tuyo) en la ventana de decisión.",
+      "candidatesParked": "Este paso generó candidatos y espera a que alguien elija cuáles conservar antes de entregar nada. Compáralos y conserva los que quieras en la ventana de candidatos.",
       "openFollowUps": "Abrir seguimientos",
       "chooseApproach": "Elegir enfoque",
+      "chooseCandidates": "Elegir candidatos",
       "expandAll": "Expandir todas las secciones",
       "collapseAll": "Contraer todas las secciones",
       "copyRawOutput": "Copiar salida sin procesar",
@@ -4850,6 +4853,9 @@
       "forkDecision": {
         "proposing": "Proponiendo enfoques…",
         "choose": "Elegir un enfoque"
+      },
+      "binaryCandidates": {
+        "choose": "Elegir candidatos"
       },
       "elapsedTooltip": "Tiempo transcurrido en este paso",
       "prReview": {

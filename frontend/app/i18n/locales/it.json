@@ -1654,6 +1654,7 @@
       "mergePr": "Unisci PR",
       "chooseApproach": "Scegli approccio",
       "triageFollowUps": "Decidi i follow-up",
+      "chooseCandidates": "Decidi i candidati",
       "elapsedTooltip": "Tempo trascorso su questo passaggio",
       "reviewFindings": "Esamina i rilievi",
       "dryRun": "Prova",
@@ -1932,8 +1933,10 @@
       "decisionRequired": "Decisione richiesta",
       "followUpsParked": "Il Coder ha sollevato follow-up che richiedono una decisione prima che la run possa continuare. Gestisci ogni elemento (crea, rimanda indietro, rispondi o scarta) nella finestra dei follow-up.",
       "forkParked": "Questo passo del Coder attende la scelta di un approccio di implementazione prima di scrivere codice. Scegli un approccio proposto (o inserisci il tuo) nella finestra di decisione.",
+      "candidatesParked": "Questo passo ha generato candidati e attende che qualcuno scelga quali conservare prima di consegnare qualcosa. Confrontali e conserva quelli che vuoi nella finestra dei candidati.",
       "openFollowUps": "Apri i follow-up",
       "chooseApproach": "Scegli approccio",
+      "chooseCandidates": "Scegli i candidati",
       "expandAll": "Espandi tutte le sezioni",
       "collapseAll": "Comprimi tutte le sezioni",
       "copyRawOutput": "Copia l'output grezzo",
@@ -4411,6 +4414,9 @@
       "forkDecision": {
         "proposing": "Proposta di approcci…",
         "choose": "Scegli un approccio"
+      },
+      "binaryCandidates": {
+        "choose": "Scegli un candidato"
       },
       "elapsedTooltip": "Tempo trascorso su questo passaggio",
       "prReview": {

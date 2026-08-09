@@ -221,6 +221,56 @@ describe('mothership-mode generative binary integrations', () => {
     }
   })
 
+  it('fills an ABSENT `capabilities` with the empty declaration, rather than serving a view without it', async () => {
+    // A mothership predating the capability axis emits no such key, and every reader downstream
+    // is typed against a required array: the board snapshot's `.length`, the coverage rule and
+    // the candidate brief's `.includes` all reach it. Left absent, a rollback of the mothership
+    // alone turns a workspace snapshot into a `TypeError`, the whole board failing to load over
+    // a picker on one step type. Empty is also the HONEST reading: it is the state the axis
+    // already defines for a declaration that pins nothing down, so the requirement comes out
+    // unverifiable and is stated to the agent instead of being silently called covered.
+    const source = new HttpBinaryGeneratorSource({
+      baseUrl: 'https://mothership.test',
+      token: 'tok',
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              generators: [{ id: 'retro', modalities: ['image'], mediaTypes: ['image/png'] }],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )) as unknown as typeof fetch,
+    })
+    const views = await source.views()
+    expect(views[0]!.capabilities).toEqual([])
+  })
+
+  it('THROWS on a `capabilities` that is PRESENT and not an array', async () => {
+    // The other half of the rule above: absence is a version skew to absorb, a wrong TYPE is a
+    // reply this node cannot resolve a selection against. Flattening it to "declared none" would
+    // turn a malformed payload into a clean bill of health on the surface that admits the run.
+    const source = new HttpBinaryGeneratorSource({
+      baseUrl: 'https://mothership.test',
+      token: 'tok',
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              generators: [
+                { id: 'retro', modalities: ['image'], mediaTypes: [], capabilities: 'seed' },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )) as unknown as typeof fetch,
+    })
+    await expect(source.views()).rejects.toMatchObject({
+      code: 'unavailable',
+      details: { reason: 'binary_generators_unreachable', field: 'generators' },
+    })
+  })
+
   it('THROWS on a documents map whose VALUES are not arrays', async () => {
     // Otherwise this escapes as a `TypeError` from the brief renderer's `.map()` — an unreadable
     // reply surfacing as a generic crash instead of the one error every route to "we do not know

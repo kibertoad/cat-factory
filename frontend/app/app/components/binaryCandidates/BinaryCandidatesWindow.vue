@@ -33,8 +33,15 @@ const candidates = useBinaryCandidatesStore()
 const access = useWorkspaceAccess()
 const { t } = useI18n()
 
+// The warm-up read is keyed by the RUN, not the block: `load` calls
+// `GET /workspaces/:ws/executions/:executionId/binary-candidates`, and a block id put in that
+// position resolves to no run at all, so the fetch quietly returns nothing and the window shows
+// whatever the stream happened to deliver. `instanceId` is nullable (a view can be opened without
+// a resolved run), so the guard is the same one `PrReviewWindow` makes.
 const { open, blockId, instanceId, stepIndex, close } = useResultView('binary-candidates', {
-  onOpen: ({ blockId }) => void candidates.load(blockId),
+  onOpen: ({ instanceId }) => {
+    if (instanceId) void candidates.load(instanceId)
+  },
 })
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
