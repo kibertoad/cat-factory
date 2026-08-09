@@ -8,7 +8,7 @@
 
 Supersedes the `bugfix-reproduction-proof` initiative tracker, whose committed scope (phases A-E)
 is complete. It is slice 10 of the PR-verification-report backlog
-([`../../docs/initiatives/pr-verification-report.md`](../../docs/initiatives/pr-verification-report.md)),
+([`../../docs/initiatives/pr-verification-report.md`](../../../docs/initiatives/pr-verification-report.md)),
 which keeps its own row pointing here.
 
 ## Context

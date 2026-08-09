@@ -502,6 +502,17 @@ jobs:
       - name: Guard documentation anchors
         run: node scripts/check-doc-anchors.mjs
 
+      # Requires every RELATIVE link in a repo markdown file to resolve to a path and, where it
+      # deep-links one, a heading. The two guards above sound like they cover this and neither does:
+      # the shipped-doc one walks published package directories only, and the anchor one resolves
+      # only URLs that CODE builds. So `git rm`ing a doc was green, which matters because CLAUDE.md
+      # REQUIRES that when a completed initiative tracker converts to an ADR. Twelve links were
+      # dangling when this landed, three of them at trackers deleted exactly that way. Generated
+      # CHANGELOGs are out of scope: frozen history correctly naming what was true when written. Its
+      # fixtures run in the `node --test` step above. Pure node, no install, no network.
+      - name: Guard documentation links
+        run: node scripts/check-doc-links.mjs
+
       # Requires `pnpm test:quick` to exclude exactly the packages the `test-units` lane below
       # excludes. The two deny-lists are the same fact written twice, and `running-tests.md` sells
       # the script as "the same set CI runs", which is the only evidence that set really needs no

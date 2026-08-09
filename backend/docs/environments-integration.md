@@ -92,162 +92,35 @@ versioned `v1.…` envelope so a rotation can tell the generations apart.
 
 ## The manifest
 
-A manifest describes your management API, and the single generic `HttpEnvironmentProvider`
-interprets it: nothing about your endpoints is assumed. The site's
-[Integration manifests](https://www.catfactory.ai/extend/manifests.html#environment-provider-manifest)
-owns what the two manifests share (base URL, auth scheme, request templates, response mapping,
-secrets referenced by key) and names the three operations. It stops above the field level, so the
-schema, the worked example and the variable namespaces below are still authoritative here rather
-than a second copy of that page; a website slice that lands them is what would let this section
-become a pointer.
+> **The manifest FORMAT is the website's**:
+> [Integration Manifests](https://www.catfactory.ai/extend/manifests.html#environment-provider-manifest)
+> owns the field schema, the `{{input.*}}` / `{{provision.*}}` namespaces including the git/PR/repo
+> context table, the auth-scheme table, the worked PR-environment example, and the two things to
+> check against a real platform's API (where the URL lives, and asynchronous provisioning). A
+> manifest is authored in the app by a user with no checkout, so none of it is here.
 
-```jsonc
-{
-  "providerId": "acme-envs", // [a-z0-9-]
-  "label": "Acme Ephemeral Envs",
-  "baseUrl": "https://envs.acme.internal-is-blocked.example", // https, public host
-  "auth": { "type": "bearer", "secretRef": { "key": "API_TOKEN" } },
+The single generic `HttpEnvironmentProvider` interprets it and nothing about your endpoints is
+assumed. Three facts about that interpretation belong to this repository:
 
-  // provision/status/teardown: arbitrary method + path + body, with templating.
-  "provision": {
-    "method": "POST",
-    "pathTemplate": "/environments",
-    "bodyTemplate": "{\"ref\":\"{{input.blockId}}\",\"title\":\"{{input.title}}\"}",
-  },
-  "status": { "method": "GET", "pathTemplate": "/environments/{{provision.externalId}}" },
-  "teardown": { "method": "DELETE", "pathTemplate": "/environments/{{provision.externalId}}" },
-
-  // Map YOUR response shape onto the canonical handle via dot-paths.
-  "response": {
-    "urlPath": "data.url",
-    "statusPath": "data.state",
-    "statusMap": [
-      { "from": "running", "to": "ready" },
-      { "from": "building", "to": "provisioning" },
-      { "from": "error", "to": "failed" },
-    ],
-    "externalIdPath": "data.id",
-    "expiresAtPath": "data.expires_at", // epoch-ms, numeric string, or ISO
-    // How the *provisioned env* itself is reached by the tester (per-env creds,
-    // read from the provision response - distinct from the management-API auth):
-    "access": { "scheme": "bearer", "tokenPath": "data.access_token" },
-  },
-
-  "defaultTtlMs": 3600000, // fallback TTL when no expiry returned
-}
-```
-
-### Worked example: a PR-environment platform
-
-Most preview-environment platforms expose three calls: "create an environment for
-this PR", "get its status", "delete it", and key the environment on the PR's git
-ref. Here is a complete manifest for that common shape. A project/tenant slug the
-platform requires (`my-project` below) isn't derivable from a block, so it lives as
-a literal in the paths; the git ref + repo come from the
-[git/PR/repo context](#gitprrepo-context-input-on-a-deployer-step):
-
-```jsonc
-{
-  "providerId": "preview-envs",
-  "label": "Preview Environments",
-  "baseUrl": "https://envs.example.com/v2",
-  "auth": { "type": "bearer", "secretRef": { "key": "API_TOKEN" } },
-
-  // Create: target the PR by number + repo. The platform returns a stable "ref"
-  // (or id) we capture and reuse on status/teardown.
-  "provision": {
-    "method": "POST",
-    "pathTemplate": "/projects/my-project/environments",
-    "bodyTemplate": "{\"git_ref\":{\"pr_number\":{{input.pullNumber}}},\"github\":{\"owner\":\"{{input.repoOwner}}\",\"repo\":\"{{input.repoName}}\"}}",
-  },
-  // Status/teardown address the env by the ref captured from the provision response.
-  "status": {
-    "method": "GET",
-    "pathTemplate": "/projects/my-project/environments/{{provision.externalId}}",
-  },
-  "teardown": {
-    "method": "DELETE",
-    "pathTemplate": "/projects/my-project/environments/{{provision.externalId}}",
-  },
-
-  "response": {
-    "externalIdPath": "data.ref", // the per-PR ref, reused as {{provision.externalId}}
-    "urlPath": "data.url",
-    "statusPath": "data.status",
-    "statusMap": [
-      { "from": "pending", "to": "provisioning" },
-      { "from": "online", "to": "ready" },
-      { "from": "failed", "to": "failed" },
-      { "from": "deleting", "to": "tearing_down" },
-      { "from": "deleted", "to": "torn_down" },
-    ],
-  },
-  "defaultTtlMs": 3600000,
-}
-```
-
-Two things to check against your platform's real API:
-
-- **Where the URL lives.** `urlPath` reads a single string via a dot-path
-  (`data.url`, or an array index like `data.links.0.href`). If your platform returns
-  the reachable URL only inside a nested/array-valued or templated structure that a
-  dot-path can't pull out cleanly, you have outgrown the manifest path: use the
-  [code-adapter seam](#code-adapter-seam-when-the-manifest-isnt-enough).
-- **Async provisioning.** If create returns before the environment is live, supply a
-  `status` template; the cron sweep polls it until `statusMap` yields `ready` (or
-  `failed`). A synchronous platform that returns a ready URL can omit `status`.
-
-### Templating
-
-- `{{input.*}}`: provision inputs. On a pipeline `deployer` step these are derived
-  from the block (`blockId`, `title`, `type`, `description`, `features`) plus the
-  **git/PR/repo context** below; on a manual provision they come from the request
-  `inputs` (plus `blockId`). Explicit request `inputs` always win over the derived
-  values.
-- `{{provision.*}}`: fields captured from the provision response (`externalId`,
-  `url`), available to `status`/`teardown`.
-- Unknown references resolve to empty: a manifest can't reach arbitrary state.
-
-#### Git/PR/repo context (`{{input.*}}` on a `deployer` step)
-
-A preview/PR-environment platform almost always keys an environment on **the git
-ref it is building** and **the repo it belongs to**, not on an opaque block id. So
-the `deployer` step derives that context from the block's open PR and exposes it
-both as flattened `{{input.*}}` strings (for the manifest path) and as a typed
-object for a [code adapter](#code-adapter-seam-when-the-manifest-isnt-enough). Each
-is present only when known (a manual provision, or a block with no PR, carries
-fewer):
-
-| Variable               | Value                                                    |
-| ---------------------- | -------------------------------------------------------- |
-| `{{input.blockId}}`    | The board block being deployed (always present).         |
-| `{{input.branch}}`     | The head branch the agent pushed its work to.            |
-| `{{input.pullNumber}}` | The pull request number within the repo (e.g. `42`).     |
-| `{{input.pullUrl}}`    | The pull request web URL.                                |
-| `{{input.repoOwner}}`  | The repo owner (org/user login), parsed from the PR URL. |
-| `{{input.repoName}}`   | The repo name, parsed from the PR URL.                   |
-
-This is what lets a manifest build a "create an environment for PR #N of
-owner/repo" request without any per-block configuration. Any identifier a
-platform needs which is **not** derivable from the block (a project/team/tenant
-slug, a target cluster) is not in this namespace: bake it into the manifest as a
-literal in the `pathTemplate`/`bodyTemplate`, or pass it as a manual-provision
-`input`. Register one manifest per such project if they differ.
+- **The schema is Valibot, in `backend/packages/contracts/src/environments.ts`**, enforced at
+  registration. A field added there is a field the website page has to gain, in the same change.
+- **`{{input.*}}` on a `deployer` step is DERIVED, and the derivation is the engine's.** The block
+  supplies `blockId` / `title` / `type` / `description` / `features`; the git/PR/repo half is read
+  off the block's open pull request, so it is present only when there is one. An explicit request
+  input always wins over a derived value, which is what makes a manual provision able to stand in
+  for a missing PR rather than being a second code path.
+- **A dot-path that cannot address the value is the boundary of this integration**, not a gap to
+  widen. The response mapping is deliberately a set of dot-paths rather than an expression
+  language: a platform whose URL is only reachable through a computed structure has outgrown the
+  manifest, and the answer is the code-adapter seam below.
 
 ### Auth schemes (calling the management API)
 
-Why a manifest carries no secret VALUE is on the site's
-[Integration manifests](https://www.catfactory.ai/extend/manifests.html) ("secrets are referenced,
-never embedded"); what each scheme does with the key it references is here.
-
-| `auth.type`                 | fields                                                                          | effect                                 |
-| --------------------------- | ------------------------------------------------------------------------------- | -------------------------------------- |
-| `none`                      | (none)                                                                          | no auth header                         |
-| `api_key`                   | `headerName`, `secretRef`, `valuePrefix?`                                       | `headerName: <prefix><secret>`         |
-| `bearer`                    | `secretRef`                                                                     | `Authorization: Bearer <secret>`       |
-| `basic`                     | `usernameSecretRef`, `passwordSecretRef`                                        | `Authorization: Basic base64(u:p)`     |
-| `oauth2_client_credentials` | `tokenUrl`, `clientIdSecretRef`, `clientSecretSecretRef`, `scope?`, `audience?` | POST token → `Authorization: Bearer …` |
-| `custom_headers`            | `headers: [{ name, secretRef }]`                                                | each header set from its secret        |
+The scheme table is the website's too, and it is shared with the runner pool: both integrations
+accept the same six types, which is why the page states them once. What is worth knowing HERE is
+that the two integrations resolve their URL policies independently (see
+[Reaching an internal / VPN-hosted platform](#reaching-an-internal--vpn-hosted-platform)), so the
+schemes are shared and the network policy is not.
 
 ## Code-adapter seam (when the manifest isn't enough)
 

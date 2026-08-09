@@ -3,7 +3,7 @@
 How the SPA stays in sync with the backend. The app is a **thin client**: it holds
 no business logic, calls the Worker for every mutation, and hydrates its stores
 from server snapshots plus pushed events. For the high-level tour see
-[`../README.md`](../README.md).
+[`frontend/app/README.md`](../../README.md).
 
 ## The three paths
 
