@@ -35,4 +35,4 @@ pull requests themselves are untouched). Public `/api/v1` is additive only: `PrR
 `frameIds` and keeps `frameId` as its head (surface version 1.40.0). `frameId` is no longer always
 null on an own-service report: it names a co-located involved service when there is one.
 
-The runner image moves to `cat-factory-executor:1.107.0`.
+The runner image moves to `cat-factory-executor:1.109.0`.

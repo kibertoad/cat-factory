@@ -3,6 +3,7 @@ import {
   EFFORT_REPORT_FILE,
   FOLLOW_UPS_FILE,
   PR_DESCRIPTION_FILE,
+  DESIGN_RENDER_DIR,
   REFERENCE_SCREENSHOT_DIR,
 } from '@cat-factory/agents'
 
@@ -95,4 +96,6 @@ export const HARNESS_SENTINEL_PATHS = {
   followUps: FOLLOW_UPS_FILE,
   /** Where a capturing run's reference design images are downloaded to, and read from. */
   referenceScreenshots: REFERENCE_SCREENSHOT_DIR,
+  /** Where a building run's design pictures are downloaded to, and read from. */
+  designRenders: DESIGN_RENDER_DIR,
 } as const

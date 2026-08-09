@@ -24,10 +24,10 @@ import {
 import { type TestSecretSpec, parseInfraEnv, parseSecretEnvPairs, str } from './job-env.js'
 import {
   parseContextFiles,
-  parseReferenceScreenshots,
+  parseImageManifest,
   type ContextFileSpec,
-  type ReferenceScreenshotSpec,
-  type ReferenceScreenshotsSpec,
+  type ImageFileSpec,
+  type ImageManifestSpec,
 } from './context-manifests.js'
 
 // Re-exported so a handler describing a job keeps ONE import site (the env-pair shape is a job
@@ -39,7 +39,7 @@ export type { McpServerSpec, SkillResourceSpec, SkillSpec }
 
 // Same rule for the two staged-file manifests: their shapes and their defensive parsing moved to
 // `context-manifests.ts`, but they remain job body fields, so this stays the import site.
-export type { ContextFileSpec, ReferenceScreenshotSpec, ReferenceScreenshotsSpec }
+export type { ContextFileSpec, ImageFileSpec, ImageManifestSpec }
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -720,11 +720,23 @@ export interface AgentJob extends HarnessAuthFields {
   contextFiles?: ContextFileSpec[]
   /**
    * The task's reference design images, downloaded into `.cat-context/reference-screenshots/`
-   * before the agent runs (see {@link ReferenceScreenshotsSpec}). Sent only for a kind that
+   * before the agent runs (see {@link ImageManifestSpec}). Sent only for a kind that
    * CAPTURES views and only when the task actually has references, so absent is the normal case
    * and means the agent names its own views.
    */
-  referenceScreenshots?: ReferenceScreenshotsSpec
+  referenceScreenshots?: ImageManifestSpec
+  /**
+   * The PICTURES of the task's designs, for a kind that builds or plans a screen. Downloaded into
+   * `.cat-context/design-renders/` before the run; the agent's prompt (composed by the backend)
+   * names each file and its view, and the agent opens them with its own image-reading tool.
+   *
+   * The same wire shape and the same download seam as {@link AgentJob.referenceScreenshots}, and a
+   * separate field with a separate directory because the two are opposite instructions: that one
+   * names the views to CAPTURE, this one is the design to BUILD. Sent only when the backend
+   * decided this harness can read an image at all, so absent is the normal case and means the run
+   * works from the textual design description (its prompt says which).
+   */
+  designImages?: ImageManifestSpec
   /**
    * Private package-registry auth (npm private orgs, GitHub Packages), rendered into
    * `~/.npmrc` before the run so the checkout's installs — the agent's own and the
@@ -1212,7 +1224,8 @@ export function parseAgentJob(input: unknown): AgentJob {
     referenceBranches: parseReferenceBranches(o.referenceBranches),
     bootstrap: parseAgentBootstrapSpec(o.bootstrap),
     contextFiles: parseContextFiles(o.contextFiles),
-    referenceScreenshots: parseReferenceScreenshots(o.referenceScreenshots),
+    referenceScreenshots: parseImageManifest(o.referenceScreenshots),
+    designImages: parseImageManifest(o.designImages),
     packageRegistries: parsePackageRegistries(o.packageRegistries),
     skills: parseSkillSpecs(o.skills),
     mcpServers: parseMcpServerSpecs(o.mcpServers),
@@ -1255,7 +1268,8 @@ interface ParsedAgentJobParts {
   referenceBranches: ReturnType<typeof parseReferenceBranches>
   bootstrap: ReturnType<typeof parseAgentBootstrapSpec>
   contextFiles: ReturnType<typeof parseContextFiles>
-  referenceScreenshots: ReturnType<typeof parseReferenceScreenshots>
+  referenceScreenshots: ReturnType<typeof parseImageManifest>
+  designImages: ReturnType<typeof parseImageManifest>
   packageRegistries: ReturnType<typeof parsePackageRegistries>
   skills: ReturnType<typeof parseSkillSpecs>
   mcpServers: ReturnType<typeof parseMcpServerSpecs>
@@ -1314,6 +1328,7 @@ function assembleAgentJob(
     bootstrap,
     contextFiles,
     referenceScreenshots,
+    designImages,
     packageRegistries,
     skills,
     mcpServers,
@@ -1342,6 +1357,7 @@ function assembleAgentJob(
     ...(output ? { output } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
     ...(referenceScreenshots ? { referenceScreenshots } : {}),
+    ...(designImages ? { designImages } : {}),
     ...(packageRegistries.length ? { packageRegistries } : {}),
     ...(skills ? { skills } : {}),
     ...(mcpServers ? { mcpServers } : {}),

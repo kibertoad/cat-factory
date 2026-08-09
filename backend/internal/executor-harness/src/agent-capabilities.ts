@@ -343,7 +343,7 @@ export function parseSkillSpecs(value: unknown): SkillSpec[] | undefined {
  * A member is added here in the SAME change that teaches the parser the field, never ahead of it:
  * the whole value of the list is that it is the image's own honest answer.
  */
-export const HARNESS_BODY_CAPABILITIES: readonly string[] = ['mcpServers', 'skills']
+export const HARNESS_BODY_CAPABILITIES: readonly string[] = ['mcpServers', 'skills', 'designImages']
 
 /**
  * A safe MCP server id: it becomes a tool-name fragment AND a TOML table key.

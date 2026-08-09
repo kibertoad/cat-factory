@@ -72,6 +72,7 @@ export {
   DOC_AWARE_TRAIT,
   SPEC_AWARE_TRAIT,
   BINARY_STORAGE_TRAIT,
+  DESIGN_IMAGES_TRAIT,
   INTERVIEW_GATE_TRAIT,
   BRIEF_STANDARDS_TRAIT,
   FOUNDATIONAL_CATALOG_TRAIT,
@@ -204,6 +205,8 @@ export {
   initiativePresetSection,
   CONTEXT_DIR,
   REFERENCE_SCREENSHOT_DIR,
+  DESIGN_RENDER_DIR,
+  designImagesSection,
 } from './agents/prompts/standard.js'
 export { toolServersSection } from './agents/prompts/capabilities.js'
 export {

@@ -4,8 +4,9 @@ import type {
   ModelRef,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
+import type { HarnessKind } from '@cat-factory/kernel'
 import { isIndividualVendor, subscriptionOptionFor } from '@cat-factory/kernel'
-import { type AgentRouting, resolveStepModelRef } from '@cat-factory/agents'
+import { type AgentRouting, isProxyableProvider, resolveStepModelRef } from '@cat-factory/agents'
 
 /** The collaborators {@link ModelRouter} needs to resolve a step's model + subscription path. */
 export interface ModelRouterDependencies {
@@ -138,5 +139,35 @@ export class ModelRouter {
       }
     }
     return { ref, ...(subscriptionVendor ? { subscriptionVendor } : {}) }
+  }
+
+  /**
+   * The model this dispatch runs and the harness that will run it, resolved together because
+   * the second is a property of the first. "Subscriptions always win": a subscription-only model
+   * carries its harness; a dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed
+   * to Claude Code when the workspace has a pooled token for the vendor. Shared with
+   * `isQuotaBased` so the dispatch and the spend gate agree on what the step runs.
+   *
+   * The Pi harness reaches models through the LLM proxy, so its model must be a provider the
+   * proxy can serve; locking it here stops the container choosing another. The subscription
+   * harnesses (Claude Code / Codex) talk direct to the vendor with a pooled token, so the
+   * proxyable guard does not apply to them.
+   */
+  async resolveDispatchRef(
+    context: AgentRunContext,
+    workspaceId: string,
+  ): Promise<{ ref: ModelRef; harness: HarnessKind; subscriptionVendor?: SubscriptionVendor }> {
+    const { ref, subscriptionVendor } = await this.resolveEffectiveRef(context, workspaceId)
+    const harness: HarnessKind = ref.harness ?? 'pi'
+    if (harness === 'pi' && !isProxyableProvider(ref.provider)) {
+      throw new Error(
+        `Container implementation needs a model the LLM proxy can serve ` +
+          `(Workers AI, a direct OpenAI-compatible provider, or a local runner); ` +
+          `'${ref.provider}' is not supported. Pick a Workers AI model, configure a ` +
+          `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY), or add a local ` +
+          `runner (Ollama / LM Studio / …) and pick that model.`,
+      )
+    }
+    return { ref, harness, ...(subscriptionVendor ? { subscriptionVendor } : {}) }
   }
 }

@@ -203,7 +203,7 @@ const LEGACY_ALLOWANCES = new Map([
   // the three resolvers it composes already live, when job-token scoping made the auxiliary
   // resolution a dispatch INPUT (the token is narrowed to the repos it produces) rather than a
   // tail step.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1368],
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1328],
   // The two `/search/*` endpoints (issue + code search) and their response shapes moved to
   // `github/searchApi.ts` when the bug hunt needed the issue search to surface the extra
   // fields its response already carries — so the client ratchets DOWN.

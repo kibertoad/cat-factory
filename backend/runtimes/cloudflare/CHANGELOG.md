@@ -1,5 +1,77 @@
 # @cat-factory/worker
 
+## 0.180.0
+
+### Minor Changes
+
+- 19baddf: Show a task's design PICTURES to the agents that build the screen.
+
+  The frames an import retains for a linked design (Figma, Zeplin) already fed the
+  visual-confirmation gate and the UI tester's capture set. They now also reach the kinds that build
+  or plan a screen, on the two channels a dispatch can actually carry an image over: written into
+  `.cat-context/design-renders/` for a harness whose CLI reads image files, and attached to the model
+  request as image parts for an inline call. Which kinds get them is a declared trait
+  (`design-images`, on `coder` / `architect` / `fixer`), so a deployment's own UI kind opts in the
+  same way.
+
+  Delivery joins two DECLARED facts, and neither is inferred: `HARNESS_IMAGE_INPUT` says which agent
+  CLI can get bytes into a turn (`claude-code`; Codex and Pi are `false` with their reason stated),
+  and the new per-flavour `ModelRef.acceptsImages` says which model takes one. A dispatch that cannot
+  show the pictures TELLS the agent they exist, with which of the two is missing, so the textual
+  design description never reads as everything the platform had. An UNDECLARED model modality is its
+  own refusal reason rather than a silent "no", so an undeclared multimodal model cannot read as a
+  text-only one forever.
+
+  **Runner image bump** (`cat-factory-executor:1.107.0`): the harness gained the download for the new
+  manifest, and `designImages` joins `HARNESS_BODY_CAPABILITIES`, so a deployment running an older
+  image is told rather than leaving the backend's prompt naming a directory nothing wrote. Mirror the
+  tag into your registry and roll it out; nothing else in the change requires it.
+
+  Recorded prompt bodies now pass through `redactImagePayloads` on both the inline and proxy paths: a
+  `Uint8Array` JSON-stringifies to one entry per byte, so an attached frame would otherwise have
+  landed in telemetry as megabytes per recorded call.
+
+### Patch Changes
+
+- Updated dependencies [19baddf]
+  - @cat-factory/kernel@0.284.0
+  - @cat-factory/agents@0.124.0
+  - @cat-factory/orchestration@0.255.0
+  - @cat-factory/server@0.267.0
+  - @cat-factory/caching@0.18.36
+  - @cat-factory/consensus@0.14.81
+  - @cat-factory/eks@0.1.293
+  - @cat-factory/gates@0.10.21
+  - @cat-factory/gitlab@0.19.12
+  - @cat-factory/integrations@0.153.12
+  - @cat-factory/observability-langfuse@0.10.65
+  - @cat-factory/observability-otel@0.18.28
+  - @cat-factory/prompt-fragments@1.0.45
+  - @cat-factory/provider-cloudflare@0.7.443
+  - @cat-factory/spend@0.15.63
+
+## 0.179.14
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+  - @cat-factory/kernel@0.283.0
+  - @cat-factory/orchestration@0.254.0
+  - @cat-factory/server@0.266.0
+  - @cat-factory/agents@0.123.6
+  - @cat-factory/consensus@0.14.80
+  - @cat-factory/eks@0.1.292
+  - @cat-factory/gates@0.10.20
+  - @cat-factory/gitlab@0.19.11
+  - @cat-factory/integrations@0.153.11
+  - @cat-factory/observability-otel@0.18.27
+  - @cat-factory/prompt-fragments@1.0.44
+  - @cat-factory/spend@0.15.62
+  - @cat-factory/caching@0.18.35
+  - @cat-factory/observability-langfuse@0.10.64
+  - @cat-factory/provider-cloudflare@0.7.442
+
 ## 0.179.13
 
 ### Patch Changes

@@ -1,5 +1,11 @@
-import type { AgentRunContext } from '@cat-factory/kernel'
-import { noopLogger } from '@cat-factory/kernel'
+import type {
+  AgentRunContext,
+  DesignImageDelivery,
+  DesignImageSet,
+  HarnessKind,
+  ModelRef,
+} from '@cat-factory/kernel'
+import { noopLogger, resolveDesignImageDelivery } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   CONFLICT_RESOLVER_AGENT_KIND,
@@ -58,6 +64,84 @@ export function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
 }
 
 /**
+ * What THIS dispatch can do with the task's design pictures, or `undefined` when it holds none.
+ *
+ * A DISPATCH fact for the same reason the tool servers are: it takes the resolved harness AND the
+ * resolved model, neither of which the engine knows while it is building the context. Resolved even
+ * when the answer is no, because the prompt has to STATE a withheld picture rather than leave the
+ * agent reading the textual design description as everything the platform had.
+ */
+export function dispatchDesignImageDelivery(
+  context: AgentRunContext,
+  harness: HarnessKind,
+  ref: Pick<ModelRef, 'acceptsImages'>,
+): DesignImageDelivery | undefined {
+  return context.designImages?.files.length ? resolveDesignImageDelivery(harness, ref) : undefined
+}
+
+/** One image manifest as the harness parses it: where to fetch, with what, and which files. */
+interface ImageManifestBody {
+  url: string
+  token: string
+  files: { artifactId: string; fileName: string; view: string }[]
+  omitted?: string[]
+}
+
+/**
+ * The two image manifests a job body may carry: the reference designs a CAPTURING kind compares
+ * against, and the design pictures a BUILDING kind is shown.
+ *
+ * One builder, because both ride the same seam: only identities travel (a run's frames are
+ * megabytes of PNG and a job body is JSON that crosses every transport and is persisted with the
+ * dispatch), and the bytes come back through the container's own session token, so neither needs an
+ * extra credential or a public URL. They stay two FIELDS with two directories because they are
+ * opposite instructions: one names the views to CAPTURE, the other is the design to BUILD, and a
+ * capturing kind reading the builder's short list would take it for the complete set of views.
+ *
+ * Each is gated on a set that says SOMETHING. The engine already answered "this kind wants none" by
+ * resolving nothing at all, and a manifest of zero files would have the harness create an empty
+ * directory, which reads to the agent as designs that gave nothing rather than as a task with none
+ * linked. For the capture half `omitted` counts as something to say on its own, since a set the cap
+ * emptied entirely still owes the agent the view names it is expected to capture; the design half
+ * carries no `omitted`, because the BACKEND's prompt names those views and the container is only
+ * ever asked to CORRECT that list.
+ */
+function buildImageManifests(
+  context: AgentRunContext,
+  auth: Record<string, unknown>,
+  designImages: DesignImageSet | undefined,
+): { referenceScreenshots?: ImageManifestBody; designImages?: ImageManifestBody } {
+  const { proxyBaseUrl, sessionToken } = auth
+  if (typeof proxyBaseUrl !== 'string' || typeof sessionToken !== 'string') return {}
+  const url = `${proxyBaseUrl}/artifacts/reference`
+  const files = (set: { files: { artifactId: string; fileName: string; view: string }[] }) =>
+    set.files.map((file) => ({
+      artifactId: file.artifactId,
+      fileName: file.fileName,
+      view: file.view,
+    }))
+  const references = context.referenceScreenshots
+  return {
+    ...(references?.files.length || references?.omitted.length
+      ? {
+          referenceScreenshots: {
+            url,
+            token: sessionToken,
+            files: files(references),
+            // The views the engine's cap dropped, carried so the harness can state them beside the
+            // ones that failed to transfer: from the agent's side both are a view it must capture
+            // with no image to compare against.
+            ...(references.omitted.length ? { omitted: references.omitted } : {}),
+          },
+        }
+      : {}),
+    ...(designImages?.files.length
+      ? { designImages: { url, token: sessionToken, files: files(designImages) } }
+      : {}),
+  }
+}
+
+/**
  * Assemble the fields EVERY harness job body carries (`common`), built once so the per-kind
  * bodies can't drift on which jobId/model/auth/repo/proxy fields they forward. Extracted from
  * `ContainerAgentExecutor.buildJobBody` to keep it under the complexity ceiling.
@@ -76,6 +160,7 @@ export function buildCommonBody(
     mcpServers?: McpServerJobSpec[]
     generatorSecrets?: GeneratorSecretJobSpec[]
     guardLimits?: unknown
+    designImages?: DesignImageSet
   },
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
@@ -100,36 +185,13 @@ export function buildCommonBody(
     typeof auth.sessionToken === 'string'
       ? { url: `${auth.proxyBaseUrl}/artifacts/ingest`, token: auth.sessionToken }
       : undefined
-  // The other direction of the same seam: the reference design images the engine resolved for
-  // this task, as a MANIFEST the harness downloads into `.cat-context/reference-screenshots/`.
-  // Only identities travel (a run's frames are megabytes of PNG and a job body is JSON that
-  // crosses every transport and is persisted with the dispatch), and the bytes come back through
-  // the container's own session token, so no extra credential and no public URL is involved.
-  //
-  // Gated on a set that says SOMETHING: the engine already answered "this kind captures nothing"
-  // by resolving nothing at all, and a manifest of zero files would have the harness create an
-  // empty directory, which reads to the agent as designs that gave nothing rather than as a task
-  // with none linked. `omitted` counts as something to say on its own, because a set the cap
-  // emptied entirely still owes the agent the view names it is expected to capture.
-  const references = context.referenceScreenshots
-  const referenceScreenshots =
-    (references?.files.length || references?.omitted.length) &&
-    typeof auth.proxyBaseUrl === 'string' &&
-    typeof auth.sessionToken === 'string'
-      ? {
-          url: `${auth.proxyBaseUrl}/artifacts/reference`,
-          token: auth.sessionToken,
-          files: references.files.map((reference) => ({
-            artifactId: reference.artifactId,
-            fileName: reference.fileName,
-            view: reference.view,
-          })),
-          // The views the engine's cap dropped, carried so the harness can state them beside the
-          // ones that failed to transfer: from the agent's side both are a view it must capture
-          // with no image to compare against, and only the CAUSE differs.
-          ...(references.omitted.length ? { omitted: references.omitted } : {}),
-        }
-      : undefined
+  // The other direction of the same seam: the images the engine resolved for this task, as
+  // manifests the harness downloads before the agent's first turn.
+  const { referenceScreenshots, designImages } = buildImageManifests(
+    context,
+    auth,
+    args.designImages,
+  )
   return {
     jobId,
     // The run's correlation ids, carried purely so the container's own log lines can be joined
@@ -176,6 +238,7 @@ export function buildCommonBody(
     ...(generatorSecrets?.length ? { generatorSecrets } : {}),
     ...(artifactUpload ? { artifactUpload } : {}),
     ...(referenceScreenshots ? { referenceScreenshots } : {}),
+    ...(designImages ? { designImages } : {}),
     ...(guardLimits ? { guardLimits } : {}),
   }
 }

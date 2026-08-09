@@ -207,10 +207,17 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
     }
   }
 
-  /** Patch the user-editable fields of a block (title, features, threshold…). */
-  async function updateBlock(id: string, patch: UpdateBlockInput) {
+  /**
+   * Patch the user-editable fields of a block (title, features, threshold…).
+   *
+   * Returns whether the patch was PERSISTED. Both failure modes are already reported here (an
+   * unknown block is a no-op, a rejected write rolls back and toasts), so an inspector control
+   * firing and forgetting stays correct. A caller that goes on to ASSERT what the patch achieved
+   * must read it, or it announces links the rollback has just undone.
+   */
+  async function updateBlock(id: string, patch: UpdateBlockInput): Promise<boolean> {
     const b = getBlock(id)
-    if (!b) return
+    if (!b) return false
     // Snapshot ONLY the fields this patch touches so a rejected write restores them exactly
     // (a patch may set several at once) rather than leaving a stale optimistic value stuck on
     // screen with no feedback — the same rollback contract the other mutations here follow.
@@ -224,6 +231,7 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
     Object.assign(b, patch) // optimistic
     try {
       upsert(await api.updateBlock(useWorkspaceStore().requireId(), id, patch))
+      return true
     } catch (e) {
       // Re-resolve the block: a live event may have replaced its object reference (`upsert`
       // swaps in a fresh one) while the write was in flight, so `b` can be stale. Only revert
@@ -242,6 +250,7 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
         icon: 'i-lucide-triangle-alert',
         color: 'error',
       })
+      return false
     }
   }
 

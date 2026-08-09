@@ -14,6 +14,7 @@ import {
   catFactoryObservability,
   describeError,
   noopLogger,
+  redactImagePayloads,
   resolveInlineAttribution,
   runBestEffort,
 } from '@cat-factory/kernel'
@@ -478,9 +479,16 @@ export class InstrumentedModelProvider implements ModelProvider {
   }
 }
 
+/**
+ * Serialise a recorded body, with any image payload replaced by a description of itself.
+ *
+ * The redaction is not a nicety: a multimodal turn carries the picture as a `Uint8Array` in the
+ * SDK's own message shape, and a typed array JSON-stringifies to one entry per byte — several
+ * megabytes of `{"0":137,…}` per recorded call, on every turn of a run that attached a design.
+ */
 function safeJson(value: unknown): string {
   try {
-    return JSON.stringify(value ?? [])
+    return JSON.stringify(redactImagePayloads(value ?? []))
   } catch {
     return ''
   }
