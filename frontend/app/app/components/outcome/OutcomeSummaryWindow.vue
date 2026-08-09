@@ -39,6 +39,7 @@ import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import type { BadgeColor } from '~/utils/badge'
 
 const board = useBoardStore()
 const documents = useDocumentsStore()
@@ -106,7 +107,6 @@ const DISPOSITION_KEYS: Record<OutcomeDisposition, string> = {
   unknown: 'outcome.disposition.unknown',
 }
 /** The badge palette, named once so every colour map below is checked against it. */
-type BadgeColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
 
 const DISPOSITION_COLOR: Record<OutcomeDisposition, BadgeColor> = {
   merged: 'success',

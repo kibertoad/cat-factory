@@ -4,8 +4,8 @@ import type { PanelEntry } from '@modular-vue/core'
 import type { Block } from '~/types/domain'
 
 /** The engine's opaque component type on a `PanelEntry` (the neutral `UiComponent`,
- *  which isn't exported by name). A Vue component is a valid one; the outlet renders
- *  it as a Vue component. We reference it structurally so no cast reaches for `any`. */
+ *  which isn't exported by name). Referenced structurally off `PanelEntry` so a
+ *  `defineComponent` result is checked against it rather than asserted into it. */
 type PanelComponent = PanelEntry<Block>['component']
 import {
   INSPECTOR_PANELS_SLOT,
@@ -61,7 +61,7 @@ function blockPanel(component: Component, id: InspectorPanelId): PanelComponent 
       const block = usePanelSubject<Block>()
       return () => h(component, { block: block.value })
     },
-  }) as unknown as PanelComponent
+  })
 }
 
 /** Exhaustive id → sub-panel map. Typed `Record<InspectorPanelId, …>` so adding a
