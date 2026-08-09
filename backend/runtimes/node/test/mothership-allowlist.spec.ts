@@ -438,6 +438,21 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     // duplicate-service / frame-deletion read). The remaining CRUD + `getByRepo` (the GitHub-sync
     // repo→service link) stay off the SPA path — a later slice.
     getByRepo: 'pending',
+    // `insert` is the one with a REACHABLE consumer, and it needs more than an allow-list line, so
+    // it is recorded here rather than opened: `registerServiceForFrame` runs it on EVERY top-level
+    // frame creation, so a mothership-mode node cannot create a service frame at all today.
+    //
+    // What blocks it is that no existing rule binds it soundly. The obvious `accountField` (the
+    // record's own `accountId`) leaves `frameBlockId` unbound, and `getByFrameBlock` resolves by
+    // frame block id ALONE — the unique index is `(account_id, frame_block_id)`, so two accounts may
+    // hold a service for one frame id and the walk answers with an arbitrary one (see
+    // `mountProjection.frameMount`, which already works around this). A caller could then plant a
+    // service on another org's frame block and redirect its runs' `resolveRepoTarget` at a repo it
+    // controls. Binding the frame block instead is not available either: `registerServiceForFrame`
+    // inserts the service BEFORE the block row exists, so the resolver would find nothing and refuse
+    // every legitimate frame creation. Opening it therefore needs either an account-scoped
+    // `getByFrameBlock` or a port that carries the frame's workspace — its own slice, tracked in
+    // `docs/initiatives/mothership-mode.md`.
     insert: 'pending',
     update: 'pending',
     delete: 'pending',
@@ -606,29 +621,19 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'local',
     remove: 'local',
   },
-  // `listByOwner`/`upsert` are now allow-listed (the fragment-source library's list + link, owner
-  // scoped). The `sourceId`-keyed `get`/`updateSyncState`/`softDelete` back the repo-SYNC management
-  // the mothership owns (its source service needs a GitHub client a mothership node lacks) — they
-  // stay pending until a GitHub-sync-in-mothership slice adds a source→owner resolver.
-  fragmentSourceRepository: {
-    get: 'pending',
-    updateSyncState: 'pending',
-    softDelete: 'pending',
-  },
-  // Foundational services (backend/docs/adr/0031-foundational-services.md). The owner-scoped
-  // catalog + contract reads/writes ARE allow-listed (org/durable state a RUN reads: a
-  // mothership-mode architect resolves the catalog and its coder resolves the declared
-  // services' contracts over the RPC). What stays off is the repo-SYNC surface, for exactly the
-  // reason the fragment library's does — a sync needs a GitHub client a mothership node lacks,
-  // and none of these methods carries an `(ownerKind, ownerId)` pair for a scope rule to bind.
-  foundationalServiceRepository: {
-    listBySource: 'pending',
-    softDeleteBySource: 'pending',
-  },
+  // Fully remote: `listByOwner`/`upsert` (list + link) plus the sourceId-keyed sync trio on
+  // `librarySource`. `upsert` is the one that moved rule rather than side: it conflicts on the `id`
+  // alone, so it now binds through `ownerFieldUpsert` (declared owner AND stored row's owner), the
+  // gap the skills slice named and left open.
+  fragmentSourceRepository: {},
+  // Foundational services (backend/docs/adr/0031-foundational-services.md). The whole owner-scoped
+  // surface is remote: the catalog + contract reads/writes (org/durable state a RUN reads — a
+  // mothership-mode architect resolves the catalog and its coder the declared services' contracts)
+  // AND the repo-SYNC methods, which bind through the `librarySource` rule (source id → owning tier
+  // pair, resolved server-side). The premise that deferred the sync — no GitHub client on a node —
+  // died with token delegation; see the fragment library below.
+  foundationalServiceRepository: {},
   foundationalServiceSourceRepository: {
-    get: 'pending',
-    updateSyncState: 'pending',
-    softDelete: 'pending',
     // The autorefresh sweep's query: global (across every tier) and unscoped by construction.
     listStale: 'sweeper',
     // The push-webhook freshness fan-out's query, keyed on the repo a delivery names and
@@ -637,12 +642,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     // it triggers would need.
     listByRepo: 'sweeper',
   },
-  // `listByOwner`/`get`/`upsert`/`softDelete` are now allow-listed (the prompt-fragment library
-  // management surface, owner scoped, member-level, no secrets). The `sourceId`-keyed `listBySource`
-  // is the repo-sync fan-out read (mothership-owned sync) — stays pending.
-  promptFragmentRepository: {
-    listBySource: 'pending',
-  },
+  // The whole prompt-fragment library is remote: the owner-scoped management surface (member-level,
+  // no secrets) plus the repo-SYNC methods on `librarySource`, the owner-pair generalisation of
+  // `skillSource`. The sync half was parked on "a mothership node has no GitHub client", which
+  // token delegation made false — leaving its link/sync/unlink routes reachable and broken.
+  promptFragmentRepository: {},
   // The repo-sourced Claude Skills library (ADR 0024) is fully remote — catalog reads AND the
   // repo-sync surface, which the sibling libraries above still defer. A mothership-mode node HAS a
   // GitHub client (the delegated App token rides the same machine API), so its `SkillSourceService`
@@ -690,16 +694,13 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     rowToRecord: 'helper',
   },
   // The tracker writeback's idempotency marker for a parked review's question comments. The ENGINE
-  // writes it, so a mothership-mode node genuinely reaches it (unlike its ingest sibling below) and
-  // it is already routed through `pickRepoSource` — but the methods are not allow-listed yet, so a
-  // claim answers `unknown_method` and `postReviewQuestions` degrades to "someone else holds the
-  // claim", loudly. A real backlog item: allow-listing it needs a scope rule keyed on the marker's
-  // own workspace plus conformance coverage of the claim/settle race.
+  // writes it, so a mothership-mode node genuinely reaches it (unlike its ingest sibling below), and
+  // `claim`/`settle`/`get` are now allow-listed on the `workspaceField` rule (the marker key carries
+  // its own `workspaceId`). Until then a claim answered `unknown_method`, which the caller's
+  // deliberate fallback reads as "someone else holds the claim" — so every parked review on a local
+  // run skipped its ticket comment and only a `warn` said so. `where` is a private row predicate.
   reviewQuestionPostRepository: {
     where: 'helper',
-    claim: 'pending',
-    settle: 'pending',
-    get: 'pending',
   },
   // The INBOUND half of the same idea: dedupe for tracker comments arriving by webhook. It rides
   // `'inbound'` rather than `'pending'` because there is nothing to complete — a delivery reaches

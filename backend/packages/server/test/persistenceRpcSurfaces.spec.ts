@@ -1360,3 +1360,63 @@ describe('document / task integration surface (workspace-scoped)', () => {
     }
   }
 })
+
+describe('parked-review question writeback markers (workspaceField-scoped)', () => {
+  // `IssueWritebackService.postReviewQuestions` claims one marker per `(workspace, review,
+  // iteration, linked issue)` BEFORE posting, so a replaying durable driver cannot comment the same
+  // findings onto the reporter's issue twice. The ENGINE writes it, so a mothership-mode node
+  // reaches it on the run path; every method takes the KEY as arg0, whose `workspaceId` is a FIELD.
+  const key = (workspaceId: string) => ({
+    workspaceId,
+    reviewId: 'rev_1',
+    iteration: 2,
+    issueRef: 'github:acme/api#42',
+  })
+  const WINDOW = { now: 1_000, reclaimPendingBefore: 0 }
+  const CALLS: Array<{ method: string; extra: unknown[] }> = [
+    { method: 'claim', extra: [WINDOW] },
+    { method: 'settle', extra: [{ status: 'posted' }, 1_000] },
+    { method: 'get', extra: [] },
+  ]
+
+  for (const { method, extra } of CALLS) {
+    it(`forwards ${method} when the key targets an in-scope workspace`, async () => {
+      // `claim` echoes the bound workspace through its boolean and `get` echoes the whole key, so
+      // this proves the marker the repo saw is the one the caller named — not merely that the call
+      // was admitted.
+      const result = await remoteRegistry().reviewQuestionPostRepository![method]!(
+        key('ws_in'),
+        ...extra,
+      )
+      if (method === 'claim') expect(result).toBe(true)
+      if (method === 'get') expect(result).toMatchObject({ workspaceId: 'ws_in', iteration: 2 })
+    })
+
+    it(`rejects ${method} when the key targets an out-of-scope workspace (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry().reviewQuestionPostRepository![method]!(key('ws_out'), ...extra),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    for (const [label, arg] of [
+      ['no workspaceId field', { reviewId: 'rev_1' }],
+      ['null', null],
+      ['a non-record primitive', 'not-a-record'],
+    ] as const) {
+      it(`rejects ${method} when the key is ${label} (404, fail-closed)`, async () => {
+        await expect(
+          remoteRegistry().reviewQuestionPostRepository![method]!(arg, ...extra),
+        ).rejects.toMatchObject({ code: 'not_found' })
+      })
+    }
+  }
+
+  it('still refuses the INBOUND tracker-comment ingest markers (off the allow-list)', async () => {
+    // The mirror-image surface, and the reason it is a permanent exclusion rather than a backlog
+    // item: a tracker comment reaches the deployment holding the public webhook URL, so a laptop
+    // never receives a delivery and has nothing to claim.
+    await expect(
+      remoteRegistry().trackerCommentIngestRepository!.claim!({ workspaceId: 'ws_in' }),
+    ).rejects.toThrow(/not callable/)
+  })
+})

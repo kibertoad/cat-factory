@@ -1,6 +1,8 @@
 import { DomainError, type DomainErrorCode } from '@cat-factory/kernel'
 import { REMOTE_PERSISTENCE_METHODS } from './rpc-allowlist.js'
 import {
+  checkLibrarySourceScope,
+  checkOwnerFieldUpsertScope,
   checkOwnerPairScope,
   checkServiceMountScope,
   checkUsageRecordScope,
@@ -178,6 +180,30 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *   - `ownerField`    — `args[arg]` is a library record whose `(ownerKind, ownerId)` are FIELDS (an
  *                       `upsert(record)` whose owner is a property, not positional args). Binds on
  *                       those fields exactly like `owner`; a non-object arg / missing fields fail closed.
+ *                       Safe only under the same precondition `accountField` states: the row is stored
+ *                       under, and later read by, the bound owner. An id-keyed conflict breaks that, so
+ *                       such a write takes `ownerFieldUpsert` below.
+ *   - `librarySource` — `args[arg]` is a content-library SOURCE id (a `fragment_sources` /
+ *                       `foundational_service_sources` row) with no owner arg; resolve that source's
+ *                       owning `(ownerKind, ownerId)` PAIR server-side by `entity` and bind it exactly
+ *                       like `owner`. This is what a repo-sourced library's SYNC surface needs: a
+ *                       source id is the only key its reconcile / tombstone / pin methods carry, so
+ *                       nothing positional binds them. The owner-pair analogue of `skillSource` (skills
+ *                       live in ONE tier, so theirs resolves to a bare accountId). A missing source, an
+ *                       unresolvable owner, or no resolver wired fails closed (404, no existence leak).
+ *   - `ownerFieldUpsert`
+ *                     — the UPSERT form of `ownerField`, and the owner-pair analogue of
+ *                       `accountFieldUpsert`: for a record-keyed write whose conflict key is the
+ *                       record's `id` rather than its owner columns. Binds BOTH the declared owner
+ *                       (`record.ownerKind`/`record.ownerId`, exactly like `ownerField`) AND — when a
+ *                       row with `record.id` already EXISTS — that stored row's owner pair, resolved
+ *                       server-side by `entity`. An absent row is a CREATE and passes on the declared
+ *                       half alone; a record with no usable `id` is refused rather than admitted on the
+ *                       declared half. See `accountFieldUpsert` for the attack the stored half closes:
+ *                       both source tables conflict on `id` alone and never re-`SET` their owner
+ *                       columns, so binding only the declared owner would let a token scoped to one
+ *                       tenant repoint another tenant's source at a repo it controls, whose Markdown
+ *                       bodies the victim's next sync folds into their prompts as guidance.
  *   - `usageRecord`   — `args[arg]` is a `TokenUsageRecord` (the spend ledger's `record`). Binds on
  *                       the row's `workspaceId` FIELD like `workspaceField`, AND ADDITIONALLY pins
  *                       the two DENORMALIZED rollup keys the account- and user-tier budget reads
@@ -203,13 +229,49 @@ export type ScopeRule =
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
   | { kind: 'skillSource'; arg: number }
-  // `entity` names the resolver that binds the STORED row. A one-member union today; adding a
-  // member is what a sibling library's own id-keyed upsert will need (see `fragmentSourceRepository`
-  // in the allow-list), and the exhaustive switch fails to compile until it is handled.
+  // `entity` names the resolver that binds the STORED row. Skills live in ONE tier, so theirs is
+  // the account-keyed form; a library owned by an `(ownerKind, ownerId)` PAIR takes
+  // `ownerFieldUpsert` below instead. The exhaustive switch fails to compile until a member is
+  // handled.
   | { kind: 'accountFieldUpsert'; arg: number; entity: 'skillSource' }
   | { kind: 'usageRecord'; arg: number }
   | { kind: 'owner'; kindArg: number; idArg: number }
   | { kind: 'ownerField'; arg: number }
+  | { kind: 'librarySource'; arg: number; entity: LibrarySourceEntity }
+  | { kind: 'ownerFieldUpsert'; arg: number; entity: LibrarySourceEntity }
+
+/**
+ * The owner-pair content-library SOURCE tables a `librarySource` / `ownerFieldUpsert` rule resolves
+ * against. Each names one source repository, because a source id from one library is meaningless in
+ * the other: the discriminator is what stops a fragment-source id being bound through the
+ * foundational-service source table (which would resolve to nothing and, without it, would have to
+ * fall back to trying both).
+ */
+export type LibrarySourceEntity = 'fragmentSource' | 'foundationalServiceSource'
+
+/** A content-library source row's owning tier, as the scope check needs it. */
+export interface LibrarySourceOwner {
+  ownerKind: unknown
+  ownerId: unknown
+}
+
+/**
+ * What a {@link DispatchOptions.resolveLibrarySourceOwner} lookup ANSWERED, as three states rather
+ * than a nullable owner.
+ *
+ * `absent` and `unreadable` are the same VALUE and opposite FACTS, and only `ownerFieldUpsert` can
+ * tell them apart from the outside: it admits an absent row as a create (the declared half already
+ * bound it) and must refuse an unreadable one, because a table it cannot read cannot say whose row
+ * the write would land on. Collapsing the two into `null` is what made a deployment that wires a
+ * source table's `upsert` without its `get` — or a library added with a rule and no resolver row —
+ * silently drop the stored half and admit the cross-tenant repoint the rule exists to close.
+ */
+export type LibrarySourceOwnerLookup =
+  | { status: 'found'; owner: LibrarySourceOwner }
+  /** No such source row: for an id-keyed upsert this is a CREATE. */
+  | { status: 'absent' }
+  /** This deployment cannot read that source table at all, so nothing may be concluded. */
+  | { status: 'unreadable' }
 
 export interface MethodSpec {
   scope: ScopeRule
@@ -263,6 +325,20 @@ export interface DispatchOptions {
    * kind with no resolver fails closed (404), like the other entity resolvers.
    */
   resolveSkillSourceAccountId?(sourceId: string): Promise<string | null | undefined>
+  /**
+   * Resolve a content-library source's owning `(ownerKind, ownerId)` pair (the mothership's
+   * `fragmentSourceRepository.get` / `foundationalServiceSourceRepository.get`, projected to the
+   * owner columns). ONE resolver taking the table rather than one member per table: the two answer
+   * the same question about the same shape, and a second near-identical option is how a new library
+   * lands with a rule and no resolver. Required for the `librarySource` and `ownerFieldUpsert` scope
+   * kinds; a call hitting either with no resolver fails closed (404), like the other entity
+   * resolvers. Answers a {@link LibrarySourceOwnerLookup} rather than a nullable owner so that "no
+   * such row" stays distinguishable from "that table is not readable here".
+   */
+  resolveLibrarySourceOwner?(
+    entity: LibrarySourceEntity,
+    sourceId: string,
+  ): Promise<LibrarySourceOwnerLookup>
   /**
    * Resolve the member userIds of an account (the mothership's `MembershipRepository.listByAccount`,
    * mapped to `userId`s). Required for the `user`/`userList` scope kinds: a requested user is in
@@ -663,6 +739,8 @@ async function checkEntityCallScope(
         | 'usageRecord'
         | 'owner'
         | 'ownerField'
+        | 'librarySource'
+        | 'ownerFieldUpsert'
     }
   >,
   args: unknown[],
@@ -741,6 +819,32 @@ async function checkEntityCallScope(
         denied,
       )
       if (denialForOwnerField) return denialForOwnerField
+      break
+    }
+    case 'librarySource': {
+      // A repo-sourced library's sync method carries only a source id; resolve that source's owning
+      // tier PAIR server-side and bind it like `owner` (the owner-pair analogue of `skillSource`).
+      const denialForSource = await checkLibrarySourceScope(
+        rule.entity,
+        args[rule.arg],
+        opts,
+        inScope,
+        denied,
+      )
+      if (denialForSource) return denialForSource
+      break
+    }
+    case 'ownerFieldUpsert': {
+      // Binds the record's DECLARED owner and the STORED row's owner together; see the rule's entry
+      // on `ScopeRule` for why the declared half alone is not enough.
+      const denialForUpsert = await checkOwnerFieldUpsertScope(
+        rule.entity,
+        args[rule.arg],
+        opts,
+        inScope,
+        denied,
+      )
+      if (denialForUpsert) return denialForUpsert
       break
     }
     default: {

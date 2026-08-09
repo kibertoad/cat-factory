@@ -70,6 +70,7 @@ export { defineAgentSearchQuerySuite } from './agent-search-queries-suite.js'
 export { defineAgentToolCallSuite } from './agent-tool-calls-suite.js'
 export { defineCacheSuite } from './cache-suite.js'
 export { defineSkillLibrarySuite, type SkillLibraryRepos } from './skill-library-suite.js'
+export { defineFragmentLibrarySuite, type FragmentLibraryRepos } from './fragment-library-suite.js'
 export {
   defineFoundationalServicesSuite,
   type FoundationalServiceRepos,
