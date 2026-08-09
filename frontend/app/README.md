@@ -68,6 +68,35 @@ Order within the column is by what the user loses by not reading it now; the too
 
 `app/components/layout/BoardTopOverlays.spec.ts` enforces the no-self-placement half, reading the member list from the component's own imports.
 
+### A board driver that MEASURES the DOM runs off the activity pulse, never a bare RAF
+
+Two board features cannot be derived from the stores alone: the dependency-edge overlay needs
+each card's on-screen rectangle, and the task-expansion driver needs the topmost card under the
+pointer. Both used `useRafFn`, so an open board paid O(edges) `querySelector` plus forced layout
+reads sixty times a second with nothing moving, and the edge overlay reassigned an
+equal-but-new segment array every frame on top of that.
+
+**A new driver of that kind pairs `useSettlingRaf(compute)` with the canvas pulse
+(`useBoardActivity`), and `compute` reports honestly whether it changed anything.** The pulse
+answers "something may have started moving" (DOM mutations under the canvas, its resize, the
+Vue Flow camera, pointer/wheel/scroll gestures) and the settling loop carries that wake through
+the animation that follows, parking once the output has held still for a few frames. Neither
+half works alone: a signal fires one frame BEFORE the transition it starts has any geometry, and
+a bare frame loop never stops.
+
+Two things this cost, both worth knowing before adding a third driver. `compute` returning
+`true` unconditionally silently restores the old behaviour, which is why the loop's contract is
+stated in terms of what the user can see rather than what the function did. And the pulse
+watches `style`/`class` attributes but not the geometry attributes the overlay itself writes,
+because a driver whose own output pulsed it awake would never settle.
+
+What the pulse cannot see is a reflow with no mutation and no gesture, a late-loading image or
+font resizing a card. That leaves an arrow stale until the next pulse of any kind, which is the
+deliberate trade: firing too often costs a handful of frames, and the alternative is the loop
+that never sleeps.
+
+`app/utils/settlingLoop.spec.ts` pins the loop against a hand-driven frame clock.
+
 ### A store must be instantiable outside a component `setup`
 
 A Pinia setup store runs its body on the FIRST `useStore()` anywhere in the app, and that
