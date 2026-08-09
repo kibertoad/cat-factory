@@ -6414,6 +6414,31 @@
         "none_captured": "Die Oberfläche sollte aufgenommen werden, es wurde aber keine Ansicht erfasst."
       }
     },
+    "environments": {
+      "title": "Live-Umgebung",
+      "open": "Live-Umgebung öffnen",
+      "retained": "Diese Umgebung soll den Lauf überdauern.",
+      "expires": "Läuft am {date} ab",
+      "expired": "Abgelaufen am {date}",
+      "state": {
+        "live": "Live",
+        "provisioning": "Wird bereitgestellt",
+        "failed": "Kam nie hoch",
+        "reclaiming": "Wird abgebaut",
+        "reclaimed": "Abgebaut",
+        "expired": "Abgelaufen"
+      },
+      "origin": {
+        "deployer": "Von diesem Lauf bereitgestellt",
+        "human_test": "Für den manuellen Test bereitgestellt",
+        "projected": "Der Lauf arbeitet noch, das kann sich also noch ändern"
+      },
+      "gap": {
+        "no_environment_step": "In dieser Pipeline stellt nichts eine Umgebung bereit, es gibt also nichts zu öffnen.",
+        "not_provisioned": "Eine Umgebung sollte bereitgestellt werden, bisher wurde aber keine erfasst.",
+        "infraless": "Dieser Service deklariert keine eigene Umgebung, es wurde also nichts bereitgestellt."
+      }
+    },
     "checks": {
       "title": "Prüfungen",
       "row": "{kind}: {state}",

@@ -5851,6 +5851,31 @@
         "none_captured": "La interfaz debía capturarse, pero no se capturó ninguna vista."
       }
     },
+    "environments": {
+      "title": "Entorno en vivo",
+      "open": "Abrir el entorno en vivo",
+      "retained": "Este entorno está pensado para seguir existiendo después de la ejecución.",
+      "expires": "Caduca el {date}",
+      "expired": "Caducó el {date}",
+      "state": {
+        "live": "En vivo",
+        "provisioning": "Levantándose",
+        "failed": "Nunca llegó a levantarse",
+        "reclaiming": "Desmontándose",
+        "reclaimed": "Desmontado",
+        "expired": "Caducado"
+      },
+      "origin": {
+        "deployer": "Levantado por esta ejecución",
+        "human_test": "Levantado para la prueba manual",
+        "projected": "La ejecución sigue en curso, así que esto aún puede cambiar"
+      },
+      "gap": {
+        "no_environment_step": "Nada en esta canalización levanta un entorno, así que no hay nada que abrir.",
+        "not_provisioned": "Debía levantarse un entorno y todavía no se ha registrado ninguno.",
+        "infraless": "Este servicio no declara ningún entorno propio, así que no se levantó nada."
+      }
+    },
     "checks": {
       "title": "Comprobaciones",
       "row": "{kind}: {state}",

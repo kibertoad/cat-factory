@@ -408,8 +408,11 @@ export const deployEnvStateSchema = v.object({
   /** The provisioned URL for a `ready` env (absent for `failed`/`skipped`). */
   url: v.optional(v.nullable(v.string())),
   /**
-   * The registry id of the environment this frame got, recorded for a `ready` env at the moment
-   * the deployer resolved its handle.
+   * The registry id of the environment this frame got, recorded at the moment the deployer
+   * resolved its handle: for a `ready` env, and for a `failed` one where the provision got far
+   * enough to have a record to fail against (a `failed` env row is persisted and projected, so
+   * naming it is what lets a reader tell the environment this frame broke on from a second one
+   * nothing accounts for). It stays absent where the provision broke before any handle existed.
    *
    * This is the RUN's own record of WHICH environment it stood up, and it exists so that the
    * `disposer` at the other end of the lifecycle can reclaim exactly that one. Re-resolving the

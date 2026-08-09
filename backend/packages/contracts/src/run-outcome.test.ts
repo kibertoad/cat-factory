@@ -702,6 +702,344 @@ describe('composeRunOutcome: what the run was built FROM', () => {
   })
 })
 
+describe('composeRunOutcome: where to go and look', () => {
+  // The section answers one question (is there something to click, and if not why not), so the
+  // cases worth pinning are the ones where a wrong answer hands a designer a dead URL, or hides
+  // a working one.
+
+  const deployer = (
+    envs: Record<string, Record<string, unknown>>,
+    overrides: Partial<PipelineStep> = {},
+  ): PipelineStep =>
+    step({ agentKind: 'deployer', deployEnvs: envs, ...overrides } as Partial<PipelineStep>)
+
+  const disposer = (envs: Record<string, Record<string, unknown>>): PipelineStep =>
+    step({ agentKind: 'disposer', disposeEnvs: envs } as Partial<PipelineStep>)
+
+  const projecting = (environment: Record<string, unknown>): PipelineStep =>
+    step({ agentKind: 'tester-ui', environment } as Partial<PipelineStep>)
+
+  function entries(instance: ExecutionInstance) {
+    const { environments } = composeRunOutcome({ block: block(), instance })
+    if (environments.status !== 'reported')
+      throw new Error(`expected entries, got ${environments.gap}`)
+    return environments.entries
+  }
+
+  it('reports the live URL of every frame that came up, and the cause of one that did not', () => {
+    const rows = entries(
+      run([
+        deployer({
+          frm_own: { status: 'ready', url: 'https://pr-7.preview.test', environmentId: 'env_1' },
+          frm_peer: { status: 'failed', error: 'helm release timed out' },
+        }),
+      ]),
+    )
+    expect(rows).toEqual([
+      {
+        url: 'https://pr-7.preview.test',
+        state: 'live',
+        origin: 'deployer',
+        expiresAt: null,
+        retained: false,
+        frameId: 'frm_own',
+        environmentId: 'env_1',
+        detail: null,
+      },
+      {
+        url: null,
+        state: 'failed',
+        origin: 'deployer',
+        expiresAt: null,
+        retained: false,
+        frameId: 'frm_peer',
+        environmentId: null,
+        detail: 'helm release timed out',
+      },
+    ])
+  })
+
+  // The deploy row is terminal at PROVISION time and never moves again, so reading it alone
+  // reports a reclaimed environment as a working preview for as long as the run is readable.
+  it('never reports a reclaimed environment as live, whoever took it', () => {
+    const reclaimed = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test', environmentId: 'env_1' } }),
+        disposer({
+          frm_own: { status: 'reclaimed', environmentId: 'env_1', confirmation: 'confirmed' },
+        }),
+      ]),
+    )
+    expect(reclaimed[0]?.state).toBe('reclaimed')
+    // The disposer went looking and found nothing live: also gone, and the reader's next move is
+    // the same one.
+    const alreadyGone = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test', environmentId: 'env_1' } }),
+        disposer({ frm_own: { status: 'none' } }),
+      ]),
+    )
+    expect(alreadyGone[0]?.state).toBe('reclaimed')
+  })
+
+  // The opposite collapse: a teardown the provider refused leaves the environment standing, and
+  // its URL still works. That it should not be standing is the verification report's business.
+  it('keeps an environment whose reclaim FAILED open, with the provider’s cause beside it', () => {
+    const rows = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test', environmentId: 'env_1' } }),
+        disposer({
+          frm_own: {
+            status: 'failed',
+            environmentId: 'env_1',
+            error: 'namespace stuck terminating',
+          },
+        }),
+      ]),
+    )
+    expect(rows[0]).toMatchObject({
+      state: 'live',
+      url: 'https://x.test',
+      detail: 'namespace stuck terminating',
+    })
+  })
+
+  it('follows the step projection while the run is still watching the environment', () => {
+    const rows = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test', environmentId: 'env_1' } }),
+        projecting({ id: 'env_1', url: 'https://x.test', status: 'expired', expiresAt: 1_000 }),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ state: 'expired', expiresAt: 1_000, origin: 'deployer' })
+  })
+
+  // The in-flight case: the deployer has not settled, so the only thing that knows an
+  // environment exists is the projection. Going silent here loses the URL for exactly as long as
+  // the run is live.
+  it('reports an environment the run is running against before any frame has settled', () => {
+    const rows = entries(
+      run([projecting({ id: 'env_1', url: 'https://x.test', status: 'ready', expiresAt: 9_000 })]),
+    )
+    expect(rows).toEqual([
+      {
+        url: 'https://x.test',
+        state: 'live',
+        origin: 'projected',
+        expiresAt: 9_000,
+        retained: false,
+        frameId: null,
+        environmentId: 'env_1',
+        detail: null,
+      },
+    ])
+  })
+
+  // Two producers naming one environment is one row. A deploy row predating `environmentId`
+  // names its environment only by the URL it handed out, so that is the second key.
+  it('lists one environment once, however many producers name it', () => {
+    const byId = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test', environmentId: 'env_1' } }),
+        step({
+          agentKind: 'human-test',
+          humanTest: { environment: { id: 'env_1', url: 'https://x.test', status: 'ready' } },
+        } as Partial<PipelineStep>),
+      ]),
+    )
+    expect(byId).toHaveLength(1)
+    expect(byId[0]?.origin).toBe('deployer')
+    const byUrl = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test' } }),
+        projecting({ id: 'env_1', url: 'https://x.test', status: 'ready' }),
+      ]),
+    )
+    expect(byUrl).toHaveLength(1)
+  })
+
+  // The gate READS the environment the deployer stood up and destroys it when the person
+  // confirms, so the deploy row and the gate's record are two producers on ONE environment and
+  // the gate's is the later fact. Reported off the deploy row alone, the card offers "Open the
+  // live environment" for an environment the gate tore down on the way past.
+  it('never reports an environment the hands-on gate tore down as live', () => {
+    const rows = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test', environmentId: 'env_1' } }),
+        step({
+          agentKind: 'human-test',
+          humanTest: {
+            phase: 'passed',
+            environment: { id: 'env_1', url: 'https://x.test', status: 'torn_down' },
+          },
+        } as Partial<PipelineStep>),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ state: 'reclaimed', origin: 'deployer', url: 'https://x.test' })
+  })
+
+  // A deploy row predating `deployEnvs.environmentId` names its environment ONLY by the URL it
+  // handed out. Joined by id alone it matches nothing, falls through to the `live` floor, and
+  // the observation carrying its real state is then dropped as a duplicate of it: the one
+  // producer that knew the environment was gone is discarded by the row that says it is up.
+  it('joins a deploy row that names its environment only by URL to what the run observed', () => {
+    const rows = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test' } }),
+        projecting({ id: 'env_1', url: 'https://x.test', status: 'torn_down' }),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      state: 'reclaimed',
+      origin: 'deployer',
+      // Named by the observation, since the frame recorded no id of its own.
+      environmentId: 'env_1',
+    })
+  })
+
+  // A frame that FAILED records the provider's cause; the environment it broke on is projected
+  // beside it. Unnamed by the frame, that projection is an environment nothing accounts for, and
+  // one failed provision renders as two rows both reading "never came up".
+  it('lists a failed provision once, naming the environment it broke on', () => {
+    const rows = entries(
+      run([
+        deployer({
+          frm_own: { status: 'failed', environmentId: 'env_1', error: 'helm release timed out' },
+        }),
+        projecting({
+          id: 'env_1',
+          url: null,
+          status: 'failed',
+          lastError: 'helm release timed out',
+        }),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      state: 'failed',
+      origin: 'deployer',
+      frameId: 'frm_own',
+      environmentId: 'env_1',
+      detail: 'helm release timed out',
+    })
+  })
+
+  // A run deploys twice (a re-deploy after a fix, or a gate rebuilding what a person is testing).
+  // The frame's row is the LATEST environment, and the first one is gone: the provisioning
+  // service superseded it on the way to standing the replacement up. Nothing ever refreshes its
+  // projection again, so left underived it is a `ready` snapshot with a URL that opens nothing.
+  it('reports the frame’s current environment, and never the one a re-deploy replaced', () => {
+    const rows = entries(
+      run([
+        deployer({
+          frm_own: { status: 'ready', url: 'https://first.test', environmentId: 'env_1' },
+        }),
+        projecting({ id: 'env_1', url: 'https://first.test', status: 'ready' }),
+        deployer({
+          frm_own: { status: 'ready', url: 'https://second.test', environmentId: 'env_2' },
+        }),
+        projecting({ id: 'env_2', url: 'https://second.test', status: 'ready' }),
+      ]),
+    )
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({
+      state: 'live',
+      origin: 'deployer',
+      frameId: 'frm_own',
+      environmentId: 'env_2',
+      url: 'https://second.test',
+    })
+    // Still listed (its URL is what an operator greps for) and never as something to open.
+    expect(rows[1]).toMatchObject({
+      state: 'reclaimed',
+      origin: 'projected',
+      environmentId: 'env_1',
+      url: 'https://first.test',
+    })
+  })
+
+  // The mirror of the above: a superseded environment whose last observation already named WHY
+  // it is gone keeps that word. `reclaimed` would flatten a failure into a tidy teardown.
+  it('keeps a superseded environment’s own terminal cause rather than flattening it', () => {
+    const rows = entries(
+      run([
+        deployer({
+          frm_own: { status: 'failed', environmentId: 'env_1', error: 'quota exceeded' },
+        }),
+        projecting({ id: 'env_1', url: null, status: 'failed', lastError: 'quota exceeded' }),
+        deployer({
+          frm_own: { status: 'ready', url: 'https://second.test', environmentId: 'env_2' },
+        }),
+      ]),
+    )
+    expect(rows).toHaveLength(2)
+    expect(rows[1]).toMatchObject({ state: 'failed', environmentId: 'env_1' })
+  })
+
+  it('reports a gate’s own environment, which no deployer frame keys', () => {
+    const rows = entries(
+      run([
+        step({
+          agentKind: 'human-test',
+          humanTest: { environment: { id: 'env_h', url: 'https://h.test', status: 'ready' } },
+        } as Partial<PipelineStep>),
+      ]),
+    )
+    expect(rows).toEqual([
+      {
+        url: 'https://h.test',
+        state: 'live',
+        origin: 'human_test',
+        expiresAt: null,
+        retained: false,
+        frameId: null,
+        environmentId: 'env_h',
+        detail: null,
+      },
+    ])
+  })
+
+  // What separates a preview a reviewer is meant to keep clicking from one still standing
+  // because nobody reclaimed it.
+  it('carries the deployer’s retention declaration onto the frames it provisioned', () => {
+    const rows = entries(
+      run([
+        deployer({ frm_own: { status: 'ready', url: 'https://x.test', environmentId: 'env_1' } }, {
+          stepOptions: { retainEnvironment: true },
+        } as Partial<PipelineStep>),
+      ]),
+    )
+    expect(rows[0]?.retained).toBe(true)
+  })
+
+  it('keeps the three ways there is nothing to open apart', () => {
+    const gap = (instance: ExecutionInstance | null) => {
+      const { environments } = composeRunOutcome({ block: block(), instance })
+      return environments.status === 'absent' ? environments.gap : 'reported'
+    }
+    // Nothing in the pipeline provisions anything.
+    expect(gap(run([step()]))).toBe('no_environment_step')
+    // A deployer that has not recorded an outcome: it has not got that far, or the deployment
+    // wires no provider.
+    expect(gap(run([deployer({})]))).toBe('not_provisioned')
+    // Every frame declared no environment of its own, which is not a failure to provision.
+    expect(gap(run([deployer({ frm_own: { status: 'skipped' } })]))).toBe('infraless')
+    // And the read that never happened is never blamed on the pipeline.
+    expect(
+      (() => {
+        const { environments } = composeRunOutcome({
+          block: block({ executionId: 'exe_gone' }),
+          instance: null,
+        })
+        return environments.status === 'absent' ? environments.gap : 'reported'
+      })(),
+    ).toBe('run_unavailable')
+  })
+})
+
 describe('hasOutcomeToShow', () => {
   it('is false for a run that has produced nothing to read yet', () => {
     expect(
@@ -720,6 +1058,24 @@ describe('hasOutcomeToShow', () => {
         }),
       ),
     ).toBe(false)
+  })
+
+  // A running preview of the change is worth opening before the run has produced anything else,
+  // which is the whole point of putting it on this card.
+  it('is true for a run whose only product so far is a live environment', () => {
+    expect(
+      hasOutcomeToShow(
+        composeRunOutcome({
+          block: block({ status: 'in_progress' }),
+          instance: run([
+            step({
+              agentKind: 'deployer',
+              deployEnvs: { frm_own: { status: 'ready', url: 'https://x.test' } },
+            } as Partial<PipelineStep>),
+          ]),
+        }),
+      ),
+    ).toBe(true)
   })
 
   it('is true as soon as there is a PR or any recorded evidence', () => {

@@ -501,9 +501,50 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
 
 ### Track E: the designer verification loop
 
-- [ ] **Live URL on the outcome card.** Surface the run's ephemeral-environment / preview URL on
-      `OutcomeSummaryWindow` (today it is buried in step detail and the test report), so "click
-      and look" is the designer's default verification, next to the captured views.
+- [x] **Live URL on the outcome card.** The run's environments are a section of the outcome
+      summary (`environments`, contracts' `run-outcome.ts`), so "click and look" sits next to the
+      captured views on the card and on `GET /api/v1/runs/:runId/outcome` (surface 1.38.0, outcome
+      `version` 3) rather than in step detail.
+      **The section reports a STATE, not a URL**, which is the decision the plan above did not
+      make. A deploy row is terminal at provision time and never moves again, so the URL alone
+      reads as a working preview for as long as the run is readable, months after the disposer
+      reclaimed it: `live` is the only state that offers a link, and every other row still shows
+      its URL as text because that is what names the environment and what an operator greps for.
+      Several producers know something about the same environment, and they are RECONCILED BY
+      IDENTITY before they are ranked: the run's step projections and the `human-test` gate's own
+      record are folded into one observation per environment id (the gate destroys the environment
+      it sent a person to and stamps its record on the way past, so kept apart it is the deploy
+      row's stale `ready` that a reader is offered). Above that observation the DISPOSE record
+      wins, being written after the run stops watching; below it the deploy row is the floor. A
+      reclaim that FAILED deliberately changes nothing here: the environment is still standing and
+      its URL still works, and that it should not be is the verification report's teardown proof,
+      not this card's question.
+      **A superseded environment is derived, not observed.** A re-deploy of a frame (a fix, or the
+      gate rebuilding what a person is testing) supersedes the frame's earlier environment, and
+      nothing ever refreshes its projection again: left underived it is the most convincing dead
+      link a run can produce, a `ready` snapshot with a URL. Every deploy the run made is folded,
+      the frame reports the environment it ended on, and the ones it replaced report `reclaimed`
+      unless their own last status already named where they went.
+      **`reclaimed` is one word for two facts on purpose** (the disposer tore it down, or went
+      looking and found nothing live): nothing records who took it, and the reader's next move is
+      the same either way. The three absences are kept apart for the opposite reason, since each
+      names a different fix: `no_environment_step`, `not_provisioned` and `infraless`.
+      **The in-flight row is reported and LABELLED** (`origin: 'projected'`), because a card that
+      goes silent until the deployer settles loses the preview URL for exactly as long as the run
+      is live, which is when a designer most wants it. `hasOutcomeToShow` counts it, so the
+      affordance appears on a run whose only product so far is something to look at.
+      The rules this shares with the verification report (which frames the run's deploys settled,
+      what the run observed of each environment, which recorded states mean one is gone, whether
+      the deployer declared retention) moved into contracts' `run-evidence.ts` beside the tester
+      rules, and the parity test asserts the two documents name the same environments, including
+      for a run that deployed twice. The disposer reclaims by the same fold, so the set of
+      environments a run stood up has ONE statement.
+      **A clock is deliberately not one of the reduction's inputs**: a lapsed TTL is reported as
+      the instant it lapses, so the SPA composing the summary live and the endpoint composing it
+      server-side cannot disagree about one run. Applying that instant is then the RENDERER's job,
+      and the card does it (`OutcomeSummaryWindow.logic.ts`): a `live` row past its expiry reads
+      `expired` and offers no link, because the alternative is a green badge and a working-looking
+      button beside a date in the past.
 - [ ] **Visual pipeline out of the attic.** Once tester-ui auto-capture is wired end to end (the
       deploy-coupled `image: 'ui'` routing + harness passthrough tracked in the
       visual-confirmation handover), drop the `experimental` label on `pl_visual` and revisit the

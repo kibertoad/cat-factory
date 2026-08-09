@@ -1,15 +1,27 @@
 import * as v from 'valibot'
 import type { Block, PullRequestRef } from './entities.js'
 import { allPullRequests } from './entities.js'
-import type { ExecutionInstance, PipelineStep } from './execution.js'
+import type { EnvironmentStatus } from './environments.js'
+import type {
+  DeployEnvState,
+  DisposeEnvState,
+  ExecutionInstance,
+  PipelineStep,
+} from './execution.js'
 import { reproductionStatusSchema } from './reproduction.js'
-import type { JoinedRequirement } from './run-evidence.js'
+import type { JoinedRequirement, RunEnvironmentObservation } from './run-evidence.js'
 import {
   countCapturedViews,
+  declaresRetainedEnvironment,
+  deployedFrames,
+  deployerSteps,
+  disposedFrames,
   indexRequirementVerdicts,
+  isEnvironmentGone,
   isRequirementRegression,
   isTesterKind,
   joinSpecRequirements,
+  runEnvironmentObservations,
   selectTesterReportStep,
   tallyRequirements,
   tallyTestOutcomes,
@@ -68,7 +80,7 @@ import { UI_TESTER_AGENT_KIND } from './visual-pipeline.js'
  * consumer would want to notice; never a compatibility switch (the surface is additive, so a
  * consumer written against an older number keeps reading the fields it knows).
  */
-export const RUN_OUTCOME_VERSION = 2
+export const RUN_OUTCOME_VERSION = 3
 
 /**
  * Where the run stands, in the terms the person reading the outcome cares about. Derived from
@@ -276,6 +288,92 @@ export const outcomeVisualsSchema = v.variant('status', [
 ])
 export type OutcomeVisuals = v.InferOutput<typeof outcomeVisualsSchema>
 
+// ---- Where to go and look --------------------------------------------------
+
+/**
+ * Why there is no environment to open. Each names a different reaction, and the last two are the
+ * pair that matters: a pipeline that stands nothing up and one that was meant to and did not are
+ * opposite facts about whether anything is missing.
+ */
+export const environmentsGapSchema = v.picklist([
+  runUnavailableGap,
+  /** Nothing in this pipeline provisions an environment, so there was never a URL to have. */
+  'no_environment_step',
+  /** Something was meant to stand one up and nothing was recorded: it has not got that far, or the deployment wires no environment provider. */
+  'not_provisioned',
+  /** Every frame the deployer settled declared no environment of its own (`infraless`). */
+  'infraless',
+])
+export type EnvironmentsGap = v.InferOutput<typeof environmentsGapSchema>
+
+/**
+ * Where one environment stands, in the terms of the only question this section answers: is there
+ * something to click, and if not, why not.
+ *
+ * Six members rather than the recorded lifecycle status alone, because the run's own reclaim is
+ * part of the answer and the status projection cannot see it. `reclaimed` is deliberately the
+ * one word for BOTH "the run's disposer tore it down" and "the disposer went looking and found
+ * nothing live": who took it is not recorded anywhere this reduction can read, and the reader's
+ * next move (start another run) is the same either way. `reclaiming` is kept apart from it
+ * because a teardown that has been asked for is not one that happened.
+ */
+export const outcomeEnvironmentStateSchema = v.picklist([
+  'live',
+  'provisioning',
+  'failed',
+  'reclaiming',
+  'reclaimed',
+  'expired',
+])
+export type OutcomeEnvironmentState = v.InferOutput<typeof outcomeEnvironmentStateSchema>
+
+/**
+ * Which producer this row came from, so a consumer never reads one as another.
+ *
+ * `projected` is the in-flight row: the environment the run's steps are currently running
+ * against, read off the step projection because no terminal per-frame outcome exists yet. It is
+ * the weakest of the three and the only one that can still change, which is exactly why it is
+ * labelled rather than folded into `deployer`.
+ */
+export const outcomeEnvironmentOriginSchema = v.picklist(['deployer', 'human_test', 'projected'])
+export type OutcomeEnvironmentOrigin = v.InferOutput<typeof outcomeEnvironmentOriginSchema>
+
+/** One environment this run stood up: where it is, where it stands, and how long it lasts. */
+export const outcomeEnvironmentSchema = v.object({
+  /** The public URL, or null when there is not one to open (still provisioning, or it failed). */
+  url: v.nullable(v.string()),
+  state: outcomeEnvironmentStateSchema,
+  origin: outcomeEnvironmentOriginSchema,
+  /**
+   * Epoch ms the environment's TTL lapses, when the platform recorded one.
+   *
+   * A lapsed TTL is NOT folded into `state`: this reduction is clock-free on purpose, so the SPA
+   * composing it live off its store and the endpoint composing it server-side cannot disagree
+   * about the same run. What a reader gets instead is the instant itself, which says the same
+   * thing without either surface having to guess whether the sweep has run yet.
+   */
+  expiresAt: v.nullable(v.number()),
+  /**
+   * True when the run's deployer DECLARED that the environments it provisions outlive the run.
+   * It is what separates a preview URL a reviewer is meant to keep clicking from one that is
+   * still standing because the reclaim never happened.
+   */
+  retained: v.boolean(),
+  /** The service frame this environment was stood up for; null for a row no frame keys. */
+  frameId: v.nullable(v.string()),
+  /** The environments-registry id, the handle an operator greps for. Null when not recorded. */
+  environmentId: v.nullable(v.string()),
+  /** The producer's own verbatim cause, when it recorded one. Detail, never the headline. */
+  detail: v.nullable(v.string()),
+})
+export type OutcomeEnvironment = v.InferOutput<typeof outcomeEnvironmentSchema>
+
+export const outcomeEnvironmentsSchema = v.variant('status', [
+  v.object({ status: v.literal('absent'), gap: environmentsGapSchema }),
+  v.object({ status: v.literal('reported'), entries: v.array(outcomeEnvironmentSchema) }),
+])
+export type OutcomeEnvironments = v.InferOutput<typeof outcomeEnvironmentsSchema>
+
 // ---- What it was built FROM ------------------------------------------------
 
 /** Why there is no linked source to show. */
@@ -348,6 +446,11 @@ export const runOutcomeSchema = v.object({
   requirements: outcomeRequirementsSchema,
   tests: outcomeTestsSchema,
   visuals: outcomeVisualsSchema,
+  /**
+   * The throwaway environments the run stood up, so "click and look" is one step from the
+   * summary rather than buried in the step that provisioned it.
+   */
+  environments: outcomeEnvironmentsSchema,
   /** The linked pages the run built from, and how current the copy its agents read was. */
   sources: outcomeSourcesSchema,
   /** Only the checks that actually ran: an absent check is omitted, never rendered as passing. */
@@ -596,6 +699,216 @@ function composeSources(steps: readonly PipelineStep[]): OutcomeSources {
   return { status: 'reported', sources: [...rows.values()] }
 }
 
+/**
+ * The recorded lifecycle status an environment carries, in the terms this section reports.
+ * An exhaustive `Record`, so a new lifecycle member fails this build rather than rendering as a
+ * blank row on the surface whose whole job is to say whether there is anything to click.
+ */
+const ENVIRONMENT_STATE_BY_STATUS: Record<EnvironmentStatus, OutcomeEnvironmentState> = {
+  provisioning: 'provisioning',
+  ready: 'live',
+  failed: 'failed',
+  expired: 'expired',
+  tearing_down: 'reclaiming',
+  torn_down: 'reclaimed',
+}
+
+/**
+ * Where an environment stands as the run last OBSERVED it: the recorded lifecycle status, unless
+ * a later deploy superseded the environment, which outranks whatever its last snapshot said.
+ *
+ * A superseded environment reports `reclaimed` for the same reason a disposer's `none` does: it
+ * is gone, and who took it (the supersede's teardown, or its tombstone) is not recorded anywhere
+ * this reduction can read. An already-terminal status is kept as it is, because `failed` and
+ * `expired` name why it is gone and `reclaimed` would flatten that away.
+ */
+function observedState(observed: RunEnvironmentObservation): OutcomeEnvironmentState {
+  if (observed.superseded && !isEnvironmentGone(observed.status)) return 'reclaimed'
+  return ENVIRONMENT_STATE_BY_STATUS[observed.status]
+}
+
+/**
+ * Where one frame's environment stands, from the three producers that know something about it,
+ * in strict precedence.
+ *
+ * The DISPOSE record wins, because it is written after the run stops observing the environment:
+ * a run's polls never revisit one once the run settles, so a reclaimed environment keeps a
+ * `ready` observation forever. Below it the observation wins over the deployer's terminal row for
+ * the mirror-image reason: the deploy row records the moment the environment came up and never
+ * moves again, while the run's steps follow it for as long as one is watching. That is also
+ * where the `human-test` gate's teardown enters, folded into the observation by identity: the
+ * gate destroys the environment it sent a person to and stamps its own record, and this row is
+ * for the same environment the deployer stood up.
+ *
+ * A reclaim that FAILED changes nothing here: the provider refused to tear the environment down,
+ * so it is still standing and its URL still works. That it should not be is a fact about the
+ * teardown proof (the PR verification report's business), not about whether a designer can open
+ * it, and folding it in here would report a working preview as gone.
+ */
+function environmentState(
+  deployed: DeployEnvState,
+  disposal: DisposeEnvState | undefined,
+  observed: RunEnvironmentObservation | undefined,
+): OutcomeEnvironmentState {
+  if (deployed.status === 'failed') return 'failed'
+  // `none` means the disposer resolved this frame's environment and found nothing live: it is
+  // gone, and the only thing separating that from a reclaim is who took it, which nothing
+  // records. Reporting the deployer's terminal `ready` instead would hand out a dead URL.
+  if (disposal && disposal.status !== 'failed') return 'reclaimed'
+  if (observed) return observedState(observed)
+  return 'live'
+}
+
+/**
+ * The keys one row is claimed under: the environments-registry id, and the URL that names the
+ * same environment for a producer that recorded no id.
+ *
+ * ONE definition, used by the join, the claim and the dedupe alike. The three previously spelled
+ * identity differently (the join read the id, the claim wrote both, the gate leg checked only the
+ * id), and every disagreement between them is a row that reads as a second environment or a row
+ * joined to nothing at all.
+ */
+function environmentKeys(entry: { environmentId?: string | null; url?: string | null }): string[] {
+  return [entry.environmentId, entry.url].filter((key): key is string => Boolean(key))
+}
+
+/**
+ * Look one environment up the way a deploy row names it: by the id it recorded, else by the URL
+ * it handed out.
+ *
+ * The URL leg is not a convenience. A deploy row predating `deployEnvs.environmentId` names its
+ * environment ONLY by that URL, so an id-keyed lookup alone leaves such a row joined to nothing
+ * while the observation carrying its real state sits one map away, and the row then reports the
+ * `live` floor for an environment the run watched being torn down.
+ */
+function observationLookup(
+  observations: readonly RunEnvironmentObservation[],
+): (entry: {
+  environmentId?: string | null
+  url?: string | null
+}) => RunEnvironmentObservation | undefined {
+  const byId = new Map<string, RunEnvironmentObservation>()
+  const byUrl = new Map<string, RunEnvironmentObservation>()
+  for (const observed of observations) {
+    byId.set(observed.id, observed)
+    if (observed.url) byUrl.set(observed.url, observed)
+  }
+  return (entry) => {
+    for (const key of environmentKeys(entry)) {
+      const found = byId.get(key) ?? byUrl.get(key)
+      if (found) return found
+    }
+    return undefined
+  }
+}
+
+/**
+ * The rows for the frames the run's deploys settled, beside the count of frames that declared no
+ * environment at all.
+ *
+ * The `skipped` count travels with the rows rather than being derivable from them: a run whose
+ * every frame is `infraless` stood nothing up ON PURPOSE, and reporting that as a deployer which
+ * recorded nothing would send a reader looking for a provisioning failure that never happened.
+ */
+function deployedEnvironments(
+  frames: ReadonlyMap<string, DeployEnvState>,
+  disposed: ReadonlyMap<string, DisposeEnvState>,
+  observationFor: ReturnType<typeof observationLookup>,
+  retained: boolean,
+): { entries: OutcomeEnvironment[]; skipped: number } {
+  const entries: OutcomeEnvironment[] = []
+  let skipped = 0
+  for (const [frameId, deployed] of frames) {
+    if (deployed.status === 'skipped') {
+      skipped += 1
+      continue
+    }
+    const observed = observationFor(deployed)
+    const disposal = disposed.get(frameId)
+    entries.push({
+      url: deployed.url ?? observed?.url ?? null,
+      state: environmentState(deployed, disposal, observed),
+      origin: 'deployer',
+      expiresAt: observed?.expiresAt ?? null,
+      retained,
+      // The observation's id where the frame recorded none: a frame that FAILED records only the
+      // provider's cause, so without this the environment it broke on is nameless in the row that
+      // is about it, and is then listed a second time as an environment no frame accounts for.
+      frameId,
+      environmentId: deployed.environmentId ?? observed?.id ?? null,
+      detail: deployed.error ?? disposal?.error ?? observed?.lastError ?? null,
+    })
+  }
+  return { entries, skipped }
+}
+
+/**
+ * The environments no settled frame accounts for: the one the run is running against right now
+ * (no terminal frame row exists yet) and the one a `human-test` gate is holding for a person.
+ *
+ * Appended rather than folded into the deployer's rows, and LABELLED with the producer that
+ * observed them. Without them the card goes silent for exactly as long as the run is live, which
+ * is when a preview URL is most worth having.
+ *
+ * `claimed` carries what the deployer's rows already named, under the same keys everything else
+ * here uses: listing one environment twice under two origins reads as two.
+ */
+function unclaimedEnvironments(
+  observations: readonly RunEnvironmentObservation[],
+  claimed: ReadonlySet<string>,
+): OutcomeEnvironment[] {
+  const seen = new Set(claimed)
+  const entries: OutcomeEnvironment[] = []
+  for (const observed of observations) {
+    const keys = environmentKeys({ environmentId: observed.id, url: observed.url })
+    if (keys.some((key) => seen.has(key))) continue
+    for (const key of keys) seen.add(key)
+    entries.push({
+      url: observed.url,
+      state: observedState(observed),
+      origin: observed.source === 'human_test' ? 'human_test' : 'projected',
+      expiresAt: observed.expiresAt,
+      // The retention declaration is the deployer's, and this row is not one of its settled frames.
+      retained: false,
+      frameId: null,
+      environmentId: observed.id,
+      detail: observed.lastError,
+    })
+  }
+  return entries
+}
+
+/**
+ * The environments this run stood up.
+ *
+ * Composed from the run's own steps and nothing else, so the SPA's live composition and the
+ * endpoint's answer for the same run are the same answer. That rules out the provisioning event
+ * log, which is what DATES the lifecycle for the verification report; this section reports where
+ * an environment stands, not when it got there, and the two surfaces share the rules they both
+ * state through `run-evidence.ts` rather than sharing a read.
+ *
+ * Every deploy the run made is folded, not the last one alone: the frame rows report the
+ * environment each frame ended on, and the ones an earlier deploy stood up are accounted for as
+ * superseded rather than left to surface as a live preview nothing will refresh again.
+ */
+function composeEnvironments(steps: readonly PipelineStep[]): OutcomeEnvironments {
+  const observations = runEnvironmentObservations(steps)
+  if (deployerSteps(steps).length === 0 && observations.length === 0) {
+    return { status: 'absent', gap: 'no_environment_step' }
+  }
+  const { entries, skipped } = deployedEnvironments(
+    deployedFrames(steps),
+    disposedFrames(steps),
+    observationLookup(observations),
+    declaresRetainedEnvironment(steps),
+  )
+  const claimed = new Set(entries.flatMap(environmentKeys))
+  entries.push(...unclaimedEnvironments(observations, claimed))
+
+  if (entries.length > 0) return { status: 'reported', entries }
+  return { status: 'absent', gap: skipped > 0 ? 'infraless' : 'not_provisioned' }
+}
+
 function composeChecks(steps: readonly PipelineStep[]): OutcomeCheck[] {
   const checks: OutcomeCheck[] = []
 
@@ -680,6 +993,7 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
       requirements: { status: 'absent', gap: runUnavailableGap },
       tests: { status: 'absent', gap: runUnavailableGap },
       visuals: { status: 'absent', gap: runUnavailableGap, detail: null },
+      environments: { status: 'absent', gap: runUnavailableGap },
       sources: { status: 'absent', gap: runUnavailableGap },
       checks: [],
     }
@@ -692,6 +1006,7 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
     requirements: composeRequirements(steps, spec),
     tests: composeTests(tester),
     visuals: composeVisuals(steps, tester),
+    environments: composeEnvironments(steps),
     sources: composeSources(steps),
     checks: composeChecks(steps),
   }
@@ -709,7 +1024,10 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
  * notices would be the same empty card by another route.
  *
  * Linked SOURCES deliberately do not count. They say what the run was working FROM, not what it
- * produced, so a run that has only read its brief has nothing for this card to answer yet.
+ * produced, so a run that has only read its brief has nothing for this card to answer yet. An
+ * ENVIRONMENT does count, and is the one thing here that can be worth opening before the run has
+ * produced anything else: a running preview of the change is exactly what the person who does
+ * not read diffs came for.
  */
 export function hasOutcomeToShow(outcome: RunOutcome): boolean {
   return (
@@ -717,6 +1035,7 @@ export function hasOutcomeToShow(outcome: RunOutcome): boolean {
     outcome.requirements.status === 'reported' ||
     outcome.tests.status === 'reported' ||
     outcome.visuals.status === 'reported' ||
+    outcome.environments.status === 'reported' ||
     outcome.checks.length > 0
   )
 }

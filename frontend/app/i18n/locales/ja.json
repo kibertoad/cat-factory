@@ -5851,6 +5851,31 @@
         "none_captured": "画面を取得する予定でしたが、ビューは取得されませんでした。"
       }
     },
+    "environments": {
+      "title": "稼働中の環境",
+      "open": "稼働中の環境を開く",
+      "retained": "この環境は実行の終了後も残るように設定されています。",
+      "expires": "{date} に期限切れ",
+      "expired": "{date} に期限切れ",
+      "state": {
+        "live": "稼働中",
+        "provisioning": "起動中",
+        "failed": "起動できませんでした",
+        "reclaiming": "破棄中",
+        "reclaimed": "破棄済み",
+        "expired": "期限切れ"
+      },
+      "origin": {
+        "deployer": "この実行が用意した環境",
+        "human_test": "手動テスト用に用意した環境",
+        "projected": "実行がまだ続いているため、この内容は変わる可能性があります"
+      },
+      "gap": {
+        "no_environment_step": "このパイプラインには環境を用意する処理がないため、開けるものはありません。",
+        "not_provisioned": "環境が用意されるはずですが、まだ何も記録されていません。",
+        "infraless": "このサービスは独自の環境を宣言していないため、何も用意されていません。"
+      }
+    },
     "checks": {
       "title": "チェック",
       "row": "{kind}: {state}",

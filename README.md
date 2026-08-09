@@ -414,7 +414,8 @@ currently open and what each one is trying to change.
   (using them: [Issue & document sources](https://www.catfactory.ai/guide/issue-sources.html) ·
   [Design context](https://www.catfactory.ai/guide/design-context.html))
 - [Bug hunt: rate a tracker board's unassigned bugs and pick one](./backend/docs/bug-hunt.md)
-- [Public API (`/api/v1`): endpoint reference](./backend/docs/public-api.md)
+- [Public API (`/api/v1`): endpoint reference](./backend/docs/public-api.md) ·
+  [surface version history](./backend/docs/public-api-versions.md)
   (using it: [Public API](https://www.catfactory.ai/extend/public-api.html))
 - [SDK clients (TypeScript / Python / Go / Java+Kotlin): generation & releases](./sdk/README.md)
   (using them: [SDKs](https://www.catfactory.ai/extend/sdks.html))

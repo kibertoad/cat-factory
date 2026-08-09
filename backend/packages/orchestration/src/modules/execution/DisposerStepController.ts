@@ -6,7 +6,7 @@ import type {
   PipelineStep,
 } from '@cat-factory/kernel'
 import { getErrorMessage, noopLogger, NotFoundError } from '@cat-factory/kernel'
-import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
+import { deployedFrames } from '@cat-factory/contracts'
 import type { EnvironmentTeardownService } from '@cat-factory/integrations'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { AdvanceResult } from './advance.js'
@@ -73,27 +73,26 @@ interface ProvisionedFrame {
 }
 
 /**
- * The environments this run stood up, read off the deployer step's recorded per-frame outcomes.
+ * The environments this run stood up, read off its recorded per-frame deploy outcomes.
  * Only `ready` frames are candidates: a `failed` frame never got an environment and a `skipped`
- * one was never meant to have one, so neither is something to reclaim — and reporting either as
+ * one was never meant to have one, so neither is something to reclaim, and reporting either as
  * "nothing to tear down" would pad the disposer's summary with frames it did no work for.
  *
- * Reads EVERY deployer step rather than the first, because a pipeline may deploy more than once
- * (a re-deploy after a fix), and a disposer that reclaimed only the first one's frames would
- * leave the rest standing while reporting a clean sweep. A later deploy of the same frame WINS:
- * it superseded the earlier environment, so its id is the live one, and reclaiming the earlier id
- * would tear down a row that is already a tombstone while leaving the real environment running.
+ * The fold over every deploy is `deployedFrames`, shared with the two evidence reductions that
+ * report on the same environments: a pipeline may deploy more than once (a re-deploy after a
+ * fix), and a disposer that reclaimed only one step's frames would leave the rest standing while
+ * reporting a clean sweep. A later deploy of the same frame WINS there, which is also what this
+ * step needs: it superseded the earlier environment, so its id is the live one, and reclaiming
+ * the earlier id would tear down a row that is already a tombstone while leaving the real
+ * environment running.
  */
 function provisionedFrames(instance: ExecutionInstance): ProvisionedFrame[] {
-  const byFrame = new Map<string, ProvisionedFrame>()
-  for (const step of instance.steps) {
-    if (step.agentKind !== DEPLOYER_AGENT_KIND) continue
-    for (const [frameId, env] of Object.entries(step.deployEnvs ?? {})) {
-      if (env.status !== 'ready') continue
-      byFrame.set(frameId, { frameId, environmentId: env.environmentId ?? null })
-    }
+  const frames: ProvisionedFrame[] = []
+  for (const [frameId, env] of deployedFrames(instance.steps)) {
+    if (env.status !== 'ready') continue
+    frames.push({ frameId, environmentId: env.environmentId ?? null })
   }
-  return [...byFrame.values()]
+  return frames
 }
 
 /** The one-line summary of a frame's reclaim, for the step's output. */

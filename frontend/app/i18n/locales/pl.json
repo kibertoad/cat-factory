@@ -5851,6 +5851,31 @@
         "none_captured": "Interfejs miał zostać zarejestrowany, ale nie zapisano żadnego widoku."
       }
     },
+    "environments": {
+      "title": "Działające środowisko",
+      "open": "Otwórz działające środowisko",
+      "retained": "To środowisko ma istnieć dłużej niż samo uruchomienie.",
+      "expires": "Wygasa {date}",
+      "expired": "Wygasło {date}",
+      "state": {
+        "live": "Działa",
+        "provisioning": "Uruchamiane",
+        "failed": "Nigdy nie wystartowało",
+        "reclaiming": "Usuwane",
+        "reclaimed": "Usunięte",
+        "expired": "Wygasło"
+      },
+      "origin": {
+        "deployer": "Uruchomione przez ten przebieg",
+        "human_test": "Uruchomione na potrzeby testu ręcznego",
+        "projected": "Przebieg wciąż trwa, więc to może się jeszcze zmienić"
+      },
+      "gap": {
+        "no_environment_step": "Nic w tym potoku nie uruchamia środowiska, więc nie ma czego otworzyć.",
+        "not_provisioned": "Środowisko miało zostać uruchomione, ale żadnego jeszcze nie zapisano.",
+        "infraless": "Ta usługa nie deklaruje własnego środowiska, więc nic nie zostało uruchomione."
+      }
+    },
     "checks": {
       "title": "Sprawdzenia",
       "row": "{kind}: {state}",
