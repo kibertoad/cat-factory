@@ -1,5 +1,40 @@
 # @cat-factory/orchestration
 
+## 0.249.0
+
+### Minor Changes
+
+- afe1250: Binary generation: provider capability traits, per-step generation options, and side-by-side
+  candidate comparison.
+
+  A registered generative integration now declares `capabilities` (reference images, masked or
+  instruction editing, negative prompt, seed, aspect ratio, batching, upscaling, transparent
+  background, seamless tiling), and a binary-output step declares the generation options each of
+  those unlocks. An option nothing selected supports refuses the run at admission with
+  `binary_output_generator_invalid` / `capability_unsupported`; an option nothing has DECLARED either
+  way is admitted and stated as unverifiable, so every integration registered before this axis
+  existed keeps working unchanged.
+
+  A step may also declare a `comparison`: it generates a candidate per subject from every selected
+  integration, parks, and a human keeps one (or several under distinct ids) before the step re-runs
+  to deliver exactly those.
+
+  Internal shape change: the engine's park-window verbs moved from sixteen `ExecutionService`
+  delegates onto one `executionService.decisions` surface.
+
+### Patch Changes
+
+- Updated dependencies [afe1250]
+  - @cat-factory/contracts@0.285.0
+  - @cat-factory/kernel@0.280.0
+  - @cat-factory/agents@0.122.0
+  - @cat-factory/integrations@0.153.4
+  - @cat-factory/prompt-fragments@1.0.37
+  - @cat-factory/sandbox@0.11.114
+  - @cat-factory/spend@0.15.55
+  - @cat-factory/workspaces@0.26.27
+  - @cat-factory/caching@0.18.28
+
 ## 0.248.5
 
 ### Patch Changes
