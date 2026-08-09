@@ -1109,6 +1109,7 @@
       },
       "chooseApproach": "Yaklaşım seç",
       "triageFollowUps": "Takipleri karara bağla",
+      "chooseCandidates": "Adayları karara bağla",
       "elapsedTooltip": "Bu adımda geçen süre",
       "reviewFindings": "Bulguları incele",
       "dryRun": "Prova çalışması",
@@ -1387,8 +1388,10 @@
       "decisionRequired": "Karar gerekli",
       "followUpsParked": "Coder, çalıştırmanın devam edebilmesi için karara bağlanması gereken takipler ortaya çıkardı. Her maddeyi takipler penceresinde ele alın (kaydet, geri gönder, yanıtla veya yok say).",
       "forkParked": "Bu Coder adımı, kod yazılmadan önce bir uygulama yaklaşımının seçilmesini bekliyor. Karar penceresinde önerilen bir yaklaşımı seçin (veya kendi yaklaşımınızı girin).",
+      "candidatesParked": "Bu adım adaylar üretti ve herhangi bir çıktı teslim etmeden önce hangilerinin saklanacağının seçilmesini bekliyor. Adaylar penceresinde karşılaştırın ve istediklerinizi saklayın.",
       "openFollowUps": "Takipleri aç",
       "chooseApproach": "Yaklaşım seç",
+      "chooseCandidates": "Adayları seç",
       "expandAll": "Tüm bölümleri genişlet",
       "collapseAll": "Tüm bölümleri daralt",
       "copyRawOutput": "Ham çıktıyı kopyala",
@@ -4766,7 +4769,45 @@
         "3d-model": "3B modeller",
         "3d-scene": "3B sahneler",
         "document": "Belgeler"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "Referans görsel",
+        "multi-reference": "Birden çok referans görsel",
+        "instruction-edit": "Yönergeyle düzenleme",
+        "mask-edit": "Maskeli düzenleme",
+        "negative-prompt": "Negatif istem",
+        "seed": "Sabit tohum",
+        "aspect-ratio": "En boy oranı",
+        "candidate-batch": "Çağrı başına birden çok aday",
+        "upscale": "Büyütme",
+        "transparent-background": "Saydam arka plan",
+        "tileable": "Kusursuz döşenebilir"
+      },
+      "binaryCapabilityUnknown": "{capability} (bu kurulumun tanımlamadığı bir yetenek)",
+      "binaryCapabilityUnsupported": "Seçili entegrasyonların hiçbiri, bu adımın üretim seçeneklerinin istediği {capabilities} desteğini sunmuyor. Seçeneği kaldırın ya da yeteneği bildiren bir entegrasyon seçin.",
+      "binaryCapabilityUnverifiable": "Seçili entegrasyonların hiçbiri {capabilities} desteğini bildirmiyor, ancak biri hiç yetenek bildirmiyor, bu yüzden bu doğrulanamadı. Adım yine de başlar; entegrasyonun API’sinden teyit edin.",
+      "binaryReferenceImages": "Referans görseller",
+      "binaryReferenceImagesPlaceholder": "rol{'|'}konum{'|'}servis, her satıra bir tane",
+      "binaryReferenceImagesUnusable": "Referans olarak kaydedilmedi: {entries}. Her satır rol{'|'}konum biçiminde olmalı; rol style, subject, composition veya base olabilir.",
+      "binaryEditMode": "Mevcudu düzenle",
+      "binaryEditModeNone": "Yeni üret",
+      "binaryEditModeInstruction": "Bir yönergeyle",
+      "binaryEditModeMask": "Maskeli bölge",
+      "binaryEditInstruction": "Neyin değişeceği",
+      "binaryEditInstructionPlaceholder": "örn. gökyüzünü değiştir",
+      "binaryNegativePrompt": "Negatif istem",
+      "binaryNegativePromptPlaceholder": "nelerden kaçınılacağı",
+      "binaryAspectRatio": "En boy oranı",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binarySeed": "Tohum",
+      "binarySeedPlaceholder": "sabit tohum",
+      "binaryTransparent": "Saydam arka plan",
+      "binaryTileable": "Kusursuz döşenebilir",
+      "binaryUpscale": "Sonucu büyüt",
+      "binaryComparison": "Teslimden önce adayları karşılaştır",
+      "binaryPerGenerator": "Entegrasyon başına aday",
+      "binaryMultiSelect": "Birden fazlasını tutmaya izin ver",
+      "binaryComparisonUnreachable": "Bu adım her konu için yalnızca bir aday üretebilir; karşılaştırılacak bir şey olmaz ve tek aday sorulmadan tutulur. İkinci bir entegrasyon seçin ya da entegrasyon başına aday sayısını artırın."
     },
     "progress": {
       "status": {
@@ -4812,6 +4853,9 @@
       "forkDecision": {
         "proposing": "Yaklaşımlar öneriliyor…",
         "choose": "Bir yaklaşım seçin"
+      },
+      "binaryCandidates": {
+        "choose": "Bir aday seçin"
       },
       "elapsedTooltip": "Bu adımda geçen süre",
       "prReview": {
@@ -6265,7 +6309,12 @@
       "unknownGenerators": "Bu kurulumun kaydetmediği bir üretken entegrasyon belirtildi: {ids}. Kayıt bildirildiği gibi korunur; entegrasyon bu çalışma alanında değil, kurulumun kodunda kaydedilir. | Bu kurulumun kaydetmediği üretken entegrasyonlar belirtildi: {ids}. Kayıtları bildirildiği gibi korunur; entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
       "generatorsUnverified": "Adım tamamlanırken bu dağıtımın üretken entegrasyonları okunamadı, bu yüzden aşağıda adı geçen entegrasyonlar bunlarla karşılaştırılmadı. Kayıtlar bildirildiği gibi saklanır."
     },
-    "unknownGeneratorBadge": "Kayıtlı değil"
+    "unknownGeneratorBadge": "Kayıtlı değil",
+    "candidates": {
+      "automatic": "{total} aday üretildi ve inceleme olmadan otomatik olarak tutuldu.",
+      "chosen": "Üretilen {total} adayın {kept} tanesi tutuldu.",
+      "awaiting": "{total} aday üretildi ve karşılaştırılmayı bekliyor."
+    }
   },
   "sandbox": {
     "title": "Sandbox: prompt ve model testi",
@@ -7550,6 +7599,33 @@
       "unresolved": "Bu araç geçerli çalışma alanı için bir adres döndürmedi.",
       "resolverFailed": "Bu araç adresini belirlerken hata verdi. Nedeni, bu dağıtımı yönetenler için tarayıcı konsolunda yer alıyor.",
       "unsafeUrl": "Bu araç web bağlantısı olmayan bir adres döndürdü, bu yüzden açılmadı."
+    }
+  },
+  "binaryCandidates": {
+    "title": "Üretilen adaylar",
+    "titleWithBlock": "Üretilen adaylar: {title}",
+    "subtitle": "Her entegrasyonun ürettiğini karşılaştırın ve istediğinizi tutun",
+    "automatic": "Yalnızca bir aday üretildi, bu yüzden otomatik olarak tutuldu. Kimse incelemedi.",
+    "unlabelledSubject": "Konu bildirilmedi",
+    "noPreview": "Önizleme yok",
+    "fromGenerator": "{generator} kaynaklı",
+    "unattributed": "Entegrasyon kaydedilmedi",
+    "kept": "Tutuldu",
+    "keptAs": "{id} olarak tutuldu",
+    "storeAsPlaceholder": "bu kimlikle sakla",
+    "notePlaceholder": "Saklarken değişmesi gerekenler (isteğe bağlı)",
+    "missingAlias": "Tutulan her adaya kendi kimliğini verin, yoksa hepsi aynı adla saklanır.",
+    "duplicateAlias": "Tutulan iki aday aynı kimliği paylaşıyor. Tek konumdaki iki çıktı, tek çıktıdır.",
+    "keepAction": "{count} tanesini tut",
+    "warning": {
+      "omitted": "Üst sınırın ötesinde {count} aday elendi, bu liste yalnızca baştan bir bölüm. ",
+      "invalid": "Bildirilen {count} kayıt okunamadı ve burada yok. ",
+      "previews": "{count} önizleme bağlantısı reddedildi, o adaylar görselsiz gösteriliyor."
+    },
+    "noChoice": {
+      "undeclared": "Adım adaylarını hiç bildirmedi, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti.",
+      "parseFailed": "Adımın aday bildirimi okunamadı, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti.",
+      "noCandidates": "Adım hiç aday hazırlamadı, bu yüzden karşılaştırılacak bir şey yoktu. Çalıştırma devam etti."
     }
   }
 }

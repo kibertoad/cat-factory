@@ -1109,6 +1109,7 @@
       },
       "chooseApproach": "בחר גישה",
       "triageFollowUps": "הכרע בהמשכים",
+      "chooseCandidates": "הכרע במועמדים",
       "elapsedTooltip": "הזמן שחלף בשלב זה",
       "reviewFindings": "עיין בממצאים",
       "dryRun": "הרצת יבש",
@@ -1387,8 +1388,10 @@
       "decisionRequired": "נדרשת החלטה",
       "followUpsParked": "ה-Coder העלה המשכים שדורשים הכרעה לפני שהריצה תוכל להמשיך. טפל בכל פריט (תייק, החזר, ענה או דחה) בחלון ההמשכים.",
       "forkParked": "שלב ה-Coder הזה ממתין לבחירת גישת מימוש לפני כתיבת קוד. בחר גישה מוצעת (או הזן גישה משלך) בחלון ההחלטה.",
+      "candidatesParked": "השלב הזה יצר מועמדים וממתין שמישהו יבחר אילו לשמור לפני שיספק דבר. השווה ביניהם ושמור את מה שתרצה בחלון המועמדים.",
       "openFollowUps": "פתח את ההמשכים",
       "chooseApproach": "בחר גישה",
+      "chooseCandidates": "בחר מועמדים",
       "expandAll": "הרחב את כל המקטעים",
       "collapseAll": "כווץ את כל המקטעים",
       "copyRawOutput": "העתק פלט גולמי",
@@ -4766,7 +4769,45 @@
         "3d-model": "מודלים תלת-ממדיים",
         "3d-scene": "סצנות תלת-ממדיות",
         "document": "מסמכים"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "תמונת ייחוס",
+        "multi-reference": "כמה תמונות ייחוס",
+        "instruction-edit": "עריכה לפי הנחיה",
+        "mask-edit": "עריכה עם מסכה",
+        "negative-prompt": "הנחיה שלילית",
+        "seed": "זרע קבוע",
+        "aspect-ratio": "יחס גובה-רוחב",
+        "candidate-batch": "כמה מועמדים בקריאה אחת",
+        "upscale": "הגדלה",
+        "transparent-background": "רקע שקוף",
+        "tileable": "ריצוף חלק"
+      },
+      "binaryCapabilityUnknown": "{capability} (יכולת שההתקנה הזו אינה מגדירה)",
+      "binaryCapabilityUnsupported": "אף אינטגרציה שנבחרה אינה תומכת ב-{capabilities}, שאותה מבקשות אפשרויות היצירה של שלב זה. הסירו את האפשרות או בחרו אינטגרציה שמצהירה על היכולת.",
+      "binaryCapabilityUnverifiable": "אף אינטגרציה שנבחרה אינה מצהירה על תמיכה ב-{capabilities}, אך אחת מהן אינה מצהירה על יכולות כלל, ולכן לא ניתן היה לבדוק זאת. השלב עדיין יתחיל; אשרו זאת מול ה-API של האינטגרציה.",
+      "binaryReferenceImages": "תמונות ייחוס",
+      "binaryReferenceImagesPlaceholder": "תפקיד{'|'}מיקום{'|'}שירות, אחת בכל שורה",
+      "binaryReferenceImagesUnusable": "לא נשמרו כייחוס: {entries}. כל שורה חייבת להיות תפקיד{'|'}מיקום, כאשר התפקיד הוא style, subject, composition או base.",
+      "binaryEditMode": "עריכת קיים",
+      "binaryEditModeNone": "יצירה חדשה",
+      "binaryEditModeInstruction": "לפי הנחיה",
+      "binaryEditModeMask": "אזור ממוסך",
+      "binaryEditInstruction": "מה לשנות",
+      "binaryEditInstructionPlaceholder": "למשל להחליף את השמיים",
+      "binaryNegativePrompt": "הנחיה שלילית",
+      "binaryNegativePromptPlaceholder": "ממה להימנע",
+      "binaryAspectRatio": "יחס גובה-רוחב",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binarySeed": "זרע",
+      "binarySeedPlaceholder": "זרע קבוע",
+      "binaryTransparent": "רקע שקוף",
+      "binaryTileable": "ריצוף חלק",
+      "binaryUpscale": "הגדלת התוצאה",
+      "binaryComparison": "להשוות מועמדים לפני מסירה",
+      "binaryPerGenerator": "מועמדים לכל אינטגרציה",
+      "binaryMultiSelect": "לאפשר לשמור יותר מאחד",
+      "binaryComparisonUnreachable": "השלב הזה יכול להפיק רק מועמד אחד לכל נושא, כך שלא יהיה מה להשוות והיחיד יישמר בלי לשאול. בחרו אינטגרציה נוספת או העלו את מספר המועמדים לכל אינטגרציה."
     },
     "progress": {
       "status": {
@@ -4812,6 +4853,9 @@
       "forkDecision": {
         "proposing": "מציע גישות…",
         "choose": "בחר גישה"
+      },
+      "binaryCandidates": {
+        "choose": "בחר מועמדים"
       },
       "elapsedTooltip": "הזמן שחלף בשלב זה",
       "prReview": {
@@ -6265,7 +6309,12 @@
       "unknownGenerators": "צוינה אינטגרציה גנרטיבית שההתקנה הזו אינה רושמת: {ids}. הרשומה נשמרת כפי שהוצהרה; האינטגרציה נרשמת בקוד ההתקנה, לא במרחב העבודה הזה. | צוינו שתי אינטגרציות גנרטיביות שההתקנה הזו אינה רושמת: {ids}. הרשומות נשמרות כפי שהוצהרו; אינטגרציות נרשמות בקוד ההתקנה, לא במרחב העבודה הזה. | צוינו אינטגרציות גנרטיביות שההתקנה הזו אינה רושמת: {ids}. הרשומות נשמרות כפי שהוצהרו; אינטגרציות נרשמות בקוד ההתקנה, לא במרחב העבודה הזה.",
       "generatorsUnverified": "לא ניתן היה לקרוא את האינטגרציות הגנרטיביות של הפריסה הזו בעת סיום השלב, ולכן האינטגרציות המצוינות למטה לא נבדקו מולן. הרשומות נשמרות כפי שהוצהרו."
     },
-    "unknownGeneratorBadge": "לא רשומה"
+    "unknownGeneratorBadge": "לא רשומה",
+    "candidates": {
+      "automatic": "נוצר {total} מועמד ונשמר אוטומטית, ללא בדיקה.",
+      "chosen": "נשמרו {kept} מתוך {total} מועמדים שנוצרו.",
+      "awaiting": "נוצרו {total} מועמדים והם ממתינים להשוואה."
+    }
   },
   "sandbox": {
     "title": "Sandbox: בדיקת פרומפטים ומודלים",
@@ -7550,6 +7599,33 @@
       "unresolved": "הכלי הזה לא החזיר כתובת עבור סביבת העבודה הנוכחית.",
       "resolverFailed": "הכלי הזה נכשל בעת חישוב הכתובת שלו. הסיבה מופיעה במסוף הדפדפן, עבור מי שמתחזק את ההתקנה הזו.",
       "unsafeUrl": "הכלי הזה החזיר כתובת שאינה קישור אינטרנט, ולכן היא לא נפתחה."
+    }
+  },
+  "binaryCandidates": {
+    "title": "מועמדים שנוצרו",
+    "titleWithBlock": "מועמדים שנוצרו: {title}",
+    "subtitle": "השוו מה כל אינטגרציה יצרה ושמרו את מה שאתם רוצים",
+    "automatic": "נוצר מועמד אחד בלבד, ולכן הוא נשמר אוטומטית. אף אחד לא בדק אותו.",
+    "unlabelledSubject": "לא הוצהר נושא",
+    "noPreview": "אין תצוגה מקדימה",
+    "fromGenerator": "מ-{generator}",
+    "unattributed": "לא נרשמה אינטגרציה",
+    "kept": "נשמר",
+    "keptAs": "נשמר בשם {id}",
+    "storeAsPlaceholder": "לשמור במזהה הזה",
+    "notePlaceholder": "מה לשנות בעת השמירה (רשות)",
+    "missingAlias": "תנו לכל מועמד שנשמר מזהה משלו, אחרת כולם יישמרו באותו שם.",
+    "duplicateAlias": "לשני מועמדים שנשמרו יש אותו מזהה. שני פריטים במיקום אחד הם פריט אחד.",
+    "keepAction": "לשמור {count}",
+    "warning": {
+      "omitted": "{count} מועמדים הושמטו מעבר לתקרה, ולכן הרשימה הזו היא רק ההתחלה. ",
+      "invalid": "{count} רשומות שהוצהרו לא היו קריאות וחסרות כאן. ",
+      "previews": "{count} קישורי תצוגה מקדימה נדחו, ולכן המועמדים האלה מוצגים ללא תמונה."
+    },
+    "noChoice": {
+      "undeclared": "השלב מעולם לא הצהיר על מועמדים, ולכן לא היה מה להשוות. הריצה המשיכה.",
+      "parseFailed": "לא ניתן היה לקרוא את הצהרת המועמדים של השלב, ולכן לא היה מה להשוות. הריצה המשיכה.",
+      "noCandidates": "השלב לא הכין אף מועמד, ולכן לא היה מה להשוות. הריצה המשיכה."
     }
   }
 }

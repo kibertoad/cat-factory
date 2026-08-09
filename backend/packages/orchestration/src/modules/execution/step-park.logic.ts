@@ -50,6 +50,7 @@ export type DedicatedParkSurface =
   | 'companion-cap'
   | 'follow-ups'
   | 'fork-decision'
+  | 'binary-candidates'
 
 /**
  * The dedicated surface that owns this step's park, or `null` when the park is an ORDINARY
@@ -90,6 +91,10 @@ export function dedicatedParkSurface(
   ) {
     return 'fork-decision'
   }
+  // A comparison step parked between its generating and delivering passes. Answered by keeping
+  // candidates, so the generic verbs must not reach it: approving would mark a step done that has
+  // staged files and delivered nothing, and the run would advance past the decision it exists for.
+  if (step.binaryCandidates?.status === 'awaiting_choice') return 'binary-candidates'
   return null
 }
 

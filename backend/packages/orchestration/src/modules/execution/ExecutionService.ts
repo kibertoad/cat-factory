@@ -5,13 +5,6 @@ import type {
   AgentFailureKind,
   Block,
   ExecutionInstance,
-  FollowUpsStepState,
-  ForkDecisionStepState,
-  ChooseForkInput,
-  ForkChatRequestInput,
-  PrReviewStepState,
-  ResolvePrReviewInput,
-  ChallengePrReviewFindingInput,
   PipelineStep,
   PullRequestMerger,
   GateActor,
@@ -49,7 +42,7 @@ import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { PostMergeBoardController, type PostMergeBoardHost } from './PostMergeBoardController.js'
 import { orderPrsForMerge } from './mergeOrder.logic.js'
-import { type ReviewGateController, type ReviewKind } from './ReviewGateController.js'
+import { type ReviewKind } from './ReviewGateController.js'
 import { runStepPreamble, type StepPreambleDeps } from './stepPreamble.js'
 import type { InputGateController } from './InputGateController.js'
 import {
@@ -58,8 +51,7 @@ import {
   buildReviewSubjects,
 } from './gate-window-controllers.js'
 import { buildRunContextAndAdmission } from './run-context-admission.js'
-import { ForkDecisionController } from './ForkDecisionController.js'
-import { PrReviewController } from './PrReviewController.js'
+import { runDecisionSurfaces, type RunDecisionSurfaces } from './run-decision-surfaces.js'
 import {
   BrainstormActions,
   ClarityReviewActions,
@@ -67,10 +59,6 @@ import {
   RequirementReviewActions,
   type VisualConfirmActions,
 } from './gate-window-facades.js'
-import { TesterController } from './TesterController.js'
-import { RalphController } from './RalphController.js'
-import { HumanTestController } from './HumanTestController.js'
-import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import { DocInterviewController } from './DocInterviewController.js'
@@ -208,22 +196,19 @@ export class ExecutionService {
   private readonly mergeResolver: MergeResolver
   /** Drives a companion (reviewer/spec/architect) step: grade → pass / loop producer / park. */
   private readonly companionController: CompanionController
-  /** Drives the Tester gate's fix loop: report → greenlight / dispatch fixer / fail. */
-  private readonly testerController: TesterController
-  private readonly ralphController: RalphController
-  /** Drives the human-testing gate: provision env → park → confirm / fix / pull-main / recreate. */
-  private readonly humanTestController: HumanTestController
-  /** Drives the visual-confirmation gate: gather screenshots → park → approve / fix / recapture. */
-  private readonly visualConfirmationController: VisualConfirmationController
-  /** Drives both iterative review gates (requirements + clarity); kind-parameterised. */
-  private readonly reviewGate: ReviewGateController
+  /**
+   * The controllers behind the run's gates and dedicated park windows, as ONE bundle rather than
+   * one field each: the Tester fix loop, the Ralph loop, the human-testing and
+   * visual-confirmation gates, both iterative review gates, the implementation-fork decision, the
+   * PR deep-review and the generated-candidate comparison. The family grows with every park
+   * surface, and a field plus an assignment per member spends two lines of this class's budget on
+   * a value that is only ever forwarded. See {@link buildGateWindowControllers}.
+   */
+  private readonly gateWindows: ReturnType<typeof buildGateWindowControllers>
   /** The pre-dispatch input gate; see {@link InputGateController}. */
   private readonly inputGate: InputGateController
   /** Bound collaborators for the shared pre-dispatch preamble ({@link runStepPreamble}). */
   private stepPreambleDepsCache?: StepPreambleDeps
-  /** Drives the human-facing half of the implementation-fork decision phase on the Coder step. */
-  private readonly forkDecisionController: ForkDecisionController
-  private readonly prReviewController: PrReviewController
   /** The requirements subject for {@link reviewGate}. */
   private readonly requirementsKind: ReviewKind<RequirementReview>
   /** The clarity (bug-report triage) subject for {@link reviewGate}. */
@@ -444,13 +429,7 @@ export class ExecutionService {
       issueWriteback,
       logger,
     })
-    this.testerController = gateWindows.testerController
-    this.ralphController = gateWindows.ralphController
-    this.humanTestController = gateWindows.humanTestController
-    this.visualConfirmationController = gateWindows.visualConfirmationController
-    this.reviewGate = gateWindows.reviewGate
-    this.forkDecisionController = gateWindows.forkDecisionController
-    this.prReviewController = gateWindows.prReviewController
+    this.gateWindows = gateWindows
     // The pre-dispatch input gate: not a gate WINDOW (it guards the run's first dispatch and has no
     // pipeline step of its own), so it has its own factory over the same dependency bag.
     this.inputGate = buildInputGateController(dependencies, {
@@ -622,13 +601,14 @@ export class ExecutionService {
       contextBuilder: this.contextBuilder,
       mergeResolver: this.mergeResolver,
       companionController: this.companionController,
-      testerController: this.testerController,
-      ralphController: this.ralphController,
-      humanTestController: this.humanTestController,
-      visualConfirmationController: this.visualConfirmationController,
-      reviewGate: this.reviewGate,
-      forkDecisionController: this.forkDecisionController,
-      prReviewController: this.prReviewController,
+      testerController: this.gateWindows.testerController,
+      ralphController: this.gateWindows.ralphController,
+      humanTestController: this.gateWindows.humanTestController,
+      visualConfirmationController: this.gateWindows.visualConfirmationController,
+      reviewGate: this.gateWindows.reviewGate,
+      forkDecisionController: this.gateWindows.forkDecisionController,
+      binaryCandidateController: this.gateWindows.binaryCandidateController,
+      prReviewController: this.gateWindows.prReviewController,
       requirementsKind: this.requirementsKind,
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
@@ -674,7 +654,7 @@ export class ExecutionService {
   /** Requirements-review window actions (run / incorporate / re-review / proceed / …). */
   get requirementsReview(): RequirementReviewActions {
     this.requirementsReviewActions ??= new RequirementReviewActions(
-      this.reviewGate,
+      this.gateWindows.reviewGate,
       this.requirementsKind,
     )
     return this.requirementsReviewActions
@@ -682,13 +662,16 @@ export class ExecutionService {
 
   /** Clarity-review (bug-report triage) window actions. */
   get clarityReview(): ClarityReviewActions {
-    this.clarityReviewActions ??= new ClarityReviewActions(this.reviewGate, this.clarityKind)
+    this.clarityReviewActions ??= new ClarityReviewActions(
+      this.gateWindows.reviewGate,
+      this.clarityKind,
+    )
     return this.clarityReviewActions
   }
 
   /** Brainstorm (structured-dialogue) window actions, keyed by stage. */
   get brainstorm(): BrainstormActions {
-    this.brainstormActions ??= new BrainstormActions(this.reviewGate, (stage) =>
+    this.brainstormActions ??= new BrainstormActions(this.gateWindows.reviewGate, (stage) =>
       this.brainstormKindFor(stage),
     )
     return this.brainstormActions
@@ -696,12 +679,12 @@ export class ExecutionService {
 
   /** Human-testing gate window actions (confirm / request-fix / pull-main / recreate / destroy). */
   get humanTest(): HumanTestActions {
-    return this.humanTestController
+    return this.gateWindows.humanTestController
   }
 
   /** Visual-confirmation gate window actions (approve / request-fix / recapture). */
   get visualConfirm(): VisualConfirmActions {
-    return this.visualConfirmationController
+    return this.gateWindows.visualConfirmationController
   }
 
   /**
@@ -1011,108 +994,14 @@ export class ExecutionService {
     return this.runDispatcher.resolveGatePollExhaustion(workspaceId, executionId)
   }
 
-  /** @see RunDispatcher.getFollowUps */
-  getFollowUps(workspaceId: string, executionId: string): Promise<FollowUpsStepState | null> {
-    return this.runDispatcher.getFollowUps(workspaceId, executionId)
-  }
-
-  /** @see RunDispatcher.getForkDecision */
-  getForkDecision(workspaceId: string, executionId: string): Promise<ForkDecisionStepState | null> {
-    return this.runDispatcher.getForkDecision(workspaceId, executionId)
-  }
-
-  /** @see RunDispatcher.chooseFork */
-  chooseFork(
-    workspaceId: string,
-    executionId: string,
-    input: ChooseForkInput,
-  ): Promise<ForkDecisionStepState> {
-    return this.runDispatcher.chooseFork(workspaceId, executionId, input)
-  }
-
-  /** @see RunDispatcher.forkChat */
-  forkChat(
-    workspaceId: string,
-    executionId: string,
-    input: ForkChatRequestInput,
-  ): Promise<ForkDecisionStepState> {
-    return this.runDispatcher.forkChat(workspaceId, executionId, input)
-  }
-
-  /** @see RunDispatcher.getPrReview */
-  getPrReview(workspaceId: string, executionId: string): Promise<PrReviewStepState | null> {
-    return this.runDispatcher.getPrReview(workspaceId, executionId)
-  }
-
-  /** @see RunDispatcher.resolvePrReview */
-  resolvePrReview(
-    workspaceId: string,
-    executionId: string,
-    input: ResolvePrReviewInput,
-  ): Promise<PrReviewStepState> {
-    return this.runDispatcher.resolvePrReview(workspaceId, executionId, input)
-  }
-
-  /** @see RunDispatcher.resumePrReview */
-  resumePrReview(workspaceId: string, executionId: string): Promise<PrReviewStepState> {
-    return this.runDispatcher.resumePrReview(workspaceId, executionId)
-  }
-
-  /** @see RunDispatcher.dismissPrReviewFinding */
-  dismissPrReviewFinding(
-    workspaceId: string,
-    executionId: string,
-    findingId: string,
-  ): Promise<PrReviewStepState> {
-    return this.runDispatcher.dismissPrReviewFinding(workspaceId, executionId, findingId)
-  }
-
-  /** @see RunDispatcher.challengePrReviewFinding */
-  challengePrReviewFinding(
-    workspaceId: string,
-    executionId: string,
-    findingId: string,
-    input: ChallengePrReviewFindingInput,
-  ): Promise<PrReviewStepState> {
-    return this.runDispatcher.challengePrReviewFinding(workspaceId, executionId, findingId, input)
-  }
-
-  /** @see RunDispatcher.fileFollowUp */
-  fileFollowUp(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-  ): Promise<FollowUpsStepState> {
-    return this.runDispatcher.fileFollowUp(workspaceId, executionId, itemId)
-  }
-
-  /** @see RunDispatcher.queueFollowUp */
-  queueFollowUp(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-  ): Promise<FollowUpsStepState> {
-    return this.runDispatcher.queueFollowUp(workspaceId, executionId, itemId)
-  }
-
-  /** @see RunDispatcher.answerFollowUp */
-  answerFollowUp(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-    answer: string,
-  ): Promise<FollowUpsStepState> {
-    return this.runDispatcher.answerFollowUp(workspaceId, executionId, itemId, answer)
-  }
-
-  /** @see RunDispatcher.dismissFollowUp */
-  dismissFollowUp(
-    workspaceId: string,
-    executionId: string,
-    itemId: string,
-  ): Promise<FollowUpsStepState> {
-    return this.runDispatcher.dismissFollowUp(workspaceId, executionId, itemId)
-  }
+  /**
+   * The verbs a run's DEDICATED PARK WINDOWS are answered with: the Follow-up companion, the
+   * implementation-fork decision, the PR deep-review and the generated-candidate comparison.
+   *
+   * One property rather than sixteen delegates, because they are one concern and the family grows
+   * by two every time a park surface is added. See `run-decision-surfaces.ts`.
+   */
+  readonly decisions: RunDecisionSurfaces = runDecisionSurfaces(() => this.runDispatcher)
 
   /**
    * Infer + persist the block's `technical` label from the settled spec phase (item 5):

@@ -1654,6 +1654,7 @@
       "mergePr": "PR mergen",
       "chooseApproach": "Ansatz wählen",
       "triageFollowUps": "Folgeaufgaben entscheiden",
+      "chooseCandidates": "Kandidaten entscheiden",
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
       "reviewFindings": "Befunde prüfen",
       "dryRun": "Probelauf",
@@ -1932,8 +1933,10 @@
       "decisionRequired": "Entscheidung erforderlich",
       "followUpsParked": "Der Coder hat Folgeaufgaben aufgeworfen, die entschieden werden müssen, bevor der Lauf fortgesetzt werden kann. Bearbeite jeden Punkt (anlegen, zurückgeben, beantworten oder verwerfen) im Folgeaufgaben-Fenster.",
       "forkParked": "Dieser Coder-Schritt wartet darauf, dass ein Implementierungsansatz gewählt wird, bevor Code geschrieben wird. Wähle einen vorgeschlagenen Ansatz (oder gib einen eigenen ein) im Entscheidungsfenster.",
+      "candidatesParked": "Dieser Schritt hat Kandidaten erzeugt und wartet darauf, dass jemand auswählt, welche behalten werden, bevor er etwas ausliefert. Vergleiche sie im Kandidatenfenster und behalte, was du möchtest.",
       "openFollowUps": "Folgeaufgaben öffnen",
       "chooseApproach": "Ansatz wählen",
+      "chooseCandidates": "Kandidaten wählen",
       "expandAll": "Alle Abschnitte ausklappen",
       "collapseAll": "Alle Abschnitte einklappen",
       "copyRawOutput": "Rohausgabe kopieren",
@@ -4327,7 +4330,45 @@
         "3d-model": "3D-Modelle",
         "3d-scene": "3D-Szenen",
         "document": "Dokumente"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "Referenzbild",
+        "multi-reference": "Mehrere Referenzbilder",
+        "instruction-edit": "Bearbeitung per Anweisung",
+        "mask-edit": "Maskierte Bearbeitung",
+        "negative-prompt": "Negativer Prompt",
+        "seed": "Fester Seed",
+        "aspect-ratio": "Seitenverhältnis",
+        "candidate-batch": "Mehrere Kandidaten pro Aufruf",
+        "upscale": "Hochskalierung",
+        "transparent-background": "Transparenter Hintergrund",
+        "tileable": "Nahtlos kachelbar"
+      },
+      "binaryCapabilityUnknown": "{capability} (eine Fähigkeit, die diese Installation nicht definiert)",
+      "binaryCapabilityUnsupported": "Keine ausgewählte Integration unterstützt {capabilities}, was die Generierungsoptionen dieses Schritts verlangen. Entferne die Option oder wähle eine Integration, die die Fähigkeit deklariert.",
+      "binaryCapabilityUnverifiable": "Keine ausgewählte Integration deklariert Unterstützung für {capabilities}, aber eine von ihnen deklariert überhaupt keine Fähigkeiten, daher konnte das nicht geprüft werden. Der Schritt startet trotzdem; prüfe es in der API der Integration.",
+      "binaryReferenceImages": "Referenzbilder",
+      "binaryReferenceImagesPlaceholder": "Rolle{'|'}Ort{'|'}Dienst, eine pro Zeile",
+      "binaryReferenceImagesUnusable": "Nicht als Referenz gespeichert: {entries}. Jede Zeile muss Rolle{'|'}Ort sein, wobei die Rolle style, subject, composition oder base ist.",
+      "binaryEditMode": "Vorhandenes bearbeiten",
+      "binaryEditModeNone": "Neu generieren",
+      "binaryEditModeInstruction": "Per Anweisung",
+      "binaryEditModeMask": "Maskierter Bereich",
+      "binaryEditInstruction": "Was geändert wird",
+      "binaryEditInstructionPlaceholder": "z. B. den Himmel ersetzen",
+      "binaryNegativePrompt": "Negativer Prompt",
+      "binaryNegativePromptPlaceholder": "was vermieden werden soll",
+      "binaryAspectRatio": "Seitenverhältnis",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binarySeed": "Seed",
+      "binarySeedPlaceholder": "fester Seed",
+      "binaryTransparent": "Transparenter Hintergrund",
+      "binaryTileable": "Nahtlos kachelbar",
+      "binaryUpscale": "Ergebnis hochskalieren",
+      "binaryComparison": "Kandidaten vor der Lieferung vergleichen",
+      "binaryPerGenerator": "Kandidaten pro Integration",
+      "binaryMultiSelect": "Mehrere behalten erlauben",
+      "binaryComparisonUnreachable": "Dieser Schritt kann nur einen Kandidaten pro Motiv erzeugen, es gäbe also nichts zu vergleichen und der einzige würde ungefragt behalten. Wähle eine zweite Integration oder erhöhe die Anzahl der Kandidaten pro Integration."
     },
     "progress": {
       "status": {
@@ -4373,6 +4414,9 @@
       "forkDecision": {
         "proposing": "Ansätze werden vorgeschlagen…",
         "choose": "Ansatz wählen"
+      },
+      "binaryCandidates": {
+        "choose": "Kandidaten wählen"
       },
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
       "prReview": {
@@ -5023,7 +5067,12 @@
       "unknownGenerators": "Eine generative Integration genannt, die diese Installation nicht registriert: {ids}. Der Eintrag bleibt wie angegeben erhalten; die Integration wird im Code der Installation registriert, nicht in diesem Workspace. | Generative Integrationen genannt, die diese Installation nicht registriert: {ids}. Ihre Einträge bleiben wie angegeben erhalten; Integrationen werden im Code der Installation registriert, nicht in diesem Workspace.",
       "generatorsUnverified": "Die generativen Integrationen dieser Installation konnten beim Abschluss des Schritts nicht gelesen werden, daher wurden die unten genannten Integrationen nicht dagegen geprüft. Die Einträge bleiben wie angegeben erhalten."
     },
-    "unknownGeneratorBadge": "Nicht registriert"
+    "unknownGeneratorBadge": "Nicht registriert",
+    "candidates": {
+      "automatic": "{total} Kandidat wurde erzeugt und ohne Prüfung automatisch behalten.",
+      "chosen": "{kept} von {total} erzeugten Kandidaten wurden behalten.",
+      "awaiting": "{total} Kandidaten wurden erzeugt und warten auf den Vergleich."
+    }
   },
   "brainstorm": {
     "title": {
@@ -7550,6 +7599,33 @@
       "unresolved": "Dieses Tool hat für den aktuellen Arbeitsbereich keine Adresse geliefert.",
       "resolverFailed": "Beim Ermitteln der Adresse ist in diesem Tool ein Fehler aufgetreten. Die Ursache steht in der Browser-Konsole, für die Betreuer dieser Installation.",
       "unsafeUrl": "Dieses Tool hat eine Adresse geliefert, die kein Weblink ist, und wurde daher nicht geöffnet."
+    }
+  },
+  "binaryCandidates": {
+    "title": "Erzeugte Kandidaten",
+    "titleWithBlock": "Erzeugte Kandidaten: {title}",
+    "subtitle": "Vergleiche, was jede Integration erzeugt hat, und behalte, was du willst",
+    "automatic": "Es wurde nur ein Kandidat erzeugt, daher wurde er automatisch behalten. Niemand hat ihn geprüft.",
+    "unlabelledSubject": "Kein Motiv angegeben",
+    "noPreview": "Keine Vorschau verfügbar",
+    "fromGenerator": "Von {generator}",
+    "unattributed": "Keine Integration erfasst",
+    "kept": "Behalten",
+    "keptAs": "Behalten als {id}",
+    "storeAsPlaceholder": "unter dieser ID ablegen",
+    "notePlaceholder": "Was beim Ablegen geändert werden soll (optional)",
+    "missingAlias": "Gib jedem behaltenen Kandidaten eine eigene ID, sonst würden alle unter demselben Namen abgelegt.",
+    "duplicateAlias": "Zwei behaltene Kandidaten teilen sich eine ID. Zwei Artefakte an einem Ort sind ein Artefakt.",
+    "keepAction": "{count} behalten",
+    "warning": {
+      "omitted": "{count} Kandidaten wurden über der Obergrenze verworfen, diese Liste ist also ein Anfang. ",
+      "invalid": "{count} deklarierte Einträge waren unlesbar und fehlen hier. ",
+      "previews": "{count} Vorschaulinks wurden abgelehnt, diese Kandidaten werden ohne Bild dargestellt."
+    },
+    "noChoice": {
+      "undeclared": "Der Schritt hat seine Kandidaten nie deklariert, es gab also nichts zu vergleichen. Der Lauf ging weiter.",
+      "parseFailed": "Die Kandidaten-Deklaration des Schritts war nicht lesbar, es gab also nichts zu vergleichen. Der Lauf ging weiter.",
+      "noCandidates": "Der Schritt hat keine Kandidaten bereitgestellt, es gab also nichts zu vergleichen. Der Lauf ging weiter."
     }
   }
 }

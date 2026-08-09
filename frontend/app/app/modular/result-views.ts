@@ -13,6 +13,7 @@ import ConsensusSessionWindow from '~/components/consensus/ConsensusSessionWindo
 import GenericStructuredResultView from '~/components/panels/GenericStructuredResultView.vue'
 import ServiceSpecWindow from '~/components/spec/ServiceSpecWindow.vue'
 import FollowUpWindow from '~/components/followUp/FollowUpWindow.vue'
+import BinaryCandidatesWindow from '~/components/binaryCandidates/BinaryCandidatesWindow.vue'
 import ForkDecisionWindow from '~/components/forkDecision/ForkDecisionWindow.vue'
 import PrReviewWindow from '~/components/prReview/PrReviewWindow.vue'
 import MergerResultView from '~/components/panels/MergerResultView.vue'
@@ -77,6 +78,9 @@ const BUILT_IN_RESULT_VIEWS: Record<ResultViewId, Component> = {
   'follow-ups': FollowUpWindow,
   // The implementation-fork decision: the proposer's approaches + the human's pick / custom.
   'fork-decision': ForkDecisionWindow,
+  // The generated-candidate comparison: the candidates a generating step staged, side by side,
+  // and the human's keep/discard decision (with the alternate ids they assigned).
+  'binary-candidates': BinaryCandidatesWindow,
   // The PR deep-review: the reviewer's sliced, prioritized findings + the human's multi-select.
   'pr-review': PrReviewWindow,
   // The merger's verdict: PR complexity/risk/impact scores + the engine's decision (and why).

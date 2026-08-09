@@ -14,6 +14,7 @@ import type {
   InfraEngine,
   InfraHandlerConfig,
 } from '@cat-factory/contracts'
+import { isKubernetesUrlSource } from '@cat-factory/contracts'
 import type { K3sSetupPrefill } from '~/stores/ui'
 
 // The kube branch of the discriminated handler config this form produces (the `local-k3s` /
@@ -22,6 +23,10 @@ import type { K3sSetupPrefill } from '~/stores/ui'
 // `as never` cast, so a wrong config shape is caught at the call site instead of server-side.
 type KubeHandlerConfig = Extract<InfraHandlerConfig, { engine: 'local-k3s' | 'remote-kubernetes' }>
 type KubeHandlerPayload = { config: KubeHandlerConfig; secrets: Record<string, string> }
+/** The engine connection block itself, read off the variant so it cannot drift from it. */
+type KubeEngineConfig = KubeHandlerConfig['kubernetes']
+/** How the environment URL is derived: its own discriminated union, keyed by `source`. */
+type KubeUrlSource = KubeEngineConfig['url']
 
 const props = defineProps<{
   /** `local-k3s` or `remote-kubernetes` — the engine this handler is registered under. */
@@ -46,12 +51,9 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-type UrlSource =
-  | 'ingressTemplate'
-  | 'ingressStatus'
-  | 'serviceStatus'
-  | 'gatewayStatus'
-  | 'httpRouteStatus'
+/** The `source` discriminants, read off the contract union: a source added there makes
+ *  `buildUrl`'s switch non-exhaustive rather than leaving this list quietly short. */
+type UrlSource = KubeUrlSource['source']
 
 const form = reactive({
   label: '',
@@ -101,23 +103,34 @@ watch(
   (h) => {
     const cfg = h?.config
     if (!cfg || (cfg.engine !== 'local-k3s' && cfg.engine !== 'remote-kubernetes')) return
-    const k = cfg.kubernetes as Record<string, unknown>
-    form.label = typeof k.label === 'string' ? k.label : ''
-    form.apiServerUrl = typeof k.apiServerUrl === 'string' ? k.apiServerUrl : ''
-    form.caCertPem = typeof k.caCertPem === 'string' ? k.caCertPem : ''
+    // Narrowing `cfg.engine` above types `kubernetes` as the engine config, so these read the
+    // contract directly. They used to widen it to a `Record` and `typeof`-guard every field,
+    // which re-derived at runtime what the discriminated union already states.
+    const k = cfg.kubernetes
+    form.label = k.label
+    form.apiServerUrl = k.apiServerUrl
+    form.caCertPem = k.caCertPem ?? ''
     form.insecureSkipTlsVerify = k.insecureSkipTlsVerify === true
-    form.namespaceTemplate = typeof k.namespaceTemplate === 'string' ? k.namespaceTemplate : ''
-    form.imageTemplate = typeof k.imageTemplate === 'string' ? k.imageTemplate : ''
-    const url = k.url as Record<string, unknown> | undefined
-    const src = typeof url?.source === 'string' ? (url.source as UrlSource) : 'ingressTemplate'
-    form.urlSource = src
-    form.hostTemplate = typeof url?.hostTemplate === 'string' ? url.hostTemplate : ''
-    form.ingressName = typeof url?.ingressName === 'string' ? url.ingressName : ''
-    form.serviceName = typeof url?.serviceName === 'string' ? url.serviceName : ''
-    form.servicePort = typeof url?.port === 'number' ? String(url.port) : ''
-    form.gatewayName = typeof url?.gatewayName === 'string' ? url.gatewayName : ''
-    form.httpRouteName = typeof url?.httpRouteName === 'string' ? url.httpRouteName : ''
-    form.urlScheme = url?.scheme === 'http' || url?.scheme === 'https' ? url.scheme : 'default'
+    form.namespaceTemplate = k.namespaceTemplate ?? ''
+    form.imageTemplate = k.imageTemplate ?? ''
+    // Each url field is read off the ONE variant that carries it, so a field belonging to a
+    // different `source` cannot silently populate the form.
+    //
+    // Typed as present with an on-union `source`, read as neither: both were true when the
+    // connect form admitted this config, and the value has been through storage since — which is
+    // exactly why the backend re-parses a stored `providerConfig` rather than asserting it, and
+    // this form is where an operator REPAIRS one that drifted. An unrecognised source falls back
+    // to the form's default, because `buildUrl` has no branch to build a config out of one.
+    const url: KubeUrlSource | undefined = k.url
+    const source = url?.source
+    form.urlSource = isKubernetesUrlSource(source) ? source : 'ingressTemplate'
+    form.hostTemplate = url?.source === 'ingressTemplate' ? url.hostTemplate : ''
+    form.ingressName = url?.source === 'ingressStatus' ? (url.ingressName ?? '') : ''
+    form.serviceName = url?.source === 'serviceStatus' ? url.serviceName : ''
+    form.servicePort = url?.source === 'serviceStatus' && url.port != null ? String(url.port) : ''
+    form.gatewayName = url?.source === 'gatewayStatus' ? (url.gatewayName ?? '') : ''
+    form.httpRouteName = url?.source === 'httpRouteStatus' ? (url.httpRouteName ?? '') : ''
+    form.urlScheme = url?.scheme ?? 'default'
   },
   { immediate: true },
 )
@@ -222,42 +235,81 @@ const connectBlockedReason = computed(() => {
   return t('settings.infrastructure.kubernetesEngine.invalidPort')
 })
 
-function buildUrl(): Record<string, unknown> {
-  const url: Record<string, unknown> = { source: form.urlSource }
-  if (form.urlSource === 'ingressTemplate') {
-    url.hostTemplate = form.hostTemplate.trim()
-  } else if (form.urlSource === 'ingressStatus') {
-    if (form.ingressName.trim()) url.ingressName = form.ingressName.trim()
-  } else if (form.urlSource === 'serviceStatus') {
-    url.serviceName = form.serviceName.trim()
-    const port = Number(form.servicePort)
-    if (form.servicePort.trim() && Number.isInteger(port)) url.port = port
-  } else if (form.urlSource === 'gatewayStatus') {
-    if (form.gatewayName.trim()) url.gatewayName = form.gatewayName.trim()
-  } else {
-    if (form.httpRouteName.trim()) url.httpRouteName = form.httpRouteName.trim()
+/**
+ * The URL-derivation block, built as the contract's discriminated union rather than a `Record`.
+ * Each branch returns its OWN variant, so the fields a source carries are checked against that
+ * source: setting `hostTemplate` on a `serviceStatus` url stops compiling instead of shipping a
+ * config the backend rejects. `urlScheme` is the one field every variant shares, and the
+ * 'default' sentinel means "omit it and let the derivation decide".
+ */
+function buildUrl(): KubeUrlSource {
+  const scheme = form.urlScheme === 'default' ? {} : { scheme: form.urlScheme }
+  switch (form.urlSource) {
+    case 'ingressTemplate':
+      return { source: 'ingressTemplate', hostTemplate: form.hostTemplate.trim(), ...scheme }
+    case 'ingressStatus': {
+      const ingressName = form.ingressName.trim()
+      return { source: 'ingressStatus', ...(ingressName ? { ingressName } : {}), ...scheme }
+    }
+    case 'serviceStatus': {
+      const port = Number(form.servicePort)
+      return {
+        source: 'serviceStatus',
+        serviceName: form.serviceName.trim(),
+        ...(form.servicePort.trim() && Number.isInteger(port) ? { port } : {}),
+        ...scheme,
+      }
+    }
+    case 'gatewayStatus': {
+      const gatewayName = form.gatewayName.trim()
+      return { source: 'gatewayStatus', ...(gatewayName ? { gatewayName } : {}), ...scheme }
+    }
+    case 'httpRouteStatus': {
+      const httpRouteName = form.httpRouteName.trim()
+      return { source: 'httpRouteStatus', ...(httpRouteName ? { httpRouteName } : {}), ...scheme }
+    }
+    default:
+      return refuseUnknownUrlSource(form.urlSource)
   }
-  if (form.urlScheme !== 'default') url.scheme = form.urlScheme
-  return url
+}
+
+/**
+ * A `source` outside the contract union, which the switch above therefore cannot build.
+ *
+ * The parameter is `never`, so this keeps BOTH properties at once: a source added to the contract
+ * without a case above still fails the typecheck (the argument stops being `never`), while a value
+ * the union never had is refused at runtime instead of falling off the end of the switch. That end
+ * is what the `default` exists to close: it returned `undefined`, which `buildPayload` then sent as
+ * the config's `url` for the backend to reject as a missing block.
+ *
+ * Deliberately NOT mapped onto a current source. Nothing here knows which one was meant, and a
+ * guess would silently rewrite the operator's URL derivation to something they never picked.
+ */
+function refuseUnknownUrlSource(source: never): never {
+  throw new Error(`Unsupported Kubernetes URL source '${String(source)}'`)
 }
 
 function buildPayload(): KubeHandlerPayload {
-  const kubernetes: Record<string, unknown> = {
+  // Built as the contract type rather than assembled into a `Record` and asserted: an optional
+  // field is a conditional SPREAD, so a key the config does not declare (or a value of the
+  // wrong type) fails the build here instead of surfacing as a server-side validation refusal.
+  const caCertPem = form.caCertPem.trim()
+  const namespaceTemplate = form.namespaceTemplate.trim()
+  const imageTemplate = form.imageTemplate.trim()
+  const kubernetes: KubeEngineConfig = {
     label: form.label.trim(),
     apiServerUrl: form.apiServerUrl.trim(),
     url: buildUrl(),
+    ...(caCertPem ? { caCertPem } : {}),
+    ...(form.insecureSkipTlsVerify ? { insecureSkipTlsVerify: true } : {}),
+    ...(namespaceTemplate ? { namespaceTemplate } : {}),
+    ...(imageTemplate ? { imageTemplate } : {}),
   }
-  if (form.caCertPem.trim()) kubernetes.caCertPem = form.caCertPem.trim()
-  if (form.insecureSkipTlsVerify) kubernetes.insecureSkipTlsVerify = true
-  if (form.namespaceTemplate.trim()) kubernetes.namespaceTemplate = form.namespaceTemplate.trim()
-  if (form.imageTemplate.trim()) kubernetes.imageTemplate = form.imageTemplate.trim()
-  // One honest assertion at the boundary that actually builds the shape (the reactive form is
-  // dynamically assembled, then validated server-side); the emitted config flows typed onward.
   // OMIT the token when the field is blank so the backend preserves the saved one (a blank
   // secret means "keep it") — only a typed value is sent, and it replaces the stored token.
   const token = apiToken.value.trim()
   return {
-    config: { engine: props.engine, kubernetes } as unknown as KubeHandlerConfig,
+    config: { engine: props.engine, kubernetes },
     secrets: token ? { [KUBERNETES_ENV_TOKEN_SECRET_KEY]: token } : {},
   }
 }

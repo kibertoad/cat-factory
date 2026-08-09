@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
+import { queryOne } from './db.js'
 
 // The mothership-mode LOCAL machine-token cache.
 //
@@ -71,11 +72,10 @@ class SqliteMachineTokenStore implements LocalMachineTokenStore {
   constructor(private readonly db: DatabaseSync) {}
 
   read(): MachineTokenRecord | null {
-    const row = this.db
-      .prepare(
-        'SELECT token, node_id, user_id, account_ids, exp, created_at FROM machine_token WHERE id = 1',
-      )
-      .get() as MachineTokenRow | undefined
+    const row = queryOne<MachineTokenRow>(
+      this.db,
+      'SELECT token, node_id, user_id, account_ids, exp, created_at FROM machine_token WHERE id = 1',
+    )
     if (!row) return null
     return {
       token: row.token,

@@ -97,6 +97,8 @@ const WRONG_SURFACE_MESSAGES: Record<DedicatedParkSurface, string> = {
   interview: 'Resolve the interview through its interview window, not the approval gate',
   'companion-cap':
     'Resolve this companion review through its iteration-cap prompt, not the approval gate',
+  'binary-candidates':
+    'Resolve this step through its candidate window (keep the generated candidates you want), not the approval gate',
   'follow-ups':
     'Resolve the follow-up companion through its window (file / send back / answer / dismiss), not the approval gate',
   // Approving here would advance the run PAST the coder step with the build never run (the park

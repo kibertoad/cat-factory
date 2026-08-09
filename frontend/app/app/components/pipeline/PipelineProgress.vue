@@ -11,11 +11,13 @@ import {
   FAILED_STEP_META,
   containerPhaseLabel,
   dedicatedParkView,
+  REDIRECT_PARK_PRESENTATION,
 } from '~/utils/pipelineRender'
 import { prReviewPhase } from '~/utils/prReviewProgress'
 import StepMetricsBar from '~/components/observability/StepMetricsBar.vue'
 import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
 import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
+import type { BadgeColor } from '~/utils/badge'
 
 const props = defineProps<{ instance: ExecutionInstance }>()
 const emit = defineEmits<{
@@ -90,6 +92,17 @@ function prReviewAwaiting(step: PipelineStep): boolean {
 }
 
 /**
+ * Whether a binary-output step is parked awaiting a human candidate choice. Asked of the shared
+ * park recognizer rather than re-derived from `step.binaryCandidates`, so this chip and the
+ * generic approval gate below (which suppresses itself for exactly the parks that recognizer
+ * names) can never disagree about who owns the park. That disagreement is what leaves a parked
+ * run showing no action at all.
+ */
+function candidatesAwaiting(step: PipelineStep): boolean {
+  return dedicatedParkView(step, props.instance) === 'binary-candidates'
+}
+
+/**
  * Whether a `pr-reviewer` step has a LIVE phase to surface (slicing / reviewing / … ). Drives
  * showing the phase badge in place of the generic subtask count header; a terminal (done/skipped)
  * review keeps the plain count.
@@ -147,15 +160,15 @@ const STATE_META = computed<Record<AgentState, { label: string; color: string; i
 )
 
 /** Visual language for the pipeline instance as a whole. */
-const STATUS_META = computed<Record<ExecutionInstance['status'], { label: string; chip: string }>>(
-  () => ({
-    running: { label: t('pipeline.progress.status.running'), chip: 'primary' },
-    blocked: { label: t('pipeline.progress.status.blocked'), chip: 'warning' },
-    paused: { label: t('pipeline.progress.status.paused'), chip: 'neutral' },
-    done: { label: t('pipeline.progress.status.done'), chip: 'success' },
-    failed: { label: t('pipeline.progress.status.failed'), chip: 'error' },
-  }),
-)
+const STATUS_META = computed<
+  Record<ExecutionInstance['status'], { label: string; chip: BadgeColor }>
+>(() => ({
+  running: { label: t('pipeline.progress.status.running'), chip: 'primary' },
+  blocked: { label: t('pipeline.progress.status.blocked'), chip: 'warning' },
+  paused: { label: t('pipeline.progress.status.paused'), chip: 'neutral' },
+  done: { label: t('pipeline.progress.status.done'), chip: 'success' },
+  failed: { label: t('pipeline.progress.status.failed'), chip: 'error' },
+}))
 
 const steps = computed(() => props.instance.steps)
 const total = computed(() => steps.value.length)
@@ -254,7 +267,7 @@ const ITEM_ICON: Record<string, string> = {
     <!-- summary -->
     <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
       <div class="flex flex-wrap items-center gap-3">
-        <UBadge :color="statusMeta.chip as any" variant="subtle">{{ statusMeta.label }}</UBadge>
+        <UBadge :color="statusMeta.chip" variant="subtle">{{ statusMeta.label }}</UBadge>
         <span class="text-sm text-slate-300">
           <i18n-t keypath="pipeline.progress.agentsComplete" tag="span" scope="global">
             <template #completed>
@@ -661,6 +674,31 @@ const ITEM_ICON: Record<string, string> = {
             </span>
             <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
               {{ t('pipeline.progress.prReview.review') }}
+            </span>
+          </button>
+
+          <!-- A generating step parked between its candidate pass and its delivering pass: a
+               purpose-built chip opening the comparison window, ahead of the generic approval
+               gate (mirrors the fork-decision and pr-review chips above). Without it the step
+               shows no action at all, because the generic gate below is suppressed for every
+               park a dedicated window owns. -->
+          <button
+            v-if="candidatesAwaiting(s)"
+            type="button"
+            data-testid="binary-candidates-open"
+            class="mt-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-cyan-500/50 bg-cyan-500/10 px-2.5 py-1.5 text-start transition followup-blink hover:border-cyan-400/60"
+            @click="ui.openBinaryCandidates(instance.id, i)"
+          >
+            <span
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-cyan-500/40 bg-cyan-500/15"
+            >
+              <UIcon
+                :name="REDIRECT_PARK_PRESENTATION['binary-candidates'].icon"
+                class="h-3 w-3 text-cyan-300"
+              />
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">
+              {{ t('pipeline.progress.binaryCandidates.choose') }}
             </span>
           </button>
 

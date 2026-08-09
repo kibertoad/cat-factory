@@ -1,10 +1,13 @@
 import {
   ASSET_STORAGE_CAPABILITY,
+  binaryCapabilityCoverage,
   binaryFormatCoverage,
   binaryModalityOverlaps,
   normalizeMediaType,
+  requiredBinaryCapabilities,
 } from '@cat-factory/contracts'
 import type {
+  BinaryGeneratorCapability,
   BinaryModality,
   BinaryModalityOverlap,
   RegisteredBinaryGenerator,
@@ -437,6 +440,20 @@ export type BinaryOutputPickIssue =
    * think to write it; this catches the author.
    */
   | 'generator_overlap'
+  /**
+   * A per-step GENERATION OPTION whose capability no selected integration declares: a reference
+   * image handed to an endpoint that takes no image input, a seed asked of one that has none
+   * (kernel's `capability_unsupported` spelling verbatim, like the members above it). A refusal.
+   */
+  | 'capability_unsupported'
+  /**
+   * A required capability nothing selected declares, where a selected integration declares NO
+   * capabilities at all, so it might be supported and nothing may say otherwise. ADVISORY, like
+   * `media_type_unverifiable` and for the same reason: the step starts. It is the state EVERY
+   * integration registered before capabilities existed is in, so styling it as a refusal would
+   * flag most working selections in the product.
+   */
+  | 'capability_unverifiable'
 
 /** What the builder found wrong with one step's selection, and which ids to name. */
 export interface BinaryOutputPickState {
@@ -457,6 +474,10 @@ export interface BinaryOutputPickState {
    * picker and the brief cannot describe one selection two ways.
    */
   generatorOverlaps: readonly BinaryModalityOverlap[]
+  /** The capabilities the step's generation options need that nothing selected supports. */
+  unsupportedCapabilities: readonly BinaryGeneratorCapability[]
+  /** The ones that could not be judged, kept apart from the refusal above. */
+  unverifiableCapabilities: readonly BinaryGeneratorCapability[]
 }
 
 /**
@@ -482,7 +503,10 @@ export interface BinaryOutputPickState {
  */
 function generatorPickIssues(
   config: BinaryOutputConfig | undefined,
-  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities' | 'mediaTypes'>[],
+  generators: readonly Pick<
+    RegisteredBinaryGenerator,
+    'id' | 'modalities' | 'mediaTypes' | 'capabilities'
+  >[],
   unavailable: boolean,
 ): {
   issues: BinaryOutputPickIssue[]
@@ -491,6 +515,8 @@ function generatorPickIssues(
   uncoveredMediaTypes: string[]
   unverifiableMediaTypes: string[]
   overlaps: BinaryModalityOverlap[]
+  unsupportedCapabilities: BinaryGeneratorCapability[]
+  unverifiableCapabilities: BinaryGeneratorCapability[]
 } {
   const none = {
     unknownGeneratorIds: [],
@@ -498,6 +524,8 @@ function generatorPickIssues(
     uncoveredMediaTypes: [],
     unverifiableMediaTypes: [],
     overlaps: [],
+    unsupportedCapabilities: [],
+    unverifiableCapabilities: [],
   }
   if (unavailable) return { issues: ['generators_unavailable'], ...none }
   const byId = new Map(generators.map((g) => [g.id, g]))
@@ -518,12 +546,21 @@ function generatorPickIssues(
   // one step is the one where neither is the deliverable (an image generated to feed a mesh API),
   // and gating on `modalities` would go silent on exactly that step.
   const overlaps = binaryModalityOverlaps(selected)
+  // The GENERATION OPTIONS, judged against the same resolved selection and through the same
+  // imported rule the brief renders from. The requirement is DERIVED from what the step actually
+  // asks for, so a single reference image is never flagged for lacking `multi-reference`.
+  const capability = binaryCapabilityCoverage(
+    requiredBinaryCapabilities(config?.generation),
+    selected,
+  )
   const issues: BinaryOutputPickIssue[] = []
   if (unknownGeneratorIds.length) issues.push('unknown_generator')
   if (uncovered.length) issues.push('modality_uncovered')
   if (format.uncovered.length) issues.push('media_type_uncovered')
   if (format.unverifiable.length) issues.push('media_type_unverifiable')
   if (overlaps.length) issues.push('generator_overlap')
+  if (capability.uncovered.length) issues.push('capability_unsupported')
+  if (capability.unverifiable.length) issues.push('capability_unverifiable')
   return {
     issues,
     unknownGeneratorIds,
@@ -531,6 +568,8 @@ function generatorPickIssues(
     uncoveredMediaTypes: format.uncovered,
     unverifiableMediaTypes: format.unverifiable,
     overlaps,
+    unsupportedCapabilities: capability.uncovered,
+    unverifiableCapabilities: capability.unverifiable,
   }
 }
 
@@ -565,7 +604,10 @@ export function binaryOutputPickIssues(
   // that registers no integrations cannot satisfy a step that selects one. So a call site that
   // omits this FLAGS a selection rather than passing it — the loud direction — and the default
   // stays a legitimate value rather than a hole.
-  generators: readonly Pick<RegisteredBinaryGenerator, 'id' | 'modalities' | 'mediaTypes'>[] = [],
+  generators: readonly Pick<
+    RegisteredBinaryGenerator,
+    'id' | 'modalities' | 'mediaTypes' | 'capabilities'
+  >[] = [],
   // Whether the deployment's integrations could not be READ. Defaulted to `false` — the honest
   // default, since every deployment but a mothership-mode node reads them in-process and cannot
   // fail — so an omitting call site judges the list it was given rather than claiming an outage.
@@ -594,6 +636,8 @@ export function binaryOutputPickIssues(
       uncoveredMediaTypes: generative.uncoveredMediaTypes,
       unverifiableMediaTypes: generative.unverifiableMediaTypes,
       generatorOverlaps: generative.overlaps,
+      unsupportedCapabilities: generative.unsupportedCapabilities,
+      unverifiableCapabilities: generative.unverifiableCapabilities,
     }
   }
 
@@ -618,5 +662,7 @@ export function binaryOutputPickIssues(
     uncoveredMediaTypes: generative.uncoveredMediaTypes,
     unverifiableMediaTypes: generative.unverifiableMediaTypes,
     generatorOverlaps: generative.overlaps,
+    unsupportedCapabilities: generative.unsupportedCapabilities,
+    unverifiableCapabilities: generative.unverifiableCapabilities,
   }
 }

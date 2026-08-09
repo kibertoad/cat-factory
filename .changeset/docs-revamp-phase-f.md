@@ -5,7 +5,7 @@ Docs and CI guards only: the documentation revamp's next phase, closing item 12 
 breakage the previous one introduced (`docs/initiatives/documentation-revamp.md`).
 
 The previous phase reduced `mcp-tool-servers.md` (723 → 347) and `debug-api.md` (433 → 207) toward
-catfactory.ai pages that were never landed, and its changeset above says both were written first.
+catfactory.ai pages that were never landed, and its own changeset said both were written first.
 Neither was. For the time between those merges, roughly 600 lines of the only account of wiring an
 MCP tool server and of reading a run's telemetry were reachable from nowhere, behind pointers that
 404'd. Both pages now exist, written to the anchors this repo had already committed to. CLAUDE.md's

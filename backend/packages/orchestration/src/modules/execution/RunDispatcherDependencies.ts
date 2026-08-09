@@ -36,6 +36,7 @@ import type {
 import type { SpendService } from '@cat-factory/spend'
 import type { AgentContextBuilder, FragmentBodyResolver } from './AgentContextBuilder.js'
 import type { CompanionController } from './CompanionController.js'
+import type { BinaryCandidateController } from './BinaryCandidateController.js'
 import type { ForkDecisionController } from './ForkDecisionController.js'
 import type { HumanTestController } from './HumanTestController.js'
 import type { InterviewGateController } from './InterviewGateController.js'
@@ -130,6 +131,7 @@ export interface RunDispatcherDeps {
   visualConfirmationController: VisualConfirmationController
   reviewGate: ReviewGateController
   forkDecisionController: ForkDecisionController
+  binaryCandidateController: BinaryCandidateController
   prReviewController: PrReviewController
   requirementsKind: ReviewKind<RequirementReview>
   clarityKind: ReviewKind<ClarityReview>

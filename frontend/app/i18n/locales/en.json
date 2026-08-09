@@ -1196,6 +1196,7 @@
       "mergePr": "Merge PR",
       "chooseApproach": "Choose approach",
       "triageFollowUps": "Decide follow-ups",
+      "chooseCandidates": "Decide candidates",
       "elapsedTooltip": "Elapsed time on this step",
       "reviewFindings": "Review findings",
       "dryRun": "Dry run",
@@ -1478,8 +1479,10 @@
       "decisionRequired": "Decision required",
       "followUpsParked": "The Coder surfaced follow-up items that need a decision before the run can continue. Triage each item (file, send back, answer, or dismiss) in the follow-ups window.",
       "forkParked": "This Coder step is waiting for an implementation approach to be chosen before any code is written. Pick a proposed approach (or enter your own) in the fork-decision window.",
+      "candidatesParked": "This step generated candidates and is waiting for someone to choose which ones to keep before it delivers anything. Compare them and keep what you want in the candidates window.",
       "openFollowUps": "Open follow-ups",
       "chooseApproach": "Choose approach",
+      "chooseCandidates": "Choose candidates",
       "expandAll": "Expand all sections",
       "collapseAll": "Collapse all sections",
       "copyRawOutput": "Copy raw output",
@@ -4917,7 +4920,45 @@
         "3d-model": "3D models",
         "3d-scene": "3D scenes",
         "document": "Documents"
-      }
+      },
+      "binaryCapability": {
+        "reference-image": "Reference image",
+        "multi-reference": "Several reference images",
+        "instruction-edit": "Editing from an instruction",
+        "mask-edit": "Masked editing",
+        "negative-prompt": "Negative prompt",
+        "seed": "Fixed seed",
+        "aspect-ratio": "Aspect ratio",
+        "candidate-batch": "Several candidates per call",
+        "upscale": "Upscaling",
+        "transparent-background": "Transparent background",
+        "tileable": "Seamless tiling"
+      },
+      "binaryCapabilityUnknown": "{capability} (a capability this deployment does not define)",
+      "binaryCapabilityUnsupported": "No selected integration supports {capabilities}, which this step's generation options ask for. Remove the option, or select an integration that declares the capability.",
+      "binaryCapabilityUnverifiable": "No selected integration declares support for {capabilities}, but one of them declares no capabilities at all, so this could not be checked. The step still starts; confirm it from the integration’s API.",
+      "binaryReferenceImages": "Reference images",
+      "binaryReferenceImagesPlaceholder": "role{'|'}location{'|'}service, one per line",
+      "binaryReferenceImagesUnusable": "Not stored as references: {entries}. Each line must be role{'|'}location, where role is style, subject, composition or base.",
+      "binaryEditMode": "Edit existing",
+      "binaryEditModeNone": "Generate new",
+      "binaryEditModeInstruction": "From an instruction",
+      "binaryEditModeMask": "Masked region",
+      "binaryEditInstruction": "What to change",
+      "binaryEditInstructionPlaceholder": "e.g. replace the sky",
+      "binaryNegativePrompt": "Negative prompt",
+      "binaryNegativePromptPlaceholder": "what to keep out",
+      "binaryAspectRatio": "Aspect ratio",
+      "binaryAspectRatioPlaceholder": "16:9",
+      "binarySeed": "Seed",
+      "binarySeedPlaceholder": "fixed seed",
+      "binaryTransparent": "Transparent background",
+      "binaryTileable": "Seamless tiling",
+      "binaryUpscale": "Upscale the result",
+      "binaryComparison": "Compare candidates before delivering",
+      "binaryPerGenerator": "Candidates per integration",
+      "binaryMultiSelect": "Allow keeping more than one",
+      "binaryComparisonUnreachable": "This step can only produce one candidate per subject, so nothing would be compared and the only one would be kept without asking. Select a second integration, or raise the candidates-per-integration count."
     },
     "progress": {
       "status": {
@@ -4963,6 +5004,9 @@
       "forkDecision": {
         "proposing": "Proposing approaches…",
         "choose": "Choose an approach"
+      },
+      "binaryCandidates": {
+        "choose": "Choose candidates"
       },
       "elapsedTooltip": "Elapsed time on this step",
       "prReview": {
@@ -6550,7 +6594,12 @@
       "unknownGenerators": "Named a generative integration this deployment does not register: {ids}. The entry is kept as claimed; the integration is registered in the deployment's code, not in this workspace. | Named generative integrations this deployment does not register: {ids}. Their entries are kept as claimed; integrations are registered in the deployment's code, not in this workspace.",
       "generatorsUnverified": "This deployment's generative integrations could not be read when the step settled, so the integrations named below were not checked against them. The entries are kept as claimed."
     },
-    "unknownGeneratorBadge": "Not registered"
+    "unknownGeneratorBadge": "Not registered",
+    "candidates": {
+      "automatic": "{total} candidate was generated and kept automatically, without review.",
+      "chosen": "{kept} of {total} generated candidates were kept.",
+      "awaiting": "{total} candidates were generated and are waiting to be compared."
+    }
   },
   "sandbox": {
     "title": "Sandbox: prompt and model testing",
@@ -7814,6 +7863,33 @@
       "unresolved": "This tool did not return an address for the current workspace.",
       "resolverFailed": "This tool failed while working out its address. The cause is in the browser console, for whoever maintains this deployment.",
       "unsafeUrl": "This tool returned an address that is not a web link, so it was not opened."
+    }
+  },
+  "binaryCandidates": {
+    "title": "Generated candidates",
+    "titleWithBlock": "Generated candidates: {title}",
+    "subtitle": "Compare what each integration produced, and keep what you want",
+    "automatic": "Only one candidate was generated, so it was kept automatically. Nobody reviewed it.",
+    "unlabelledSubject": "No subject declared",
+    "noPreview": "No preview available",
+    "fromGenerator": "From {generator}",
+    "unattributed": "No integration recorded",
+    "kept": "Kept",
+    "keptAs": "Kept as {id}",
+    "storeAsPlaceholder": "store under this id",
+    "notePlaceholder": "Anything to change when storing these (optional)",
+    "missingAlias": "Give each kept candidate its own id, or they would all be stored under the same name.",
+    "duplicateAlias": "Two kept candidates share an id. Two artifacts at one location is one artifact.",
+    "keepAction": "Keep {count}",
+    "warning": {
+      "omitted": "{count} candidates were dropped past the cap, so this list is a prefix. ",
+      "invalid": "{count} declared entries were unreadable and are missing here. ",
+      "previews": "{count} preview links were refused, so those candidates render without an image."
+    },
+    "noChoice": {
+      "undeclared": "The step never declared its candidates, so there was nothing to compare. The run continued.",
+      "parseFailed": "The step’s candidate declaration could not be read, so there was nothing to compare. The run continued.",
+      "noCandidates": "The step staged no candidates, so there was nothing to compare. The run continued."
     }
   }
 }

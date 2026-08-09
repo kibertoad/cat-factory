@@ -8,6 +8,7 @@ import type {
   EnvironmentStatus,
   EnvironmentStatusRequest,
   EnvironmentTeardownRequest,
+  KubernetesConnectionConfig,
   KubernetesEnvironmentConfig,
   KubernetesProvisionConfig,
   ProviderConfigField,
@@ -42,6 +43,7 @@ import {
   type KubernetesResource,
   namespaceUrl,
   parseKubernetesEnvConfig,
+  parseKubernetesEnvConnection,
   parseManifests,
   renderTemplate,
   resolveNamespace,
@@ -103,12 +105,28 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   }
 
   /**
+   * Parse only what it takes to REACH the cluster, for the paths that reclaim rather than build.
+   *
+   * Separate from {@link parseConfig} so a stored config whose PROVISIONING half stopped matching
+   * the contract can still be torn down: a manifest source or URL derivation that no longer
+   * validates has to stop a provision, and must not be what leaves a namespace running forever
+   * with nothing able to delete it. Overridable alongside `parseConfig` so a subclass whose
+   * connection carries more (the EKS provider's AWS coordinates) narrows this the same way.
+   */
+  protected parseConnection(manifest: EnvironmentManifest): KubernetesConnectionConfig {
+    return parseKubernetesEnvConnection(manifest)
+  }
+
+  /**
    * Build the apiserver client for a request. Overridable so a subclass can inject a different
    * auth scheme (the EKS provider passes a SigV4/STS token minter) WITHOUT touching any of the
    * provisioning/status/teardown logic, which stays auth-agnostic.
+   *
+   * Takes the CONNECTION shape, not the full config: the reclaim paths only ever parse that much,
+   * and the provisioning paths pass a full config, which is one.
    */
   protected makeClient(
-    config: KubernetesEnvironmentConfig,
+    config: KubernetesConnectionConfig,
     resolveSecret: SecretResolver,
   ): KubernetesApiClient {
     return new KubernetesApiClient(config, resolveSecret)
@@ -187,7 +205,9 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   }
 
   async teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }> {
-    const config = this.parseConfig(req.manifest)
+    // The CONNECTION, not the full config: deleting a namespace needs the apiserver and nothing
+    // the provisioning half of the config describes (see {@link parseConnection}).
+    const config = this.parseConnection(req.manifest)
     const namespace = req.provisionFields.namespace ?? req.externalId
     if (!namespace) return { status: 'torn_down' }
     const client = this.makeClient(config, req.resolveSecret)
@@ -229,11 +249,14 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
         reason: 'No namespace recorded for this environment.',
       }
     }
-    let config: KubernetesEnvironmentConfig
+    let config: KubernetesConnectionConfig
     try {
-      config = this.parseConfig(req.manifest)
+      // Same narrow read as `teardown` — the probe reads the namespace back off the apiserver, so
+      // it is answerable for exactly the configs a teardown is.
+      config = this.parseConnection(req.manifest)
     } catch (err) {
-      // A manifest that no longer parses is fixed by editing it, not by re-probing.
+      // A manifest whose apiserver coordinates no longer parse is fixed by editing it, not by
+      // re-probing.
       return {
         state: 'unknown',
         retryable: false,
@@ -332,7 +355,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     })
     return {
       ref: deploy.ref,
-      spec: spec as unknown as Record<string, unknown>,
+      spec,
       kind: 'deploy',
       options: { image: 'deploy' },
     }

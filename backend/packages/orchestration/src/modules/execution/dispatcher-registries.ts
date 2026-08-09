@@ -67,6 +67,7 @@ import type { CompanionController } from './CompanionController.js'
 import type { HumanTestController } from './HumanTestController.js'
 import type { MergeResolver } from './MergeResolver.js'
 import type { ReviewGateController, ReviewKind } from './ReviewGateController.js'
+import type { BinaryCandidateController } from './BinaryCandidateController.js'
 import type { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController, PR_REVIEW_STEP_KIND } from './PrReviewController.js'
 import { forkPhasePending, resolveForkTriState } from './forkDecision.logic.js'
@@ -120,6 +121,7 @@ export interface DispatcherRegistryDeps {
   visualConfirmationController: VisualConfirmationController
   reviewGate: ReviewGateController
   forkDecisionController: ForkDecisionController
+  binaryCandidateController: BinaryCandidateController
   prReviewController: PrReviewController
   mergeResolver: MergeResolver
   requirementsKind: ReviewKind<RequirementReview>
@@ -506,6 +508,23 @@ export function buildStepCompletionInterceptors(
           step.model,
         )
       },
+    },
+    // A BINARY-OUTPUT step configured to COMPARE candidates just finished its generating pass.
+    // Its reply's fenced ```binary-candidates block is what it staged; record it and either park
+    // for the human to choose (≥2 candidates), auto-keep the only one, or fall through to the
+    // ordinary completion when nothing was staged (the run advances and the step's state names
+    // the reason). Keyed on the step's own comparison config plus the ABSENCE of a resolved
+    // choice, which is what tells the two passes of one step apart: after `keep` the same step
+    // re-runs to deliver, and that pass must complete normally.
+    {
+      kind: 'binary-candidates',
+      order: 107,
+      canIntercept: ({ step }) =>
+        step.stepOptions?.binaryOutput?.comparison !== undefined &&
+        step.binaryCandidates?.status !== 'chosen' &&
+        step.binaryCandidates?.status !== 'no_choice',
+      intercept: ({ workspaceId, instance, step, result }) =>
+        d.binaryCandidateController.recordCandidates(workspaceId, instance, step, result.output),
     },
     // A Challenge Investigator helper (dispatched off a parked `pr-reviewer` step when the human
     // challenged a finding) just finished. Its structured `result.custom` is the uphold/retract

@@ -1,5 +1,16 @@
-import { binaryFormatCoverage, binaryModalityOverlaps } from '@cat-factory/contracts'
-import type { BinaryModality, BinaryOutputConfig } from '@cat-factory/contracts'
+import {
+  binaryCapabilityCoverage,
+  binaryCapabilityProviders,
+  binaryFormatCoverage,
+  binaryModalityOverlaps,
+  requiredBinaryCapabilities,
+} from '@cat-factory/contracts'
+import type {
+  BinaryGenerationOptions,
+  BinaryGeneratorCapability,
+  BinaryModality,
+  BinaryOutputConfig,
+} from '@cat-factory/contracts'
 import type { BinaryGeneratorView } from './binary-generator-registry.js'
 import {
   BINARY_GENERATOR_CONTEXT_DIR,
@@ -41,6 +52,11 @@ export interface ResolvedBinaryGenerator {
   id: string
   label: string
   modalities: BinaryModality[]
+  // Deliberately NO `capabilities` here. The dispatch projection exists so the container executor
+  // can resolve each credential without the registry, and what an integration SUPPORTS is stated
+  // to the agent in its brief, which is rendered from the registry view. Carrying it a second time
+  // would put a copy on the wire that nothing reads and that a future reader could believe was
+  // authoritative.
   /**
    * The credential's LOOKUP key, which is what the executor asks the resolver for. Absent means
    * none is declared.
@@ -99,6 +115,21 @@ export type BinaryGeneratorSelectionIssue =
    * {@link binaryFormatCoverage} for the third state, which is not an issue.
    */
   | { problem: 'media_type_uncovered'; mediaType: string }
+  /**
+   * A per-step GENERATION OPTION whose capability no selected integration declares: a reference
+   * image handed to an endpoint that takes no image input, a mask edit asked of an API that only
+   * rewrites whole pictures, a seed asked of one that has none.
+   *
+   * The third axis of the same rule the two above enforce, and refused for the same reason: an
+   * unsupported parameter is not a thinner generation. Either the call is rejected, which burns
+   * the run, or it succeeds having silently ignored the one input that made the step's output
+   * correct, which is worse because every downstream check passes.
+   *
+   * Only ever raised against integrations that DECLARED their capabilities. The third outcome
+   * ({@link binaryCapabilityCoverage}'s `unverifiable`) is not an issue, which is what keeps
+   * every integration registered before this axis existed running unchanged.
+   */
+  | { problem: 'capability_unsupported'; capability: BinaryGeneratorCapability }
 
 /** A step's selection, resolved against the registry's views. */
 export interface ResolvedBinaryGeneratorSelection {
@@ -168,7 +199,67 @@ export function binaryGeneratorSelectionIssues(
   for (const mediaType of binaryFormatCoverage(config?.mediaTypes ?? [], selected).uncovered) {
     issues.push({ problem: 'media_type_uncovered', mediaType })
   }
+  // The GENERATION OPTIONS, judged the same way and for the same reason. The requirement is
+  // DERIVED from what the step actually asks for rather than declared, so a step is never refused
+  // over a capability it does not exercise: one reference image needs `reference-image` and not
+  // `multi-reference`, and an edit needs exactly the one capability its mode names.
+  for (const capability of binaryCapabilityCoverage(
+    requiredBinaryCapabilities(config?.generation),
+    selected,
+  ).uncovered) {
+    issues.push({ problem: 'capability_unsupported', capability })
+  }
   return issues
+}
+
+/**
+ * A capability in words, for a message a human reads.
+ *
+ * The `default` is here for the reason {@link describeModality}'s is, minus the persistence: this
+ * vocabulary is not stored on a step, but a MOTHERSHIP-MODE node resolves its integrations from a
+ * process that may be a build AHEAD of it, so a capability this build has never defined arrives
+ * over `/internal/binary-generators` and reaches this switch. Falling off the end would render it
+ * `undefined` inside the one sentence whose job is to say what a selection cannot do.
+ */
+export function describeCapability(capability: BinaryGeneratorCapability): string {
+  switch (capability) {
+    case 'reference-image':
+      return 'conditioning a generation on a reference image'
+    case 'multi-reference':
+      return 'combining several reference images in one generation'
+    case 'instruction-edit':
+      return 'editing an existing artifact from a written instruction'
+    case 'mask-edit':
+      return 'editing only the region an image mask names'
+    case 'negative-prompt':
+      return 'a negative prompt (what to keep out)'
+    case 'seed':
+      return 'a fixed seed'
+    case 'aspect-ratio':
+      return 'an explicit aspect ratio'
+    case 'candidate-batch':
+      return 'returning several candidates from one call'
+    case 'upscale':
+      return 'upscaling its own output'
+    case 'transparent-background':
+      return 'a transparent background'
+    case 'tileable':
+      return 'a seamlessly tiling image'
+    default:
+      return describeUnknownCapability(capability)
+  }
+}
+
+/**
+ * A capability this build does not define, named as the unknown value it is.
+ *
+ * Takes `never`, so adding a member without a case still fails the typecheck while a value from a
+ * newer mothership is still described honestly. Deliberately not mapped onto a neighbour: nothing
+ * here knows what it means, and inventing a description would put a claim about a vendor's API in
+ * front of whoever is deciding what to ask that API for.
+ */
+function describeUnknownCapability(capability: never): string {
+  return `'${String(capability)}' (a capability this deployment does not define)`
 }
 
 /**
@@ -235,6 +326,9 @@ export function describeBinaryGeneratorSelectionIssues(
     if (issue.problem === 'media_type_uncovered') {
       return `no selected integration emits '${issue.mediaType}', which this step declares it delivers — the integrations it selects declare the formats they emit, and this is not one of them`
     }
+    if (issue.problem === 'capability_unsupported') {
+      return `this step's generation options ask for ${describeCapability(issue.capability)}, and no selected integration supports it: remove the option, or select an integration that declares the capability`
+    }
     return `no selected integration produces ${describeModality(issue.modality)}, which this step declares it delivers`
   })
   const problems = clauses.length === 1 ? clauses[0] : clauses.map((c) => `\n  - ${c}`).join('')
@@ -263,6 +357,8 @@ export function renderBinaryGeneratorSection(input: {
   requestedModalities: BinaryModality[]
   /** The concrete formats it must deliver (`stepOptions.binaryOutput.mediaTypes`). */
   requestedMediaTypes?: string[]
+  /** The parameters every generation carries (`stepOptions.binaryOutput.generation`). */
+  generation?: BinaryGenerationOptions
 }): string[] {
   const { selected, unresolvedIds } = input.selection
   const lines: string[] = ['## Generation', '']
@@ -305,7 +401,114 @@ export function renderBinaryGeneratorSection(input: {
   lines.push(
     ...requirementLines(input.requestedModalities, input.requestedMediaTypes ?? [], selected),
   )
+  lines.push(...generationOptionLines(input.generation, selected))
   return lines
+}
+
+/**
+ * The step's GENERATION OPTIONS as instructions: the parameters every call must carry, which
+ * integrations will honour each, and the ones nothing selected can be shown to support.
+ *
+ * Stated in the platform's own vocabulary and never in any vendor's, because the agent writes the
+ * request and only it knows what the endpoint in front of it calls a seed. "Send a negative
+ * prompt of X" is actionable against four different APIs; `negative_prompt=X` is actionable
+ * against one and wrong for the others.
+ *
+ * Three things it refuses to leave silent, each because silence is read as permission:
+ *
+ * - A reference or a mask that is a LOCATION rather than an attachment. The platform never
+ *   fetches these, so an agent that is not told where the file lives will generate without it and
+ *   report success.
+ * - Which integrations honour an option, once more than one is selected. An aspect ratio honoured
+ *   by one of two producers is not a covered requirement in any useful sense, and the artifact it
+ *   comes back on carries no trace of which one made it.
+ * - An UNVERIFIABLE option: nothing selected declares the capability and at least one declared no
+ *   capabilities at all. Told nothing, the agent proceeds as if it were confirmed; told "nothing
+ *   supports this", it drops an option that very likely works. Neither is what the state means,
+ *   so it gets its own sentence pointing at the contract.
+ */
+function generationOptionLines(
+  generation: BinaryGenerationOptions | undefined,
+  selected: BinaryGeneratorView[],
+): string[] {
+  const required = requiredBinaryCapabilities(generation)
+  if (!generation || required.length === 0) return []
+  const lines: string[] = [
+    'These generation options apply to EVERY artifact this step produces:',
+    '',
+  ]
+  for (const reference of generation.referenceImages ?? []) {
+    lines.push(
+      `- Reference image (${reference.role}): ${assetPointer(reference)}${reference.note ? ` ${reference.note}` : ''}`,
+    )
+  }
+  if (generation.edit) {
+    const edit = generation.edit
+    lines.push(
+      `- This step EDITS existing artifacts (${edit.mode === 'mask' ? 'masked region only' : 'whole-artifact instruction'}) rather than generating from nothing.${edit.instruction ? ` What to change: ${edit.instruction}` : ''}`,
+    )
+    lines.push(
+      edit.source
+        ? `  - The artifact to revise: ${assetPointer(edit.source)}`
+        : '  - Which existing artifact each generation revises comes from the scope services below, not from this step.',
+    )
+    if (edit.mode === 'mask') {
+      lines.push(
+        edit.mask
+          ? `  - The mask: ${assetPointer(edit.mask)}`
+          : '  - NO mask was configured for this masked edit. Do not fall back to editing the whole artifact: report that the mask was missing.',
+      )
+    }
+  }
+  if (generation.negativePrompt) lines.push(`- Negative prompt: ${generation.negativePrompt}`)
+  if (generation.seed !== undefined) {
+    lines.push(
+      `- Seed: ${generation.seed}. Send it on every call so this run can be reproduced; vary it only where you are explicitly asked for several candidates of one subject.`,
+    )
+  }
+  if (generation.aspectRatio) lines.push(`- Aspect ratio: ${generation.aspectRatio}`)
+  if (generation.upscale !== undefined) {
+    lines.push(`- Upscale the result ${generation.upscale}x where the integration offers it.`)
+  }
+  if (generation.transparentBackground) {
+    lines.push(
+      '- Deliver a TRANSPARENT background (an alpha channel), not a matted or filled one. Choose an output format that carries alpha.',
+    )
+  }
+  if (generation.tileable) {
+    lines.push('- Deliver a SEAMLESSLY TILING image, not one that merely looks repeatable.')
+  }
+  lines.push('')
+  const providers = binaryCapabilityProviders(required, selected)
+  if (selected.length > 1 && providers.length > 0) {
+    lines.push(
+      'Not every integration honours every option:',
+      '',
+      ...providers.map(
+        (entry) =>
+          `- ${describeCapability(entry.capability)}: ${joinIds(entry.generatorIds)}.` +
+          (entry.generatorIds.length < selected.length
+            ? ' The others do not declare it, so do not send it to them and say so in your report if the option mattered.'
+            : ''),
+      ),
+      '',
+    )
+  }
+  const coverage = binaryCapabilityCoverage(required, selected)
+  if (coverage.unverifiable.length > 0) {
+    lines.push(
+      `No selected integration declares support for ${coverage.unverifiable.map(describeCapability).join(', ')}, and at least one of them declares no capabilities at all, so whether it can is unknown rather than settled. Check its API contract before relying on ${coverage.unverifiable.length === 1 ? 'it' : 'them'}, and report the gap rather than generating as if the option had been applied.`,
+      '',
+    )
+  }
+  return lines
+}
+
+/** Where a referenced asset lives, in whichever of the two addressings the step used. */
+function assetPointer(ref: { location: string; service?: string }): string {
+  return ref.service
+    ? `\`${ref.location}\` in the \`${ref.service}\` service (fetch it through that service's API; it is not attached to this job)`
+    : `\`${ref.location}\` (fetch it yourself; it is not attached to this job)`
 }
 
 /**

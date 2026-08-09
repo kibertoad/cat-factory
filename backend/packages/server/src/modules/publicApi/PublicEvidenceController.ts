@@ -12,7 +12,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { blobResponseHeaders } from '../artifacts/imageArtifacts.js'
+import { blobResponseBody, blobResponseHeaders } from '../artifacts/imageArtifacts.js'
 import { requireScopedRun, runNotFound } from './decisions/scope.js'
 import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 
@@ -222,7 +222,7 @@ export function publicEvidenceController(): Hono<AppEnv> {
     // type to the image allow-list and send `nosniff`, exactly as the session-authed blob route
     // does. The bytes are attacker-influenced (an agent captured them) whichever door they
     // leave by.
-    return new Response(got.bytes as unknown as BodyInit, {
+    return new Response(blobResponseBody(got.bytes), {
       status: 200,
       headers: blobResponseHeaders(got.record.contentType),
     })

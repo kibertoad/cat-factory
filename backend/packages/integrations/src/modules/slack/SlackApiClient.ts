@@ -1,4 +1,5 @@
 import type { SlackChannel } from '@cat-factory/kernel'
+import type { SlackMessageBody } from './slack.logic.js'
 
 // A thin, runtime-neutral wrapper over the Slack Web API (plain `fetch`, no SDK),
 // so it runs identically in a Workers isolate and under Node. Only the handful of
@@ -110,8 +111,10 @@ export class SlackApiClient {
     }
   }
 
-  /** Post a message (`chat.postMessage`). `body` is a rendered message payload. */
-  async chatPostMessage(token: string, body: Record<string, unknown>): Promise<void> {
+  /** Post a message (`chat.postMessage`). Takes the RENDERED message rather than an open
+   *  JSON record: `renderNotificationMessage` is the only producer, so naming its type here
+   *  is what lets the one caller pass it straight through. */
+  async chatPostMessage(token: string, body: SlackMessageBody): Promise<void> {
     await this.postJson('chat.postMessage', token, body)
   }
 

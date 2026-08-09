@@ -11,12 +11,12 @@
 
 Where each decision is made, because the layering is the thing a change here breaks:
 
-| Decision | Resolved in | Why there |
-| --- | --- | --- |
-| Which transports a CLI can reach | kernel `MCP_HARNESS_TRANSPORTS` (`domain/agent-capabilities.ts`) | A fact about the CLI, held once so boot validation and dispatch cannot disagree |
-| Whether a server applies to THIS run | the container EXECUTOR, at dispatch | It depends on the resolved harness and the facade-wired credential resolver, neither of which the engine knows |
-| Whether a credential may be looked up | kernel `isReservedPlatformEnvKey`, at boot AND at dispatch AND at the job boundary | Three layers, because each is reachable without the others |
-| What the agent is TOLD it has | the prompt's tool-server section, from `step.toolServers` | The same record a person reads, so the two cannot drift |
+| Decision                              | Resolved in                                                                        | Why there                                                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Which transports a CLI can reach      | kernel `MCP_HARNESS_TRANSPORTS` (`domain/agent-capabilities.ts`)                   | A fact about the CLI, held once so boot validation and dispatch cannot disagree                                |
+| Whether a server applies to THIS run  | the container EXECUTOR, at dispatch                                                | It depends on the resolved harness and the facade-wired credential resolver, neither of which the engine knows |
+| Whether a credential may be looked up | kernel `isReservedPlatformEnvKey`, at boot AND at dispatch AND at the job boundary | Three layers, because each is reachable without the others                                                     |
+| What the agent is TOLD it has         | the prompt's tool-server section, from `step.toolServers`                          | The same record a person reads, so the two cannot drift                                                        |
 
 Design records: [ADR 0029](./adr/0029-agent-kind-capabilities.md) (the capability model) and
 [ADR 0041](./adr/0041-capability-credential-store.md) (the per-workspace sealed store the resolver
