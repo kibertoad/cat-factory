@@ -4138,6 +4138,9 @@
       "monorepoBrowseHint": "Parcourez le dépôt et sélectionnez les répertoires des services que vous voulez ajouter, depuis n'importe quel dossier. Les agents travaillant sur un service s'exécutent dans son sous-répertoire.",
       "selectedServices": "Services sélectionnés",
       "noServicesSelected": "Aucun service sélectionné pour le moment. Choisissez des répertoires ci-dessus.",
+      "frontendLabel": "Application frontend (facultatif)",
+      "frontendHint": "Désignez l'un des répertoires sélectionnés comme le frontend des autres. Il est ajouté en tant qu'application frontend rattachée à ce sous-répertoire et relié à chaque service backend ajouté à ses côtés. Nommez ensuite chaque variable d'environnement d'URL backend dans l'inspecteur du frontend.",
+      "frontendNone": "Aucun : toutes les sélections sont des services backend",
       "addServices": "Ajouter {count} service | Ajouter {count} services",
       "removeService": "Retirer {directory}",
       "addedConfigure": "{title} ajouté, configurez-le",
@@ -4151,7 +4154,9 @@
         "addedDescription": "{title} est sur le tableau, configurez-le ci-dessous.",
         "addFailedTitle": "Impossible d'ajouter le service",
         "servicesAddedTitle": "Services ajoutés",
-        "servicesAddedDescription": "{count} service ajouté au tableau. | {count} services ajoutés au tableau."
+        "servicesAddedDescription": "{count} service ajouté au tableau. | {count} services ajoutés au tableau.",
+        "frontendLinkedNote": "{directory} a été ajouté comme frontend et relié aux autres. Nommez ses variables d'environnement d'URL backend dans son inspecteur.",
+        "frontendWiringFailedNote": "Les réglages du frontend n'ont pas été enregistrés. Ouvrez l'inspecteur de chaque application frontend pour définir son sous-répertoire et ses services backend."
       },
       "repoType": "Type de dépôt",
       "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
