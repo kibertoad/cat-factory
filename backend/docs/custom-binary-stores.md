@@ -17,59 +17,38 @@ had to fork the facade it was already depending on.
 
 ## What you implement
 
-The kernel `BinaryBlobBackend` port, unchanged: three methods over opaque bytes keyed by a string.
-Artifact METADATA always lives in the runtime's own database (so it is listed, joined and pruned
-like any other row); a store holds only the bytes.
+The kernel `BinaryBlobBackend` port: three methods over opaque bytes keyed by a string. Artifact
+METADATA always lives in the runtime's own database (so it is listed, joined and pruned like any
+other row); a store holds only the bytes. The registration example, the four rules that go with it
+(bytes-only, registration only OFFERS, a stable id, implement `delete`) and the `create`-returns-null
+case are on the website's
+[Custom Providers](https://www.catfactory.ai/extend/custom-providers.html#example-a-custom-binary-artifact-store).
 
-```ts
-import { defaultBinaryStoreRegistry, type BinaryBlobBackend } from '@cat-factory/node-server'
-
-const binaryStoreRegistry = defaultBinaryStoreRegistry()
-
-binaryStoreRegistry.register({
-  id: 'gcs',
-  name: 'Cloud Storage',
-  summary: 'The org bucket (europe-west1).',
-  create: ({ accountId }) => new GcsBlobBackend({ bucket: process.env.GCS_BUCKET, accountId }),
-})
-
-await start({ binaryStoreRegistry })
-```
-
-`create` is called on a cache miss, once per account, and its result is memoised until the
-account's storage config changes, so a client built there survives across requests. It may return
-`null` for "this deployment cannot serve the store right now" (an unset credential, an
-un-provisioned bucket); the resolver then reads as storage-unavailable, exactly as it does for a
-backend a runtime does not support, and logs which store declined.
-
-Import the seam from the FACADE you already depend on (`@cat-factory/node-server`,
-`@cat-factory/local-server`, `@cat-factory/worker`), never from `@cat-factory/kernel` directly: a
-`workspace:*` dependency publishes as an exact version, so reaching below the facade can resolve a
-second physical copy and register into the one nothing reads.
+Two facts sit under that page. **Import the seam from the FACADE you already depend on**
+(`@cat-factory/node-server`, `@cat-factory/local-server`, `@cat-factory/worker`), never from
+`@cat-factory/kernel` directly: a `workspace:*` dependency publishes as an EXACT version, so
+reaching below the facade can resolve a second physical copy and register into the one nothing
+reads. And **`create` is memoised per account** until that account's storage config changes, so the
+client you build there survives across requests rather than being rebuilt per resolve.
 
 ## How a store is selected
 
-Registration only OFFERS a store. An account picks it in the deployment settings panel, where each
-registered store is its own option beside `fs` / `s3` / `db` / `r2` / off, and the selection is
-stored as `contentStorage: { backend: 'custom', custom: { storeId: 'gcs' } }`. A `custom` selection
-naming no store is refused where it is written, because it is the one storage config that cannot
-mean anything.
-
-The registered id is stamped onto every artifact row's `storage` column, which is why the id has
-to be stable across releases: it is the column that says which store to ask for those bytes. The
-value written is the REGISTRATION's id, not whatever `kind` the returned backend declares, so one
-implementation registered twice (a bucket per region, say) still files its rows under two names.
+The registered id is stamped onto every artifact row's `storage` column, and the value written is
+the REGISTRATION's id, not whatever `kind` the returned backend declares. So one implementation
+registered twice (a bucket per region, say) files its rows under two names, which is the behaviour
+that makes the id load-bearing rather than cosmetic. A `custom` selection naming no store is refused
+where it is written, because it is the one storage config that cannot mean anything.
 
 An account pointed at a store this build does not register resolves to no storage, and says so
-three times over rather than silently: a warning log naming the id and the registered set, the
-store id in the settings summary, and a line in the settings panel naming the store the account is
+three times over rather than silently: a warning log naming the id and the registered set, the store
+id in the settings summary, and a line in the settings panel naming the store the account is
 configured with and that this deployment does not register.
 
 ## Per-process, deliberately
 
 The seam is an option on `start()` / `startLocal()` and a `createWorker({ overrides })` entry, and
 it has no mothership `Source` sibling, unlike the generative-integration registry it otherwise
-resembles.
+resembles. That asymmetry is the design decision worth recording.
 
 A generator definition is DATA a run resolves (ids, content types, a credential's name), so a
 mothership-mode node reading its own copy can disagree with the picker the mothership fed, and the
@@ -77,18 +56,9 @@ set has to cross `/internal/binary-generators`. A store is the opposite kind of 
 client holding credentials, and only the process holding the bytes can construct one. There is
 nothing for a machine API to carry, and no second copy that could disagree with a first.
 
-What follows from that is the rule to actually wire by: **register your stores on every process
-that HANDLES the bytes**, which is more than the processes that serve requests.
-
-- **A standalone deployment** (Node, local, or a Worker) is one process, so one registration is the
-  whole story.
-- **A mothership deployment is two.** Each node writes its artifacts' bytes through its own
-  registry, and the mothership runs the artifact-retention sweep, which deletes them through
-  _its_ registry. Register on `startLocal({ binaryStoreRegistry })` and on the mothership's
-  `start({ binaryStoreRegistry })`. Registering only on the nodes is the failure this section
-  exists to prevent: the bytes are written and never reclaimed, and the sweep reports the same
-  zero it reports for a deployment that stores nothing. A mothership-mode node says so at boot,
-  naming the ids it registered.
+What follows for a deployment (register on every process that HANDLES the bytes, which on a
+mothership is both the node and the mothership) is on the website's page above. A mothership-mode
+node says so at boot, naming the ids it registered.
 
 On the Worker the registration is process-wide rather than held on the app
 (`infrastructure/binaryStores.ts`), because that runtime builds a container per entry point and

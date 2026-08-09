@@ -1,29 +1,26 @@
 # Documentation revamp: the repo ⇄ website split
 
-Status: **executing; item 15's eleven unread docs are what is left.** Item 12's render landed, item
-16's follow-on is settled, and item 19 fixed a breakage the previous phase introduced and did not
-notice.
+Status: **executing; item 15's eleven unread docs are DONE, and one of them turned up something
+worse than duplication.** Item 12b landed with it, at the small size the last revision predicted.
 
-**The previous phase reduced two docs toward website pages that did not exist**, and said in its
-commit message that they did. `mcp-tool-servers.md` went 723 → 347 and `debug-api.md` 433 → 207,
-each pointing at a page the website's phase E never landed. So for the time between those merges,
-roughly 600 lines of the only account anyone had of wiring an MCP tool server and of reading a run's
-telemetry existed nowhere a reader could reach, behind pointers that 404'd. That is the worst
-failure this split can produce, it is named in this file's own gotchas as the worst failure this
-split can produce, and it happened anyway. Item 19 is the fix and the rule it earned.
+**The last phase's failure was pointing at pages that did not exist. This phase's finding is that
+two pages that DO exist stopped describing the code.** `extend/custom-gates.md` told a deployment
+author to import `wireProvider` / `isProviderWired` from the kernel, and neither is exported: provider
+wiring moved to an app-owned registry instance. `extend/custom-providers.md` told them to pass
+`environmentProvider` to `buildNodeContainer` / `startLocal`, an option removed when environment
+backends became a registry keyed by `kind`. Both pages were complete, well-shaped, correctly linked,
+and would not compile. Item 20 is the fix and the check it earns.
 
 What is open:
 
-- **Item 15**, the eleven docs in the per-doc table still marked NOT READ, plus
-  `document-sources.md`'s unfinished half. Named as debt, with a verdict owed per doc.
-- **Item 12b**, the reduction half of item 12, now scoped by measurement rather than by estimate.
-  See the checklist entry: the answer is much smaller than three revisions of this tracker assumed,
-  and knowing that is the deliverable.
+- **Item 15q**, the one remaining verdict: `kubernetes-topology.md` was READ and is BLOCKED on a
+  website page that stops at the connect form. Named as debt with the reduction it is waiting for,
+  rather than cut ahead of a destination (the mistake items 17 and 19 exist for).
+- **`document-sources.md`'s context-picker half**, unchanged since 15k and still owed a verdict.
 
 The sibling tracker is
 [`planning/documentation-revamp.md`](https://github.com/kibertoad/cat-factory-website/blob/main/planning/documentation-revamp.md)
-in the website repo, now carrying a phase F for the two destinations phase E was never told about
-plus the generated API reference.
+in the website repo, now carrying a phase G for the two corrections plus the preset-authoring page.
 
 ## Goal and rationale
 
@@ -244,7 +241,7 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       read as an endpoint needing no authorization), summaries are unique because they become the
       anchors, every operation carries exactly one tag because the grouping IS the navigation, and
       no two headings on the page slug the same.
-- [ ] 12b. **The reduction half, re-scoped by measuring instead of estimating.** Three revisions of
+- [x] 12b. **The reduction half, re-scoped by measuring instead of estimating.** Three revisions of
       this tracker described `public-api.md` as "2,029 lines of prose companion to the spec", which
       framed the cut as enormous and is why it was deferred four times. It is wrong. The
       `## Reference` section is 1,352 lines of which **125 are endpoint-table rows**; the rest is
@@ -269,7 +266,7 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       checked-in copy of the site's page list, which is a second routing table to keep in step and
       rots in the direction that matters most, since a page deleted from the site would stay listed
       and keep passing.
-- [ ] 15. **Finish the reductions the pointers only announced.** ([#1884](https://github.com/kibertoad/cat-factory/pull/1884)) A pointer at the top of a doc is
+- [x] 15. **Finish the reductions the pointers only announced.** ([#1884](https://github.com/kibertoad/cat-factory/pull/1884)) A pointer at the top of a doc is
       not the split; it is the promise of one, and on a checklist the promise reads as done. Slices
       2 to 11 reduced five things: `sdk/README.md` (-92 lines), `security-model.md` (-60),
       `vcs-providers.md` (-24), the root `README.md` (-13) and `model-support.md` §6-§8. Every other
@@ -362,6 +359,25 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       staleness sweep says open the website pull request first and NAME it in this one's
       description, and load the page before linking it. An assertion that the page exists is what
       failed; opening the URL is what would not have.
+- [x] 20. **Two live website pages had stopped describing the code, and the reduction pass is what
+      found them.** ([cat-factory-website#28](https://github.com/kibertoad/cat-factory-website/pull/28))
+      `extend/custom-gates.md` imported `wireProvider` / `isProviderWired` from
+      `@cat-factory/kernel` and called them as module-level functions; neither is exported, because
+      provider wiring moved to an app-owned `ProviderRegistry` instance the facade injects.
+      `extend/custom-providers.md` passed `environmentProvider` to `buildNodeContainer` /
+      `startLocal`; that option was removed when environment backends became a registry keyed by
+      `kind`. A deployment author following either page got a type error, and in the second case the
+      repo doc it links had said so in its own opening paragraph the whole time.
+      **What this adds to the existing checks.** Item 14 asks whether a link RESOLVES. Item 17 and
+      the reduction-findings section ask whether the page is DEEP enough. Neither asks whether the
+      page is still TRUE, and nothing automatic can: `check-repo-links.mjs` resolved both pages and
+      both headings, correctly, and a code fence is not a link. The check is the same person doing
+      the same reading, with one more question: does the example still compile against the seam this
+      doc describes. Where the answer is no, the repo doc is usually the one that is right, because
+      it is the one a code change's own PR touches.
+      **And the fix has to land on the SITE first**, which is the ordering rule doing exactly what
+      it is for: the reduction that discovered the breakage could not land until the page it points
+      at was correct, so #28 merged ahead of this pull request and is named in its description.
 
 ## Slice 15 reductions
 
@@ -398,15 +414,15 @@ already. `pointer` means the doc opens by naming the website page that owns its 
 | `llm-telemetry.md`                | yes     | not needed      | nothing: the clean-split model to copy                                  |
 | `storage-and-retention.md`        | yes     | not needed      | nothing: read, and it is sink/rollup design the site does not carry     |
 | `reports.md`                      | yes     | not needed      | nothing: read, and it is the decision record behind the reports surface |
-| `custom-agent-roles.md`           | yes     | NOT READ        | against `extend/custom-agents.html`                                     |
-| `custom-agent-gate-ergonomics.md` | yes     | NOT READ        | against `extend/custom-gates.html`                                      |
-| `custom-binary-stores.md`         | yes     | NOT READ        | against `extend/custom-providers.html`                                  |
-| `native-environment-adapter.md`   | yes     | NOT READ        | against `extend/custom-providers.html`; 438 lines, the largest unread   |
-| `local-k3s-environments.md`       | yes     | NOT READ        | against `operate/environments.html` + `deploy/kubernetes.html`          |
-| `initiative-presets.md`           | yes     | NOT READ        | against `guide/initiatives.html`                                        |
-| `github-integration.md`           | yes     | NOT READ        | against `deploy/github-app.html`                                        |
-| `github-operations.md`            | yes     | NOT READ        | the runbook stays; setup already moved                                  |
-| `kubernetes-topology.md`          | yes     | NOT READ        | against `deploy/kubernetes.html`                                        |
+| `custom-agent-roles.md`           | yes     | yes (15l)       | nothing: 374 → 320                                                      |
+| `custom-agent-gate-ergonomics.md` | yes     | yes (15l)       | nothing: 214 → 195                                                      |
+| `custom-binary-stores.md`         | yes     | yes (15l)       | nothing: 129 → 99                                                       |
+| `native-environment-adapter.md`   | yes     | yes (15m)       | nothing: 460 → 389, after the site's wiring section was FIXED           |
+| `local-k3s-environments.md`       | yes     | yes (15o)       | nothing: 250 → 240, a small cut, and the assessment says why            |
+| `initiative-presets.md`           | yes     | yes (15n)       | nothing: 328 → 236, after the site gained a preset-authoring page       |
+| `github-integration.md`           | yes     | yes (15p)       | nothing: reduced toward ADR 0001, not toward the site                   |
+| `github-operations.md`            | yes     | yes (15p)       | nothing: 188 → 71, the largest cut of the initiative                    |
+| `kubernetes-topology.md`          | yes     | READ, BLOCKED   | a page that stops at the connect form; the verdict is 15q               |
 
 **A verdict of "no reduction warranted" is a real outcome and it is not the same as "not
 assessed".** `llm-telemetry.md`, `storage-and-retention.md` and `reports.md` were read against their
@@ -647,6 +663,121 @@ remaining known duplication after the eleven unread docs.
 `llm-telemetry.md` is the model of a clean split and needs nothing: every section is an internal rule
 with no counterpart on the site. Copy its shape.
 
+### 15l. The three capability docs: `custom-agent-roles`, `-gate-ergonomics`, `custom-binary-stores`
+
+Rode together because each cut the same shape: a table or an example the site now carries in equal
+or greater depth, with a fact underneath it that only makes sense with the code open.
+
+- **`custom-agent-roles.md` (374 → 320).** The traits table went (the site's is LONGER: it carries
+  `foundational-catalog`, `foundational-contracts` and `binary-output`), as did the
+  `McpServerDefinition` / `secretKeys` / `oauth` field tables, which `extend/tool-servers.html`
+  took in full at item 19. What stayed of the tool-server section is three facts about how the
+  platform READS a declaration rather than how you write one, and the one the site genuinely does
+  not carry is the `oauth` pair `resource` / `header`, where a `secretKeys` entry naming the same
+  header is a boot WARNING and the granted token silently wins.
+- **`custom-agent-gate-ergonomics.md` (214 → 195).** The `defineStructuredOutput` example and the
+  authoring checklist both had longer counterparts on the site. What replaced the checklist is the
+  one thing neither website page can state without knowing what validates when: the ORDER
+  registrations must happen in.
+- **`custom-binary-stores.md` (129 → 99).** The registration example and its four rules are the
+  site's. The mothership two-process rule MOVED there rather than being deleted, because it is a
+  deployment instruction and its absence is silent: register only on the nodes and the sweep reports
+  the same zero it reports for a deployment that stores nothing.
+
+### 15m. `native-environment-adapter.md` (460 → 389), and the reason it could not have been cut before
+
+**This is the doc that found the breakage.** Its registration section opened by saying the
+`buildNodeContainer({ environmentProvider })` / `startLocal({ environmentProvider })` singletons were
+REMOVED and the seam is now the injected `EnvironmentBackendRegistry`. The website page it points at
+taught the removed option, in a copy-pasteable example. The repo doc was right and had been right
+since the change landed; nobody had read the two side by side.
+
+So the cut is the second half of a fix, not a cut: `extend/custom-providers.html` gained the correct
+wiring (phase G), and this doc reduced to the two facts that are about the SEAM rather than about
+wiring one adapter (there is deliberately no provider injection option, because selection is a
+per-workspace fact; and by-reference registration means module identity does not matter). The
+`confirmTeardown` rules also moved to the site, because they are how you WRITE the probe; what
+stayed is where the verdict goes and that omitting it is a supported choice recorded as
+`unverifiable`.
+
+### 15n. `initiative-presets.md` (328 → 236), and the destination nobody had
+
+The site said, on `guide/initiatives.html`, that a deployment registers its own presets in code and
+sent the reader to `extend/custom-agents.html`, which says nothing about presets.
+`extend/reusable-operations.html` named the preset as one of four vehicles and sent them back to
+`guide/initiatives.html`. Every link resolved. The reader who correctly picked the preset vehicle
+was routed in a circle and landed nowhere, and no guard on either side can see that, because
+nothing was broken: the material simply did not exist.
+
+`extend/initiative-presets.html` is that page (phase G), and the reduction is against it: the seam,
+the registration table, the form vocabulary, the `phaseTemplate` declaration, the human-review
+override and the two worked examples all went. What stayed is what the ENGINE does: the two generic
+mechanisms that ENFORCE a phase template (the planner prompt fold and the ingest normalizer, neither
+of which knows a preset id), the descriptor's wire constraint, and the cross-phase-artifact rule,
+which is the one thing in the file that decides an agent kind's SURFACE and would be re-derived
+wrongly by anyone who did not know it.
+
+**The lesson to carry: a circular cross-link is what a missing destination looks like.** Two pages
+each named the other as the authority. When a page says "see X for how", open X and check that it
+does, which is the same instruction item 19 arrived at from the other direction.
+
+### 15o. `local-k3s-environments.md` (250 → 240): a small cut, deliberately
+
+Only the guided-setup walkthrough went, because `deploy/kubernetes.html#local-k3s-guided-setup`
+carries it in equal depth. The manual path, the RBAC manifest and the WSL2 networking notes stayed,
+and the doc now says why: the manual path is a `kubectl apply` against a file THIS REPOSITORY ships,
+so the reader is already in a checkout. A ten-line cut is the correct answer here, and recording it
+as such is what stops the next pass re-opening the file expecting one.
+
+### 15p. The GitHub pair: `github-operations.md` (188 → 71) and `github-integration.md`
+
+The largest single cut of the initiative, and the easiest, because `deploy/github-app.html` already
+owned the setup path in MORE depth than the runbook did: it carries the permission table with a
+reason per row, the OAuth callback the runbook never mentioned, and the privileged-App opt-in for
+programmatic repository creation. Sections 0 through 3 and 6 were a strictly worse copy. Five of the
+eight troubleshooting rows were too.
+
+What stayed is the production queue path, the deploy commands, rotation, and the three
+troubleshooting rows whose diagnosis needs something only this side can see: the App JWT's claims,
+the reconciliation cursor, the rate-limit ledger. The doc now states that test explicitly, so the
+next person adding a row knows which table it belongs in.
+
+**Two code remedies moved with the content**, per the slice-9 rule that a remedy whose instruction
+the website now owns moves to `SITE_DOCS`. The `GITHUB_APP_PRIVATE_KEY` config problem (whose whole
+remedy is the PKCS#8 conversion) and the node facade's "no GitHub token source" boot warning both
+pointed at the runbook for a step that is no longer in it. `SITE_DOCS.githubApp` is the new entry.
+
+`github-integration.md` is the one doc here reduced toward a SIBLING rather than the site: its "Why
+a GitHub App (and not OAuth / PAT)" comparison restated ADR 0001's decision 1, in a file that names
+ADR 0001 as "the design rationale" two paragraphs earlier. That is the repo-to-repo class this
+tracker already names, and the rule it broke ("a doc that names another as the full model may not
+also contain that model") is the same one `custom-agents.md` broke three times. Everything else in
+the file (the ports, the services, the adapters, the auth crypto, the projection and cursor model,
+the endpoint table) is contributor material with no counterpart on the site, so it stays whole.
+
+### 15q. `kubernetes-topology.md`: READ, and BLOCKED. Not cut.
+
+The one row that does not end in a reduction, and it is a verdict rather than a deferral.
+
+`deploy/kubernetes.html` stops at the CONNECT FORM: which fields to fill on the Agent containers and
+Test environments tabs. `kubernetes-topology.md` is the other question entirely, and by the reader
+test it is the website's: an operator laying out namespaces, node pools, a `NetworkPolicy`, the
+ServiceAccount's RBAC verbs, and sizing for concurrent runs needs every line of it and needs no
+checkout. Today they can fill in the form and cannot lay out the cluster.
+
+So this is the item-17 shape again, and the rule holds: the reduction is blocked on a page that does
+not exist, and finding that out IS the assessment. What the website owes is a topology section on
+its Kubernetes page (or a page beside it): the two backends and how they differ, who owns the
+control plane versus the data plane, why the run pod has no Service and the RBAC-gated pod-proxy is
+the only way in, the executor's egress set, and the reaping backstop a bare Pod needs. What would
+stay here afterwards is small and specific: that a re-dispatch is a `409 AlreadyExists` treated as an
+idempotent re-attach, why it is a bare Pod rather than a Job, and the manifest variant's
+`jobId`-sticky routing.
+
+**Not cutting it is the finding.** The previous phase cut two docs toward pages it had not opened;
+the correct move when the page cannot receive the content is to write down what it owes and leave
+the content where a reader can still reach it.
+
 ## Docs added since this tracker was written
 
 Checked against `main` on 2026-08-08, after the tracker's base commit:
@@ -718,6 +849,13 @@ converts.
   works is opening the URL**, and the phrasing that survives is an action rather than an ordering:
   CLAUDE.md's sweep now says to open the website pull request first and NAME it in the repo one's
   description, which is a thing a reviewer can see the absence of.
+- **A page can resolve, be deep enough, and still be WRONG.** The two Extend pages item 20 fixed
+  passed every check this initiative had: they existed, their anchors resolved, and they carried
+  more sections than the repo docs pointing at them. They also taught APIs that had been deleted.
+  A code example is not a link, so no crossing guard can see it, and neither repository's CI can
+  typecheck the other's prose. The practical rule: **when you reduce a doc toward a page, read the
+  page's CODE, not only its coverage**, and when the two disagree about what exists, believe the
+  repo doc, because it is the one a code change's own pull request has to touch.
 - **The website restructure changes URLs.** Its tracker's phase A regroups navigation without
   moving files precisely so slices here can start early; slices that link moved pages wait
   for the website's redirect slice, or link section anchors that survive the move.

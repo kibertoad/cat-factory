@@ -20,20 +20,16 @@ For the design rationale see [adr/0001-github-app-integration.md](./adr/0001-git
 
 ---
 
-## Why a GitHub App (and not OAuth / PAT)
+## The access model
 
-| Option                       | Identity / isolation                                             | Webhooks             | Rate limits            | Verdict                             |
-| ---------------------------- | ---------------------------------------------------------------- | -------------------- | ---------------------- | ----------------------------------- |
-| **GitHub App** (chosen)      | Per-**installation** tokens → one credential scope per workspace | Built in, one secret | Scale per installation | ✅ Multi-tenant read/write/webhooks |
-| OAuth App                    | User-scoped tokens; no per-install isolation                     | Configured per repo  | Per user               | ✖ No clean tenant isolation         |
-| PAT (classic / fine-grained) | Single user; manual rotation                                     | None                 | Per user               | ✖ Not multi-tenant                  |
+Each cat-factory workspace maps to exactly one App **installation**. That is the fact
+the rest of this document rests on: it is what gives per-workspace credential
+isolation (a short-lived installation token), fine-grained repository permissions,
+native webhook delivery, and rate limits that scale with the number of installations.
 
-A GitHub App is the only model that cleanly satisfies all three requirements at
-once: **multi-tenant**, **read + write**, and **webhooks**. Each cat-factory
-workspace maps to exactly one App **installation**, which gives per-workspace
-credential isolation (a short-lived installation token), fine-grained repository
-permissions, native webhook delivery, and rate limits that scale with the number
-of installations.
+Why an App rather than an OAuth App or a PAT is
+[ADR 0001, decision 1](./adr/0001-github-app-integration.md#1-access-model-a-github-app-multi-tenant-not-oauth-app-or-pat),
+which is where the comparison and the rejected options belong.
 
 ---
 
