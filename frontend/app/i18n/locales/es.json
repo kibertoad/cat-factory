@@ -1450,6 +1450,7 @@
           "oauthNotConnected": "no estuvo disponible: nadie ha conectado este tablero con él todavía.",
           "oauthTokenFailed": "no estuvo disponible: la conexión dejó de producir un token de acceso.",
           "overBudget": "no estuvo disponible: este agente declara más servidores de los que lleva una ejecución.",
+          "consensusPanel": "no estuvo disponible: este paso se ejecutó como un panel de consenso, y un panel no tiene entorno de agente al que conectar un servidor de herramientas.",
           "unknown": "no estuvo disponible ({reason})."
         },
         "remedy": {
@@ -1460,7 +1461,8 @@
           "unusableSecret": "Corrige la declaración en el código de la instalación: la credencial de un servidor remoto viaja en una cabecera y la de uno local se inyecta en el proceso del servidor.",
           "oauthNotConnected": "Conecta este tablero con él desde la ventana de Infraestructura. Un despliegue sin ENCRYPTION_KEY no tiene dónde guardar una concesión, así que un operador debe configurarla primero.",
           "oauthTokenFailed": "Vuelve a conectarlo desde la ventana de Infraestructura, o espera a que pase la caída del proveedor.",
-          "overBudget": "Recorta lo que declara el agente, para que una ejecución pueda llevarlo todo."
+          "overBudget": "Recorta lo que declara el agente, para que una ejecución pueda llevarlo todo.",
+          "consensusPanel": "Desactiva el consenso en este paso si necesita la herramienta, o acepta que el panel juzgue sin ella. No hay que cambiar nada del servidor."
         },
         "observed": {
           "ready": "iniciado",

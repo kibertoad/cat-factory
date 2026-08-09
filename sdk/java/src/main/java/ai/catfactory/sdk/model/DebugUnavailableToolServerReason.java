@@ -22,6 +22,7 @@ public enum DebugUnavailableToolServerReason {
     OAUTH_NOT_CONNECTED("oauth_not_connected"),
     OAUTH_TOKEN_FAILED("oauth_token_failed"),
     OVER_BUDGET("over_budget"),
+    CONSENSUS_PANEL("consensus_panel"),
 
     /**
      * A value this SDK release does not know.

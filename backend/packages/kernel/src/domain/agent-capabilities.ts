@@ -350,6 +350,13 @@ export interface UnavailableToolServer {
    *   authorization server that would not answer, a rotated client secret. Apart from
    *   `oauth_not_connected` because "never connected" and "the connection stopped working" send an
    *   operator to different places, and only the second is ever transient.
+   * - `consensus_panel` is the only member decided by NO dispatch to a CLI at all: the step was
+   *   diverted to a multi-model consensus panel, whose participants are inline model calls with no
+   *   checkout, no CLI and therefore nowhere to wire an MCP server. Kept apart from
+   *   `harness_unsupported` because nothing about the harness is involved: the kind's standard
+   *   surface may serve the server perfectly, and the same step without consensus would have got
+   *   it. The fix is a step-level choice (turn consensus off for this step, or accept the panel's
+   *   ceiling), which is nobody's list to widen and no credential to set.
    *
    * ONE MEMBER IS NOT ONE CAUSE, and anyone writing operator-facing copy off this list has to
    * read the whole of a member before naming a fix for it. Three of them are reached from more

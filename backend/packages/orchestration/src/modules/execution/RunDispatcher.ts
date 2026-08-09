@@ -40,7 +40,7 @@ import {
 } from '@cat-factory/kernel'
 import { buildStepApproval } from './stepApproval.js'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
-import type { StepSkipReason } from '@cat-factory/contracts'
+import type { DispatchToolServers, StepSkipReason } from '@cat-factory/contracts'
 import { applyContainerRunning, applySubtaskProgress, pollHandleFor } from './step-fold.logic.js'
 import { applyObservedToolServers } from './toolServers.logic.js'
 import { FORK_PROPOSER_KIND } from '@cat-factory/agents'
@@ -520,6 +520,11 @@ export class RunDispatcher {
   /** @see AgentDispatchController.previewStepModel */
   previewStepModel(context: AgentRunContext): Promise<string | undefined> {
     return this.agentDispatch.previewStepModel(context)
+  }
+
+  /** @see AgentDispatchController.previewStepToolServers */
+  previewStepToolServers(context: AgentRunContext): Promise<DispatchToolServers | undefined> {
+    return this.agentDispatch.previewStepToolServers(context)
   }
 
   /** @see AgentDispatchController.currentStepIsNonMetered */

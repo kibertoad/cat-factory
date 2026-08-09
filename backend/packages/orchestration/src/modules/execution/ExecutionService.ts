@@ -396,6 +396,7 @@ export class ExecutionService {
       spend: spendService,
       idGenerator,
       previewStepModel: (ctx) => this.runDispatcher.previewStepModel(ctx),
+      previewStepToolServers: (ctx) => this.runDispatcher.previewStepToolServers(ctx),
       runAgent: (ctx, opts) => this.runDispatcher.runAgent(ctx, opts),
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
