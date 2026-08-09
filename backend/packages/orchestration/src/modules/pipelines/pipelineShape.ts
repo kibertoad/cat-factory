@@ -8,7 +8,7 @@ import type {
   TesterQualityConfig,
 } from '@cat-factory/kernel'
 import type { BinaryOutputConfig } from '@cat-factory/contracts'
-import { validateDescriptorFields } from '@cat-factory/contracts'
+import { conflictingOutputSizeOptions, validateDescriptorFields } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
   companionTargets,
@@ -231,7 +231,39 @@ export function assertValidBinaryOutputSteps({
       )
     }
     assertComparableCandidates(kind, config)
+    assertUnambiguousOutputSize(kind, config)
   }
+}
+
+/**
+ * A step that states exact output DIMENSIONS may not also state the shape a second way.
+ *
+ * WHICH options conflict, and why, is contracts' {@link conflictingOutputSizeOptions}: the SPA's
+ * pipeline builder has to state this same refusal where it is fixable without a round trip, so the
+ * rule is shared and only the MESSAGE is composed here. What stays here is the disposition (this
+ * one refuses the save) and the wording, which names the numbers actually configured.
+ *
+ * Structural, so it lands beside {@link assertComparableCandidates} at pipeline SAVE and again at
+ * run start: all three fields are readable off the step and none depends on workspace state or on
+ * which integrations happen to be registered.
+ */
+function assertUnambiguousOutputSize(kind: string, config: BinaryOutputConfig): void {
+  const generation = config.generation
+  const conflicting = conflictingOutputSizeOptions(generation)
+  if (!generation?.outputSize || conflicting.length === 0) return
+  const { width, height } = generation.outputSize
+  const conflicts = conflicting.map((option) =>
+    option === 'aspectRatio'
+      ? `an aspect ratio of ${generation.aspectRatio}`
+      : `an upscale of ${generation.upscale}x`,
+  )
+  throw new ValidationError(
+    `Step '${kind}' asks for an exact output size of ${width}x${height} and also states ` +
+      `${conflicts.join(' and ')}, which describe the delivered dimensions a second time and ` +
+      'can disagree with it. Keep whichever one is the requirement and remove the other: with ' +
+      'both, the agent writing the generation call is the one left to decide which the step ' +
+      'meant.',
+  )
 }
 
 /**

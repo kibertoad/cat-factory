@@ -51,9 +51,9 @@ strictly worse than the doc it replaced. And before removing a section, check wh
 HEADING: error remedies build doc URLs in code (`config/docs.ts`, `vcs-errors.ts`,
 `providers/docs.ts`), `scripts/check-doc-anchors.mjs` resolves them, and a remedy whose instruction
 the website has taken over moves to `SITE_DOCS` rather than keeping a heading alive for it. The
-named exceptions that stay in this repo whatever their audience, the audit and the open slices are in
+named exceptions that stay in this repo whatever their audience, and the findings behind them, are in
 [`docs/README.md`](./docs/README.md#where-does-a-new-doc-go) and
-[`docs/initiatives/documentation-revamp.md`](./docs/initiatives/documentation-revamp.md).
+[ADR 0051](./backend/docs/adr/0051-documentation-repo-website-split.md).
 
 Your PR's documentation sweep therefore has one extra question: **does this change alter behaviour a
 website page describes?** If it does, say so in the PR so the website's `sync-docs` pass picks it up,

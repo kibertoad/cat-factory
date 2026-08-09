@@ -639,6 +639,36 @@ describe('assertValidBinaryOutputSteps', () => {
   it('skips the check entirely with no registry in view (the built-in-catalog caller)', () => {
     expect(() => assertValidBinaryOutputSteps({ agentKinds: ['image-generator'] })).not.toThrow()
   })
+
+  // An exact size and a second statement of the same fact. Refused rather than resolved by
+  // precedence, because the party a precedence rule leaves the decision to is the agent writing
+  // the vendor call, reading both numbers in one brief.
+  describe('an exact output size states the dimensions once', () => {
+    const step = (generation: Record<string, unknown>) => () =>
+      assertValidBinaryOutputSteps({
+        agentKinds: ['image-generator'],
+        stepOptions: [{ binaryOutput: { storageServiceId: 'asset-store', generation } }],
+        agentKindRegistry: registryWithGenerator(),
+      })
+
+    it('accepts a size on its own, and each neighbour on its own', () => {
+      expect(step({ outputSize: { width: 96, height: 96 } })).not.toThrow()
+      expect(step({ aspectRatio: '16:9' })).not.toThrow()
+      expect(step({ upscale: 2 })).not.toThrow()
+    })
+
+    it('refuses a size beside an aspect ratio or an upscale, naming both', () => {
+      expect(step({ outputSize: { width: 96, height: 96 }, aspectRatio: '16:9' })).toThrow(
+        /96x96.*aspect ratio of 16:9/s,
+      )
+      expect(step({ outputSize: { width: 96, height: 96 }, upscale: 2 })).toThrow(/upscale of 2x/)
+      // Both at once is ONE refusal naming the whole fix, the same rule the unresolved-id
+      // refusals follow: a step with two problems must not cost two save-fix rounds.
+      expect(
+        step({ outputSize: { width: 96, height: 96 }, aspectRatio: '1:1', upscale: 2 }),
+      ).toThrow(/aspect ratio of 1:1 and an upscale of 2x/)
+    })
+  })
 })
 
 // The AUTHORING rules (`validatePipelineAuthoring`) are a layer above the shape validation: what

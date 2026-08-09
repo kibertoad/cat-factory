@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_BINARY_PIXEL_EXTENT } from '@cat-factory/contracts'
 import {
+  formatExtent,
   formatReferenceImages,
   generationControlOffer,
+  parseExtent,
   parseMediaTypeRequirement,
   parseReferenceImages,
   sameFormats,
@@ -88,6 +91,32 @@ describe('parseReferenceImages', () => {
   it('round-trips through the text the field shows', () => {
     const text = 'base|assets/hero.png|asset-store'
     expect(formatReferenceImages(parseReferenceImages(text).usable)).toBe(text)
+  })
+})
+
+describe('parseExtent', () => {
+  it('accepts exactly what the save boundary accepts', () => {
+    expect(parseExtent(' 96 ')).toBe(96)
+    expect(parseExtent(String(MAX_BINARY_PIXEL_EXTENT))).toBe(MAX_BINARY_PIXEL_EXTENT)
+  })
+
+  it('refuses everything the schema would refuse, so a typed size is a saveable one', () => {
+    // Including ZERO, which is the one that mattered: an unset half written as 0 stored a config
+    // the schema rejects, so the step became unsaveable behind an opaque validation error and the
+    // untouched field rendered "0" back at whoever had not touched it.
+    expect(parseExtent('0')).toBeNull()
+    expect(parseExtent('-8')).toBeNull()
+    expect(parseExtent('96.5')).toBeNull()
+    expect(parseExtent('wide')).toBeNull()
+    expect(parseExtent(String(MAX_BINARY_PIXEL_EXTENT + 1))).toBeNull()
+  })
+
+  it('reads a blank field as nothing typed', () => {
+    expect(parseExtent('')).toBeNull()
+    expect(parseExtent('   ')).toBeNull()
+    // And the round trip holds: what a stored size renders as is what parses back to it.
+    expect(parseExtent(formatExtent(96))).toBe(96)
+    expect(formatExtent(undefined)).toBe('')
   })
 })
 

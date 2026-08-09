@@ -205,7 +205,7 @@ function printInstallGuidance(state: HostState, io: Io, platform: NodeJS.Platfor
     const osName = platform === 'win32' ? 'Windows' : platform === 'darwin' ? 'macOS' : platform
     const install =
       platform === 'win32'
-        ? 'Install k3d (needs Docker Desktop running) — see backend/docs/local-kubernetes-setup-windows.md, then:'
+        ? 'Install k3d (needs Docker Desktop running): https://www.catfactory.ai/deploy/kubernetes-windows.html, then:'
         : 'Install k3d (needs Docker running), e.g. `brew install k3d`, then:'
     io.info(
       [

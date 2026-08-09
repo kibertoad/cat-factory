@@ -119,7 +119,7 @@ radius (a one-line internal fix needs none; a new export / env var / capability 
   mirrored; a new env var, endpoint, capability, failure mode or operator step meets that test. **LOAD the
   page before you link it**: neither repo's CI can see the other (the crossing guard is weekly BY DESIGN),
   so a reduction that ASSERTED its page existed left 600 lines reachable from nowhere. Before reducing a
-  doc, check what deep-links its HEADINGS from code (`check-doc-anchors.mjs`). Model: `docs/initiatives/documentation-revamp.md`.
+  doc, check what deep-links its HEADINGS from code (`check-doc-anchors.mjs`). Model: [ADR 0051](./backend/docs/adr/0051-documentation-repo-website-split.md).
 
 ### Bigger initiatives get a tracker document
 
