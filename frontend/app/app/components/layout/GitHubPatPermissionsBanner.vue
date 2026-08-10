@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import {
   GITHUB_PAT_FINE_GRAINED_PERMISSIONS,
   githubPatCheckNeedsAttention,
+  githubPatCheckSource,
   missingGitHubPatCapabilities,
 } from '@cat-factory/contracts'
 import type { GitHubPatCapability, GitHubPatKind } from '~/types/domain'
@@ -80,9 +81,15 @@ const remintUrl = computed(() =>
  * the developer at the terminal); an initiator token belongs to the signed-in user and is
  * replaced in their own settings. Sending one to the other's remedy is worse than saying
  * nothing, which is why the source rides the wire rather than being guessed from the shape.
+ *
+ * Read through the contract's own accessor rather than off `report`, because a REJECTED token
+ * produces no report and every state this banner renders carries a source. Deriving it from the
+ * report alone left the rejected case falling through to whichever branch the ternary ended on,
+ * which told a local developer whose deployment token had expired to replace it in their
+ * personal settings: the exact misrouting the wire field exists to prevent.
  */
 const sourceKey = computed(() =>
-  report.value?.source === 'deployment'
+  check.value && githubPatCheckSource(check.value) === 'deployment'
     ? 'layout.githubPatPermissionsBanner.sourceDeployment'
     : 'layout.githubPatPermissionsBanner.sourceInitiator',
 )
@@ -142,6 +149,16 @@ const fineGrainedPermissions = GITHUB_PAT_FINE_GRAINED_PERMISSIONS.join(', ')
               {{
                 t('layout.githubPatPermissionsBanner.alsoMissing', {
                   capabilities: advisory.map(capabilityLabel).join(', '),
+                })
+              }}
+            </p>
+
+            <!-- For a fine-grained token, WHICH repositories it was not granted is the whole
+                 remedy: the permission list is right and the repository selection is not. -->
+            <p v-if="report && report.deniedRepos.length" class="mt-1 text-xs text-red-200/80">
+              {{
+                t('layout.githubPatPermissionsBanner.deniedRepos', {
+                  repos: report.deniedRepos.join(', '),
                 })
               }}
             </p>

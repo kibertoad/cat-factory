@@ -2252,7 +2252,8 @@
       "createFineGrained": "Crear un token de reemplazo de permisos detallados",
       "classicHint": "El enlace abre el formulario de token clásico con los ámbitos necesarios ya seleccionados.",
       "fineGrainedHint": "El formulario de permisos detallados de GitHub no admite preselección, así que concede tú mismo estos permisos de repositorio: {permissions}.",
-      "sampled": "Se comprobaron {checked} repositorios vinculados; otros {remaining} no se comprobaron."
+      "sampled": "Se comprobaron {checked} repositorios en uso; otros {remaining} no se comprobaron.",
+      "deniedRepos": "El token no puede acceder a estos repositorios que usan tus servicios: {repos}. Vuelve a generarlo seleccionando esos repositorios."
     },
     "providerConfigBanner": {
       "titleMany": "Los proveedores necesitan configuración",
@@ -2783,7 +2784,8 @@
           "runner_manifest_no_status_path": "Sin ruta de estado: cada sondeo se interpreta como todavía en ejecución, así que un trabajo solo puede terminar agotando el presupuesto de sondeo de la ejecución.",
           "github_pat_classic_account_wide": "Es un token clásico con el ámbito 'repo': alcanza todos los repositorios a los que puedes hacer push, incluidos aquellos donde nunca se instaló la App de GitHub de este espacio de trabajo. Las ejecuciones que inicias lo usan con preferencia sobre la App. Un token granular limitado a los repositorios de esta instalación es más estrecho.",
           "github_pat_scopes_beyond_need": "Este token concede permisos que cat-factory nunca usa. Quitarlos no cuesta nada y reduce lo que podría alcanzar una ejecución comprometida.",
-          "github_pat_scope_unreadable": "GitHub aceptó este token pero no informó de sus ámbitos, así que aquí no se puede mostrar su alcance. Comprueba lo que concede en la configuración de tokens de GitHub."
+          "github_pat_scope_unreadable": "GitHub aceptó este token pero no informó de sus ámbitos, así que aquí no se puede mostrar su alcance. Comprueba lo que concede en la configuración de tokens de GitHub.",
+          "github_pat_no_scopes": "GitHub no informa de ningún ámbito para este token clásico, así que solo puede leer datos públicos. Las ejecuciones que clonen, envíen cambios o abran una pull request con él fallarán. Genera uno nuevo con 'repo' y 'workflow' seleccionados."
         }
       },
       "toast": {

@@ -7,13 +7,21 @@ import type { AppEnv, ServerContainer } from '../src/http/env.js'
 import { githubController } from '../src/modules/github/GitHubController.js'
 
 // What the CONTROLLER decides about the credential check, as opposed to what the probe decides
-// (that is `githubPatCapability.test.ts`, in integrations): WHICH token gets judged.
+// (that is `githubPatCapability.test.ts`, in integrations): WHICH token gets judged, and WHETHER
+// one is judged at all.
 //
-// The rule is the load-bearing part. A run authenticates as its initiator's own token only when
-// the workspace permits it, so the check has to ask the same shared resolver the dispatch mint
-// and the engine's GitHub client ask — otherwise a workspace that turned the preference off is
-// nagged about a credential none of its runs touch, and a hosted deployment on a GitHub App is
-// told something about a token it never uses.
+// Both rules are load-bearing. A run authenticates as its initiator's own token only when the
+// workspace permits it, so the check asks the same shared resolver the dispatch mint and the
+// engine's GitHub client ask — otherwise a workspace that turned the preference off is nagged
+// about a credential none of its runs touch, and a hosted deployment on a GitHub App is told
+// something about a token it never uses. And a token is judged only where a run would present
+// it, which is what the run-target read decides: a board whose services target no GitHub
+// repository reaches GitHub nowhere.
+//
+// This file builds its OWN container, so it can assert what the module DECIDES and nothing about
+// what a facade WIRES. That gap is not theoretical — the read below replaced a field no facade
+// ever attached — so the wiring claim is made where it can be: `runtimes/local/test/github-pat`
+// drives the same endpoint through a container `buildLocalContainer` actually produced.
 
 const CLASSIC_OK = new Response('{}', {
   status: 200,
@@ -27,13 +35,15 @@ function makeApp(
     resolveRunInitiatorToken?: ReturnType<typeof vi.fn>
     /** The deployment's own configured token (local mode); omitted ⇒ a GitHub App deployment. */
     configuredToken?: string
-    repos?: { owner: string; name: string; provider?: 'github' | 'gitlab' }[]
+    /** What the board's services target; omitted ⇒ one GitHub repo, so a token IS judged. */
+    runRepos?: { owner: string; name: string; provider?: 'github' | 'gitlab' }[]
     fetch?: typeof fetch
     /** Omit the signed-in user, as an auth-off deployment would. */
     anonymous?: boolean
   } = {},
 ) {
-  const doFetch = options.fetch ?? ((() => Promise.resolve(CLASSIC_OK.clone())) as typeof fetch)
+  const doFetch =
+    options.fetch ?? (vi.fn(() => Promise.resolve(CLASSIC_OK.clone())) as unknown as typeof fetch)
   vi.stubGlobal('fetch', doFetch)
 
   const resolveRunInitiatorToken =
@@ -48,9 +58,8 @@ function makeApp(
     ...(options.configuredToken
       ? { vcsIdentity: { github: { configuredToken: () => options.configuredToken } } }
       : {}),
-    repoProjectionRepository: {
-      list: () => Promise.resolve(options.repos ?? []),
-    },
+    listWorkspaceRunRepos: () =>
+      Promise.resolve(options.runRepos ?? [{ owner: 'acme', name: 'api', provider: 'github' }]),
     vcsWebUrls: { github: 'https://github.com' },
   } as unknown as ServerContainer
 
@@ -134,12 +143,12 @@ describe('GET /workspaces/:workspaceId/github/pat-check', () => {
     expect(await check(app)).toMatchObject({ state: 'checked', report: { source: 'deployment' } })
   })
 
-  it('probes only the GitHub repositories a board links', async () => {
+  it('probes only the GitHub repositories a board’s services target', async () => {
     const seen: string[] = []
     const { app } = makeApp({
       initiatorToken: 'github_pat_11FINE',
-      repos: [
-        { owner: 'acme', name: 'api' },
+      runRepos: [
+        { owner: 'acme', name: 'api', provider: 'github' },
         { owner: 'acme', name: 'legacy', provider: 'gitlab' },
       ],
       fetch: (async (url: string | URL) => {
@@ -153,7 +162,28 @@ describe('GET /workspaces/:workspaceId/github/pat-check', () => {
     const result = await check(app)
     expect(result).toMatchObject({ state: 'checked', report: { probedRepos: ['acme/api'] } })
     // The GitLab row is reachable through a different token on a different host; asking GitHub
-    // about it would produce a 404 the fold reads as an unreadable repository.
+    // about it would produce a 404 the fold now reads as a repository the token was denied.
     expect(seen).toEqual(['https://api.github.com/repos/acme/api'])
+  })
+
+  // The provider gate, and the reason it sits in front of the CLASSIC path too: a classic
+  // token's scopes are readable with no repository at all, so a GitLab-bound board rendered a
+  // blocking verdict about a credential its runs could never present. Nothing here contradicts
+  // that verdict once it exists, which is what made it the loudest possible wrong answer.
+  it('judges nothing on a board whose services target only GitLab', async () => {
+    const { app, doFetch } = makeApp({
+      initiatorToken: 'ghp_mine',
+      runRepos: [{ owner: 'acme', name: 'legacy', provider: 'gitlab' }],
+    })
+    expect(await check(app)).toEqual({ state: 'not_applicable' })
+    expect(vi.mocked(doFetch)).not.toHaveBeenCalled()
+  })
+
+  // Same rule, the not-yet-linked case: no service targets a repository, so no run starts that
+  // would authenticate, and the outbound call is pure cost.
+  it('judges nothing before a service is linked to a repository', async () => {
+    const { app, doFetch } = makeApp({ initiatorToken: 'ghp_mine', runRepos: [] })
+    expect(await check(app)).toEqual({ state: 'not_applicable' })
+    expect(vi.mocked(doFetch)).not.toHaveBeenCalled()
   })
 })

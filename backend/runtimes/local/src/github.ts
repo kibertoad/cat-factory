@@ -257,11 +257,14 @@ export function classifyPatProbe(res: {
     return { ok: false, reason: 'forbidden', detail: `HTTP ${res.status} — unexpected response` }
   }
   // 2xx: the token authenticates. Verify scopes only when GitHub reports them (classic token).
+  // An ABSENT header is a fine-grained token, whose scopes cannot be verified from here; a
+  // header that is present and EMPTY is a classic token minted with nothing ticked, which is
+  // missing every scope rather than unverifiable.
   const granted = (res.scopesHeader ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  if (granted.length === 0) return { ok: true } // fine-grained token — scopes not reported
+  if (granted.length === 0 && res.scopesHeader === null) return { ok: true }
   const missing = GITHUB_PAT_CLASSIC_SCOPES.filter((s) => !granted.includes(s))
   return missing.length === 0
     ? { ok: true }

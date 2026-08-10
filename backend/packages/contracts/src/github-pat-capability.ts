@@ -175,19 +175,31 @@ export function githubPatCreateUrl(
  * What the check found about the token a workspace's runs would use.
  *
  * `probedRepos` / `unprobedRepoCount` exist because the fine-grained answer is a SAMPLE: the
- * probe reads the repositories linked to this board, capped, and a reader who assumed it read
- * all of them would take a clean verdict as a guarantee about a repository nobody looked at.
- * Both are empty/zero for a classic token, whose scopes answer for every repository at once.
+ * probe reads the repositories this board's services target, capped, and a reader who assumed
+ * it read all of them would take a clean verdict as a guarantee about a repository nobody
+ * looked at. Both are empty/zero for a classic token, whose scopes answer for every repository
+ * at once.
+ *
+ * The token's raw scope list is deliberately NOT here. Nothing renders it, and the one source
+ * whose scopes this endpoint could expose is `deployment` — a shared operational credential
+ * whose breadth every workspace member would then be able to read off a route that lets reads
+ * through. The per-capability verdict is what a reader can act on; the scope list is what the
+ * person who pasted the token already saw on the connect form.
  */
 export const githubPatCapabilityReportSchema = v.object({
   source: githubPatSourceSchema,
   kind: githubPatKindSchema,
-  /** The classic scopes GitHub named, in header order. Empty for the other kinds. */
-  scopes: v.array(v.string()),
   capabilities: githubPatCapabilitiesSchema,
-  /** The `owner/name` of each repository the probe actually read. */
+  /** The `owner/name` of each repository the probe actually asked GitHub about. */
   probedRepos: v.array(v.string()),
-  /** Linked repositories the probe's cap left unread, so a verdict never reads as exhaustive. */
+  /**
+   * The probed repositories GitHub answered 404 for. A subset of {@link probedRepos}, and the
+   * one detail that turns "push is missing" into something a reader can act on for a
+   * fine-grained token: these are the repositories the token was not granted (GitHub 404s
+   * rather than 403s for a repository a credential may not see, so it cannot leak existence).
+   */
+  deniedRepos: v.array(v.string()),
+  /** Targeted repositories the probe's cap left unread, so a verdict never reads as exhaustive. */
   unprobedRepoCount: v.number(),
   /** The instance the token authenticates against, for the re-mint link. Null ⇒ not derivable. */
   webUrl: v.nullable(v.string()),
@@ -199,18 +211,26 @@ export type GitHubPatCapabilityReport = v.InferOutput<typeof githubPatCapability
  * four different reactions, and three of them are not "the token lacks something":
  *
  *  - `not_applicable` — no PAT is in play (a GitHub App deployment, GitLab, or nothing
- *    connected at all). There is no token whose reach could be wrong.
+ *    connected at all), or this board's services target no GitHub repository, so no run here
+ *    would ever authenticate with one. There is no token whose reach could be wrong.
  *  - `token_rejected` — GitHub refused the token outright (401/403). Blocking, and a strictly
  *    worse problem than a missing scope, so it gets its own state instead of collapsing into
- *    "everything is missing".
- *  - `probe_failed`   — GitHub could not be reached, or answered in a way the probe could not
- *    read. NOT a verdict about the token: an upstream outage must never render as a permissions
- *    problem, because the remedy it would advertise (mint a new token) is wrong and costly.
+ *    "everything is missing". It carries `source` for the same reason the report does: the
+ *    remedy for a rejected DEPLOYMENT credential is not the one for a rejected personal token,
+ *    and this is the state in which the reader is least able to work that out for themselves.
+ *  - `probe_failed`   — GitHub could not be reached, refused to answer for now (a rate limit),
+ *    or answered in a way the probe could not read. NOT a verdict about the token: an upstream
+ *    condition must never render as a permissions problem, because the remedy it would
+ *    advertise (mint a new token) is wrong and costly.
  *  - `checked`        — a report was produced. It may still be entirely clean.
  */
 export const githubPatCheckSchema = v.variant('state', [
   v.object({ state: v.literal('not_applicable') }),
-  v.object({ state: v.literal('token_rejected'), status: v.number() }),
+  v.object({
+    state: v.literal('token_rejected'),
+    status: v.number(),
+    source: githubPatSourceSchema,
+  }),
   v.object({ state: v.literal('probe_failed'), message: v.string() }),
   v.object({ state: v.literal('checked'), report: githubPatCapabilityReportSchema }),
 ])
@@ -232,6 +252,30 @@ export function missingGitHubPatCapabilities(report: GitHubPatCapabilityReport):
   const isBlocking = (c: GitHubPatCapability): boolean =>
     (GITHUB_PAT_BLOCKING_CAPABILITIES as readonly GitHubPatCapability[]).includes(c)
   return { blocking: missing.filter(isBlocking), advisory: missing.filter((c) => !isBlocking(c)) }
+}
+
+/**
+ * WHOSE credential the check judged, or null when it judged none.
+ *
+ * The one place that answer is derived, because it decides which remedy a surface offers: a
+ * `deployment` token is replaced by whoever runs the deployment, an `initiator` one by the
+ * signed-in user in their own settings, and sending one reader to the other's remedy is worse
+ * than saying nothing. Two of the four states carry a source and two cannot have one, which is
+ * the shape a caller gets wrong by reading `report?.source` and letting the absent case fall
+ * through to whichever branch its ternary happened to end on.
+ */
+export function githubPatCheckSource(check: GitHubPatCheck): GitHubPatSource | null {
+  switch (check.state) {
+    case 'checked':
+      return check.report.source
+    case 'token_rejected':
+      return check.source
+    // Neither state judged a credential: `not_applicable` found none in play, and
+    // `probe_failed` never got an answer about the one it found.
+    case 'not_applicable':
+    case 'probe_failed':
+      return null
+  }
 }
 
 /**

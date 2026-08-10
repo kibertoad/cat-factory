@@ -62,7 +62,7 @@ import { selectEnvConfigRepairer, selectRepoBootstrapper } from './container-dis
 import type { Env } from './env'
 import { requireAuditDb } from './env'
 import type { WorkerRegistries } from './container-registries.js'
-import { buildResolveRunInitiatorToken } from './container-vcs-identity'
+import { buildListWorkspaceRunRepos, buildResolveRunInitiatorToken } from './container-vcs-identity'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { bedrockModelsCapability } from './ai/registries'
 import { buildResolvePresetProviderPreference } from './container-model-resolver.js'
@@ -897,6 +897,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The block→service→repo resolver, surfaced so the task-search controller can scope a
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget: buildResolveRepoTarget(db),
+    // Its board-wide sibling, surfaced so the credential check can ask whether this
+    // workspace's runs reach GitHub at all before judging a stored GitHub token.
+    listWorkspaceRunRepos: buildListWorkspaceRunRepos(db),
     agentRunRepository,
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: dependencies.executionRepository,

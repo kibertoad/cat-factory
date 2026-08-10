@@ -20,4 +20,5 @@ export const CONNECTION_WARNING_KEYS: Record<ConnectionWarningCode, string> = {
     'settings.providerConnection.test.warnings.github_pat_scopes_beyond_need',
   github_pat_scope_unreadable:
     'settings.providerConnection.test.warnings.github_pat_scope_unreadable',
+  github_pat_no_scopes: 'settings.providerConnection.test.warnings.github_pat_no_scopes',
 }

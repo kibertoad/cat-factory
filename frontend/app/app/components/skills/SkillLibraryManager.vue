@@ -24,7 +24,7 @@ watch(
   () => {
     void library.probe()
     // The GitHub pickers need the active board's installation state; probe once so they light up.
-    void github.probe()
+    void github.ensureProbed()
   },
   { immediate: true },
 )

@@ -2252,7 +2252,8 @@
       "createFineGrained": "Yerine ayrıntılı izinli belirteç oluştur",
       "classicHint": "Bağlantı, gerekli kapsamlar zaten seçili hâlde klasik belirteç formunu açar.",
       "fineGrainedHint": "GitHub'ın ayrıntılı izin formu ön seçim kabul etmez; bu depo izinlerini kendiniz verin: {permissions}.",
-      "sampled": "{checked} bağlı depoya karşı denetlendi; {remaining} tanesi denetlenmedi."
+      "sampled": "Kullanılan {checked} depoya karşı denetlendi; {remaining} tanesi denetlenmedi.",
+      "deniedRepos": "Belirteç, hizmetlerinizin kullandığı şu depolara erişemiyor: {repos}. Bu depoları seçerek yeniden oluşturun."
     },
     "providerConfigBanner": {
       "titleMany": "Sağlayıcıların yapılandırılması gerekiyor",
@@ -2984,7 +2985,8 @@
           "runner_manifest_no_status_path": "Durum yolu yok: her yoklama hâlâ çalışıyor olarak okunur, bu yüzden bir iş ancak çalıştırmanın yoklama bütçesi tükendiğinde sona erebilir.",
           "github_pat_classic_account_wide": "Bu, 'repo' kapsamına sahip klasik bir belirteç: gönderim yapabildiğiniz her depoya, bu çalışma alanının GitHub Uygulamasının hiç kurulmadığı depolar dahil, erişir. Başlattığınız çalıştırmalar bunu Uygulamaya tercih eder. Bu kurulumun depolarıyla sınırlı ince ayarlı bir belirteç daha dardır.",
           "github_pat_scopes_beyond_need": "Bu belirteç, cat-factory'nin hiç kullanmadığı izinler veriyor. Bunları kaldırmak hiçbir şeye mal olmaz ve ele geçirilmiş bir çalıştırmanın erişebileceği alanı daraltır.",
-          "github_pat_scope_unreadable": "GitHub bu belirteci kabul etti ancak kapsamlarını bildirmedi, bu yüzden erişimi burada gösterilemiyor. Neler verdiğini GitHub belirteç ayarlarınızdan kontrol edin."
+          "github_pat_scope_unreadable": "GitHub bu belirteci kabul etti ancak kapsamlarını bildirmedi, bu yüzden erişimi burada gösterilemiyor. Neler verdiğini GitHub belirteç ayarlarınızdan kontrol edin.",
+          "github_pat_no_scopes": "GitHub bu klasik belirteç için hiçbir kapsam bildirmiyor, dolayısıyla yalnızca herkese açık verileri okuyabilir. Onunla klonlayan, gönderim yapan veya pull request açan çalıştırmalar başarısız olur. 'repo' ve 'workflow' seçili yeni bir belirteç oluşturun."
         }
       },
       "toast": {

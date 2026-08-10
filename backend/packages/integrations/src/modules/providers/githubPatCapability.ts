@@ -20,20 +20,24 @@ import { describeGitHubPatScope } from './githubPatScope.js'
 // Two properties are load-bearing and easy to lose:
 //
 //  - A probe that cannot get an ANSWER is never a verdict about the token. GitHub being
-//    unreachable produces `probe_failed`, which raises nothing, because the remedy a
-//    permissions banner advertises (go mint a new token) is both wrong and expensive when the
-//    real cause is a five-minute upstream blip.
-//  - The fine-grained answer is a SAMPLE, and it says so. It reads the linked repositories up
+//    unreachable, or refusing to answer for now because the token is rate limited, produces
+//    `probe_failed`, which raises nothing, because the remedy a permissions banner advertises
+//    (go mint a new token) is both wrong and expensive when the real cause is temporary.
+//  - The fine-grained answer is a SAMPLE, and it says so. It reads the targeted repositories up
 //    to a cap and reports which ones it read plus how many it did not, so a clean verdict is
 //    never mistaken for a guarantee about a repository nobody looked at.
+//  - A repository read establishes a NEGATIVE far more strongly than a positive, and the two
+//    are not folded together. GitHub's repository payload reports the authenticated IDENTITY's
+//    role, and a token's grants are a subset of its owner's, so `push: false` refutes the token
+//    while `push: true` only fails to refute it. See {@link probeRepo}.
 
 /** The public API. A deployment on GitHub Enterprise Server passes its own base. */
 const PUBLIC_GITHUB_API_BASE = 'https://api.github.com'
 
 /**
- * How many linked repositories the fine-grained probe reads. Small on purpose: this runs on
+ * How many targeted repositories the fine-grained probe reads. Small on purpose: this runs on
  * board load, and the question it answers ("can this token push to the repositories we work
- * on") is settled by a handful of samples — the failure it catches is a token scoped to the
+ * on") is settled by a handful of samples. The failure it catches is a token scoped to the
  * wrong account or to no repositories at all, not a per-repository access matrix. Whatever the
  * cap drops is COUNTED on the report rather than silently omitted.
  */
@@ -54,11 +58,12 @@ export interface GitHubPatCapabilityRequest {
   /** Which credential this is, so the report can name the remedy that fits it. */
   source: GitHubPatSource
   /**
-   * The repositories this board links, most relevant first. Empty is a legitimate state (a
-   * workspace that has linked nothing yet) and yields an all-`unknown` report rather than a
-   * clean one: there is nothing to check the token against.
+   * The GitHub repositories this workspace's runs would push to: the ones its mounted services
+   * target, which is what makes a per-repository answer worth acting on. Empty yields an
+   * all-`unknown` report rather than a clean one, though the caller normally resolves that
+   * state to `not_applicable` before reaching here (no target ⇒ no run ⇒ no token to judge).
    */
-  linkedRepos: readonly GitHubPatProbeRepo[]
+  targetRepos: readonly GitHubPatProbeRepo[]
   /** The instance's browser-facing base, carried through for the re-mint link. */
   webUrl: string | null
 }
@@ -70,8 +75,19 @@ export interface GitHubPatCapabilityDeps {
   maxProbedRepos?: number
 }
 
-/** What one repository probe established about the token. */
-type RepoProbeOutcome = 'granted' | 'missing' | 'unreachable'
+/**
+ * What one repository probe established. Four outcomes rather than the obvious three, because
+ * the two ways a read can fail to produce a positive are not the same fact:
+ *
+ *  - `refused`       — GitHub answered, and said the authenticated identity cannot push here.
+ *  - `denied`        — GitHub answered 404. For a credential that just authenticated against a
+ *    live API, that is "this token may not see this repository": GitHub 404s rather than 403s
+ *    on a repository a credential is not granted, so existence is never leaked.
+ *  - `permitted`     — the identity can push. NOT proof the token can (see {@link probeRepo}).
+ *  - `indeterminate` — a transport failure, a 5xx, or a payload shape we cannot read. Says
+ *    nothing about anything.
+ */
+type RepoProbeOutcome = 'permitted' | 'refused' | 'denied' | 'indeterminate'
 
 function headers(token: string): Record<string, string> {
   return {
@@ -114,22 +130,42 @@ function classicCapabilities(scopes: readonly string[]): GitHubPatCapabilities {
 /**
  * Fold the per-repository outcomes into one push verdict.
  *
- * A single definitive refusal wins: a board that links a repository this token cannot push to
- * has a broken pipeline for that repository, whatever the others say. Absent one, only an
- * ALL-clear counts as `granted` — a mix of successes and unreachable repositories is `unknown`,
- * because a 404 from GitHub means "this token cannot see it" and "it no longer exists" alike,
- * and a stale projection row must not be reported to a user as a broken credential.
+ * Two things establish `missing`, and neither is a guess:
+ *
+ *  - A single `refused`. A board whose service targets a repository this identity cannot push
+ *    to has a broken pipeline for that repository, whatever the others say.
+ *  - EVERY probe coming back `denied`. One 404 among reachable repositories stays ambiguous
+ *    between "not in this token's selection" and a projection row pointing at a repository
+ *    that has since been renamed or deleted, and a stale row must not be reported as a broken
+ *    credential. But `GET /user` has already succeeded by this point, so the token
+ *    authenticates and GitHub is answering; a 404 on every repository the board's services
+ *    target is the token's repository selection. The alternative reading is that every
+ *    repository this board works on vanished at once, which is not a state a board arrives at
+ *    without its owner knowing.
+ *
+ * Everything else is `unknown`, `permitted` included: it refutes nothing and proves nothing
+ * (see {@link probeRepo}).
  */
 function foldRepoProbes(outcomes: readonly RepoProbeOutcome[]): GitHubPatCapabilityStatus {
   if (outcomes.length === 0) return 'unknown'
-  if (outcomes.includes('missing')) return 'missing'
-  return outcomes.every((o) => o === 'granted') ? 'granted' : 'unknown'
+  if (outcomes.includes('refused')) return 'missing'
+  return outcomes.every((o) => o === 'denied') ? 'missing' : 'unknown'
 }
 
 /**
- * Ask GitHub whether the token may push to one repository. `permissions.push` on the repository
- * payload is the user-role answer, which is exactly the authoritative one for a PAT (the same
- * field `FetchGitHubClient.canPush` prefers).
+ * Ask GitHub what the token reaches on one repository.
+ *
+ * `permissions.push` on the repository payload reports the authenticated IDENTITY's role, not
+ * the grants of the credential presenting it, and that asymmetry is why this returns four
+ * outcomes rather than a boolean. A token's reach is a SUBSET of its owner's: a fine-grained
+ * token holding `contents: read` on a repository its owner maintains still sees `push: true`
+ * there, and so would a classic token minted with nothing ticked. So `false` REFUTES the token
+ * (the owner cannot push, therefore neither can anything acting as them) while `true` merely
+ * fails to refute it, and reporting the latter as `granted` would have been the module
+ * silencing the exact gap it exists to find.
+ *
+ * A 404 is the one positive statement about the CREDENTIAL available here: GitHub answers 404
+ * rather than 403 for a repository a credential may not see, so as not to leak its existence.
  */
 async function probeRepo(
   repo: GitHubPatProbeRepo,
@@ -143,20 +179,35 @@ async function probeRepo(
       `${apiBase}/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}`,
       { headers: headers(token), signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) },
     )
-    if (!res.ok) return 'unreachable'
+    if (res.status === 404) return 'denied'
+    if (!res.ok) return 'indeterminate'
     const body = (await res.json()) as { permissions?: { push?: boolean } }
     const push = body.permissions?.push
     // An absent permissions block is not a denial — it is an older/enterprise payload shape we
-    // cannot read. Treated as unreachable so it lands on `unknown` rather than inventing a
-    // refusal GitHub never made.
-    return push === true ? 'granted' : push === false ? 'missing' : 'unreachable'
+    // cannot read. Indeterminate, rather than inventing a refusal GitHub never made.
+    return push === true ? 'permitted' : push === false ? 'refused' : 'indeterminate'
   } catch (error) {
     logger?.warn('GitHub repository permission probe failed; treating it as unreadable', {
       repo: `${repo.owner}/${repo.name}`,
       ...describeError(error),
     })
-    return 'unreachable'
+    return 'indeterminate'
   }
+}
+
+/**
+ * Whether a 401/403/429 is GitHub throttling this token rather than rejecting it.
+ *
+ * GitHub answers 403 for a spent primary rate limit and for a tripped secondary one, the same
+ * status it uses for a token an org policy blocks. Read as a rejection, a throttled board load
+ * raises the loudest banner the product has and tells the reader to mint a replacement, which
+ * is both the wrong remedy and an expensive one. The three signals below are GitHub's own
+ * documented markers, and every one of them means "ask again later".
+ */
+function isRateLimited(res: Response): boolean {
+  if (res.status === 429) return true
+  if (res.headers.get('x-ratelimit-remaining') === '0') return true
+  return res.headers.get('retry-after') !== null
 }
 
 /**
@@ -181,10 +232,18 @@ export async function probeGitHubPatCapability(
   } catch (error) {
     return { state: 'probe_failed', message: getErrorMessage(error) }
   }
-  // 401/403 is the token itself: revoked, expired, or blocked by an org policy. Anything else
-  // non-2xx is GitHub having a bad day, which says nothing about the credential.
+  // A throttled token is a temporary upstream condition, not a verdict — checked FIRST because
+  // GitHub spells it with the same 403 it uses to reject a credential outright.
+  if (isRateLimited(res)) {
+    return {
+      state: 'probe_failed',
+      message: `GitHub rate-limited this token (HTTP ${res.status}); the check will run again on the next board load`,
+    }
+  }
+  // 401/403 is now the token itself: revoked, expired, or blocked by an org policy. Anything
+  // else non-2xx is GitHub having a bad day, which says nothing about the credential.
   if (res.status === 401 || res.status === 403) {
-    return { state: 'token_rejected', status: res.status }
+    return { state: 'token_rejected', status: res.status, source: request.source }
   }
   if (!res.ok) {
     return { state: 'probe_failed', message: `GitHub answered HTTP ${res.status}` }
@@ -197,11 +256,11 @@ export async function probeGitHubPatCapability(
       report: {
         source: request.source,
         kind: scope.kind,
-        scopes: scope.scopes,
         capabilities: classicCapabilities(scope.scopes),
         // A classic token's scopes answer for every repository at once, so nothing was sampled
         // and there is no unread remainder to declare.
         probedRepos: [],
+        deniedRepos: [],
         unprobedRepoCount: 0,
         webUrl: request.webUrl,
       },
@@ -209,17 +268,17 @@ export async function probeGitHubPatCapability(
   }
 
   // Fine-grained (and the `unknown` kind, which is equally unreadable from headers): the only
-  // available evidence is what the token can do to a repository we know the board uses.
-  const toProbe = request.linkedRepos.slice(0, maxRepos)
+  // available evidence is what the token can do to a repository we know a run would target.
+  const toProbe = request.targetRepos.slice(0, maxRepos)
   const outcomes = await Promise.all(
     toProbe.map((repo) => probeRepo(repo, request.token, apiBase, fetchImpl, deps.logger)),
   )
+  const name = (repo: GitHubPatProbeRepo): string => `${repo.owner}/${repo.name}`
   return {
     state: 'checked',
     report: {
       source: request.source,
       kind: scope.kind,
-      scopes: [],
       capabilities: {
         push: foldRepoProbes(outcomes),
         // No GitHub endpoint reports a fine-grained token's `pull_requests` or `workflows`
@@ -228,8 +287,9 @@ export async function probeGitHubPatCapability(
         pullRequests: 'unknown',
         workflows: 'unknown',
       },
-      probedRepos: toProbe.map((r) => `${r.owner}/${r.name}`),
-      unprobedRepoCount: Math.max(0, request.linkedRepos.length - toProbe.length),
+      probedRepos: toProbe.map(name),
+      deniedRepos: toProbe.filter((_, i) => outcomes[i] === 'denied').map(name),
+      unprobedRepoCount: Math.max(0, request.targetRepos.length - toProbe.length),
       webUrl: request.webUrl,
     },
   }

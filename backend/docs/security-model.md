@@ -274,11 +274,25 @@ list (`@cat-factory/contracts`' `GITHUB_PAT_CLASSIC_SCOPES`): the connect form's
 is stored, the local facade's boot log, and a board-load check
 (`GET /workspaces/:id/github/pat-check`) that resolves the token a run would ACTUALLY authenticate as
 through the same `resolveRunInitiatorToken` the dispatch mint uses, so an `allowInitiatorPat` opt-out
-is honoured rather than re-decided. It answers per capability with a tri-state, because a CLASSIC
-token's scopes come back on `x-oauth-scopes` while a fine-grained one reports nothing anywhere: what
-can only be established by probing a repository is reported as unknown, never as granted. Note what
-this does NOT change: the check reads capability, it does not bound it, and a token that passes it is
-still exactly as wide as the human who minted it made it.
+is honoured rather than re-decided. It judges a token only where a run would PRESENT it: the
+repositories the board's mounted services target are both the gate (none ⇒ nothing to judge, which is
+the answer for a GitLab-bound or not-yet-linked board) and the probe set.
+
+It answers per capability with a tri-state, because a CLASSIC token's scopes come back on
+`x-oauth-scopes` while a fine-grained one reports nothing anywhere. What a repository read can
+establish is asymmetric and reported that way: GitHub's repository payload names the authenticated
+IDENTITY's role, and a token's grants are a subset of its owner's, so `push: false` refutes the token
+while `push: true` only fails to refute it. A 404 is the one positive statement about the credential
+itself (GitHub 404s rather than 403s on a repository a credential may not see), and a 404 on EVERY
+targeted repository is reported as a missing capability: that is the fine-grained token pointed at the
+wrong repositories.
+
+The token's raw scope list is deliberately absent from that response. Reads pass the route's
+permission mount, so publishing it would let any member read the breadth of a shared DEPLOYMENT
+credential; the per-capability verdict is what a reader can act on.
+
+Note what none of this changes: the check reads capability, it does not bound it, and a token that
+passes it is still exactly as wide as the human who minted it made it.
 
 So the worst case of Layer 2's stated limit is "the repos this run was about" rather than "the
 installation", but only where the run authenticates as the App. Installation scope still bounds

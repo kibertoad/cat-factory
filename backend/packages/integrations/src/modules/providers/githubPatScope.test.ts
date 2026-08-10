@@ -54,9 +54,18 @@ describe('describeGitHubPatScope', () => {
     expect(report.warnings.map((w) => w.code)).toEqual(['github_pat_scope_unreadable'])
   })
 
-  it('reads an empty scope header as unreported, not as no scopes', () => {
-    expect(codes('')).toEqual(['github_pat_scope_unreadable'])
-    expect(codes('  ,  ')).toEqual(['github_pat_scope_unreadable'])
+  // The header is PRESENT for every classic token, so an empty value is a positive statement
+  // that this one grants nothing — the opposite fact from an absent header, and the one a reader
+  // most easily produces by accident, since GitHub's form ticks nothing by default. Folded
+  // together they classified as `unknown`, which sent every downstream reader to the
+  // fine-grained code path where a repository read its OWNER could satisfy masked the gap.
+  it('reads an empty scope header as no scopes granted, not as unreported', () => {
+    const report = describeGitHubPatScope('ghp_abc', '')
+    expect(report.kind).toBe('classic')
+    expect(report.scopes).toEqual([])
+    expect(report.warnings.map((w) => w.code)).toEqual(['github_pat_no_scopes'])
+    // A header carrying only separators says the same thing.
+    expect(codes('  ,  ')).toEqual(['github_pat_no_scopes'])
   })
 
   it('summarises each kind for the test verdict line', () => {
@@ -65,5 +74,6 @@ describe('describeGitHubPatScope', () => {
       'fine-grained',
     )
     expect(summarizeGitHubPatScope(describeGitHubPatScope('ghp_a', null))).toContain('not reported')
+    expect(summarizeGitHubPatScope(describeGitHubPatScope('ghp_a', ''))).toContain('no scopes')
   })
 })

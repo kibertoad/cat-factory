@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { DrizzleDb } from '@cat-factory/node-server'
 import type { GitHubAvailableRepo, GitHubConnection, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type { GitHubPatCheck } from '@cat-factory/contracts'
 import { makeConformanceApp, setupTestDb } from './harness.js'
 
 // Local mode reaches GitHub through a PAT, not a GitHub App. These tests assert the
@@ -114,5 +115,153 @@ describe('[local] PAT GitHub linking', () => {
     // `/user/repos` listing — never `/search/repositories`.
     expect(calls.some((u) => u.includes('/user/repos'))).toBe(true)
     expect(calls.some((u) => u.includes('/search/repositories'))).toBe(false)
+  })
+})
+
+// The credential check, driven through the container a local deployment actually BUILDS rather
+// than one a test assembles.
+//
+// That distinction is the whole reason these live here. The check reads two things off the
+// container, and a unit test supplying its own container proves only that the module reads the
+// names it was handed: it shipped reading a repository the real container never carried, so the
+// probe list was empty on every deployment, every fine-grained token reported `unknown`, and no
+// test could fail. Reaching the seam through `buildLocalContainer` is what makes "wired" part of
+// the claim, on the deployment shape where a PAT is the operational credential.
+describe('[local] PAT credential check', () => {
+  let db: DrizzleDb
+
+  beforeAll(async () => {
+    db = await setupTestDb()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  /**
+   * GitHub for a PAT deployment: the account probe, the repo listing the picker reads, and a
+   * per-repository read. `repos` overrides the answer per `owner/name`; `'denied'` produces the
+   * 404 GitHub returns for a repository a credential may not see. Unnamed repositories answer
+   * pushable, because LINKING one syncs it and a fixture that 404s there fails its own setup.
+   */
+  function stubGitHub(options: {
+    /** `undefined` sends NO scope header, which is how GitHub reports a fine-grained token. */
+    scopes?: string
+    repos?: Record<string, { push?: boolean } | 'denied'>
+  }) {
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      calls.push(url)
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        })
+      if (url.endsWith('/user')) {
+        return new Response(JSON.stringify({ id: 42, login: 'octocat', type: 'User' }), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+            ...(options.scopes === undefined ? {} : { 'x-oauth-scopes': options.scopes }),
+          },
+        })
+      }
+      if (url.includes('/user/repos')) {
+        return json([
+          {
+            id: 1,
+            name: 'alpha',
+            private: false,
+            default_branch: 'main',
+            owner: { login: 'octocat' },
+          },
+        ])
+      }
+      // Linking a repo syncs its branches/pulls/issues/commits; empty is enough, and answering
+      // keeps the fixture's own setup out of the error log.
+      const path = url.split('/repos/')[1] ?? ''
+      const [owner, name, ...rest] = path.split('?')[0]!.split('/')
+      if (rest.length > 0) return json([])
+      const answer = options.repos?.[`${owner}/${name}`]
+      if (answer === 'denied') return json({ message: 'Not Found' }, 404)
+      return json({
+        id: 1,
+        name,
+        owner: { login: owner },
+        permissions: { push: answer?.push ?? true },
+      })
+    })
+    return calls
+  }
+
+  /** A board with one service frame targeting `octocat/alpha`, the state a run needs. */
+  async function boardTargetingAlpha() {
+    const app = makeConformanceApp(db)
+    const ws = (await app.createWorkspace({ seed: false })) as WorkspaceSnapshot
+    const workspaceId = ws.workspace.id
+    const linked = await app.call('PUT', `/workspaces/${workspaceId}/github/repos`, {
+      repoGithubIds: [1],
+    })
+    expect(linked.status).toBe(200)
+    const frame = await app.call('POST', `/workspaces/${workspaceId}/blocks/from-repo`, {
+      repoGithubId: 1,
+    })
+    expect(frame.status).toBe(201)
+    return { app, workspaceId }
+  }
+
+  // The deployment PAT lacking `repo` is the failure this whole surface exists to catch, and the
+  // report has to name whose credential it is: in local mode that is the operator's, not the
+  // signed-in user's, and the two have different remedies.
+  it('reports the deployment token as under-scoped once a service targets a repo', async () => {
+    stubGitHub({ scopes: 'read:user' })
+    const { app, workspaceId } = await boardTargetingAlpha()
+
+    const res = await app.call<GitHubPatCheck>('GET', `/workspaces/${workspaceId}/github/pat-check`)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({
+      state: 'checked',
+      report: { source: 'deployment', kind: 'classic', capabilities: { push: 'missing' } },
+    })
+  })
+
+  // The wiring assertion the unit test structurally cannot make: the probe list comes off the
+  // real container, so a repository actually gets read, and it is the one a service targets.
+  it('probes the repository the board’s service targets', async () => {
+    const calls = stubGitHub({ scopes: undefined, repos: { 'octocat/alpha': { push: true } } })
+    const { app, workspaceId } = await boardTargetingAlpha()
+    calls.length = 0
+
+    const res = await app.call<GitHubPatCheck>('GET', `/workspaces/${workspaceId}/github/pat-check`)
+
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ state: 'checked', report: { probedRepos: ['octocat/alpha'] } })
+    expect(calls.some((u) => u.endsWith('/repos/octocat/alpha'))).toBe(true)
+  })
+
+  // A repository the connection can SEE is not one a run can target: only a service frame's
+  // link makes it reachable, and until one exists no run starts that would present the token.
+  // Linking without a frame is the state that separates the projection from the run-target set,
+  // which is what the check now reads.
+  it('answers not_applicable, and calls nothing, while no service targets the linked repo', async () => {
+    const calls = stubGitHub({ scopes: 'read:user' })
+    const app = makeConformanceApp(db)
+    const ws = (await app.createWorkspace({ seed: false })) as WorkspaceSnapshot
+    const linked = await app.call('PUT', `/workspaces/${ws.workspace.id}/github/repos`, {
+      repoGithubIds: [1],
+    })
+    expect(linked.status).toBe(200)
+    calls.length = 0
+
+    const res = await app.call<GitHubPatCheck>(
+      'GET',
+      `/workspaces/${ws.workspace.id}/github/pat-check`,
+    )
+
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ state: 'not_applicable' })
+    expect(calls).toEqual([])
   })
 })

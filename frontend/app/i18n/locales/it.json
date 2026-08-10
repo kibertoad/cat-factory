@@ -388,7 +388,8 @@
           "runner_manifest_no_status_path": "Nessun percorso di stato: ogni polling viene letto come ancora in corso, quindi un job può terminare solo esaurendo il budget di polling dell'esecuzione.",
           "github_pat_classic_account_wide": "È un token classico con l'ambito 'repo': raggiunge ogni repository su cui puoi fare push, compresi quelli in cui l'App GitHub di questo spazio di lavoro non è mai stata installata. Le esecuzioni che avvii lo usano di preferenza rispetto all'App. Un token granulare limitato ai repository di questa installazione è più ristretto.",
           "github_pat_scopes_beyond_need": "Questo token concede permessi che cat-factory non usa mai. Rimuoverli non costa nulla e restringe ciò che un'esecuzione compromessa potrebbe raggiungere.",
-          "github_pat_scope_unreadable": "GitHub ha accettato questo token ma non ne ha segnalato gli ambiti, quindi la sua portata non può essere mostrata qui. Verifica cosa concede nelle impostazioni dei token di GitHub."
+          "github_pat_scope_unreadable": "GitHub ha accettato questo token ma non ne ha segnalato gli ambiti, quindi la sua portata non può essere mostrata qui. Verifica cosa concede nelle impostazioni dei token di GitHub.",
+          "github_pat_no_scopes": "GitHub non riporta alcun ambito per questo token classico, quindi può solo leggere dati pubblici. Le esecuzioni che clonano, inviano commit o aprono una pull request con esso falliranno. Generane uno nuovo con 'repo' e 'workflow' selezionati."
         }
       },
       "toast": {
@@ -2471,7 +2472,8 @@
       "createFineGrained": "Crea un token sostitutivo fine-grained",
       "classicHint": "Il link apre il modulo del token classico con gli scope richiesti già selezionati.",
       "fineGrainedHint": "Il modulo fine-grained di GitHub non accetta pre-selezioni, quindi concedi tu stesso questi permessi di repository: {permissions}.",
-      "sampled": "Verificato su {checked} repository collegati; altri {remaining} non sono stati verificati."
+      "sampled": "Verificato su {checked} repository in uso; altri {remaining} non sono stati verificati.",
+      "deniedRepos": "Il token non raggiunge questi repository usati dai tuoi servizi: {repos}. Rigeneralo selezionando quei repository."
     },
     "providerConfigBanner": {
       "titleMany": "I provider necessitano di configurazione",

@@ -388,7 +388,8 @@
           "runner_manifest_no_status_path": "Kein Statuspfad: Jede Abfrage wird als weiterhin laufend gelesen. Ein Job kann daher nur enden, wenn das Abfragebudget des Laufs aufgebraucht ist.",
           "github_pat_classic_account_wide": "Dies ist ein klassisches Token mit dem Bereich 'repo': Es erreicht jedes Repository, in das du pushen kannst, auch solche, in denen die GitHub-App dieses Arbeitsbereichs nie installiert wurde. Ausführungen, die du startest, nutzen es bevorzugt vor der App. Ein fein abgestuftes Token, das auf die Repositories dieser Installation begrenzt ist, ist enger gefasst.",
           "github_pat_scopes_beyond_need": "Dieses Token gewährt Berechtigungen, die cat-factory nie nutzt. Sie zu entfernen kostet nichts und verkleinert das, was eine kompromittierte Ausführung erreichen könnte.",
-          "github_pat_scope_unreadable": "GitHub hat dieses Token akzeptiert, aber keine Bereiche dafür gemeldet, daher lässt sich seine Reichweite hier nicht anzeigen. Prüfe in deinen GitHub-Token-Einstellungen, was es gewährt."
+          "github_pat_scope_unreadable": "GitHub hat dieses Token akzeptiert, aber keine Bereiche dafür gemeldet, daher lässt sich seine Reichweite hier nicht anzeigen. Prüfe in deinen GitHub-Token-Einstellungen, was es gewährt.",
+          "github_pat_no_scopes": "GitHub meldet für dieses klassische Token keine Scopes, es kann also nur öffentliche Daten lesen. Läufe, die damit klonen, pushen oder einen Pull Request öffnen, schlagen fehl. Erstellen Sie ein neues Token mit ausgewähltem 'repo' und 'workflow'."
         }
       },
       "toast": {
@@ -2471,7 +2472,8 @@
       "createFineGrained": "Fein granuliertes Ersatz-Token erstellen",
       "classicHint": "Der Link öffnet das klassische Token-Formular mit bereits ausgewählten erforderlichen Scopes.",
       "fineGrainedHint": "Das fein granulierte Formular von GitHub akzeptiert keine Vorauswahl; erteilen Sie diese Repository-Berechtigungen daher selbst: {permissions}.",
-      "sampled": "Gegen {checked} verknüpfte Repositories geprüft; {remaining} weitere wurden nicht geprüft."
+      "sampled": "Gegen {checked} genutzte Repositories geprüft; {remaining} weitere wurden nicht geprüft.",
+      "deniedRepos": "Das Token erreicht diese von Ihren Services genutzten Repositories nicht: {repos}. Erstellen Sie es neu und wählen Sie diese Repositories aus."
     },
     "providerConfigBanner": {
       "titleMany": "Anbieter benötigen Konfiguration",

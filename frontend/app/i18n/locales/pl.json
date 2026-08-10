@@ -2252,7 +2252,8 @@
       "createFineGrained": "Utwórz zastępczy token o precyzyjnych uprawnieniach",
       "classicHint": "Link otwiera formularz klasycznego tokenu z już zaznaczonymi wymaganymi zakresami.",
       "fineGrainedHint": "Formularz precyzyjnych uprawnień GitHub nie obsługuje wstępnego wyboru, więc nadaj te uprawnienia repozytorium samodzielnie: {permissions}.",
-      "sampled": "Sprawdzono {checked} połączonych repozytoriów; kolejnych {remaining} nie sprawdzono."
+      "sampled": "Sprawdzono {checked} używanych repozytoriów; kolejnych {remaining} nie sprawdzono.",
+      "deniedRepos": "Token nie ma dostępu do tych repozytoriów używanych przez Twoje usługi: {repos}. Wygeneruj go ponownie z zaznaczonymi tymi repozytoriami."
     },
     "providerConfigBanner": {
       "titleMany": "Dostawcy wymagają konfiguracji",
@@ -2783,7 +2784,8 @@
           "runner_manifest_no_status_path": "Brak ścieżki statusu: każde odpytanie jest odczytywane jako wciąż trwające, więc zadanie może zakończyć się tylko po wyczerpaniu budżetu odpytań przebiegu.",
           "github_pat_classic_account_wide": "To klasyczny token z zakresem 'repo': sięga każdego repozytorium, do którego możesz wypychać zmiany, także tych, w których aplikacja GitHub tego obszaru roboczego nigdy nie została zainstalowana. Uruchomienia, które rozpoczynasz, używają go zamiast aplikacji. Token szczegółowy ograniczony do repozytoriów tej instalacji jest węższy.",
           "github_pat_scopes_beyond_need": "Ten token przyznaje uprawnienia, z których cat-factory nigdy nie korzysta. Ich usunięcie nic nie kosztuje i zawęża to, co mogłoby osiągnąć skompromitowane uruchomienie.",
-          "github_pat_scope_unreadable": "GitHub przyjął ten token, ale nie zgłosił jego zakresów, więc jego zasięgu nie da się tu pokazać. Sprawdź w ustawieniach tokenów GitHub, co przyznaje."
+          "github_pat_scope_unreadable": "GitHub przyjął ten token, ale nie zgłosił jego zakresów, więc jego zasięgu nie da się tu pokazać. Sprawdź w ustawieniach tokenów GitHub, co przyznaje.",
+          "github_pat_no_scopes": "GitHub nie zgłasza żadnych zakresów dla tego klasycznego tokena, więc może on tylko odczytywać dane publiczne. Uruchomienia, które klonują, wypychają zmiany lub otwierają pull requesta przy jego użyciu, zakończą się niepowodzeniem. Wygeneruj nowy z zaznaczonymi 'repo' i 'workflow'."
         }
       },
       "toast": {

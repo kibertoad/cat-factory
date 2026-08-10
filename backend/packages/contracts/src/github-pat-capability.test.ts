@@ -5,6 +5,7 @@ import {
   GITHUB_PAT_CLASSIC_SCOPES,
   githubPatCapabilitiesSchema,
   githubPatCheckNeedsAttention,
+  githubPatCheckSource,
   githubPatCreateUrl,
   missingGitHubPatCapabilities,
   type GitHubPatCapabilities,
@@ -18,7 +19,6 @@ function report(
   return {
     source: 'initiator',
     kind: 'classic',
-    scopes: [],
     capabilities: {
       push: 'granted',
       pullRequests: 'granted',
@@ -26,6 +26,7 @@ function report(
       ...capabilities,
     },
     probedRepos: [],
+    deniedRepos: [],
     unprobedRepoCount: 0,
     webUrl: 'https://github.com',
     ...overrides,
@@ -70,7 +71,9 @@ describe('missingGitHubPatCapabilities', () => {
 
 describe('githubPatCheckNeedsAttention', () => {
   it('raises on a rejected token', () => {
-    expect(githubPatCheckNeedsAttention({ state: 'token_rejected', status: 401 })).toBe(true)
+    expect(
+      githubPatCheckNeedsAttention({ state: 'token_rejected', status: 401, source: 'initiator' }),
+    ).toBe(true)
   })
 
   it('raises on an established blocking gap', () => {
@@ -136,5 +139,26 @@ describe('githubPatCreateUrl', () => {
     expect(githubPatCreateUrl('fine_grained', { webUrl: 'https://ghe.example.com/' })).toBe(
       'https://ghe.example.com/settings/personal-access-tokens/new',
     )
+  })
+})
+
+describe('githubPatCheckSource', () => {
+  // The state with no report is the one whose remedy is most easily misrouted, and the reason
+  // the source rides the variant rather than being read off a report that may not exist.
+  it('names the credential a rejected token belonged to', () => {
+    expect(
+      githubPatCheckSource({ state: 'token_rejected', status: 401, source: 'deployment' }),
+    ).toBe('deployment')
+  })
+
+  it('reads a checked report’s source', () => {
+    expect(githubPatCheckSource({ state: 'checked', report: report({}) })).toBe('initiator')
+  })
+
+  // Null is a real answer, not a default: neither state judged a credential, so a caller that
+  // renders a remedy has nothing to attribute it to.
+  it('answers null for the states that judged no credential', () => {
+    expect(githubPatCheckSource({ state: 'not_applicable' })).toBeNull()
+    expect(githubPatCheckSource({ state: 'probe_failed', message: 'fetch failed' })).toBeNull()
   })
 })

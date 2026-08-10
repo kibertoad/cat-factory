@@ -2359,7 +2359,8 @@
       "createFineGrained": "Create a replacement fine-grained token",
       "classicHint": "The link opens the classic token form with the required scopes already selected.",
       "fineGrainedHint": "GitHub's fine-grained form accepts no pre-selection, so grant these repository permissions yourself: {permissions}.",
-      "sampled": "Checked against {checked} linked repositories; {remaining} more were not checked.",
+      "sampled": "Checked against {checked} targeted repositories; {remaining} more were not checked.",
+      "deniedRepos": "The token cannot reach these repositories your services target: {repos}. Re-mint it with those repositories selected.",
       "@title": {
         "description": "Banner heading when the configured GitHub personal access token authenticates but lacks a permission the pipeline needs. \"push\" and \"pull request\" are the Git/GitHub terms."
       },
@@ -2374,6 +2375,9 @@
       },
       "@sampled": {
         "description": "Declares that the fine-grained check read a SAMPLE. {checked} and {remaining} are counts of repositories."
+      },
+      "@deniedRepos": {
+        "description": "{repos} is a comma-joined list of GitHub owner/name repository paths; keep them verbatim, untranslated. Shown when a fine-grained token was denied access to repositories the board's services target."
       }
     },
     "providerConfigBanner": {
@@ -3109,7 +3113,8 @@
           "runner_manifest_no_status_path": "No status path: every poll reads as still running, so a job can only end by exhausting the run's poll budget.",
           "github_pat_classic_account_wide": "This is a classic token with the 'repo' scope: it reaches every repository you can push to, including ones this workspace's GitHub App was never installed on. Runs you start use it in preference to the App. A fine-grained token limited to this deployment's repositories is narrower.",
           "github_pat_scopes_beyond_need": "This token grants permissions cat-factory never uses. Removing them costs nothing and narrows what a compromised run could reach.",
-          "github_pat_scope_unreadable": "GitHub accepted this token but reported no scopes for it, so its reach cannot be shown here. Check what it grants in your GitHub token settings."
+          "github_pat_scope_unreadable": "GitHub accepted this token but reported no scopes for it, so its reach cannot be shown here. Check what it grants in your GitHub token settings.",
+          "github_pat_no_scopes": "GitHub reports no scopes for this classic token, so it can read public data and nothing else. Runs that clone, push or open a pull request with it will fail. Mint a replacement with 'repo' and 'workflow' selected."
         }
       },
       "toast": {

@@ -156,6 +156,12 @@ export const connectionWarningCodeSchema = v.picklist([
   // its reach. Reported rather than assumed: "unknown breadth" and "narrow" are not the same
   // fact, and treating them alike is exactly how an over-broad token stays silent.
   'github_pat_scope_unreadable',
+  // GitHub returned the scope header with an EMPTY value: a classic token minted with nothing
+  // ticked. Distinct from the code above because it is the opposite fact — a positively stated
+  // "this token grants no scopes at all" rather than an unreadable one — and it is the state a
+  // reader is most likely to have produced by accident, since GitHub's form ticks nothing by
+  // default and the token still authenticates.
+  'github_pat_no_scopes',
 ])
 export type ConnectionWarningCode = v.InferOutput<typeof connectionWarningCodeSchema>
 
