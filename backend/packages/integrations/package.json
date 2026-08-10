@@ -37,12 +37,12 @@
     "@cat-factory/kernel": "workspace:*",
     "ai": "^7.0.58",
     "p-map": "^7.0.6",
+    "undici": "^8.10.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@cat-factory/caching": "workspace:*",
     "typescript": "7.0.2",
-    "undici": "^8.10.0",
     "valibot": "^1.4.2",
     "vitest": "^4.1.10"
   }
