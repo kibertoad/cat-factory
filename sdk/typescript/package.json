@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/sdk",
-  "version": "0.31.0",
+  "version": "0.32.0",
   "description": "TypeScript/JavaScript client for the cat-factory public API (/api/v1): typed models and resource clients generated from the published OpenAPI spec, over a hand-written fetch transport with bearer auth, bounded retries, keyset auto-pagination and an SSE reader for the run streams.",
   "keywords": [
     "api-client",

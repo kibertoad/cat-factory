@@ -13,7 +13,7 @@
 //      is the same rule `config.ts` follows for environment variables, applied to the deployment.
 //   2. **"Unmet" and "could not be read" are different answers.** A probe that fails is not
 //      evidence that the prerequisite is unsatisfied, and reporting it as one sends someone to
-//      fix a model catalog when the real problem is that the app API refused the request. So a
+//      fix a model catalog when the real problem is that the deployment refused the request. So a
 //      verdict is one of THREE states and an `unknown` on a required prerequisite blocks with a
 //      message about the PROBE, not about the thing probed.
 //   3. **A remedy travels with every negative verdict, and it is INSTRUCTIONS.** The value here is
@@ -140,8 +140,8 @@ async function evaluate<Context>(
       remedy: {
         steps: [
           'Read the probe failure above: it is a fact about the CHECK, not a verdict on the prerequisite.',
-          'The usual causes are a deployment that is not running, a base URL pointing somewhere else, ' +
-            'and an app API that refuses because the deployment is not running open (AUTH_DEV_OPEN=true).',
+          'The usual causes are a deployment that is not running, a base URL naming the SPA rather ' +
+            'than the backend, and an API key that is missing, revoked, or scoped below `admin`.',
           'Fix that, then re-run the suite.',
         ],
       },

@@ -69,10 +69,16 @@ by fixing the bug.
 Edit the pagination rules and that trace changes, so the bug report has to change with them or the
 investigator is handed a symptom the code does not produce.
 
-**Setup uses three app-API calls on purpose**, each documented at the top of `src/appApi.ts`:
-repo bootstrap, the infra handler, and a block's `provisioning`. Everything else (tasks, starts,
-decisions, run projections, evidence) goes through the published SDK. If a future change puts one
-of those three on `/api/v1`, delete it from `appApi.ts` rather than keeping both.
+**Every workspace-scoped call goes through the published SDK**, setup included: repo bootstrap, the
+cluster connection, a service's `provisioning` and the wiring reads are all `/api/v1` operations. So
+a surface change that would break an integrator breaks this suite at compile time, which is most of
+why it is worth driving the SDK rather than raw `fetch`.
+
+The only exceptions are `GET /health` and `GET /auth/config` in `src/deploymentApi.ts`, and the
+reason is not convenience: both must answer for a deployment whose config failed to validate, which
+serves a fallback app that 503s every other route. **A new call does not belong there.** Anything
+scoped to a workspace has a key available, so it is a public endpoint, and adding one means adding it
+to `routes/public-provisioning.ts` plus `scripts/sdk/surface.mjs` (generation fails without the entry).
 
 **See also:** [`backend/internal/e2e`](../e2e/README.md),
 [`backend/internal/sdk-smoketest`](../sdk-smoketest/README.md),

@@ -34,7 +34,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   headlessly without the cross-workspace view the admin gate exists for), `PublicKeyController` (HEADLESS key provisioning at `admin`
   scope, delegating to the same `PublicApiKeyService` the session panel calls; the mintable rungs
   are derived from the gate, so a key minted here can never mint another),
-  `PublicMcpController` (the
+  `PublicProvisioningController` (**deployment provisioning**, all `admin`: repo bootstrap, the
+  cluster connection a run's environments deploy onto, a service's manifest source, and the three
+  reads that report what this deployment has wired. Every public shape it answers in is a
+  PROJECTION of an internal one, so its mappers are where an internal rename stops being a public
+  break; the model read shares `modules/models/workspaceCatalog.ts` with the SPA's own picker,
+  because two surfaces answering "can a run dispatch here" differently is the bug that seam
+  exists to prevent), `PublicMcpController` (the
   HOSTED **MCP** endpoint, `POST /api/v1/mcp`: mounts `@cat-factory/mcp-server`'s server behind a
   Web-standard Streamable HTTP transport, stateless per request, with the key's SCOPE deciding the
   tool list and every tool call looping back through `http/loopback.ts` to `/api/v1` under the

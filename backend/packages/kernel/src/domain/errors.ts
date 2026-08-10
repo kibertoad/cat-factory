@@ -227,9 +227,22 @@ export class ReviewContendedError extends ConflictError {
   }
 }
 
-/** Resolve a maybe-null lookup or throw a {@link NotFoundError}. */
-export function assertFound<T>(value: T | null | undefined, entity: string, id: string): T {
-  if (value === null || value === undefined) throw new NotFoundError(entity, id)
+/**
+ * Resolve a maybe-null lookup or throw a {@link NotFoundError}.
+ *
+ * `details` rides through for the reads whose 404 a MACHINE branches on: a `/api/v1` route
+ * documents a `details.reason` its callers switch on, and a service that refuses through this
+ * helper is the one place that reason can come from. Without it the controller's only options were
+ * a dead `if (!value)` beside a method that throws (a documented code shipping from nowhere) or
+ * catching the refusal to re-emit it, which is the re-mapping the error convention bans.
+ */
+export function assertFound<T>(
+  value: T | null | undefined,
+  entity: string,
+  id: string,
+  details?: Record<string, unknown>,
+): T {
+  if (value === null || value === undefined) throw new NotFoundError(entity, id, details)
   return value
 }
 

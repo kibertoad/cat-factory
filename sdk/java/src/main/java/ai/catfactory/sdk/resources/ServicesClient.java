@@ -13,8 +13,9 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The workspace's board services, the frames tasks are created under: list them, or create one
- * (optionally backed by a repository).
+ * The workspace's board services, the frames tasks are created under: list them, create one
+ * (optionally backed by a repository), or patch one, including declaring where the manifests for
+ * its per-run environments are read from.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class ServicesClient {
@@ -53,5 +54,26 @@ public final class ServicesClient {
      */
     public PublicServiceList list() {
         return transport.request("GET", "/api/v1/services", null, Map.of(), new TypeReference<PublicServiceList>() {});
+    }
+
+    /**
+     * Patch a service, including where its per-run manifests live (no body).
+     */
+    public PublicService update(String serviceId) {
+        return update(serviceId, UpdatePublicServiceRequest.builder().build());
+    }
+
+    /**
+     * Patch a service, including where its per-run manifests live
+     * Change a service’s authored fields, and declare its `provisioning`: where the manifests for
+     * a per-run environment are read from. That second half is what a connected cluster alone
+     * cannot supply, because the platform keeps “which cluster” (one per workspace) apart from
+     * “which manifests” (one set per service). An omitted `provisioning` leaves the stored one
+     * alone rather than clearing it. Board coordinates are deliberately absent, as they are on
+     * service creation.
+     * {@code PATCH /api/v1/services/{serviceId}} (operation {@code updatePublicService}).
+     */
+    public PublicService update(String serviceId, UpdatePublicServiceRequest body) {
+        return transport.request("PATCH", "/api/v1/services/" + Transport.pathSegment(serviceId), body, Map.of(), new TypeReference<PublicService>() {});
     }
 }

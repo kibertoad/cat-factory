@@ -75,40 +75,42 @@ function assertActionable(id: string, remedy: Remedy): void {
 const commandsOf = (remedy: Remedy) => (remedy.commands ?? []).map((command) => command.run)
 
 describe('deployment-health', () => {
-  const app = (status: string, problems: unknown[] = []) =>
+  const deployment = (status: string, problems: unknown[] = []) =>
     ({
       health: async () => ({ status }),
       configProblems: async () => problems,
-    }) as unknown as PreflightContext['app']
+    }) as unknown as PreflightContext['deployment']
 
   it("relays the deployment's own per-variable remedy and doc link rather than paraphrasing", async () => {
     // The backend already writes the better message: it names the variable, what breaks without
     // it, and the exact command that produces a value. A paraphrase here would be a second copy
     // of it, one release behind.
     const verdict = await refusal('deployment-health', {
-      app: app('misconfigured', [
+      deployment: deployment('misconfigured', [
         {
           key: 'ENCRYPTION_KEY',
           summary: 'Seals every per-workspace credential at rest.',
           remedy: 'Generate one with `openssl rand -base64 32`.',
-          docsUrl: 'https://www.catfactory.ai/env',
+          docsUrl: 'https://www.catfactory.ai/reference/environment-variables.html',
         },
       ]),
     })
     expect(verdict.remedy.steps[0]).toContain('openssl rand -base64 32')
-    expect(verdict.remedy.steps[0]).toContain('https://www.catfactory.ai/env')
+    expect(verdict.remedy.steps[0]).toContain(
+      'https://www.catfactory.ai/reference/environment-variables.html',
+    )
     expect(verdict.remedy.steps.at(-1)).toContain('RESTART')
   })
 
   it('says so when a misconfigured deployment publishes no problem list', async () => {
     // "Absent" and "nothing wrong" must not render the same: an empty list here means the
     // diagnosis has to come from the boot log, and the remedy is the only place that is said.
-    const verdict = await refusal('deployment-health', { app: app('misconfigured') })
+    const verdict = await refusal('deployment-health', { deployment: deployment('misconfigured') })
     expect(verdict.remedy.steps[0]).toContain('boot log')
   })
 
   it('names the SPA-vs-backend mixup for a health verdict that is neither ok nor misconfigured', async () => {
-    const verdict = await refusal('deployment-health', { app: app('degraded') })
+    const verdict = await refusal('deployment-health', { deployment: deployment('degraded') })
     expect(verdict.remedy.steps.join('\n')).toContain('CAT_FACTORY_BASE_URL')
   })
 })
@@ -137,8 +139,8 @@ describe('api-key', () => {
 })
 
 describe('vcs-connection', () => {
-  const app = (connection: Record<string, unknown> | null) =>
-    ({ vcsConnection: async () => connection }) as unknown as PreflightContext['app']
+  const client = (connection: Record<string, unknown> | null) =>
+    ({ vcs: { getConnection: async () => ({ connection }) } }) as unknown as CatFactoryClient
 
   const connected = (overrides: Record<string, unknown> = {}) => ({
     accountLogin: 'intended-org',
@@ -151,7 +153,7 @@ describe('vcs-connection', () => {
 
   it('offers the connected account as the other way to resolve an owner mismatch', async () => {
     const verdict = await refusal('vcs-connection', {
-      app: app(connected({ accountLogin: 'someone-else' })),
+      client: client(connected({ accountLogin: 'someone-else' })),
     })
     expect(commandsOf(verdict.remedy)).toContain('export ACCEPTANCE_REPO_OWNER=someone-else')
   })
@@ -160,7 +162,7 @@ describe('vcs-connection', () => {
     // Three afternoons, one per problem, is the exact failure the whole gate exists to prevent,
     // and instructions that name only the first problem reintroduce it.
     const verdict = await refusal('vcs-connection', {
-      app: app(connected({ canCreateRepos: false, canManageWorkflows: false })),
+      client: client(connected({ canCreateRepos: false, canManageWorkflows: false })),
     })
     const steps = verdict.remedy.steps.join('\n')
     expect(steps).toContain('repository creation')
@@ -168,7 +170,7 @@ describe('vcs-connection', () => {
   })
 
   it('names the workflow permission when nothing is connected at all', async () => {
-    const verdict = await refusal('vcs-connection', { app: app(null) })
+    const verdict = await refusal('vcs-connection', { client: client(null) })
     expect(verdict.remedy.steps.join('\n')).toContain('workflow')
   })
 })
@@ -191,9 +193,11 @@ describe('board-titles', () => {
 describe('cluster-connection', () => {
   it('separates reachable, valid and permitted, which the probe answer cannot', async () => {
     const verdict = await refusal('cluster-connection', {
-      app: {
-        testEnvironmentHandler: async () => ({ ok: false, message: 'Unauthorized' }),
-      } as unknown as PreflightContext['app'],
+      client: {
+        environments: {
+          testConnection: async () => ({ ok: false, message: 'Unauthorized' }),
+        },
+      } as unknown as CatFactoryClient,
     })
     const commands = commandsOf(verdict.remedy).join('\n')
     expect(commands).toContain('kubectl cluster-info')

@@ -24,7 +24,7 @@ import {
   frontendBootstrapInstructions,
   frontendRepoName,
 } from '../src/instructions.ts'
-import { buildK3sHandlerConfig, buildK3sSecrets, buildServiceProvisioning } from '../src/k3s.ts'
+import { buildK3sConnection, buildK3sSecrets, buildServiceProvisioning } from '../src/k3s.ts'
 import { findServiceByTitle } from '../src/publicApi.ts'
 import type { ServiceRecord } from '../src/world.ts'
 import { assertPrerequisites, harness, serviceTitles } from './fixtures.ts'
@@ -35,7 +35,7 @@ import { assertPrerequisites, harness, serviceTitles } from './fixtures.ts'
 const BOOTSTRAP_BUDGET_MS = 45 * 60 * 1000
 
 describe('bootstrap: two empty repositories become two provisioned board services', () => {
-  const { config, client, app, world, journal } = harness('01-bootstrap')
+  const { config, client, world, journal } = harness('01-bootstrap')
   const titles = serviceTitles(config.namePrefix)
 
   // The gate, not a duplicate of spec 00: a pass resumed straight into this file never ran that
@@ -46,9 +46,8 @@ describe('bootstrap: two empty repositories become two provisioned board service
   it('connects the workspace k3s engine for the `kubernetes` provision type', async () => {
     // Idempotent by design: re-registering replaces, so a resumed pass re-asserts the connection
     // rather than needing to know whether a previous one got this far.
-    await app.registerEnvironmentHandler({
-      provisionType: 'kubernetes',
-      config: buildK3sHandlerConfig(config.cluster),
+    await client.environments.connect({
+      connection: buildK3sConnection(config.cluster),
       secrets: buildK3sSecrets(config.cluster),
     })
     journal.say('milestone', `connected ${config.cluster.apiServerUrl} as the 'kubernetes' handler`)
@@ -86,13 +85,13 @@ describe('bootstrap: two empty repositories become two provisioned board service
     const provisioning = buildServiceProvisioning()
     for (const key of ['backend', 'frontend'] as const) {
       const service = world.require(key)
-      const block = await app.setServiceProvisioning(service.blockId, provisioning)
+      const updated = await client.services.update(service.blockId, { provisioning })
       // Read back rather than trusting the 200: the field is a discriminated union whose
       // non-matching branches are ignored, so a wrong-shaped patch can be accepted and stored as
       // something the deployer will later read as "no manifests": an empty environment that
       // looks like a cluster problem.
-      expect(block.provisioning?.type).toBe('kubernetes')
-      expect(block.provisioning?.manifestSource?.path).toBe(provisioning.manifestSource?.path)
+      expect(updated.provisioning?.type).toBe('kubernetes')
+      expect(updated.provisioning?.manifestSource.path).toBe(provisioning.manifestSource.path)
     }
   })
 
@@ -150,7 +149,7 @@ describe('bootstrap: two empty repositories become two provisioned board service
     }
 
     const job = await runBootstrap({
-      app,
+      client,
       journal,
       input: { repoName, type, description: title, private: true, instructions },
       budgetMs: BOOTSTRAP_BUDGET_MS,

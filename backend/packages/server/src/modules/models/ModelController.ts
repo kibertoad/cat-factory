@@ -1,15 +1,9 @@
 import { listModelsContract, listWorkspaceModelsContract } from '@cat-factory/contracts'
-import {
-  effectiveCatalogWith,
-  localSelectableModels,
-  openRouterSelectableModels,
-} from '@cat-factory/kernel'
-import { modelCostResolver, withDynamicPrices } from '@cat-factory/spend'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { resolveWorkspaceCapabilities } from '../../agents/providerCapabilities.js'
+import { resolveWorkspaceModelCatalog } from './workspaceCatalog.js'
 
 /**
  * Serves the model picker catalog. Selectability is derived from what is actually
@@ -30,54 +24,16 @@ export function modelController(): Hono<AppEnv> {
   })
 
   // Per-workspace catalog: selectability reflects this workspace's (+ its account's +
-  // the caller's) configured API keys and subscription tokens.
+  // the caller's) configured API keys and subscription tokens. The composition lives in
+  // `workspaceCatalog.ts` because `GET /api/v1/models` must answer the same question
+  // identically; see that file for why a second copy would drift.
   buildHonoRoute(app, listWorkspaceModelsContract, async (c) => {
-    const container = c.get('container')
-    const workspaceId = param(c, 'workspaceId')
-    const userId = c.get('user')?.id
-    const presets = container.modelPresets?.service
-    // Spread the container (it structurally supplies apiKeys/subscriptions/localModels/…),
-    // then add the model-policy inputs: the account-settings SERVICE (the container exposes
-    // it as a `{ service }` module), the workspace→account resolver, and the deployment's
-    // support flag. The account read is cached via `container.caches.accountModelPolicy`.
-    //
-    // No preset id is passed, so the catalog renders under the WORKSPACE DEFAULT preset's route
-    // order. That is the honest answer for a workspace-wide read: the picker is asked "which route
-    // would this model take here", and a task that has selected another preset resolves under it
-    // at dispatch, where the block is in hand.
-    const caps = await resolveWorkspaceCapabilities(
-      {
-        ...container,
-        accountSettings: container.accountSettings?.service,
-        workspaceAccountOf: (ws) => container.workspaceService.accountOf(ws),
-        modelPolicySupported: container.config.infrastructure?.modelPolicy?.supported ?? false,
-        ...(presets
-          ? { resolvePresetProviderPreference: (ws: string) => presets.providerPreferenceFor(ws) }
-          : {}),
-      },
-      workspaceId,
-      userId,
+    const catalog = await resolveWorkspaceModelCatalog(
+      c.get('container'),
+      param(c, 'workspaceId'),
+      c.get('user')?.id,
     )
-    // Surface the caller's own locally-run models (Ollama / LM Studio / …) alongside the
-    // built-in catalog. They're scoped to the user (a runner lives on their machine).
-    const local =
-      userId && container.localModelEndpoints
-        ? await container.localModelEndpoints.capabilitiesFor(userId)
-        : []
-    // Plus this workspace's enabled OpenRouter gateway models (the dynamic catalog), with
-    // their live per-model prices overlaid onto the spend table so costs/budgets are exact.
-    const openRouter = container.openRouterCatalog
-      ? await container.openRouterCatalog.capabilitiesFor(workspaceId)
-      : []
-    const costFor = modelCostResolver(withDynamicPrices(container.config.spend, openRouter))
-    return c.json(
-      effectiveCatalogWith(
-        [...localSelectableModels(local), ...openRouterSelectableModels(openRouter)],
-        caps,
-        costFor,
-      ),
-      200,
-    )
+    return c.json(catalog, 200)
   })
 
   return app

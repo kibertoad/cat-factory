@@ -23,10 +23,11 @@ export function createClient(config: AcceptanceConfig): CatFactoryClient {
  * What is wrong with the key, or null. Checked before anything is created.
  *
  * Two failures this catches, both of which would otherwise appear much later wearing a
- * misleading face: a key bound to a DIFFERENT workspace than `ACCEPTANCE_WORKSPACE_ID` (every
- * public read then answers 404 for resources the app API is busy creating in the other one,
- * which reads as a broken deployment), and a key below `admin` (spec 01 creates services and
- * spec 03 answers a human gate, so a `write` key gets a third of the way and refuses).
+ * misleading face: a key bound to a DIFFERENT workspace than `ACCEPTANCE_WORKSPACE_ID` (the pass
+ * then creates its repositories and services on that workspace's board while every assertion
+ * about THIS one answers 404, which reads as a broken deployment), and a key below `admin`
+ * (spec 01 creates services and spec 03 answers a human gate, so a `write` key gets a third of
+ * the way and refuses).
  *
  * A returned value rather than a throw, because the prerequisite gate reports it as one verdict
  * beside nine others: refusing out of the first probe is what collecting every problem exists to

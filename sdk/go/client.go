@@ -38,7 +38,7 @@ import (
 )
 
 // Version is the SDK version, stamped into User-Agent. Kept in step by `pnpm check:sdk`.
-const Version = "0.31.0"
+const Version = "0.32.0"
 
 // Options configures a Client.
 type Options struct {
@@ -88,6 +88,14 @@ type Client struct {
 	Pipelines *PipelinesService
 	// What a task can be created AS here, and the fields each type accepts.
 	TaskTypes *TaskTypesService
+	// The cluster this workspace provisions per-run environments onto.
+	Environments *EnvironmentsService
+	// The models a run here could dispatch to, and why an unavailable one is unavailable.
+	Models *ModelsService
+	// The workspace's source-control connection and what it may do.
+	Vcs *VcsService
+	// The merge-threshold presets a task can resolve, and which is the default.
+	MergePresets *MergePresetsService
 	// The workspace's human-actionable inbox.
 	Notifications *NotificationsService
 	// The workspace's one outbound endpoint for pushed notifications, run events and alerts.
@@ -155,6 +163,10 @@ func New(options Options) (*Client, error) {
 	client.Tasks = &TasksService{client: client}
 	client.Pipelines = &PipelinesService{client: client}
 	client.TaskTypes = &TaskTypesService{client: client}
+	client.Environments = &EnvironmentsService{client: client}
+	client.Models = &ModelsService{client: client}
+	client.Vcs = &VcsService{client: client}
+	client.MergePresets = &MergePresetsService{client: client}
 	client.Notifications = &NotificationsService{client: client}
 	client.Webhook = &WebhookService{client: client}
 	client.Usage = &UsageService{client: client}

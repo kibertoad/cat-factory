@@ -21,6 +21,8 @@ from .models import (
     ActPublicNotificationRequest,
     AddPublicTaskDependencyRequest,
     AttachPublicTaskDocumentRequest,
+    ConnectPublicEnvironmentRequest,
+    ConnectPublicEnvironmentResponse,
     CreateHeadlessPublicApiKey,
     CreatePublicJob,
     CreatePublicServiceRequest,
@@ -34,6 +36,7 @@ from .models import (
     GetDebugLlmExportResponse,
     GetPublicMergeRecordResponse,
     GetPublicRunOutcomeResponse,
+    GetPublicVcsConnectionResponse,
     ListDebugAgentContextResponse,
     ListDebugLlmCallsOrder,
     ListDebugLlmCallsResponse,
@@ -45,10 +48,12 @@ from .models import (
     ListDebugToolCallsResponse,
     ListPublicJobsResponse,
     ListPublicMergeClassRollupsResponse,
+    ListPublicMergePresetsResponse,
     ListPublicReposResponse,
     ListPublicTaskDocumentsResponse,
     ListPublicTaskDocumentsResponseDocument,
     ListPublicTaskTypesResponse,
+    ListPublicWiredModelsResponse,
     LlmCallOutcome,
     Notification,
     NotificationWebhook,
@@ -93,9 +98,14 @@ from .models import (
     PublicUsage,
     PutNotificationWebhook,
     RunStatus,
+    StartPublicRepoBootstrapRequest,
+    StartPublicRepoBootstrapResponse,
     StartPublicTask,
     TagPublicMergeReviewEffortRequest,
     TaskStatus,
+    TestPublicEnvironmentConnectionRequest,
+    TestPublicEnvironmentConnectionResponse,
+    UpdatePublicServiceRequest,
     UpdatePublicTask,
 )
 
@@ -209,8 +219,9 @@ class JobsResource:
 
 
 class ServicesResource:
-    """The workspace's board services, the frames tasks are created under: list them, or create
-    one (optionally backed by a repository).
+    """The workspace's board services, the frames tasks are created under: list them, create
+    one (optionally backed by a repository), or patch one, including declaring where the
+    manifests for its per-run environments are read from.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -249,6 +260,25 @@ class ServicesResource:
             timeout=timeout,
         )
         return PublicServiceList.from_dict(raw)
+
+    def update(self, service_id: str, body: UpdatePublicServiceRequest | None = None, *, timeout: float | None = None) -> PublicService:
+        """Patch a service, including where its per-run manifests live
+        Change a service’s authored fields, and declare its `provisioning`: where the
+        manifests for a per-run environment are read from. That second half is what a
+        connected cluster alone cannot supply, because the platform keeps “which cluster”
+        (one per workspace) apart from “which manifests” (one set per service). An omitted
+        `provisioning` leaves the stored one alone rather than clearing it. Board
+        coordinates are deliberately absent, as they are on service creation.
+        `PATCH /api/v1/services/{serviceId}` (operation `updatePublicService`).
+        """
+        raw = self._transport.request(
+            "PATCH",
+            f"/api/v1/services/{_quote(service_id)}",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicService.from_dict(raw)
 
 
 class SpecResource:
@@ -316,11 +346,49 @@ class SpecResource:
 
 class ReposResource:
     """The repositories this workspace can back a service with, and which service each already
-    backs: the discovery half of service creation.
+    backs (the discovery half of service creation), plus creating a brand-new one: a
+    bootstrap writes the repository with an agent and reports the board service it
+    materialises.
     """
 
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
+
+    def bootstrap(self, body: StartPublicRepoBootstrapRequest, *, timeout: float | None = None) -> StartPublicRepoBootstrapResponse:
+        """Create a repository and adapt it with the bootstrapper agent
+        Create a brand-new repository under the account the workspace is connected to, then
+        run the bootstrapper agent in a container to write it against the supplied brief (or
+        to adapt a reference architecture). Answers 201 with a job to poll rather than
+        blocking for the minutes a container takes. The job names the board service frame it
+        materialises, so work can be filed against the service before the repository has
+        finished being written. This is the one act of board setup with no other public
+        counterpart: creating a service takes a repoId, and nothing else here makes one.
+        `POST /api/v1/repos/bootstrap` (operation `startPublicRepoBootstrap`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/repos/bootstrap",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return StartPublicRepoBootstrapResponse.from_dict(raw)
+
+    def get_bootstrap(self, job_id: str, *, timeout: float | None = None) -> StartPublicRepoBootstrapResponse:
+        """Poll one repository bootstrap
+        Read a bootstrap run’s current state. `failureKind` says whether a retry could
+        plausibly help: a `preflight` refusal (the target repository already has content,
+        nothing is connected) cannot be retried into success, where an `evicted` container
+        can.
+        `GET /api/v1/repos/bootstrap/{jobId}` (operation `getPublicRepoBootstrap`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/repos/bootstrap/{_quote(job_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return StartPublicRepoBootstrapResponse.from_dict(raw)
 
     def list(self, *, timeout: float | None = None) -> ListPublicReposResponse:
         """List the repositories a service can be created against
@@ -705,6 +773,137 @@ class NotificationsResource:
             timeout=timeout,
         )
         return PublicNotificationList.from_dict(raw)
+
+
+class EnvironmentsResource:
+    """The cluster this workspace provisions per-run environments onto: probe a candidate
+    connection without saving it, or bind one. The credential is write-only, so a read
+    reports which secret keys are stored and never their values.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def connect(self, body: ConnectPublicEnvironmentRequest, *, timeout: float | None = None) -> ConnectPublicEnvironmentResponse:
+        """Connect the workspace to the cluster its environments deploy onto
+        Bind environment provisioning to a Kubernetes cluster: the apiserver, how its TLS is
+        verified, the namespace template, and how an environment URL is derived once
+        manifests are applied. The secret bundle authenticating the connection is
+        write-only; the response reports which secret KEYS were stored and never their
+        values. Idempotent, so re-connecting replaces rather than accumulating.
+        `POST /api/v1/environments/connections` (operation `connectPublicEnvironment`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/environments/connections",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return ConnectPublicEnvironmentResponse.from_dict(raw)
+
+    def test_connection(self, body: TestPublicEnvironmentConnectionRequest, *, timeout: float | None = None) -> TestPublicEnvironmentConnectionResponse:
+        """Probe a candidate cluster connection without saving it
+        Reach the apiserver with the supplied credentials and report what came back,
+        persisting nothing. Worth a call of its own because the alternative is discovering
+        an unreachable cluster or an expired token on the deploy step of a run that has
+        already paid for a design pass and an implementation. A cluster that refuses the
+        credential is an ANSWER, so it is a 200 carrying `ok: false` rather than an error.
+        `POST /api/v1/environments/connections/test` (operation
+        `testPublicEnvironmentConnection`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/environments/connections/test",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return TestPublicEnvironmentConnectionResponse.from_dict(raw)
+
+
+class ModelsResource:
+    """The models a run in this workspace could actually dispatch to, and why an unavailable
+    one is unavailable: unconfigured, or refused by the account model-family policy. Those
+    two need opposite fixes.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def list(self, *, timeout: float | None = None) -> ListPublicWiredModelsResponse:
+        """List the models a run in this workspace could dispatch to
+        The workspace’s model catalog with the two flags that decide whether an agent step
+        can run at all: `available`, and `policyBlocked` for a model that is configured but
+        refused by the account’s model-family policy. Those two need OPPOSITE fixes, which
+        is why they are separate: everything blocked by policy is already configured, so
+        adding another provider key changes nothing.
+        `GET /api/v1/models` (operation `listPublicWiredModels`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/models",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicWiredModelsResponse.from_dict(raw)
+
+
+class VcsResource:
+    """The workspace's source-control connection: which account it talks to, how it
+    authenticates, and whether it may create repositories and write workflow files. Both
+    permissions are enforced by the provider at push time, so reading them beats discovering
+    one missing halfway through an automated setup.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def get_connection(self, *, timeout: float | None = None) -> GetPublicVcsConnectionResponse:
+        """Read the workspace’s source-control connection and what it may do
+        The connected account, how the workspace authenticates to it, and the two
+        permissions that decide whether an automated flow can complete: whether the platform
+        may create repositories, and whether it may write workflow files. Both are enforced
+        by the provider at push time, so a caller that cannot read them discovers a missing
+        workflow permission as a repository that bootstrapped and then failed to gain its CI
+        workflow. Provider-neutral: a GitLab-connected workspace answers here too.
+        `connection` is null when nothing is connected, which is a state rather than an
+        error.
+        `GET /api/v1/vcs/connection` (operation `getPublicVcsConnection`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/vcs/connection",
+            query=None,
+            timeout=timeout,
+        )
+        return GetPublicVcsConnectionResponse.from_dict(raw)
+
+
+class MergePresetsResource:
+    """The merge-threshold presets a task can resolve, including which is the workspace
+    default: what decides whether a run can land its pull request without a person.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def list(self, *, timeout: float | None = None) -> ListPublicMergePresetsResponse:
+        """List the workspace’s merge-threshold presets
+        The preset library, including which row is the workspace default that a task pinning
+        none resolves. `autoMergeEnabled` is the master switch that decides whether a run
+        can land its pull request without a person; `dryRunRoles` names the roles whose runs
+        the preset forces into dry-run mode, which is the difference between “this preset
+        merges” and “this preset merges for everyone except one role”.
+        `GET /api/v1/merge-presets` (operation `listPublicMergePresets`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/merge-presets",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicMergePresetsResponse.from_dict(raw)
 
 
 class WebhookResource:
@@ -2128,6 +2327,10 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "pipelines": PipelinesResource(transport),
         "task_types": TaskTypesResource(transport),
         "notifications": NotificationsResource(transport),
+        "environments": EnvironmentsResource(transport),
+        "models": ModelsResource(transport),
+        "vcs": VcsResource(transport),
+        "merge_presets": MergePresetsResource(transport),
         "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),
         "me": MeResource(transport),
