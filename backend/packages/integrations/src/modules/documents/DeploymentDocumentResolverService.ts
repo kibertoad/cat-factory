@@ -6,7 +6,7 @@ import type {
   DocumentSourceProvider,
   DocumentSourceRegistry,
 } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { getErrorMessage, ValidationError } from '@cat-factory/kernel'
 import { isDeploymentScopedSource } from '@cat-factory/contracts'
 import { MapDocumentSourceRegistry } from './documents.logic.js'
 import { ConfluenceProvider } from './ConfluenceProvider.js'
@@ -246,7 +246,7 @@ export function deploymentDocumentCredentialsFromEnv(
       results.push({
         source: provider.kind,
         problem:
-          `${error instanceof Error ? error.message : String(error)} ` +
+          `${getErrorMessage(error)} ` +
           `(configured via ${provider.descriptor.credentialFields
             .map((f) => envKeyFor(provider.kind, f.key))
             .join(', ')})`,

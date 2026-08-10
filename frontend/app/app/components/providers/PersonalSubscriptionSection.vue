@@ -13,6 +13,7 @@ const auth = useAuthStore()
 const workspace = useWorkspaceStore()
 const models = useModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
@@ -177,11 +178,7 @@ async function connect() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('personalSubscriptions.toast.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'personalSubscriptions.toast.connectFailed')
   } finally {
     busy.value = false
   }
@@ -203,11 +200,7 @@ async function disconnect(v: SubscriptionVendor) {
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
     toast.add({ title: t('personalSubscriptions.toast.disconnected'), icon: 'i-lucide-check' })
   } catch (e) {
-    toast.add({
-      title: t('personalSubscriptions.toast.disconnectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'personalSubscriptions.toast.disconnectFailed')
   }
 }
 </script>

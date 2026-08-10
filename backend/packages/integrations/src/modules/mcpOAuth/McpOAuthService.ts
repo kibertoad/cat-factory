@@ -8,11 +8,11 @@ import type {
   SecretCipher,
 } from '@cat-factory/kernel'
 import {
+  getErrorMessage,
   MCP_OAUTH_DEFAULT_HEADER,
   MCP_OAUTH_DEFAULT_HEADER_TEMPLATE,
-  ValidationError,
   noopLogger,
-  redactSecrets,
+  ValidationError,
 } from '@cat-factory/kernel'
 import type { ToolServerOAuthStatus } from '@cat-factory/contracts'
 import {
@@ -618,15 +618,16 @@ function dropError(summary: GrantSummary): GrantSummary {
 }
 
 /**
- * An OAuth failure as an operator-facing sentence, scrubbed.
+ * An OAuth failure as an operator-facing sentence.
  *
- * `describeError` in kernel would do the scrubbing, and this exists beside it because an
+ * Thin over `getErrorMessage` on purpose, and kept as a named function because an
  * `McpOAuthError`'s message IS the operator-facing sentence: wrapping it in a generic description
- * would bury the one part of it that names the fix.
+ * would bury the one part of it that names the fix. The scrubbing and the length cap belong to the
+ * shared describer, so a second `redactSecrets` here would only re-scan text already scrubbed and
+ * risk re-matching the `[REDACTED]` marker it left behind.
  */
 function describeOAuthError(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error)
-  return redactSecrets(raw) ?? 'unknown error'
+  return getErrorMessage(error)
 }
 
 /**

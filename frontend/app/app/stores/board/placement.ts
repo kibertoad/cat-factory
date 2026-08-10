@@ -34,7 +34,7 @@ function blockAsPatchable(block: Block): PatchSnapshot {
  * in-closure functions, and the split is purely to keep every function within the size budget.
  */
 export function createBoardPlacement(ctx: BoardWriteContext) {
-  const { blocks, getBlock, upsert, api, toast, tr } = ctx
+  const { blocks, getBlock, upsert, api, toast, tr, present } = ctx
 
   /**
    * Move a block into a new container at a new local position. Drag-reparent commits
@@ -94,12 +94,14 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
       // can act on rather than a fault. The backend sends the machine-readable reason and no
       // translated prose, so map it here; anything else keeps the raw message as the last resort.
       const refusal = moveRefusalKey(e)
-      toast.add({
-        title: tr('board.toast.moveFailed'),
-        description: refusal ? tr(refusal) : e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      if (refusal) {
+        toast.add({
+          title: tr('board.toast.moveFailed'),
+          description: tr(refusal),
+          icon: 'i-lucide-triangle-alert',
+          color: 'error',
+        })
+      } else present(e, 'board.toast.moveFailed')
     }
   }
 
@@ -137,12 +139,7 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
       // Restore the pre-drag position — a rejected move must not leave the block at a
       // spot the server never stored (a lie that survives until the next re-hydrate).
       b.position = prevPosition
-      toast.add({
-        title: tr('board.toast.moveFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.moveFailed')
     }
   }
 
@@ -198,12 +195,7 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
       upsert(await api.resizeBlock(useWorkspaceStore().requireId(), id, bounds))
     } catch (e) {
       previewResize(id, from.position, from.size)
-      toast.add({
-        title: tr('board.toast.resizeFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.resizeFailed')
     }
   }
 
@@ -244,12 +236,7 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
           if (cur[key] === patch[key]) cur[key] = prev[key]
         }
       }
-      toast.add({
-        title: tr('board.toast.updateFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.updateFailed')
       return false
     }
   }

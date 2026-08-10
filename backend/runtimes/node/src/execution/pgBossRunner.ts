@@ -1,6 +1,6 @@
 import type { OperationalMetrics, WorkRunner } from '@cat-factory/kernel'
 import { createQueueWithDeadLetter } from './deadLetter.js'
-import { runBestEffort } from '@cat-factory/kernel'
+import { getErrorMessage, runBestEffort } from '@cat-factory/kernel'
 import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
 import type { Job, JobInsert, PgBoss, SendOptions } from 'pg-boss'
 import { BOOTSTRAP_QUEUE, reenqueueStaleBootstrap } from './bootstrapRunner.js'
@@ -220,7 +220,7 @@ export async function startExecutionWorker(
           log.error('execution driver failed', {
             workspaceId,
             executionId,
-            err: error instanceof Error ? error.message : String(error),
+            err: getErrorMessage(error),
           })
           throw error
         }
@@ -351,7 +351,7 @@ export function startStaleRunSweeper(
         await reclaimAdvanceJob(boss, queue, jobId).catch((err) =>
           log.error('failed to reclaim orphaned advance job', {
             runId: ref.id,
-            err: err instanceof Error ? err.message : String(err),
+            err: getErrorMessage(err),
           }),
         )
       }
@@ -469,7 +469,7 @@ export function startStaleRunSweeper(
       health.recordSuccess('stale-run')
     } catch (error) {
       log.error('stale-run sweep failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
       })
       // This sweeper predates `startSweeper` (it is a hand-rolled interval, because a boot
       // reconcile has to run before the first tick), so it reports its own pass under the same

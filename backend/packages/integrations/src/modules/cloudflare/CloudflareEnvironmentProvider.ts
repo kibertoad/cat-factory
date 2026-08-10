@@ -2,22 +2,23 @@ import { CLOUDFLARE_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 import {
   type CloudflareConnectionConfig,
   type CloudflareEnvironmentConfig,
+  connectionFailureResult,
   type ConnectionTestResult,
   type EnvironmentConnectionTestRequest,
   type EnvironmentManifest,
   type EnvironmentProvider,
   type EnvironmentStatusRequest,
   type EnvironmentTeardownRequest,
+  getErrorMessage,
   type ProviderConfigField,
-  type ProvisionEnvironmentRequest,
   type ProvisionedEnvironment,
+  type ProvisionEnvironmentRequest,
   type RepoValidationRequest,
   type RepoValidationResult,
   type SecretResolver,
+  STRICT_URL_SAFETY_POLICY,
   type TeardownProbe,
   type UrlSafetyPolicy,
-  connectionFailureResult,
-  STRICT_URL_SAFETY_POLICY,
 } from '@cat-factory/kernel'
 import { type MakeHttpError, readCappedText, safeFetch } from '../shared/safe-fetch.js'
 import { assertSafeEnvironmentUrl } from '../environments/environments.logic.js'
@@ -253,7 +254,7 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
     try {
       config = parseCloudflareEnvConfig(req.manifest)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
     const pinned = config.repo?.trim()
     try {

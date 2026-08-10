@@ -7,7 +7,12 @@ import type {
   ModelProviderResolver,
   ModelRef,
 } from '@cat-factory/kernel'
-import { extractJson, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
+import {
+  extractJson,
+  getErrorMessage,
+  resolveScopedModelProvider,
+  ValidationError,
+} from '@cat-factory/kernel'
 import {
   catFactoryObservability,
   JUDGE_SYSTEM_PROMPT,
@@ -99,9 +104,7 @@ export class JudgeService implements JudgeAssessor {
       text = result.text
     } catch (e) {
       throw new ValidationError(
-        `The judge assessment (${ref.provider}:${ref.model}) failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `The judge assessment (${ref.provider}:${ref.model}) failed: ${getErrorMessage(e)}`,
       )
     }
     const verdict = extractJson(text)

@@ -1,8 +1,9 @@
 import {
   composePostMortem,
-  type ConnectionTestResult,
   connectionFailureResult,
+  type ConnectionTestResult,
   CONTAINER_EVICTION_ERROR,
+  getErrorMessage,
   harnessDispatchError,
   type KubernetesRunnerConfig,
   readRunnerDispatchAck,
@@ -271,7 +272,7 @@ export class KubernetesRunnerTransport implements RunnerTransport {
       // The cause goes into PROSE on the run rather than into log fields, so it is the message
       // itself that is wanted here, not `describeError`'s field pair; `composePostMortem` applies
       // the same scrub that helper would have.
-      const cause = error instanceof Error ? error.message : String(error)
+      const cause = getErrorMessage(error)
       return composePostMortem([
         `Could not read runner pod '${name}' to explain the eviction: ${cause}. ` +
           `The pod's own termination state was not consulted.`,

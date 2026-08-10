@@ -18,6 +18,7 @@ import {
   ConflictError,
   DomainError,
   describeError,
+  getErrorMessage,
   noopLogger,
   runBestEffort,
 } from '@cat-factory/kernel'
@@ -507,7 +508,7 @@ export class InitiativeLoopService {
         )
         return { outcome: 'conflict', entity: reverted ?? claimed }
       }
-      const message = error instanceof Error ? error.message : 'Failed to start the task.'
+      const message = error instanceof Error ? getErrorMessage(error) : 'Failed to start the task.'
       const blocked = await this.blockItem(
         workspaceId,
         entity.blockId,

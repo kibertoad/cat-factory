@@ -3,7 +3,7 @@ import type { GitHubInstallation, GitHubRepo } from '@cat-factory/kernel'
 import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
-import { UnavailableError, RateLimitedError } from '@cat-factory/kernel'
+import { getErrorMessage, RateLimitedError, UnavailableError } from '@cat-factory/kernel'
 
 /**
  * The mothership-mode GitHub delegation API: `POST /internal/github/installation-token`.
@@ -222,7 +222,7 @@ export function githubDelegationController(
       // error's message never leaks over the machine API.
       log.error('github delegation: mint failed', {
         installationId,
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
       })
       return c.json({ error: { code: 'internal', message: 'Internal error' } }, 500)
     }

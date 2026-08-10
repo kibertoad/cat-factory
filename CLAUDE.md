@@ -240,34 +240,32 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
 - **A local `interface XLogger { warn(obj, msg?) }` is BANNED**, as is a bespoke
   `log?: (event, msg) => void` callback dependency. A package that can't see kernel is in the wrong layer.
 - **A service takes `logger?: Logger` and normalises ONCE** (`this.log = deps.logger ?? noopLogger`) so it
-  stays unit-testable standalone, but **`CoreDependencies.logger` is REQUIRED**: a facade that forgets to
-  wire it must fail to typecheck rather than silently run the whole engine on `noopLogger`.
-- **`.catch(() => {})` is BANNED; use `runBestEffort(logger, label, fn, fields)`** (kernel). It keeps the
-  swallow (a best-effort path must NEVER propagate into its caller) and adds one `warn` naming the
-  operation with the cause attached. Where a bespoke `catch` is genuinely right, still bind the cause with
-  `describeError(error)`. `scripts/check-silent-catch.mjs` enforces this (detection in
-  `scripts/silent-catch.mjs`, with fixtures; extend those when you touch it); EVERY spelling of an empty
-  handler counts, including a body holding only a comment. A drop that genuinely needs no report keeps the
-  idiom under a `// silent-catch-ok: <why>` comment. Out of scope: the executor/deploy harnesses (a source
-  change there bumps the runner image) and the SPA (no logger yet).
-- **`describeError` scrubs through `redactSecrets`**, because a `fetch`/spawn/SDK error routinely echoes
-  the request URL or an auth header. Any OTHER field carrying command output, a URL, or model text goes
-  through `redactSecrets` at the emit site. Never log an auth header or a decrypted credential, not even
-  at `debug`, which operators turn on in production.
+  stays unit-testable, but **`CoreDependencies.logger` is REQUIRED**: a facade forgetting to wire it must
+  fail to typecheck, not silently run the engine on `noopLogger`.
+- **`.catch(() => {})` is BANNED; use `runBestEffort(logger, label, fn, fields)`** (kernel): it keeps the
+  swallow (a best-effort path must NEVER propagate into its caller) and adds one `warn` naming the operation
+  with the cause attached. A bespoke `catch` still binds the cause with `describeError(error)`. Enforced by
+  `check-silent-catch.mjs`, whose header owns the scope and the `// silent-catch-ok:` escape hatch.
+- **A thrown value has exactly THREE describers, all reading the whole CAUSE CHAIN** through kernel's
+  `error-chain.logic.ts`: `getErrorMessage` (shown to a human / recorded on a row), `describeError` (log
+  fields), `describeConnectionFailure` (a probe verdict, plus a cause class and remedy). **A hand-rolled
+  `e instanceof Error ? e.message : String(e)` is BANNED**: on Node a transport failure's own message IS the
+  contentless `fetch failed`, identical for an unreachable host, a bad cert and a DNS typo. The chain is
+  scrubbed there; any OTHER field carrying command output, a URL or model text goes through `redactSecrets`
+  at the emit site, and a credential is never logged, not even at `debug`. Reader and USE also pick the
+  describer: UNAUTHENTICATED takes `publicDiagnostic`, a VERDICT `errorChainMatches` (the rendered string
+  carries a display CAP), and an error with nothing to say answers EMPTY so a `|| '<fallback>'` guard works.
 - **Correlate with `child`, not per-call spreads**: bind `{ workspaceId, executionId }` once at the top of
-  the scope. Three seams do it for you: `mountRequestLogging` (mounted FIRST by both facades; mints or
-  adopts `X-Request-Id`, binds a request-scoped child reachable as `requestLogger(c)`, and puts the id in
-  every error envelope), `containerJobLog` (the workflow↔container seam; the same ids ride the job body so
-  the harness binds them beside `jobId`), and the durable drivers. A request line logs the PATHNAME only,
-  because a query string carries the WS `?ticket=` and OAuth `?code=`.
-- **`LOG_LEVEL`** is applied FIRST in each boot path, an unrecognised value falling back to `info`; the
-  threshold is checked in the adapter, because a pino CHILD snapshots its parent's level at creation.
-- **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
-- **A SECOND destination is a kernel `LogSink` installed with `setLogSink`** (today the opt-in
-  OTLP log export), never a second logger. It gets the `child`-bound fields folded in and sits
-  behind the same level gate; `record` may not throw or block and `flush` may not reject, and the
-  facade DRAINS wherever the buffer's HOLDER can vanish: Node timer + shutdown flush ⇄ Worker
-  per-invocation `waitUntil` ⇄ each isolate-ending wait in a workflow wake, a failed `step.do` too.
+  the scope. Three seams do it for you: `mountRequestLogging` (mounted FIRST, it mints or adopts
+  `X-Request-Id` and puts it in every error envelope, which is what a user quotes off a failed request),
+  `containerJobLog` (the same ids ride the job body), and the durable drivers. A request line logs the
+  PATHNAME only, because a query string carries the WS `?ticket=` and OAuth `?code=`.
+- **`LOG_LEVEL`** is applied FIRST in each boot path and gated in the ADAPTER (a pino child snapshots its
+  parent's level at creation). **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
+- **A SECOND destination is a kernel `LogSink` installed with `setLogSink`**, never a second logger; it
+  sits behind the same level gate. `record` may not throw or block, `flush` may not reject, and the facade
+  DRAINS wherever the buffer's HOLDER can vanish: Node timer + shutdown flush ⇄ Worker per-invocation
+  `waitUntil` ⇄ each isolate-ending wait in a workflow wake, a failed `step.do` too.
 
 ## Operational EVENTS are counted, not just logged
 
@@ -1008,9 +1006,11 @@ drift guards) is
 status: [`docs/internal/localization.md`](./docs/internal/localization.md). What binds beyond the SPA:
 
 - **The backend does not localize prose.** A localizable condition emits a machine-readable
-  `error.details.reason`/`code` that the SPA maps to a frontend key (the `usePipelineErrorToast.ts`
-  pattern). The wire vocabulary lives in `@cat-factory/contracts`, so the SPA imports the SAME source of
-  truth. Raw backend prose is DETAIL behind a disclosure, never the primary description.
+  `error.details.reason`/`code` that the SPA maps to a frontend key. The wire vocabulary lives in
+  `@cat-factory/contracts`, so the SPA imports the SAME source of truth. **Every failure toast goes through
+  the ONE funnel** (`usePipelineErrorToast().present(error, titleKey)`), never a hand-built
+  `toast.add({ description: err.message })`: raw prose is DETAIL behind a disclosure, and the funnel is what
+  makes a failure translated, non-auto-dismissing, and copyable WITH the `requestId` joining it to the log.
 - **Locale parity is CI-gated per change** (`i18n-locale-parity.mjs`), and **never ship an English
   string as a non-`en` value**: the parity gate checks only that the key exists, so a verbatim English
   copy passes and is a bug. If you genuinely cannot produce a translation, say so in the PR.

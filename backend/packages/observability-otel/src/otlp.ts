@@ -1,4 +1,5 @@
 import type { AttributeMap, AttributeValue } from './mapping.js'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 
 // Shared OTLP/HTTP JSON encoding + transport helpers used by BOTH fetch-based exporters
@@ -70,7 +71,7 @@ export async function postOtlp(opts: {
   } catch (err) {
     opts.logger?.warn('otel: failed to POST OTLP batch', {
       scope: 'otel',
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
   }
 }

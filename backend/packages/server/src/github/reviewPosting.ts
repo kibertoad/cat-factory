@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   CreateReviewInput,
   CreateReviewResult,
@@ -16,8 +17,7 @@ export type GitHubRequestFn = (
   opts: { installationId: number; method?: string; body?: unknown },
 ) => Promise<{ json: unknown }>
 
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
+const errorMessage = (error: unknown): string => getErrorMessage(error)
 
 /**
  * Publish a PR review's findings on GitHub, posting each inline comment INDIVIDUALLY rather than as

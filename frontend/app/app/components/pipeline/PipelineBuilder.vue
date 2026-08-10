@@ -279,6 +279,7 @@ function toggleSaved(id: string) {
 }
 
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 // ---- "Add agent" mini-form -------------------------------------------------
 const addAgentOpen = ref(false)
@@ -329,13 +330,9 @@ async function save() {
       toast.add({ title: t('pipeline.builder.toast.addOneFirst'), color: 'warning' })
     }
   } catch (e) {
-    // Surface the backend reason (e.g. post-release-health rejected without an
-    // observability integration) rather than a generic failure.
-    toast.add({
-      title: t('pipeline.builder.toast.saveFailed'),
-      description: e instanceof Error ? e.message : undefined,
-      color: 'error',
-    })
+    // Through the funnel, so the backend reason (e.g. post-release-health rejected without an
+    // observability integration) is reachable as copyable detail rather than raw prose up front.
+    present(e, 'pipeline.builder.toast.saveFailed')
   }
 }
 

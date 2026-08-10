@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   BlockRepository,
   GitHubClient,
@@ -60,7 +61,7 @@ export class GitHubPullRequestMerger implements PullRequestMerger {
       } catch (err) {
         return {
           merged,
-          failed: { entry, error: err instanceof Error ? err.message : String(err) },
+          failed: { entry, error: getErrorMessage(err) },
           skipped: prs.slice(i + 1),
         }
       }

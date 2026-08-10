@@ -13,6 +13,7 @@ import SecretInput from '~/components/common/SecretInput.vue'
 const { t } = useI18n()
 const store = usePackageRegistriesStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 // The registry vendors a workspace can connect. Fixed set — the host derives from the
@@ -44,15 +45,6 @@ const parsedScopes = computed(() =>
     .map((s) => (s.startsWith('@') ? s : `@${s}`)),
 )
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 // The tab this renders in only exists once the window's probe resolved `available === true`, so
 // `ensureLoaded()` here would early-return every time and this error branch would be dead code.
 // Read the list outright instead: the window owns the PROBE (a failure there means no tab), the
@@ -63,7 +55,7 @@ onMounted(async () => {
   try {
     await store.load()
   } catch (e) {
-    notifyError(t('settings.packageRegistries.toast.loadFailed'), e)
+    present(e, 'settings.packageRegistries.toast.loadFailed')
   }
 })
 
@@ -84,7 +76,7 @@ async function addEntry() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.packageRegistries.toast.addFailed'), e)
+    present(e, 'settings.packageRegistries.toast.addFailed')
   } finally {
     busy.value = false
   }
@@ -98,7 +90,7 @@ async function removeEntry(entryId: string) {
     await store.remove(entryId)
     toastDone('remove', noun)
   } catch (e) {
-    notifyError(t('settings.packageRegistries.toast.removeFailed'), e)
+    present(e, 'settings.packageRegistries.toast.removeFailed')
   } finally {
     busy.value = false
   }

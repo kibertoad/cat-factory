@@ -25,6 +25,7 @@ const { t } = useI18n()
 const infra = useInfraConfigStore()
 const settingsStore = useWorkspaceSettingsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 onMounted(() => {
   void infra.ensureLoaded()
@@ -91,11 +92,7 @@ async function save() {
     })
     toast.add({ title: t('settings.defaultProvision.saved'), color: 'success' })
   } catch (e) {
-    toast.add({
-      title: t('settings.defaultProvision.saveFailed'),
-      description: e instanceof Error ? e.message : undefined,
-      color: 'error',
-    })
+    present(e, 'settings.defaultProvision.saveFailed')
   } finally {
     saving.value = false
   }

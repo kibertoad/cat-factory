@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import * as v from 'valibot'
 import {
@@ -185,7 +186,7 @@ export function telemetryIngestController(): Hono<AppEnv> {
       log.error('telemetry ingest: append failed', {
         workspaceId: body.workspaceId,
         executionId: body.executionId,
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
       })
       return c.json({ ok: false, error: { code: 'internal', message: 'Internal error' } }, 500)
     }

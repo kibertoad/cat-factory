@@ -18,6 +18,7 @@ import type {
 const ui = useUiStore()
 const store = useSandboxStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 // Exhaustive enum→label maps of literal `t(...)` keys (keeps the typed-key drift guard
@@ -167,12 +168,7 @@ async function createAndRun() {
     await store.launch(created.id)
     toast.add({ title: t('sandbox.toast.complete'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    toast.add({
-      title: t('sandbox.toast.runFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'sandbox.toast.runFailed')
   }
 }
 
@@ -223,12 +219,7 @@ async function saveVersion() {
     toast.add({ title: t('sandbox.toast.versionSaved'), icon: 'i-lucide-check', color: 'success' })
     editing.value = null
   } catch (e) {
-    toast.add({
-      title: t('sandbox.toast.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'sandbox.toast.saveFailed')
   } finally {
     savingPrompt.value = false
   }
@@ -239,12 +230,7 @@ async function archive(prompt: SandboxPromptVersion) {
     await store.archivePrompt(prompt.id)
     if (editing.value?.id === prompt.id) editing.value = null
   } catch (e) {
-    toast.add({
-      title: t('sandbox.toast.archiveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'sandbox.toast.archiveFailed')
   }
 }
 </script>

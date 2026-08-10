@@ -14,6 +14,7 @@ const store = useReleaseHealthStore()
 const ui = useUiStore()
 const uiMode = useUiModeStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -52,15 +53,6 @@ watch(
   { immediate: true },
 )
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function save() {
   busy.value = true
   try {
@@ -75,7 +67,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('inspector.releaseHealth.saveFailed'), e)
+    present(e, 'inspector.releaseHealth.saveFailed')
   } finally {
     busy.value = false
   }
@@ -92,7 +84,7 @@ async function clear() {
     draft.envTag = ''
     toastDone('clear', noun)
   } catch (e) {
-    notifyError(t('inspector.releaseHealth.clearFailed'), e)
+    present(e, 'inspector.releaseHealth.clearFailed')
   } finally {
     busy.value = false
   }

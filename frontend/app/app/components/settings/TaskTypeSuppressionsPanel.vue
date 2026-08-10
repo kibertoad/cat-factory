@@ -16,7 +16,7 @@ import type { TaskTypeSuppression } from '~/types/domain'
 const { t } = useI18n()
 const api = useApi()
 const workspace = useWorkspaceStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const rows = ref<TaskTypeSuppression[]>([])
 const loading = ref(false)
@@ -31,7 +31,7 @@ async function load() {
   try {
     rows.value = (await api.listTaskTypeSuppressions(workspace.requireId())).taskTypes
   } catch (e) {
-    fail(e)
+    present(e, 'settings.taskTypeSuppressions.saveFailed')
   } finally {
     loading.value = false
   }
@@ -52,19 +52,10 @@ async function toggle(row: TaskTypeSuppression, offered: boolean) {
     rows.value = result.taskTypes
     await workspace.refresh()
   } catch (e) {
-    fail(e)
+    present(e, 'settings.taskTypeSuppressions.saveFailed')
   } finally {
     busyId.value = null
   }
-}
-
-function fail(e: unknown) {
-  toast.add({
-    title: t('settings.taskTypeSuppressions.saveFailed'),
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 </script>
 

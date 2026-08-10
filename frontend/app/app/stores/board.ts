@@ -141,7 +141,17 @@ export const useBoardStore = defineStore('board', () => {
   // The write operations, split into cohesive factories sharing the state above (a size-only
   // extraction — behaviour is identical to the former in-closure functions). `undoRemove` stays
   // internal to the removal factory (only its delete toast wires it), so it is NOT re-exported.
-  const context = { blocks, getBlock, upsert, pendingRemovals, pendingDoomed, api, toast, tr }
+  const context = {
+    blocks,
+    getBlock,
+    upsert,
+    pendingRemovals,
+    pendingDoomed,
+    api,
+    toast,
+    tr,
+    present: usePipelineErrorToast().present,
+  }
   const mutations = createBoardMutations(context)
   const placement = createBoardPlacement(context)
   const { detach, reattach, removeBlock } = createBoardRemoval(context)

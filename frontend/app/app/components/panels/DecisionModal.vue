@@ -4,7 +4,7 @@ import { agentKindMeta } from '~/utils/catalog'
 const execution = useExecutionStore()
 const board = useBoardStore()
 const ui = useUiStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 const ctx = computed(() => ui.decisionContext)
@@ -44,12 +44,7 @@ async function choose(option: string) {
     )
     if (resolved) ui.closeDecision()
   } catch (e) {
-    toast.add({
-      title: t('panels.decision.resolveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'panels.decision.resolveFailed')
   } finally {
     resolvingOption.value = null
   }

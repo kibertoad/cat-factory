@@ -9,6 +9,7 @@
 const { t } = useI18n()
 const github = useGitHubStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const installing = ref(false)
 const installationId = ref('')
@@ -20,21 +21,12 @@ onMounted(() => {
   void refreshInstallations()
 })
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function refreshInstallations() {
   try {
     await github.loadInstallations()
   } catch (e) {
     // A 503 (integration off) is handled by the host; surface anything else.
-    notifyError(t('github.connect.errors.listInstallations'), e)
+    present(e, 'github.connect.errors.listInstallations')
   }
 }
 
@@ -43,7 +35,7 @@ async function install() {
   try {
     window.location.href = await github.getInstallUrl()
   } catch (e) {
-    notifyError(t('github.connect.errors.startInstall'), e)
+    present(e, 'github.connect.errors.startInstall')
     installing.value = false
   }
 }
@@ -60,7 +52,7 @@ async function connect(id: number, onDone?: () => void) {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('github.connect.errors.connect'), e)
+    present(e, 'github.connect.errors.connect')
   } finally {
     connecting.value = false
     connectingId.value = null

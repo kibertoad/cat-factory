@@ -28,12 +28,17 @@
 //     connection and report a second, correlated opinion of it. (It is a physically separate
 //     D1 database only on Cloudflare, which has no `/ready` at all — see below.)
 
+import { publicDiagnostic } from '@cat-factory/kernel'
+
 export interface ReadinessCheck {
   ok: boolean
   /**
    * The failure detail when `ok` is false. `/ready` is PUBLIC (unauthenticated, like `/health`), so
    * this string is readable by any client — keep it to a short diagnostic (`pg-boss not running`,
-   * `timed out after 2000ms`) and NEVER put a connection string, host, or credential in it.
+   * `timed out after 2000ms`) and NEVER put a connection string, host, or credential in it. A
+   * thrown value is described with kernel's `publicDiagnostic` (the outermost link only, scrubbed),
+   * which is the ONE sanctioned carve-out from `getErrorMessage` and is shared with the Worker
+   * facade's `/ready` so the two cannot answer at different depths.
    */
   error?: string
 }
@@ -71,10 +76,6 @@ export interface ReadinessProbeDeps {
   isDraining?: () => boolean
   /** Bounds the DB probe so a wedged pool can't hang the health check. Default 2000ms. */
   timeoutMs?: number
-}
-
-function message(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
 }
 
 /** Reject if `promise` hasn't settled within `ms` — a wedged pool must not hang `/ready`. */
@@ -115,7 +116,7 @@ export async function checkReadiness(deps: ReadinessProbeDeps): Promise<Readines
       await withTimeout(run(), timeoutMs)
       return { ok: true }
     } catch (err) {
-      return { ok: false, error: message(err) }
+      return { ok: false, error: publicDiagnostic(err) }
     }
   }
   const checks: Record<string, ReadinessCheck> = {}

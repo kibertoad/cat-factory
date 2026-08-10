@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
@@ -155,7 +156,7 @@ export function telemetryReadController(): Hono<AppEnv> {
         workspaceId: body.workspaceId,
         repo: body.repo,
         method: body.method,
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
       })
       return c.json({ ok: false, error: { code: 'internal', message: 'Internal error' } }, 500)
     }

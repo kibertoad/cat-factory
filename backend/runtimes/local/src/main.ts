@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import { logger } from '@cat-factory/server'
 import { startLocal } from './server.js'
 
@@ -6,6 +7,6 @@ import { startLocal } from './server.js'
 // RECOMMENDED_HARNESS_IMAGE, refreshed at boot. Set PORT to override the listen port
 // (PUBLIC_URL defaults from it).
 startLocal().catch((err: unknown) => {
-  logger.error('failed to start', { err: err instanceof Error ? err.message : String(err) })
+  logger.error('failed to start', { err: getErrorMessage(err) })
   process.exit(1)
 })

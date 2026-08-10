@@ -48,6 +48,34 @@ describe('redactSecrets', () => {
     expect(redactSecrets('no scheme user:pass@host')).toBe('no scheme user:pass@host')
   })
 
+  it('leaves prose alone where the field name is just an English word', () => {
+    // These field names (`key`, `signature`, `basic`, `token`) are ordinary English, and this
+    // scrub now reaches the message a person READS on a form and the `reason` persisted on a
+    // failed run. Redacting the next word of a sentence deleted the identifier the operator had
+    // to go and set, and named the wrong thing as a secret.
+    const prose = [
+      'Missing required key: OPENAI_API_KEY',
+      'basic authentication failed for the cluster',
+      'Invalid signature: expected sha256 digest',
+      'Provider key=value pair rejected',
+      'token refresh returned nothing',
+    ]
+    for (const text of prose) expect(redactSecrets(text), text).toBe(text)
+  })
+
+  it('still drops a credential in every shape that carve-out could have covered', () => {
+    // The pairing test for the one above: what is spared must be words, never credentials.
+    const cases = [
+      'key=a1b2c3d4e5f6',
+      'password: hunter2seven',
+      'api_key: abcdefghijklmnopqrstuvwx',
+      'Basic dXNlcjpwYXNzd29yZA==',
+      'Bearer abcdefghijklmnopqrstuvwxyz',
+      'signature=deadbeefcafe1234',
+    ]
+    for (const text of cases) expect(redactSecrets(text), text).toContain('[REDACTED]')
+  })
+
   it('drops secret-ish query/JSON params keeping the field name', () => {
     const out = redactSecrets('{"token":"abcd1234efgh","note":"keep me"}')
     expect(out).not.toContain('abcd1234efgh')

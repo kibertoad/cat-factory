@@ -22,6 +22,7 @@ const { t } = useI18n()
 const slots = useReactiveSlots<AppSlots>()
 const store = useWorkspaceSettingsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 /**
  * The fields to render. A malformed key is dropped (the store would refuse every save) and
@@ -71,12 +72,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.workspaceSettings.toast.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.workspaceSettings.toast.saveFailed')
   } finally {
     saving.value = false
   }

@@ -1,0 +1,69 @@
+---
+'@cat-factory/kernel': patch
+'@cat-factory/integrations': patch
+'@cat-factory/orchestration': patch
+'@cat-factory/server': patch
+'@cat-factory/agents': patch
+'@cat-factory/consensus': patch
+'@cat-factory/gitlab': patch
+'@cat-factory/workspaces': patch
+'@cat-factory/cli': patch
+'@cat-factory/observability-otel': patch
+'@cat-factory/observability-langfuse': patch
+'@cat-factory/worker': patch
+'@cat-factory/node-server': patch
+'@cat-factory/local-server': patch
+'@cat-factory/app': patch
+---
+
+Report the actual cause of a failure everywhere, not just on a "Test connection" button.
+
+The previous slice taught the connection PROBES to read the cause chain, because on Node a transport
+failure is `TypeError: fetch failed` and what happened hangs off `.cause`. It turned out the repo had
+three describers of a thrown value and the other two stopped at `error.message`: `getErrorMessage`
+(the string a human is shown, and what a persisted failure reason or a PR comment records) and
+`describeError` (every log line). So a probe could name `connect ECONNREFUSED 127.0.0.1:6443` while
+the log line and the toast for the same failure still said `fetch failed`, which is what made a
+Kubernetes connect failure unexplainable even with the probe fixed.
+
+All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `.cause` plus each
+`AggregateError` branch (so a dual-stack `localhost` reports what happened on each address), scrubbed
+through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
+a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
+across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
+deleted.
+
+Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+model endpoints are platform-internal, their host and port do reach a workspace member through an
+ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+`publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+address, sharing one helper so the two runtimes cannot drift to different depths.
+
+A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+a human-facing message is held to, and an error with nothing to say answers with the empty string
+rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+still fires.
+
+`redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+lose the name they have to go and set. Every credential shape the rules exist for still matches.
+
+An error message may therefore now carry appended causes where it did not before. The opening phrase
+is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
+
+On the SPA, every failure toast goes through the one funnel that already existed for pipeline errors,
+instead of 29 per-component copies of the same `notifyError(title, e)` and ~83 direct `toast.add`
+calls rendering the raw message. Beyond the translated copy that funnel already resolved, a failure
+toast now stays until dismissed instead of vanishing after about five seconds, its text is
+selectable, and one click copies the whole report: the action that failed, the class of failure, the
+backend's own account, and the `requestId` that is the only join between what the user saw and the
+server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+`@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+kernel's output byte for byte.

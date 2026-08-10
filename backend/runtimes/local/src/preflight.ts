@@ -4,6 +4,7 @@ import { createConnection } from 'node:net'
 import { homedir, tmpdir, totalmem } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { PreflightHostProbes, PreflightProbeOutcome } from '@cat-factory/kernel'
 
 const execFileAsync = promisify(execFile)
@@ -68,7 +69,7 @@ export function createDockerPreflightProbes(
         const version = stdout.trim()
         return pass(version ? `Docker ${version}` : 'daemon reachable')
       } catch (err) {
-        return fail(errMessage(err) || 'Docker daemon not reachable')
+        return fail(getErrorMessage(err) || 'Docker daemon not reachable')
       }
     },
 
@@ -160,7 +161,7 @@ export function createDockerPreflightProbes(
         const bodyOk = !probeOpts?.expectBodyContains || body.includes(probeOpts.expectBodyContains)
         return statusOk && bodyOk ? pass(`HTTP ${res.status}`) : fail(`HTTP ${res.status}`)
       } catch (err) {
-        return fail(errMessage(err) || 'request failed')
+        return fail(getErrorMessage(err) || 'request failed')
       }
     },
 
@@ -172,7 +173,7 @@ export function createDockerPreflightProbes(
         await stat(join(caRoot, 'rootCA.pem'))
         return pass('mkcert CA installed')
       } catch (err) {
-        return fail(errMessage(err) || 'mkcert CA not found')
+        return fail(getErrorMessage(err) || 'mkcert CA not found')
       }
     },
 
@@ -189,7 +190,7 @@ export function createDockerPreflightProbes(
           ? pass('all hosts entries present')
           : fail(`missing hosts entries: ${missing.join(', ')}`)
       } catch (err) {
-        return fail(`could not read the hosts file: ${errMessage(err)}`)
+        return fail(`could not read the hosts file: ${getErrorMessage(err)}`)
       }
     },
 
@@ -200,14 +201,10 @@ export function createDockerPreflightProbes(
           ? pass('secrets marker present')
           : fail(`marker '${marker}' not found in ${file}`)
       } catch (err) {
-        return fail(`could not read ${file}: ${errMessage(err)}`)
+        return fail(`could not read ${file}: ${getErrorMessage(err)}`)
       }
     },
   }
-}
-
-function errMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
 }
 
 /** Run `docker info --format <fmt>` and return the trimmed value, or null on any error / empty. */

@@ -20,6 +20,7 @@ const recurring = useRecurringPipelinesStore()
 const tracker = useTrackerStore()
 const tasks = useTasksStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { t, te } = useI18n()
 
@@ -375,12 +376,15 @@ async function add() {
     })
     ui.closeAddRecurring()
   } catch (e) {
-    toast.add({
-      title: t('board.recurring.addFailedTitle'),
-      description: intakeRefusalCopy(e) ?? (e instanceof Error ? e.message : String(e)),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    const refusal = intakeRefusalCopy(e)
+    if (refusal) {
+      toast.add({
+        title: t('board.recurring.addFailedTitle'),
+        description: refusal,
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    } else present(e, 'board.recurring.addFailedTitle')
   } finally {
     saving.value = false
   }

@@ -23,6 +23,7 @@ import type {
 const board = useBoardStore()
 const brainstorm = useBrainstormStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
 
@@ -143,15 +144,6 @@ const STATUS_LABELS: Record<ReviewItemStatus, string> = {
   recommend_requested: 'brainstorm.itemStatus.recommend_requested',
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function submitReply(item: BrainstormItem) {
   if (!session.value) return
   const text = (drafts.value[item.id] ?? '').trim()
@@ -160,7 +152,7 @@ async function submitReply(item: BrainstormItem) {
     await brainstorm.reply(session.value, item.id, text)
     drafts.value = { ...drafts.value, [item.id]: '' }
   } catch (e) {
-    notifyError(t('brainstorm.toast.saveChoiceError'), e)
+    present(e, 'brainstorm.toast.saveChoiceError')
   }
 }
 
@@ -169,7 +161,7 @@ async function setStatus(item: BrainstormItem, itemStatus: BrainstormItemStatus)
   try {
     await brainstorm.setItemStatus(session.value, item.id, itemStatus)
   } catch (e) {
-    notifyError(t('brainstorm.toast.updateOptionError'), e)
+    present(e, 'brainstorm.toast.updateOptionError')
   }
 }
 
@@ -178,7 +170,7 @@ async function incorporate(feedback?: string) {
   try {
     await brainstorm.incorporate(session.value, feedback)
   } catch (e) {
-    notifyError(t('brainstorm.toast.incorporateError'), e)
+    present(e, 'brainstorm.toast.incorporateError')
     return
   }
   redoComment.value = ''
@@ -206,7 +198,7 @@ async function reReview() {
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {
-    notifyError(t('brainstorm.toast.reReviewError'), e)
+    present(e, 'brainstorm.toast.reReviewError')
   }
 }
 
@@ -217,7 +209,7 @@ async function proceed() {
     await brainstorm.proceed(blockId.value, activeStage.value)
     toast.add({ title: t('brainstorm.toast.proceeding'), icon: 'i-lucide-arrow-right' })
   } catch (e) {
-    notifyError(t('brainstorm.toast.proceedError'), e)
+    present(e, 'brainstorm.toast.proceedError')
   } finally {
     acting.value = false
   }
@@ -237,7 +229,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
       toast.add({ title: t('brainstorm.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
     }
   } catch (e) {
-    notifyError(t('brainstorm.toast.resolveError'), e)
+    present(e, 'brainstorm.toast.resolveError')
   } finally {
     acting.value = false
   }

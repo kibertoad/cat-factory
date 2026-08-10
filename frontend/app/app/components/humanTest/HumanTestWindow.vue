@@ -20,7 +20,7 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const humanTest = useHumanTestStore()
 const { t, d } = useI18n()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const access = useWorkspaceAccess()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -116,12 +116,7 @@ async function destroy() {
     await humanTest.destroyEnv(blockId.value)
     toastDone('destroy', noun)
   } catch (e) {
-    toast.add({
-      title: t('humanTest.destroyFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'humanTest.destroyFailed')
   }
 }
 

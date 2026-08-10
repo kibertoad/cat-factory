@@ -7,7 +7,12 @@ import type {
   ModelProviderResolver,
   ModelRef,
 } from '@cat-factory/kernel'
-import { extractJson, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
+import {
+  extractJson,
+  getErrorMessage,
+  resolveScopedModelProvider,
+  ValidationError,
+} from '@cat-factory/kernel'
 import {
   BUG_HUNT_AGENT_KIND,
   BUG_HUNT_SYSTEM_PROMPT,
@@ -96,11 +101,7 @@ export class BugHuntAssessorService implements BugHuntAssessor {
       })
       text = result.text
     } catch (e) {
-      throw this.fail(
-        subject,
-        ref,
-        `generation failed: ${e instanceof Error ? e.message : String(e)}`,
-      )
+      throw this.fail(subject, ref, `generation failed: ${getErrorMessage(e)}`)
     }
     const verdicts = extractJson(text)
     if (verdicts === null || typeof verdicts !== 'object') {

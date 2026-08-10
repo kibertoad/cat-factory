@@ -14,6 +14,7 @@ const props = defineProps<{ accountId: string }>()
 const store = useAccountSettingsStore()
 const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction } = useConfirmAction()
 
@@ -157,12 +158,7 @@ onMounted(async () => {
     // deep-link scroll here (the up-front watcher misses the target set before mount).
     void maybeScrollToStorage()
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.loadFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.loadFailed')
   }
 })
 
@@ -234,11 +230,7 @@ async function saveStorage() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.contentStorage.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.contentStorage.saveFailed')
   } finally {
     savingStorage.value = false
   }
@@ -269,11 +261,7 @@ async function saveSlack() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.slack.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.slack.saveFailed')
   } finally {
     savingSlack.value = false
   }
@@ -290,11 +278,7 @@ async function clearSlack() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.slack.clearFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.slack.clearFailed')
   } finally {
     savingSlack.value = false
   }
@@ -325,11 +309,7 @@ async function saveLinear() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.linear.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.linear.saveFailed')
   } finally {
     savingLinear.value = false
   }
@@ -346,11 +326,7 @@ async function clearLinear() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.linear.clearFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.linear.clearFailed')
   } finally {
     savingLinear.value = false
   }
@@ -381,11 +357,7 @@ async function saveFigma() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.figma.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.figma.saveFailed')
   } finally {
     savingFigma.value = false
   }
@@ -402,11 +374,7 @@ async function clearFigma() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.figma.clearFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.figma.clearFailed')
   } finally {
     savingFigma.value = false
   }
@@ -439,11 +407,7 @@ async function saveWeb() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.web.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.web.saveFailed')
   } finally {
     savingWeb.value = false
   }
@@ -460,11 +424,7 @@ async function clearWeb() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('layout.accountDeployment.web.clearFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'layout.accountDeployment.web.clearFailed')
   } finally {
     savingWeb.value = false
   }

@@ -23,6 +23,7 @@ const tracker = useTrackerStore()
 const tasks = useTasksStore()
 const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 // --- filing tracker + writeback (one Save, persisted on tracker settings) -----
 const trackerKind = ref<TrackerKind | null>(null)
@@ -119,12 +120,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.issueTracker.toast.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.issueTracker.toast.saveFailed')
   } finally {
     saving.value = false
   }
@@ -150,12 +146,7 @@ async function toggleSource(source: TaskSourceKind, enabled: boolean) {
   try {
     await tasks.setEnabled(source, enabled)
   } catch (e) {
-    toast.add({
-      title: t('settings.issueTracker.toast.updateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.issueTracker.toast.updateFailed')
   } finally {
     togglingSource.value = null
   }
@@ -189,12 +180,7 @@ async function checkSetup(source: TaskSourceKind) {
   try {
     await tasks.checkSetup(source)
   } catch (e) {
-    toast.add({
-      title: t('settings.issueTracker.toast.checkFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.issueTracker.toast.checkFailed')
   }
 }
 </script>

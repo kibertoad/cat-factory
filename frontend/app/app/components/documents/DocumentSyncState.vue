@@ -39,7 +39,7 @@ const props = defineProps<{ doc: SourceDocument }>()
 
 const { t, d } = useI18n()
 const documents = useDocumentsStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 /**
  * The source to ask, or null for an origin with nobody to ask. An `upload` was handed to the
@@ -159,12 +159,7 @@ async function refresh() {
   try {
     await documents.refresh(source, props.doc.externalId)
   } catch (e) {
-    toast.add({
-      title: t('documents.freshness.refreshFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.freshness.refreshFailed')
   }
 }
 </script>

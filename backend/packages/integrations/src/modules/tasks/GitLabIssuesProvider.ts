@@ -1,12 +1,11 @@
 import {
-  ConflictError,
-  UnavailableError,
-  ValidationError,
   type BugCandidate,
+  ConflictError,
+  getErrorMessage,
   type GitHubClient,
   type GitHubInstallation,
-  type GitHubIssueSearchHit,
   type GitHubInstallationRepository,
+  type GitHubIssueSearchHit,
   type IssueIntakeQuery,
   type NormalizedTaskConnection,
   type TaskContent,
@@ -17,6 +16,8 @@ import {
   type TaskSourceProvider,
   type TaskSourceWritebackAdapter,
   type TrackerBoard,
+  UnavailableError,
+  ValidationError,
 } from '@cat-factory/kernel'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import { GITLAB_ISSUES_DESCRIPTOR } from './gitlab-issues.logic.js'
@@ -503,7 +504,7 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
     return {
       ...base,
       status: 'error',
-      message: `GitLab returned ${status} while ${whileDoing}: ${err instanceof Error ? err.message : String(err)}`,
+      message: `GitLab returned ${status} while ${whileDoing}: ${getErrorMessage(err)}`,
     }
   }
 

@@ -40,6 +40,7 @@ const github = useGitHubStore()
 const board = useBoardStore()
 const services = useServicesStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 
 const open = computed({
@@ -353,12 +354,7 @@ async function add() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('github.addService.toast.addFailedTitle'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'github.addService.toast.addFailedTitle')
   } finally {
     adding.value = false
   }
@@ -431,12 +427,7 @@ async function addServices() {
       color: wiringLanded ? 'success' : 'warning',
     })
   } catch (e) {
-    toast.add({
-      title: t('github.addService.toast.addFailedTitle'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'github.addService.toast.addFailedTitle')
   } finally {
     adding.value = false
   }

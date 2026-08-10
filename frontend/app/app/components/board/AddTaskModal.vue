@@ -59,6 +59,7 @@ const pipelines = usePipelinesStore()
 const agentConfig = useAgentConfigStore()
 const fragments = useFragmentsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 const { resolvePending, linkPending, presentLinkFailures } = useContextLinking()
@@ -730,12 +731,15 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
       openReviewFrictionDialog(conflict)
       return
     }
-    toast.add({
-      title: t('board.addTask.addFailedTitle'),
-      description: createRefusalMessage(e) ?? (e instanceof Error ? e.message : String(e)),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    const refusal = createRefusalMessage(e)
+    if (refusal) {
+      toast.add({
+        title: t('board.addTask.addFailedTitle'),
+        description: refusal,
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    } else present(e, 'board.addTask.addFailedTitle')
   } finally {
     saving.value = false
   }

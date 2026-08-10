@@ -40,6 +40,7 @@ const library =
 const documents = useDocumentsStore()
 const github = useGitHubStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
@@ -104,15 +105,6 @@ function tabLabel(which: Tab): string {
   return t('fragments.tab.sources')
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 // Per-row / per-form in-flight tracking. The store's single `library.loading` flag
 // drove every row's button at once (UX-29) and cross-spun the add/link forms; key
 // each async action so only the control that triggered it shows a spinner.
@@ -156,7 +148,7 @@ async function autofillTitle(
     })
     set(title)
   } catch (e) {
-    notifyError(t('fragments.authored.titleGenFailed'), e)
+    present(e, 'fragments.authored.titleGenFailed')
   } finally {
     generatingTitleFor.value = null
   }
@@ -225,7 +217,7 @@ async function saveEdit() {
       editDraft.value = null
       toast.add({ title: t('fragments.toast.updated'), icon: 'i-lucide-check' })
     } catch (e) {
-      notifyError(t('fragments.toast.updateFailed'), e)
+      present(e, 'fragments.toast.updateFailed')
     }
   })
 }
@@ -247,7 +239,7 @@ async function createFragment() {
     draft.value = { title: '', summary: '', body: '', brief: '', tags: '' }
     toast.add({ title: t('fragments.toast.added'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('fragments.toast.addFailed'), e)
+    present(e, 'fragments.toast.addFailed')
   } finally {
     creating.value = false
   }
@@ -268,7 +260,7 @@ async function removeFragment(id: string) {
       await library.remove(id)
       toast.add({ title: t('fragments.toast.removed'), icon: 'i-lucide-trash-2' })
     } catch (e) {
-      notifyError(t('fragments.toast.removeFailed'), e)
+      present(e, 'fragments.toast.removeFailed')
     }
   })
 }
@@ -462,13 +454,13 @@ async function linkDocumentFragment() {
       })
     }
     if (firstError) {
-      notifyError(t('fragments.toast.linkDocumentFailed'), firstError)
+      present(firstError, 'fragments.toast.linkDocumentFailed')
     } else {
       // Everything staged linked — clear the whole draft (also resets repo/source selection).
       docDraft.value = { source: '', ref: '', tags: '' }
     }
   } catch (e) {
-    notifyError(t('fragments.toast.linkDocumentFailed'), e)
+    present(e, 'fragments.toast.linkDocumentFailed')
   } finally {
     linkingDoc.value = false
   }
@@ -480,7 +472,7 @@ async function refreshFragment(id: string) {
       await library.refreshDocumentFragment(id)
       toast.add({ title: t('fragments.toast.refreshed'), icon: 'i-lucide-refresh-cw' })
     } catch (e) {
-      notifyError(t('fragments.toast.refreshFailed'), e)
+      present(e, 'fragments.toast.refreshFailed')
     }
   })
 }
@@ -537,7 +529,7 @@ async function linkSource() {
     await library.syncSource(source.id)
     toast.add({ title: t('fragments.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
   } catch (e) {
-    notifyError(t('fragments.toast.linkSourceFailed'), e)
+    present(e, 'fragments.toast.linkSourceFailed')
   } finally {
     linkingSource.value = false
   }
@@ -556,7 +548,7 @@ async function syncSource(id: string) {
         color: 'info',
       })
     } catch (e) {
-      notifyError(t('fragments.toast.syncFailed'), e)
+      present(e, 'fragments.toast.syncFailed')
     }
   })
 }
@@ -572,7 +564,7 @@ async function checkSource(id: string) {
         icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
       })
     } catch (e) {
-      notifyError(t('fragments.toast.checkSourceFailed'), e)
+      present(e, 'fragments.toast.checkSourceFailed')
     }
   })
 }
@@ -593,7 +585,7 @@ async function unlinkSource(id: string) {
       await library.unlinkSource(id)
       toast.add({ title: t('fragments.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
     } catch (e) {
-      notifyError(t('fragments.toast.unlinkSourceFailed'), e)
+      present(e, 'fragments.toast.unlinkSourceFailed')
     }
   })
 }

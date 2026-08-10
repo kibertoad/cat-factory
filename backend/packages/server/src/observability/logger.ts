@@ -1,10 +1,11 @@
 import pino from 'pino'
 import {
+  getErrorMessage,
   type LogFields,
+  type Logger,
   type LogLevel,
   type LogSink,
   type LogThreshold,
-  type Logger,
   noopLogger,
 } from '@cat-factory/kernel'
 
@@ -145,7 +146,7 @@ export function serialize(o: object): string {
     const msg = (o as { msg?: unknown }).msg
     return JSON.stringify({
       ...(typeof msg === 'string' ? { msg } : {}),
-      logSerializationError: error instanceof Error ? error.message : String(error),
+      logSerializationError: getErrorMessage(error),
     })
   }
 }

@@ -8,6 +8,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   describeComposeSource,
+  getErrorMessage,
   materializedComposePath,
   normalizeComposeFileRefs,
 } from '@cat-factory/kernel'
@@ -895,9 +896,7 @@ export function prepareComposeProject(
   } catch (err) {
     return {
       content: renderedText,
-      issues: [
-        `compose file is not valid YAML: ${err instanceof Error ? err.message : String(err)}`,
-      ],
+      issues: [`compose file is not valid YAML: ${getErrorMessage(err)}`],
     }
   }
   if (!parsed || typeof parsed !== 'object') {
@@ -1128,9 +1127,7 @@ function parseRecipeComposeDoc(input: RecipeComposeInput): { doc?: ComposeDoc; i
     parsed = parse(input.text)
   } catch (err) {
     return {
-      issue: `compose file '${input.path}' is not valid YAML: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      issue: `compose file '${input.path}' is not valid YAML: ${getErrorMessage(err)}`,
     }
   }
   if (!parsed || typeof parsed !== 'object') {

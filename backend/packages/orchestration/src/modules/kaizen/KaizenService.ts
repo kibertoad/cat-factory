@@ -20,6 +20,7 @@ import type {
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   extractJson,
+  getErrorMessage,
   resolveScopedModelProvider,
 } from '@cat-factory/kernel'
 import { generateText } from 'ai'
@@ -254,7 +255,7 @@ export class KaizenService {
       await this.updateCombo(workspaceId, complete, now)
       await this.emit(workspaceId, complete)
     } catch (e) {
-      await this.fail(workspaceId, running, e instanceof Error ? e.message : String(e))
+      await this.fail(workspaceId, running, getErrorMessage(e))
     }
   }
 

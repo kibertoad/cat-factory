@@ -1,5 +1,6 @@
 import type { Logger, ServerContainer, TrackerWebhookIngest } from '@cat-factory/server'
 import { createQueueWithDeadLetter } from './deadLetter.js'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { Job, PgBoss, SendOptions } from 'pg-boss'
 
@@ -95,7 +96,7 @@ export async function startTrackerSyncWorker(
             workspaceId: job.data.workspaceId,
             source: job.data.event.source,
             kind: job.data.event.kind,
-            err: error instanceof Error ? error.message : String(error),
+            err: getErrorMessage(error),
           })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }

@@ -15,6 +15,7 @@ const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const creds = useVendorCredentialsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -131,11 +132,7 @@ async function add() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('providers.vendorCredentials.toast.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.vendorCredentials.toast.connectFailed')
   } finally {
     busy.value = false
   }
@@ -145,11 +142,7 @@ async function toggleEnabled(cred: { id: string }, enabled: boolean) {
   try {
     await creds.update(cred.id, { enabled })
   } catch (e) {
-    toast.add({
-      title: t('providers.vendorCredentials.toast.updateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.vendorCredentials.toast.updateFailed')
   }
 }
 
@@ -157,11 +150,7 @@ async function toggleDefault(cred: { id: string; isDefault: boolean }) {
   try {
     await creds.update(cred.id, { isDefault: !cred.isDefault })
   } catch (e) {
-    toast.add({
-      title: t('providers.vendorCredentials.toast.updateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.vendorCredentials.toast.updateFailed')
   }
 }
 
@@ -177,11 +166,7 @@ async function remove(cred: { id: string; label: string }) {
   try {
     await creds.remove(cred.id)
   } catch (e) {
-    toast.add({
-      title: t('providers.vendorCredentials.toast.removeFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.vendorCredentials.toast.removeFailed')
   }
 }
 

@@ -11,7 +11,7 @@ import type {
   OperationalGauge,
   OperationalGaugeSample,
 } from '@cat-factory/kernel'
-import { SPAN_ID_FIELD, TRACE_ID_FIELD } from '@cat-factory/kernel'
+import { getErrorMessage, SPAN_ID_FIELD, TRACE_ID_FIELD } from '@cat-factory/kernel'
 import type { PlatformObservability } from '@cat-factory/contracts'
 
 // The SINGLE source of truth for how a cat-factory observability event becomes
@@ -946,13 +946,13 @@ export function logAttributeValue(value: unknown): AttributeValue | undefined {
     // A cycle, a BigInt inside an object, a throwing `toJSON`: the same class the pino
     // browser writer guards against, for the same reason: a field bag we cannot render must
     // not remove the line, which is the only evidence that the code path ran at all.
-    return `[unserializable: ${error instanceof Error ? error.message : String(error)}]`
+    return `[unserializable: ${getErrorMessage(error)}]`
   }
 }
 
 /** Render a value this mapping could not read at all, in the `logAttributeValue` vocabulary. */
 function unreadable(error: unknown): string {
-  return `[unreadable: ${error instanceof Error ? error.message : String(error)}]`
+  return `[unreadable: ${getErrorMessage(error)}]`
 }
 
 /**

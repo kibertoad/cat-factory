@@ -16,11 +16,12 @@ import type {
 } from '@cat-factory/kernel'
 import {
   assertFound,
+  DEFAULT_MAX_REQUIREMENT_ITERATIONS,
   describeOwnService,
+  getErrorMessage,
+  resolveScopedModelProvider,
   resolveServiceFrameBlock,
   ReviewContendedError,
-  DEFAULT_MAX_REQUIREMENT_ITERATIONS,
-  resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
 import {
@@ -582,9 +583,7 @@ export abstract class IterativeReviewService<
   private reviewerFailed(ref: ModelRef, e: unknown): string {
     // Surface the real cause (binding missing, rate limit, provider error) rather than
     // masking every failure behind one vague message.
-    return `The ${this.reviewerLabel} (${ref.provider}:${ref.model}) failed: ${
-      e instanceof Error ? e.message : String(e)
-    }`
+    return `The ${this.reviewerLabel} (${ref.provider}:${ref.model}) failed: ${getErrorMessage(e)}`
   }
 
   /** Run the reviewer LLM over the prepared context and coerce the JSON into review items. */

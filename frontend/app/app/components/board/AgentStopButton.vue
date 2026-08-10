@@ -23,6 +23,7 @@ const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
 const access = useWorkspaceAccess()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 const stopping = ref(false)
 
@@ -50,11 +51,7 @@ async function stop() {
       color: 'warning',
     })
   } catch (e) {
-    toast.add({
-      title: t('board.stop.stopFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'board.stop.stopFailed')
   } finally {
     stopping.value = false
   }

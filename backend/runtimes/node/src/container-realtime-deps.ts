@@ -12,6 +12,7 @@ import {
   type AgentExecutor,
   type Clock,
   CompositeNotificationChannel,
+  getErrorMessage,
   type ModelProviderResolver,
   type NotificationChannel,
 } from '@cat-factory/kernel'
@@ -96,7 +97,7 @@ function selectNodeSlackDeps(
       // invite) through the structured logger so a broken route is diagnosable.
       onError: (error, ctx) =>
         logger.warn('slack notification delivery failed', {
-          err: error instanceof Error ? error.message : String(error),
+          err: getErrorMessage(error),
           ...ctx,
         }),
     }),
@@ -169,17 +170,17 @@ function selectNodeNotificationWebhookSupport(
     // through the structured logger so a broken receiver is diagnosable.
     onError: (error, ctx) =>
       logger.warn('notification webhook delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
         ...ctx,
       }),
     onRunEventError: (error, ctx) =>
       logger.warn('run lifecycle webhook delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
         ...ctx,
       }),
     onPlatformAlertError: (error, ctx) =>
       logger.warn('platform health webhook delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
         ...ctx,
       }),
   })
