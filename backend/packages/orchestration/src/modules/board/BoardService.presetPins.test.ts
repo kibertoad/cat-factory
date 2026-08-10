@@ -93,7 +93,12 @@ describe('BoardService: a pinned preset must name something', () => {
   it('refuses a patch that re-points at nothing, leaving the previous pin in force', async () => {
     const { service, blocks } = build([FRAME, block({ riskPolicyId: POLICY.id })])
     await expect(
-      service.updateBlock(WS, 'task_1', { riskPolicyId: 'mp_nope' }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY),
+      service.updateBlock(
+        WS,
+        'task_1',
+        { riskPolicyId: 'mp_nope' },
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+      ),
     ).rejects.toMatchObject({ details: { reason: 'risk_policy_not_found' } })
     expect(blocks[1]?.riskPolicyId).toBe(POLICY.id)
   })

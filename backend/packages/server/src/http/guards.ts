@@ -43,7 +43,11 @@ export function requireUser<E extends AppEnv>(c: Context<E>, message: string): S
  * `details.reason: 'model_presets_unwired'` from a refused pin, and then string-matches prose on
  * the list endpoint it hits first, is being asked to handle one condition two ways.
  */
-export function requireCapability<T>(value: T | undefined | null, message: string, reason?: string): T {
+export function requireCapability<T>(
+  value: T | undefined | null,
+  message: string,
+  reason?: string,
+): T {
   if (value === undefined || value === null) throw new UnavailableError(message, reason)
   return value
 }

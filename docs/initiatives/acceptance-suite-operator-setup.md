@@ -51,12 +51,12 @@ is the suite working as designed.
 
 Ordered by what unblocks a live pass soonest. A is independent and can land at any point.
 
-| #   | Slice                                                                        | PR                                                     |
-| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------ |
+| #   | Slice                                                                        | PR                                                          |
+| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | B   | Public model-preset surface: list, plus `modelPresetId` on task create       | [#1940](https://github.com/kibertoad/cat-factory/pull/1940) |
-| C   | Suite adopts operator-created repos, and pins the configured preset          |                                                        |
-| D   | `configure` command: defaults, the token, the repo names, the creation pages |                                                        |
-| A   | OpenAI catalog entry and a `chatgpt` built-in preset                         |                                                        |
+| C   | Suite adopts operator-created repos, and pins the configured preset          |                                                             |
+| D   | `configure` command: defaults, the token, the repo names, the creation pages |                                                             |
+| A   | OpenAI catalog entry and a `chatgpt` built-in preset                         |                                                             |
 
 ### B. Public preset surface
 
