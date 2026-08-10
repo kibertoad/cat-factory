@@ -82,6 +82,11 @@ const UNATTRIBUTED: Record<string, string> = {
     'a headless `/api/v1` caller authenticates as an API KEY, which holds scopes rather than a ' +
     'workspace tier, so there is no role for a merge preset to sandbox or narrow, and the task ' +
     'patch contract exposes title/description only, so no preset can be selected here in any case.',
+  'server:modules/publicApi/PublicProvisioningController.ts':
+    'the `/api/v1` service PATCH route, on the same API-key reading as the task routes below: a ' +
+    'key holds scopes rather than a workspace tier, so no role-scoped restriction exists for a ' +
+    'preset selection to drop. `toBlockPatch` also lowers the body key by key rather than ' +
+    'spreading it, so no preset reaches `updateBlock` even if the public schema gains one.',
   'server:modules/publicApi/taskCreation.ts':
     'the `/api/v1` task CREATION route, on the same API-key reading as the patch route above. ' +
     'Stated at the route rather than inside `addServiceTask`, because that method takes a full ' +

@@ -26,15 +26,17 @@ export type ClusterConfig = {
 }
 
 export type AcceptanceConfig = {
-  /** Backend origin serving BOTH `/api/v1` and the app API. */
+  /** Backend origin serving `/api/v1`, plus the two unauthenticated deployment root reads. */
   baseUrl: string
   /** A public-API key at `admin` (spec 03 answers a human gate, so it must also carry `decide`). */
   apiKey: string
   /**
-   * The workspace the key is bound to. The public API never names it (every call is implicitly
-   * scoped), but the app-API escape hatch is mounted under `/workspaces/:workspaceId`, so the
-   * three calls `/api/v1` does not serve need it spelled out. `GET /api/v1/me` reports it, and
-   * `assertWorkspaceMatchesKey` checks the two agree before anything is created.
+   * The workspace the key is bound to.
+   *
+   * Every `/api/v1` call is implicitly scoped to it, so nothing sends it on the wire. It is
+   * configured anyway because `assertWorkspaceMatchesKey` checks it against what `GET /api/v1/me`
+   * reports before anything is created: a key pasted from another workspace otherwise bootstraps
+   * two repositories onto a board nobody was watching, and every later assertion still passes.
    */
   workspaceId: string
   /** GitHub owner (user or org) the bootstrapped repositories are created under. */

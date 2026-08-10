@@ -1,4 +1,11 @@
-import type { Block, PublicService, PublicTask } from '@cat-factory/contracts'
+import {
+  publicKubernetesRendererSchema,
+  type Block,
+  type KubernetesManifestSource,
+  type PublicKubernetesManifestSource,
+  type PublicService,
+  type PublicTask,
+} from '@cat-factory/contracts'
 
 // The `Block` → public-resource projections, shared by every controller that answers with one.
 //
@@ -30,13 +37,60 @@ export function toPublicTask(block: Block, serviceId: string): PublicTask {
   }
 }
 
-/** Project a service frame block onto the external service resource. */
+/**
+ * Project a service frame block onto the external service resource.
+ *
+ * `provisioning` is projected only for the shapes this surface publishes (today `kubernetes`). A
+ * service provisioned through another engine reports NOTHING here rather than a coerced value: the
+ * public union cannot describe it, and answering with the nearest member would tell a caller its
+ * service deploys from manifests it never declared.
+ */
 export function toPublicService(frame: Block): PublicService {
+  const provisioning = frame.provisioning
+  const manifestSource =
+    provisioning?.type === 'kubernetes' && provisioning.manifestSource
+      ? toPublicManifestSource(provisioning.manifestSource)
+      : null
   return {
     serviceId: frame.id,
     title: frame.title,
     description: frame.description,
     type: frame.type,
     status: frame.status,
+    ...(manifestSource ? { provisioning: { type: 'kubernetes' as const, manifestSource } } : {}),
   }
 }
+
+/**
+ * Lift a stored manifest source onto the published one, or null when this surface cannot describe
+ * it.
+ *
+ * The public shape is a PROJECTION of the internal one rather than the internal one (see the
+ * contracts header), so the lift is explicit in both directions. Null is the same disposition the
+ * caller above already takes for a non-Kubernetes engine, and it is what makes a stored value this
+ * build cannot express (a source kind or a renderer added by a deployment ahead of this one)
+ * report as "nothing published" rather than as a manifest source with a member silently dropped.
+ */
+function toPublicManifestSource(
+  source: KubernetesManifestSource,
+): PublicKubernetesManifestSource | null {
+  if (source.renderer !== undefined && !PUBLIC_RENDERERS.has(source.renderer)) return null
+  const renderer = source.renderer === undefined ? {} : { renderer: source.renderer }
+  if (source.type === 'colocated') return { type: 'colocated', path: source.path, ...renderer }
+  if (source.type === 'separate') {
+    return {
+      type: 'separate',
+      repo: source.repo,
+      ...(source.ref === undefined ? {} : { ref: source.ref }),
+      path: source.path,
+      ...renderer,
+    }
+  }
+  return null
+}
+
+/**
+ * The renderers this surface publishes, DERIVED from the public picklist rather than restated, so
+ * adding one there is all it takes for a stored value to start being reported.
+ */
+const PUBLIC_RENDERERS: ReadonlySet<string> = new Set(publicKubernetesRendererSchema.options)

@@ -7,7 +7,7 @@
 // trusting an object a previous file left behind.
 
 import type { CatFactoryClient } from '@cat-factory/sdk'
-import { AppApi } from '../src/appApi.ts'
+import { DeploymentApi } from '../src/deploymentApi.ts'
 import { type AcceptanceConfig, requireConfig } from '../src/config.ts'
 import { Journal } from '../src/journal.ts'
 import {
@@ -24,8 +24,8 @@ export type Harness = {
   config: AcceptanceConfig
   /** The published SDK, pointed at the deployment. The suite's primary surface. */
   client: CatFactoryClient
-  /** The setup calls and preflight probes `/api/v1` does not serve. See `src/appApi.ts`. */
-  app: AppApi
+  /** The two deployment ROOT reads, which take no credential. See `src/deploymentApi.ts`. */
+  deployment: DeploymentApi
   world: WorldStore
   /** The pass's durable progress record. Every spec's observations land here. */
   journal: Journal
@@ -49,7 +49,7 @@ function currentHarness(): Harness {
   cached = {
     config,
     client: createClient(config),
-    app: new AppApi({ baseUrl: config.baseUrl, workspaceId: config.workspaceId }),
+    deployment: new DeploymentApi({ baseUrl: config.baseUrl }),
     world,
     journal: new Journal(world.dir, runId),
   }
@@ -89,13 +89,13 @@ let preflight: Promise<PreflightReport> | null = null
  */
 export function preflightReport(): Promise<PreflightReport> {
   if (preflight) return preflight
-  const { config, client, app, world, journal } = currentHarness()
+  const { config, client, deployment, world, journal } = currentHarness()
   preflight = runPreflight(
     PREREQUISITES,
     {
       config,
       client,
-      app,
+      deployment,
       serviceTitles: Object.values(serviceTitles(config.namePrefix)),
       hasBootstrappedServices: Boolean(world.value.backend ?? world.value.frontend),
     },

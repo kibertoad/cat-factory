@@ -35,7 +35,7 @@ const LATEST_POINTER = 'latest.json'
 
 /** One repository the suite bootstrapped, and the board service frame it materialised. */
 export type ServiceRecord = {
-  /** The board block id of the service frame (the app API addresses blocks by this). */
+  /** The board block id of the service frame, which `/api/v1` addresses as a `serviceId`. */
   blockId: string
   /** The same frame as `/api/v1` names it. Identical value; both spellings appear in the specs. */
   serviceId: string

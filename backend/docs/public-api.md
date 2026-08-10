@@ -475,6 +475,7 @@ mapping, so it always agrees with the field it filters on.
 | `POST /api/v1/tasks/:taskId/retry`               | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                        |
 | `DELETE /api/v1/tasks/:taskId`                   | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                            |
 | `POST /api/v1/services`                          | `admin`  | Create a service, optionally backed by a repository. See [Provisioning the board](#provisioning-the-board).                                                                                                                                                                                                             |
+| `PATCH /api/v1/services/:serviceId`              | `admin`  | Patch a service's authored fields, and declare its `provisioning`: where a per-run environment's manifests are read from. See [Deployment provisioning](#deployment-provisioning).                                                                                                                                      |
 | `GET /api/v1/repos`                              | `read`   | The repositories a service can be created against, and which service each already backs.                                                                                                                                                                                                                                |
 | `GET /api/v1/services/:serviceId/spec`           | `read`   | The service's in-repo **specification**: the requirement tree, the Gherkin rendered from it, and the commit both were read at. See [Service specification](#service-specification).                                                                                                                                     |
 | `POST /api/v1/tasks/:taskId/dependencies`        | `write`  | Declare that this task waits for another. Declare a dependency. Idempotent. See [Ordering a batch of tasks](#ordering-a-batch-of-tasks).                                                                                                                                                                                |
@@ -940,6 +941,127 @@ The inline-only rule stays jobs-only: a `decide` key may start container pipelin
 Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically
 knowable, so they do not gate the start; see
 [ADR 0043](./adr/0043-public-decision-surface.md) for which parks the decision surface can answer.
+
+### Deployment provisioning
+
+Everything above assumes a workspace that already has a repository, a cluster and a wired model. This
+group is how a caller gets there without a browser: create the repository, connect the cluster, tell
+a service where its manifests live, and read back what the deployment actually has.
+
+| Method / path                                | Scope   | Behaviour                                                                                                       |
+| -------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/repos/bootstrap`               | `admin` | Create a repository and adapt it with the bootstrapper agent. `201` with a job to poll.                         |
+| `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                             |
+| `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`. |
+| `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                 |
+| `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                  |
+| `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                 |
+| `GET /api/v1/merge-presets`                  | `admin` | The merge-threshold presets, including which is the workspace default.                                          |
+
+**The three reads are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
+is what they name: those name board CONTENT, where these name what the DEPLOYMENT has wired,
+including the permissions its source-control credential holds. A caller that can read them is
+already at the rung that could change them. (A scope can be relaxed later and never tightened, so
+where the reading was close the reversible one wins.)
+
+#### Bootstrapping a repository
+
+```http
+POST /api/v1/repos/bootstrap
+{ "repoName": "payments-api", "type": "service",
+  "instructions": "A Fastify service exposing a paginated catalog over Postgres." }
+
+201 { "jobId": "bsj_...", "status": "running", "repoName": "payments-api",
+      "repoOwner": null, "repoUrl": null, "serviceId": "blk_...", "progress": null,
+      "error": null, "failureKind": null, "failureDetail": null, "failureHint": null,
+      "createdAt": 1760000000000, "updatedAt": 1760000000000 }
+```
+
+Either `instructions` or a `referenceArchitectureId` is required: a request with neither describes no
+work. `serviceId` is the board frame the run materialises, and it exists from the first response, so
+work can be filed against the service before the repository has finished being written.
+
+A creation answers `running` or, when the pre-flight refuses it outright (nothing connected, the
+target repository already has content), `failed` with the reason already filled in. So the terminal
+state can arrive in the 201 itself, and a caller that treats a `failed` creation as impossible skips
+the branch it will actually hit first.
+
+**Poll until `status` is `succeeded` or `failed`.** On a failure, read `failureKind` before deciding
+to retry: a `preflight` refusal (the target repository already has content, nothing is connected)
+cannot be retried into success, where an `evicted` container can. `failureDetail` and `failureHint`
+carry the platform's own diagnosis verbatim, so prefer relaying them over paraphrasing them.
+
+#### Connecting a cluster, and pointing a service at its manifests
+
+The platform keeps these two deliberately apart: the ENGINE (one cluster per workspace, and how a URL
+is derived) and the SOURCE (one set of manifests per service). **A cluster alone provisions nothing.**
+Connecting one and skipping the per-service half leaves every deploy step reading an empty manifest
+source, which surfaces as an empty environment that looks like a cluster fault.
+
+```http
+POST /api/v1/environments/connections/test
+{ "connection": { "engine": "kubernetes",
+    "kubernetes": { "label": "Staging", "apiServerUrl": "https://cluster.example:6443",
+      "namespaceTemplate": "env-{{pullNumber}}",
+      "url": { "source": "ingressTemplate", "hostTemplate": "{{namespace}}.preview.example.com" } } },
+  "secrets": { "apiToken": "..." } }
+
+200 { "ok": true, "message": "Reached the apiserver" }
+```
+
+Send the same body to `POST /api/v1/environments/connections` to persist it. The response reports
+which secret KEYS were stored and never their values, and no read returns them: a credential goes in
+and does not come back out. Probe first, because the alternative is discovering an unreachable cluster
+on the deploy step of a run that has already paid for an implementation.
+
+```http
+PATCH /api/v1/services/blk_...
+{ "provisioning": { "type": "kubernetes",
+    "manifestSource": { "type": "colocated", "path": "deploy/k8s", "renderer": "raw" } } }
+```
+
+`provisioning` is a discriminated union whose non-matching branches are IGNORED, so read it back off
+the response rather than trusting the `200`: a wrong-shaped patch is accepted and stored as something
+the deploy step later reads as "no manifests". An omitted `provisioning` leaves the stored one alone,
+so patching a title cannot silently un-deploy a service.
+
+A supplied `provisioning` OVERLAYS the stored one rather than replacing it, as long as the provision
+type is the same. A service configured in the app can carry more than this surface publishes (image
+overrides, Secret injections, helm releases), and a caller correcting a manifest path has no way to
+restate what it never saw; a wholesale write would drop it and the next deploy would come up with no
+images and no Secrets. Changing the provision type does replace, because the remainder describes the
+type being left behind. The patch must name at least one field: an empty body is refused rather than
+spent on a write whose only outcome is the state it started in.
+
+The public engine is `kubernetes`, singular. The platform's internal vocabulary splits it in two, and
+that split is not published because one backend serves both and they lower to the same config: it was
+never observable in anything a run does.
+
+#### Reading what is wired
+
+`GET /api/v1/models` separates two states that need OPPOSITE fixes. `available: false` with
+`policyBlocked: false` means nothing is configured for that model, so add a provider key.
+`policyBlocked: true` means it IS configured and the account's model-family policy refuses it, so
+adding a key changes nothing and the fix is the policy. Collapsing the two is why "no model
+available" so often sends someone to change a setting that was already correct.
+
+There is a third state, and it is on the RESPONSE rather than on a model: `excludesUserScopedModels`
+reports that this deployment serves per-user locally-run endpoints, which this read cannot
+enumerate. They belong to one signed-in developer's machine and an API key has no developer, so they
+are absent from `models` entirely. On a deployment wired that way alone, every catalog row reads
+`available: false` and the honest remedy is a run started by that user, not a provider key.
+
+`GET /api/v1/vcs/connection` exists for `canCreateRepos` and `canManageWorkflows`. Both are enforced
+by the provider at PUSH time, so a caller that does not check them discovers a missing workflow
+permission as a repository that bootstrapped and then failed to gain its CI workflow, which reads as
+a broken bootstrap.
+
+`GET /api/v1/merge-presets`: `autoMergeEnabled` on the `isDefault` row decides whether a run can land
+its pull request without a person. `dryRunRoles` and `submissionRestrictedRoles` are the two caveats
+this API cannot resolve for you, since it does not report which workspace role your key's runs are
+admitted under: the first names roles whose runs open a pull request and never merge it, the second
+names roles that may land only certain change classes. Either being non-empty means the preset merges
+for some roles and not others, so report the caveat rather than concluding "this preset merges".
 
 ### Task runs & streaming
 

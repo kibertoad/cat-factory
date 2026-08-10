@@ -22,6 +22,10 @@ public abstract class Resources {
     private final PipelinesClient pipelines;
     private final TaskTypesClient taskTypes;
     private final NotificationsClient notifications;
+    private final EnvironmentsClient environments;
+    private final ModelsClient models;
+    private final VcsClient vcs;
+    private final MergePresetsClient mergePresets;
     private final WebhookClient webhook;
     private final UsageClient usage;
     private final MeClient me;
@@ -40,6 +44,10 @@ public abstract class Resources {
         this.pipelines = new PipelinesClient(transport);
         this.taskTypes = new TaskTypesClient(transport);
         this.notifications = new NotificationsClient(transport);
+        this.environments = new EnvironmentsClient(transport);
+        this.models = new ModelsClient(transport);
+        this.vcs = new VcsClient(transport);
+        this.mergePresets = new MergePresetsClient(transport);
         this.webhook = new WebhookClient(transport);
         this.usage = new UsageClient(transport);
         this.me = new MeClient(transport);
@@ -55,7 +63,7 @@ public abstract class Resources {
         return jobs;
     }
 
-    /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
+    /** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), or patch one, including declaring where the manifests for its per-run environments are read from. */
     public ServicesClient services() {
         return services;
     }
@@ -65,7 +73,7 @@ public abstract class Resources {
         return spec;
     }
 
-    /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+    /** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the repository with an agent and reports the board service it materialises. */
     public ReposClient repos() {
         return repos;
     }
@@ -88,6 +96,26 @@ public abstract class Resources {
     /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */
     public NotificationsClient notifications() {
         return notifications;
+    }
+
+    /** The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values. */
+    public EnvironmentsClient environments() {
+        return environments;
+    }
+
+    /** The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes. */
+    public ModelsClient models() {
+        return models;
+    }
+
+    /** The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup. */
+    public VcsClient vcs() {
+        return vcs;
+    }
+
+    /** The merge-threshold presets a task can resolve, including which is the workspace default: what decides whether a run can land its pull request without a person. */
+    public MergePresetsClient mergePresets() {
+        return mergePresets;
     }
 
     /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */

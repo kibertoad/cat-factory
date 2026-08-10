@@ -115,9 +115,9 @@ caveat rather than graded, which is the honest disposition for an answer the pro
 
 **The deployment**
 
-- Running in **local mode** (`@cat-factory/local-server`) with `AUTH_DEV_OPEN=true` (local mode's
-  default). The setup calls and the preflight probes use the session-authed app API; see "The
-  escape hatch" below.
+- Running in **local mode** (`@cat-factory/local-server`), or any deployment you hold an `admin`
+  key for. Nothing here needs the deployment to run open: every call the suite makes is either
+  key-authenticated against `/api/v1` or one of the two unauthenticated deployment root reads.
 - `ENCRYPTION_KEY` set, or `/api/v1` answers `503` on every call.
 - A **container runtime** for the agent jobs.
 
@@ -143,7 +143,7 @@ cluster (a public package, or an `imagePullSecret` you have already installed).
 
 | Variable                               | Required | What it is                                                                                                                                                                         |
 | -------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves both `/api/v1` and the app API.                                                                                               |
+| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves `/api/v1` and the deployment root reads.                                                                                      |
 | `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (spec 03 also needs the `decide` rung it includes).                                                                                            |
 | `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                                                                                                    |
 | `ACCEPTANCE_REPO_OWNER`                | yes      | GitHub owner the bootstrapped repositories are created under.                                                                                                                      |
@@ -265,29 +265,23 @@ that `src/deadline.ts` fires first: "timed out after 5400000ms" is true and usel
 **4. Every failing claim is reported, not just the first.** A run that both skipped its environment
 and failed CI is one story, and learning the second half on tomorrow's re-run wastes a day per bug.
 
-## The escape hatch
+## The two calls that are not `/api/v1`
 
-The suite drives `/api/v1` through the **published TypeScript SDK**, the same artifact an
+The suite drives the public API through the **published TypeScript SDK**, the same artifact an
 integrator installs, so a surface change that would break an integration breaks this suite at
-compile time. Two groups of call go elsewhere, and they are different in kind.
+compile time. That is now true of the WHOLE narrative, setup included: bootstrapping a repository,
+connecting the cluster, declaring a service's manifest source and reading what the deployment has
+wired are all public operations (surface 1.41.0).
 
-**Three SETUP calls** have no public counterpart, each documented at the top of
-[`src/appApi.ts`](./src/appApi.ts):
+What is left outside are two UNAUTHENTICATED reads on the deployment root, `GET /health` and
+`GET /auth/config`, in [`src/deploymentApi.ts`](./src/deploymentApi.ts). They are not a smaller
+escape hatch; they answer a question `/api/v1` structurally cannot. Both have to work for a
+deployment whose configuration failed to validate, and such a backend serves a fallback app that
+answers 503 on every other route, `/api/v1` included. A key-authenticated health check cannot
+describe a deployment too broken to authenticate a key, which is exactly the state worth describing.
 
-1. **Bootstrapping a repository** (`POST /workspaces/:ws/bootstrap/jobs`). `/api/v1` can create a
-   service against an existing repository but has nothing that makes one.
-2. **Connecting the k3s engine** (`POST /workspaces/:ws/environments/handlers`).
-3. **Declaring a service's manifest source** (`PATCH /workspaces/:ws/blocks/:blockId`).
-
-All three are deployment SETUP, deliberately absent from a surface frozen forever. The acceptance
-narrative itself (file work, watch it run, answer what it asks, read what it proved) is entirely
-public. If a future change makes one of these reachable from `/api/v1`, delete it from there.
-
-**Four READ-ONLY preflight probes** (health and the deployment's own problem list, the model
-catalog, the VCS connection, the merge presets) ask what the deployment has WIRED. That is exactly
-the class of fact a frozen public surface does not publish, and the alternative to asking is not a
-public call: it is discovering the answer forty minutes into a run. They create nothing and drive
-nothing, and `src/prerequisites.ts` is their only caller.
+That reasoning is also the rule for adding to that file: it does not extend to anything scoped to a
+workspace. A caller acting on one holds a key, so that is a public endpoint.
 
 ## Where things live
 
@@ -309,7 +303,7 @@ nothing, and `src/prerequisites.ts` is their only caller.
 | `src/instructions.ts`        | The briefs, and the reasoning behind the planted defect.                         |
 | `src/k3s.ts`                 | The engine connection and the per-service manifest source.                       |
 | `src/bootstrap.ts`           | Starting (or re-attaching to) a bootstrap, and reporting its structured failure. |
-| `src/appApi.ts`              | The setup calls and preflight probes `/api/v1` does not serve.                   |
+| `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`).       |
 | `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                  |
 
 **See also:** [`backend/internal/e2e`](../e2e) (the faked-externals product suite),

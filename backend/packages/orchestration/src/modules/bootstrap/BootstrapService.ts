@@ -223,9 +223,24 @@ export class BootstrapService {
     return out
   }
 
+  /**
+   * ONE bootstrap run, scoped to the workspace, or a 404 carrying `bootstrap_job_not_found`.
+   *
+   * The reason code is on the refusal rather than left to the caller because `/api/v1` documents it
+   * as the code a headless poller branches on, and this method is where the absence is known: a
+   * job in another workspace is ABSENT here rather than forbidden, which is the same
+   * 404-hides-everything rule the public surface follows everywhere else.
+   */
   async getJob(workspaceId: string, id: string): Promise<BootstrapJob> {
     return toBootstrapJob(
-      assertFound(await this.deps.bootstrapJobRepository.get(workspaceId, id), 'Bootstrap job', id),
+      assertFound(
+        await this.deps.bootstrapJobRepository.get(workspaceId, id),
+        'Bootstrap job',
+        id,
+        {
+          reason: 'bootstrap_job_not_found',
+        },
+      ),
     )
   }
 
