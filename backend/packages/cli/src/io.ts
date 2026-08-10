@@ -34,16 +34,54 @@ export interface Io {
   openBrowser(url: string): Promise<void>
 }
 
-/** The OS-appropriate command for opening a URL in the default browser. */
-function openCommand(url: string): { cmd: string; args: string[] } {
-  switch (process.platform) {
+/** How to spawn the OS's URL opener: the command, its argv, and Windows' verbatim-argv flag. */
+export interface OpenBrowserCommand {
+  cmd: string
+  args: string[]
+  /**
+   * Windows only: hand the joined argv to `CreateProcess` unchanged instead of re-quoting each
+   * argument for `CommandLineToArgvW`, whose rules `cmd` does not follow.
+   */
+  windowsVerbatimArguments?: boolean
+}
+
+/**
+ * The OS-appropriate command for opening a URL in the default browser.
+ *
+ * Windows goes through `cmd`, and cmd splits an UNQUOTED command line on `&` before the `start`
+ * builtin ever sees it. Every URL we open carries more than one query parameter, so this used to
+ * open the browser at everything up to the first `&` and then try to RUN each remaining parameter
+ * as a command: `cat-factory k3s` landed on a bare `?infraSetup=local-k3s` with none of the values
+ * the connect form prefills from, and the PAT links dropped their `scopes`.
+ *
+ * So the URL is quoted, which is also why `start`'s first argument is an empty quoted window title
+ * (it reads a leading quoted token as one). The quotes have to reach cmd verbatim, hence the flag.
+ *
+ * The quoting holds only while the URL carries no `"` of its own, so this SERIALIZES the input
+ * rather than trusting the caller to have done it: WHATWG serialization percent-encodes `"` in
+ * every component that can carry one and rejects it in a host, so no argument can close the quote
+ * and have cmd read the rest as a second command. Input that is not a URL at all throws, rather
+ * than reaching a shell as a command line whose meaning nobody has checked; `openBrowser` is
+ * best-effort and both call sites print the link before opening it. Inside the quotes cmd still
+ * expands a `%NAME%` reference, but the expansion is literal text there: quotes make `&` and its
+ * friends inert, and no Windows environment value can contain a `"` to close them, so the worst
+ * case is a wrong URL, never a second command.
+ *
+ * @throws {TypeError} if `url` is not a parsable absolute URL.
+ */
+export function openCommand(url: string, platform: NodeJS.Platform): OpenBrowserCommand {
+  const href = new URL(url).href
+  switch (platform) {
     case 'darwin':
-      return { cmd: 'open', args: [url] }
+      return { cmd: 'open', args: [href] }
     case 'win32':
-      // `start` is a cmd builtin; the empty "" is the window title arg it requires.
-      return { cmd: 'cmd', args: ['/c', 'start', '', url] }
+      return {
+        cmd: 'cmd',
+        args: ['/c', 'start', '""', `"${href}"`],
+        windowsVerbatimArguments: true,
+      }
     default:
-      return { cmd: 'xdg-open', args: [url] }
+      return { cmd: 'xdg-open', args: [href] }
   }
 }
 
@@ -102,8 +140,12 @@ export function createConsoleIo(): Io {
     openBrowser(url) {
       return new Promise<void>((resolve) => {
         try {
-          const { cmd, args } = openCommand(url)
-          const child = spawn(cmd, args, { stdio: 'ignore', detached: true })
+          const { cmd, args, windowsVerbatimArguments } = openCommand(url, process.platform)
+          const child = spawn(cmd, args, {
+            stdio: 'ignore',
+            detached: true,
+            windowsVerbatimArguments,
+          })
           child.on('error', () => resolve())
           child.unref()
           resolve()
