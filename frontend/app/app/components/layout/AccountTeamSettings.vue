@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { AccountRole } from '~/types/domain'
 import type { InvitationStatus } from '@cat-factory/contracts'
 import AccountAuditLog from '~/components/layout/AccountAuditLog.vue'

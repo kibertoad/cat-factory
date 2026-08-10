@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { WorkspaceAccessMode, WorkspaceRole } from '~/types/domain'
 
 // Workspace-membership management (workspace-rbac initiative, slice 9). The tier BELOW

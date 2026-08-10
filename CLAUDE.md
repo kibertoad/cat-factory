@@ -240,28 +240,28 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
 - **A local `interface XLogger { warn(obj, msg?) }` is BANNED**, as is a bespoke
   `log?: (event, msg) => void` callback dependency. A package that can't see kernel is in the wrong layer.
 - **A service takes `logger?: Logger` and normalises ONCE** (`this.log = deps.logger ?? noopLogger`) so it
-  stays unit-testable standalone, but **`CoreDependencies.logger` is REQUIRED**: a facade that forgets to
-  wire it must fail to typecheck rather than silently run the whole engine on `noopLogger`.
+  stays unit-testable, but **`CoreDependencies.logger` is REQUIRED**: a facade forgetting to wire it must
+  fail to typecheck, not silently run the engine on `noopLogger`.
 - **`.catch(() => {})` is BANNED; use `runBestEffort(logger, label, fn, fields)`** (kernel): it keeps the
   swallow (a best-effort path must NEVER propagate into its caller) and adds one `warn` naming the operation
-  with the cause attached. A bespoke `catch` still binds the cause with `describeError(error)`.
-  `scripts/check-silent-catch.mjs` enforces it; a drop needing no report says why under
-  `// silent-catch-ok:`. Out of scope: the executor/deploy harnesses (a change bumps the image), the SPA.
+  with the cause attached. A bespoke `catch` still binds the cause with `describeError(error)`. Enforced by
+  `check-silent-catch.mjs`, whose header owns the scope and the `// silent-catch-ok:` escape hatch.
 - **A thrown value has exactly THREE describers, all reading the whole CAUSE CHAIN** through kernel's
   `error-chain.logic.ts`: `getErrorMessage` (shown to a human / recorded on a row), `describeError` (log
   fields), `describeConnectionFailure` (a probe verdict, plus a cause class and remedy). **A hand-rolled
   `e instanceof Error ? e.message : String(e)` is BANNED**: on Node a transport failure's own message IS the
-  contentless `fetch failed`, reading identically for an unreachable host, a bad certificate and a DNS typo.
-  The chain is scrubbed there; any OTHER field carrying command output, a URL or model text goes through
-  `redactSecrets` at the emit site, and a credential is never logged, not even at `debug`.
+  contentless `fetch failed`, identical for an unreachable host, a bad cert and a DNS typo. The chain is
+  scrubbed there; any OTHER field carrying command output, a URL or model text goes through `redactSecrets`
+  at the emit site, and a credential is never logged, not even at `debug`. Reader and USE also pick the
+  describer: UNAUTHENTICATED takes `publicDiagnostic`, a VERDICT `errorChainMatches` (the rendered string
+  carries a display CAP), and an error with nothing to say answers EMPTY so a `|| '<fallback>'` guard works.
 - **Correlate with `child`, not per-call spreads**: bind `{ workspaceId, executionId }` once at the top of
   the scope. Three seams do it for you: `mountRequestLogging` (mounted FIRST, it mints or adopts
   `X-Request-Id` and puts it in every error envelope, which is what a user quotes off a failed request),
   `containerJobLog` (the same ids ride the job body), and the durable drivers. A request line logs the
   PATHNAME only, because a query string carries the WS `?ticket=` and OAuth `?code=`.
-- **`LOG_LEVEL`** is applied FIRST in each boot path (an unrecognised value falls back to `info`) and the
-  threshold is checked in the ADAPTER, because a pino child snapshots its parent's level at creation.
-- **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
+- **`LOG_LEVEL`** is applied FIRST in each boot path and gated in the ADAPTER (a pino child snapshots its
+  parent's level at creation). **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
 - **A SECOND destination is a kernel `LogSink` installed with `setLogSink`**, never a second logger; it
   sits behind the same level gate. `record` may not throw or block, `flush` may not reject, and the facade
   DRAINS wherever the buffer's HOLDER can vanish: Node timer + shutdown flush ⇄ Worker per-invocation

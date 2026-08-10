@@ -440,8 +440,14 @@ export function usePipelineErrorToast() {
    * Per-reason copy from the exhaustive map: a translated title + description, and a jump
    * action for the reasons a UI panel can fix. `te` (translation-exists) guards every lookup,
    * so a key missing from the active locale falls back rather than leaking a raw key: the
-   * title falls to the caller's key, the description to the raw backend `message`. An unknown
-   * reason (not in the map) gets the same generic title + raw-message fallback.
+   * title falls to the caller's key, the description to the generic conflict line.
+   *
+   * A conflict is a FAILURE, so it carries the two properties `presentGenericFailure` documents
+   * below and for the same reasons: it does not auto-dismiss, and its detail is copyable. The
+   * backend's own prose is DETAIL here rather than the headline, which matters most on the
+   * unknown-reason path: that is where a reason this SPA build has never heard of lands, so
+   * leaving it as the description meant the newest failures were the ones shown untranslated,
+   * uncopyable, and gone in five seconds.
    */
   function presentMappedConflict(
     conflict: ParsedConflict,
@@ -451,36 +457,46 @@ export function usePipelineErrorToast() {
     const info = conflict.reason
       ? CONFLICT_INFO[conflict.reason as Exclude<ConflictReason, BespokeConflictReason>]
       : undefined
-    if (info) {
-      toast.add({
-        title: te(info.titleKey) ? t(info.titleKey) : t(fallbackTitleKey, titleParams ?? {}),
-        description: te(info.descriptionKey)
-          ? t(info.descriptionKey)
-          : (conflict.message ?? t('errors.conflict.fallbackMessage')),
-        color: 'warning',
-        icon: 'i-lucide-triangle-alert',
-        // A reason with a jump action becomes an actionable, sticky toast (like the bespoke
-        // conflicts above) so the one-click remedy doesn't auto-dismiss before it's reached.
-        ...(info.action
-          ? {
-              duration: 0,
-              actions: [
-                {
-                  label: t(info.action.labelKey),
-                  icon: info.action.icon,
-                  onClick: () => info.action?.run(ui),
-                },
-              ],
-            }
-          : {}),
-      })
-      return
-    }
-    toast.add({
-      title: t(fallbackTitleKey, titleParams ?? {}),
-      description: conflict.message ?? t('errors.conflict.fallbackMessage'),
+    const title =
+      info && te(info.titleKey) ? t(info.titleKey) : t(fallbackTitleKey, titleParams ?? {})
+    const description =
+      info && te(info.descriptionKey)
+        ? t(info.descriptionKey)
+        : t('errors.conflict.fallbackMessage')
+    // The backend's prose, kept only when it adds something the translated line doesn't already say.
+    const detail = conflict.message && conflict.message !== description ? conflict.message : ''
+    const report = [title, description, detail].filter((part) => part.length > 0).join('\n')
+    const added = toast.add({
+      title,
+      description,
       color: 'warning',
       icon: 'i-lucide-triangle-alert',
+      duration: 0,
+      ui: { description: 'select-text' },
+      actions: [
+        // A reason with a jump action leads with its one-click remedy; the detail reveal and the
+        // copy follow it, so the primary affordance stays first in the row.
+        ...(info?.action
+          ? [
+              {
+                label: t(info.action.labelKey),
+                icon: info.action.icon,
+                onClick: () => info.action?.run(ui),
+              },
+            ]
+          : []),
+        ...(detail
+          ? [
+              {
+                label: t('errors.generic.showDetail'),
+                icon: 'i-lucide-info',
+                onClick: () =>
+                  toast.update(added.id, { description: detail, actions: [copyAction(report)] }),
+              },
+            ]
+          : []),
+        copyAction(report),
+      ],
     })
   }
 

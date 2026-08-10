@@ -112,21 +112,30 @@ describe('usePipelineErrorToast', () => {
     expect(arg.description).toBe('errors.conflict.description.dependencies_unmet')
   })
 
-  it('falls back to the caller fallback key + raw message for an UNKNOWN reason', () => {
+  it('keeps raw prose as DETAIL for an UNKNOWN reason, never as the headline', () => {
+    // An unmapped reason is the path a reason this build has never heard of takes, so it is the
+    // one that most needs the funnel's two properties rather than the least: translated copy up
+    // front, the backend's untranslated prose behind the disclosure.
     usePipelineErrorToast().present(
       conflict('totally_unknown_reason', {}, 'raw detail'),
       'errors.action.retryFailed',
     )
     const arg = add.mock.calls[0]![0]
     expect(arg.title).toBe('errors.action.retryFailed')
-    // Unmapped reason ⇒ raw backend prose is the last-resort description.
-    expect(arg.description).toBe('raw detail')
-    expect(arg.actions).toBeUndefined()
+    expect(arg.description).toBe('errors.conflict.fallbackMessage')
+    arg.actions[0].onClick()
+    expect(update).toHaveBeenCalledWith(
+      'toast-1',
+      expect.objectContaining({ description: 'raw detail' }),
+    )
   })
 
   it('shows the fallback message for an unknown reason with no backend message', () => {
     usePipelineErrorToast().present(conflict('totally_unknown_reason'))
-    expect(add.mock.calls[0]![0].description).toBe('errors.conflict.fallbackMessage')
+    const arg = add.mock.calls[0]![0]
+    expect(arg.description).toBe('errors.conflict.fallbackMessage')
+    // Nothing to disclose ⇒ no reveal, but the copy action is still the point.
+    expect(arg.actions).toHaveLength(1)
   })
 
   it('offers a jump action for a reason with a UI remedy (github_not_connected → connect GitHub)', () => {
@@ -141,11 +150,15 @@ describe('usePipelineErrorToast', () => {
     expect(ui.openGitHub).toHaveBeenCalledOnce()
   })
 
-  it('leaves a reason without a UI remedy as a plain (auto-dismissing) toast', () => {
+  it('keeps a conflict on screen and copyable even with no UI remedy to jump to', () => {
+    // A conflict is a failure like any other: the reader has to be able to finish it, quote it,
+    // and paste it into a report. A remedy-less reason used to be the one that auto-dismissed.
     usePipelineErrorToast().present(conflict('dependencies_unmet'))
     const arg = add.mock.calls[0]![0]
-    expect(arg.duration).toBeUndefined()
-    expect(arg.actions).toBeUndefined()
+    expect(arg.duration).toBe(0)
+    expect(arg.actions.map((a: { label: string }) => a.label)).toEqual(['common.copyDetails'])
+    arg.actions[0].onClick()
+    expect(copied.at(-1)).toContain('errors.conflict.description.dependencies_unmet')
   })
 
   it('interpolates the model list for providers_unconfigured and offers the AI setup jump', () => {

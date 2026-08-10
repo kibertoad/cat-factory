@@ -17,20 +17,72 @@ import { redactSecrets } from './redact-secrets.logic.js'
 // This module owns the walk and the rendering; `connection-failure.logic.ts` keeps what is its
 // own (classifying the cause and naming a remedy) and reads the links from here.
 
-/** Cap on rendered chain text, so a pathological nesting can't flood a log line or the UI. */
+/**
+ * Cap on chain text rendered for a HUMAN reader: a message on a form, a probe verdict, a
+ * persisted failure `reason`, a PR comment. Sized so a pathological nesting can't flood the UI.
+ */
 export const MAX_ERROR_CHAIN_CHARS = 400
+/**
+ * Cap on chain text rendered into a LOG FIELD, deliberately far wider than the human one.
+ *
+ * The two readers do not share a budget. A toast has a few lines of room and a person reading it
+ * wants the first sentence; a structured log line is the surface the operator turns to when the
+ * first sentence was not enough, and the things that make it worth having are long: the SQL a
+ * Postgres error quotes back, a provider's JSON error body, a multi-issue validation dump. Capped
+ * all the same, because an unbounded field is a log-ingestion cost and a pathological nesting
+ * would still be the thing that pays it.
+ */
+export const MAX_LOGGED_ERROR_CHAIN_CHARS = 4_000
 /** Cap on how far down `cause` / `errors` the walk goes. */
 const MAX_CHAIN_DEPTH = 6
+/**
+ * Cap on how many branches of ONE `AggregateError` are walked.
+ *
+ * Depth was bounded from the start; breadth was not, and it is the axis that actually gets wide:
+ * a `Promise.any` over every endpoint of a fleet rejects with one branch per endpoint. Walking
+ * hundreds of them to render a few hundred characters is work done and then thrown away. Sized
+ * generously against what the walk exists to read (one branch per resolved address of one host,
+ * so two or three), and what it drops is REPORTED rather than silently missing.
+ */
+const MAX_AGGREGATE_BRANCHES = 8
+
+/**
+ * One property of a thrown value, or `undefined` when reading it throws.
+ *
+ * The walk reads `.cause`, `.errors` and `.code` off values it did not construct: a Proxy, an
+ * ORM or SDK error with an accessor-backed field, whatever a dependency chose to throw. A getter
+ * that throws would make the DESCRIBER throw, and the describer runs inside `runBestEffort`'s own
+ * catch and inside the `.catch` handlers of the durable drivers, whose entire contract is not to
+ * propagate. A failed read is therefore an absent link, never a second failure stacked on the
+ * first one.
+ */
+function readProperty(value: unknown, key: string): unknown {
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined
+  try {
+    return (value as Record<string, unknown>)[key]
+  } catch {
+    return undefined
+  }
+}
+
+/** `String(value)`, or `''` when the value's own stringification throws. Same reason as above. */
+function safeText(value: unknown): string {
+  try {
+    return String(value)
+  } catch {
+    return ''
+  }
+}
 
 /** An error-shaped value's `code`, which Node puts the useful identifier on. */
 function errorCode(error: unknown): string | undefined {
-  const code = (error as { code?: unknown } | null)?.code
+  const code = readProperty(error, 'code')
   return typeof code === 'string' && code ? code : undefined
 }
 
 /** The `errors` array an `AggregateError` carries (one entry per attempted address). */
 function aggregated(error: unknown): unknown[] {
-  const errors = (error as { errors?: unknown } | null)?.errors
+  const errors = readProperty(error, 'errors')
   return Array.isArray(errors) ? errors : []
 }
 
@@ -57,8 +109,15 @@ export function flattenErrorChain(
     seen.add(error)
   }
   out.push(error)
-  for (const branch of aggregated(error)) flattenErrorChain(branch, depth + 1, out, seen)
-  flattenErrorChain((error as { cause?: unknown }).cause, depth + 1, out, seen)
+  const branches = aggregated(error)
+  for (const branch of branches.slice(0, MAX_AGGREGATE_BRANCHES))
+    flattenErrorChain(branch, depth + 1, out, seen)
+  // A dropped branch is SAID rather than left out. The rendering folds identical links into a
+  // count, so silently walking eight of two hundred would report "(x8)" — a reader's fair reading
+  // of which is that eight is all there were.
+  if (branches.length > MAX_AGGREGATE_BRANCHES)
+    out.push(`[…${branches.length - MAX_AGGREGATE_BRANCHES} more branches not read]`)
+  flattenErrorChain(readProperty(error, 'cause'), depth + 1, out, seen)
   return out
 }
 
@@ -72,9 +131,9 @@ const TRANSPORT_CODE = /^[A-Z][A-Z0-9_]*$/
 
 /** One link's human text: its message, with the transport `code` appended when the message omits it. */
 export function describeErrorLink(link: unknown): string {
-  const message = link instanceof Error ? link.message : String(link)
+  const message = link instanceof Error ? readProperty(link, 'message') : link
   const code = errorCode(link)
-  const text = message.trim()
+  const text = safeText(message ?? '').trim()
   if (!code || !TRANSPORT_CODE.test(code)) return text || code || ''
   if (!text) return code
   return text.includes(code) ? text : `${text} (${code})`
@@ -87,15 +146,16 @@ export function describeErrorLink(link: unknown): string {
  * emits address-less `connect ECONNREFUSED` forms, so two branches routinely stringify the same.
  */
 export function renderErrorChainLinks(links: readonly unknown[]): string[] {
-  const counted: { text: string; count: number }[] = []
+  // Counted in a Map rather than by scanning the accumulated list per link: a `Map` keeps
+  // insertion order, so the walk order this renders in is unchanged, and the fold stays linear
+  // where the scan was quadratic in the number of DISTINCT links (the wide-aggregate shape).
+  const counts = new Map<string, number>()
   for (const link of links) {
     const text = describeErrorLink(link)
     if (!text) continue
-    const existing = counted.find((c) => c.text === text)
-    if (existing) existing.count += 1
-    else counted.push({ text, count: 1 })
+    counts.set(text, (counts.get(text) ?? 0) + 1)
   }
-  return counted.map((c) => (c.count > 1 ? `${c.text} (x${c.count})` : c.text))
+  return [...counts].map(([text, count]) => (count > 1 ? `${text} (x${count})` : text))
 }
 
 /**
@@ -104,10 +164,10 @@ export function renderErrorChainLinks(links: readonly unknown[]): string[] {
  * there is more to ask for. The marker sits outside the budget on purpose: it is the report about
  * the cap, not part of what was capped.
  */
-export function capErrorChain(text: string): string {
-  if (text.length <= MAX_ERROR_CHAIN_CHARS) return text
-  const dropped = text.length - MAX_ERROR_CHAIN_CHARS
-  return `${text.slice(0, MAX_ERROR_CHAIN_CHARS)} […${dropped} more characters of the cause chain]`
+export function capErrorChain(text: string, maxChars: number = MAX_ERROR_CHAIN_CHARS): string {
+  if (text.length <= maxChars) return text
+  const dropped = text.length - maxChars
+  return `${text.slice(0, maxChars)} […${dropped} more characters of the cause chain]`
 }
 
 /**
@@ -119,8 +179,11 @@ export function capErrorChain(text: string): string {
  * second segment, or a `bearer <tok>` cut to under the rule's minimum run, would ship its surviving
  * characters verbatim.
  */
-export function joinErrorChain(parts: readonly string[]): string {
-  return capErrorChain(redactSecrets(parts.join(': ')) ?? '')
+export function joinErrorChain(
+  parts: readonly string[],
+  maxChars: number = MAX_ERROR_CHAIN_CHARS,
+): string {
+  return capErrorChain(redactSecrets(parts.join(': ')) ?? '', maxChars)
 }
 
 /**
@@ -135,12 +198,62 @@ export function joinErrorChain(parts: readonly string[]): string {
  * their opening phrase (`/dispatch failed/i`, the eviction sentinels). Dropping a leading link would
  * silently re-point every one of those matches; appending the causes cannot.
  */
-export function errorChainText(error: unknown): string {
+export function errorChainText(error: unknown, maxChars: number = MAX_ERROR_CHAIN_CHARS): string {
   const parts = renderErrorChainLinks(flattenErrorChain(error))
-  // A thrown `null`/`undefined` (or an error whose message is empty) walks to NO links, because the
-  // walk's job is to stop at an absent `cause`. Naming the value is still better than reporting
-  // nothing: "null" says something was thrown and there is nothing behind it, where `''` reads as a
-  // failure that was never described.
-  if (parts.length === 0) return joinErrorChain([String(error)])
-  return joinErrorChain(parts)
+  if (parts.length > 0) return joinErrorChain(parts, maxChars)
+  // Nothing in the chain had anything to say, and what that means depends on WHAT was thrown.
+  //
+  // For a non-error value, naming it is a report: "null" says something was thrown and there is
+  // nothing behind it, where `''` reads as a failure that was never described.
+  //
+  // For an ERROR it is the opposite, and the difference matters because this string feeds the
+  // whole product. `String(new Error(''))` is `Error`, the base constructor name EVERY error
+  // shares: it names nothing about the failure, and it is exactly the string that a call site's
+  // `getErrorMessage(err) || '<what the operator should do about it>'` guard exists to replace. A
+  // describer that can never return empty silently turns every one of those guards into dead code
+  // and prints `Error` where the actionable sentence used to be. So an error with nothing to say
+  // says nothing. A CUSTOM `name` (`AbortError`) is the one fact there is, and survives.
+  if (error instanceof Error) {
+    const name = readProperty(error, 'name')
+    return typeof name === 'string' && name && name !== Error.name
+      ? joinErrorChain([name], maxChars)
+      : ''
+  }
+  return joinErrorChain([safeText(error)], maxChars)
+}
+
+/**
+ * Whether ANY link of the chain matches `pattern` — the read for a CLASSIFICATION rather than a
+ * rendering (is this stop a rollout signal, is this dispatch failure an eviction).
+ *
+ * It deliberately does not go through {@link errorChainText}, and the difference is the point: that
+ * string is scrubbed and CAPPED for a reader, and a verdict that consults it silently inherits the
+ * display budget. A sentinel phrase sitting past the cap, or altered by the scrubber, would turn a
+ * recognised condition into an unrecognised one, which on the eviction path means a healthy run
+ * spending its crash budget on a deploy. Links are matched individually so a phrase can never be
+ * split across the `: ` the join inserts either.
+ *
+ * Matched with `String.search`, not `RegExp.test`: `test` advances `lastIndex` on a `/g` pattern,
+ * so a caller's module-level regex would answer differently on its second call.
+ */
+export function errorChainMatches(error: unknown, pattern: RegExp): boolean {
+  return flattenErrorChain(error).some((link) => describeErrorLink(link).search(pattern) !== -1)
+}
+
+/**
+ * The OUTERMOST link only, deliberately LESS than the chain above, for a PUBLIC surface.
+ *
+ * Both facades' `/ready` answer an UNAUTHENTICATED caller, and that inverts the reasoning behind
+ * every other describer here. A flattened chain is what makes an error useful to the operator and
+ * what makes this field a leak: a pool failure's inner link is `connect ECONNREFUSED
+ * 10.x.y.z:5432`, the deployment's database address, handed to anyone who curls the endpoint. The
+ * operator's copy of the same failure is the boot/probe LOG line, which does carry the chain.
+ *
+ * It lives here, beside the describers it deliberately differs from, so the carve-out is ONE
+ * named function both runtimes call rather than a hand-rolled `err instanceof Error ? …` in each
+ * (which is indistinguishable from the bug the chain exists to fix, and drifted between the
+ * facades the first time it was written twice).
+ */
+export function publicDiagnostic(error: unknown): string {
+  return redactSecrets(describeErrorLink(error)) ?? ''
 }

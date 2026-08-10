@@ -188,29 +188,55 @@ product, logs included, still said `fetch failed`.
 
 There are exactly THREE describers, and they all flatten through `shared/error-chain.logic.ts`:
 
-| describer | answers | used by |
-| --- | --- | --- |
-| `getErrorMessage` (`domain/errors.ts`) | the string a HUMAN is shown, or a row records | a `DomainError` message, a persisted failure `reason`, a PR comment, a `ConnectionTestResult` |
-| `describeError` (`shared/best-effort.ts`) | `{ err, errKind }` log fields | every `logger.*` site, `runBestEffort` |
-| `describeConnectionFailure` (`shared/connection-failure.logic.ts`) | the chain PLUS a machine cause class and a remedy | the "Test connection" probes |
+| describer                                                          | answers                                           | used by                                                                                       |
+| ------------------------------------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `getErrorMessage` (`domain/errors.ts`)                             | the string a HUMAN is shown, or a row records     | a `DomainError` message, a persisted failure `reason`, a PR comment, a `ConnectionTestResult` |
+| `describeError` (`shared/best-effort.ts`)                          | `{ err, errKind }` log fields                     | every `logger.*` site, `runBestEffort`                                                        |
+| `describeConnectionFailure` (`shared/connection-failure.logic.ts`) | the chain PLUS a machine cause class and a remedy | the "Test connection" probes                                                                  |
 
 **Never hand-roll `error instanceof Error ? error.message : String(error)`.** That expression is the
 bug above, spelled out. It was in ~90 places; the sweep that removed them is why the chain now shows
 up everywhere. Reach for `getErrorMessage` (a human-facing string) or `describeError` (log fields).
 
-Two properties of the shared core are worth knowing when you read its output:
+Four properties of the shared core are worth knowing when you read its output:
 
 - **The chain is capped**, and it SAYS how much it dropped (`[…N more characters of the cause
-  chain]`), because a silent slice reads as the whole chain.
+chain]`), because a silent slice reads as the whole chain. The two readers have DIFFERENT budgets:
+  `MAX_ERROR_CHAIN_CHARS` (400) for a human, `MAX_LOGGED_ERROR_CHAIN_CHARS` for a log field, which is
+  where the long detail worth having lives (a quoted SQL statement, a provider's JSON error body).
 - **The outermost link is KEPT**, `fetch failed` and all, unlike `describeConnectionFailure`, which
   drops it so a probe's verdict leads with the real cause. The divergence is deliberate: a log line
   and a `DispatchError` message are matched downstream by their OPENING phrase (`/dispatch failed/i`,
   the eviction sentinels), so appending causes is safe where dropping a leading link is not.
+- **An error with NOTHING to say answers with the empty string**, not with `String(error)`, whose
+  value for a message-less error is the base constructor name `Error`. Call sites guard with
+  `getErrorMessage(err) || '<what the operator should do about it>'` (the local preflight probes),
+  and a describer that can never be empty turns every one of those into dead code.
+- **The chain is scrubbed** with `redactSecrets` before the cap. That scrub is a shape-matcher over
+  field NAMES which are also ordinary English, so it deliberately spares a single-case word and an
+  env-var-shaped identifier: `Missing required key: OPENAI_API_KEY` must not lose the name the
+  operator has to go and set. Adding a rule means adding both halves of that pair of tests.
 
-The ONE deliberate exception in the repo is `ReadinessCheck.error` (Node's `/ready`), which is
-PUBLIC and unauthenticated: the inner link of a pool failure is the deployment's own database
-address, so that site keeps the outermost message and says why at the call site. If you add another
-public unauthenticated surface, make the same call there and write down why.
+**A VERDICT does not read the rendered string.** `errorChainMatches(error, /phrase/)` tests each link
+uncapped and unscrubbed, because a classification that consults `getErrorMessage` silently inherits
+a DISPLAY budget: a phrase past the cap turns a recognised condition into an unrecognised one
+(`isRolloutSignal` on the Worker, where the cost is a healthy run spending its crash budget).
+
+### Who may read a chain
+
+The chain widens what a message discloses, so the audience is part of the rule.
+
+- **An AUTHENTICATED reader gets the chain.** A signed-in operator on a connect form, a workspace
+  member whose run failed, a provisioning log, a PR comment on their own repo. The inner link is
+  usually the only thing that says whether the fix is theirs (a wrong base URL, an expired key) or
+  the deployment's. Residual, stated rather than implied: where a deployment's model endpoints or
+  infrastructure are platform-internal, their host and port reach a workspace member through an
+  ordinary 4xx.
+- **An UNAUTHENTICATED surface gets `publicDiagnostic`**: the outermost link only, scrubbed. Today
+  that is `/ready` on BOTH facades (`ReadinessCheck.error` and the Worker's bindings probe), sharing
+  one kernel helper so the two cannot answer at different depths. The inner link of a pool failure is
+  the deployment's own database address. A new public surface uses that helper, not a second
+  hand-rolled narrowing.
 
 ### The guard, and the escape hatch
 

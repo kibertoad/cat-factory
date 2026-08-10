@@ -34,7 +34,7 @@ const board = useBoardStore()
 const initiatives = useInitiativesStore()
 const access = useWorkspaceAccess()
 const { t } = useI18n()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const { open, blockId, instanceId, stepIndex, close } = useResultView('initiative-tracker', {
   onOpen: ({ blockId }) => void initiatives.load(blockId),
@@ -155,8 +155,7 @@ const editable = computed(() => initiative.value?.status === 'executing')
 
 /** Report a failed curation call as a toast (a stale-rev CAS conflict, an illegal edit, …). */
 function reportError(error: unknown) {
-  const message = error instanceof Error ? error.message : t('initiative.curation.failed')
-  toast.add({ title: t('initiative.curation.failed'), description: message, color: 'error' })
+  present(error, 'initiative.curation.failed')
 }
 
 // Follow-up promotion: an inline per-follow-up form (phase + optional title override).

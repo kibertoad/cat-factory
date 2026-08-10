@@ -243,6 +243,20 @@ export function assertFound<T>(value: T | null | undefined, entity: string, id: 
  * unreachable cluster, an untrusted certificate and a DNS typo with the same three words while the
  * cause sat one `.cause` down. It is the one describer the repo should reach for; a hand-rolled
  * `error instanceof Error ? error.message : String(error)` is that bug re-introduced.
+ *
+ * WHO MAY READ IT, stated because the chain widens what a message discloses and the answer is not
+ * "anyone". This string reaches an AUTHENTICATED reader: a signed-in operator on a connect form,
+ * a workspace member whose run failed, a provisioning log, a PR comment on their own repo. That is
+ * deliberate, because the inner link is usually the only thing that says whether the fix is theirs
+ * (a wrong base URL, an expired key) or the deployment's. The residual is stated rather than
+ * implied: where a deployment's model endpoints or infrastructure are platform-internal, their
+ * host and port become visible to a workspace member through an ordinary 4xx. An UNAUTHENTICATED
+ * surface does not qualify and does not use this: `/ready` on both facades answers with
+ * `publicDiagnostic`, the outermost link only.
+ *
+ * An error with NOTHING to say answers with the empty string, not with `String(error)`. See
+ * `errorChainText`: the base constructor name is not a description, and a call site's
+ * `getErrorMessage(err) || '<what the operator should do>'` fallback has to stay reachable.
  */
 export function getErrorMessage(error: unknown): string {
   return errorChainText(error)

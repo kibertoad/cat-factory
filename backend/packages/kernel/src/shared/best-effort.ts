@@ -8,7 +8,7 @@
 // when to use it: `backend/docs/logging.md`.
 
 import type { LogFields, Logger } from '../ports/logging.js'
-import { errorChainText } from './error-chain.logic.js'
+import { errorChainText, MAX_LOGGED_ERROR_CHAIN_CHARS } from './error-chain.logic.js'
 
 /**
  * Describe a thrown value as log fields. The message is scrubbed with `redactSecrets`
@@ -24,10 +24,14 @@ import { errorChainText } from './error-chain.logic.js'
  * Only the chain and the constructor name are kept: a stack is high-volume and rarely
  * the thing that identifies the failure in a structured log. Pass one explicitly when a
  * specific site needs it.
+ *
+ * The chain is capped at the LOG budget, not the human one. A toast has a few lines of room; this
+ * field is where an operator goes when those lines were not enough, and the detail that makes the
+ * trip worth it (a quoted SQL statement, a provider's JSON error body) is long by nature.
  */
 export function describeError(error: unknown): LogFields {
   return {
-    err: errorChainText(error),
+    err: errorChainText(error, MAX_LOGGED_ERROR_CHAIN_CHARS),
     errKind: error instanceof Error ? error.name : typeof error,
   }
 }

@@ -33,6 +33,7 @@ const agentTier = useAgentTierStore()
 const creds = useVendorCredentialsStore()
 const workspace = useWorkspaceStore()
 const { present } = usePipelineErrorToast()
+const toast = useToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -251,10 +252,15 @@ async function save() {
   const e = editor.value
   if (!e) return
   if (!e.name.trim()) {
-    present(
-      new Error(t('settings.modelConfiguration.toast.nameRequiredBody')),
-      'settings.modelConfiguration.toast.nameRequiredTitle',
-    )
+    // NOT through `present`: that funnel classifies a BACKEND failure, and a synthesized local
+    // `Error` carries no envelope and no status, so it lands on the network-fault description and
+    // tells the user the server could not be reached about a check that never left the browser.
+    toast.add({
+      title: t('settings.modelConfiguration.toast.nameRequiredTitle'),
+      description: t('settings.modelConfiguration.toast.nameRequiredBody'),
+      color: 'warning',
+      icon: 'i-lucide-triangle-alert',
+    })
     return
   }
   busy.value = true

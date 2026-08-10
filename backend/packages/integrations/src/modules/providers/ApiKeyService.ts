@@ -9,7 +9,7 @@ import type {
   SecretCipher,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { ConflictError, getErrorMessage, NotFoundError } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError } from '@cat-factory/kernel'
 import { DEFAULT_USAGE_WINDOW_MS } from './providers.logic.js'
 
 // ApiKeyService: owns the direct-provider API-key pool (OpenAI/Anthropic/Qwen/
@@ -232,10 +232,13 @@ export class ApiKeyService {
       // that leases keys before any LLM call) points at the offending provider key rather
       // than surfacing the cipher's opaque error with no context. The cipher already
       // explains the likely encryption-key mismatch; prepend which key it was.
-      throw new Error(
-        `Could not decrypt the leased '${provider}' API key '${chosen.id}': ${getErrorMessage(e)}`,
-        { cause: e },
-      )
+      //
+      // The cause is ATTACHED, not interpolated. Every describer in the repo now walks `.cause`,
+      // so a message that also embeds the inner text renders it twice ("…: <inner>: <inner>") and
+      // spends the chain's character budget saying the same thing over again.
+      throw new Error(`Could not decrypt the leased '${provider}' API key '${chosen.id}'`, {
+        cause: e,
+      })
     }
     return { keyId: chosen.id, provider, secret }
   }

@@ -31,8 +31,25 @@ All three now flatten through one kernel core (`shared/error-chain.logic.ts`): `
 through `redactSecrets`, capped with a marker saying what it dropped, and bounded by link identity so
 a cause cycle terminates. Roughly 90 hand-rolled `e instanceof Error ? e.message : String(e)` copies
 across the backend now call `getErrorMessage`, and five local `errMessage`/`messageOf` wrappers are
-deleted. Node's `/ready` is the one deliberate exception: it is public and unauthenticated, so it
-keeps the outermost message rather than publishing the deployment's database address.
+deleted.
+
+Who may read a chain is part of the rule. An AUTHENTICATED reader gets it, because the inner link is
+usually the only thing saying whether the fix is theirs or the deployment's; where a deployment's
+model endpoints are platform-internal, their host and port do reach a workspace member through an
+ordinary 4xx. An UNAUTHENTICATED surface does not: `/ready` on BOTH facades answers with kernel's
+`publicDiagnostic` (the outermost link, scrubbed) rather than publishing the deployment's database
+address, sharing one helper so the two runtimes cannot drift to different depths.
+
+A VERDICT does not read the rendered string either. `errorChainMatches` tests each link uncapped, so
+a sentinel phrase pushed past the display budget by a long wrapper cannot silently turn a recognised
+rollout stop into a crash. Relatedly, log fields get their own, much wider cap than the 400 characters
+a human-facing message is held to, and an error with nothing to say answers with the empty string
+rather than the bare constructor name, so a call site's `getErrorMessage(e) || '<what to do>'` guard
+still fires.
+
+`redactSecrets` now spares a single-case word and an env-var-shaped identifier where a field-name rule
+matched: it scrubs the message a person reads, and `Missing required key: OPENAI_API_KEY` must not
+lose the name they have to go and set. Every credential shape the rules exist for still matches.
 
 An error message may therefore now carry appended causes where it did not before. The opening phrase
 is unchanged, which is what the downstream `/dispatch failed/i` and eviction-sentinel checks match on.
@@ -43,4 +60,10 @@ calls rendering the raw message. Beyond the translated copy that funnel already 
 toast now stays until dismissed instead of vanishing after about five seconds, its text is
 selectable, and one click copies the whole report: the action that failed, the class of failure, the
 backend's own account, and the `requestId` that is the only join between what the user saw and the
-server log line explaining it.
+server log line explaining it. Conflict (409) toasts get the same treatment, which matters most on
+the unknown-reason path, since that is where a reason an older SPA build has never heard of lands.
+
+`@cat-factory/cli` carries its own copy of the describer rather than importing kernel. That package is
+published and deliberately runtime-dependency-free, so a `workspace:*` import from its `bin` resolves
+through pnpm's link locally and is simply absent off the registry; a conformity test pins the copy to
+kernel's output byte for byte.

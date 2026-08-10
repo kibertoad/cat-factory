@@ -16,7 +16,7 @@
  *   crash, and two hiccups in one step then exhaust the single crash-eviction budget and fail
  *   a healthy run (stuck-run audit F12).
  */
-import { getErrorMessage } from '@cat-factory/kernel'
+import { errorChainMatches } from '@cat-factory/kernel'
 
 export type ContainerStopCause = 'rollout' | 'idle'
 
@@ -131,10 +131,15 @@ export interface StopObservation {
  */
 export function isRolloutSignal(error: unknown): boolean {
   // The whole CHAIN, not just the outermost message: the runtime's signal arrives wrapped when it
-  // crosses the container binding, and the phrase this matches is then one `.cause` down. Widening
-  // where the phrase is looked for cannot lose a match (the message is a prefix of the chain text),
-  // and a nested rollout signal IS a rollout signal.
-  return /new version rollout|runtime signalled the container to exit/i.test(getErrorMessage(error))
+  // crosses the container binding, and the phrase this matches is then one `.cause` down. A nested
+  // rollout signal IS a rollout signal.
+  //
+  // Read through `errorChainMatches` rather than `getErrorMessage`, because this is a VERDICT and
+  // that string is built for a reader: scrubbed, and capped at the display budget. A long wrapped
+  // message would push the phrase past the cap and the stop would be misread as a crash, which is
+  // this file's F12 failure — two hiccups in one step exhausting the single crash-eviction budget
+  // and failing a healthy run.
+  return errorChainMatches(error, /new version rollout|runtime signalled the container to exit/i)
 }
 
 /**

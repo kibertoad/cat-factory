@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { getErrorMessage } from '../domain/errors.js'
 import { describeError } from './best-effort.js'
 import { describeConnectionFailure } from './connection-failure.logic.js'
-import { errorChainText, MAX_ERROR_CHAIN_CHARS } from './error-chain.logic.js'
+import {
+  errorChainMatches,
+  errorChainText,
+  MAX_ERROR_CHAIN_CHARS,
+  MAX_LOGGED_ERROR_CHAIN_CHARS,
+  publicDiagnostic,
+} from './error-chain.logic.js'
 
 /**
  * Build the shape Node/undici actually throws from `fetch`: a generic `TypeError` wrapper whose
@@ -116,6 +122,105 @@ describe('errorChainText', () => {
     expect(errorChainText(undefined)).toBe('undefined')
     expect(errorChainText('just a string')).toBe('just a string')
     expect(errorChainText(404)).toBe('404')
+  })
+
+  it('says NOTHING for an error with nothing to say, so a caller fallback still fires', () => {
+    // `String(new Error(''))` is `Error`, the base constructor name every error shares. Answering
+    // with it turns every `getErrorMessage(err) || '<what to do about it>'` guard in the repo into
+    // dead code and prints `Error` where the actionable sentence belongs.
+    expect(errorChainText(new Error(''))).toBe('')
+    expect(errorChainText(new Error('')) || 'Docker daemon not reachable').toBe(
+      'Docker daemon not reachable',
+    )
+  })
+
+  it('keeps a CUSTOM error name, which is the one fact a message-less error has', () => {
+    expect(errorChainText(Object.assign(new Error(''), { name: 'AbortError' }))).toBe('AbortError')
+  })
+
+  it('describes a value whose own accessors throw instead of throwing itself', () => {
+    // The describer runs inside `runBestEffort`'s catch and inside the durable drivers' `.catch`
+    // handlers, whose contract is not to propagate. A throwing getter on a thrown SDK object must
+    // therefore cost a link, never turn a swallowed failure into an unhandled rejection.
+    const hostile = new Error('outer')
+    Object.defineProperty(hostile, 'cause', {
+      get() {
+        throw new Error('cause getter exploded')
+      },
+    })
+    expect(errorChainText(hostile)).toBe('outer')
+
+    const unstringifiable = {
+      toString() {
+        throw new Error('toString exploded')
+      },
+    }
+    expect(() => errorChainText(unstringifiable)).not.toThrow()
+    expect(() =>
+      errorChainText({
+        message: 'x',
+        get code() {
+          throw new Error('boom')
+        },
+      }),
+    ).not.toThrow()
+  })
+
+  it('bounds how many branches of one aggregate it walks, and SAYS what it skipped', () => {
+    // A `Promise.any` over a fleet rejects with one branch per endpoint. Walking hundreds to
+    // render a few hundred characters is work thrown away; walking eight silently would render
+    // "(x8)", which reads as eight being all there were.
+    const wide = new AggregateError(
+      Array.from({ length: 40 }, (_unused, i) => new Error(`endpoint ${i} refused`)),
+    )
+    const text = errorChainText(wide, 10_000)
+    expect(text).toContain('endpoint 0 refused')
+    expect(text).toContain('more branches not read')
+    expect(text).not.toContain('endpoint 39 refused')
+  })
+
+  it('caps to the budget the CALLER asks for, so a log line is not held to the UI budget', () => {
+    const long = new Error('y'.repeat(2_000))
+    expect(errorChainText(long).length).toBeLessThan(MAX_ERROR_CHAIN_CHARS + 60)
+    expect(errorChainText(long, MAX_LOGGED_ERROR_CHAIN_CHARS)).toBe('y'.repeat(2_000))
+  })
+})
+
+describe('errorChainMatches', () => {
+  it('recognises a sentinel phrase sitting past the DISPLAY cap', () => {
+    // The bug this exists for: a verdict read off `getErrorMessage` inherits that string's
+    // 400-char budget, so a long wrapper pushes the phrase out of reach and a rollout stop is
+    // misclassified as a crash, spending a healthy run's eviction budget.
+    const buried = new Error('a'.repeat(MAX_ERROR_CHAIN_CHARS + 50), {
+      cause: new Error('runtime signalled the container to exit'),
+    })
+    expect(errorChainText(buried)).not.toContain('runtime signalled')
+    expect(errorChainMatches(buried, /runtime signalled the container to exit/i)).toBe(true)
+  })
+
+  it('answers the same on a repeat call with a global pattern', () => {
+    const pattern = /refused/g
+    const error = new Error('connection refused')
+    expect(errorChainMatches(error, pattern)).toBe(true)
+    expect(errorChainMatches(error, pattern)).toBe(true)
+  })
+})
+
+describe('publicDiagnostic', () => {
+  it('answers an UNAUTHENTICATED caller with the outermost link only', () => {
+    // `/ready` is public on both facades. The chain is what makes an error useful to the operator
+    // and what makes this field a leak: the inner link is the deployment's database address.
+    const poolFailure = new Error('Connection terminated unexpectedly', {
+      cause: coded('connect ECONNREFUSED 10.4.2.7:5432', 'ECONNREFUSED'),
+    })
+    expect(publicDiagnostic(poolFailure)).toBe('Connection terminated unexpectedly')
+    expect(publicDiagnostic(poolFailure)).not.toContain('10.4.2.7')
+  })
+
+  it('scrubs what it does answer with', () => {
+    expect(publicDiagnostic(new Error('rejected token=abcd1234EFGHijkl5678'))).not.toContain(
+      'abcd1234EFGHijkl5678',
+    )
   })
 })
 

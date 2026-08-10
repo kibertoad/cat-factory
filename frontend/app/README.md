@@ -223,6 +223,13 @@ its own copy. A store passes it through its context alongside `api`/`toast` (see
 a recognised refusal keeps that branch and drains only its fallback into the funnel
 (`stores/board/placement.ts`, `components/board/AddTaskModal.vue`).
 
+**A FAILED CALL, though, not every refusal.** The funnel's whole job is to classify what the backend
+answered, so a local check that never left the browser must not be dressed up as one: a synthesized
+`new Error(t('...'))` has no envelope and no status, which is precisely the input `describeGenericFailure`
+reads as a network fault. A blank required field then renders as "The server could not be reached",
+with the real sentence hidden behind a disclosure. Client-side validation stays a plain
+`toast.add` with translated title and description (`components/settings/ModelConfigurationPanel.vue`).
+
 The still-open remainder is the INLINE family: `error.value = e.message` rendered in a panel, and
 `testResult = { ok: false, message }` rendered by `ConnectionTestVerdict`. Those need a render
 surface rather than a toast, and are tracked as G4 in

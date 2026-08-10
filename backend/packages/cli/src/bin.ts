@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-import { getErrorMessage } from '@cat-factory/kernel'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { ArgError, HELP_TEXT, parseArgs } from './args.js'
 import { bootstrap } from './bootstrap.js'
 import { generateEnv } from './envCommand.js'
+// Kernel's describer, COPIED into this package rather than imported: `@cat-factory/kernel` is a
+// devDependency here and this file is the published `bin`, so a runtime import would resolve
+// through pnpm's workspace link locally and fail with ERR_MODULE_NOT_FOUND off the registry.
+import { getErrorMessage } from './errorText.js'
 import { setupK3s } from './k3s.js'
 import { supervise } from './superviseCommand.js'
 
@@ -55,6 +58,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  process.stderr.write(`\ncat-factory: ${getErrorMessage(err)}\n`)
+  // An error that describes itself as nothing (an empty message with no cause) says so as an
+  // empty string, so the fallback is what stops the last line of a failed run being a bare prefix.
+  process.stderr.write(
+    `\ncat-factory: ${getErrorMessage(err) || 'failed for an unreported reason'}\n`,
+  )
   process.exit(1)
 })

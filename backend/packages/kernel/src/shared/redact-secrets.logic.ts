@@ -53,13 +53,51 @@ function redactPrivateKeyBlocks(value: string): string {
   return copiedTo === 0 ? value : out + value.slice(copiedTo)
 }
 
+// An environment variable's NAME (`OPENAI_API_KEY`), which an error naming a missing setting
+// interpolates and no vendor emits a credential in the shape of. The underscore is required:
+// without it this would also spare an uppercase hex or base32 token.
+const ENV_VAR_NAME = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/
+// One word in ONE case convention (`expected`, `AUTHENTICATION`, `Missing`). Mixed case inside a
+// purely-alphabetic run is the tell that it is not a word: short base64 (`dXNlcjpwYXNz`) is
+// alphabetic too, and that is exactly what a `Basic ` prefix carries.
+const PROSE_WORD = /^(?:[a-z]+|[A-Z]+|[A-Z][a-z]+)$/
+// Above this length a purely-alphabetic single-case run stops reading as an English word. The
+// words that actually appear after these field names in error prose ("expected", "required",
+// "authentication") are all well under it.
+const MIN_ALPHABETIC_SECRET_CHARS = 16
+
+/**
+ * Whether a value captured by a FIELD-NAME rule is plausibly a credential rather than the next
+ * word of a sentence.
+ *
+ * The field-name rules key off a name (`key`, `signature`, `token`, `basic`), and those names are
+ * ordinary English that appears in ordinary error prose. Unguarded they turned "Missing required
+ * key: OPENAI_API_KEY" into "Missing required key: [REDACTED]" — deleting the one identifier the
+ * operator has to go and set — and "basic authentication failed" into "basic [REDACTED] failed".
+ * That was survivable while scrubbing was confined to log fields; it is not now that the same
+ * text is the message a person reads on a form and the `reason` persisted on a failed run.
+ *
+ * Deliberately asymmetric, in the direction the surrounding module already declares: this is a
+ * best-effort net over the structural allow-lists, so it gives up an all-lowercase dictionary
+ * word used as a password (`password=letmein`) to stop mangling every sentence that contains the
+ * word "key". Every credential SHAPE the rules exist for still matches, because real ones carry a
+ * digit, a symbol, mixed case, or length.
+ *
+ * An absent capture group answers `true`: a rule that matched without producing a value has told
+ * us nothing about the value, and the safe reading of nothing is "secret".
+ */
+function looksLikeSecretValue(value: string): boolean {
+  if (ENV_VAR_NAME.test(value)) return false
+  return !(value.length < MIN_ALPHABETIC_SECRET_CHARS && PROSE_WORD.test(value))
+}
+
 // Each rule matches a secret-bearing fragment; the capture group(s) bracket the literal
 // prefix to keep (so the reader still sees WHAT was redacted) and the secret to drop.
 const RULES: { pattern: RegExp; replace: (m: RegExpMatchArray) => string }[] = [
   // `Authorization: Bearer <token>` / `Bearer <token>` (case-insensitive scheme).
   {
     pattern: /\b(bearer|basic|token)\s+([A-Za-z0-9._+/=~-]{8,})/gi,
-    replace: (m) => `${m[1]} ${REPLACEMENT}`,
+    replace: (m) => (looksLikeSecretValue(m[2] ?? '') ? `${m[1]} ${REPLACEMENT}` : (m[0] ?? '')),
   },
   // `Authorization: <anything>` / `x-api-key: <anything>` header echoes.
   {
@@ -86,7 +124,8 @@ const RULES: { pattern: RegExp; replace: (m: RegExpMatchArray) => string }[] = [
   {
     pattern:
       /\b((?:access[_-]?)?(?:api[_-]?)?(?:client[_-]?)?(?:token|secret|password|passwd|pwd|sig|signature|key|apikey|auth))(["']?\s*[:=]\s*["']?)([^\s"',&}@/]{4,})/gi,
-    replace: (m) => `${m[1]}${m[2]}${REPLACEMENT}`,
+    replace: (m) =>
+      looksLikeSecretValue(m[3] ?? '') ? `${m[1]}${m[2]}${REPLACEMENT}` : (m[0] ?? ''),
   },
   // Recognisable standalone token shapes, regardless of surrounding context.
   { pattern: /\b(sk|rk|pk)-[A-Za-z0-9_-]{16,}/g, replace: () => REPLACEMENT },

@@ -804,6 +804,13 @@ export {
 } from './shared/post-mortem.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
+  errorChainMatches,
+  errorChainText,
+  publicDiagnostic,
+  MAX_ERROR_CHAIN_CHARS,
+  MAX_LOGGED_ERROR_CHAIN_CHARS,
+} from './shared/error-chain.logic.js'
+export {
   connectionFailureResult,
   describeConnectionFailure,
   type ConnectionFailureCause,
