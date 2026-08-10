@@ -22,9 +22,28 @@ splits four ways, each with a test file beside it: `k3s-probe.ts` classifies the
 - **The CLI never states a capability it has not established.** An ingress-template environment URL
   needs an ingress CONTROLLER and a published HOST PORT, and both are probed. The verdict is three
   states, not two (`ready` / `missing` / `unknown`), because a probe that could not read an answer
-  has not established the negative either. Everything that would otherwise promise a URL keys off it:
-  the printed summary, and the connect-form deep link, which WITHHOLDS the host-template param rather
-  than prefilling one nothing serves.
+  has not established the negative either, and an `unknown` names WHICH read failed, because a
+  missing `kubectl` and an RBAC refusal need different things done. Everything that would otherwise
+  promise a URL keys off the verdict: the printed summary, `buildK3sHandler` (which answers `null`
+  rather than fabricating a `url` block), and the connect-form deep link, which WITHHOLDS the
+  host-template param rather than prefilling one nothing serves. A stronger claim needs a stronger
+  check: `ready` carries an `attribution`, because a TCP connect cannot tell the cluster's controller
+  from any other process on that host port, and only `docker port` on the cluster's own container
+  settles it.
 - **A published host port is create-time-only** on every local distribution (k3d's `-p`, kind's
   `extraPortMappings`), so a create that omits it can never be repaired in place. That is why
-  `--recreate` exists, and why it is a general operation rather than one condition's remedy.
+  `--recreate` exists, and why it is a general operation rather than one condition's remedy. Every
+  create runs `clusterCreateCommand` and every printed recipe renders from it, so the guidance the
+  CLI hands a human cannot drift into building the one cluster shape it cannot repair.
+- **A printed remedy must be a command the CLI would ACCEPT.** `--recreate` only ever targets a
+  k3d/kind cluster it can name, so a remedy naming one is rendered from a resolved
+  `recreateTarget` and omitted when there is none. `RECREATE_OFFERS` is the one table the
+  destructive set is derived from, keyed by runtime: `K3sRuntime` has a member (`k3s`) with no
+  recreate at all, and a two-way ternary over it destroyed a cluster nobody named.
+- **The ingress port travels beside the host template, never inside it.** The rendered template is
+  also the Ingress `spec.rules[].host` a service's manifests declare, and Kubernetes rejects a
+  `host` with a port, so `ingressHostTemplate` is always portless and `ingressUrlPort` carries the
+  rest (the contracts' `ingressTemplate` source has a `port` field for exactly this).
+- **Use `runCommand(shell, command)` for a read whose non-zero exit is data.** A bare
+  `shell.run(cmd, command.args)` silently drops the planner's `cmd`, `input` and per-command
+  `timeoutMs`; `runOrThrow` is the same rule for a read whose failure must stop the run.

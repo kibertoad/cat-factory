@@ -39,8 +39,64 @@ export type OfferId =
   | 'recreate-kind'
   | 'install-k3s'
 
-/** The two DESTRUCTIVE offers: they delete a cluster before building it again. */
-export const RECREATE_OFFERS: readonly OfferId[] = ['recreate-k3d', 'recreate-kind']
+/**
+ * The DESTRUCTIVE offers, keyed by the runtime each one rebuilds. This is the ONE definition of
+ * the recreate set: {@link recreateOfferFor} resolves `--recreate`'s target from it and
+ * {@link isRecreateOffer} recognises one, so a `K3sRuntime` with no entry cannot be folded into a
+ * neighbour's branch by a two-way ternary.
+ *
+ * `k3s` has no entry deliberately: it is a HOST SERVICE (a systemd unit installed by `curl | sh`,
+ * which this CLI only ever prints), so there is no cluster for the CLI to delete and build again.
+ */
+export const RECREATE_OFFERS = {
+  k3d: 'recreate-k3d',
+  kind: 'recreate-kind',
+} as const satisfies Readonly<Partial<Record<K3sRuntime, OfferId>>>
+
+/** A runtime `--recreate` can target: one with an entry in {@link RECREATE_OFFERS}. */
+export type RecreatableRuntime = keyof typeof RECREATE_OFFERS
+export type RecreateOfferId = (typeof RECREATE_OFFERS)[RecreatableRuntime]
+
+/** The recreate offer for a runtime, or `null` when that runtime has no recreate at all. */
+export function recreateOfferFor(runtime: K3sRuntime): RecreateOfferId | null {
+  return runtime in RECREATE_OFFERS ? RECREATE_OFFERS[runtime as RecreatableRuntime] : null
+}
+
+/** Whether an offer is one of the destructive ones. */
+export function isRecreateOffer(id: OfferId): id is RecreateOfferId {
+  return (Object.values(RECREATE_OFFERS) as OfferId[]).includes(id)
+}
+
+/** kubeconfig context prefixes k3d/kind assign, paired with the runtime that owns them. */
+const CONTEXT_RUNTIMES: ReadonlyArray<[prefix: string, runtime: RecreatableRuntime]> = [
+  ['k3d-', 'k3d'],
+  ['kind-', 'kind'],
+]
+
+/**
+ * The k3d/kind cluster a REUSED kubeconfig context names, when the CLI can both name it and build
+ * it again. `null` for anything else (a bare k3s host service, a shared cluster, a context whose
+ * cluster the runtime no longer reports).
+ *
+ * This exists because a remedy has to be a command that WORKS. `--recreate`'s target rule is
+ * exactly "a k3d/kind cluster this command can name", and on the reuse path nothing else knows
+ * which cluster that is: the offer was `use-existing`, so no name was passed. Without this, the
+ * missing-host-port remedy printed `cat-factory k3s --recreate` against the DEFAULT name, which
+ * `chooseOffer` then refused for any cluster not called `cat-factory`.
+ */
+export function recreateTargetForContext(
+  d: HostDetections,
+): { runtime: RecreatableRuntime; clusterName: string } | null {
+  const context = d.clusterContext
+  if (!context) return null
+  for (const [prefix, runtime] of CONTEXT_RUNTIMES) {
+    if (!context.startsWith(prefix)) continue
+    const clusterName = context.slice(prefix.length)
+    const known = runtime === 'kind' ? d.kindClusters : d.k3dClusters
+    if (clusterName.length > 0 && known.includes(clusterName)) return { runtime, clusterName }
+  }
+  return null
+}
 
 /** One offered setup path, with whether it's currently possible + why not. */
 export interface Offer {
@@ -150,8 +206,8 @@ export function classifyHost(
   // only for a cluster this CLI can both NAME and build again, which is why there is no recreate
   // for `use-existing` (that fires for any reachable kubeconfig, including a shared cluster, and
   // there is no recipe for re-creating "whatever this context points at").
-  const recreate = (id: 'recreate-k3d' | 'recreate-kind'): Offer => {
-    const runtime = id === 'recreate-kind' ? 'kind' : 'k3d'
+  const recreate = (runtime: RecreatableRuntime): Offer => {
+    const id = RECREATE_OFFERS[runtime]
     const tooling = runtime === 'kind' ? d.kind : d.k3d
     const clusters = runtime === 'kind' ? d.kindClusters : d.k3dClusters
     const known = clusters.includes(clusterName)
@@ -174,8 +230,7 @@ export function classifyHost(
     useExisting,
     createK3d,
     createKind,
-    recreate('recreate-k3d'),
-    recreate('recreate-kind'),
+    ...(Object.keys(RECREATE_OFFERS) as RecreatableRuntime[]).map(recreate),
     installK3s,
   ]
   const recommended =

@@ -298,6 +298,11 @@ export function httpRouteParentRef(obj: unknown): { name: string; namespace?: st
  * Derive the environment URL from the configured source. For `ingressTemplate` the URL
  * is known immediately (rendered host); the status-backed sources return null until the
  * caller has fetched the live address and passes it in.
+ *
+ * A configured `port` is appended here rather than being baked into the host template, because
+ * the rendered template is also the Ingress `host` the manifests declare and a Kubernetes `host`
+ * may not carry a port. A local cluster whose controller is published on a non-default host port
+ * is the case that needs it.
  */
 export function deriveUrl(
   url: KubernetesUrlSource,
@@ -307,7 +312,8 @@ export function deriveUrl(
   const scheme = url.scheme ?? 'https'
   if (url.source === 'ingressTemplate') {
     const host = renderTemplate(url.hostTemplate, vars).trim()
-    return host ? `${scheme}://${host}` : null
+    if (!host) return null
+    return url.port ? `${scheme}://${host}:${url.port}` : `${scheme}://${host}`
   }
   if (!liveAddress) return null
   if (url.source === 'serviceStatus' && url.port) {

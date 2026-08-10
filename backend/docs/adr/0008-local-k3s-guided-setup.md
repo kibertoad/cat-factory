@@ -111,16 +111,38 @@ What changed, all inside `@cat-factory/cli`:
 - **The create path publishes the port** (`k3d -p`, kind `extraPortMappings` + the
   `ingress-ready` node label, both create-time-only), configurable with `--ingress-port`.
 - **`k3s-ingress.ts` PROBES both halves** and answers in three states, `unknown` distinct from
-  `missing` for the reason `preflight.ts` states. The summary and the deep link key off it; an
-  unestablished ingress WITHHOLDS the `hostTemplate` prefill, so the connect form's required
-  field stays empty rather than saving a URL nothing serves.
-- **The deep-link contract gains `scheme`** (Decision 4's param list): a local ingress controller's
-  TLS is self-signed, so the verified derivation is plain HTTP.
+  `missing` for the reason `preflight.ts` states, and each `unknown` NAMES its cause (no `kubectl`,
+  an unreachable apiserver, a refused read, an unparseable answer, a filtered port) because each
+  needs a different thing done. The summary and the deep link key off the verdict; an unestablished
+  ingress WITHHOLDS the `hostTemplate` prefill, so the connect form's required field stays empty
+  rather than saving a URL nothing serves, and `buildK3sHandler` answers `null` rather than
+  fabricating a `url` block for a `--register` to POST.
+- **The port half is settled against the CONTAINER RUNTIME, not a socket.** A TCP connect proves
+  something listens, and an unrelated web server on host 80 answers it exactly as an ingress
+  controller does, so a cluster forwarding nothing could read as ready. Where the CLI can name the
+  cluster (every create/recreate, plus a reuse whose context resolves to a detected k3d/kind
+  cluster) it reads `docker port` on the cluster's own container: that both refutes a foreign
+  listener and names the host port the cluster DOES publish, which is a shorter fix than a rebuild.
+  Where it cannot be asked, the verdict stays `ready` with `attribution: 'unattributed'` and the
+  summary says which half was not checked.
+- **The deep-link contract gains `scheme`** (Decision 4's param list) and `ingressPort`: a local
+  ingress controller's TLS is self-signed, so the verified derivation is plain HTTP, and a
+  non-default host port rides its OWN param. It cannot ride inside the host template, because the
+  rendered template is also the Ingress `spec.rules[].host` a service's manifests declare and
+  Kubernetes rejects a `host` carrying a port. That is why the `ingressTemplate` URL source gained
+  an optional `port` in `@cat-factory/contracts` (additively, on `/api/v1` too).
 - **`--recreate`** destroys and rebuilds a named k3d/kind cluster from the current flags, since a
   published host port cannot be added in place. It is a GENERAL operation (these clusters are
   transient), not one condition's remedy: it is offered whenever the CLI can both name the cluster
   and build it again, never for `use-existing`, and it is deliberately absent from the
-  recommendation priority so `--yes` alone can never select a destructive path.
+  recommendation priority so `--yes` alone can never select a destructive path. The recreate set is
+  ONE table (`RECREATE_OFFERS`, keyed by runtime) rather than a ternary, so `--runtime k3s` is
+  refused outright instead of resolving to the k3d branch and destroying a cluster nobody named:
+  `K3sRuntime` has three members and only two of them name a cluster this CLI can rebuild.
+- **A remedy that names a recreate is one the CLI would ACCEPT.** The missing-host-port fix is
+  rendered from the resolved target (`ResolvedConnection.recreateTarget`), and where there is none
+  it says so instead of printing a `cat-factory k3s --recreate` that `chooseOffer` then refuses
+  against the default cluster name.
 
 ## References
 

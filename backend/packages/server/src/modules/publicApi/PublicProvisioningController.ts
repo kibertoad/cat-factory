@@ -241,7 +241,12 @@ function registerBootstrapRoutes(app: Hono<AppEnv>): void {
 function toKubernetesUrlSource(url: PublicKubernetesUrlSource): KubernetesUrlSource {
   switch (url.source) {
     case 'ingressTemplate':
-      return { source: 'ingressTemplate', hostTemplate: url.hostTemplate, ...scheme(url.scheme) }
+      return {
+        source: 'ingressTemplate',
+        hostTemplate: url.hostTemplate,
+        ...(url.port === undefined ? {} : { port: url.port }),
+        ...scheme(url.scheme),
+      }
     case 'ingressStatus':
       return {
         source: 'ingressStatus',

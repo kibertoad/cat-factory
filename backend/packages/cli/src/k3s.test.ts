@@ -96,8 +96,17 @@ function provisionMap(context?: string): Record<string, Partial<ShellResult>> {
 /** The reuse-path provisioning commands (current context, no `--context` suffix). */
 const PROVISION = provisionMap()
 
-/** The ingress readiness a healthy k3d/k3s cluster on the default host port reports. */
-const READY_INGRESS = { status: 'ready', port: 80, controller: 'traefik' }
+/**
+ * The ingress readiness a healthy k3d/k3s cluster on the default host port reports. `unattributed`
+ * because these fixtures name no cluster whose published-port table could be read: the reuse path
+ * only gets a nameable cluster when the current context resolves to a DETECTED k3d/kind one.
+ */
+const READY_INGRESS = {
+  status: 'ready',
+  port: 80,
+  controller: 'traefik',
+  attribution: 'unattributed',
+}
 
 describe('setupK3s', () => {
   it('in --yes mode provisions the recommended offer (reuse existing cluster)', async () => {
@@ -176,7 +185,11 @@ describe('setupK3s', () => {
     const out = io.lines.join('\n')
     expect(out).not.toContain(K3S_INSTALL_COMMAND) // curl | sh can't run on Windows
     expect(out).toContain('only on Linux')
-    expect(out).toContain('k3d cluster create cat-factory')
+    // The recipe the CLI hands a human is the one the CLI itself runs, `-p` and all: hand-written,
+    // it had lost the publish flag and told the operator to build exactly the cluster whose missing
+    // host port the next run would ask them to recreate.
+    expect(out).toContain('k3d cluster create cat-factory --api-port 6443 -p 80:80@loadbalancer')
+    expect(out).toContain('only be')
     // The install steps are the website's: a reader who hit this message has no checkout to
     // read a repo path from.
     expect(out).toContain('catfactory.ai/deploy/kubernetes-windows.html')
@@ -416,7 +429,15 @@ describe('printed environment-URL guidance', () => {
     const out = await summaryFor(ONE_CLASS, 'open')
     expect(out).toContain('Host template:           {{branch}}.127.0.0.1.nip.io')
     expect(out).toContain('Verified:')
-    expect(out).toContain('host port 80 reaches it')
+    expect(out).toContain('host port 80 answers')
+  })
+
+  it('does not claim the answering port IS the cluster when that was not checked', async () => {
+    // A TCP connect cannot tell an ingress controller from any other process on the host port, so
+    // the unattributed case says so instead of asserting the stronger fact it did not establish.
+    const out = await summaryFor(ONE_CLASS, 'open')
+    expect(out).toContain('Not checked')
+    expect(out).toContain('check what else is bound there')
   })
 
   it('states the gap and the fix when the cluster cannot serve one', async () => {
@@ -426,19 +447,57 @@ describe('printed environment-URL guidance', () => {
     expect(out).toContain('CANNOT serve an ingress-derived environment URL')
     expect(out).toContain('it runs no ingress controller')
     expect(out).toContain('nothing on the host serves port 80')
-    // The one fix for a missing host port, since it cannot be added to a running cluster.
-    expect(out).toContain('cat-factory k3s --recreate')
     // And the alternative that needs no cluster change at all.
     expect(out).toContain('Service status')
   })
 
-  it('says COULD NOT TELL rather than "missing" when the read failed', async () => {
+  it('withholds the recreate remedy on a reuse path it could not name a cluster for', async () => {
+    // `--recreate` only ever targets a k3d/kind cluster this command can name, so printing it for a
+    // cluster it cannot name produced a remedy the CLI itself refuses: the live case the fix is for.
+    const out = await summaryFor(NO_CLASSES, 'closed')
+    expect(out).not.toContain('--recreate')
+    expect(out).toContain('re-create it with the tool that made it')
+  })
+
+  it('names the DETECTED cluster in the recreate remedy when the context resolves to one', async () => {
+    // The current context is `k3d-cat-factory` AND k3d reports that cluster, so the CLI can both
+    // name it and build it again: the remedy becomes a command that actually runs.
+    const io = captureIo()
+    await setupK3s(opts({ yes: true }), {
+      io,
+      tcp: fakeTcp('closed'),
+      shell: scriptShell({
+        ...REACHABLE,
+        ...PROVISION,
+        'k3d version': { code: 0, stdout: 'k3d version v5.6.0' },
+        'k3d cluster list --output json': { code: 0, stdout: '[{"name":"cat-factory"}]' },
+        'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
+        'kubectl get ingressclass -o json --request-timeout=5s': NO_CLASSES,
+      }),
+    })
+    expect(io.lines.join('\n')).toContain(
+      'cat-factory k3s --recreate --runtime k3d --cluster-name cat-factory --ingress-port 80',
+    )
+  })
+
+  it('says COULD NOT TELL rather than "missing" when the read failed, and why', async () => {
     // An unreadable cluster has not established the negative either, and reporting it as missing
-    // would send an operator to rebuild a cluster that was fine.
-    const out = await summaryFor({ code: 1, stderr: 'connection refused' }, 'open')
+    // would send an operator to rebuild a cluster that was fine. The CAUSE decides the remedy: an
+    // RBAC refusal and a missing binary need different things done.
+    const out = await summaryFor({ code: 1, stderr: 'Error from server (Forbidden)' }, 'open')
     expect(out).toContain('Could NOT establish')
+    expect(out).toContain('Forbidden')
+    expect(out).toContain('allowed to list ingressclasses')
     expect(out).not.toContain('CANNOT serve')
     expect(out).not.toContain('Host template:')
+  })
+
+  it('sends a MISSING kubectl at installing it, not at waiting for the cluster', async () => {
+    // The four causes used to render one message with one remedy ("re-run once the cluster has
+    // settled"), which is advice for a problem an operator with no kubectl does not have.
+    const out = await summaryFor({ code: 127, stderr: 'not found' }, 'open')
+    expect(out).toContain('Install `kubectl`')
+    expect(out).not.toContain('cluster-info')
   })
 })
 
@@ -490,5 +549,28 @@ describe('--recreate', () => {
         shell: scriptShell({ ...REACHABLE, ...PROVISION }),
       }),
     ).rejects.toThrow(/Cannot recreate/)
+  })
+
+  it('refuses --runtime k3s outright instead of destroying the k3d cluster', async () => {
+    // `K3sRuntime` has three members and only two name a cluster this CLI can rebuild. Resolved by
+    // a two-way ternary, `--runtime k3s` folded into the k3d branch and deleted a k3d cluster the
+    // operator never named: an unrelated Docker cluster lost to a flag about a host service.
+    const io = captureIo()
+    const shell = scriptShell({
+      ...REACHABLE,
+      ...K3D_HOST,
+      'k3d cluster delete cat-factory': { code: 0 },
+      'k3d cluster create cat-factory --api-port 6443 -p 80:80@loadbalancer': { code: 0 },
+      ...provisionMap('k3d-cat-factory'),
+    })
+    await expect(
+      setupK3s(opts({ yes: true, recreate: true, k3sRuntime: 'k3s' }), {
+        io,
+        tcp: fakeTcp(),
+        shell,
+      }),
+    ).rejects.toThrow(/Cannot recreate a "k3s" cluster/)
+    // And nothing was destroyed on the way to the refusal.
+    expect(io.lines.join('\n')).not.toContain('About to DESTROY')
   })
 })

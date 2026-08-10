@@ -1,18 +1,28 @@
 import { type CliOptions, OPTION_DEFAULTS } from './args.js'
-import { buildK3sHandler, buildK3sSetupUrl } from './k3s-handler.js'
-import { createNodeShell, type HostShell } from './host-shell.js'
+import { buildK3sSetupUrl } from './k3s-handler.js'
+import { createNodeShell, type HostShell, renderCommandLine } from './host-shell.js'
 import { createConsoleIo, type Io } from './io.js'
 import {
   createNodeTcpProbe,
+  ingressHostTemplate,
   ingressRemedies,
   type IngressReadiness,
+  ingressUrlPort,
   type TcpProbe,
 } from './k3s-ingress.js'
-import { type HostState, type Offer, type OfferId, probeHost } from './k3s-probe.js'
+import {
+  type HostState,
+  type Offer,
+  type OfferId,
+  probeHost,
+  recreateOfferFor,
+} from './k3s-probe.js'
 import {
   CAT_FACTORY_NAMESPACE,
+  clusterCreateCommand,
   provisionCluster,
   ProvisionError,
+  resolveIngressPort,
   type ResolvedConnection,
   SERVICE_ACCOUNT_NAME,
 } from './k3s-provision.js'
@@ -64,9 +74,9 @@ export async function setupK3s(options: CliOptions, deps: K3sDeps = {}): Promise
 
   const chosen = await chooseOffer(state, options, io)
 
-  // The k3s install needs sudo — we only ever print the command, never provision on the user's behalf.
+  // The k3s install needs sudo, so we only ever print the command, never provision for the user.
   if (chosen === 'install-k3s') {
-    printInstallGuidance(state, io, platform)
+    printInstallGuidance(state, io, platform, clusterName, resolveIngressPort(options))
     return { state, chosen }
   }
 
@@ -74,7 +84,7 @@ export async function setupK3s(options: CliOptions, deps: K3sDeps = {}): Promise
   try {
     connection = await provisionCluster(chosen, state, options, { io, shell, tcp })
   } catch (err) {
-    // A declined confirm or a failed command is an expected, non-fatal outcome — report and stop.
+    // A declined confirm or a failed command is an expected, non-fatal outcome: report and stop.
     if (err instanceof ProvisionError) {
       io.warn(err.message)
       return { state, chosen }
@@ -92,16 +102,16 @@ export async function setupK3s(options: CliOptions, deps: K3sDeps = {}): Promise
  * Guide the SECOND half of a working Kubernetes test environment: the DEPLOY RUNNER. The connection
  * we just provisioned only says WHERE to deploy (the apiserver + namespace); a test environment
  * ALSO needs a runner to actually render + apply its manifests, or standing one up fails with "no
- * deploy runner wired". That runner is a local-backend env var, NOT part of the cluster connection —
+ * deploy runner wired". That runner is a local-backend env var, NOT part of the cluster connection,
  * so a user who wires only the connection hits the failure mid-run. Surface it here, now that it is
  * a one-liner: `LOCAL_DEPLOY_RUNTIME=container` works out of the box (the deploy-harness image is
- * resolved automatically to the version the backend supports — no image ref to hunt down).
+ * resolved automatically to the version the backend supports, with no image ref to hunt down).
  */
 function printDeployRunnerGuidance(io: Io): void {
   io.info(
     [
       '',
-      'One more step — the DEPLOY RUNNER. The cluster connection above says WHERE to deploy; a test',
+      'One more step, the DEPLOY RUNNER. The cluster connection above says WHERE to deploy; a test',
       'environment also needs a runner to render + apply its manifests (kubectl/kustomize/helm), or',
       'standing it up fails with "no deploy runner wired". Enable it in your local backend .env:',
       '',
@@ -123,7 +133,7 @@ function printDeployRunnerGuidance(io: Io): void {
 async function handOff(connection: ResolvedConnection, options: CliOptions, io: Io): Promise<void> {
   const spaUrl = options.appUrl ?? OPTION_DEFAULTS.appUrl
   const verified = connection.ingress.status === 'ready'
-  const link = buildK3sSetupUrl(spaUrl, buildK3sHandler(connection), { ingressVerified: verified })
+  const link = buildK3sSetupUrl(spaUrl, connection)
   io.info(
     [
       '',
@@ -179,11 +189,21 @@ function renderReport(state: HostState): string {
  * flags they passed had taken effect. The refusal escapes to `bin.ts` (a non-zero exit) rather
  * than joining the warn-and-carry-on path a DECLINED confirm takes, because those are opposite
  * facts: one is the operator changing their mind, this one is the command unable to obey.
+ *
+ * The target is resolved through `recreateOfferFor`, which answers `null` for a runtime that HAS no
+ * recreate. `--runtime` has three members and only two of them name a cluster this CLI can rebuild,
+ * so a two-way ternary silently folded `--runtime k3s` into the k3d branch and destroyed a k3d
+ * cluster the operator never named.
  */
 async function chooseOffer(state: HostState, options: CliOptions, io: Io): Promise<OfferId> {
   if (options.recreate) {
     const runtime = options.k3sRuntime ?? OPTION_DEFAULTS.k3sRuntime
-    const id: OfferId = runtime === 'kind' ? 'recreate-kind' : 'recreate-k3d'
+    const id = recreateOfferFor(runtime)
+    if (id === null) {
+      throw new ProvisionError(
+        `Cannot recreate a "${runtime}" cluster: --recreate deletes and rebuilds a k3d or kind cluster, and k3s is a host service this command never installs or removes. Re-run with --runtime k3d or --runtime kind to target one of those.`,
+      )
+    }
     const offer = state.offers.find((o) => o.id === id)
     if (!offer?.available) {
       throw new ProvisionError(
@@ -218,9 +238,20 @@ function offerLabel(o: Offer): string {
  * Print the k3s install guidance. cat-factory never provisions k3s for the user, so this only ever
  * PRINTS instructions. The copy is platform-aware: k3s is Linux-only, so on Windows/macOS it steers
  * to the k3d (k3s-in-Docker) path rather than a `curl | sh` install that can't run there.
+ *
+ * The k3d recipe is RENDERED from the same planner the create path runs, never written out here.
+ * Hand-written, it had lost the `-p` publish flag, so the one create this CLI hands to a human built
+ * exactly the cluster whose missing host port the next run then asked them to recreate. A published
+ * host port is create-time-only, which is what makes that omission unrecoverable rather than untidy.
  */
-function printInstallGuidance(state: HostState, io: Io, platform: NodeJS.Platform): void {
-  // Don't tell a user who already has k3s to re-install it — point them at starting the service.
+function printInstallGuidance(
+  state: HostState,
+  io: Io,
+  platform: NodeJS.Platform,
+  clusterName: string,
+  ingressPort: number,
+): void {
+  // Don't tell a user who already has k3s to re-install it: point them at starting the service.
   if (state.detections.k3s.installed) {
     io.info(
       [
@@ -229,7 +260,7 @@ function printInstallGuidance(state: HostState, io: Io, platform: NodeJS.Platfor
         '',
         '  sudo systemctl start k3s   # or: sudo k3s server',
         '',
-        'Then re-run `cat-factory k3s` — it will detect the running cluster and provision the handler.',
+        'Then re-run `cat-factory k3s`: it will detect the running cluster and provision the handler.',
       ].join('\n'),
     )
     return
@@ -251,9 +282,13 @@ function printInstallGuidance(state: HostState, io: Io, platform: NodeJS.Platfor
         '',
         `  ${install}`,
         '',
-        '  k3d cluster create cat-factory --api-port 127.0.0.1:6443',
+        `  ${renderCommandLine(clusterCreateCommand('k3d', clusterName, ingressPort))}`,
         '',
-        'Then re-run `cat-factory k3s` — it will detect the new k3d cluster and provision the handler.',
+        `The \`-p\` publishes host port ${ingressPort} into the cluster's ingress controller. It can only be`,
+        'set when the cluster is created, so a cluster built without it can never serve an',
+        'ingress-derived environment URL without being created again.',
+        '',
+        'Then re-run `cat-factory k3s`: it will detect the new k3d cluster and provision the handler.',
       ].join('\n'),
     )
     return
@@ -262,13 +297,109 @@ function printInstallGuidance(state: HostState, io: Io, platform: NodeJS.Platfor
   io.info(
     [
       '',
-      'Install k3s (single-node) — run this yourself (needs sudo):',
+      'Install k3s (single-node). Run this yourself (needs sudo):',
       '',
       `  ${K3S_INSTALL_COMMAND}`,
       '',
-      'Then re-run `cat-factory k3s` — it will detect the new cluster and provision the handler.',
+      'Then re-run `cat-factory k3s`: it will detect the new cluster and provision the handler.',
     ].join('\n'),
   )
+}
+
+/**
+ * The environment-URL half of the summary, rendered from the PROBE rather than from a fixed
+ * script. This is the line the whole change turns on: it used to state "Ingress host template" +
+ * `{{branch}}.127.0.0.1.nip.io` unconditionally, including on a reused cluster the command had
+ * never looked at, and an operator who typed it got an environment whose URL answered nothing.
+ *
+ * Three outcomes, three different things to say, per the degrade-loudly rule: verified working,
+ * verified missing (with the fix), and could-not-tell (which is NOT the same as missing, and must
+ * not send someone to rebuild a cluster that was fine).
+ *
+ * The template itself comes from `ingressHostTemplate`, the same function the handler and deep link
+ * read. Re-deriving it here (with its own hard-coded default port) is how the printed line and the
+ * link it sits above could disagree about the very value the operator is told to type.
+ */
+function renderUrlSourceLines(connection: ResolvedConnection): string[] {
+  const { ingress } = connection
+  if (ingress.status === 'ready') {
+    const port = ingressUrlPort(ingress)
+    return [
+      `  • Environment URL source:  Ingress host template`,
+      `  • Host template:           ${ingressHostTemplate(ingress)}`,
+      ...(port === null ? [] : [`  • Ingress port:            ${port}`]),
+      `  • URL scheme:              http`,
+      '',
+      ...verifiedLines(ingress),
+    ]
+  }
+  const headline =
+    ingress.status === 'missing'
+      ? `  This cluster CANNOT serve an ingress-derived environment URL (${describeGaps(ingress)}).`
+      : `  Could NOT establish whether this cluster serves an ingress-derived environment URL: ${ingress.probeFailure}.`
+  return [
+    `  • Environment URL source:  leave this for now, see below`,
+    '',
+    headline,
+    '  So the connect form is NOT pre-filled with an ingress host template: entering one would',
+    '  give every test environment a URL that resolves to nothing, and the failure would surface',
+    '  much later, at the tester step, long after provisioning reported success.',
+    ...ingressRemedies(ingress, remedyContext(connection)).map((line) =>
+      line.startsWith('  ') ? `  ${line}` : `  - ${line}`,
+    ),
+  ]
+}
+
+/**
+ * What the probe established about a READY ingress, claimed no more strongly than it was checked.
+ *
+ * A TCP connect proves that something listens, not that the cluster's controller is what listens:
+ * an unrelated web server on the same host port answers identically. Where the container runtime
+ * confirmed the cluster publishes that port, the claim is whole; where it could not be asked, the
+ * residual is stated, because an operator who then gets a 404 from the wrong server has no other
+ * way to know that is even possible.
+ */
+function verifiedLines(ingress: Extract<IngressReadiness, { status: 'ready' }>): string[] {
+  if (ingress.attribution === 'cluster') {
+    return [
+      `  Verified: the cluster runs the "${ingress.controller}" ingress controller and publishes host port ${ingress.port} into it.`,
+    ]
+  }
+  return [
+    `  Verified: the cluster runs the "${ingress.controller}" ingress controller, and host port ${ingress.port} answers.`,
+    `  Not checked: whether the process answering on ${ingress.port} IS this cluster (that read needs a`,
+    '  container runtime this could ask). If an environment URL 404s, check what else is bound there.',
+  ]
+}
+
+/** The remedy context: the distribution for wording, plus a recreate command that would WORK. */
+function remedyContext(connection: ResolvedConnection): {
+  runtime?: 'k3d' | 'kind'
+  recreateCommand?: string
+} {
+  const target = connection.recreateTarget
+  return {
+    ...((connection.runtime ?? target?.runtime)
+      ? { runtime: connection.runtime ?? target?.runtime }
+      : {}),
+    ...(target
+      ? {
+          recreateCommand: `cat-factory k3s --recreate --runtime ${target.runtime} --cluster-name ${target.clusterName} --ingress-port ${connection.ingress.port}`,
+        }
+      : {}),
+  }
+}
+
+/** Name the missing halves the way the fix splits: a controller and a published host port. */
+function describeGaps(ingress: Extract<IngressReadiness, { status: 'missing' }>): string {
+  const parts = ingress.gaps.map((gap) =>
+    gap === 'controller'
+      ? 'it runs no ingress controller'
+      : ingress.publishedOn !== undefined
+        ? `it publishes its ingress controller on host port ${ingress.publishedOn}, not ${ingress.port}`
+        : `nothing on the host serves port ${ingress.port} for it`,
+  )
+  return parts.join('; ')
 }
 
 /**
@@ -285,59 +416,6 @@ function printInstallGuidance(state: HostState, io: Io, platform: NodeJS.Platfor
  * because it is the coordinate you need to mint a REPLACEMENT token later, so it is printed as
  * exactly that.
  */
-/**
- * The environment-URL half of the summary, rendered from the PROBE rather than from a fixed
- * script. This is the line the whole change turns on: it used to state "Ingress host template" +
- * `{{branch}}.127.0.0.1.nip.io` unconditionally, including on a reused cluster the command had
- * never looked at, and an operator who typed it got an environment whose URL answered nothing.
- *
- * Three outcomes, three different things to say, per the degrade-loudly rule: verified working,
- * verified missing (with the fix), and could-not-tell (which is NOT the same as missing, and must
- * not send someone to rebuild a cluster that was fine).
- */
-function renderUrlSourceLines(connection: ResolvedConnection): string[] {
-  const { ingress } = connection
-  const context = { runtime: connection.runtime, clusterName: connection.clusterName }
-  if (ingress.status === 'ready') {
-    const host =
-      ingress.port === 80
-        ? '{{branch}}.127.0.0.1.nip.io'
-        : `{{branch}}.127.0.0.1.nip.io:${ingress.port}`
-    return [
-      `  • Environment URL source:  Ingress host template`,
-      `  • Host template:           ${host}`,
-      `  • URL scheme:              http`,
-      '',
-      `  Verified: the cluster runs the "${ingress.controller}" ingress controller and host port ${ingress.port} reaches it.`,
-    ]
-  }
-  const headline =
-    ingress.status === 'missing'
-      ? `  This cluster CANNOT serve an ingress-derived environment URL (${describeGaps(ingress)}).`
-      : `  Could NOT establish whether this cluster serves an ingress-derived environment URL: ${ingress.probeFailure}.`
-  return [
-    `  • Environment URL source:  leave this for now, see below`,
-    '',
-    headline,
-    '  So the connect form is NOT pre-filled with an ingress host template: entering one would',
-    '  give every test environment a URL that resolves to nothing, and the failure would surface',
-    '  much later, at the tester step, long after provisioning reported success.',
-    ...ingressRemedies(ingress, context).map((line) =>
-      line.startsWith('  ') ? `  ${line}` : `  - ${line}`,
-    ),
-  ]
-}
-
-/** Name the missing halves the way the fix splits: a controller and a published host port. */
-function describeGaps(ingress: Extract<IngressReadiness, { status: 'missing' }>): string {
-  const parts = ingress.gaps.map((gap) =>
-    gap === 'controller'
-      ? 'it runs no ingress controller'
-      : `nothing on the host serves port ${ingress.port}`,
-  )
-  return parts.join('; ')
-}
-
 function printConnectionSummary(connection: ResolvedConnection, io: Io): void {
   io.info(
     [

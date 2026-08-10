@@ -93,6 +93,12 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      manual path is yours to check with `kubectl get ingressclass` and a `curl` at the host port.
      Also set the URL **scheme** to `http`: a local ingress controller serves TLS with a
      self-signed certificate, so an `https` environment URL fails on the certificate instead.
+
+     A host port other than the scheme's default goes in the URL source's own **`port`** field,
+     never inside `hostTemplate`. The rendered template is also the Ingress `spec.rules[].host`
+     your manifests declare, and Kubernetes rejects a `host` carrying a port, so a template like
+     `{{branch}}.127.0.0.1.nip.io:18080` yields the right environment URL and a manifest the
+     apiserver refuses.
      The **`manifestSource`** is no longer on this connection: it is declared per-service on the
      block's `provisioning` (colocated path or a separate repo), and merged with this engine config
      at provision time. In local mode you can additionally set a per-user "this-machine" override of

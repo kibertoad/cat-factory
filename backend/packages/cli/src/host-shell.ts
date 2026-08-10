@@ -69,6 +69,27 @@ export interface HostShell {
   ): Promise<ShellResult>
 }
 
+/**
+ * Run a planned {@link Command} through a shell, honouring every field it carries.
+ *
+ * Use this for a READ whose non-zero exit is data rather than a failure (a probe, a best-effort
+ * list). `shell.run(command.cmd, command.args)` at a call site looks equivalent and is not: it
+ * silently drops `input` and the per-command `timeoutMs`, and hard-codes the binary the planner
+ * was there to name, so changing `cmd` keeps invoking the old one and the read gets the 10s
+ * default watchdog instead of its own.
+ */
+export function runCommand(shell: HostShell, command: Command): Promise<ShellResult> {
+  return shell.run(command.cmd, command.args, {
+    input: command.input,
+    timeoutMs: command.timeoutMs,
+  })
+}
+
+/** A planned command rendered as the shell line a human would type, for printed guidance. */
+export function renderCommandLine(command: Command): string {
+  return [command.cmd, ...command.args].join(' ')
+}
+
 /** The real, process-backed {@link HostShell}. */
 export function createNodeShell(): HostShell {
   return {

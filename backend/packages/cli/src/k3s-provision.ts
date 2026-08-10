@@ -1,22 +1,29 @@
 import { type CliOptions, OPTION_DEFAULTS } from './args.js'
-import { type Command, type HostShell, type ShellResult } from './host-shell.js'
+import { type Command, type HostShell, runCommand, type ShellResult } from './host-shell.js'
 import {
   DEFAULT_INGRESS_PORT,
   INGRESS_CONTAINER_HTTP_PORT,
   INGRESS_SETTLE_WAIT_MS,
+  type IngressProbeCluster,
   type IngressReadiness,
   probeIngress,
   type TcpProbe,
 } from './k3s-ingress.js'
 import { type Io } from './io.js'
-import { type HostState, type OfferId } from './k3s-probe.js'
+import {
+  type HostState,
+  isRecreateOffer,
+  type OfferId,
+  RECREATE_OFFERS,
+  recreateTargetForContext,
+} from './k3s-probe.js'
 
 /** The namespace + ServiceAccount + long-lived token Secret the guided setup creates. */
 export const CAT_FACTORY_NAMESPACE = 'cat-factory'
 export const SERVICE_ACCOUNT_NAME = 'cat-factory'
 const TOKEN_SECRET_NAME = 'cat-factory-token'
 /** The apiserver port k3d/kind is asked to publish (the kube default). */
-const DEFAULT_API_PORT = 6443
+export const DEFAULT_API_PORT = 6443
 
 /**
  * Watchdog budget (ms) for `k3d cluster create` / `kind create cluster`. These pull node images on
@@ -49,6 +56,13 @@ export interface ResolvedConnection {
    * summary, the connect-form deep link) keys off this.
    */
   ingress: IngressReadiness
+  /**
+   * The cluster a `--recreate` could name, when there is one: the cluster this run built, or (on
+   * the reuse path) the k3d/kind cluster the kubeconfig context resolves to. Absent when no such
+   * target exists, and a remedy that would print a recreate has to WITHHOLD it then, because
+   * `--recreate` refuses anything it cannot name.
+   */
+  recreateTarget?: { runtime: 'k3d' | 'kind'; clusterName: string }
 }
 
 /** Raised when a provisioning command fails; carries an actionable message (never the token). */
@@ -219,6 +233,22 @@ export function kindCreateCommand(
   }
 }
 
+/**
+ * The create command for either distribution, so every caller (the create path, the recreate leg,
+ * and the printed guidance) issues the SAME line. The printed one used to be hand-written and had
+ * therefore lost the `-p` publish flag, telling an operator to build exactly the cluster whose
+ * missing host port the next run then asked them to recreate.
+ */
+export function clusterCreateCommand(
+  runtime: 'k3d' | 'kind',
+  name: string,
+  ingressPort: number = DEFAULT_INGRESS_PORT,
+): Command {
+  return runtime === 'kind'
+    ? kindCreateCommand(name, ingressPort)
+    : k3dCreateCommand(name, DEFAULT_API_PORT, ingressPort)
+}
+
 /** `k3d cluster delete <name>` / `kind delete cluster --name <name>`. Destroys the cluster. */
 export function clusterDeleteCommand(runtime: 'k3d' | 'kind', name: string): Command {
   return {
@@ -366,6 +396,8 @@ export interface ProvisionDeps {
   tcp: TcpProbe
   /** Delay between token-Secret read attempts (real setTimeout; a no-op in tests). */
   sleep?: (ms: number) => Promise<void>
+  /** Clock the ingress settle wait is measured against (default `Date.now`); see `probeIngress`. */
+  now?: () => number
   /**
    * How many times to poll the freshly-applied token Secret for a populated `.data.token` before
    * giving up (500ms between attempts). Absent ⇒ {@link DEFAULT_TOKEN_READ_ATTEMPTS} (a snappy
@@ -400,27 +432,49 @@ async function runOrThrow(
 }
 
 /**
+ * The two shapes Docker names a refused host port in, and both are common:
+ *
+ *   `Bind for 0.0.0.0:80 failed: port is already allocated`
+ *   `... Error starting userland proxy: listen tcp4 0.0.0.0:80: bind: address already in use`
+ *
+ * Matching only the first left every collision reported through the second reading as "one of the
+ * two ports", which is the misattribution the hint exists to remove.
+ */
+const BOUND_PORT_PATTERNS: readonly RegExp[] = [
+  /bind for\s+\S*?:(\d+)/i,
+  /listen tcp\d?\s+\S*?:(\d+):\s*bind:/i,
+]
+
+/** The host port a Docker failure names as already bound, when it names one. */
+export function boundPortFromDetail(detail: string): number | undefined {
+  for (const pattern of BOUND_PORT_PATTERNS) {
+    const port = Number(pattern.exec(detail)?.[1])
+    if (Number.isInteger(port) && port > 0) return port
+  }
+  return undefined
+}
+
+/**
  * An extra hint appended to a create failure that looks like a host-port collision.
  *
- * A create now asks for TWO host ports, so the hint READS which one Docker refused out of its own
- * message (`Bind for 0.0.0.0:80 failed: port is already allocated`) instead of naming the
- * apiserver port, which it used to do unconditionally and would now misattribute an ingress-port
- * collision. Port 80 is taken often enough on Windows and macOS that an opaque
- * `k3d cluster create` failure here is the likely first experience, so the hint names the flag
- * that moves it.
+ * A create asks for TWO host ports, so the hint READS which one Docker refused out of its own
+ * message instead of naming the apiserver port, which it used to do unconditionally and would
+ * misattribute an ingress-port collision. Port 80 is taken often enough on Windows and macOS that
+ * an opaque `k3d cluster create` failure here is the likely first experience, so the hint names
+ * the flag that moves it.
  */
 export function portCollisionHint(ingressPort: number): (detail: string) => string {
   return (detail) => {
     if (!/already (allocated|in use)|address already in use|port is already/i.test(detail))
       return ''
-    const bound = /(?:bind for|bind:)\s*\S*?:(\d+)/i.exec(detail)?.[1]
-    if (bound === String(ingressPort)) {
-      return ` (host port ${ingressPort} is already in use — free it, or re-run with \`--ingress-port <free port>\`)`
+    const bound = boundPortFromDetail(detail)
+    if (bound === ingressPort) {
+      return ` (host port ${ingressPort} is already in use: free it, or re-run with \`--ingress-port <free port>\`)`
     }
     if (bound !== undefined) {
-      return ` (host port ${bound} is already in use — free it, or remove the conflicting cluster, then re-run)`
+      return ` (host port ${bound} is already in use: free it, or remove the conflicting cluster, then re-run)`
     }
-    return ` (a requested host port is already in use: the apiserver's ${DEFAULT_API_PORT} or the ingress' ${ingressPort} — free it, or re-run with \`--ingress-port <free port>\`)`
+    return ` (a requested host port is already in use, either the apiserver's ${DEFAULT_API_PORT} or the ingress' ${ingressPort}: free it, or re-run with \`--ingress-port <free port>\`)`
   }
 }
 
@@ -456,8 +510,8 @@ async function readSaToken(deps: ProvisionDeps, context?: string): Promise<strin
 
 /** The distribution behind a create/recreate offer; `null` for the reuse path. */
 export function offerRuntime(chosen: OfferId): 'k3d' | 'kind' | null {
-  if (chosen === 'create-k3d' || chosen === 'recreate-k3d') return 'k3d'
-  if (chosen === 'create-kind' || chosen === 'recreate-kind') return 'kind'
+  if (chosen === 'create-k3d' || chosen === RECREATE_OFFERS.k3d) return 'k3d'
+  if (chosen === 'create-kind' || chosen === RECREATE_OFFERS.kind) return 'kind'
   return null
 }
 
@@ -501,7 +555,7 @@ async function recreateCluster(
   // Best-effort: a cluster too wedged to answer kubectl is exactly one a recreate fixes, so an
   // unreadable namespace list must not block the operation. It is reported as unread rather than
   // rendered as "nothing on it", which would read like an empty cluster.
-  const namespaces = await shell.run('kubectl', listNamespacesCommand(context).args)
+  const namespaces = await runCommand(shell, listNamespacesCommand(context))
   const lost = namespaces.code === 0 ? parseUserNamespaces(namespaces.stdout) : null
   io.warn(
     [
@@ -525,14 +579,8 @@ async function recreateCluster(
 
   io.info(`Re-creating the ${runtime} cluster "${clusterName}" (this can take a minute)…`)
   const ingressPort = resolveIngressPort(options)
-  const create =
-    runtime === 'kind'
-      ? kindCreateCommand(clusterName, ingressPort)
-      : k3dCreateCommand(clusterName, DEFAULT_API_PORT, ingressPort)
-  const result = await shell.run(create.cmd, create.args, {
-    input: create.input,
-    timeoutMs: create.timeoutMs,
-  })
+  const create = clusterCreateCommand(runtime, clusterName, ingressPort)
+  const result = await runCommand(shell, create)
   if (result.code !== 0) {
     // Deleted-but-not-recreated is worse than either end, so the failure says WHICH state the
     // host is in and how to leave it, rather than reporting only the create's own error.
@@ -548,10 +596,10 @@ async function recreateCluster(
 /**
  * Provision (create, recreate or reuse) a local cluster for the chosen offer, create the
  * least-privilege ServiceAccount + RBAC, mint a long-lived token, read the apiserver URL, and
- * PROBE whether an ingress-derived environment URL can actually be served — returning the
- * resolved `local-k3s` connection. Every MUTATING step (cluster create/delete, RBAC apply) is
- * behind an explicit confirm unless `--yes`. Idempotent apart from `recreate-*`: an existing
- * cluster/SA is reused, not duplicated. `install-k3s` is NOT handled here (guidance-only).
+ * PROBE whether an ingress-derived environment URL can actually be served, returning the resolved
+ * `local-k3s` connection. Every MUTATING step (cluster create/delete, RBAC apply) is behind an
+ * explicit confirm unless `--yes`. Idempotent apart from `recreate-*`: an existing cluster/SA is
+ * reused, not duplicated. `install-k3s` is NOT handled here (guidance-only).
  */
 export async function provisionCluster(
   chosen: Exclude<OfferId, 'install-k3s'>,
@@ -568,37 +616,35 @@ export async function provisionCluster(
   // on the already-current context (`undefined`).
   let targetContext: string | undefined
   let createdName: string | undefined
-  // A cluster this run BUILT is given time for its bundled controller to install; a cluster that
-  // was already running is probed once, because a settled cluster's answer is already final.
+  // A cluster this run BUILT is given time for its BUNDLED controller to install; anything else is
+  // probed once, because that answer is already final. `settleWaitFor` is what decides, and the
+  // distinction it draws (kind installs no controller, so waiting cannot change kind's verdict) is
+  // the difference between a one-read create and one that burns the whole budget by design.
   let ingressWaitMs = 0
   if (runtime !== null) {
     const clusterName = options.clusterName ?? OPTION_DEFAULTS.k3sClusterName
     const existing =
       runtime === 'kind' ? state.detections.kindClusters : state.detections.k3dClusters
-    if (chosen === 'recreate-k3d' || chosen === 'recreate-kind') {
+    if (isRecreateOffer(chosen)) {
       if (!existing.includes(clusterName)) {
         throw new ProvisionError(
           `There is no ${runtime} cluster named "${clusterName}" to recreate (${runtime} reports: ${existing.join(', ') || 'none'}). Drop --recreate to create it, or name an existing one with --cluster-name.`,
         )
       }
       await recreateCluster(runtime, clusterName, options, deps)
-      ingressWaitMs = INGRESS_SETTLE_WAIT_MS
+      ingressWaitMs = settleWaitFor(runtime)
     } else if (existing.includes(clusterName)) {
       io.info(`Reusing the existing ${runtime} cluster "${clusterName}".`)
     } else {
       await confirmStep(io, options, `Create a local ${runtime} cluster "${clusterName}"?`)
       io.info(`Creating the ${runtime} cluster "${clusterName}" (this can take a minute)…`)
-      const create =
-        runtime === 'kind'
-          ? kindCreateCommand(clusterName, ingressPort)
-          : k3dCreateCommand(clusterName, DEFAULT_API_PORT, ingressPort)
       await runOrThrow(
         shell,
-        create,
+        clusterCreateCommand(runtime, clusterName, ingressPort),
         `Creating the ${runtime} cluster`,
         portCollisionHint(ingressPort),
       )
-      ingressWaitMs = INGRESS_SETTLE_WAIT_MS
+      ingressWaitMs = settleWaitFor(runtime)
     }
     targetContext = contextName(runtime, clusterName)
     createdName = clusterName
@@ -606,6 +652,14 @@ export async function provisionCluster(
     // use-existing: operate on the current context (its name is what the probe detected).
     targetContext = undefined
   }
+
+  // The cluster whose published host ports can be read, and the one `--recreate` could name: the
+  // cluster this run built, or on the reuse path whichever k3d/kind cluster the current context
+  // resolves to (`null` for anything else, e.g. a bare k3s service).
+  const clusterTarget: IngressProbeCluster | null =
+    runtime !== null && createdName !== undefined
+      ? { runtime, clusterName: createdName }
+      : recreateTargetForContext(state.detections)
 
   // Read the apiserver URL first (a read-only op): it names the target in the confirm below and
   // gates the reuse path against accidentally mutating a non-local cluster.
@@ -647,8 +701,13 @@ export async function provisionCluster(
 
   io.info('Checking whether this cluster can serve an ingress-derived environment URL…')
   const ingress = await probeIngress(
-    { shell, tcp: deps.tcp, sleep: deps.sleep },
-    { context: targetContext, port: ingressPort, waitMs: ingressWaitMs },
+    { shell, tcp: deps.tcp, sleep: deps.sleep, now: deps.now },
+    {
+      context: targetContext,
+      port: ingressPort,
+      waitMs: ingressWaitMs,
+      ...(clusterTarget ? { cluster: clusterTarget } : {}),
+    },
   )
 
   return {
@@ -659,5 +718,19 @@ export async function provisionCluster(
     apiToken,
     insecureSkipTlsVerify: true,
     ingress,
+    ...(clusterTarget ? { recreateTarget: clusterTarget } : {}),
   }
+}
+
+/**
+ * How long a freshly built cluster is given before its ingress verdict is final.
+ *
+ * k3d/k3s install Traefik through a HelmChart Job that completes ~20-30s AFTER the create returns,
+ * so judging immediately would report a definitive `missing` for a cluster that is merely still
+ * starting. kind installs NO controller (by design, see {@link kindClusterConfig}), so its verdict
+ * is final the moment the create returns, and waiting would spend the whole budget re-reading a
+ * fact that cannot change.
+ */
+function settleWaitFor(runtime: 'k3d' | 'kind'): number {
+  return runtime === 'kind' ? 0 : INGRESS_SETTLE_WAIT_MS
 }

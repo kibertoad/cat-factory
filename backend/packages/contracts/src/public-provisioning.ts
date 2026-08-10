@@ -205,6 +205,12 @@ export const publicKubernetesUrlSourceSchema = v.variant('source', [
     source: v.literal('ingressTemplate'),
     /** Host template, e.g. `{{branch}}.preview.example.com`, rendered with the provision vars. */
     hostTemplate: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+    /**
+     * Host port the ingress controller answers on, when it is not the scheme's default. Kept out
+     * of `hostTemplate` because the rendered template is also the Ingress `host` the manifests
+     * declare, and a Kubernetes `host` may not carry a port.
+     */
+    port: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
     scheme: v.optional(v.picklist(['http', 'https'])),
   }),
   v.object({

@@ -1,22 +1,24 @@
 import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { buildK3sHandler, buildK3sSetupUrl } from './k3s-handler.js'
+import { buildK3sSetupUrl } from './k3s-handler.js'
 import { createConsoleIo, openCommand, type OpenBrowserCommand } from './io.js'
 import { patCreationUrl } from './vcs.js'
 
 /** The real `cat-factory k3s` hand-off link: the multi-parameter URL the bug truncated. */
-const DEEP_LINK = buildK3sSetupUrl(
-  'http://localhost:3000',
-  buildK3sHandler({
-    engine: 'local-k3s',
-    clusterName: 'cat-factory',
-    runtime: 'k3d',
-    apiServerUrl: 'https://127.0.0.1:6443',
-    apiToken: 'tok-abc',
-    insecureSkipTlsVerify: true,
-    ingress: { status: 'ready', port: 80, controller: 'traefik.io/ingress-controller' },
-  }),
-)
+const DEEP_LINK = buildK3sSetupUrl('http://localhost:3000', {
+  engine: 'local-k3s',
+  clusterName: 'cat-factory',
+  runtime: 'k3d',
+  apiServerUrl: 'https://127.0.0.1:6443',
+  apiToken: 'tok-abc',
+  insecureSkipTlsVerify: true,
+  ingress: {
+    status: 'ready',
+    port: 80,
+    controller: 'traefik.io/ingress-controller',
+    attribution: 'cluster',
+  },
+})
 
 /** The command line `windowsVerbatimArguments` hands to `CreateProcess`: the argv joined, as-is. */
 function verbatimCommandLine({ cmd, args }: OpenBrowserCommand): string {

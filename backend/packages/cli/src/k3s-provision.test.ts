@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { type CliOptions } from './args.js'
-import { COMMAND_NOT_FOUND, type HostShell, type ShellResult } from './host-shell.js'
+import {
+  COMMAND_NOT_FOUND,
+  type HostShell,
+  renderCommandLine,
+  type ShellResult,
+} from './host-shell.js'
 import { type Io } from './io.js'
 import { type PortState, type TcpProbe } from './k3s-ingress.js'
 import { classifyHost, type HostDetections } from './k3s-probe.js'
 import {
   applyRbacCommand,
+  boundPortFromDetail,
   CAT_FACTORY_NAMESPACE,
   CLUSTER_CREATE_TIMEOUT_MS,
+  clusterCreateCommand,
   clusterDeleteCommand,
   contextName,
   decodeToken,
@@ -161,6 +168,33 @@ describe('pure planners', () => {
     expect(hint('some unrelated failure')).toBe('')
   })
 
+  it('reads the port out of BOTH shapes Docker names a collision in', () => {
+    // The userland-proxy phrasing is at least as common as `Bind for`, and matching only the first
+    // left every collision reported through it falling back to "one of the two ports", which is the
+    // misattribution the hint was rewritten to remove.
+    expect(boundPortFromDetail('Bind for 0.0.0.0:80 failed: port is already allocated')).toBe(80)
+    expect(
+      boundPortFromDetail(
+        'driver failed programming external connectivity on endpoint x: Error starting userland proxy: listen tcp4 0.0.0.0:80: bind: address already in use',
+      ),
+    ).toBe(80)
+    expect(boundPortFromDetail('something else entirely')).toBeUndefined()
+    // And the hint built on it names the flag rather than both candidate ports.
+    const hint = portCollisionHint(80)(
+      'Error starting userland proxy: listen tcp 0.0.0.0:80: bind: address already in use',
+    )
+    expect(hint).toContain('--ingress-port')
+    expect(hint).not.toContain('either the apiserver')
+  })
+
+  it('renders the create recipe from the same planner every create path runs', () => {
+    // The printed guidance used to hand-write this line and had lost the `-p`, so the one create
+    // the CLI gives a human built the cluster whose missing port the next run asked them to fix.
+    const recipe = renderCommandLine(clusterCreateCommand('k3d', 'mine', 8080))
+    expect(recipe).toBe('k3d cluster create mine --api-port 6443 -p 8080:80@loadbalancer')
+    expect(clusterCreateCommand('kind', 'mine', 8080)).toEqual(kindCreateCommand('mine', 8080))
+  })
+
   it('plans the destructive delete per distribution and reads what is on the cluster', () => {
     expect(clusterDeleteCommand('k3d', 'c')).toMatchObject({
       cmd: 'k3d',
@@ -224,12 +258,24 @@ describe('pure planners', () => {
 })
 
 describe('provisionCluster', () => {
-  const deps = (shell: HostShell, io: Io = silentIo(), tcp: TcpProbe = fakeTcp()) => ({
-    shell,
-    io,
-    tcp,
-    sleep: () => Promise.resolve(),
-  })
+  /**
+   * Provisioning deps with a VIRTUAL clock: the ingress settle wait is measured in wall clock, so a
+   * no-op `sleep` against the real `Date.now` would spin the retry loop for the full 90s budget.
+   * Advancing the injected clock by each skipped sleep keeps that deterministic and instant.
+   */
+  const deps = (shell: HostShell, io: Io = silentIo(), tcp: TcpProbe = fakeTcp()) => {
+    let elapsed = 0
+    return {
+      shell,
+      io,
+      tcp,
+      sleep: (ms: number) => {
+        elapsed += ms
+        return Promise.resolve()
+      },
+      now: () => elapsed,
+    }
+  }
 
   it('reuse-existing: applies RBAC + reads token/URL, no cluster create', async () => {
     const shell = recordingShell(provisionMap())
@@ -241,7 +287,12 @@ describe('provisionCluster', () => {
       apiServerUrl: 'https://127.0.0.1:6443',
       apiToken: 'sa-token-value',
       insecureSkipTlsVerify: true,
-      ingress: { status: 'ready', port: 80, controller: 'traefik.io/ingress-controller' },
+      ingress: {
+        status: 'ready',
+        port: 80,
+        controller: 'traefik.io/ingress-controller',
+        attribution: 'unattributed',
+      },
     })
     expect(shell.calls.some((c) => c.cmd === 'k3d')).toBe(false)
     expect(shell.calls.some((c) => c.args.join(' ').includes('apply -f -'))).toBe(true)
@@ -280,11 +331,75 @@ describe('provisionCluster', () => {
       status: 'ready',
       port: 80,
       controller: 'traefik.io/ingress-controller',
+      // No cluster this CLI can name (the context's k3d cluster is not in the detected list), so
+      // the port table could not be read and the weaker claim is what gets made.
+      attribution: 'unattributed',
     })
     // The probe is a REAL read of the reused cluster, not an assumption about the distribution.
     expect(shell.calls.some((c) => c.args.join(' ').includes('get ingressclass -o json'))).toBe(
       true,
     )
+  })
+
+  it('refuses a host port that answers but is NOT this cluster forwarding it', async () => {
+    // The false positive a bare TCP connect cannot see: a k3d cluster created with no `-p`, plus an
+    // unrelated web server already on host 80. The socket says open; the cluster's own port table
+    // says it forwards nothing, and that is the fact that decides.
+    const shell = recordingShell({
+      [K3D_CREATE]: { code: 0 },
+      'docker port k3d-cat-factory-serverlb': { code: 0, stdout: '6443/tcp -> 0.0.0.0:6443\n' },
+      ...provisionMap('k3d-cat-factory'),
+    })
+    const conn = await provisionCluster(
+      'create-k3d',
+      classifyHost(detections()),
+      opts(),
+      deps(shell, silentIo(), fakeTcp('open')),
+    )
+    expect(conn.ingress).toMatchObject({ status: 'missing', gaps: ['hostPort'] })
+  })
+
+  it('attributes an answering port to the cluster when the runtime confirms the forward', async () => {
+    const shell = recordingShell({
+      [K3D_CREATE]: { code: 0 },
+      'docker port k3d-cat-factory-serverlb': { code: 0, stdout: '80/tcp -> 0.0.0.0:80\n' },
+      ...provisionMap('k3d-cat-factory'),
+    })
+    const conn = await provisionCluster(
+      'create-k3d',
+      classifyHost(detections()),
+      opts(),
+      deps(shell),
+    )
+    expect(conn.ingress).toMatchObject({ status: 'ready', attribution: 'cluster' })
+    // The created cluster is also the recreate target every remedy is rendered against.
+    expect(conn.recreateTarget).toEqual({ runtime: 'k3d', clusterName: 'cat-factory' })
+  })
+
+  it('does not spend the settle wait on a kind create, which installs no controller', async () => {
+    // kindClusterConfig deliberately installs none, so re-reading cannot change the verdict: the
+    // wait would burn its whole budget to print the `missing: controller` it already had.
+    let sleeps = 0
+    const shell = recordingShell({
+      'kind create cluster --name cat-factory --config -': { code: 0 },
+      ...provisionMap('kind-cat-factory'),
+      'kubectl get ingressclass -o json --request-timeout=5s --context kind-cat-factory': {
+        code: 0,
+        stdout: JSON.stringify({ items: [] }),
+      },
+    })
+    const conn = await provisionCluster('create-kind', classifyHost(detections()), opts(), {
+      shell,
+      io: silentIo(),
+      tcp: fakeTcp('open'),
+      sleep: () => {
+        sleeps++
+        return Promise.resolve()
+      },
+    })
+    expect(conn.ingress).toMatchObject({ status: 'missing', gaps: ['controller'] })
+    expect(sleeps).toBe(0)
+    expect(shell.calls.filter((c) => c.args.join(' ').includes('get ingressclass')).length).toBe(1)
   })
 
   it('reports a reused cluster with no ingress path as MISSING, naming both halves', async () => {
