@@ -158,6 +158,11 @@ cluster (a public package, or an `imagePullSecret` you have already installed).
 | `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                                                                                                   |
 | `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass. Unset starts a new one.                                                                                              |
 
+Set them in a **`.env` beside `vitest.acceptance.config.ts`** (gitignored, and read by that
+config: vitest does not pick one up on its own). A variable exported in the shell wins over the
+file, so the file states the setup and the invocation states the exception:
+`ACCEPTANCE_RUN_ID=latest pnpm … acceptance` resumes without editing anything.
+
 Missing configuration is reported **all at once**, with what each variable is for. The suite
 refuses rather than guessing, because it creates real repositories.
 
