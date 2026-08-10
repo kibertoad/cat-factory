@@ -2234,6 +2234,26 @@
       "createToken": "Crear un token de GitHub (ámbitos preseleccionados)",
       "thenSet": "Luego define {envVar} y reinicia."
     },
+    "githubPatPermissionsBanner": {
+      "title": "El token de GitHub no puede hacer push ni abrir pull requests",
+      "rejectedTitle": "GitHub rechazó el token que usan tus ejecuciones",
+      "body": "Las ejecuciones iniciadas aquí se autentican con un token de acceso personal de GitHub, y a este le faltan permisos que la canalización necesita. Los pasos de agente que envían una rama, abren una pull request o fusionan fallarán.",
+      "rejectedBody": "El token de acceso personal de GitHub con el que se autentican tus ejecuciones no es válido, ha caducado, fue revocado o está bloqueado por una política de la organización. Todos los pasos que clonan, envían, abren pull requests o fusionan fallarán hasta que lo reemplaces.",
+      "missing": "Falta:",
+      "alsoMissing": "También falta, aunque solo bloquea cambios en archivos de flujo de trabajo: {capabilities}.",
+      "capability": {
+        "push": "enviar commits",
+        "pullRequests": "abrir y fusionar pull requests",
+        "workflows": "editar archivos de flujo de trabajo"
+      },
+      "sourceDeployment": "Este es el token con el que está configurado este despliegue, así que reemplazarlo implica actualizar el despliegue.",
+      "sourceInitiator": "Este es tu propio token almacenado, que tus ejecuciones usan con preferencia sobre la credencial del despliegue. Reemplázalo en tus ajustes personales.",
+      "createClassic": "Crear un token de reemplazo (ámbitos preseleccionados)",
+      "createFineGrained": "Crear un token de reemplazo de permisos detallados",
+      "classicHint": "El enlace abre el formulario de token clásico con los ámbitos necesarios ya seleccionados.",
+      "fineGrainedHint": "El formulario de permisos detallados de GitHub no admite preselección, así que concede tú mismo estos permisos de repositorio: {permissions}.",
+      "sampled": "Se comprobaron {checked} repositorios vinculados; otros {remaining} no se comprobaron."
+    },
     "providerConfigBanner": {
       "titleMany": "Los proveedores necesitan configuración",
       "titleOne": {

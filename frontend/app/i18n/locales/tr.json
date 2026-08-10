@@ -2234,6 +2234,26 @@
       "createToken": "GitHub belirteci oluştur (kapsamlar önceden seçili)",
       "thenSet": "Ardından {envVar} ayarlayın ve yeniden başlatın."
     },
+    "githubPatPermissionsBanner": {
+      "title": "GitHub belirteci push yapamıyor veya pull request açamıyor",
+      "rejectedTitle": "GitHub, çalıştırmalarınızın kullandığı belirteci reddetti",
+      "body": "Burada başlatılan çalıştırmalar bir GitHub kişisel erişim belirteciyle kimlik doğrular ve bu belirteçte iş hattının ihtiyaç duyduğu izinler yok. Dal push eden, pull request açan veya birleştiren ajan adımları başarısız olacak.",
+      "rejectedBody": "Çalıştırmalarınızın kimlik doğruladığı GitHub kişisel erişim belirteci geçersiz, süresi dolmuş, iptal edilmiş ya da bir kuruluş politikası tarafından engellenmiş. Değiştirilene kadar klonlayan, push eden, pull request açan veya birleştiren her adım başarısız olacak.",
+      "missing": "Eksik:",
+      "alsoMissing": "Yalnızca iş akışı dosyalarındaki değişiklikleri engellese de şu da eksik: {capabilities}.",
+      "capability": {
+        "push": "commit push etme",
+        "pullRequests": "pull request açma ve birleştirme",
+        "workflows": "iş akışı dosyalarını düzenleme"
+      },
+      "sourceDeployment": "Bu, bu dağıtımın yapılandırıldığı belirteçtir; değiştirmek dağıtımı güncellemek anlamına gelir.",
+      "sourceInitiator": "Bu, çalıştırmalarınızın dağıtım kimlik bilgisi yerine tercih ettiği kendi kayıtlı belirtecinizdir. Kişisel ayarlarınızdan değiştirin.",
+      "createClassic": "Yerine belirteç oluştur (kapsamlar önceden seçili)",
+      "createFineGrained": "Yerine ayrıntılı izinli belirteç oluştur",
+      "classicHint": "Bağlantı, gerekli kapsamlar zaten seçili hâlde klasik belirteç formunu açar.",
+      "fineGrainedHint": "GitHub'ın ayrıntılı izin formu ön seçim kabul etmez; bu depo izinlerini kendiniz verin: {permissions}.",
+      "sampled": "{checked} bağlı depoya karşı denetlendi; {remaining} tanesi denetlenmedi."
+    },
     "providerConfigBanner": {
       "titleMany": "Sağlayıcıların yapılandırılması gerekiyor",
       "titleOne": {

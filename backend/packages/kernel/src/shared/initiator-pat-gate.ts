@@ -1,6 +1,7 @@
 import { DEFAULT_WORKSPACE_SETTINGS } from '../domain/catalog.js'
 import { readCachedWorkspaceSettings } from '../ports/caching.js'
 import type { GroupCacheHandle, WorkspaceSettingsCacheValue } from '../ports/caching.js'
+import type { RunCredentialScope } from '../ports/user-secret-repositories.js'
 import type { WorkspaceSettingsRepository } from '../ports/workspace-settings-repositories.js'
 
 /**
@@ -9,6 +10,21 @@ import type { WorkspaceSettingsRepository } from '../ports/workspace-settings-re
  * env PAT). Asked once per credential mint on the run path.
  */
 export type InitiatorPatGate = (workspaceId: string) => Promise<boolean>
+
+/**
+ * The ANSWER {@link InitiatorPatGate} feeds: the token a run in `scope` should authenticate as,
+ * or null to fall back to the deployment credential (the App installation token, or local mode's
+ * env PAT). Built once per facade by `createResolveRunInitiatorToken` in `@cat-factory/server`,
+ * which composes the gate with the initiator's stored secret and fails CLOSED on an unreadable
+ * policy.
+ *
+ * The TYPE lives in kernel rather than beside that builder because it is now a
+ * `CoreDependencies` field: the credential check that warns a user their personal access token
+ * cannot push has to ask the SAME question the run path asks, and a controller that re-composed
+ * the gate itself would be the fourth copy of a security decision this module exists to keep
+ * singular.
+ */
+export type ResolveRunInitiatorToken = (scope: RunCredentialScope) => Promise<string | null>
 
 /**
  * The per-workspace `allowInitiatorPat` switch, as ONE factory shared by every mint site —

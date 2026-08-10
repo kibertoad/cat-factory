@@ -123,6 +123,7 @@ import type {
   PipelineRegistry,
   PromptFragmentRegistry,
   PromptFragmentSource,
+  ResolveRunInitiatorToken,
   TaskTypeRegistry,
   VcsWebUrls,
 } from '@cat-factory/kernel'
@@ -532,6 +533,13 @@ export interface OptionalCoreModules {
    * carry once bound, rather than re-deriving it from config beside it.
    */
   vcsWebUrls?: VcsWebUrls
+  /**
+   * The run path's "initiator PAT or deployment credential?" answer (see CoreDependencies).
+   * Surfaced here so the credential check judges the token a run would ACTUALLY authenticate
+   * as, honouring the workspace's `allowInitiatorPat` opt-out, instead of re-composing that
+   * decision beside the one every mint site shares.
+   */
+  resolveRunInitiatorToken?: ResolveRunInitiatorToken
   /** Present only when the document-source integration is configured (see CoreDependencies). */
   documents?: DocumentsModule
   /** Present only when the task-source integration is configured (see CoreDependencies). */

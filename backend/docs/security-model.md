@@ -267,6 +267,19 @@ Consequences to internalize:
   to everything you own is exactly that dangerous in this context; use a fine-grained PAT restricted
   to the repos the deployment works on. The same advice applies, per member, to stored personal PATs.
 
+**What the platform can SAY about the token in use, and what it still cannot do.** The scope of a PAT
+is not narrowable from here, so the only control left is the holder knowing what they handed over.
+Three surfaces report it, from the same classification (`githubPatScope.ts`) and the same required-scope
+list (`@cat-factory/contracts`' `GITHUB_PAT_CLASSIC_SCOPES`): the connect form's warnings when a token
+is stored, the local facade's boot log, and a board-load check
+(`GET /workspaces/:id/github/pat-check`) that resolves the token a run would ACTUALLY authenticate as
+through the same `resolveRunInitiatorToken` the dispatch mint uses, so an `allowInitiatorPat` opt-out
+is honoured rather than re-decided. It answers per capability with a tri-state, because a CLASSIC
+token's scopes come back on `x-oauth-scopes` while a fine-grained one reports nothing anywhere: what
+can only be established by probing a repository is reported as unknown, never as granted. Note what
+this does NOT change: the check reads capability, it does not bound it, and a token that passes it is
+still exactly as wide as the human who minted it made it.
+
 So the worst case of Layer 2's stated limit is "the repos this run was about" rather than "the
 installation", but only where the run authenticates as the App. Installation scope still bounds
 what any run in the workspace could ever ask for, and it is what the checklist's item 3 is about;

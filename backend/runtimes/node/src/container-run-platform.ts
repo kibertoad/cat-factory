@@ -353,6 +353,11 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     appRegistry,
     resolveRepoTarget,
     resolveTransport,
+    // Returned so the CONTAINER can surface it too: besides the dispatch mint and the engine's
+    // GitHub client, the board-load credential check asks the same question to judge the token a
+    // run would actually use. Undefined here means no per-user secret store, which is already
+    // what makes the preference inert.
+    resolveRunInitiatorToken,
     baseDeployMint,
     deployDeps,
     standardAgentExecutor,

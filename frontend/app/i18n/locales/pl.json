@@ -2234,6 +2234,26 @@
       "createToken": "Utwórz token GitHub (zakresy wstępnie wybrane)",
       "thenSet": "Następnie ustaw {envVar} i uruchom ponownie."
     },
+    "githubPatPermissionsBanner": {
+      "title": "Token GitHub nie może wypychać zmian ani otwierać pull requestów",
+      "rejectedTitle": "GitHub odrzucił token używany przez Twoje uruchomienia",
+      "body": "Uruchomienia rozpoczęte tutaj uwierzytelniają się osobistym tokenem dostępu GitHub, a temu brakuje uprawnień wymaganych przez potok. Kroki agenta, które wypychają gałąź, otwierają pull request lub scalają, zakończą się niepowodzeniem.",
+      "rejectedBody": "Osobisty token dostępu GitHub, którym uwierzytelniają się Twoje uruchomienia, jest nieprawidłowy, wygasł, został unieważniony lub zablokowany przez zasady organizacji. Każdy krok, który klonuje, wypycha, otwiera pull request lub scala, będzie kończył się niepowodzeniem, dopóki go nie wymienisz.",
+      "missing": "Brakuje:",
+      "alsoMissing": "Brakuje również, choć blokuje to tylko zmiany w plikach przepływów pracy: {capabilities}.",
+      "capability": {
+        "push": "wypychanie commitów",
+        "pullRequests": "otwieranie i scalanie pull requestów",
+        "workflows": "edytowanie plików przepływów pracy"
+      },
+      "sourceDeployment": "To jest token skonfigurowany dla tego wdrożenia, więc jego wymiana oznacza aktualizację wdrożenia.",
+      "sourceInitiator": "To Twój własny zapisany token, którego Twoje uruchomienia używają zamiast poświadczeń wdrożenia. Wymień go w swoich ustawieniach osobistych.",
+      "createClassic": "Utwórz token zastępczy (zakresy wstępnie wybrane)",
+      "createFineGrained": "Utwórz zastępczy token o precyzyjnych uprawnieniach",
+      "classicHint": "Link otwiera formularz klasycznego tokenu z już zaznaczonymi wymaganymi zakresami.",
+      "fineGrainedHint": "Formularz precyzyjnych uprawnień GitHub nie obsługuje wstępnego wyboru, więc nadaj te uprawnienia repozytorium samodzielnie: {permissions}.",
+      "sampled": "Sprawdzono {checked} połączonych repozytoriów; kolejnych {remaining} nie sprawdzono."
+    },
     "providerConfigBanner": {
       "titleMany": "Dostawcy wymagają konfiguracji",
       "titleOne": {

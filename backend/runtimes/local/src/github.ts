@@ -12,6 +12,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { Logger, VcsIdentityRegistry, VcsProvider } from '@cat-factory/kernel'
 import { runBestEffort } from '@cat-factory/kernel'
+import { GITHUB_PAT_CLASSIC_SCOPES, githubPatCreateUrl } from '@cat-factory/contracts'
 import type { LocalVcsCredential } from './vcsCredential.js'
 import {
   type AppTokenSource,
@@ -40,23 +41,22 @@ import type { PatAccount } from './installations.js'
 // mode — those are the GitHub-App connect flow, which local mode replaces with the
 // linkRepo helper — so they throw rather than pretend to work.
 
-// The scopes a local-mode PAT needs. Agent containers clone/push branches and open PRs
-// (`repo`, which also covers reading the PR head's Actions check runs for the CI gate and
-// merging the PR), and the coder/ci-fixer may touch `.github/workflows/*` files (`workflow`).
-const LOCAL_PAT_SCOPES = ['repo', 'workflow'] as const
-
 /**
  * A GitHub "new personal access token (classic)" URL with the scopes local mode needs
  * pre-selected, so a developer without a PAT can click straight through to create one.
  * Classic tokens are used (not fine-grained) because only the classic form accepts the
  * `scopes` query param for pre-selection.
+ *
+ * The scope list and the URL shape both come from `@cat-factory/contracts`, which is also what
+ * the SPA's credential banner links to. They were separate copies while the only consumer was
+ * this boot warning; once the same advice had to be rendered in the browser, two lists would
+ * have been two answers to "what should I tick" for the same deployment.
  */
 export function githubPatCreationUrl(): string {
-  const params = new URLSearchParams({
+  return githubPatCreateUrl('classic', {
+    webUrl: 'https://github.com',
     description: 'cat-factory local mode',
-    scopes: LOCAL_PAT_SCOPES.join(','),
   })
-  return `https://github.com/settings/tokens/new?${params.toString()}`
 }
 
 /**
@@ -262,7 +262,7 @@ export function classifyPatProbe(res: {
     .map((s) => s.trim())
     .filter(Boolean)
   if (granted.length === 0) return { ok: true } // fine-grained token — scopes not reported
-  const missing = LOCAL_PAT_SCOPES.filter((s) => !granted.includes(s))
+  const missing = GITHUB_PAT_CLASSIC_SCOPES.filter((s) => !granted.includes(s))
   return missing.length === 0
     ? { ok: true }
     : { ok: false, reason: 'underscoped', missing: [...missing] }

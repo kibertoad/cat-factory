@@ -2234,6 +2234,26 @@
       "createToken": "Créer un jeton GitHub (portées présélectionnées)",
       "thenSet": "Définissez ensuite {envVar} et redémarrez."
     },
+    "githubPatPermissionsBanner": {
+      "title": "Le jeton GitHub ne peut ni pousser ni ouvrir de pull requests",
+      "rejectedTitle": "GitHub a rejeté le jeton utilisé par vos exécutions",
+      "body": "Les exécutions lancées ici s'authentifient avec un jeton d'accès personnel GitHub, et celui-ci n'a pas les autorisations dont le pipeline a besoin. Les étapes d'agent qui poussent une branche, ouvrent une pull request ou fusionnent échoueront.",
+      "rejectedBody": "Le jeton d'accès personnel GitHub avec lequel vos exécutions s'authentifient est invalide, expiré, révoqué ou bloqué par une politique d'organisation. Toute étape qui clone, pousse, ouvre une pull request ou fusionne échouera tant qu'il n'est pas remplacé.",
+      "missing": "Manquant :",
+      "alsoMissing": "Manque également, bien que cela ne bloque que les modifications des fichiers de workflow : {capabilities}.",
+      "capability": {
+        "push": "pousser des commits",
+        "pullRequests": "ouvrir et fusionner des pull requests",
+        "workflows": "modifier les fichiers de workflow"
+      },
+      "sourceDeployment": "C'est le jeton configuré pour ce déploiement ; le remplacer suppose donc de mettre à jour le déploiement.",
+      "sourceInitiator": "C'est votre propre jeton enregistré, que vos exécutions utilisent de préférence aux identifiants du déploiement. Remplacez-le dans vos paramètres personnels.",
+      "createClassic": "Créer un jeton de remplacement (portées présélectionnées)",
+      "createFineGrained": "Créer un jeton de remplacement à portée fine",
+      "classicHint": "Le lien ouvre le formulaire de jeton classique avec les portées requises déjà sélectionnées.",
+      "fineGrainedHint": "Le formulaire à portée fine de GitHub n'accepte aucune présélection : accordez vous-même ces autorisations de dépôt : {permissions}.",
+      "sampled": "Vérifié sur {checked} dépôts liés ; {remaining} autres non vérifiés."
+    },
     "providerConfigBanner": {
       "titleMany": "Les fournisseurs nécessitent une configuration",
       "titleOne": {

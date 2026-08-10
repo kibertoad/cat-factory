@@ -2453,6 +2453,26 @@
       "createToken": "Crea un token GitHub (scope pre-selezionati)",
       "thenSet": "Poi imposta {envVar} e riavvia."
     },
+    "githubPatPermissionsBanner": {
+      "title": "Il token GitHub non può fare push né aprire pull request",
+      "rejectedTitle": "GitHub ha rifiutato il token usato dalle tue esecuzioni",
+      "body": "Le esecuzioni avviate qui si autenticano con un personal access token GitHub, e a questo mancano permessi necessari alla pipeline. Le fasi degli agenti che effettuano push di un branch, aprono una pull request o uniscono falliranno.",
+      "rejectedBody": "Il personal access token GitHub con cui si autenticano le tue esecuzioni non è valido, è scaduto, è stato revocato o è bloccato da una policy dell'organizzazione. Ogni fase che clona, effettua push, apre una pull request o unisce fallirà finché non lo sostituisci.",
+      "missing": "Manca:",
+      "alsoMissing": "Manca anche, sebbene blocchi solo le modifiche ai file di workflow: {capabilities}.",
+      "capability": {
+        "push": "effettuare push dei commit",
+        "pullRequests": "aprire e unire pull request",
+        "workflows": "modificare i file di workflow"
+      },
+      "sourceDeployment": "Questo è il token con cui è configurato questo deployment, quindi sostituirlo significa aggiornare il deployment.",
+      "sourceInitiator": "Questo è il tuo token memorizzato, che le tue esecuzioni usano al posto delle credenziali del deployment. Sostituiscilo nelle tue impostazioni personali.",
+      "createClassic": "Crea un token sostitutivo (scope pre-selezionati)",
+      "createFineGrained": "Crea un token sostitutivo fine-grained",
+      "classicHint": "Il link apre il modulo del token classico con gli scope richiesti già selezionati.",
+      "fineGrainedHint": "Il modulo fine-grained di GitHub non accetta pre-selezioni, quindi concedi tu stesso questi permessi di repository: {permissions}.",
+      "sampled": "Verificato su {checked} repository collegati; altri {remaining} non sono stati verificati."
+    },
     "providerConfigBanner": {
       "titleMany": "I provider necessitano di configurazione",
       "titleOne": {

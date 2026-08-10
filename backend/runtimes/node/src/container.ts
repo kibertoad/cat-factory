@@ -33,7 +33,11 @@ import {
 // below, then wires each gate's provider.
 import { applyGateProviders, warnUnwiredGates } from '@cat-factory/gates'
 import { GitLabIdentityResolver } from '@cat-factory/gitlab'
-import type { ResolveBinaryArtifactStore, VcsIdentityRegistry } from '@cat-factory/kernel'
+import type {
+  ResolveBinaryArtifactStore,
+  ResolveRunInitiatorToken,
+  VcsIdentityRegistry,
+} from '@cat-factory/kernel'
 
 import { selectNodeGitHubDeps } from './container-github-deps.js'
 import { buildNodeModelDeps } from './container-model-deps.js'
@@ -766,6 +770,11 @@ interface NodeContainerFinalizeBundle {
   providerRegistry: NodeAppRegistriesResult['providerRegistry']
   packageRegistrySecretCipher: NodeRunServicesResult['packageRegistrySecretCipher']
   githubInstallationRepository: GitHubInstallationRepository
+  /**
+   * The run path's "initiator PAT or deployment credential?" answer, forwarded from the run
+   * platform so the container can surface it for the board-load credential check.
+   */
+  resolveRunInitiatorToken: ResolveRunInitiatorToken | undefined
   environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
   runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
   customManifestTypeRegistry: NodeAppRegistriesResult['customManifestTypeRegistry']
@@ -839,6 +848,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     providerRegistry,
     packageRegistrySecretCipher,
     githubInstallationRepository,
+    resolveRunInitiatorToken,
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,
@@ -968,6 +978,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     gateways,
     runnerUrlPolicy,
     githubInstallationRepository,
+    resolveRunInitiatorToken,
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,

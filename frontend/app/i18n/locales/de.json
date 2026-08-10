@@ -2453,6 +2453,26 @@
       "createToken": "Ein GitHub-Token erstellen (Scopes vorausgewählt)",
       "thenSet": "Setzen Sie dann {envVar} und starten Sie neu."
     },
+    "githubPatPermissionsBanner": {
+      "title": "GitHub-Token kann nicht pushen oder Pull Requests öffnen",
+      "rejectedTitle": "GitHub hat das Token Ihrer Läufe abgelehnt",
+      "body": "Hier gestartete Läufe authentifizieren sich mit einem GitHub Personal Access Token, und diesem fehlen Berechtigungen, die die Pipeline braucht. Agentenschritte, die einen Branch pushen, einen Pull Request öffnen oder mergen, werden fehlschlagen.",
+      "rejectedBody": "Das GitHub Personal Access Token, mit dem sich Ihre Läufe authentifizieren, ist ungültig, abgelaufen, widerrufen oder durch eine Organisationsrichtlinie blockiert. Jeder Schritt, der klont, pusht, einen Pull Request öffnet oder merget, schlägt fehl, bis es ersetzt wird.",
+      "missing": "Fehlt:",
+      "alsoMissing": "Fehlt ebenfalls, blockiert aber nur Änderungen an Workflow-Dateien: {capabilities}.",
+      "capability": {
+        "push": "Commits pushen",
+        "pullRequests": "Pull Requests öffnen und mergen",
+        "workflows": "Workflow-Dateien bearbeiten"
+      },
+      "sourceDeployment": "Dies ist das Token, mit dem dieses Deployment konfiguriert ist; es zu ersetzen bedeutet daher, das Deployment zu aktualisieren.",
+      "sourceInitiator": "Dies ist Ihr eigenes gespeichertes Token, das Ihre Läufe bevorzugt vor den Deployment-Zugangsdaten verwenden. Ersetzen Sie es in Ihren persönlichen Einstellungen.",
+      "createClassic": "Ersatz-Token erstellen (Scopes vorausgewählt)",
+      "createFineGrained": "Fein granuliertes Ersatz-Token erstellen",
+      "classicHint": "Der Link öffnet das klassische Token-Formular mit bereits ausgewählten erforderlichen Scopes.",
+      "fineGrainedHint": "Das fein granulierte Formular von GitHub akzeptiert keine Vorauswahl; erteilen Sie diese Repository-Berechtigungen daher selbst: {permissions}.",
+      "sampled": "Gegen {checked} verknüpfte Repositories geprüft; {remaining} weitere wurden nicht geprüft."
+    },
     "providerConfigBanner": {
       "titleMany": "Anbieter benötigen Konfiguration",
       "titleOne": {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, type Mock } from 'vitest'
 import { useGitHubStore } from '~/stores/github'
 import { useWorkspaceStore } from '~/stores/workspace'
-import type { GitHubConnection, GitHubRepo, VcsConnectOption } from '~/types/domain'
+import type { GitHubConnection, GitHubPatCheck, GitHubRepo, VcsConnectOption } from '~/types/domain'
 
 // The VCS connect surface of the (single, GitHub-shaped) repo store: which connect methods the
 // deployment offers, the per-workspace GitLab PAT connect, and the provider-routed disconnect.
@@ -29,6 +29,7 @@ function stubApi<T extends Record<string, Mock>>(api: T) {
     listGitHubRepos: vi.fn().mockResolvedValue([]),
     listGitHubPullRequests: vi.fn().mockResolvedValue([]),
     listGitHubIssues: vi.fn().mockResolvedValue([]),
+    getGitHubPatCheck: vi.fn().mockResolvedValue({ state: 'not_applicable' }),
     ...api,
   }
   vi.stubGlobal('useApi', () => full)
@@ -283,5 +284,65 @@ describe('github store — repo web links', () => {
     expect(github.pullUrl({ repoGithubId: 1, number: 7 } as never)).toBe(
       'https://github.com/acme/api/pull/7',
     )
+  })
+})
+
+// The credential check rides the same probe, but NOT the same failure. Local mode reaches GitHub
+// with a personal access token and wires no App module, so the connection read 503s exactly where
+// this check matters most; sharing that catch would have discarded the answer there.
+describe('github store — GitHub PAT credential check', () => {
+  const REPORT: GitHubPatCheck = {
+    state: 'checked',
+    report: {
+      source: 'deployment',
+      kind: 'classic',
+      scopes: ['public_repo'],
+      capabilities: { push: 'missing', pullRequests: 'missing', workflows: 'missing' },
+      probedRepos: [],
+      unprobedRepoCount: 0,
+      webUrl: 'https://github.com',
+    },
+  }
+
+  it('resolves the check alongside the connection probe', async () => {
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: connection() }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      getGitHubPatCheck: vi.fn().mockResolvedValue(REPORT),
+    })
+    const github = storeWithWorkspace()
+
+    await github.probe()
+
+    expect(github.patCheck).toEqual(REPORT)
+  })
+
+  it('keeps the check when the connection read fails, as it does in local mode', async () => {
+    stubApi({
+      getGitHubConnection: vi.fn().mockRejectedValue(new Error('503')),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      getGitHubPatCheck: vi.fn().mockResolvedValue(REPORT),
+    })
+    const github = storeWithWorkspace()
+
+    await github.probe()
+
+    expect(github.available).toBe(false)
+    expect(github.patCheck).toEqual(REPORT)
+  })
+
+  // A failed READ is not a verdict: `null` says "not answered", which the banner renders as
+  // nothing. Collapsing it onto a clean report would be an all-clear nobody established.
+  it('leaves the check unanswered when its own read fails', async () => {
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: null }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      getGitHubPatCheck: vi.fn().mockRejectedValue(new Error('500')),
+    })
+    const github = storeWithWorkspace()
+
+    await github.probe()
+
+    expect(github.patCheck).toBeNull()
   })
 })
