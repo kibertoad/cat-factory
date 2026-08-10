@@ -8,6 +8,7 @@ import {
   buildK3sSetupUrl,
   KUBERNETES_ENV_TOKEN_SECRET_KEY,
 } from './k3s-handler.js'
+import { createNodeTcpProbe } from './k3s-ingress.js'
 import { probeHost } from './k3s-probe.js'
 import {
   CAT_FACTORY_NAMESPACE,
@@ -70,7 +71,7 @@ function silentIo(): Io {
  * required `test-k8s` job. 120 × 500ms = 60s, comfortably inside the suite's 180s timeout.
  */
 function provisionDeps(): ProvisionDeps {
-  return { io: silentIo(), shell, tokenReadAttempts: 120 }
+  return { io: silentIo(), shell, tcp: createNodeTcpProbe(), tokenReadAttempts: 120 }
 }
 
 describe.skipIf(skip !== null)(

@@ -10,12 +10,16 @@ import {
 } from './k3s-handler.js'
 import { type ResolvedConnection } from './k3s-provision.js'
 
+const READY_INGRESS = { status: 'ready', port: 80, controller: 'traefik' } as const
+
 const CREATED: ResolvedConnection = {
   engine: 'local-k3s',
   clusterName: 'cat-factory',
+  runtime: 'k3d',
   apiServerUrl: 'https://127.0.0.1:6443',
   apiToken: 'tok-abc',
   insecureSkipTlsVerify: true,
+  ingress: READY_INGRESS,
 }
 
 const REUSED: ResolvedConnection = {
@@ -23,6 +27,13 @@ const REUSED: ResolvedConnection = {
   apiServerUrl: 'https://127.0.0.1:6550',
   apiToken: 'tok-xyz',
   insecureSkipTlsVerify: true,
+  ingress: READY_INGRESS,
+}
+
+/** A cluster whose ingress path the probe found DEFINITIVELY absent. */
+const NO_INGRESS: ResolvedConnection = {
+  ...CREATED,
+  ingress: { status: 'missing', port: 80, gaps: ['controller', 'hostPort'] },
 }
 
 describe('buildK3sHandler', () => {
@@ -40,8 +51,24 @@ describe('buildK3sHandler', () => {
       apiServerUrl: 'https://127.0.0.1:6443',
       insecureSkipTlsVerify: true,
       namespaceTemplate: DEFAULT_NAMESPACE_TEMPLATE,
-      url: { source: 'ingressTemplate', hostTemplate: DEFAULT_INGRESS_HOST_TEMPLATE },
+      url: {
+        source: 'ingressTemplate',
+        hostTemplate: DEFAULT_INGRESS_HOST_TEMPLATE,
+        // Plain HTTP, not the derivation's `https` default: a local ingress controller's TLS is
+        // self-signed, so an https env URL fails on the certificate rather than connecting.
+        scheme: 'http',
+      },
     })
+  })
+
+  it('carries a non-default ingress port IN the host template', () => {
+    // The URL derivation composes `scheme://host` and has nowhere else to put a port, so a
+    // cluster published on 8080 must say so here or the derived URL silently dials 80.
+    const handler = buildK3sHandler({
+      ...CREATED,
+      ingress: { status: 'ready', port: 8080, controller: 'traefik' },
+    })
+    expect(handler.config.kubernetes.url.hostTemplate).toBe('{{branch}}.127.0.0.1.nip.io:8080')
   })
 
   it('carries the minted token ONLY in the write-only secret bundle', () => {
@@ -65,10 +92,29 @@ describe('buildK3sSetupUrl', () => {
     expect(url.searchParams.get('apiServerUrl')).toBe('https://127.0.0.1:6443')
     expect(url.searchParams.get('namespaceTemplate')).toBe(DEFAULT_NAMESPACE_TEMPLATE)
     expect(url.searchParams.get('hostTemplate')).toBe(DEFAULT_INGRESS_HOST_TEMPLATE)
+    expect(url.searchParams.get('scheme')).toBe('http')
     expect(url.searchParams.get('insecureSkipTlsVerify')).toBe('1')
     expect(url.searchParams.get('label')).toBe('Local k3s (cat-factory)')
     // A secret in a URL would leak into browser history — assert it never appears.
     expect(url.toString()).not.toContain('tok-abc')
+  })
+
+  it('WITHHOLDS the host-template prefill when the ingress was not verified', () => {
+    // The whole defect, at the hand-off end: prefilling the form with a template the cluster
+    // cannot serve is how an operator saved a URL that resolves to nothing. The form treats the
+    // host template as required for an ingressTemplate source, so an absent param is what stops
+    // the promise being saved silently.
+    const url = new URL(
+      buildK3sSetupUrl('http://localhost:3000', buildK3sHandler(NO_INGRESS), {
+        ingressVerified: false,
+      }),
+    )
+    expect(url.searchParams.has('hostTemplate')).toBe(false)
+    expect(url.searchParams.has('scheme')).toBe(false)
+    // Everything the probe DID establish is still prefilled: a withheld field is not a withheld form.
+    expect(url.searchParams.get('apiServerUrl')).toBe('https://127.0.0.1:6443')
+    expect(url.searchParams.get('namespaceTemplate')).toBe(DEFAULT_NAMESPACE_TEMPLATE)
+    expect(url.searchParams.get('insecureSkipTlsVerify')).toBe('1')
   })
 
   it('preserves an app URL that already has a path/params', () => {

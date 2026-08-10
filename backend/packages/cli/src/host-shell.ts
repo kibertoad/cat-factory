@@ -14,6 +14,21 @@ export interface ShellResult {
 /** Conventional exit code for a missing binary — returned by {@link HostShell.run} on `ENOENT`. */
 export const COMMAND_NOT_FOUND = 127
 
+/**
+ * A single command to run through the {@link HostShell}, optionally with stdin `input`.
+ *
+ * Lives here rather than beside one of its planners because several modules now plan commands
+ * (provisioning, the ingress probe) and a shared type in either of them would make the pair
+ * import each other.
+ */
+export interface Command {
+  cmd: string
+  args: string[]
+  input?: string
+  /** Per-command watchdog override (ms). Absent ⇒ the {@link HostShell} default applies. */
+  timeoutMs?: number
+}
+
 /** Conventional exit code for a command killed by the watchdog timeout (mirrors `timeout(1)`). */
 export const COMMAND_TIMED_OUT = 124
 

@@ -41,6 +41,21 @@ export interface CliOptions {
   clusterName?: string
   /** `k3s` command: the Kubernetes distribution to provision/target. */
   k3sRuntime?: K3sRuntime
+  /**
+   * `k3s` command: host port published into the cluster's ingress controller, so an
+   * ingress-template environment URL resolves to something. Fixed at cluster-create time.
+   */
+  ingressPort?: number
+  /**
+   * `k3s` command: DESTROY the named local cluster and build it again from the current flags.
+   *
+   * A flag rather than a subcommand because everything a recreate needs (`--cluster-name`,
+   * `--runtime`, `--ingress-port`) is already `k3s`'s own option surface, and the flow around it
+   * (probe, RBAC, token, hand-off) is byte-for-byte the create path's: a subcommand would be the
+   * same command with one step in front of it. It is also what makes destructive intent EXPLICIT
+   * rather than inferred, since `--yes` alone can never select a recreate.
+   */
+  recreate?: boolean
   /** `k3s` command: base URL of the running SPA, opened (deep-linked) to wire the handler. */
   appUrl?: string
   /** `supervise` command: the command to run and keep alive — everything after `--`. */
@@ -184,10 +199,43 @@ function applyCommandToken(
 }
 
 /**
+ * The flags that name a local Kubernetes CLUSTER: which one, how it is built, and how the SPA is
+ * reached to wire it. Split out of {@link applyOptionFlag} so the one table stays under the
+ * complexity ratchet, and because they are the group that grows together (`--ingress-port` and
+ * `--recreate` arrived as a pair with the ingress work). Returns `false` for anything not its own.
+ */
+function applyClusterFlag(flag: string, opts: CliOptions, take: (flag: string) => string): boolean {
+  switch (flag) {
+    case '--cluster-name':
+      opts.clusterName = take(flag)
+      break
+    case '--runtime':
+      opts.k3sRuntime = parseK3sRuntime(take(flag))
+      break
+    case '--ingress-port':
+      opts.ingressPort = parsePort(take(flag), flag)
+      break
+    case '--recreate':
+      opts.recreate = true
+      break
+    case '--app-url':
+      opts.appUrl = parseAppUrl(take(flag))
+      break
+    case '--k3s-cluster':
+      opts.k3sCluster = take(flag)
+      break
+    default:
+      return false
+  }
+  return true
+}
+
+/**
  * Apply a single option flag, consuming its value from the queue (via `take`) where one is
  * required. Returns `false` for an unrecognised flag so the caller can raise the error.
  */
 function applyOptionFlag(flag: string, opts: CliOptions, take: (flag: string) => string): boolean {
+  if (applyClusterFlag(flag, opts, take)) return true
   switch (flag) {
     case '--dir':
     case '-d':
@@ -229,15 +277,6 @@ function applyOptionFlag(flag: string, opts: CliOptions, take: (flag: string) =>
     case '--harness-entry':
       opts.harnessEntry = take(flag)
       break
-    case '--cluster-name':
-      opts.clusterName = take(flag)
-      break
-    case '--runtime':
-      opts.k3sRuntime = parseK3sRuntime(take(flag))
-      break
-    case '--app-url':
-      opts.appUrl = parseAppUrl(take(flag))
-      break
     case '--health-path':
       opts.healthPath = parseHealthPath(take(flag))
       break
@@ -246,9 +285,6 @@ function applyOptionFlag(flag: string, opts: CliOptions, take: (flag: string) =>
       break
     case '--compose-service':
       opts.composeService = take(flag)
-      break
-    case '--k3s-cluster':
-      opts.k3sCluster = take(flag)
       break
     case '--poll':
       opts.pollSeconds = parseWholeSeconds(flag, take(flag), 1)
@@ -360,10 +396,10 @@ function parseFailures(value: string): number {
   return n
 }
 
-function parsePort(value: string): number {
+function parsePort(value: string, flag = '--port'): number {
   const n = Number(value)
   if (!Number.isInteger(n) || n < 1 || n > 65535) {
-    throw new ArgError(`Invalid --port "${value}" (expected an integer 1-65535)`)
+    throw new ArgError(`Invalid ${flag} "${value}" (expected an integer 1-65535)`)
   }
   return n
 }
@@ -474,6 +510,11 @@ Options (env):
 Options (k3s):
       --cluster-name <n>  Name for a provisioned local cluster (default: cat-factory)
       --runtime <r>       Kubernetes distribution: k3d | kind | k3s (default: k3d)
+      --ingress-port <n>  Host port published into the cluster's ingress controller (default: 80).
+                          Fixed when the cluster is created: changing it needs --recreate.
+      --recreate          DESTROY the named k3d/kind cluster and build it again from these flags.
+                          Names what is on it first and asks before deleting. Never selected for
+                          you: -y alone cannot pick this path.
       --app-url <url>     SPA base URL to deep-link for wiring (default: http://localhost:3000)
       --no-open           Don't open the browser at the pre-filled connect form (still prints it)
   -y, --yes               Non-interactive: pick the recommended path + skip confirms
@@ -481,6 +522,10 @@ Options (k3s):
   After provisioning, the values are printed and the SPA's Local k3s connect form is opened
   pre-filled (paste the token, then Test -> Save). A hands-free --register flag that POSTs the
   handler to the local API directly is a planned follow-up.
+
+  Ingress-derived environment URLs need TWO things, and both are checked rather than assumed: an
+  ingress controller in the cluster, and a host port published into it. A published host port
+  cannot be added to a running k3d/kind cluster, which is what --recreate is for.
 
 Options (supervise):
       --port <n>          Port the supervised server binds (default: 8787)

@@ -10,9 +10,11 @@ const DEEP_LINK = buildK3sSetupUrl(
   buildK3sHandler({
     engine: 'local-k3s',
     clusterName: 'cat-factory',
+    runtime: 'k3d',
     apiServerUrl: 'https://127.0.0.1:6443',
     apiToken: 'tok-abc',
     insecureSkipTlsVerify: true,
+    ingress: { status: 'ready', port: 80, controller: 'traefik.io/ingress-controller' },
   }),
 )
 

@@ -88,6 +88,53 @@ describe('classifyHost', () => {
     expect(classifyHost(d, 'kind').recommended).toBe('create-kind')
   })
 
+  it('offers a recreate only for a cluster it can NAME and build again', () => {
+    const withCluster = classifyHost(
+      detections({
+        docker: { installed: true, running: true },
+        k3d: { installed: true },
+        k3dClusters: ['mine'],
+      }),
+      'k3d',
+      'linux',
+      'mine',
+    )
+    const offer = withCluster.offers.find((o) => o.id === 'recreate-k3d')
+    expect(offer?.available).toBe(true)
+    expect(offer?.label).toContain('DESTROYS')
+    // There is no recreate for `use-existing`: that offer fires for ANY reachable kubeconfig,
+    // which can be a shared cluster, and there is no recipe for re-creating an arbitrary context.
+    expect(withCluster.offers.map((o) => o.id)).not.toContain('recreate-use-existing')
+  })
+
+  it('never RECOMMENDS a recreate, even when it is the only thing available', () => {
+    // A recommendation is what `--yes` follows unattended, so a destructive path must be picked
+    // explicitly (via --recreate or an interactive selection) and never inferred.
+    const state = classifyHost(
+      detections({
+        docker: { installed: true, running: true },
+        k3d: { installed: true },
+        k3dClusters: ['mine'],
+      }),
+      'k3d',
+      'linux',
+      'mine',
+    )
+    expect(state.offers.find((o) => o.id === 'recreate-k3d')?.available).toBe(true)
+    expect(state.recommended).not.toBe('recreate-k3d')
+    expect(state.offers.every((o) => !(o.recommended && o.id.startsWith('recreate-')))).toBe(true)
+  })
+
+  it('explains a recreate that is off, naming the cluster it looked for', () => {
+    const noSuchCluster = classifyHost(
+      detections({ docker: { installed: true, running: true }, k3d: { installed: true } }),
+      'k3d',
+      'linux',
+      'ghost',
+    )
+    expect(noSuchCluster.offers.find((o) => o.id === 'recreate-k3d')?.reason).toContain('"ghost"')
+  })
+
   it('offers create-kind with a reason when kind is missing', () => {
     const noKind = classifyHost(detections({ docker: { installed: true, running: true } }))
     const offer = noKind.offers.find((o) => o.id === 'create-kind')

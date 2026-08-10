@@ -2,6 +2,12 @@ import { type CliOptions, OPTION_DEFAULTS } from './args.js'
 import { buildK3sHandler, buildK3sSetupUrl } from './k3s-handler.js'
 import { createNodeShell, type HostShell } from './host-shell.js'
 import { createConsoleIo, type Io } from './io.js'
+import {
+  createNodeTcpProbe,
+  ingressRemedies,
+  type IngressReadiness,
+  type TcpProbe,
+} from './k3s-ingress.js'
 import { type HostState, type Offer, type OfferId, probeHost } from './k3s-probe.js'
 import {
   CAT_FACTORY_NAMESPACE,
@@ -15,6 +21,8 @@ import {
 export interface K3sDeps {
   io?: Io
   shell?: HostShell
+  /** TCP reachability seam for the ingress host-port probe. */
+  tcp?: TcpProbe
   /** Host platform, injected so the k3s-install guidance is deterministic in tests. */
   platform?: NodeJS.Platform
 }
@@ -42,14 +50,16 @@ export const K3S_INSTALL_COMMAND = 'curl -sfL https://get.k3s.io | sh -'
 export async function setupK3s(options: CliOptions, deps: K3sDeps = {}): Promise<K3sResult> {
   const io = deps.io ?? createConsoleIo()
   const shell = deps.shell ?? createNodeShell()
+  const tcp = deps.tcp ?? createNodeTcpProbe()
   const platform = deps.platform ?? process.platform
 
   const preferred = options.k3sRuntime ?? OPTION_DEFAULTS.k3sRuntime
+  const clusterName = options.clusterName ?? OPTION_DEFAULTS.k3sClusterName
 
   io.info('\ncat-factory — guided local k3s / k3d setup\n')
   io.info('Probing your machine for a usable Kubernetes cluster…')
 
-  const state = await probeHost(shell, preferred, platform)
+  const state = await probeHost(shell, preferred, platform, clusterName)
   io.info(renderReport(state))
 
   const chosen = await chooseOffer(state, options, io)
@@ -62,7 +72,7 @@ export async function setupK3s(options: CliOptions, deps: K3sDeps = {}): Promise
 
   let connection: ResolvedConnection
   try {
-    connection = await provisionCluster(chosen, state, options, { io, shell })
+    connection = await provisionCluster(chosen, state, options, { io, shell, tcp })
   } catch (err) {
     // A declined confirm or a failed command is an expected, non-fatal outcome — report and stop.
     if (err instanceof ProvisionError) {
@@ -112,11 +122,14 @@ function printDeployRunnerGuidance(io: Io): void {
  */
 async function handOff(connection: ResolvedConnection, options: CliOptions, io: Io): Promise<void> {
   const spaUrl = options.appUrl ?? OPTION_DEFAULTS.appUrl
-  const link = buildK3sSetupUrl(spaUrl, buildK3sHandler(connection))
+  const verified = connection.ingress.status === 'ready'
+  const link = buildK3sSetupUrl(spaUrl, buildK3sHandler(connection), { ingressVerified: verified })
   io.info(
     [
       '',
-      'Open the pre-filled Local k3s connect form (everything except the token is filled in):',
+      verified
+        ? 'Open the pre-filled Local k3s connect form (everything except the token is filled in):'
+        : 'Open the pre-filled Local k3s connect form (the environment URL is left for you to pick, see above):',
       '',
       `  ${link}`,
     ].join('\n'),
@@ -156,8 +169,30 @@ function renderReport(state: HostState): string {
   return lines.join('\n')
 }
 
-/** Pick an offer: `--yes` takes the recommendation; otherwise prompt over the available offers. */
+/**
+ * Pick an offer: `--recreate` names one outright, `--yes` takes the recommendation, otherwise
+ * prompt over the available offers.
+ *
+ * `--recreate` is resolved FIRST and never falls back. A destructive request that cannot be
+ * honoured must refuse with the reason rather than quietly doing the nearest safe thing: an
+ * operator who asked for a fresh cluster and got the old one reused would carry on believing the
+ * flags they passed had taken effect. The refusal escapes to `bin.ts` (a non-zero exit) rather
+ * than joining the warn-and-carry-on path a DECLINED confirm takes, because those are opposite
+ * facts: one is the operator changing their mind, this one is the command unable to obey.
+ */
 async function chooseOffer(state: HostState, options: CliOptions, io: Io): Promise<OfferId> {
+  if (options.recreate) {
+    const runtime = options.k3sRuntime ?? OPTION_DEFAULTS.k3sRuntime
+    const id: OfferId = runtime === 'kind' ? 'recreate-kind' : 'recreate-k3d'
+    const offer = state.offers.find((o) => o.id === id)
+    if (!offer?.available) {
+      throw new ProvisionError(
+        `Cannot recreate: ${offer?.reason ?? 'no such cluster'}. --recreate only ever targets a k3d/kind cluster this command can name and build again.`,
+      )
+    }
+    return id
+  }
+
   const available = state.offers.filter((o) => o.available)
   // `install-k3s` is always available, so `available` is never empty.
   if (options.yes || available.length === 1) return state.recommended
@@ -250,6 +285,59 @@ function printInstallGuidance(state: HostState, io: Io, platform: NodeJS.Platfor
  * because it is the coordinate you need to mint a REPLACEMENT token later, so it is printed as
  * exactly that.
  */
+/**
+ * The environment-URL half of the summary, rendered from the PROBE rather than from a fixed
+ * script. This is the line the whole change turns on: it used to state "Ingress host template" +
+ * `{{branch}}.127.0.0.1.nip.io` unconditionally, including on a reused cluster the command had
+ * never looked at, and an operator who typed it got an environment whose URL answered nothing.
+ *
+ * Three outcomes, three different things to say, per the degrade-loudly rule: verified working,
+ * verified missing (with the fix), and could-not-tell (which is NOT the same as missing, and must
+ * not send someone to rebuild a cluster that was fine).
+ */
+function renderUrlSourceLines(connection: ResolvedConnection): string[] {
+  const { ingress } = connection
+  const context = { runtime: connection.runtime, clusterName: connection.clusterName }
+  if (ingress.status === 'ready') {
+    const host =
+      ingress.port === 80
+        ? '{{branch}}.127.0.0.1.nip.io'
+        : `{{branch}}.127.0.0.1.nip.io:${ingress.port}`
+    return [
+      `  • Environment URL source:  Ingress host template`,
+      `  • Host template:           ${host}`,
+      `  • URL scheme:              http`,
+      '',
+      `  Verified: the cluster runs the "${ingress.controller}" ingress controller and host port ${ingress.port} reaches it.`,
+    ]
+  }
+  const headline =
+    ingress.status === 'missing'
+      ? `  This cluster CANNOT serve an ingress-derived environment URL (${describeGaps(ingress)}).`
+      : `  Could NOT establish whether this cluster serves an ingress-derived environment URL: ${ingress.probeFailure}.`
+  return [
+    `  • Environment URL source:  leave this for now, see below`,
+    '',
+    headline,
+    '  So the connect form is NOT pre-filled with an ingress host template: entering one would',
+    '  give every test environment a URL that resolves to nothing, and the failure would surface',
+    '  much later, at the tester step, long after provisioning reported success.',
+    ...ingressRemedies(ingress, context).map((line) =>
+      line.startsWith('  ') ? `  ${line}` : `  - ${line}`,
+    ),
+  ]
+}
+
+/** Name the missing halves the way the fix splits: a controller and a published host port. */
+function describeGaps(ingress: Extract<IngressReadiness, { status: 'missing' }>): string {
+  const parts = ingress.gaps.map((gap) =>
+    gap === 'controller'
+      ? 'it runs no ingress controller'
+      : `nothing on the host serves port ${ingress.port}`,
+  )
+  return parts.join('; ')
+}
+
 function printConnectionSummary(connection: ResolvedConnection, io: Io): void {
   io.info(
     [
@@ -262,8 +350,7 @@ function printConnectionSummary(connection: ResolvedConnection, io: Io): void {
       `  • API server URL:          ${connection.apiServerUrl}`,
       `  • Skip TLS verification:   yes (local self-signed cert)`,
       `  • Namespace template:      cf-env-{{pullNumber}}`,
-      `  • Environment URL source:  Ingress host template`,
-      `  • Host template:           {{branch}}.127.0.0.1.nip.io`,
+      ...renderUrlSourceLines(connection),
       '',
       'Then paste this ServiceAccount token into the "ServiceAccount token" field and click Test → Save:',
       '',

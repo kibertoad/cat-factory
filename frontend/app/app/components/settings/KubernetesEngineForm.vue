@@ -185,10 +185,14 @@ watch(
     if (prefill.insecureSkipTlsVerify !== undefined)
       form.insecureSkipTlsVerify = prefill.insecureSkipTlsVerify
     if (prefill.namespaceTemplate.trim()) form.namespaceTemplate = prefill.namespaceTemplate.trim()
+    // An EMPTY host template is meaningful, not a gap the link forgot to fill: the CLI withholds
+    // it when it could not establish that the cluster serves an ingress-derived URL, and leaving
+    // the required field blank is what stops a URL nothing answers being saved.
     if (prefill.hostTemplate.trim()) {
       form.urlSource = 'ingressTemplate'
       form.hostTemplate = prefill.hostTemplate.trim()
     }
+    if (prefill.urlScheme) form.urlScheme = prefill.urlScheme
   },
   { immediate: true },
 )

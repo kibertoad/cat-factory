@@ -95,6 +95,33 @@ follow-up, not built.
   the cluster's ongoing lifecycle (idle tear-down, local-image import, run-UI bring-up progress)
   and the hands-free `--register`.
 
+## Amendment: the ingress promise is PROBED, and a cluster can be recreated
+
+Decision 4 above shipped a FIXED hand-off: the deep link and the printed summary always named the
+`{{branch}}.127.0.0.1.nip.io` ingress host template. That was a capability claim the flow never
+established. An ingress-derived URL needs an ingress controller in the cluster AND a host port
+published into it, and a local distribution forwards only the ports asked for at cluster-create
+time. The create path published none, kind ships no controller at all, and the reuse path looked
+at neither, so an operator could be told the template was wired against a cluster that could not
+serve it. Nothing failed at provisioning (environment readiness is workload readiness), so the
+consequence landed at the `tester` step against a URL that answered nothing.
+
+What changed, all inside `@cat-factory/cli`:
+
+- **The create path publishes the port** (`k3d -p`, kind `extraPortMappings` + the
+  `ingress-ready` node label, both create-time-only), configurable with `--ingress-port`.
+- **`k3s-ingress.ts` PROBES both halves** and answers in three states, `unknown` distinct from
+  `missing` for the reason `preflight.ts` states. The summary and the deep link key off it; an
+  unestablished ingress WITHHOLDS the `hostTemplate` prefill, so the connect form's required
+  field stays empty rather than saving a URL nothing serves.
+- **The deep-link contract gains `scheme`** (Decision 4's param list): a local ingress controller's
+  TLS is self-signed, so the verified derivation is plain HTTP.
+- **`--recreate`** destroys and rebuilds a named k3d/kind cluster from the current flags, since a
+  published host port cannot be added in place. It is a GENERAL operation (these clusters are
+  transient), not one condition's remedy: it is offered whenever the CLI can both name the cluster
+  and build it again, never for `use-existing`, and it is deliberately absent from the
+  recommendation priority so `--yes` alone can never select a destructive path.
+
 ## References
 
 - Operator/end-to-end runbook: [`../local-k3s-environments.md`](../local-k3s-environments.md)

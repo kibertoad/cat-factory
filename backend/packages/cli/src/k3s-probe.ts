@@ -1,5 +1,8 @@
-import { type K3sRuntime } from './args.js'
+import { type K3sRuntime, OPTION_DEFAULTS } from './args.js'
 import { COMMAND_NOT_FOUND, type HostShell } from './host-shell.js'
+
+/** The cluster name the recreate offers key off when `--cluster-name` was not supplied. */
+const DEFAULT_CLUSTER_NAME = OPTION_DEFAULTS.k3sClusterName
 
 /** Whether a host CLI is installed, and its reported version string when detectable. */
 export interface ToolDetection {
@@ -28,7 +31,16 @@ export interface HostDetections {
 }
 
 /** The setup paths the probe can offer. */
-export type OfferId = 'use-existing' | 'create-k3d' | 'create-kind' | 'install-k3s'
+export type OfferId =
+  | 'use-existing'
+  | 'create-k3d'
+  | 'create-kind'
+  | 'recreate-k3d'
+  | 'recreate-kind'
+  | 'install-k3s'
+
+/** The two DESTRUCTIVE offers: they delete a cluster before building it again. */
+export const RECREATE_OFFERS: readonly OfferId[] = ['recreate-k3d', 'recreate-kind']
 
 /** One offered setup path, with whether it's currently possible + why not. */
 export interface Offer {
@@ -51,6 +63,10 @@ export interface HostState {
  * Priority order for picking the recommendation, given the user's preferred runtime. A live cluster
  * always wins; otherwise the preferred distribution's create/install path is tried first, then the
  * others as fallbacks. Every list ends with `install-k3s`, which is always available.
+ *
+ * The `recreate-*` offers appear in NO list, deliberately: they destroy a cluster, and a
+ * recommendation is what `--yes` follows when nobody is watching. They are reachable only by an
+ * explicit `--recreate` or an interactive pick, so the destructive intent is always stated.
  */
 function offerPriority(preferred: K3sRuntime): readonly OfferId[] {
   switch (preferred) {
@@ -75,6 +91,7 @@ export function classifyHost(
   d: HostDetections,
   preferred: K3sRuntime = 'k3d',
   platform: NodeJS.Platform = 'linux',
+  clusterName: string = DEFAULT_CLUSTER_NAME,
 ): HostState {
   const useExisting: Offer = {
     id: 'use-existing',
@@ -126,7 +143,41 @@ export function classifyHost(
     recommended: false,
   }
 
-  const offers: Offer[] = [useExisting, createK3d, createKind, installK3s]
+  // Recreating is a first-class operation rather than the remedy for any one condition: these
+  // clusters are transient and the reasons to want a fresh one are open-ended (wedged, created by
+  // hand with the wrong flags, a version bump, a pile of leftover namespaces, or no stated reason
+  // at all). What does NOT open up is the TARGET, and that is a safety boundary: it is offered
+  // only for a cluster this CLI can both NAME and build again, which is why there is no recreate
+  // for `use-existing` (that fires for any reachable kubeconfig, including a shared cluster, and
+  // there is no recipe for re-creating "whatever this context points at").
+  const recreate = (id: 'recreate-k3d' | 'recreate-kind'): Offer => {
+    const runtime = id === 'recreate-kind' ? 'kind' : 'k3d'
+    const tooling = runtime === 'kind' ? d.kind : d.k3d
+    const clusters = runtime === 'kind' ? d.kindClusters : d.k3dClusters
+    const known = clusters.includes(clusterName)
+    return {
+      id,
+      label: `Recreate the ${runtime} cluster "${clusterName}" (DESTROYS it and everything on it)`,
+      available: d.docker.running && tooling.installed && known,
+      recommended: false,
+      reason:
+        dockerReason ??
+        (!tooling.installed
+          ? `${runtime} is not installed`
+          : !known
+            ? `no ${runtime} cluster named "${clusterName}" exists`
+            : undefined),
+    }
+  }
+
+  const offers: Offer[] = [
+    useExisting,
+    createK3d,
+    createKind,
+    recreate('recreate-k3d'),
+    recreate('recreate-kind'),
+    installK3s,
+  ]
   const recommended =
     offerPriority(preferred).find((id) => offers.find((o) => o.id === id)?.available) ??
     'install-k3s'
@@ -211,6 +262,7 @@ export async function probeHost(
   shell: HostShell,
   preferred: K3sRuntime = 'k3d',
   platform: NodeJS.Platform = process.platform,
+  clusterName: string = DEFAULT_CLUSTER_NAME,
 ): Promise<HostState> {
   const [
     kubectlVersion,
@@ -252,5 +304,5 @@ export async function probeHost(
     kindClusters: kindList.code === 0 ? parseKindClusters(kindList.stdout) : [],
   }
 
-  return classifyHost(detections, preferred, platform)
+  return classifyHost(detections, preferred, platform, clusterName)
 }

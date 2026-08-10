@@ -77,8 +77,22 @@ If you'd rather wire it by hand (or the guided flow can't run on your host), do 
      cluster. Node/local honors custom-CA TLS via undici; the Cloudflare Worker does not, so a
      CA/insecure config is rejected there at registration.
    - `apiToken`: the ServiceAccount token (stored encrypted).
-   - the **URL derivation** (ingress-template host like `{{branch}}.127.0.0.1.nip.io` works with
-     k3s Traefik; or a `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`.
+   - the **URL derivation** (an ingress-template host like `{{branch}}.127.0.0.1.nip.io`, or a
+     `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`.
+
+     An ingress-template host needs **two** things, and neither is implied by the other. First an
+     **ingress controller** in the cluster: a default k3d/k3s cluster bundles Traefik, but a
+     cluster created with `--disable=traefik` has none, and kind ships none at all. Second a
+     **host port published into it**: every local distribution runs the cluster inside Docker and
+     forwards only the ports it was asked for at CREATE time (`k3d cluster create -p
+"80:80@loadbalancer"`, kind's `extraPortMappings`), and neither can be added to a cluster that
+     already exists. Without the port, `http://<anything>.127.0.0.1.nip.io` resolves to loopback
+     and finds nothing listening, environments still reach `ready` (readiness is workload
+     readiness, not an HTTP probe), and the failure surfaces much later at the `tester` step.
+     `cat-factory k3s` checks both and refuses to prefill a template it has not established; the
+     manual path is yours to check with `kubectl get ingressclass` and a `curl` at the host port.
+     Also set the URL **scheme** to `http`: a local ingress controller serves TLS with a
+     self-signed certificate, so an `https` environment URL fails on the certificate instead.
      The **`manifestSource`** is no longer on this connection: it is declared per-service on the
      block's `provisioning` (colocated path or a separate repo), and merged with this engine config
      at provision time. In local mode you can additionally set a per-user "this-machine" override of
@@ -238,9 +252,10 @@ ongoing lifecycle**: a cluster adapter analogous to the per-run `ContainerRuntim
 - **Image loading**: a local image the PR built must be importable into the cluster (`k3d image
 import`) rather than pulled from a registry; wire the provision flow to load `{{image}}` when
   it's a local tag.
-- **URL exposure**: decide the default ingress story (k3d maps a host port to Traefik; the
-  ingress-template host should resolve to that port). Document the `nip.io`/`localhost` host
-  pattern that resolves to the mapped port.
+- **URL exposure**: settled for the guided path (`cat-factory k3s` publishes the host port at
+  cluster-create time and probes both halves before promising a template; see above). What is
+  still open here is the MANAGED-lifecycle version: a cluster the local backend brings up itself
+  has to make the same two guarantees, and has to pick the host port without an operator flag.
 - **Isolation between concurrent runs**: per-PR namespaces already isolate within one cluster;
   decide whether concurrent runs share one managed cluster (cheaper) or get one each (stronger).
 - **Open questions**: cluster reuse vs per-run; how long an idle managed cluster lives before the

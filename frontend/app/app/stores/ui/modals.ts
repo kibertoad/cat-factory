@@ -33,7 +33,15 @@ export interface K3sSetupPrefill {
   label: string
   apiServerUrl: string
   namespaceTemplate: string
+  /**
+   * Empty when the CLI could not establish that the cluster serves an ingress-derived URL, in
+   * which case it deliberately omits the param so this form does NOT prefill a host template
+   * nothing would answer. The field is required for an `ingressTemplate` source, so an empty
+   * value stops the unserved promise being saved.
+   */
   hostTemplate: string
+  /** Scheme the CLI verified. Absent ⇒ the form keeps its own default. */
+  urlScheme?: 'http' | 'https'
   // Absent when the link omitted the param, so the form keeps its engine default rather than
   // forcing verification back on (which would break a self-signed local cluster).
   insecureSkipTlsVerify?: boolean
@@ -795,6 +803,10 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
       apiServerUrl: params.get('apiServerUrl') ?? '',
       namespaceTemplate: params.get('namespaceTemplate') ?? '',
       hostTemplate: params.get('hostTemplate') ?? '',
+      // A local ingress controller serves TLS with a self-signed cert, so the CLI verifies (and
+      // links) a plain-HTTP environment URL. Without this the form would keep its `https`
+      // default and save a URL that fails on the certificate rather than on the connection.
+      urlScheme: params.get('scheme') === 'http' ? 'http' : undefined,
       // Only carry the flag the link actually set — a missing param leaves the form's engine
       // default (skip-TLS on for a local self-signed cluster) untouched.
       insecureSkipTlsVerify: params.has('insecureSkipTlsVerify')
@@ -814,6 +826,7 @@ function createInfraModals(resetHubReturn: ResetHubReturn) {
       'apiServerUrl',
       'namespaceTemplate',
       'hostTemplate',
+      'scheme',
       'insecureSkipTlsVerify',
     ]) {
       params.delete(key)

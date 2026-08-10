@@ -104,6 +104,20 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['k3s', '--runtime', 'minikube'])).toThrow(ArgError)
   })
 
+  it('parses --ingress-port and --recreate', () => {
+    const o = parseArgs(['k3s', '--ingress-port', '8080', '--recreate'])
+    expect(o.ingressPort).toBe(8080)
+    expect(o.recreate).toBe(true)
+    // Absent means "use the default", never 0: the port is only ever set deliberately.
+    expect(parseArgs(['k3s']).ingressPort).toBeUndefined()
+    expect(parseArgs(['k3s']).recreate).toBeUndefined()
+  })
+
+  it('rejects an --ingress-port that is not a port, naming the flag it rejected', () => {
+    expect(() => parseArgs(['k3s', '--ingress-port', '0'])).toThrow(/--ingress-port/)
+    expect(() => parseArgs(['k3s', '--ingress-port', '70000'])).toThrow(ArgError)
+  })
+
   it('rejects a malformed --app-url up front (before any provisioning)', () => {
     // A missing scheme is an easy mistake and would otherwise throw from `new URL(...)` at the very
     // end of a successful run — reject it at parse time instead.
