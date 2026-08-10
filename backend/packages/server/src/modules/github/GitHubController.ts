@@ -8,6 +8,7 @@ import {
   disconnectGitHubContract,
   getGitHubConnectionContract,
   getGitHubInstallUrlContract,
+  getGitHubPatCheckContract,
   listGitHubAvailableReposContract,
   listGitHubBranchesContract,
   listGitHubInstallationsContract,
@@ -26,6 +27,7 @@ import type { GitHubModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
+import { checkGitHubPat } from '../../github/patCheck.js'
 import { StateSigner } from '../../github/state.js'
 import { resolveViewerPat } from '../../github/viewerPat.js'
 import type { AppEnv } from '../../http/env.js'
@@ -87,6 +89,16 @@ export function githubController(): Hono<AppEnv> {
     const connection = await github.installationService.getConnection(param(c, 'workspaceId'))
     return c.json({ connection }, 200)
   })
+
+  // What the personal access token this workspace's runs would authenticate as can actually do.
+  // Deliberately NOT behind `requireGitHub`: local mode reaches GitHub with a PAT and wires no
+  // App module at all, which is the deployment shape where this check matters most. The
+  // resolution itself reports `not_applicable` when no PAT is in play, so an App deployment gets
+  // a clean 200 rather than the 503 a capability guard would raise on a question that has a
+  // perfectly good answer.
+  buildHonoRoute(app, getGitHubPatCheckContract, async (c) =>
+    c.json(await checkGitHubPat(c, param(c, 'workspaceId')), 200),
+  )
 
   // Discover the App's installations so the UI can offer a pick instead of a
   // manually typed installation id (the caller already owns :workspaceId).

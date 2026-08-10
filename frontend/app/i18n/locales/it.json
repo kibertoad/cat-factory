@@ -388,7 +388,8 @@
           "runner_manifest_no_status_path": "Nessun percorso di stato: ogni polling viene letto come ancora in corso, quindi un job può terminare solo esaurendo il budget di polling dell'esecuzione.",
           "github_pat_classic_account_wide": "È un token classico con l'ambito 'repo': raggiunge ogni repository su cui puoi fare push, compresi quelli in cui l'App GitHub di questo spazio di lavoro non è mai stata installata. Le esecuzioni che avvii lo usano di preferenza rispetto all'App. Un token granulare limitato ai repository di questa installazione è più ristretto.",
           "github_pat_scopes_beyond_need": "Questo token concede permessi che cat-factory non usa mai. Rimuoverli non costa nulla e restringe ciò che un'esecuzione compromessa potrebbe raggiungere.",
-          "github_pat_scope_unreadable": "GitHub ha accettato questo token ma non ne ha segnalato gli ambiti, quindi la sua portata non può essere mostrata qui. Verifica cosa concede nelle impostazioni dei token di GitHub."
+          "github_pat_scope_unreadable": "GitHub ha accettato questo token ma non ne ha segnalato gli ambiti, quindi la sua portata non può essere mostrata qui. Verifica cosa concede nelle impostazioni dei token di GitHub.",
+          "github_pat_no_scopes": "GitHub non riporta alcun ambito per questo token classico, quindi può solo leggere dati pubblici. Le esecuzioni che clonano, inviano commit o aprono una pull request con esso falliranno. Generane uno nuovo con 'repo' e 'workflow' selezionati."
         }
       },
       "toast": {
@@ -2452,6 +2453,27 @@
       "body": "La modalità locale raggiunge GitHub con un personal access token. Senza di esso, le fasi degli agenti che clonano, effettuano push, aprono PR, applicano il gate sulla CI o uniscono falliranno.",
       "createToken": "Crea un token GitHub (scope pre-selezionati)",
       "thenSet": "Poi imposta {envVar} e riavvia."
+    },
+    "githubPatPermissionsBanner": {
+      "title": "Il token GitHub non può fare push né aprire pull request",
+      "rejectedTitle": "GitHub ha rifiutato il token usato dalle tue esecuzioni",
+      "body": "Le esecuzioni avviate qui si autenticano con un personal access token GitHub, e a questo mancano permessi necessari alla pipeline. Le fasi degli agenti che effettuano push di un branch, aprono una pull request o uniscono falliranno.",
+      "rejectedBody": "Il personal access token GitHub con cui si autenticano le tue esecuzioni non è valido, è scaduto, è stato revocato o è bloccato da una policy dell'organizzazione. Ogni fase che clona, effettua push, apre una pull request o unisce fallirà finché non lo sostituisci.",
+      "missing": "Manca:",
+      "alsoMissing": "Manca anche, sebbene blocchi solo le modifiche ai file di workflow: {capabilities}.",
+      "capability": {
+        "push": "effettuare push dei commit",
+        "pullRequests": "aprire e unire pull request",
+        "workflows": "modificare i file di workflow"
+      },
+      "sourceDeployment": "Questo è il token con cui è configurato questo deployment, quindi sostituirlo significa aggiornare il deployment.",
+      "sourceInitiator": "Questo è il tuo token memorizzato, che le tue esecuzioni usano al posto delle credenziali del deployment. Sostituiscilo nelle tue impostazioni personali.",
+      "createClassic": "Crea un token sostitutivo (scope pre-selezionati)",
+      "createFineGrained": "Crea un token sostitutivo fine-grained",
+      "classicHint": "Il link apre il modulo del token classico con gli scope richiesti già selezionati.",
+      "fineGrainedHint": "Il modulo fine-grained di GitHub non accetta pre-selezioni, quindi concedi tu stesso questi permessi di repository: {permissions}.",
+      "sampled": "Verificato su {checked} repository in uso; altri {remaining} non sono stati verificati.",
+      "deniedRepos": "Il token non raggiunge questi repository usati dai tuoi servizi: {repos}. Rigeneralo selezionando quei repository."
     },
     "providerConfigBanner": {
       "titleMany": "I provider necessitano di configurazione",

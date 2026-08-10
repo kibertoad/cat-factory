@@ -118,6 +118,8 @@ export interface NodeCoreDepsBundle {
   gateways: ReturnType<typeof createNodeGateways>
   runnerUrlPolicy: ReturnType<typeof resolveUrlSafetyPolicy>
   githubInstallationRepository: GitHubInstallationRepository
+  /** The run path's initiator-PAT decision, surfaced on Core for the credential check. */
+  resolveRunInitiatorToken: CoreDependencies['resolveRunInitiatorToken']
   environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
   runnerBackendRegistry: NodeAppRegistriesResult['runnerBackendRegistry']
   customManifestTypeRegistry: NodeAppRegistriesResult['customManifestTypeRegistry']
@@ -600,6 +602,10 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // connection + connect option so the SPA links to the instance a workspace is bound to.
     // Derived by the shared resolver both facades call, so they cannot name different hosts.
     vcsWebUrls: resolveVcsWebUrls(config),
+    // The one "does a run use its initiator's own token?" instance, shared with the dispatch
+    // mint and the engine's GitHub client. On Core so the credential check judges the token a
+    // run would actually authenticate as instead of re-deciding the policy beside them.
+    resolveRunInitiatorToken: bundle.resolveRunInitiatorToken,
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.

@@ -1,4 +1,5 @@
-import type { GitHubConnection, VcsProvider } from '~/types/domain'
+import { GITHUB_TOKEN_CREATE_PATHS, githubPatCreateUrl } from '@cat-factory/contracts'
+import type { GitHubConnection, GitHubPatKind, VcsProvider } from '~/types/domain'
 
 // ---------------------------------------------------------------------------
 // Shared VCS provider presentation. The platform's repo DATA is provider-neutral (one
@@ -42,9 +43,14 @@ const VCS_PROVIDER_PUBLIC_WEB_URLS: Record<VcsProvider, string> = {
   gitlab: 'https://gitlab.com',
 }
 
-/** Where a user creates a personal access token, relative to the instance's web root. */
+/**
+ * Where a user creates a personal access token, relative to the instance's web root. GitHub's
+ * comes from `@cat-factory/contracts` rather than being spelled again here: the credential
+ * banner's PRE-FILLED re-mint link is built from that same map, and the unscoped connect-box
+ * link below has to land on the same page.
+ */
 const TOKEN_SETTINGS_PATHS: Record<VcsProvider, string> = {
-  github: '/settings/tokens/new',
+  github: GITHUB_TOKEN_CREATE_PATHS.classic,
   gitlab: '/-/user_settings/personal_access_tokens',
 }
 
@@ -83,6 +89,25 @@ function root(webUrl: string): string {
  */
 export function vcsTokenCreateUrl(provider: VcsProvider, webUrl?: string | null): string {
   return `${root(webUrl || VCS_PROVIDER_PUBLIC_WEB_URLS[provider])}${TOKEN_SETTINGS_PATHS[provider]}`
+}
+
+/**
+ * Where the credential banner sends someone to REPLACE a GitHub token that cannot do what their
+ * runs need, pre-filled as far as GitHub allows.
+ *
+ * The `kind` is the kind of the token being replaced, so a deployment that standardised on
+ * fine-grained tokens is not pushed back to a classic one by a warning. When the check never got
+ * far enough to classify (GitHub rejected the token outright), the caller passes `'unknown'` and
+ * lands on the form that CAN be pre-filled.
+ *
+ * Shares {@link vcsTokenCreateUrl}'s public-host fallback for the same stated reason: this is a
+ * settings page, so being wrong costs one noticed click, unlike a repository link.
+ */
+export function githubPatRemintUrl(kind: GitHubPatKind, webUrl?: string | null): string {
+  return githubPatCreateUrl(kind, {
+    webUrl: webUrl || VCS_PROVIDER_PUBLIC_WEB_URLS.github,
+    description: 'cat-factory',
+  })
 }
 
 /**

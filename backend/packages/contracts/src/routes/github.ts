@@ -21,6 +21,7 @@ import {
   resyncRequestSchema,
   setRepoMonorepoSchema,
 } from '../github.js'
+import { githubPatCheckSchema } from '../github-pat-capability.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -224,4 +225,20 @@ export const commentGitHubIssueContract = defineApiContract({
     `/github/repos/${repoGithubId}/issues/${number}/comments`,
   requestBodySchema: commentSchema,
   responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+})
+
+/**
+ * What the personal access token this workspace's runs would authenticate with can actually do
+ * (see `github-pat-capability.ts`). A READ, so it passes the controller's writes-only
+ * `integrations.manage` mount and any member can call it — deliberately, because on a hosted
+ * deployment the token under judgement is the CALLER'S OWN stored `github_pat`, and the person
+ * who has to re-mint it is exactly the person an admin-gated route would hide it from.
+ *
+ * Answers `not_applicable` rather than 404ing when no PAT is in play, so the SPA has one call to
+ * make on board load regardless of how the deployment authenticates.
+ */
+export const getGitHubPatCheckContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/github/pat-check',
+  responsesByStatusCode: { 200: githubPatCheckSchema, ...errorResponses },
 })

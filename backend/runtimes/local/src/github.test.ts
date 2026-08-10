@@ -76,9 +76,20 @@ describe('classifyPatProbe (A12)', () => {
     })
   })
 
-  it('does NOT false-warn on a fine-grained token (no reported scopes)', () => {
+  it('does NOT false-warn on a fine-grained token (no scope header at all)', () => {
     expect(classifyPatProbe({ status: 200, scopesHeader: null })).toEqual({ ok: true })
-    expect(classifyPatProbe({ status: 200, scopesHeader: '' })).toEqual({ ok: true })
+  })
+
+  // GitHub sends the header for every CLASSIC token, so an empty value is a positive statement
+  // that this one grants nothing — not the fine-grained token's silence. Passing it as `ok`
+  // sent the operator's most easily made mistake (GitHub's form ticks nothing by default)
+  // straight past the boot warning that exists to catch it.
+  it('flags a classic token with an empty scope header as missing everything', () => {
+    expect(classifyPatProbe({ status: 200, scopesHeader: '' })).toEqual({
+      ok: false,
+      reason: 'underscoped',
+      missing: ['repo', 'workflow'],
+    })
   })
 })
 

@@ -62,7 +62,7 @@ watch(
     void documents.probe()
     // The GitHub pickers (repo search + tree browser) need the active board's
     // installation state; probe once so they light up when the App is connected.
-    void github.probe()
+    void github.ensureProbed()
   },
   { immediate: true },
 )

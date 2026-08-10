@@ -43,6 +43,7 @@ import type { Core } from '@cat-factory/orchestration'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
+import type { ListWorkspaceRunRepos } from '../agents/resolveRepoTarget.js'
 import type { SessionPayload, SessionUser } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
 import type { MachineEventRelay } from '../events/machineEvents.js'
@@ -128,6 +129,19 @@ export interface ServerContainer extends Core {
    * service isn't linked to a repo). Present only when GitHub is wired.
    */
   resolveRepoTarget?: ResolveRepoTarget
+  /**
+   * Every repository this workspace's runs would push to (its mounted services' repo links),
+   * the block-free counterpart of {@link resolveRepoTarget}. Present whenever GitHub is wired,
+   * built from the same repositories beside it on each facade.
+   *
+   * The credential check reads it for both of its questions. WHETHER to judge a stored token
+   * at all: a board whose services target no GitHub repository runs nothing that would
+   * authenticate with one, so a GitLab-bound or not-yet-linked workspace is told nothing about
+   * a member's GitHub token rather than warned about a credential its runs never touch. And
+   * WHICH repositories a fine-grained token is probed against, since only a repository a run
+   * targets makes a per-repository answer worth acting on.
+   */
+  listWorkspaceRunRepos?: ListWorkspaceRunRepos
   /**
    * The workspace subscription-token pool (Claude Code / Codex credentials).
    * Present only when the facade wired the provider-subscription repository.

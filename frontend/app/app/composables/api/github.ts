@@ -6,6 +6,7 @@ import {
   createGitHubRepoContract,
   disconnectGitHubContract,
   getGitHubConnectionContract,
+  getGitHubPatCheckContract,
   getGitHubInstallUrlContract,
   listGitHubAvailableReposContract,
   listGitHubBranchesContract,
@@ -51,6 +52,12 @@ export function githubApi({ send, ws }: ApiContext) {
 
     getGitHubConnection: (workspaceId: string) =>
       send(getGitHubConnectionContract, { pathPrefix: ws(workspaceId) }),
+
+    // What the personal access token this workspace's runs would authenticate with can actually
+    // do. Answers `not_applicable` (not a 404/503) on a deployment that uses a GitHub App or no
+    // PAT at all, so the caller makes one unconditional call on board load.
+    getGitHubPatCheck: (workspaceId: string) =>
+      send(getGitHubPatCheckContract, { pathPrefix: ws(workspaceId) }),
 
     listGitHubInstallations: (workspaceId: string) =>
       send(listGitHubInstallationsContract, { pathPrefix: ws(workspaceId) }),

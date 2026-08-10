@@ -62,6 +62,7 @@ import { selectEnvConfigRepairer, selectRepoBootstrapper } from './container-dis
 import type { Env } from './env'
 import { requireAuditDb } from './env'
 import type { WorkerRegistries } from './container-registries.js'
+import { buildListWorkspaceRunRepos, buildResolveRunInitiatorToken } from './container-vcs-identity'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { bedrockModelsCapability } from './ai/registries'
 import { buildResolvePresetProviderPreference } from './container-model-resolver.js'
@@ -659,6 +660,11 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // connection + connect option so the SPA links to the instance a workspace is bound to.
     // Derived by the shared resolver both facades call, so they cannot name different hosts.
     vcsWebUrls: resolveVcsWebUrls(config),
+    // The one "does a run use its initiator's own token?" instance — the SAME builder the engine's
+    // GitHub client and the container push-token mint go through, so the board-load credential
+    // check judges the token a run would actually authenticate as (and honours a workspace that
+    // turned the preference off) rather than re-deciding the policy beside them.
+    resolveRunInitiatorToken: buildResolveRunInitiatorToken(env, db, clock),
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.
@@ -891,6 +897,9 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The block→service→repo resolver, surfaced so the task-search controller can scope a
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget: buildResolveRepoTarget(db),
+    // Its board-wide sibling, surfaced so the credential check can ask whether this
+    // workspace's runs reach GitHub at all before judging a stored GitHub token.
+    listWorkspaceRunRepos: buildListWorkspaceRunRepos(db),
     agentRunRepository,
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: dependencies.executionRepository,

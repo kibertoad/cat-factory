@@ -138,6 +138,7 @@ import type {
   RepoBootstrapper,
   RepoProjectionRepository,
   ReportsRepository,
+  ResolveRunInitiatorToken,
   SpendRollupRepository,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
@@ -631,6 +632,23 @@ export interface CoreDependencies {
    * host and the SPA withholds those links rather than pointing at the public instance.
    */
   vcsWebUrls?: VcsWebUrls
+  /**
+   * "Does a run in this scope authenticate as its INITIATOR's own personal access token, or as
+   * the deployment credential?" — the single built instance, shared with the engine's GitHub
+   * client and each facade's container-dispatch mint (kernel's `createInitiatorPatGate` +
+   * `@cat-factory/server`'s `createResolveRunInitiatorToken`).
+   *
+   * On the container it serves the credential CHECK: the board-load probe that warns a user
+   * their token cannot push has to judge the token a run would ACTUALLY use, which means
+   * honouring the workspace's `allowInitiatorPat` opt-out. Re-composing that gate in the
+   * controller would have made a fourth copy of a security decision whose whole point is being
+   * singular, and an opted-out workspace would then be nagged about a token no run touches.
+   *
+   * Absent ⇒ no per-user secret store is wired (no `ENCRYPTION_KEY`), which is the same
+   * condition that already makes the preference inert; the check then judges the deployment
+   * credential alone.
+   */
+  resolveRunInitiatorToken?: ResolveRunInitiatorToken
   repoProjectionRepository?: RepoProjectionRepository
   branchProjectionRepository?: BranchProjectionRepository
   pullRequestProjectionRepository?: PullRequestProjectionRepository

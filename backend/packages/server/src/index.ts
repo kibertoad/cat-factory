@@ -219,11 +219,15 @@ export {
 export {
   buildResolveRepoTarget,
   buildResolveRepoTargets,
+  buildListWorkspaceRunRepos,
   type ResolveRepoTargetDependencies,
   type ResolveRepoTargetsDependencies,
   type ResolveRepoTargets,
   type ResolvedRepoTargets,
   type RepoCheckout,
+  type ListWorkspaceRunRepos,
+  type ListWorkspaceRunReposDependencies,
+  type WorkspaceRunRepo,
 } from './agents/resolveRepoTarget.js'
 // The checkout-free RepoFiles facade over the wired GitHubClient + the engine-facing
 // run-repo resolver each facade threads into the core for a registered kind's pre/post-ops.

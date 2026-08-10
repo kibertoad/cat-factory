@@ -818,6 +818,7 @@ export {
   createInitiatorPatGate,
   type InitiatorPatGate,
   type InitiatorPatAccountTier,
+  type ResolveRunInitiatorToken,
 } from './shared/initiator-pat-gate.js'
 export {
   type RepoScanEntry,

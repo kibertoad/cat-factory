@@ -539,6 +539,12 @@ export {
   type GitHubPatScopeReport,
 } from './modules/providers/githubPatScope.js'
 export {
+  probeGitHubPatCapability,
+  type GitHubPatCapabilityDeps,
+  type GitHubPatCapabilityRequest,
+  type GitHubPatProbeRepo,
+} from './modules/providers/githubPatCapability.js'
+export {
   OpenRouterCatalogService,
   type OpenRouterCatalogServiceDependencies,
   OPENROUTER_BASE_URL,
