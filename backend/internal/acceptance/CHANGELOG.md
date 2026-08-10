@@ -1,5 +1,13 @@
 # @cat-factory/acceptance
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [b25732f]
+  - @cat-factory/contracts@0.293.0
+  - @cat-factory/sdk@0.32.0
+
 ## 0.0.2
 
 ### Patch Changes
