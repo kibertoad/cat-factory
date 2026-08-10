@@ -12,8 +12,8 @@ import { KUBERNETES_TOKEN_KEY } from './kubernetes.logic.js'
 // ServiceAccount token + an optional custom-CA / insecure-skip TLS dispatcher. This
 // client owns that mechanism so the two transports don't duplicate it.
 //
-// The undici Agent is loaded lazily (Node only) so the Worker bundle never pulls in
-// `undici`; on a runtime without it a custom-CA/insecure config fails clearly. The
+// `undici` is a RUNTIME dependency of this package (see {@link loadUndici}), loaded
+// lazily through a variable specifier so the Worker bundle never pulls it in. The
 // Agent is cached at MODULE scope keyed by the CA/insecure pair (the wiring builds a
 // fresh transport on every dispatch/poll resolve, so a per-instance cache would
 // create — and abandon — one TLS connection pool per tick, defeating keep-alive).
@@ -130,15 +130,7 @@ export class KubernetesApiClient {
     { fetch: UndiciModule['fetch']; dispatcher: unknown } | undefined
   > {
     if (!this.config.caCertPem && !this.config.insecureSkipTlsVerify) return undefined
-    // Variable specifier so bundlers don't statically resolve `undici`. Nothing memoises the
-    // import because the module loader already does: this is a cache lookup after the first call.
-    const moduleName = 'undici'
-    const undici = (await import(moduleName).catch(() => null)) as UndiciModule | null
-    if (!undici) {
-      throw new Error(
-        'Kubernetes custom CA / insecure TLS requires the Node runtime (undici is unavailable).',
-      )
-    }
+    const undici = await loadUndici()
     const key = `${this.config.insecureSkipTlsVerify ? 'insecure' : 'verify'}:${this.config.caCertPem ?? ''}`
     let dispatcher = tlsDispatcherCache.get(key)
     if (!dispatcher) {
@@ -158,6 +150,36 @@ export class KubernetesApiClient {
 interface UndiciModule {
   Agent: new (opts: unknown) => unknown
   fetch: (url: string, init: unknown) => Promise<Response>
+}
+
+/**
+ * Load the userland `undici`, or throw a failure that names what could not be done and carries
+ * WHY as its `cause`.
+ *
+ * The specifier is a variable so a bundler cannot statically resolve it: the Worker build must not
+ * pull `undici` in, and no Worker reaches this line anyway, because the Cloudflare facade sets
+ * `customTlsSupported: false` and a custom-TLS config is refused before it becomes a client.
+ * Nothing memoises the import because the module loader already does: this is a cache lookup after
+ * the first call.
+ *
+ * **The failure is reported, never guessed at.** `undici` is a runtime dependency of this package,
+ * so on Node a load failure means a broken or pruned install; the message this replaced asserted
+ * instead that the runtime was not Node, which is the one explanation that is almost always wrong
+ * when an operator reads it. The load error rides along as `cause`, so
+ * `describeConnectionFailure` renders it (scrubbed) into the detail the connect form shows.
+ */
+async function loadUndici(): Promise<UndiciModule> {
+  const moduleName = 'undici'
+  try {
+    return (await import(moduleName)) as UndiciModule
+  } catch (error) {
+    throw new Error(
+      // No trailing period: this message is read with the cause appended to it, which is where
+      // `describeConnectionFailure` joins the chain with a colon.
+      "Kubernetes custom CA / insecure TLS needs the 'undici' package, which this deployment could not load",
+      { cause: error },
+    )
+  }
 }
 
 /** Module-scoped undici Agent cache, keyed by the CA/insecure pair (see tlsTransport). */

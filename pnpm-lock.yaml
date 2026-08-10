@@ -520,6 +520,9 @@ importers:
       p-map:
         specifier: ^7.0.6
         version: 7.0.6
+      undici:
+        specifier: ^8.10.0
+        version: 8.10.0
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
@@ -530,9 +533,6 @@ importers:
       typescript:
         specifier: 7.0.2
         version: 7.0.2
-      undici:
-        specifier: ^8.10.0
-        version: 8.10.0
       valibot:
         specifier: ^1.4.2
         version: 1.4.2(typescript@7.0.2)
