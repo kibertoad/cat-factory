@@ -56,17 +56,32 @@ export interface OpenBrowserCommand {
  *
  * So the URL is quoted, which is also why `start`'s first argument is an empty quoted window title
  * (it reads a leading quoted token as one). The quotes have to reach cmd verbatim, hence the flag.
- * Nothing can break out of them: `URL`/`URLSearchParams` percent-encode both `"` and space, and
- * outside a batch file cmd leaves an undefined `%…%` reference alone.
+ *
+ * The quoting holds only while the URL carries no `"` of its own, so this SERIALIZES the input
+ * rather than trusting the caller to have done it: WHATWG serialization percent-encodes `"` in
+ * every component that can carry one and rejects it in a host, so no argument can close the quote
+ * and have cmd read the rest as a second command. Input that is not a URL at all throws, rather
+ * than reaching a shell as a command line whose meaning nobody has checked; `openBrowser` is
+ * best-effort and both call sites print the link before opening it. Inside the quotes cmd still
+ * expands a `%NAME%` reference, but the expansion is literal text there: quotes make `&` and its
+ * friends inert, and no Windows environment value can contain a `"` to close them, so the worst
+ * case is a wrong URL, never a second command.
+ *
+ * @throws {TypeError} if `url` is not a parsable absolute URL.
  */
 export function openCommand(url: string, platform: NodeJS.Platform): OpenBrowserCommand {
+  const href = new URL(url).href
   switch (platform) {
     case 'darwin':
-      return { cmd: 'open', args: [url] }
+      return { cmd: 'open', args: [href] }
     case 'win32':
-      return { cmd: 'cmd', args: ['/c', 'start', '""', `"${url}"`], windowsVerbatimArguments: true }
+      return {
+        cmd: 'cmd',
+        args: ['/c', 'start', '""', `"${href}"`],
+        windowsVerbatimArguments: true,
+      }
     default:
-      return { cmd: 'xdg-open', args: [url] }
+      return { cmd: 'xdg-open', args: [href] }
   }
 }
 
