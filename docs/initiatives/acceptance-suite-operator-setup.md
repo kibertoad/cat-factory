@@ -54,8 +54,8 @@ Ordered by what unblocks a live pass soonest. A is independent and can land at a
 | #   | Slice                                                                        | PR                                                          |
 | --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | B   | Public model-preset surface: list, plus `modelPresetId` on task create       | [#1940](https://github.com/kibertoad/cat-factory/pull/1940) |
-| C   | Suite adopts operator-created repos, and pins the configured preset          | [#1942](https://github.com/kibertoad/cat-factory/pull/1942) |
-| D   | `configure` command: defaults, the token, the repo names, the creation pages | [#1942](https://github.com/kibertoad/cat-factory/pull/1942) |
+| C   | Suite adopts operator-created repos, and pins the configured preset          | [#1943](https://github.com/kibertoad/cat-factory/pull/1943) |
+| D   | `configure` command: defaults, the token, the repo names, the creation pages | [#1943](https://github.com/kibertoad/cat-factory/pull/1943) |
 | A   | OpenAI catalog entry and a `chatgpt` built-in preset                         |                                                             |
 
 ### B. Public preset surface
