@@ -8,16 +8,14 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code CreatePublicServiceRequestType} vocabulary.
+ * The {@code GetPublicVcsConnectionResponseConnectionMethod} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum CreatePublicServiceRequestType {
-    SERVICE("service"),
-    FRONTEND("frontend"),
-    LIBRARY("library"),
-    DOCUMENT("document"),
+public enum GetPublicVcsConnectionResponseConnectionMethod {
+    APP("app"),
+    PAT("pat"),
 
     /**
      * A value this SDK release does not know.
@@ -31,7 +29,7 @@ public enum CreatePublicServiceRequestType {
 
     private final String wire;
 
-    CreatePublicServiceRequestType(String wire) {
+    GetPublicVcsConnectionResponseConnectionMethod(String wire) {
         this.wire = wire;
     }
 
@@ -43,8 +41,8 @@ public enum CreatePublicServiceRequestType {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static CreatePublicServiceRequestType fromWire(@Nullable String wire) {
-        for (CreatePublicServiceRequestType candidate : values()) {
+    public static GetPublicVcsConnectionResponseConnectionMethod fromWire(@Nullable String wire) {
+        for (GetPublicVcsConnectionResponseConnectionMethod candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

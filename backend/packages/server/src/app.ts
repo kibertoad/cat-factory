@@ -112,6 +112,7 @@ import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGen
 import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicBoardController } from './modules/publicApi/PublicBoardController.js'
+import { publicProvisioningController } from './modules/publicApi/PublicProvisioningController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
@@ -241,6 +242,12 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // in-controller key auth; service creation is `admin` (board structure), the task-level writes
   // `write`. See backend/docs/public-api.md.
   app.route('/', publicBoardController())
+  // DEPLOYMENT PROVISIONING (`/api/v1/repos/bootstrap`, `/api/v1/environments/connections`,
+  // `PATCH /api/v1/services/:serviceId`, and the reads naming what this deployment has WIRED).
+  // What a caller does BEFORE there is a board to shape, which is why it is not part of the board
+  // controller above. Same in-controller key auth, `admin` throughout: it creates repositories and
+  // accepts an infrastructure credential. See backend/docs/public-api.md.
+  app.route('/', publicProvisioningController())
   // The public PARKED-DECISION surface (`/api/v1/runs/:runId/decisions/*`): the answerer that lets
   // a headless run include the clarification loop at all. Same in-controller key auth, gated on
   // the `decide` rung of the scope ladder. See backend/docs/adr/0047-headless-clarification-loop.md.

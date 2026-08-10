@@ -524,8 +524,9 @@ func (s *JobsService) Stream(ctx context.Context, id string) (*EventStream, erro
 	return s.client.stream(ctx, req)
 }
 
-// ServicesService the workspace's board services, the frames tasks are created under: list them, or create one
-// (optionally backed by a repository).
+// ServicesService the workspace's board services, the frames tasks are created under: list them, create one
+// (optionally backed by a repository), or patch one, including declaring where the manifests for
+// its per-run environments are read from.
 type ServicesService struct {
 	client *Client
 }
@@ -564,6 +565,29 @@ func (s *ServicesService) List(ctx context.Context) (*PublicServiceList, error) 
 		Path:   "/api/v1/services",
 	}
 	var out PublicServiceList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Update patch a service, including where its per-run manifests live
+// Change a service’s authored fields, and declare its `provisioning`: where the manifests for a
+// per-run environment are read from. That second half is what a connected cluster alone cannot
+// supply, because the platform keeps “which cluster” (one per workspace) apart from “which
+// manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather
+// than clearing it. Board coordinates are deliberately absent, as they are on service creation.
+// PATCH /api/v1/services/{serviceId} (operation updatePublicService).
+func (s *ServicesService) Update(ctx context.Context, serviceID string, body *UpdatePublicServiceRequest) (*PublicService, error) {
+	if body == nil {
+		body = &UpdatePublicServiceRequest{}
+	}
+	req := requestSpec{
+		Method: "PATCH",
+		Path:   fmt.Sprintf("/api/v1/services/%s", pathEscape(serviceID)),
+		Body:   body,
+	}
+	var out PublicService
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -630,10 +654,50 @@ func (s *SpecService) GetForRun(ctx context.Context, runID string) (*PublicRunSp
 	return &out, nil
 }
 
-// ReposService the repositories this workspace can back a service with, and which service each already backs:
-// the discovery half of service creation.
+// ReposService the repositories this workspace can back a service with, and which service each already backs
+// (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the
+// repository with an agent and reports the board service it materialises.
 type ReposService struct {
 	client *Client
+}
+
+// Bootstrap create a repository and adapt it with the bootstrapper agent
+// Create a brand-new repository under the account the workspace is connected to, then run the
+// bootstrapper agent in a container to write it against the supplied brief (or to adapt a
+// reference architecture). Answers 201 with a job to poll rather than blocking for the minutes a
+// container takes. The job names the board service frame it materialises, so work can be filed
+// against the service before the repository has finished being written. This is the one act of
+// board setup with no other public counterpart: creating a service takes a repoId, and nothing
+// else here makes one.
+// POST /api/v1/repos/bootstrap (operation startPublicRepoBootstrap).
+func (s *ReposService) Bootstrap(ctx context.Context, body StartPublicRepoBootstrapRequest) (*StartPublicRepoBootstrapResponse, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/repos/bootstrap",
+		Body:   body,
+	}
+	var out StartPublicRepoBootstrapResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetBootstrap poll one repository bootstrap
+// Read a bootstrap run’s current state. `failureKind` says whether a retry could plausibly help:
+// a `preflight` refusal (the target repository already has content, nothing is connected) cannot
+// be retried into success, where an `evicted` container can.
+// GET /api/v1/repos/bootstrap/{jobId} (operation getPublicRepoBootstrap).
+func (s *ReposService) GetBootstrap(ctx context.Context, jobID string) (*StartPublicRepoBootstrapResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/repos/bootstrap/%s", pathEscape(jobID)),
+	}
+	var out StartPublicRepoBootstrapResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // List list the repositories a service can be created against
@@ -1056,6 +1120,133 @@ func (s *NotificationsService) List(ctx context.Context) (*PublicNotificationLis
 		Path:   "/api/v1/notifications",
 	}
 	var out PublicNotificationList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// EnvironmentsService the cluster this workspace provisions per-run environments onto: probe a candidate connection
+// without saving it, or bind one. The credential is write-only, so a read reports which secret
+// keys are stored and never their values.
+type EnvironmentsService struct {
+	client *Client
+}
+
+// Connect connect the workspace to the cluster its environments deploy onto
+// Bind environment provisioning to a Kubernetes cluster: the apiserver, how its TLS is verified,
+// the namespace template, and how an environment URL is derived once manifests are applied. The
+// secret bundle authenticating the connection is write-only; the response reports which secret
+// KEYS were stored and never their values. Idempotent, so re-connecting replaces rather than
+// accumulating.
+// POST /api/v1/environments/connections (operation connectPublicEnvironment).
+func (s *EnvironmentsService) Connect(ctx context.Context, body ConnectPublicEnvironmentRequest) (*ConnectPublicEnvironmentResponse, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/environments/connections",
+		Body:   body,
+	}
+	var out ConnectPublicEnvironmentResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// TestConnection probe a candidate cluster connection without saving it
+// Reach the apiserver with the supplied credentials and report what came back, persisting
+// nothing. Worth a call of its own because the alternative is discovering an unreachable cluster
+// or an expired token on the deploy step of a run that has already paid for a design pass and an
+// implementation. A cluster that refuses the credential is an ANSWER, so it is a 200 carrying
+// `ok: false` rather than an error.
+// POST /api/v1/environments/connections/test (operation testPublicEnvironmentConnection).
+func (s *EnvironmentsService) TestConnection(ctx context.Context, body TestPublicEnvironmentConnectionRequest) (*TestPublicEnvironmentConnectionResponse, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/environments/connections/test",
+		Body:   body,
+	}
+	var out TestPublicEnvironmentConnectionResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ModelsService the models a run in this workspace could actually dispatch to, and why an unavailable one is
+// unavailable: unconfigured, or refused by the account model-family policy. Those two need
+// opposite fixes.
+type ModelsService struct {
+	client *Client
+}
+
+// List list the models a run in this workspace could dispatch to
+// The workspace’s model catalog with the two flags that decide whether an agent step can run at
+// all: `available`, and `policyBlocked` for a model that is configured but refused by the
+// account’s model-family policy. Those two need OPPOSITE fixes, which is why they are separate:
+// everything blocked by policy is already configured, so adding another provider key changes
+// nothing.
+// GET /api/v1/models (operation listPublicWiredModels).
+func (s *ModelsService) List(ctx context.Context) (*ListPublicWiredModelsResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/models",
+	}
+	var out ListPublicWiredModelsResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// VcsService the workspace's source-control connection: which account it talks to, how it authenticates, and
+// whether it may create repositories and write workflow files. Both permissions are enforced by
+// the provider at push time, so reading them beats discovering one missing halfway through an
+// automated setup.
+type VcsService struct {
+	client *Client
+}
+
+// GetConnection read the workspace’s source-control connection and what it may do
+// The connected account, how the workspace authenticates to it, and the two permissions that
+// decide whether an automated flow can complete: whether the platform may create repositories,
+// and whether it may write workflow files. Both are enforced by the provider at push time, so a
+// caller that cannot read them discovers a missing workflow permission as a repository that
+// bootstrapped and then failed to gain its CI workflow. Provider-neutral: a GitLab-connected
+// workspace answers here too. `connection` is null when nothing is connected, which is a state
+// rather than an error.
+// GET /api/v1/vcs/connection (operation getPublicVcsConnection).
+func (s *VcsService) GetConnection(ctx context.Context) (*GetPublicVcsConnectionResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/vcs/connection",
+	}
+	var out GetPublicVcsConnectionResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// MergePresetsService the merge-threshold presets a task can resolve, including which is the workspace default: what
+// decides whether a run can land its pull request without a person.
+type MergePresetsService struct {
+	client *Client
+}
+
+// List list the workspace’s merge-threshold presets
+// The preset library, including which row is the workspace default that a task pinning none
+// resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull
+// request without a person; `dryRunRoles` names the roles whose runs the preset forces into
+// dry-run mode, which is the difference between “this preset merges” and “this preset merges for
+// everyone except one role”.
+// GET /api/v1/merge-presets (operation listPublicMergePresets).
+func (s *MergePresetsService) List(ctx context.Context) (*ListPublicMergePresetsResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/merge-presets",
+	}
+	var out ListPublicMergePresetsResponse
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

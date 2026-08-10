@@ -13,6 +13,8 @@ import type {
   ActPublicNotificationRequest,
   AddPublicTaskDependencyRequest,
   AttachPublicTaskDocumentRequest,
+  ConnectPublicEnvironmentRequest,
+  ConnectPublicEnvironmentResponse,
   CreateHeadlessPublicApiKey,
   CreatePublicJob,
   CreatePublicServiceRequest,
@@ -26,6 +28,7 @@ import type {
   GetDebugLlmExportResponse,
   GetPublicMergeRecordResponse,
   GetPublicRunOutcomeResponse,
+  GetPublicVcsConnectionResponse,
   ListDebugAgentContextResponse,
   ListDebugLlmCallsOrder,
   ListDebugLlmCallsResponse,
@@ -37,10 +40,12 @@ import type {
   ListDebugToolCallsResponse,
   ListPublicJobsResponse,
   ListPublicMergeClassRollupsResponse,
+  ListPublicMergePresetsResponse,
   ListPublicReposResponse,
   ListPublicTaskDocumentsResponse,
   ListPublicTaskDocumentsResponseDocument,
   ListPublicTaskTypesResponse,
+  ListPublicWiredModelsResponse,
   LlmCallOutcome,
   Notification,
   NotificationWebhook,
@@ -85,9 +90,14 @@ import type {
   PublicUsage,
   PutNotificationWebhook,
   RunStatus,
+  StartPublicRepoBootstrapRequest,
+  StartPublicRepoBootstrapResponse,
   StartPublicTask,
   TagPublicMergeReviewEffortRequest,
   TaskStatus,
+  TestPublicEnvironmentConnectionRequest,
+  TestPublicEnvironmentConnectionResponse,
+  UpdatePublicServiceRequest,
   UpdatePublicTask,
 } from './models.generated.ts'
 
@@ -273,7 +283,7 @@ export class JobsResource {
   }
 }
 
-/** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
+/** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), or patch one, including declaring where the manifests for its per-run environments are read from. */
 export class ServicesResource {
   readonly #transport: Transport
 
@@ -304,6 +314,20 @@ export class ServicesResource {
     return this.#transport.request<PublicServiceList>({
       method: 'GET',
       path: `/api/v1/services`,
+      options,
+    })
+  }
+
+  /**
+   * Patch a service, including where its per-run manifests live
+   * Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it. Board coordinates are deliberately absent, as they are on service creation.
+   * `PATCH /api/v1/services/{serviceId}` — operation `updatePublicService`.
+   */
+  update(serviceId: string, body: UpdatePublicServiceRequest = {}, options: RequestOptions = {}): Promise<PublicService> {
+    return this.#transport.request<PublicService>({
+      method: 'PATCH',
+      path: `/api/v1/services/${encodePathSegment(serviceId)}`,
+      body,
       options,
     })
   }
@@ -344,12 +368,39 @@ export class SpecResource {
   }
 }
 
-/** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+/** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the repository with an agent and reports the board service it materialises. */
 export class ReposResource {
   readonly #transport: Transport
 
   constructor(transport: Transport) {
     this.#transport = transport
+  }
+
+  /**
+   * Create a repository and adapt it with the bootstrapper agent
+   * Create a brand-new repository under the account the workspace is connected to, then run the bootstrapper agent in a container to write it against the supplied brief (or to adapt a reference architecture). Answers 201 with a job to poll rather than blocking for the minutes a container takes. The job names the board service frame it materialises, so work can be filed against the service before the repository has finished being written. This is the one act of board setup with no other public counterpart: creating a service takes a repoId, and nothing else here makes one.
+   * `POST /api/v1/repos/bootstrap` — operation `startPublicRepoBootstrap`.
+   */
+  bootstrap(body: StartPublicRepoBootstrapRequest, options: RequestOptions = {}): Promise<StartPublicRepoBootstrapResponse> {
+    return this.#transport.request<StartPublicRepoBootstrapResponse>({
+      method: 'POST',
+      path: `/api/v1/repos/bootstrap`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Poll one repository bootstrap
+   * Read a bootstrap run’s current state. `failureKind` says whether a retry could plausibly help: a `preflight` refusal (the target repository already has content, nothing is connected) cannot be retried into success, where an `evicted` container can.
+   * `GET /api/v1/repos/bootstrap/{jobId}` — operation `getPublicRepoBootstrap`.
+   */
+  getBootstrap(jobId: string, options: RequestOptions = {}): Promise<StartPublicRepoBootstrapResponse> {
+    return this.#transport.request<StartPublicRepoBootstrapResponse>({
+      method: 'GET',
+      path: `/api/v1/repos/bootstrap/${encodePathSegment(jobId)}`,
+      options,
+    })
   }
 
   /**
@@ -682,6 +733,109 @@ export class NotificationsResource {
     return this.#transport.request<PublicNotificationList>({
       method: 'GET',
       path: `/api/v1/notifications`,
+      options,
+    })
+  }
+}
+
+/** The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values. */
+export class EnvironmentsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Connect the workspace to the cluster its environments deploy onto
+   * Bind environment provisioning to a Kubernetes cluster: the apiserver, how its TLS is verified, the namespace template, and how an environment URL is derived once manifests are applied. The secret bundle authenticating the connection is write-only; the response reports which secret KEYS were stored and never their values. Idempotent, so re-connecting replaces rather than accumulating.
+   * `POST /api/v1/environments/connections` — operation `connectPublicEnvironment`.
+   */
+  connect(body: ConnectPublicEnvironmentRequest, options: RequestOptions = {}): Promise<ConnectPublicEnvironmentResponse> {
+    return this.#transport.request<ConnectPublicEnvironmentResponse>({
+      method: 'POST',
+      path: `/api/v1/environments/connections`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Probe a candidate cluster connection without saving it
+   * Reach the apiserver with the supplied credentials and report what came back, persisting nothing. Worth a call of its own because the alternative is discovering an unreachable cluster or an expired token on the deploy step of a run that has already paid for a design pass and an implementation. A cluster that refuses the credential is an ANSWER, so it is a 200 carrying `ok: false` rather than an error.
+   * `POST /api/v1/environments/connections/test` — operation `testPublicEnvironmentConnection`.
+   */
+  testConnection(body: TestPublicEnvironmentConnectionRequest, options: RequestOptions = {}): Promise<TestPublicEnvironmentConnectionResponse> {
+    return this.#transport.request<TestPublicEnvironmentConnectionResponse>({
+      method: 'POST',
+      path: `/api/v1/environments/connections/test`,
+      body,
+      options,
+    })
+  }
+}
+
+/** The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes. */
+export class ModelsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the models a run in this workspace could dispatch to
+   * The workspace’s model catalog with the two flags that decide whether an agent step can run at all: `available`, and `policyBlocked` for a model that is configured but refused by the account’s model-family policy. Those two need OPPOSITE fixes, which is why they are separate: everything blocked by policy is already configured, so adding another provider key changes nothing.
+   * `GET /api/v1/models` — operation `listPublicWiredModels`.
+   */
+  list(options: RequestOptions = {}): Promise<ListPublicWiredModelsResponse> {
+    return this.#transport.request<ListPublicWiredModelsResponse>({
+      method: 'GET',
+      path: `/api/v1/models`,
+      options,
+    })
+  }
+}
+
+/** The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup. */
+export class VcsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Read the workspace’s source-control connection and what it may do
+   * The connected account, how the workspace authenticates to it, and the two permissions that decide whether an automated flow can complete: whether the platform may create repositories, and whether it may write workflow files. Both are enforced by the provider at push time, so a caller that cannot read them discovers a missing workflow permission as a repository that bootstrapped and then failed to gain its CI workflow. Provider-neutral: a GitLab-connected workspace answers here too. `connection` is null when nothing is connected, which is a state rather than an error.
+   * `GET /api/v1/vcs/connection` — operation `getPublicVcsConnection`.
+   */
+  getConnection(options: RequestOptions = {}): Promise<GetPublicVcsConnectionResponse> {
+    return this.#transport.request<GetPublicVcsConnectionResponse>({
+      method: 'GET',
+      path: `/api/v1/vcs/connection`,
+      options,
+    })
+  }
+}
+
+/** The merge-threshold presets a task can resolve, including which is the workspace default: what decides whether a run can land its pull request without a person. */
+export class MergePresetsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the workspace’s merge-threshold presets
+   * The preset library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the preset forces into dry-run mode, which is the difference between “this preset merges” and “this preset merges for everyone except one role”.
+   * `GET /api/v1/merge-presets` — operation `listPublicMergePresets`.
+   */
+  list(options: RequestOptions = {}): Promise<ListPublicMergePresetsResponse> {
+    return this.#transport.request<ListPublicMergePresetsResponse>({
+      method: 'GET',
+      path: `/api/v1/merge-presets`,
       options,
     })
   }
@@ -1842,11 +1996,11 @@ export class KeysResource {
 export abstract class CatFactoryResources {
   /** Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one. */
   readonly jobs: JobsResource
-  /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
+  /** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), or patch one, including declaring where the manifests for its per-run environments are read from. */
   readonly services: ServicesResource
   /** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
   readonly spec: SpecResource
-  /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+  /** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the repository with an agent and reports the board service it materialises. */
   readonly repos: ReposResource
   /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against. */
   readonly tasks: TasksResource
@@ -1856,6 +2010,14 @@ export abstract class CatFactoryResources {
   readonly taskTypes: TaskTypesResource
   /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */
   readonly notifications: NotificationsResource
+  /** The cluster this workspace provisions per-run environments onto: probe a candidate connection without saving it, or bind one. The credential is write-only, so a read reports which secret keys are stored and never their values. */
+  readonly environments: EnvironmentsResource
+  /** The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes. */
+  readonly models: ModelsResource
+  /** The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup. */
+  readonly vcs: VcsResource
+  /** The merge-threshold presets a task can resolve, including which is the workspace default: what decides whether a run can land its pull request without a person. */
+  readonly mergePresets: MergePresetsResource
   /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */
   readonly webhook: WebhookResource
   /** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
@@ -1882,6 +2044,10 @@ export abstract class CatFactoryResources {
     this.pipelines = new PipelinesResource(transport)
     this.taskTypes = new TaskTypesResource(transport)
     this.notifications = new NotificationsResource(transport)
+    this.environments = new EnvironmentsResource(transport)
+    this.models = new ModelsResource(transport)
+    this.vcs = new VcsResource(transport)
+    this.mergePresets = new MergePresetsResource(transport)
     this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)
     this.me = new MeResource(transport)

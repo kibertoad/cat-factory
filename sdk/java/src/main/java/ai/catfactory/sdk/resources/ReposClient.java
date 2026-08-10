@@ -13,8 +13,9 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The repositories this workspace can back a service with, and which service each already backs:
- * the discovery half of service creation.
+ * The repositories this workspace can back a service with, and which service each already backs
+ * (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the
+ * repository with an agent and reports the board service it materialises.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class ReposClient {
@@ -22,6 +23,32 @@ public final class ReposClient {
 
     ReposClient(Transport transport) {
         this.transport = transport;
+    }
+
+    /**
+     * Create a repository and adapt it with the bootstrapper agent
+     * Create a brand-new repository under the account the workspace is connected to, then run the
+     * bootstrapper agent in a container to write it against the supplied brief (or to adapt a
+     * reference architecture). Answers 201 with a job to poll rather than blocking for the minutes
+     * a container takes. The job names the board service frame it materialises, so work can be
+     * filed against the service before the repository has finished being written. This is the one
+     * act of board setup with no other public counterpart: creating a service takes a repoId, and
+     * nothing else here makes one.
+     * {@code POST /api/v1/repos/bootstrap} (operation {@code startPublicRepoBootstrap}).
+     */
+    public StartPublicRepoBootstrapResponse bootstrap(StartPublicRepoBootstrapRequest body) {
+        return transport.request("POST", "/api/v1/repos/bootstrap", body, Map.of(), new TypeReference<StartPublicRepoBootstrapResponse>() {});
+    }
+
+    /**
+     * Poll one repository bootstrap
+     * Read a bootstrap run’s current state. `failureKind` says whether a retry could plausibly
+     * help: a `preflight` refusal (the target repository already has content, nothing is
+     * connected) cannot be retried into success, where an `evicted` container can.
+     * {@code GET /api/v1/repos/bootstrap/{jobId}} (operation {@code getPublicRepoBootstrap}).
+     */
+    public StartPublicRepoBootstrapResponse getBootstrap(String jobId) {
+        return transport.request("GET", "/api/v1/repos/bootstrap/" + Transport.pathSegment(jobId), null, Map.of(), new TypeReference<StartPublicRepoBootstrapResponse>() {});
     }
 
     /**

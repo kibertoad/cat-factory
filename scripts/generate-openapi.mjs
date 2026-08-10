@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.40.0'
+const API_VERSION = '1.41.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -268,6 +268,54 @@ const OPERATION_DOCS = {
     summary: 'Create a service',
     description:
       'Create a board service, optionally backed by a repository from `GET /api/v1/repos`. The repository link is what makes the service runnable: execution resolves a task’s repository by walking up to its enclosing service frame, so a service with none holds tasks and can start none of them. A whole-repo repository that already backs a service in this account is MOUNTED rather than duplicated; a monorepo service must name its subdirectory. The board lays the service out itself: this surface publishes no coordinates. Requires an `admin` key.',
+  },
+  startPublicRepoBootstrap: {
+    tag: 'Repos',
+    summary: 'Create a repository and adapt it with the bootstrapper agent',
+    description:
+      'Create a brand-new repository under the account the workspace is connected to, then run the bootstrapper agent in a container to write it against the supplied brief (or to adapt a reference architecture). Answers 201 with a job to poll rather than blocking for the minutes a container takes. The job names the board service frame it materialises, so work can be filed against the service before the repository has finished being written. This is the one act of board setup with no other public counterpart: creating a service takes a repoId, and nothing else here makes one.',
+  },
+  getPublicRepoBootstrap: {
+    tag: 'Repos',
+    summary: 'Poll one repository bootstrap',
+    description:
+      'Read a bootstrap run’s current state. `failureKind` says whether a retry could plausibly help: a `preflight` refusal (the target repository already has content, nothing is connected) cannot be retried into success, where an `evicted` container can.',
+  },
+  updatePublicService: {
+    tag: 'Services',
+    summary: 'Patch a service, including where its per-run manifests live',
+    description:
+      'Change a service’s authored fields, and declare its `provisioning`: where the manifests for a per-run environment are read from. That second half is what a connected cluster alone cannot supply, because the platform keeps “which cluster” (one per workspace) apart from “which manifests” (one set per service). An omitted `provisioning` leaves the stored one alone rather than clearing it. Board coordinates are deliberately absent, as they are on service creation.',
+  },
+  connectPublicEnvironment: {
+    tag: 'Environments',
+    summary: 'Connect the workspace to the cluster its environments deploy onto',
+    description:
+      'Bind environment provisioning to a Kubernetes cluster: the apiserver, how its TLS is verified, the namespace template, and how an environment URL is derived once manifests are applied. The secret bundle authenticating the connection is write-only; the response reports which secret KEYS were stored and never their values. Idempotent, so re-connecting replaces rather than accumulating.',
+  },
+  testPublicEnvironmentConnection: {
+    tag: 'Environments',
+    summary: 'Probe a candidate cluster connection without saving it',
+    description:
+      'Reach the apiserver with the supplied credentials and report what came back, persisting nothing. Worth a call of its own because the alternative is discovering an unreachable cluster or an expired token on the deploy step of a run that has already paid for a design pass and an implementation. A cluster that refuses the credential is an ANSWER, so it is a 200 carrying `ok: false` rather than an error.',
+  },
+  listPublicWiredModels: {
+    tag: 'Models',
+    summary: 'List the models a run in this workspace could dispatch to',
+    description:
+      'The workspace’s model catalog with the two flags that decide whether an agent step can run at all: `available`, and `policyBlocked` for a model that is configured but refused by the account’s model-family policy. Those two need OPPOSITE fixes, which is why they are separate: everything blocked by policy is already configured, so adding another provider key changes nothing.',
+  },
+  getPublicVcsConnection: {
+    tag: 'VCS',
+    summary: 'Read the workspace’s source-control connection and what it may do',
+    description:
+      'The connected account, how the workspace authenticates to it, and the two permissions that decide whether an automated flow can complete: whether the platform may create repositories, and whether it may write workflow files. Both are enforced by the provider at push time, so a caller that cannot read them discovers a missing workflow permission as a repository that bootstrapped and then failed to gain its CI workflow. Provider-neutral: a GitLab-connected workspace answers here too. `connection` is null when nothing is connected, which is a state rather than an error.',
+  },
+  listPublicMergePresets: {
+    tag: 'Merge presets',
+    summary: 'List the workspace’s merge-threshold presets',
+    description:
+      'The preset library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the preset forces into dry-run mode, which is the difference between “this preset merges” and “this preset merges for everyone except one role”.',
   },
   listPublicRepos: {
     tag: 'Repos',

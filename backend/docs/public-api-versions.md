@@ -334,3 +334,38 @@ read `frameIds` and treat `frameId` as its head.
 Written against 1.39.0: the `consensus_panel` reason above took that number while this branch was
 in flight, and the VERSION line auto-merged byte-identically as the note at the top of this file
 says it does, conflicting only in this prose. Nothing about the field changed with the move.
+
+1.41.0: eight new operations, no change to anything already published, so a consumer built against
+1.40.0 reads and writes exactly what it did before. They close the one gap that made a fully
+headless deployment impossible: everything needed to bring a workspace from "connected" to "able to
+run a pipeline" existed only on the session-authenticated app API, so a caller that could provision
+its own keys, enrol its own webhook and file its own work still had to open a browser first.
+
+- `POST /api/v1/repos/bootstrap` + `GET /api/v1/repos/bootstrap/{jobId}`: create a repository and
+  adapt it with the bootstrapper agent. `POST /api/v1/services` could only back a service with a
+  repository that already existed.
+- `POST /api/v1/environments/connections` + `.../test`: bind (or probe) the cluster per-run
+  environments are provisioned onto.
+- `PATCH /api/v1/services/{serviceId}`: patch a service, including the `provisioning` that says
+  where its manifests live. A connected cluster alone provisions nothing without it.
+- `GET /api/v1/models`, `GET /api/v1/vcs/connection`, `GET /api/v1/merge-presets`: what this
+  deployment has WIRED.
+
+All eight are `admin`. The three reads are `admin` rather than `read` even though `/repos` and
+`/pipelines` are `read`, and the distinction is what each names: those name board CONTENT, where
+these name deployment configuration, including the permissions the VCS credential holds. `admin`
+can be relaxed later and a scope can never be tightened, so the reversible reading wins (ADR 0034).
+
+Two shape decisions are worth recording because they are the ones a future change will press on.
+The public `kubernetes` engine maps onto the internal `remote-kubernetes`, and the internal split
+between that and `local-k3s` is deliberately not a public fact: one backend serves both and they
+lower to the same provision config, so exposing the choice would freeze a decision that changes
+nothing. And `failureKind` on a bootstrap job carries the FULL agent-failure vocabulary rather than
+the narrower list a bootstrap is documented to reach, because the stored value is the shared
+`agentFailure`: projecting through the narrow list would leave the mapper holding a value outside
+its own type on the very path whose job is to say what went wrong.
+
+Every request body here states its omitted-value rule in prose and carries no schema default. A
+default means "always present" on the way out and "may be omitted" on the way in, and the SDK
+emitter refuses that ambiguity outright; the defaults are applied in
+`PublicProvisioningController`.

@@ -30,13 +30,29 @@ export function toPublicTask(block: Block, serviceId: string): PublicTask {
   }
 }
 
-/** Project a service frame block onto the external service resource. */
+/**
+ * Project a service frame block onto the external service resource.
+ *
+ * `provisioning` is projected only for the shapes this surface publishes (today `kubernetes`). A
+ * service provisioned through another engine reports NOTHING here rather than a coerced value: the
+ * public union cannot describe it, and answering with the nearest member would tell a caller its
+ * service deploys from manifests it never declared.
+ */
 export function toPublicService(frame: Block): PublicService {
+  const provisioning = frame.provisioning
   return {
     serviceId: frame.id,
     title: frame.title,
     description: frame.description,
     type: frame.type,
     status: frame.status,
+    ...(provisioning?.type === 'kubernetes' && provisioning.manifestSource
+      ? {
+          provisioning: {
+            type: 'kubernetes' as const,
+            manifestSource: provisioning.manifestSource,
+          },
+        }
+      : {}),
   }
 }

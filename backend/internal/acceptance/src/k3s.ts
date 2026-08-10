@@ -14,7 +14,7 @@
 // suite covers the leaner path and says so; `backend/docs/local-k3s-environments.md` owns the
 // other one.
 
-import type { InfraHandlerConfig, ServiceProvisioning } from '@cat-factory/contracts'
+import type { PublicEnvironmentConnection, PublicServiceProvisioning } from '@cat-factory/contracts'
 import type { ClusterConfig } from './config.ts'
 
 /**
@@ -36,10 +36,16 @@ const TOKEN_SECRET_KEY = 'apiToken'
  * `insecureSkipTlsVerify` is offered because k3s self-signs and a throwaway local cluster is
  * exactly the case the field documents itself for; a CA PEM is preferred and wins when both are
  * supplied, so an operator who pasted one is never silently downgraded.
+ *
+ * The public engine is `kubernetes`, singular. The platform's INTERNAL vocabulary splits it in two
+ * (`local-k3s` and `remote-kubernetes`), and the public surface deliberately does not: one backend
+ * serves both and they lower to the same provision config, so the choice was never observable in
+ * anything a run does. A k3d cluster reached over loopback is described here exactly as any other
+ * cluster would be.
  */
-export function buildK3sHandlerConfig(cluster: ClusterConfig): InfraHandlerConfig {
+export function buildK3sConnection(cluster: ClusterConfig): PublicEnvironmentConnection {
   return {
-    engine: 'local-k3s',
+    engine: 'kubernetes',
     kubernetes: {
       label: 'Acceptance k3s',
       apiServerUrl: cluster.apiServerUrl,
@@ -64,7 +70,7 @@ export function buildK3sSecrets(cluster: ClusterConfig): Record<string, string> 
 }
 
 /** The per-service half: manifests colocated in the service's own repo, read at the PR head. */
-export function buildServiceProvisioning(): ServiceProvisioning {
+export function buildServiceProvisioning(): PublicServiceProvisioning {
   return {
     type: 'kubernetes',
     manifestSource: { type: 'colocated', path: MANIFEST_DIR, renderer: 'raw' },

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { publicServiceProvisioningSchema } from './public-provisioning.js'
 import { documentSourceKindSchema } from './documents.js'
 import { descriptorFieldValuesSchema } from './form-fields.js'
 import { notificationSchema } from './notifications.js'
@@ -216,6 +217,17 @@ export const publicServiceSchema = v.object({
   /** The service's architectural classification (service / frontend / library / …). */
   type: blockTypeSchema,
   status: publicTaskStatusSchema,
+  /**
+   * Where this service's per-run environment manifests are read from, when it declares any.
+   *
+   * Absent means the service provisions no environment, which is the normal state: most services
+   * never deploy a per-run environment at all. It is projected because a caller that just SET it
+   * (`PATCH /api/v1/services/:serviceId`) otherwise has no way to confirm what landed, and the
+   * value is a discriminated union whose non-matching branches are ignored on write: a wrong-shaped
+   * patch is accepted and stored as something the deploy step later reads as "no manifests", which
+   * surfaces as an empty environment that looks like a cluster fault.
+   */
+  provisioning: v.optional(publicServiceProvisioningSchema),
 })
 export type PublicService = v.InferOutput<typeof publicServiceSchema>
 

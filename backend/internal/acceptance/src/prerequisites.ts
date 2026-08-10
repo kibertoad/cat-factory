@@ -30,16 +30,16 @@
 //     staler copy of a message the deployment already writes better.
 
 import type { CatFactoryClient } from '@cat-factory/sdk'
-import type { AppApi } from './appApi.ts'
+import type { DeploymentApi } from './deploymentApi.ts'
 import type { AcceptanceConfig } from './config.ts'
-import { buildK3sHandlerConfig, buildK3sSecrets, renderEnvironmentHost } from './k3s.ts'
+import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3s.ts'
 import type { Prerequisite, PrerequisiteVerdict, Remedy, RemedyCommand } from './preflight.ts'
 import { describeKeyProblem, type KeyProblem, type PublicIdentity } from './publicApi.ts'
 
 export type PreflightContext = {
   config: AcceptanceConfig
   client: CatFactoryClient
-  app: AppApi
+  deployment: DeploymentApi
   /** Board titles this pass will use. Supplied rather than derived: `fixtures.ts` owns them. */
   serviceTitles: readonly string[]
   /** True when the ledger already names bootstrapped services, i.e. this is a RESUMED pass. */
@@ -56,21 +56,14 @@ const unsatisfied = (problem: string, remedy: Remedy): PrerequisiteVerdict => ({
 const K3S_DOC = 'backend/docs/local-k3s-environments.md'
 
 /**
- * A read-only `curl` against the app API.
+ * A read-only `curl` through `/api/v1`, which is key-authed: reads `CAT_FACTORY_API_KEY` from the
+ * shell.
  *
- * Session-authed, which is exactly the deployment shape this suite already requires
- * (`AUTH_DEV_OPEN=true`, local mode's default), so it needs no header. Offered because every
- * remedy whose fix is a screen still owes the operator a way to see the new answer without
- * re-running an afternoon-long suite to find out.
+ * Every remedy whose fix is a SCREEN still owes the operator a way to see the new answer without
+ * re-running an afternoon-long suite to find out, and this is that way. One helper rather than two
+ * because every prerequisite this suite checks is now readable with the same credential the suite
+ * itself holds.
  */
-function appApiRead(config: AcceptanceConfig, path: string, purpose: string): RemedyCommand {
-  return {
-    run: `curl -sS '${config.baseUrl}/workspaces/${config.workspaceId}${path}'`,
-    purpose,
-  }
-}
-
-/** The same, through `/api/v1`, which is key-authed. Reads `CAT_FACTORY_API_KEY` from the shell. */
 function publicApiRead(config: AcceptanceConfig, path: string, purpose: string): RemedyCommand {
   return {
     run: `curl -sS -H "Authorization: Bearer $CAT_FACTORY_API_KEY" '${config.baseUrl}/api/v1${path}'`,
@@ -124,8 +117,8 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'deployment-health',
     what: 'the backend booted with a valid configuration',
     disposition: 'required',
-    check: async ({ app, config }) => {
-      const health = await app.health()
+    check: async ({ deployment, config }) => {
+      const health = await deployment.health()
       if (health.status === 'ok') return satisfied('the backend reports healthy')
       if (health.status !== 'misconfigured') {
         return unsatisfied(`GET /health answered '${health.status}' rather than 'ok'`, {
@@ -148,7 +141,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // already carry the exact command per variable (`openssl rand`, `npx @cat-factory/cli env`,
       // `docker compose up`) and often a doc link, which is why this branch relays and adds
       // nothing of its own beyond the restart and the way to re-read the list.
-      const problems = await app.configProblems()
+      const problems = await deployment.configProblems()
       const steps =
         problems.length === 0
           ? [
@@ -230,8 +223,8 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'agent-model',
     what: 'a model is wired that agent steps can actually dispatch to',
     disposition: 'required',
-    check: async ({ app, config }) => {
-      const models = await app.listModels()
+    check: async ({ client, config }) => {
+      const { models } = await client.models.list()
       const available = models.filter((model) => model.available)
       if (available.length > 0) {
         const names = available
@@ -246,7 +239,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // the account's model-family policy is CONFIGURED, so telling its operator to add a key
       // sends them to change a setting that is already correct.
       const blocked = models.filter((model) => model.policyBlocked)
-      const catalogRead = appApiRead(
+      const catalogRead = publicApiRead(
         config,
         '/models',
         "list the catalog with each entry's `available` and `policyBlocked` flags",
@@ -282,13 +275,13 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'vcs-connection',
     what: 'the workspace can create repositories under ACCEPTANCE_REPO_OWNER and push workflows',
     disposition: 'required',
-    check: async ({ app, config }) => {
-      const connectionRead = appApiRead(
+    check: async ({ client, config }) => {
+      const connectionRead = publicApiRead(
         config,
-        '/github/connection',
+        '/vcs/connection',
         'read back what the workspace has connected, and with which permissions',
       )
-      const connection = await app.vcsConnection()
+      const { connection } = await client.vcs.getConnection()
       if (!connection) {
         return unsatisfied(
           'the workspace has no VCS connection, so spec 01 has nothing to create repositories with',
@@ -365,11 +358,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'auto-merge-policy',
     what: 'the default merge preset permits the auto-merge every spec ends on',
     disposition: 'required',
-    check: async ({ app, config }) => {
-      const presets = await app.listRiskPolicies()
-      const policyRead = appApiRead(
+    check: async ({ client, config }) => {
+      const { presets } = await client.mergePresets.list()
+      const policyRead = publicApiRead(
         config,
-        '/risk-policies',
+        '/merge-presets',
         'read the preset library back, with `isDefault` and `autoMergeEnabled` on each row',
       )
       const fallback = presets.find((preset) => preset.isDefault)
@@ -471,14 +464,14 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'cluster-connection',
     what: 'the k3s apiserver answers the supplied ServiceAccount token',
     disposition: 'required',
-    check: async ({ app, config }) => {
+    check: async ({ client, config }) => {
       // The one probe that touches the cluster WITHOUT persisting anything. Its value is timing:
       // the same credential failure found by a `deployer` step arrives after a design pass and an
       // implementation have already been paid for.
-      const result = await app.testEnvironmentHandler(
-        buildK3sHandlerConfig(config.cluster),
-        buildK3sSecrets(config.cluster),
-      )
+      const result = await client.environments.testConnection({
+        connection: buildK3sConnection(config.cluster),
+        secrets: buildK3sSecrets(config.cluster),
+      })
       const tls = config.cluster.caCertPem
         ? 'custom CA'
         : `insecureSkipTlsVerify=${config.cluster.insecureSkipTlsVerify}`
