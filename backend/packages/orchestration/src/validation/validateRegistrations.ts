@@ -19,6 +19,7 @@ import {
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
   describeFoundationalProblem,
+  getErrorMessage,
   seedPipelines,
   stubGateContext,
   validateFoundationalDefinition,
@@ -235,7 +236,7 @@ export function collectRegistrationProblems(
       problems.push({
         severity: 'error',
         code: 'gate_factory_threw',
-        message: `Gate "${kind}" factory threw while validating: ${(err as Error).message}`,
+        message: `Gate "${kind}" factory threw while validating: ${getErrorMessage(err)}`,
       })
       continue
     }

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -82,7 +83,7 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
         pollReadFailures += 1
         log.warn(
           'env-config-repair poll could not read job status; treating as still running and retrying',
-          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
+          { err: getErrorMessage(error), pollReadFailures },
         )
         // Keep the instance ALIVE and keep polling — see BootstrapWorkflow (F2): returning on a
         // transient read failure would make the instance terminal and get the still-`running`

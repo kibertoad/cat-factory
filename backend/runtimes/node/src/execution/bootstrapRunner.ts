@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { BootstrapRunner } from '@cat-factory/kernel'
 import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Logger, ServerContainer } from '@cat-factory/server'
@@ -103,7 +104,7 @@ export async function startBootstrapWorker(
           log.error('bootstrap drive failed', {
             workspaceId,
             jobId,
-            err: error instanceof Error ? error.message : String(error),
+            err: getErrorMessage(error),
           })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }

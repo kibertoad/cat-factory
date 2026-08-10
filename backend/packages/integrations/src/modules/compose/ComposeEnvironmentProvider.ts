@@ -430,7 +430,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       }))
     } catch (err) {
       return {
-        error: `Could not clone the repo for build: ${err instanceof Error ? err.message : String(err)}`,
+        error: `Could not clone the repo for build: ${getErrorMessage(err)}`,
       }
     }
     const composeDir = composeFileDir(config.composePath)
@@ -584,7 +584,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     } catch (err) {
       return this.failed(
         project,
-        `Could not clone the repo for the recipe: ${err instanceof Error ? err.message : String(err)}`,
+        `Could not clone the repo for the recipe: ${getErrorMessage(err)}`,
       )
     }
     // `--project-directory` is the layer list's project dir (the first IN-REPO layer's directory),
@@ -684,7 +684,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
           try {
             primary = await this.resolveComposeSource(req, config)
           } catch (err) {
-            return { error: err instanceof Error ? err.message : String(err) }
+            return { error: getErrorMessage(err) }
           }
         }
         const file = await primary.ctx.repo.getFile(layer.path, primary.ref)
@@ -712,9 +712,9 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         await this.runtime.copyCheckoutFile!(project, envFile.template, envFile.target)
         await this.logStep(record, `env-file: ${envFile.target}`, started, { ok: true })
       } catch (err) {
-        const message = `Could not materialize env file '${envFile.target}': ${
-          err instanceof Error ? err.message : String(err)
-        }`
+        const message = `Could not materialize env file '${envFile.target}': ${getErrorMessage(
+          err,
+        )}`
         await this.logStep(record, `env-file: ${envFile.target}`, started, {
           ok: false,
           error: message,

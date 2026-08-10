@@ -8,6 +8,7 @@ import { computed, reactive, ref, watch, type Ref } from 'vue'
 
 const { t, n } = useI18n()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const settingsStore = useWorkspaceSettingsStore()
 const userSettingsStore = useUserSettingsStore()
@@ -37,11 +38,7 @@ async function runSave(saving: Ref<boolean>, save: () => Promise<unknown>) {
       // ignore — the budget is persisted; the meter will catch up on the next snapshot.
     }
   } catch (e) {
-    toast.add({
-      title: t('settings.workspaceSettings.toast.budgetSaveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'settings.workspaceSettings.toast.budgetSaveFailed')
   } finally {
     saving.value = false
   }

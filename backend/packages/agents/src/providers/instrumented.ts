@@ -13,6 +13,7 @@ import type {
 import {
   catFactoryObservability,
   describeError,
+  getErrorMessage,
   noopLogger,
   redactImagePayloads,
   resolveInlineAttribution,
@@ -306,7 +307,7 @@ export class InstrumentedModelProvider implements ModelProvider {
           this.emit(ref, params, result, startedAt, true, null)
           return result
         } catch (err) {
-          this.emit(ref, params, undefined, startedAt, false, errorMessage(err))
+          this.emit(ref, params, undefined, startedAt, false, getErrorMessage(err))
           throw err
         }
       },
@@ -492,8 +493,4 @@ function safeJson(value: unknown): string {
   } catch {
     return ''
   }
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
 }

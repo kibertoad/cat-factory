@@ -30,6 +30,7 @@ const ui = useUiStore()
 const notifications = useNotificationsStore()
 const slack = useSlackStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 const open = computed({
@@ -70,15 +71,6 @@ function applyMatrix(matrix: NotificationRoutingMatrix | null | undefined) {
   }
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 /**
  * The grid is editable only once the board's OWN matrix is in hand.
  *
@@ -95,7 +87,7 @@ async function load() {
     await notifications.loadSettings()
     applyMatrix(notifications.settings?.matrix)
   } catch (e) {
-    notifyError(t('notificationSettings.error.load'), e)
+    present(e, 'notificationSettings.error.load')
   }
 }
 
@@ -132,7 +124,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('notificationSettings.error.save'), e)
+    present(e, 'notificationSettings.error.save')
   } finally {
     busy.value = false
   }

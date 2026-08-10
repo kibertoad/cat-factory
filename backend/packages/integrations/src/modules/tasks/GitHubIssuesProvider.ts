@@ -1,12 +1,13 @@
 import {
-  ConflictError,
-  ValidationError,
   type BugCandidate,
+  ConflictError,
+  getErrorMessage,
   type GitHubClient,
   type GitHubInstallation,
   type GitHubInstallationRepository,
   type GitHubIssueSearchHit,
   type IssueIntakeQuery,
+  type NormalizedTaskConnection,
   type TaskContent,
   type TaskCredentials,
   type TaskSearchRepoScope,
@@ -15,7 +16,7 @@ import {
   type TaskSourceProvider,
   type TaskSourceWritebackAdapter,
   type TrackerBoard,
-  type NormalizedTaskConnection,
+  ValidationError,
 } from '@cat-factory/kernel'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import { GITHUB_ISSUES_DESCRIPTOR } from './github-issues.logic.js'
@@ -447,7 +448,7 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
     return {
       ...base,
       status: 'error',
-      message: `GitHub returned ${status} while ${whileDoing}: ${err instanceof Error ? err.message : String(err)}`,
+      message: `GitHub returned ${status} while ${whileDoing}: ${getErrorMessage(err)}`,
     }
   }
 

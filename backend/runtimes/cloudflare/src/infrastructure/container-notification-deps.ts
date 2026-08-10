@@ -1,5 +1,5 @@
 import type { Clock, ExecutionEventPublisher, NotificationChannel } from '@cat-factory/kernel'
-import { CompositeNotificationChannel } from '@cat-factory/kernel'
+import { CompositeNotificationChannel, getErrorMessage } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
   EMAIL_CIPHER_INFO,
@@ -83,7 +83,7 @@ function buildSlackChannel(config: AppConfig, db: D1Database): SlackNotification
     // invite) through the structured logger so a broken route is diagnosable.
     onError: (error, ctx) =>
       logger.warn('slack notification delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
         ...ctx,
       }),
   })
@@ -120,17 +120,17 @@ export function buildNotificationWebhookSupportForWorker(
     // through the structured logger so a broken receiver is diagnosable.
     onError: (error, ctx) =>
       logger.warn('notification webhook delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
         ...ctx,
       }),
     onRunEventError: (error, ctx) =>
       logger.warn('run lifecycle webhook delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
         ...ctx,
       }),
     onPlatformAlertError: (error, ctx) =>
       logger.warn('platform health webhook delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
         ...ctx,
       }),
   })

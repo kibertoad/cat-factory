@@ -8,7 +8,7 @@ import type { BoardWriteContext } from './context'
  * the split is purely to keep every function within the size budget.
  */
 export function createBoardDependencies(ctx: BoardWriteContext) {
-  const { getBlock, upsert, api, toast, tr } = ctx
+  const { getBlock, upsert, api, present } = ctx
 
   /**
    * Toggle a dependency edge target -> source (target dependsOn source). The backend
@@ -20,12 +20,7 @@ export function createBoardDependencies(ctx: BoardWriteContext) {
     try {
       upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
     } catch (e) {
-      toast.add({
-        title: tr('board.toast.linkFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.linkFailed')
     }
   }
 
@@ -39,12 +34,7 @@ export function createBoardDependencies(ctx: BoardWriteContext) {
     } catch (e) {
       // Mirror `toggleDependency`: a failure must surface (and leave the edge visible) rather
       // than rejecting unhandled with no feedback.
-      toast.add({
-        title: tr('board.toast.unlinkFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.unlinkFailed')
     }
   }
 

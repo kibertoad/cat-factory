@@ -18,6 +18,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
 const source = computed(() => ui.documentConnect?.source ?? null)
@@ -57,12 +58,7 @@ async function connectWithOAuth() {
     // path (an app un-registered between the probe and the click).
     await documents.beginOAuthConnect(source.value)
   } catch (e) {
-    toast.add({
-      title: t('documents.connect.oauth.failed', { source: descriptor.value?.label ?? '' }),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.connect.oauth.failed', { source: descriptor.value?.label ?? '' })
   } finally {
     startingOAuth.value = false
   }
@@ -93,12 +89,7 @@ async function submit() {
     })
     ui.closeDocumentConnect()
   } catch (e) {
-    toast.add({
-      title: t('documents.connect.connectFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.connect.connectFailed')
   } finally {
     saving.value = false
   }

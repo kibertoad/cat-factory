@@ -17,7 +17,7 @@ import type { BoardWriteContext } from './context'
  * {@link createBoardPlacement}.
  */
 export function createBoardMutations(ctx: BoardWriteContext) {
-  const { getBlock, upsert, api, toast, tr } = ctx
+  const { getBlock, upsert, api, present } = ctx
 
   async function addBlock(type: BlockType, position: { x: number; y: number }): Promise<Block> {
     const block = await api.addFrame(useWorkspaceStore().requireId(), { type, position })
@@ -127,12 +127,7 @@ export function createBoardMutations(ctx: BoardWriteContext) {
       upsert(await api.assignToEpic(useWorkspaceStore().requireId(), taskId, { epicId }))
     } catch (e) {
       t.epicId = prev
-      toast.add({
-        title: tr('board.toast.epicFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.epicFailed')
     }
   }
 

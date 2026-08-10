@@ -17,6 +17,7 @@ const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 // The family / region / mode / trusted-provider domains, pinned to the contract unions so a
@@ -135,11 +136,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('settings.modelPolicy.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'settings.modelPolicy.saveFailed')
   } finally {
     saving.value = false
   }

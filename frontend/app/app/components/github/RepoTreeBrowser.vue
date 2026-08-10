@@ -41,7 +41,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const github = useGitHubStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const currentPath = ref(props.startPath)
 const treeEntries = ref<RepoTreeEntry[]>([])
@@ -94,12 +94,7 @@ async function browseTo(path: string) {
     treeEntries.value = await github.loadRepoTree(props.repoGithubId, path)
   } catch (e) {
     treeEntries.value = []
-    toast.add({
-      title: t('github.repoTree.errors.listDirectory'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'github.repoTree.errors.listDirectory')
   } finally {
     loading.value = false
   }

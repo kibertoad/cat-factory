@@ -17,6 +17,7 @@ const props = defineProps<{ accountId: string }>()
 
 const store = useAccountSettingsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 // Tri-state, and it must stay tri-state: "not set" is a real, distinct answer from "permitted".
@@ -49,11 +50,7 @@ async function save() {
     })
     toast.add({ title: t('settings.runCredentialPolicy.saved'), color: 'success' })
   } catch (e) {
-    toast.add({
-      title: t('settings.runCredentialPolicy.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'settings.runCredentialPolicy.saveFailed')
   } finally {
     saving.value = false
   }

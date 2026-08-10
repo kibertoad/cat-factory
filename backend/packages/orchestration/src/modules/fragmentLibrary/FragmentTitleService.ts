@@ -1,6 +1,6 @@
 import { generateText } from 'ai'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
-import { resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
+import { getErrorMessage, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
 import {
   catFactoryObservability,
   FRAGMENT_TITLE_AGENT_KIND,
@@ -67,9 +67,7 @@ export class FragmentTitleService {
       text = result.text
     } catch (e) {
       throw new ValidationError(
-        `Fragment-title generation (${ref.provider}:${ref.model}) failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `Fragment-title generation (${ref.provider}:${ref.model}) failed: ${getErrorMessage(e)}`,
       )
     }
     const title = cleanTitle(text)

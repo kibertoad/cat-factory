@@ -21,6 +21,7 @@ import FoundationalContractSummary from '~/components/foundational/FoundationalC
 
 const catalog = useFoundationalServicesStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 // Exhaustive maps of literal `t(...)` keys, so a new tier/format fails the typed-key guard.
@@ -40,15 +41,6 @@ const tierColor = {
   account: 'info',
   workspace: 'primary',
 } as const satisfies Record<FoundationalServiceTier, string>
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 
 const busyRows = reactive(new Set<string>())
 const rowBusy = (key: string) => busyRows.has(key)
@@ -75,7 +67,7 @@ async function toggleContracts(serviceId: string) {
       await catalog.contractsFor(serviceId)
       expanded.value = [...expanded.value, serviceId]
     } catch (e) {
-      notifyError(t('foundational.toast.contractsFailed'), e)
+      present(e, 'foundational.toast.contractsFailed')
     }
   })
 }
@@ -86,7 +78,7 @@ async function suppress(serviceId: string) {
       await catalog.suppress(serviceId)
       toast.add({ title: t('foundational.toast.suppressed'), icon: 'i-lucide-eye-off' })
     } catch (e) {
-      notifyError(t('foundational.toast.suppressFailed'), e)
+      present(e, 'foundational.toast.suppressFailed')
     }
   })
 }

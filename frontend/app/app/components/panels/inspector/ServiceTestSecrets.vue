@@ -18,6 +18,7 @@ const props = defineProps<{ block: Block }>()
 
 const store = useTestSecretsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -90,15 +91,6 @@ function removeRow(index: number) {
   draft.rows.splice(index, 1)
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function save() {
   busy.value = true
   try {
@@ -115,7 +107,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('inspector.testSecrets.saveFailed'), e)
+    present(e, 'inspector.testSecrets.saveFailed')
   } finally {
     busy.value = false
   }
@@ -129,7 +121,7 @@ async function clearAll() {
     await store.clear(props.block.id)
     toastDone('clear', noun)
   } catch (e) {
-    notifyError(t('inspector.testSecrets.clearFailed'), e)
+    present(e, 'inspector.testSecrets.clearFailed')
   } finally {
     busy.value = false
   }

@@ -24,6 +24,7 @@ import type {
 import { isToolServerObservedStatus } from '@cat-factory/contracts'
 import {
   CONTAINER_EVICTION_ERROR,
+  getErrorMessage,
   isHarnessFailureCause,
   readRunnerDispatchAck,
   STRICT_URL_SAFETY_POLICY,
@@ -185,7 +186,7 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     try {
       headers = await this.authHeaders(req.manifest.auth, req.resolveSecret)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
     return environmentsLogic.probeConnection(req.manifest.baseUrl, headers, this.urlPolicy, {
       subject: 'the runner pool API',

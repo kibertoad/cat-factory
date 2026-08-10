@@ -246,11 +246,15 @@ describe('board store read getters', () => {
     expect(() => store.previewMove('missing', { x: 1, y: 1 })).not.toThrow()
   })
 
-  it('updateBlock restores the patched fields and toasts when the write fails', async () => {
-    // Capture the toast the store surfaces on failure. Re-stub before creating the store so it
-    // binds this spy (the store resolves `useToast()` once at setup).
+  it('updateBlock restores the patched fields and reports the failure when the write fails', async () => {
+    // Capture what the store surfaces on failure. Every rolled-back write drains into the shared
+    // failure funnel (`usePipelineErrorToast().present`) rather than building its own toast, so the
+    // assertion is on the funnel and on the TITLE KEY it was given. Re-stub before creating the
+    // store: it resolves both handles once at setup.
     const addSpy = vi.fn()
+    const presentSpy = vi.fn()
     vi.stubGlobal('useToast', () => ({ add: addSpy }))
+    vi.stubGlobal('usePipelineErrorToast', () => ({ present: presentSpy }))
     setActivePinia(createPinia())
     const s = useBoardStore()
     s.hydrate([frame('f1', { title: 'Original', description: 'orig' })])
@@ -263,7 +267,7 @@ describe('board store read getters', () => {
     )
     expect(s.getBlock('f1')?.title).toBe('Original')
     expect(s.getBlock('f1')?.description).toBe('orig')
-    expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
+    expect(presentSpy).toHaveBeenCalledWith(expect.any(Error), 'board.toast.updateFailed')
   })
 
   it('updateBlock reports a no-op for a block that is not on the board', async () => {
@@ -428,6 +432,7 @@ describe('board store deferred delete + undo', () => {
   function setup(removeImpl: () => Promise<void>) {
     const removeSpy = vi.fn(removeImpl)
     const addSpy = vi.fn()
+    const presentSpy = vi.fn()
     const actions: ToastAction[] = []
     vi.stubGlobal('useApi', () => ({ removeBlock: removeSpy }))
     vi.stubGlobal('useToast', () => ({
@@ -436,9 +441,10 @@ describe('board store deferred delete + undo', () => {
         if (t.actions) actions.push(...t.actions)
       },
     }))
+    vi.stubGlobal('usePipelineErrorToast', () => ({ present: presentSpy }))
     setActivePinia(createPinia())
     useWorkspaceStore().workspaceId = 'ws1'
-    return { store: useBoardStore(), removeSpy, addSpy, actions }
+    return { store: useBoardStore(), removeSpy, addSpy, presentSpy, actions }
   }
 
   beforeEach(() => {
@@ -500,14 +506,15 @@ describe('board store deferred delete + undo', () => {
     expect(removeSpy).toHaveBeenCalledWith('ws1', 'f1')
   })
 
-  it('restores the subtree and toasts an error if the deferred delete fails', async () => {
-    const { store, addSpy } = setup(() => Promise.reject(new Error('boom')))
+  it('restores the subtree and reports the failure if the deferred delete fails', async () => {
+    const { store, presentSpy } = setup(() => Promise.reject(new Error('boom')))
     store.hydrate([frame('f1'), task('t1', 'f1')])
     store.removeBlock('f1')
     await vi.runAllTimersAsync()
     expect(store.getBlock('f1')?.id).toBe('f1')
     expect(store.getBlock('t1')?.id).toBe('t1')
-    expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
+    // Through the shared funnel, named by its title key (see `updateBlock`'s case above).
+    expect(presentSpy).toHaveBeenCalledWith(expect.any(Error), 'board.toast.deleteFailed')
   })
 
   it('does not reattach a failed deferred delete onto a different workspace', async () => {

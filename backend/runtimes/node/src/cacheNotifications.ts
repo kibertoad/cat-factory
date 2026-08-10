@@ -1,5 +1,6 @@
 import type { GroupCacheNotifications, GroupNotificationPairFactory } from '@cat-factory/caching'
 import { missingIoredisProblem } from '@cat-factory/server'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 
 // The Redis-backed cache-invalidation notification wiring (caching initiative,
@@ -131,7 +132,7 @@ export async function buildCacheNotifications(
         client.on('error', (err: unknown) =>
           log.warn('cache redis connection error (ioredis will retry)', {
             role,
-            err: err instanceof Error ? err.message : String(err),
+            err: getErrorMessage(err),
           }),
         )
         return client

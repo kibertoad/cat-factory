@@ -12,7 +12,7 @@ const { t } = useI18n()
 const fragments = useFragmentsStore()
 const defaults = useServiceFragmentDefaultsStore()
 const ui = useUiStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const busy = ref(false)
 
@@ -36,12 +36,7 @@ async function save(ids: string[]) {
   try {
     await defaults.set(ids)
   } catch (e) {
-    toast.add({
-      title: t('settings.serviceFragmentDefaults.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.serviceFragmentDefaults.saveFailed')
   } finally {
     busy.value = false
   }

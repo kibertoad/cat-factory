@@ -9,7 +9,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const presets = useRiskPoliciesStore()
 const { newPresets, outdated, hasIssues } = useRiskPolicyHealth()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.riskPolicyHealthOpen,
@@ -28,12 +28,7 @@ async function reseed(id: string) {
   try {
     await presets.reseed(id)
   } catch (e) {
-    toast.add({
-      title: t('riskPolicy.health.toast.reseedFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'riskPolicy.health.toast.reseedFailed')
   } finally {
     const next = new Set(busy.value)
     next.delete(id)

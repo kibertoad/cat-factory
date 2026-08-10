@@ -24,6 +24,7 @@ const board = useBoardStore()
 const clarity = useClarityStore()
 const models = useModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
 
@@ -145,15 +146,6 @@ const STATUS_LABELS: Record<ReviewItemStatus, string> = {
   recommend_requested: 'clarity.itemStatus.recommend_requested',
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 // Answers auto-save on blur — no explicit "save" button (matching the requirements window, so
 // muscle memory carries across the two, UX-34). The textarea is pre-seeded with the recorded
 // reply (see the watch below); persist only when the trimmed draft actually differs from what's
@@ -165,7 +157,7 @@ async function persistDraft(item: ClarityReviewItem, r: ClarityReview | null = r
   try {
     await clarity.reply(r, item.id, text)
   } catch (e) {
-    notifyError(t('clarity.error.saveAnswer'), e)
+    present(e, 'clarity.error.saveAnswer')
   }
 }
 
@@ -223,7 +215,7 @@ async function setStatus(item: ClarityReviewItem, itemStatus: ClarityItemStatus)
   try {
     await clarity.setItemStatus(review.value, item.id, itemStatus)
   } catch (e) {
-    notifyError(t('clarity.error.updateFinding'), e)
+    present(e, 'clarity.error.updateFinding')
   }
 }
 
@@ -233,7 +225,7 @@ async function incorporate(feedback?: string) {
     await flushDrafts()
     await clarity.incorporate(review.value, feedback)
   } catch (e) {
-    notifyError(t('clarity.error.incorporate'), e)
+    present(e, 'clarity.error.incorporate')
     return
   }
   redoComment.value = ''
@@ -263,7 +255,7 @@ async function reReview() {
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {
-    notifyError(t('clarity.error.reReview'), e)
+    present(e, 'clarity.error.reReview')
   }
 }
 
@@ -275,7 +267,7 @@ async function proceed() {
     await clarity.proceed(blockId.value)
     toast.add({ title: t('clarity.toast.proceeding'), icon: 'i-lucide-arrow-right' })
   } catch (e) {
-    notifyError(t('clarity.error.proceed'), e)
+    present(e, 'clarity.error.proceed')
   } finally {
     acting.value = false
   }
@@ -295,7 +287,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
       toast.add({ title: t('clarity.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
     }
   } catch (e) {
-    notifyError(t('clarity.error.resolve'), e)
+    present(e, 'clarity.error.resolve')
   } finally {
     acting.value = false
   }

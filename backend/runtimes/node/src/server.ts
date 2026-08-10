@@ -77,6 +77,7 @@ import { DrizzleSubscriptionActivationRepository } from './repositories/personal
 import { DrizzleNotificationRepository } from './repositories/notifications.js'
 import { startArtifactRetentionSweeper, startRetentionSweeper } from './retention.js'
 import { SystemClock } from './runtime.js'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 
 // The Node facade: the SAME shared Hono app (controllers + middleware) the Cloudflare
@@ -754,14 +755,14 @@ export async function backfillDeclaredSeeds(
         } catch (err) {
           log.warn(`${label} seed backfill failed for workspace`, {
             workspaceId: ws.id,
-            err: err instanceof Error ? err.message : String(err),
+            err: getErrorMessage(err),
           })
         }
       }
     }
   } catch (err) {
     log.warn('declared-seed backfill could not enumerate workspaces', {
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
   }
 }
@@ -994,7 +995,7 @@ async function bootServer(
       await boss.stop()
       await pool.end()
     } catch (err) {
-      logger.error('shutdown error', { err: err instanceof Error ? err.message : String(err) })
+      logger.error('shutdown error', { err: getErrorMessage(err) })
     }
     try {
       // Facade-owned disposables (e.g. the local facade's native host-process harnesses) —
@@ -1003,7 +1004,7 @@ async function bootServer(
       // backstop.
       await container.onShutdown?.()
     } catch (err) {
-      logger.error('onShutdown error', { err: err instanceof Error ? err.message : String(err) })
+      logger.error('onShutdown error', { err: getErrorMessage(err) })
     }
     // LAST, and after every other stop: detach the log sink and deliver what it still holds,
     // so the shutdown's own lines (including the two errors above, which are exactly the ones

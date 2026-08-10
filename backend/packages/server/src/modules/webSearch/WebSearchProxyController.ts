@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { runBestEffort } from '@cat-factory/kernel'
+import { getErrorMessage, runBestEffort } from '@cat-factory/kernel'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
 import { makeWaitUntil } from '../../http/waitUntil.js'
@@ -144,7 +144,7 @@ export function webSearchProxyController(): Hono<AppEnv> {
       // `results[].{url,title,content}` unchanged.
       return c.json({ query, number_of_results: results.length, results })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = getErrorMessage(err)
       log.error('web-search proxy: upstream search failed', { err: message })
       recordSearch(0)
       // SearXNG-shaped empty result on failure so the agent degrades gracefully

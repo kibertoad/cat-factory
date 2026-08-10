@@ -28,6 +28,7 @@ const catalog =
     ? useFoundationalServicesStore()
     : useFoundationalServices(props.kind, props.ownerId)
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirm } = useConfirm()
 
@@ -43,15 +44,6 @@ const formatItems = computed(() =>
     label: formatLabel.value[value],
   })),
 )
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 
 // ---- the editor ------------------------------------------------------------
 /** null = closed; '' = creating; a service id = editing that row. */
@@ -148,7 +140,7 @@ async function save() {
     }
     editing.value = null
   } catch (e) {
-    notifyError(t('foundational.toast.saveFailed'), e)
+    present(e, 'foundational.toast.saveFailed')
   } finally {
     saving.value = false
   }
@@ -177,7 +169,7 @@ async function remove(service: FoundationalService) {
     await catalog.remove(service.id)
     toast.add({ title: t('foundational.toast.deleted'), icon: 'i-lucide-trash-2' })
   } catch (e) {
-    notifyError(t('foundational.toast.deleteFailed'), e)
+    present(e, 'foundational.toast.deleteFailed')
   }
 }
 </script>

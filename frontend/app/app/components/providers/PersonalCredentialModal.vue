@@ -11,6 +11,7 @@ const { t } = useI18n()
 const personal = usePersonalSubscriptionsStore()
 const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const password = ref('')
 const busy = ref(false)
@@ -73,11 +74,7 @@ async function submit() {
     })
   } catch (e) {
     // A fresh 428 (e.g. still-wrong password) re-arms `pending`, keeping the modal open.
-    toast.add({
-      title: t('providers.personalCredential.toast.startFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      color: 'error',
-    })
+    present(e, 'providers.personalCredential.toast.startFailed')
   } finally {
     busy.value = false
   }

@@ -14,6 +14,7 @@ const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
 const board = useBoardStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -205,12 +206,7 @@ async function openCreateRepo() {
       color: 'success',
     })
   } catch (e) {
-    toast.add({
-      title: t('bootstrap.toast.repoCreateFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'bootstrap.toast.repoCreateFailed')
   } finally {
     creatingRepo.value = false
   }
@@ -291,12 +287,7 @@ async function launch() {
       ui.closeBootstrap()
     }
   } catch (e) {
-    toast.add({
-      title: t('bootstrap.toast.bootstrapFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'bootstrap.toast.bootstrapFailed')
   } finally {
     launching.value = false
   }
@@ -382,12 +373,7 @@ async function saveArch() {
     archForm.value = blankForm()
     archRepoSlug.value = undefined
   } catch (e) {
-    toast.add({
-      title: t('bootstrap.toast.saveArchFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'bootstrap.toast.saveArchFailed')
   } finally {
     savingArch.value = false
   }
@@ -400,12 +386,7 @@ async function removeArch(a: ReferenceArchitecture) {
     if (selectedArchId.value === a.id) selectedArchId.value = undefined
     toastDone('remove', a.name)
   } catch (e) {
-    toast.add({
-      title: t('bootstrap.toast.deleteFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'bootstrap.toast.deleteFailed')
   }
 }
 

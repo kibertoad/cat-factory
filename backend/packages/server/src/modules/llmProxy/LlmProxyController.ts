@@ -9,6 +9,7 @@ import { isLocalRunner } from '@cat-factory/contracts'
 import {
   type ApiKeyProvider,
   contextWindowFor,
+  getErrorMessage,
   normalizeCallPhase,
   redactImagePayloads,
   runBestEffort,
@@ -237,7 +238,7 @@ async function dispatchInProcess(c: Context<AppEnv>, ctx: ProxyCallContext): Pro
   try {
     return await inProcess
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = getErrorMessage(err)
     log.error('llm proxy: in-process call failed', { err: message })
     observe({
       usage: null,
@@ -397,7 +398,7 @@ async function resolveUpstreamTarget(
       fetchRunner: null,
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = getErrorMessage(err)
     log.error('llm proxy: no API key configured for provider', { err: message })
     observe({
       usage: null,
@@ -458,7 +459,7 @@ async function relayUpstream(
     try {
       upstreamRes = await fetchRunner(upstreamUrl, upstreamInit)
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = getErrorMessage(err)
       log.error('llm proxy: local runner request blocked', { err: message })
       observe({
         usage: null,
@@ -678,7 +679,7 @@ function makeCallObserver(
         // Observability must never break the proxy.
         .catch((err) =>
           log.warn('llm proxy: failed to record metric', {
-            err: err instanceof Error ? err.message : String(err),
+            err: getErrorMessage(err),
           }),
         ),
     )

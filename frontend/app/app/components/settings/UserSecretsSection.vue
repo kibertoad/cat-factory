@@ -15,6 +15,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const store = useUserSecretsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -75,15 +76,6 @@ function buildPayload(): { secret: string; metadata?: Record<string, string> } |
   return { secret, ...(Object.keys(metadata).length ? { metadata } : {}) }
 }
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function test() {
   const payload = buildPayload()
   if (!payload) return
@@ -120,7 +112,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.userSecrets.toast.saveFailed'), e)
+    present(e, 'settings.userSecrets.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -143,7 +135,7 @@ async function remove() {
     resetDraft()
     toast.add({ title: t('settings.userSecrets.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('settings.userSecrets.toast.removeFailed'), e)
+    present(e, 'settings.userSecrets.toast.removeFailed')
   } finally {
     busy.value = false
   }

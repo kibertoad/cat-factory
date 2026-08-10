@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -77,7 +78,7 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
         pollReadFailures += 1
         log.warn(
           'env-test poll could not advance the run; treating as still running and retrying',
-          { err: error instanceof Error ? error.message : String(error), pollReadFailures },
+          { err: getErrorMessage(error), pollReadFailures },
         )
         continue
       }

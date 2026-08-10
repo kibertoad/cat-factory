@@ -1,20 +1,22 @@
 import {
-  createTaskWritebackContext,
-  describeError,
-  type Logger,
-  noopLogger,
-  redactSecrets,
-  resolveWritebackFlag,
-  runBestEffort,
-  REVIEW_QUESTION_POLICIES,
-  REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type Block,
   type Clock,
+  createTaskWritebackContext,
+  describeError,
+  getErrorMessage,
   type IssueWritebackProvider,
+  type Logger,
+  noopLogger,
   type PullRequestRef,
+  redactSecrets,
+  resolveWritebackFlag,
+  REVIEW_QUESTION_POLICIES,
+  REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type ReviewQuestionPost,
   type ReviewQuestionPostOutcome,
   type ReviewQuestionPostRepository,
+  type ReviewReplyAck,
+  runBestEffort,
   type TaskConnectionStore,
   type TaskCredentials,
   type TaskRecord,
@@ -23,7 +25,6 @@ import {
   type TaskSourceProvider,
   type TaskSourceWritebackAdapter,
   type TaskWritebackContext,
-  type ReviewReplyAck,
   type TrackerSettingsRepository,
   trackerWebhookSecret,
 } from '@cat-factory/kernel'
@@ -307,7 +308,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
         outcome.failed += 1
         // Scrubbed like every other stored free text: a transport error can quote the request
         // URL, and this row is read back by operators (and, in slice 2b, by support tooling).
-        const raw = e instanceof Error ? e.message : String(e)
+        const raw = getErrorMessage(e)
         const error = (redactSecrets(raw) ?? '').slice(0, 500)
         this.log.warn('review question post failed', {
           workspaceId,

@@ -11,7 +11,7 @@ import { UNDO_WINDOW_MS } from './context'
  * stays internal — it is only wired into the delete toast's undo action.
  */
 export function createBoardRemoval(ctx: BoardWriteContext) {
-  const { blocks, getBlock, pendingRemovals, pendingDoomed, api, toast, tr } = ctx
+  const { blocks, getBlock, pendingRemovals, pendingDoomed, api, toast, tr, present } = ctx
 
   /**
    * Optimistically drop a block and its descendants from the cache, returning a
@@ -142,12 +142,7 @@ export function createBoardRemoval(ctx: BoardWriteContext) {
         // switch must not inject the old subtree onto the workspace now on screen (it
         // re-hydrates from the server there on the next refresh anyway).
         if (useWorkspaceStore().workspaceId === pending.wsId) reattach(pending.snap)
-        toast.add({
-          title: tr('board.toast.deleteFailed'),
-          description: e instanceof Error ? e.message : String(e),
-          icon: 'i-lucide-triangle-alert',
-          color: 'error',
-        })
+        present(e, 'board.toast.deleteFailed')
       }
     }
     const timer = setTimeout(() => void finalize(), UNDO_WINDOW_MS)

@@ -24,6 +24,7 @@ const catalog =
     ? useFoundationalServicesStore()
     : useFoundationalServices(props.kind, props.ownerId)
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 
 // Exhaustive scope→key maps of literal `t(...)` keys: what a board opts out of (its account's
@@ -48,12 +49,7 @@ async function restore(serviceId: string) {
     await catalog.restore(serviceId)
     toast.add({ title: t('foundational.toast.restored'), icon: 'i-lucide-eye' })
   } catch (e) {
-    toast.add({
-      title: t('foundational.toast.restoreFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'foundational.toast.restoreFailed')
   } finally {
     busyRows.delete(serviceId)
   }

@@ -30,6 +30,7 @@ const board = useBoardStore()
 const requirements = useRequirementsStore()
 const models = useModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const access = useWorkspaceAccess()
 
@@ -190,15 +191,6 @@ const STATUS_LABELS = computed<Record<ReviewItemStatus, string>>(() => ({
   recommend_requested: t('requirements.itemStatus.recommend_requested'),
 }))
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 // Answers auto-save: there is no explicit "save" button. The textarea is pre-seeded with
 // the recorded reply (see the watch below); editing and blurring persists it. Persist only
 // when the trimmed draft actually differs from what's already recorded, so blurring an
@@ -213,7 +205,7 @@ async function persistDraft(
   try {
     await requirements.reply(r, item.id, text)
   } catch (e) {
-    notifyError(t('requirements.errors.saveAnswer'), e)
+    present(e, 'requirements.errors.saveAnswer')
   }
 }
 
@@ -280,7 +272,7 @@ async function setStatus(item: RequirementReviewItem, itemStatus: ReviewItemStat
   try {
     await requirements.setItemStatus(review.value, item.id, itemStatus)
   } catch (e) {
-    notifyError(t('requirements.errors.updateFinding'), e)
+    present(e, 'requirements.errors.updateFinding')
   }
 }
 
@@ -535,7 +527,7 @@ async function requestRecommendations() {
           },
     )
   } catch (e) {
-    notifyError(t('requirements.errors.requestRecommendations'), e)
+    present(e, 'requirements.errors.requestRecommendations')
   }
 }
 
@@ -544,7 +536,7 @@ async function acceptRecommendation(rec: RequirementRecommendation) {
   try {
     await requirements.acceptRecommendation(review.value, rec.id)
   } catch (e) {
-    notifyError(t('requirements.errors.acceptRecommendation'), e)
+    present(e, 'requirements.errors.acceptRecommendation')
   }
 }
 
@@ -553,7 +545,7 @@ async function rejectRecommendation(rec: RequirementRecommendation) {
   try {
     await requirements.rejectRecommendation(review.value, rec.id)
   } catch (e) {
-    notifyError(t('requirements.errors.rejectRecommendation'), e)
+    present(e, 'requirements.errors.rejectRecommendation')
   }
 }
 
@@ -565,7 +557,7 @@ async function reRequestRecommendation(rec: RequirementRecommendation) {
     await requirements.reRequestRecommendation(review.value, rec.id, note)
     reRequestNotes.value = { ...reRequestNotes.value, [rec.id]: '' }
   } catch (e) {
-    notifyError(t('requirements.errors.reRequestRecommendation'), e)
+    present(e, 'requirements.errors.reRequestRecommendation')
   }
 }
 
@@ -575,7 +567,7 @@ async function incorporate(feedback?: string) {
     await flushDrafts()
     await requirements.incorporate(review.value, feedback)
   } catch (e) {
-    notifyError(t('requirements.errors.incorporate'), e)
+    present(e, 'requirements.errors.incorporate')
     return
   }
   redoComment.value = ''
@@ -605,7 +597,7 @@ async function reReview() {
       icon: 'i-lucide-sparkles',
     })
   } catch (e) {
-    notifyError(t('requirements.errors.reReview'), e)
+    present(e, 'requirements.errors.reReview')
   }
 }
 
@@ -617,7 +609,7 @@ async function proceed() {
     await requirements.proceed(blockId.value)
     toast.add({ title: t('requirements.toast.proceeding'), icon: 'i-lucide-arrow-right' })
   } catch (e) {
-    notifyError(t('requirements.errors.proceed'), e)
+    present(e, 'requirements.errors.proceed')
   } finally {
     acting.value = false
   }
@@ -637,7 +629,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
       toast.add({ title: t('requirements.toast.extraRoundGranted'), icon: 'i-lucide-rotate-cw' })
     }
   } catch (e) {
-    notifyError(t('requirements.errors.resolveReview'), e)
+    present(e, 'requirements.errors.resolveReview')
   } finally {
     acting.value = false
   }

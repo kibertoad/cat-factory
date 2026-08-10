@@ -20,6 +20,7 @@ import SecretInput from '~/components/common/SecretInput.vue'
 const ui = useUiStore()
 const slack = useSlackStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { confirm } = useConfirm()
 
@@ -90,15 +91,6 @@ const tokenInput = ref('')
 const busy = ref(false)
 const connectingOAuth = ref(false)
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 // Load everything the panel needs whenever it opens and Slack is connected.
 watch(
   () => open.value,
@@ -112,7 +104,7 @@ watch(
       mentionsEnabled.value = slack.settings?.mentionsEnabled ?? false
       mapping.value = slack.memberMapping.map((e) => toMemberRow(e, nextUid()))
     } catch (e) {
-      notifyError(t('slack.error.loadSettings'), e)
+      present(e, 'slack.error.loadSettings')
     }
   },
   // Lazy v-if mount: the panel mounts with `open` already true, so load immediately.
@@ -127,7 +119,7 @@ async function connectViaOAuth() {
     window.location.href = await slack.installUrl()
   } catch (e) {
     connectingOAuth.value = false
-    notifyError(t('slack.error.startOAuth'), e)
+    present(e, 'slack.error.startOAuth')
   }
 }
 
@@ -138,7 +130,7 @@ async function connectWithToken() {
     tokenInput.value = ''
     toast.add({ title: t('slack.toast.connected'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    notifyError(t('slack.error.connect'), e)
+    present(e, 'slack.error.connect')
   }
 }
 
@@ -154,7 +146,7 @@ async function disconnect() {
   try {
     await slack.disconnect()
   } catch (e) {
-    notifyError(t('slack.error.disconnect'), e)
+    present(e, 'slack.error.disconnect')
   }
 }
 
@@ -167,7 +159,7 @@ async function saveRouting() {
     })
     toast.add({ title: t('slack.toast.routingSaved'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    notifyError(t('slack.error.saveRouting'), e)
+    present(e, 'slack.error.saveRouting')
   } finally {
     busy.value = false
   }
@@ -199,7 +191,7 @@ async function saveMapping() {
     mapping.value = slack.memberMapping.map((e) => toMemberRow(e, nextUid()))
     toast.add({ title: t('slack.toast.mapSaved'), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    notifyError(t('slack.error.saveMap'), e)
+    present(e, 'slack.error.saveMap')
   } finally {
     busy.value = false
   }

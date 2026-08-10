@@ -9,7 +9,7 @@ import type { CustomManifestType } from '@cat-factory/contracts'
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 // A draft for the add/edit form. `manifestId` is locked on edit (it's the PK).
@@ -68,12 +68,7 @@ async function save() {
     })
     startAdd()
   } catch (e) {
-    toast.add({
-      title: t('settings.infrastructure.customType.saveFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.infrastructure.customType.saveFailed')
   } finally {
     busy.value = false
   }
@@ -87,12 +82,7 @@ async function remove(type: CustomManifestType) {
     if (editing.value && draft.manifestId === type.manifestId) startAdd()
     toastDone('remove', type.label)
   } catch (e) {
-    toast.add({
-      title: t('settings.infrastructure.customType.removeFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'settings.infrastructure.customType.removeFailed')
   } finally {
     busy.value = false
   }

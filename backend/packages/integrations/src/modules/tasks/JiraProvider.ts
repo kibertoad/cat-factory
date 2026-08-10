@@ -1,6 +1,7 @@
 import {
   ValidationError,
   atlassianLogic,
+  getErrorMessage,
   type BugCandidate,
   type IssueIntakeQuery,
   type TaskComment,
@@ -239,7 +240,7 @@ export class JiraProvider implements TaskSourceProvider {
         source: 'jira',
         ok: false,
         status: 'error',
-        message: err instanceof Error ? err.message : `Unsafe Jira base URL: ${base}`,
+        message: err instanceof Error ? getErrorMessage(err) : `Unsafe Jira base URL: ${base}`,
       }
     }
     const auth = btoa(`${creds.accountEmail}:${creds.apiToken}`)

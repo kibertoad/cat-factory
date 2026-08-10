@@ -30,7 +30,7 @@ import type { PendingContext } from '~/composables/useContextLinking'
 const ui = useUiStore()
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t } = useI18n()
 const { resolvePending, linkPending, presentLinkFailures } = useContextLinking()
 
@@ -170,12 +170,7 @@ async function create() {
     // Select the fresh block so the inspector offers "Run planning" right away.
     ui.select(block.id)
   } catch (e) {
-    toast.add({
-      title: t('initiative.create.failedTitle'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'initiative.create.failedTitle')
   } finally {
     submitting.value = false
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, getErrorMessage } from '@cat-factory/kernel'
 import type {
   ApiKeyProvider,
   ApiKeyScope,
@@ -229,8 +229,12 @@ describe('ApiKeyService', () => {
     expect(err).toBeInstanceOf(Error)
     expect(err.message).toContain("'openrouter'")
     expect(err.message).toContain('apikey_1')
-    expect(err.message).toContain('operation-specific reason')
     expect(err.cause).toBe(cause)
+    // The cipher's own reason arrives through the CHAIN, not by being interpolated into the
+    // message as well: every describer walks `.cause`, so doing both renders it twice and spends
+    // the chain's character budget saying the same thing over again.
+    expect(err.message).not.toContain('operation-specific reason')
+    expect(getErrorMessage(err)).toContain('operation-specific reason')
   })
 
   it('rotates to the least-loaded key across scopes (usage-aware)', async () => {

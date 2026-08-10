@@ -195,6 +195,46 @@ The failure is silent, which is why this is a rule rather than a preference. An 
 
 `scripts/check-component-imports.mjs` enforces it (CI's `repo-guards` job). If a panel section is missing and the data looks right, check the import first.
 
+### Every failure toast goes through ONE funnel
+
+**A failed call is reported with `usePipelineErrorToast().present(error, titleKey)`.** Never build
+`toast.add({ title, description: e instanceof Error ? e.message : String(e) })`, and never wrap that
+shape in a per-component `notifyError(title, e)` helper (29 components had a copy of the same six
+lines, plus four more spellings of it).
+
+The funnel is not a formatting convenience. Four properties are what it exists for, and a hand-built
+toast has none of them:
+
+- **Translated copy.** The description is resolved from the envelope's status class or its
+  `details.reason`; the backend's untranslated prose is DETAIL, never the headline (see the i18n
+  section). A hand-built toast shows English to every locale.
+- **It does not auto-dismiss.** An error is the one toast a reader has to finish, quote, or act on,
+  and a ~5s dismissal took it away mid-sentence. It keeps its close button, so leaving is a choice.
+- **One-click copy of the whole thing**, through `useCopyToClipboard` (so the copy's own
+  success/failure is reported rather than silently no-op'ing in an insecure context). Selecting text
+  in a toast is fiddly and impossible once it is gone.
+- **The `requestId` travels with it.** `mountRequestLogging` puts that id on every error envelope,
+  and it is the ONLY join between what the user saw and the one server log line that explains it. A
+  report that arrives without it costs whoever reads it the entire diagnosis.
+
+`present` takes a KEY, not a resolved title (plus optional interpolation params), so it can resolve
+its own copy. A store passes it through its context alongside `api`/`toast` (see
+`stores/board/context.ts`) rather than calling the composable per write. A site with BESPOKE copy for
+a recognised refusal keeps that branch and drains only its fallback into the funnel
+(`stores/board/placement.ts`, `components/board/AddTaskModal.vue`).
+
+**A FAILED CALL, though, not every refusal.** The funnel's whole job is to classify what the backend
+answered, so a local check that never left the browser must not be dressed up as one: a synthesized
+`new Error(t('...'))` has no envelope and no status, which is precisely the input `describeGenericFailure`
+reads as a network fault. A blank required field then renders as "The server could not be reached",
+with the real sentence hidden behind a disclosure. Client-side validation stays a plain
+`toast.add` with translated title and description (`components/settings/ModelConfigurationPanel.vue`).
+
+The still-open remainder is the INLINE family: `error.value = e.message` rendered in a panel, and
+`testResult = { ok: false, message }` rendered by `ConnectionTestVerdict`. Those need a render
+surface rather than a toast, and are tracked as G4 in
+[`error-message-coverage.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/error-message-coverage.md).
+
 ### Type a chip map with `BadgeColor`, never `string`
 
 A status → chip map feeding a `<UBadge :color="…">` types its values as `BadgeColor` (`utils/badge.ts`), which is derived from `UBadge`'s own prop type rather than restated as a literal union. Typed `string`, the binding does not compile and the reflex is `as any` at each call site: seven of them had accumulated. That cast also accepts a colour Nuxt UI does not define, which renders as an unstyled badge with nothing failing.

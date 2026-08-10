@@ -19,7 +19,12 @@ import type {
   RunInitiatorScope,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { ConflictError, disposeJudgeVerdict, renderJudgeRework } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  disposeJudgeVerdict,
+  getErrorMessage,
+  renderJudgeRework,
+} from '@cat-factory/kernel'
 import { parseJudgeVerdict } from '@cat-factory/contracts'
 import type { AdvanceResult } from './advance.js'
 import type { FragmentBodyResolver } from './AgentContextBuilder.js'
@@ -320,7 +325,7 @@ export class JudgeStepController {
         ...(raw.modelPin ? { modelPin: raw.modelPin } : {}),
       }
     } catch (e) {
-      const reason = e instanceof Error ? e.message : String(e)
+      const reason = getErrorMessage(e)
       return {
         verdict: {
           score: 0,

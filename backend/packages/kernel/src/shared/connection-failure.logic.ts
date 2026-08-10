@@ -1,4 +1,5 @@
 import type { ConnectionFailureCause, ConnectionTestResult } from '@cat-factory/contracts'
+import { flattenErrorChain, joinErrorChain, renderErrorChainLinks } from './error-chain.logic.js'
 import { redactSecrets } from './redact-secrets.logic.js'
 
 // Re-exported so the probes (spread across integrations and both facades, which share only
@@ -26,6 +27,12 @@ export type { ConnectionFailureCause }
 //
 // The cause vocabulary itself lives in `@cat-factory/contracts` because the SPA has to agree about
 // it (it owns the translated copy per member); this module is its one producer.
+//
+// The WALK is not this module's own: `error-chain.logic.ts` owns flattening and rendering a thrown
+// value's chain, because `getErrorMessage` and `describeError` need exactly the same thing and a
+// second copy here is how "fetch failed" survived on every path that is not a probe. What stays
+// here is what only a probe wants: the cause CLASSIFICATION, the per-cause remedy, and dropping
+// undici's contentless wrapper so the diagnosis leads with the real cause.
 
 /** Who/what the probe was trying to reach, so a hint can name it instead of saying "the server". */
 export interface ConnectionFailureContext {
@@ -43,67 +50,10 @@ export interface ConnectionFailureDescription {
   hint?: string
 }
 
-/** Cap on the rendered cause chain, so a pathological nested error can't flood the UI. */
-const MAX_DETAIL_CHARS = 400
-/** Cap on how far down `cause` / `errors` the walk goes. */
-const MAX_CHAIN_DEPTH = 6
-
 /** An error-shaped value's `code`, which Node puts the useful identifier on. */
 function errorCode(error: unknown): string | undefined {
   const code = (error as { code?: unknown } | null)?.code
   return typeof code === 'string' && code ? code : undefined
-}
-
-/** The `errors` array an `AggregateError` carries (one entry per attempted address). */
-function aggregated(error: unknown): unknown[] {
-  const errors = (error as { errors?: unknown } | null)?.errors
-  return Array.isArray(errors) ? errors : []
-}
-
-/**
- * Every link of the failure, outermost first: `.cause` chained, plus each branch of an
- * `AggregateError`. Both are walked because they carry different information. The chain holds
- * the specific cause; the aggregate holds one entry PER RESOLVED ADDRESS, and "refused on ::1,
- * never attempted on 127.0.0.1" is a different diagnosis from "refused on both".
- *
- * A link the walk has already reached is not walked again: a `cause` that points back at its own
- * error (or at any ancestor) is otherwise re-rendered once per remaining depth step. Bounding it
- * by IDENTITY rather than by rendered text is what lets the two branches of an aggregate stay
- * distinct even when they stringify identically, which is the whole point of reading them.
- */
-function flatten(
-  error: unknown,
-  depth = 0,
-  out: unknown[] = [],
-  seen: Set<unknown> = new Set(),
-): unknown[] {
-  if (error === null || error === undefined || depth > MAX_CHAIN_DEPTH) return out
-  if (typeof error === 'object') {
-    if (seen.has(error)) return out
-    seen.add(error)
-  }
-  out.push(error)
-  for (const branch of aggregated(error)) flatten(branch, depth + 1, out, seen)
-  flatten((error as { cause?: unknown }).cause, depth + 1, out, seen)
-  return out
-}
-
-/**
- * A TRANSPORT `code`, as Node and undici spell them (`ECONNREFUSED`, `ERR_TLS_CERT_ALTNAME_INVALID`,
- * `UND_ERR_CONNECT_TIMEOUT`). Deliberately narrow: our own `DomainError`s also carry a `code`, but
- * theirs is a lowercase status class (`validation`), which identifies nothing about a connection
- * and would render as a baffling `(validation)` glued onto an already-complete sentence.
- */
-const TRANSPORT_CODE = /^[A-Z][A-Z0-9_]*$/
-
-/** One link's human text: its message, with the transport `code` appended when the message omits it. */
-function describeLink(link: unknown): string {
-  const message = link instanceof Error ? link.message : String(link)
-  const code = errorCode(link)
-  const text = message.trim()
-  if (!code || !TRANSPORT_CODE.test(code)) return text || code || ''
-  if (!text) return code
-  return text.includes(code) ? text : `${text} (${code})`
 }
 
 /**
@@ -245,36 +195,6 @@ function hintFor(cause: ConnectionFailureCause, ctx: ConnectionFailureContext): 
 }
 
 /**
- * The links' texts in walk order, with links that render IDENTICALLY folded into a count rather
- * than dropped. A bare dedupe made "refused on both of this host's addresses" render byte-for-byte
- * like "refused on one", which is the distinction the aggregate branches are walked for: undici
- * emits address-less `connect ECONNREFUSED` forms, so two branches routinely stringify the same.
- */
-function renderLinks(links: readonly unknown[]): string[] {
-  const counted: { text: string; count: number }[] = []
-  for (const link of links) {
-    const text = describeLink(link)
-    if (!text) continue
-    const existing = counted.find((c) => c.text === text)
-    if (existing) existing.count += 1
-    else counted.push({ text, count: 1 })
-  }
-  return counted.map((c) => (c.count > 1 ? `${c.text} (x${c.count})` : c.text))
-}
-
-/**
- * Cap the rendered chain, SAYING that it was capped. A silent slice is indistinguishable from the
- * whole chain, so a reader concludes the inner links were never there; the count is what tells
- * them there is more to ask for. The marker sits outside the budget on purpose: it is the report
- * about the cap, not part of what was capped.
- */
-function capDetail(text: string): string {
-  if (text.length <= MAX_DETAIL_CHARS) return text
-  const dropped = text.length - MAX_DETAIL_CHARS
-  return `${text.slice(0, MAX_DETAIL_CHARS)} […${dropped} more characters of the cause chain]`
-}
-
-/**
  * Describe a thrown connection failure: the exact cause chain, plus the remedy when the cause is
  * one we recognise. Never throws, and never invents a cause. An unmatched chain is reported as
  * itself with no hint.
@@ -283,21 +203,16 @@ export function describeConnectionFailure(
   error: unknown,
   ctx: ConnectionFailureContext = {},
 ): ConnectionFailureDescription {
-  const links = flatten(error)
+  const links = flattenErrorChain(error)
   const cause = classifyChain(links)
 
-  const parts = renderLinks(links)
+  const parts = renderErrorChainLinks(links)
   // `fetch failed` is the wrapper undici puts over every transport error. It carries no
-  // information, and dropping it is what leaves the real cause in the first position. Kept when
-  // it is ALL there is, so the message is never empty.
+  // information, and dropping it is what leaves the real cause in the first position of a
+  // DIAGNOSIS (the one place that is right; see `errorChainText`, which keeps it). Kept when it is
+  // ALL there is, so the message is never empty.
   const meaningful = parts.length > 1 ? parts.filter((p) => p !== 'fetch failed') : parts
-  // Scrubbed for the same reason `describeError` is: a transport error routinely echoes the
-  // request URL back, and a redirected probe's URL can carry a credential in its query. It runs
-  // BEFORE the cap, because a secret sliced in half matches none of the shape rules: a JWT cut
-  // after its second segment, or a `bearer <tok>` cut to under the rule's minimum run, would ship
-  // its surviving characters verbatim.
-  const scrubbed = redactSecrets(meaningful.join(': ')) ?? ''
-  const detail = capDetail(scrubbed) || 'The connection failed for an unreported reason.'
+  const detail = joinErrorChain(meaningful) || 'The connection failed for an unreported reason.'
   const hint = hintFor(cause, ctx)
   return { cause, detail, ...(hint ? { hint } : {}) }
 }

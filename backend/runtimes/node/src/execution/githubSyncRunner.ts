@@ -1,4 +1,4 @@
-import { NotFoundError } from '@cat-factory/kernel'
+import { getErrorMessage, NotFoundError } from '@cat-factory/kernel'
 import { createQueueWithDeadLetter } from './deadLetter.js'
 import type {
   GitHubBackfillScheduler,
@@ -225,7 +225,7 @@ export async function startGitHubSyncWorker(
         } catch (error) {
           log.error('github sync job failed', {
             kind: job.data.kind,
-            err: error instanceof Error ? error.message : String(error),
+            err: getErrorMessage(error),
           })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }

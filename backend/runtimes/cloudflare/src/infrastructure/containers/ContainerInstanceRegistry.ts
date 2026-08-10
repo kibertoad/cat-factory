@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { Clock } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { ExecutionContainer } from './ExecutionContainer'
@@ -60,7 +61,7 @@ export class ContainerInstanceRegistry {
       logger.warn('container-registry: failed to record live container (continuing)', {
         containerKey,
         kind,
-        err: errMessage(error),
+        err: getErrorMessage(error),
       })
     }
   }
@@ -101,14 +102,10 @@ export class ContainerInstanceRegistry {
         // Leave the row in place so the next pass retries this one.
         logger.error('container-reaper: failed to kill leaked container (will retry next pass)', {
           containerKey: record.containerKey,
-          err: errMessage(error),
+          err: getErrorMessage(error),
         })
       }
     }
     return { reaped }
   }
-}
-
-function errMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
