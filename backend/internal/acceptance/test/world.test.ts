@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { coerceWorld, readLatestRunId, readWorld, resolveRunId, WorldStore } from '../src/world.ts'
 
-// The ledger is what makes a re-run resume instead of re-bootstrapping two repositories, so the
+// The ledger is what makes a re-run resume instead of re-scaffolding two repositories, so the
 // properties tested here are the ones whose failure costs an afternoon of real model spend:
 // a patch that does not survive the process, and a malformed file that stops the suite dead.
 
@@ -21,8 +21,8 @@ describe('resolveRunId', () => {
     expect(resolveRunId({ ACCEPTANCE_RUN_ID: '  ' }, scratch())).not.toBe('')
   })
 
-  it('mints an id usable in a repository name', () => {
-    // It becomes part of a GitHub repository name, where the character set is narrow.
+  it('mints an id usable in a filename', () => {
+    // It names this pass's ledger and journal, so it has to be safe in a path on every platform.
     expect(resolveRunId({}, scratch())).toMatch(/^[0-9]+$/)
   })
 
@@ -61,7 +61,7 @@ describe('WorldStore', () => {
     const dir = scratch()
     const first = new WorldStore(dir, 'run-1')
     first.patch({
-      backend: { blockId: 'blk_1', serviceId: 'blk_1', repoName: 'api', repoUrl: null },
+      backend: { blockId: 'blk_1', serviceId: 'blk_1', repoName: 'acme/api' },
     })
 
     // A fresh store over the same directory is the crash-and-resume case, which is the whole
@@ -149,14 +149,28 @@ describe('coerceWorld', () => {
     expect(world?.bugfix?.runId).toBe('run_3')
   })
 
-  it('carries an in-flight bootstrap job through, which is what stops a duplicate repository', () => {
-    const world = coerceWorld({ runId: 'run-1', bootstrapJobs: { backend: 'job_1', frontend: 7 } })
-    // A non-string is dropped to null rather than coerced: a resume that re-attached to a
-    // fabricated job id would wait out its whole budget against a job that never existed.
-    expect(world?.bootstrapJobs).toEqual({ backend: 'job_1', frontend: null })
+  it('carries a scaffold run through, which is what stops a second afternoon of scaffolding', () => {
+    const world = coerceWorld({
+      runId: 'run-1',
+      scaffoldBackend: { taskId: 'tsk_0', runId: 'run_0' },
+      scaffoldFrontend: { runId: 'run_1' },
+    })
+    expect(world?.scaffoldBackend?.runId).toBe('run_0')
+    // No task id is no record: a run id with nothing to re-read it from cannot be resumed, and
+    // keeping the half would have `fileAndDrive` adopt a task it cannot name.
+    expect(world?.scaffoldFrontend).toBeNull()
+  })
+
+  it('drops a ledger written before spec 01 stopped bootstrapping, rather than half-reading it', () => {
+    // Internals are not kept backwards compatible (CLAUDE.md), and this is the shape that proves it
+    // costs nothing: an old ledger's `bootstrapJobs` is simply not read, and the pass starts fresh
+    // instead of re-attaching to a job id no endpoint answers any more.
+    const world = coerceWorld({ runId: 'run-1', bootstrapJobs: { backend: 'job_1' } })
+    expect(world?.scaffoldBackend).toBeNull()
+    expect(world).not.toHaveProperty('bootstrapJobs')
   })
 })
 
 function emptyService() {
-  return { blockId: 'blk_x', serviceId: 'blk_x', repoName: 'repo', repoUrl: null }
+  return { blockId: 'blk_x', serviceId: 'blk_x', repoName: 'acme/repo' }
 }

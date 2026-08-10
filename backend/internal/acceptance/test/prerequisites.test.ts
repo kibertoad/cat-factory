@@ -21,6 +21,8 @@ function config(overrides: Partial<AcceptanceConfig> = {}): AcceptanceConfig {
     workspaceId: 'ws_intended',
     repoOwner: 'intended-org',
     namePrefix: 'cf-acc',
+    repos: { backend: 'cf-acc-catalog-api', frontend: 'cf-acc-catalog-web' },
+    modelPresetId: 'mdp_claude',
     cluster: {
       apiServerUrl: 'https://127.0.0.1:6443',
       apiToken: 'sa-token',
@@ -45,7 +47,7 @@ async function refusal(
   const verdict = await prerequisite.check({
     config: config(),
     serviceTitles: [],
-    hasBootstrappedServices: false,
+    adoptedServiceIds: [],
     ...context,
   } as PreflightContext)
   if (verdict.status !== 'unsatisfied') {
@@ -53,6 +55,25 @@ async function refusal(
   }
   assertActionable(id, verdict.remedy)
   return verdict
+}
+
+/** Run one prerequisite and assert it was SATISFIED, returning its detail line. */
+async function satisfied(id: string, context: Partial<PreflightContext>): Promise<string> {
+  const prerequisite = PREREQUISITES.find((entry) => entry.id === id)
+  if (!prerequisite) throw new Error(`no prerequisite '${id}'`)
+  const verdict = await prerequisite.check({
+    config: config(),
+    serviceTitles: [],
+    adoptedServiceIds: [],
+    ...context,
+  } as PreflightContext)
+  if (verdict.status !== 'satisfied') {
+    throw new Error(
+      `expected '${id}' to pass, got '${verdict.status}': ` +
+        `${verdict.status === 'unsatisfied' ? verdict.problem : verdict.probeFailure}`,
+    )
+  }
+  return verdict.detail
 }
 
 /**
@@ -138,6 +159,88 @@ describe('api-key', () => {
   })
 })
 
+describe('model-preset', () => {
+  const client = (
+    presets: Record<string, unknown>[],
+    models: Record<string, unknown>[] = [
+      { modelId: 'claude-opus', label: 'Claude', available: true },
+    ],
+  ) =>
+    ({
+      modelPresets: { list: async () => ({ presets }) },
+      models: { list: async () => ({ models, excludesUserScopedModels: false }) },
+    }) as unknown as CatFactoryClient
+
+  const preset = (overrides: Record<string, unknown> = {}) => ({
+    presetId: 'mdp_claude',
+    name: 'Claude Opus 5',
+    baseModelId: 'claude-opus',
+    isDefault: true,
+    overrides: {},
+    ...overrides,
+  })
+
+  it('lists the ids the deployment actually has when the pinned one is not among them', async () => {
+    // The whole remedy: an operator who typed a name or a slug needs the id, and the deployment is
+    // the only thing that knows it.
+    const verdict = await refusal('model-preset', {
+      client: client([preset({ presetId: 'mdp_kimi', name: 'Kimi K2.7', baseModelId: 'kimi' })]),
+    })
+    expect(verdict.remedy.steps.join('\n')).toContain('mdp_kimi')
+    expect(verdict.remedy.steps.join('\n')).toContain("'Kimi K2.7'")
+  })
+
+  it('separates a preset naming a model the catalog dropped from one nobody wired', async () => {
+    // Different fixes: the first is a preset to edit, the second is a provider to wire. Rolling
+    // them together sends someone to add a key for a model id that no longer exists.
+    const gone = await refusal('model-preset', {
+      client: client([preset({ baseModelId: 'claude-opus-4' })]),
+    })
+    expect(gone.problem).toContain('catalog does not list')
+
+    const unwired = await refusal('model-preset', {
+      client: client([preset()], [{ modelId: 'claude-opus', label: 'Claude', available: false }]),
+    })
+    expect(unwired.problem).toContain('not selectable')
+    expect(unwired.remedy.steps.join('\n')).toContain('Model providers')
+  })
+
+  it('sends a policy-refused model to the policy rather than to a provider key', async () => {
+    const verdict = await refusal('model-preset', {
+      client: client(
+        [preset()],
+        [{ modelId: 'claude-opus', label: 'Claude', available: false, policyBlocked: true }],
+      ),
+    })
+    expect(verdict.problem).toContain('model-family policy')
+    expect(verdict.remedy.steps.join('\n')).toContain('adding a provider key changes nothing')
+  })
+
+  it('offers only presets whose model IS selectable as the alternative', async () => {
+    // A remedy that offered an equally undispatchable preset has sent the reader round the same
+    // loop, so the alternative is joined against the catalog rather than read off the library.
+    const verdict = await refusal('model-preset', {
+      client: client(
+        [preset(), preset({ presetId: 'mdp_kimi', name: 'Kimi', baseModelId: 'kimi' })],
+        [
+          { modelId: 'claude-opus', label: 'Claude', available: false },
+          { modelId: 'kimi', label: 'Kimi', available: true },
+        ],
+      ),
+    })
+    const steps = verdict.remedy.steps.join('\n')
+    expect(steps).toContain("mdp_kimi ('Kimi')")
+    expect(steps).not.toContain("mdp_claude ('Claude Opus 5')")
+  })
+
+  it('states the per-kind override count, so a surprising dispatch model is not a surprise', async () => {
+    const detail = await satisfied('model-preset', {
+      client: client([preset({ overrides: { coder: 'kimi' } })]),
+    })
+    expect(detail).toContain('1 per-kind override')
+  })
+})
+
 describe('vcs-connection', () => {
   const client = (connection: Record<string, unknown> | null) =>
     ({ vcs: { getConnection: async () => ({ connection }) } }) as unknown as CatFactoryClient
@@ -146,7 +249,7 @@ describe('vcs-connection', () => {
     accountLogin: 'intended-org',
     provider: 'github',
     method: 'app',
-    canCreateRepos: true,
+    canCreateRepos: false,
     canManageWorkflows: true,
     ...overrides,
   })
@@ -158,20 +261,134 @@ describe('vcs-connection', () => {
     expect(commandsOf(verdict.remedy)).toContain('export ACCEPTANCE_REPO_OWNER=someone-else')
   })
 
-  it('gives each insufficiency its own step, so one reconnect fixes both', async () => {
-    // Three afternoons, one per problem, is the exact failure the whole gate exists to prevent,
-    // and instructions that name only the first problem reintroduce it.
+  it('passes a connection that cannot create repositories, which the operator now does', async () => {
+    // The prerequisite no configuration could satisfy: `VcsPatConnectionService` hard-codes
+    // `canCreateRepos: false` for every PAT connection, so this gate refused the deployment shape
+    // the README offers first. Adopting operator-created repositories is what retired it, and this
+    // is the assertion that stops it being reintroduced.
+    const detail = await satisfied('vcs-connection', { client: client(connected()) })
+    expect(detail).toContain('workflow')
+  })
+
+  it('still refuses a connection that cannot write workflow files', async () => {
     const verdict = await refusal('vcs-connection', {
-      client: client(connected({ canCreateRepos: false, canManageWorkflows: false })),
+      client: client(connected({ canManageWorkflows: false })),
     })
-    const steps = verdict.remedy.steps.join('\n')
-    expect(steps).toContain('repository creation')
-    expect(steps).toContain('Workflows: read and write')
+    expect(verdict.remedy.steps.join('\n')).toContain('Workflows: read and write')
   })
 
   it('names the workflow permission when nothing is connected at all', async () => {
     const verdict = await refusal('vcs-connection', { client: client(null) })
     expect(verdict.remedy.steps.join('\n')).toContain('workflow')
+  })
+})
+
+describe('target-repos', () => {
+  const client = (repos: Record<string, unknown>[]) =>
+    ({ repos: { list: async () => ({ repos }) } }) as unknown as CatFactoryClient
+
+  const repo = (name: string, overrides: Record<string, unknown> = {}) => ({
+    owner: 'intended-org',
+    name,
+    repoId: 1,
+    serviceId: null,
+    linkedElsewhere: false,
+    monorepo: false,
+    private: true,
+    provider: 'github',
+    defaultBranch: 'main',
+    ...overrides,
+  })
+
+  const both = () => [repo('cf-acc-catalog-api'), repo('cf-acc-catalog-web')]
+
+  it('names BOTH missing repositories, not just the first', async () => {
+    const verdict = await refusal('target-repos', { client: client([]) })
+    expect(verdict.problem).toContain('cf-acc-catalog-api')
+    expect(verdict.problem).toContain('cf-acc-catalog-web')
+    expect(commandsOf(verdict.remedy)[0]).toContain('run configure')
+  })
+
+  it('shows what the workspace CAN see, since invisible and absent answer identically', async () => {
+    // The distinction the read cannot make and the operator has to: a repository outside a GitHub
+    // App's installation is missing from this list exactly as one that was never created is.
+    const verdict = await refusal('target-repos', {
+      client: client([repo('cf-acc-catalog-api', { owner: 'someone-else' })]),
+    })
+    expect(verdict.remedy.steps.join('\n')).toContain('someone-else/cf-acc-catalog-api')
+  })
+
+  it('matches a repository name case-insensitively, as both providers do', async () => {
+    await satisfied('target-repos', {
+      client: client([repo('CF-Acc-Catalog-API'), repo('cf-acc-catalog-web')]),
+    })
+  })
+
+  it('refuses a repository that already backs a service on a FRESH pass', async () => {
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { serviceId: 'blk_9' }),
+        repo('cf-acc-catalog-web'),
+      ]),
+    })
+    expect(verdict.problem).toContain('blk_9')
+    expect(commandsOf(verdict.remedy)[0]).toContain('ACCEPTANCE_RUN_ID=latest')
+  })
+
+  it('allows the link the LEDGER names, on a resumed pass', async () => {
+    // The ledger's ids are what tell "mine, yesterday" from "someone else's".
+    const detail = await satisfied('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { serviceId: 'blk_9' }),
+        repo('cf-acc-catalog-web'),
+      ]),
+      adoptedServiceIds: ['blk_9'],
+    })
+    expect(detail).toContain('own ledger names')
+  })
+
+  it('still refuses a link the ledger does NOT name, mid-resume', async () => {
+    // The case a boolean "is this a resume" flag answered wrongly: a ledger holding only the BACKEND
+    // service made the flag true for the FRONTEND repository too, so a colleague's frontend service
+    // was silently adopted and both passes then filed work under one frame.
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { serviceId: 'blk_mine' }),
+        repo('cf-acc-catalog-web', { serviceId: 'blk_theirs' }),
+      ]),
+      adoptedServiceIds: ['blk_mine'],
+    })
+    expect(verdict.problem).toContain('blk_theirs')
+    expect(verdict.problem).not.toContain("'cf-acc-catalog-api' already backs")
+    expect(verdict.problem).toContain('it names blk_mine')
+  })
+
+  it('refuses a repository whose service is homed on ANOTHER board, which serviceId cannot state', async () => {
+    // `serviceId: null` with `linkedElsewhere: true` is the contract's honest answer for a service
+    // this workspace-scoped key cannot address. Reading only the id passes the gate and leaves a
+    // `repo_service_homed_elsewhere` 409 for spec 01's first adopt.
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { linkedElsewhere: true }),
+        repo('cf-acc-catalog-web'),
+      ]),
+    })
+    expect(verdict.problem).toContain('ANOTHER board')
+    expect(verdict.remedy.steps.join('\n')).toContain('repo_service_homed_elsewhere')
+  })
+
+  it('refuses a monorepo, which backs a service only with a subdirectory', async () => {
+    const verdict = await refusal('target-repos', {
+      client: client([repo('cf-acc-catalog-api', { monorepo: true }), repo('cf-acc-catalog-web')]),
+    })
+    expect(verdict.problem).toContain('MONOREPO')
+  })
+
+  it('says outright that EMPTINESS is not what it checked', async () => {
+    // The one claim this probe deliberately does not make: no `/api/v1` read publishes whether a
+    // repository holds content, and a verdict that read as "both are empty" would be a guess.
+    const detail = await satisfied('target-repos', { client: client(both()) })
+    expect(detail).toContain('not readable over /api/v1')
   })
 })
 

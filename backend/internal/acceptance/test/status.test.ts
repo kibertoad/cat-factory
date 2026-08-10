@@ -122,21 +122,26 @@ describe('summarisePass', () => {
     expect(summarise({}).idleMs).toBeNull()
   })
 
-  it('surfaces a bootstrap that started and never settled', () => {
-    const world = { ...emptyWorld('run-1'), bootstrapJobs: { backend: 'job_1', frontend: null } }
-    const status = summarise({ world })
-    expect(status.pendingBootstraps).toEqual([{ role: 'backend', jobId: 'job_1' }])
-  })
-
   it('lists only the records the ledger actually holds', () => {
     const world: World = {
       ...emptyWorld('run-1'),
-      backend: { blockId: 'blk_1', serviceId: 'blk_1', repoName: 'api', repoUrl: null },
+      backend: { blockId: 'blk_1', serviceId: 'blk_1', repoName: 'acme/api' },
       bugfix: { taskId: 'tsk_3', runId: 'run_3', pullRequestUrl: null, answeredKinds: [] },
     }
     const status = summarise({ world })
     expect(status.services.map((entry) => entry.role)).toEqual(['backend'])
     expect(status.runs.map((entry) => entry.role)).toEqual(['bugfix'])
+  })
+
+  it("reports a scaffold run, since spec 01's work is now a run like any other", () => {
+    // The ledger slot spec 01 gained when it stopped bootstrapping: a pass that died mid-scaffold is
+    // exactly the one someone runs `status` on, and a report that listed only the feature runs would
+    // say "nothing started" about an afternoon of work.
+    const world: World = {
+      ...emptyWorld('run-1'),
+      scaffoldBackend: { taskId: 'tsk_0', runId: 'run_0', pullRequestUrl: null, answeredKinds: [] },
+    }
+    expect(summarise({ world }).runs.map((entry) => entry.role)).toEqual(['scaffoldBackend'])
   })
 })
 

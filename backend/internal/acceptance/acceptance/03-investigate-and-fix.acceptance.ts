@@ -34,6 +34,7 @@ import {
   retainedEnvironmentUrl,
 } from '../src/evidence.ts'
 import { bugReportBrief } from '../src/instructions.ts'
+import { filePinnedTask } from '../src/publicApi.ts'
 import { fileAndDrive } from '../src/resume.ts'
 import { requireRunDone } from '../src/runDriver.ts'
 import { assertPrerequisites, harness } from './fixtures.ts'
@@ -70,7 +71,7 @@ describe('bug lifecycle: investigate the shipped defect and fix it', () => {
       // to a dead host. Resolved inside the callback because a resumed pass that adopts the
       // already filed task must not spend two evidence reads composing a description nobody uses.
       createTask: async () =>
-        client.tasks.create(frontend.serviceId, {
+        filePinnedTask(client, config, frontend.serviceId, {
           title: 'Paging repeats the last item of the previous page',
           taskType: 'bug',
           description: bugReportBrief(await liveEnvironmentUrl()),

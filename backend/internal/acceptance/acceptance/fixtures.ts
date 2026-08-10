@@ -97,7 +97,11 @@ export function preflightReport(): Promise<PreflightReport> {
       client,
       deployment,
       serviceTitles: Object.values(serviceTitles(config.namePrefix)),
-      hasBootstrappedServices: Boolean(world.value.backend ?? world.value.frontend),
+      // The IDS, not a "is this a resume" flag: `target-repos` compares each repository's linked
+      // service against them, so a ledger holding only the backend cannot vouch for the frontend.
+      adoptedServiceIds: [world.value.backend, world.value.frontend].flatMap((record) =>
+        record ? [record.serviceId] : [],
+      ),
     },
     (result) => {
       journal.record('prerequisite', formatPreflightLine(result).trim())

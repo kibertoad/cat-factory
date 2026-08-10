@@ -1,14 +1,41 @@
 # `@cat-factory/acceptance`: the live-deployment acceptance suite
 
-Bootstraps two empty repositories, ships a cross-service feature onto a real k3s ephemeral
-environment, then investigates and fixes the defect that feature leaves behind, against a LIVE
-local deployment with nothing faked. Full notes: [`README.md`](./README.md).
+Adopts two empty repositories an operator created, scaffolds a service into each, ships a
+cross-service feature onto a real k3s ephemeral environment, then investigates and fixes the defect
+that feature leaves behind, against a LIVE local deployment with nothing faked. Full notes:
+[`README.md`](./README.md).
 
 **Entry:** `acceptance/*.acceptance.ts` via
 `pnpm --filter @cat-factory/acceptance run acceptance`. Needs a running deployment, a k3s cluster
 and real model credentials; `src/config.ts` refuses with the whole list of missing VARIABLES, and
 `src/prerequisites.ts` then refuses with the whole list of unsatisfied DEPLOYMENT conditions, each
 carrying the steps and commands that fix it.
+
+**Setup entry:** `pnpm --filter @cat-factory/acceptance run configure` (`src/configureCli.ts`) writes
+that `.env`. Its rule is **resolve rather than ask**: the workspace from `GET /api/v1/me`, the owner
+from the VCS connection, the preset from the library joined against the model catalog, the cluster
+from the kubeconfig (through `@cat-factory/cli`'s own `readApiServerCommand`/`readTokenCommand`, so
+the namespace and secret name are not restated here). What it asks is the API token and the two
+repository names, and it then opens each repository's creation page and re-reads
+`GET /api/v1/repos` until it sees them. It never overwrites a value without naming it, carries
+unmanaged lines over byte for byte, and prints neither token.
+
+**The operator creates the two repositories; the suite ADOPTS them.** `canCreateRepos` is false for
+every PAT connection and the App path creates only under `/orgs/{org}/repos`, so bootstrapping was
+the one prerequisite no configuration could satisfy. Spec 01 backs a service with each `repoId` and
+scaffolds both through `pl_build` from the briefs in `src/instructions.ts`, which is why a scaffold
+resumes exactly as a feature run does. `target-repos` gates on the repositories being visible AND
+adoptable, and says outright that emptiness is not what it checked: no `/api/v1` read publishes it.
+Trap: `serviceId: null` does NOT mean free. A service homed on another board has no id this
+workspace-scoped surface can return, so it answers null WITH `linkedElsewhere: true` and
+`POST /api/v1/services` refuses; `src/adopt.ts` owns that verdict and the gate shares it. An existing
+link is compared against the LEDGER's service ids, never against "is this a resume", since a ledger
+holding one of the two services cannot vouch for the other.
+
+**Every task the suite files pins `ACCEPTANCE_MODEL_PRESET`**, through the one door
+(`filePinnedTask`), so a pass runs on the model it says it ran on rather than on whatever the
+workspace default happens to be. The risk policy is deliberately NOT pinned: `auto-merge-policy`
+grades the workspace default, and a pin would make that gate a check on a policy no run uses.
 
 **A pass is watchable and resumable, and both are load-bearing rather than conveniences.**
 `pnpm --filter @cat-factory/acceptance run status [runId|latest]` reduces the ledger and the
@@ -24,14 +51,14 @@ every CI lane.
 
 **Where things live**
 
-| File                          | What                                                                                    |
-| ----------------------------- | --------------------------------------------------------------------------------------- |
-| `acceptance/00-preflight`     | Reports each prerequisite as its own test. Creates nothing.                             |
-| `acceptance/01-bootstrap`     | k3s engine + two bootstrapped repos + each service's manifest source.                   |
-| `acceptance/02-feature-…`     | `pl_build` across both services; environment / CI / merge evidence.                     |
-| `acceptance/03-investigate-…` | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.        |
-| `src/`                        | The harness. Per-file roles are tabled in the README.                                   |
-| `test/`                       | Unit tests for the pure logic (config, gate, ledger, journal, status, evidence, waits). |
+| File                          | What                                                                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| `acceptance/00-preflight`     | Reports each prerequisite as its own test. Creates nothing.                                        |
+| `acceptance/01-adopt-…`       | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.   |
+| `acceptance/02-feature-…`     | `pl_build` across both services; environment / CI / merge evidence.                                |
+| `acceptance/03-investigate-…` | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                   |
+| `src/`                        | The harness, plus `configure`. Per-file roles are tabled in the README.                            |
+| `test/`                       | Unit tests for the pure logic (config, gate, ledger, journal, status, evidence, waits, configure). |
 
 **The rules the specs are written to** (each expanded in the README, and each the reason a
 particular file exists):
@@ -69,10 +96,11 @@ by fixing the bug.
 Edit the pagination rules and that trace changes, so the bug report has to change with them or the
 investigator is handed a symptom the code does not produce.
 
-**Every workspace-scoped call goes through the published SDK**, setup included: repo bootstrap, the
-cluster connection, a service's `provisioning` and the wiring reads are all `/api/v1` operations. So
-a surface change that would break an integrator breaks this suite at compile time, which is most of
-why it is worth driving the SDK rather than raw `fetch`.
+**Every workspace-scoped call goes through the published SDK**, setup included: the repository list,
+backing a service with one, the cluster connection, a service's `provisioning`, the preset pin and
+the wiring reads are all `/api/v1` operations. So a surface change that would break an integrator
+breaks this suite at compile time, which is most of why it is worth driving the SDK rather than raw
+`fetch`.
 
 The only exceptions are `GET /health` and `GET /auth/config` in `src/deploymentApi.ts`, and the
 reason is not convenience: both must answer for a deployment whose config failed to validate, which
