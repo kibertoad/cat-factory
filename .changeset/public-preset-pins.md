@@ -7,7 +7,7 @@
 '@cat-factory/gatekeeper-bindings': minor
 ---
 
-Let `/api/v1` callers pin what a task runs on (surface 1.42.0). `GET /api/v1/model-presets` lists
+Let `/api/v1` callers pin what a task runs on (surface 1.43.0). `GET /api/v1/model-presets` lists
 the model library, task create and task PATCH accept `modelPresetId` and `riskPolicyId`, and the
 task projection reads both back. A pinned id no library carries is refused with `details.reason`
 naming which one it missed, rather than falling back to the default, because a run that quietly

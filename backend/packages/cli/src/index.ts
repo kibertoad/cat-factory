@@ -13,33 +13,46 @@ export { bootstrap, type BootstrapDeps, BootstrapError } from './bootstrap.js'
 export { type EnvCommandDeps, EnvCommandError, generateEnv } from './envCommand.js'
 export { type FileSystem } from './fs.js'
 export {
+  type Command,
   COMMAND_NOT_FOUND,
   COMMAND_TIMED_OUT,
   createNodeShell,
   DEFAULT_COMMAND_TIMEOUT_MS,
   type HostShell,
+  renderCommandLine,
+  runCommand,
   type ShellResult,
 } from './host-shell.js'
 export { K3S_INSTALL_COMMAND, type K3sDeps, type K3sResult, setupK3s } from './k3s.js'
 export {
   buildK3sHandler,
   buildK3sSetupUrl,
-  DEFAULT_INGRESS_HOST_TEMPLATE,
   DEFAULT_NAMESPACE_TEMPLATE,
   handlerLabel,
   type K3sHandlerInput,
   KUBERNETES_ENV_TOKEN_SECRET_KEY,
 } from './k3s-handler.js'
 export {
+  DEFAULT_INGRESS_PORT,
+  INGRESS_HOST_TEMPLATE,
+  type IngressReadiness,
+  ingressHostTemplate,
+  ingressUrlPort,
+} from './k3s-ingress.js'
+export {
   classifyHost,
   hasServerVersion,
   type HostDetections,
   type HostState,
+  isRecreateOffer,
   type Offer,
   type OfferId,
   parseK3dClusters,
   parseKindClusters,
   probeHost,
+  RECREATE_OFFERS,
+  recreateOfferFor,
+  recreateTargetForContext,
   type ToolDetection,
 } from './k3s-probe.js'
 export {

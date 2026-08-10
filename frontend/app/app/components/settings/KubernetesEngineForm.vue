@@ -65,6 +65,9 @@ const form = reactive({
   imageTemplate: '',
   urlSource: 'ingressTemplate' as UrlSource,
   hostTemplate: '',
+  // The ingress-template port, separate from `servicePort`: each url field belongs to exactly ONE
+  // variant, so a value entered for one source can never populate a config built for another.
+  ingressPort: '',
   ingressName: '',
   serviceName: '',
   servicePort: '',
@@ -121,27 +124,33 @@ watch(
     form.insecureSkipTlsVerify = k.insecureSkipTlsVerify === true
     form.namespaceTemplate = k.namespaceTemplate ?? ''
     form.imageTemplate = k.imageTemplate ?? ''
-    // Each url field is read off the ONE variant that carries it, so a field belonging to a
-    // different `source` cannot silently populate the form.
-    //
-    // Typed as present with an on-union `source`, read as neither: both were true when the
-    // connect form admitted this config, and the value has been through storage since — which is
-    // exactly why the backend re-parses a stored `providerConfig` rather than asserting it, and
-    // this form is where an operator REPAIRS one that drifted. An unrecognised source falls back
-    // to the form's default, because `buildUrl` has no branch to build a config out of one.
-    const url: KubeUrlSource | undefined = k.url
-    const source = url?.source
-    form.urlSource = isKubernetesUrlSource(source) ? source : 'ingressTemplate'
-    form.hostTemplate = url?.source === 'ingressTemplate' ? url.hostTemplate : ''
-    form.ingressName = url?.source === 'ingressStatus' ? (url.ingressName ?? '') : ''
-    form.serviceName = url?.source === 'serviceStatus' ? url.serviceName : ''
-    form.servicePort = url?.source === 'serviceStatus' && url.port != null ? String(url.port) : ''
-    form.gatewayName = url?.source === 'gatewayStatus' ? (url.gatewayName ?? '') : ''
-    form.httpRouteName = url?.source === 'httpRouteStatus' ? (url.httpRouteName ?? '') : ''
-    form.urlScheme = url?.scheme ?? 'default'
+    applyStoredUrlSource(k.url)
   },
   { immediate: true },
 )
+
+/**
+ * Prefill the URL-derivation fields from a stored config. Each field is read off the ONE variant
+ * that carries it, so a field belonging to a different `source` cannot silently populate the form.
+ *
+ * Typed as present with an on-union `source`, read as neither: both were true when the connect form
+ * admitted this config, and the value has been through storage since, which is exactly why the
+ * backend re-parses a stored `providerConfig` rather than asserting it, and this form is where an
+ * operator REPAIRS one that drifted. An unrecognised source falls back to the form's default,
+ * because `buildUrl` has no branch to build a config out of one.
+ */
+function applyStoredUrlSource(url: KubeUrlSource | undefined): void {
+  const source = url?.source
+  form.urlSource = isKubernetesUrlSource(source) ? source : 'ingressTemplate'
+  form.hostTemplate = url?.source === 'ingressTemplate' ? url.hostTemplate : ''
+  form.ingressPort = url?.source === 'ingressTemplate' && url.port != null ? String(url.port) : ''
+  form.ingressName = url?.source === 'ingressStatus' ? (url.ingressName ?? '') : ''
+  form.serviceName = url?.source === 'serviceStatus' ? url.serviceName : ''
+  form.servicePort = url?.source === 'serviceStatus' && url.port != null ? String(url.port) : ''
+  form.gatewayName = url?.source === 'gatewayStatus' ? (url.gatewayName ?? '') : ''
+  form.httpRouteName = url?.source === 'httpRouteStatus' ? (url.httpRouteName ?? '') : ''
+  form.urlScheme = url?.scheme ?? 'default'
+}
 
 // The local-cluster apiserver address every loopback distro (k3s / k3d / kind / minikube)
 // exposes by default — see `seedForEngine`.
@@ -185,22 +194,33 @@ watch(
     if (prefill.insecureSkipTlsVerify !== undefined)
       form.insecureSkipTlsVerify = prefill.insecureSkipTlsVerify
     if (prefill.namespaceTemplate.trim()) form.namespaceTemplate = prefill.namespaceTemplate.trim()
+    // An EMPTY host template is meaningful, not a gap the link forgot to fill: the CLI withholds
+    // it when it could not establish that the cluster serves an ingress-derived URL, and leaving
+    // the required field blank is what stops a URL nothing answers being saved.
     if (prefill.hostTemplate.trim()) {
       form.urlSource = 'ingressTemplate'
       form.hostTemplate = prefill.hostTemplate.trim()
+      // Carried alongside the template, never inside it: a local cluster publishing its controller
+      // on 18080 needs the port in the URL and NOT in the Ingress host the manifests declare.
+      form.ingressPort = prefill.ingressPort.trim()
     }
+    if (prefill.urlScheme) form.urlScheme = prefill.urlScheme
   },
   { immediate: true },
 )
 
-const servicePortValid = computed(() => {
-  const raw = form.servicePort.trim()
-  if (!raw) return true
-  const port = Number(raw)
+/** A blank port is valid (the scheme's default); anything typed has to be a real port number. */
+function portValid(raw: string): boolean {
+  const trimmed = raw.trim()
+  if (!trimmed) return true
+  const port = Number(trimmed)
   return Number.isInteger(port) && port >= 1 && port <= 65535
-})
+}
+const servicePortValid = computed(() => portValid(form.servicePort))
+const ingressPortValid = computed(() => portValid(form.ingressPort))
 const urlValid = computed(() => {
-  if (form.urlSource === 'ingressTemplate') return !!form.hostTemplate.trim()
+  if (form.urlSource === 'ingressTemplate')
+    return !!form.hostTemplate.trim() && ingressPortValid.value
   if (form.urlSource === 'serviceStatus') return !!form.serviceName.trim() && servicePortValid.value
   return true // ingressStatus / gatewayStatus / httpRouteStatus have no required field
 })
@@ -257,8 +277,15 @@ const connectBlockedReason = computed(() => {
 function buildUrl(): KubeUrlSource {
   const scheme = form.urlScheme === 'default' ? {} : { scheme: form.urlScheme }
   switch (form.urlSource) {
-    case 'ingressTemplate':
-      return { source: 'ingressTemplate', hostTemplate: form.hostTemplate.trim(), ...scheme }
+    case 'ingressTemplate': {
+      const port = Number(form.ingressPort)
+      return {
+        source: 'ingressTemplate',
+        hostTemplate: form.hostTemplate.trim(),
+        ...(form.ingressPort.trim() && Number.isInteger(port) ? { port } : {}),
+        ...scheme,
+      }
+    }
     case 'ingressStatus': {
       const ingressName = form.ingressName.trim()
       return { source: 'ingressStatus', ...(ingressName ? { ingressName } : {}), ...scheme }
@@ -453,6 +480,24 @@ async function copyAutoSetupCommand() {
         v-model="form.hostTemplate"
         class="font-mono"
         placeholder="{{branch}}.preview.example.com"
+      />
+    </UFormField>
+
+    <!-- The host port the controller answers on, when it is not the scheme's default. Separate from
+         the template on purpose: the rendered template is also the Ingress `host` the manifests
+         declare, and Kubernetes rejects a `host` with a port in it. -->
+    <UFormField
+      v-if="form.urlSource === 'ingressTemplate'"
+      :label="optional(t('settings.infrastructure.kubernetesEngine.port'))"
+      :help="t('settings.infrastructure.kubernetesEngine.ingressPortHelp')"
+    >
+      <UInput
+        v-model="form.ingressPort"
+        type="number"
+        :min="1"
+        :max="65535"
+        class="font-mono"
+        placeholder="80"
       />
     </UFormField>
 

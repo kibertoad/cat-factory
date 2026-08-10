@@ -46,6 +46,9 @@ const form = reactive({
   // url derivation
   urlSource: 'ingressTemplate' as 'ingressTemplate' | 'ingressStatus' | 'serviceStatus',
   hostTemplate: '',
+  // The ingress-template port, its own field because the rendered template is also the Ingress
+  // `host` a service's manifests declare, and Kubernetes rejects a `host` carrying a port.
+  ingressPort: '',
   ingressName: '',
   serviceName: '',
   servicePort: '',
@@ -111,6 +114,7 @@ function applyUrl(k: Record<string, unknown>): void {
   if (url?.source === 'ingressTemplate') {
     form.urlSource = 'ingressTemplate'
     form.hostTemplate = readString(url.hostTemplate)
+    form.ingressPort = typeof url.port === 'number' ? String(url.port) : ''
   } else if (url?.source === 'ingressStatus') {
     form.urlSource = 'ingressStatus'
     form.ingressName = readString(url.ingressName)
@@ -154,16 +158,20 @@ const manifestSourceValid = computed(() =>
     ? repoShapeValid.value && !!form.manifestPath.trim()
     : !!form.manifestPath.trim(),
 )
-// serviceStatus.port is an optional integer 1..65535 (kubernetesUrlSourceSchema). Validate
-// it here so a decimal isn't silently dropped and an out-of-range value isn't sent then 422'd.
-const servicePortValid = computed(() => {
-  const raw = form.servicePort.trim()
-  if (!raw) return true
-  const port = Number(raw)
+// Both `ingressTemplate.port` and `serviceStatus.port` are optional integers 1..65535
+// (kubernetesUrlSourceSchema). Validate here so a decimal isn't silently dropped and an
+// out-of-range value isn't sent then 422'd.
+function portValid(raw: string): boolean {
+  const trimmed = raw.trim()
+  if (!trimmed) return true
+  const port = Number(trimmed)
   return Number.isInteger(port) && port >= 1 && port <= 65535
-})
+}
+const servicePortValid = computed(() => portValid(form.servicePort))
+const ingressPortValid = computed(() => portValid(form.ingressPort))
 const urlValid = computed(() => {
-  if (form.urlSource === 'ingressTemplate') return !!form.hostTemplate.trim()
+  if (form.urlSource === 'ingressTemplate')
+    return !!form.hostTemplate.trim() && ingressPortValid.value
   if (form.urlSource === 'serviceStatus') return !!form.serviceName.trim() && servicePortValid.value
   return true // ingressStatus has no required field
 })
@@ -219,6 +227,8 @@ function buildUrl(): Record<string, unknown> {
   const url: Record<string, unknown> = { source: form.urlSource }
   if (form.urlSource === 'ingressTemplate') {
     url.hostTemplate = form.hostTemplate.trim()
+    const port = Number(form.ingressPort)
+    if (form.ingressPort.trim() && Number.isInteger(port)) url.port = port
   } else if (form.urlSource === 'ingressStatus') {
     if (form.ingressName.trim()) url.ingressName = form.ingressName.trim()
   } else {
@@ -335,6 +345,23 @@ function optional(label: string): string {
         v-model="form.hostTemplate"
         class="font-mono"
         placeholder="{{branch}}.preview.example.com"
+      />
+    </UFormField>
+
+    <!-- The host port the controller answers on, when it is not the scheme's default. Kept out of
+         the template because that value is also the Ingress `host` the manifests declare. -->
+    <UFormField
+      v-if="form.urlSource === 'ingressTemplate'"
+      :label="optional(t('settings.providerConnection.kubernetesEnv.port'))"
+      :help="t('settings.providerConnection.kubernetesEnv.ingressPortHelp')"
+    >
+      <UInput
+        v-model="form.ingressPort"
+        type="number"
+        :min="1"
+        :max="65535"
+        class="font-mono"
+        placeholder="80"
       />
     </UFormField>
 

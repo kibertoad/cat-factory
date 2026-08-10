@@ -17,7 +17,15 @@ function openWith(search: string): void {
 const K3S_LINK =
   '?infraSetup=local-k3s&label=Local+k3s&apiServerUrl=https%3A%2F%2F127.0.0.1%3A6443' +
   '&namespaceTemplate=cf-env-%7B%7BpullNumber%7D%7D&hostTemplate=%7B%7Bbranch%7D%7D.127.0.0.1.nip.io' +
-  '&insecureSkipTlsVerify=1'
+  '&scheme=http&insecureSkipTlsVerify=1'
+
+/** The link a cluster published on a NON-default host port produces. */
+const CUSTOM_PORT_LINK = `${K3S_LINK}&ingressPort=18080`
+
+/** The link the CLI emits when it could NOT establish that the cluster serves ingress URLs. */
+const NO_INGRESS_LINK =
+  '?infraSetup=local-k3s&label=Local+k3s&apiServerUrl=https%3A%2F%2F127.0.0.1%3A6443' +
+  '&namespaceTemplate=cf-env-%7B%7BpullNumber%7D%7D&insecureSkipTlsVerify=1'
 
 describe('consumeK3sSetupDeepLink', () => {
   beforeEach(() => {
@@ -39,8 +47,42 @@ describe('consumeK3sSetupDeepLink', () => {
       apiServerUrl: 'https://127.0.0.1:6443',
       namespaceTemplate: 'cf-env-{{pullNumber}}',
       hostTemplate: '{{branch}}.127.0.0.1.nip.io',
+      ingressPort: '',
+      urlScheme: 'http',
       insecureSkipTlsVerify: true,
     })
+  })
+
+  it('carries a non-default ingress port SEPARATELY from the host template', () => {
+    // The template is also the Ingress `host` a service's manifests declare, and Kubernetes rejects
+    // a `host` with a port, so the port cannot ride inside it.
+    const ui = createUiModals()
+    openWith(CUSTOM_PORT_LINK)
+    ui.consumeK3sSetupDeepLink()
+
+    expect(ui.k3sSetupPrefill.value?.ingressPort).toBe('18080')
+    expect(ui.k3sSetupPrefill.value?.hostTemplate).toBe('{{branch}}.127.0.0.1.nip.io')
+  })
+
+  it('strips the ingress-port param too, so a reload does not re-seed it', () => {
+    const ui = createUiModals()
+    openWith(CUSTOM_PORT_LINK)
+    ui.consumeK3sSetupDeepLink()
+    expect(window.location.search).toBe('')
+  })
+
+  it('carries NO host template when the CLI could not verify the cluster serves one', () => {
+    // The CLI omits the param rather than prefilling a template the cluster cannot serve; the
+    // form treats it as required, so an empty value is what stops an unserved URL being saved.
+    const ui = createUiModals()
+    openWith(NO_INGRESS_LINK)
+    ui.consumeK3sSetupDeepLink()
+
+    expect(ui.k3sSetupPrefill.value?.hostTemplate).toBe('')
+    expect(ui.k3sSetupPrefill.value?.ingressPort).toBe('')
+    expect(ui.k3sSetupPrefill.value?.urlScheme).toBeUndefined()
+    // The rest of the prefill still lands: a withheld field is not a withheld form.
+    expect(ui.k3sSetupPrefill.value?.apiServerUrl).toBe('https://127.0.0.1:6443')
   })
 
   it('strips the params so a reload neither re-opens the window nor re-anchors it', () => {

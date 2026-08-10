@@ -349,7 +349,7 @@ its own keys, enrol its own webhook and file its own work still had to open a br
 - `PATCH /api/v1/services/{serviceId}`: patch a service, including the `provisioning` that says
   where its manifests live. A connected cluster alone provisions nothing without it.
 - `GET /api/v1/models`, `GET /api/v1/vcs/connection`, `GET /api/v1/merge-presets`: what this
-  deployment has WIRED. (The last of those is renamed to `GET /api/v1/risk-policies` in 1.42.0
+  deployment has WIRED. (The last of those is renamed to `GET /api/v1/risk-policies` in 1.43.0
   below, in place and with no dual-serving; the exception is argued there.)
 
 All eight are `admin`. The three reads are `admin` rather than `read` even though `/repos` and
@@ -371,7 +371,18 @@ default means "always present" on the way out and "may be omitted" on the way in
 emitter refuses that ambiguity outright; the defaults are applied in
 `PublicProvisioningController`.
 
-1.42.0: the two preset knobs become callable, and the one that shipped in 1.41.0 is renamed. Task
+1.42.0: one new optional field, nothing else, so a consumer built against 1.41.0 reads and writes
+exactly what it did before. The `ingressTemplate` environment-URL source gains `port`.
+
+An ingress-template URL is derived as `scheme://<rendered hostTemplate>`, so a cluster whose ingress
+controller answers on anything but the scheme's default port had nowhere to say so. The obvious
+workaround, writing `{{branch}}.example.com:8080` into `hostTemplate`, yields the right URL and an
+unusable manifest: that same rendered value is the Ingress `spec.rules[].host` a service declares,
+and Kubernetes rejects a `host` carrying a port. `port` is therefore its own field, matching
+`serviceStatus.port` beside it. Absent means the scheme default, which is what every existing
+connection means today.
+
+1.43.0: the two preset knobs become callable, and the one that shipped in 1.41.0 is renamed. Task
 create and task PATCH gain optional `modelPresetId` and `riskPolicyId`, `GET /api/v1/model-presets`
 lists the model library, and `PublicTask` reads both pins back (null ⇒ the task follows the
 workspace default rather than holding a copy of its id). Additive, except for the rename below: a

@@ -172,7 +172,7 @@ describe('board-write sites classify their editor', () => {
 /**
  * The second half of the three `/api/v1` exemptions above, which their reasons LEAN ON.
  *
- * Until surface 1.42.0 the claim they leaned on was that the public contract exposed no preset at
+ * Until surface 1.43.0 the claim they leaned on was that the public contract exposed no preset at
  * all, so nothing could be selected through a key in the first place. That is no longer true: both
  * public task schemas now carry `modelPresetId` and `riskPolicyId`, deliberately (see the schema's
  * own doc for why withholding one was never the control it resembled). What replaces the old
@@ -245,7 +245,7 @@ describe('the /api/v1 task surface lowers its preset pins by name', () => {
       Object.keys(updateBlockSchema.entries),
     )
     // `title`/`description` (+ `taskType` at creation, `autoStartDependents` on the patch) are the
-    // authored input both surfaces have always shared; the two pins are what 1.42.0 added. Nothing
+    // authored input both surfaces have always shared; the two pins are what 1.43.0 added. Nothing
     // else may join them without a decision made here.
     expect(create).toEqual(['description', 'modelPresetId', 'riskPolicyId', 'taskType', 'title'])
     expect(update).toEqual([

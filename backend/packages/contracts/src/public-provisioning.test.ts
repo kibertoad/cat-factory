@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
+import { kubernetesUrlSourceSchema } from './environments-kubernetes.js'
 import {
   publicBootstrapJobSchema,
   publicKubernetesManifestSourceSchema,
@@ -86,6 +87,25 @@ describe('the Kubernetes shapes this surface projects', () => {
         'httpRouteStatus',
       ]),
     )
+  })
+
+  it('projects the ingress-template PORT, so the public half cannot lag the internal one', () => {
+    // The port has to be its own field rather than part of `hostTemplate`, because the rendered
+    // template is also the Ingress `spec.rules[].host` the manifests declare and Kubernetes rejects
+    // a `host` carrying a port. Present internally and absent here, a caller could set the template
+    // over `/api/v1` and have no way to say which port serves it.
+    const withPort = {
+      source: 'ingressTemplate',
+      hostTemplate: '{{branch}}.127.0.0.1.nip.io',
+      port: 18080,
+      scheme: 'http',
+    }
+    expect(v.parse(publicKubernetesUrlSourceSchema, withPort)).toMatchObject({ port: 18080 })
+    expect(v.parse(kubernetesUrlSourceSchema, withPort)).toMatchObject({ port: 18080 })
+    // And it is a real port on both sides, not merely a number that rides through.
+    for (const schema of [publicKubernetesUrlSourceSchema, kubernetesUrlSourceSchema]) {
+      expect(() => v.parse(schema, { ...withPort, port: 70000 })).toThrow()
+    }
   })
 
   it('carries the validation of the internal shape it projects, not only its field names', () => {

@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVariant0} wire model.
  * @param hostTemplate Length 1..500.
+ * @param port May be absent entirely. Range 1..65535.
  * @param scheme May be absent entirely.
  * @param source the {@code source} field.
  */
@@ -18,6 +19,9 @@ import org.jspecify.annotations.Nullable;
 public record ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVariant0(
     /** Length 1..500. */
     @JsonProperty("hostTemplate") String hostTemplate,
+
+    /** May be absent entirely. Range 1..65535. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("port") @Nullable Integer port,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("scheme") @Nullable ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVariant0Scheme scheme,
@@ -39,12 +43,19 @@ public record ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVari
      */
     public static final class Builder {
         private @Nullable String hostTemplate;
+        private @Nullable Integer port;
         private @Nullable ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVariant0Scheme scheme;
         private @Nullable String source;
 
         /** Set {@code hostTemplate}. */
         public Builder hostTemplate(@Nullable String hostTemplate) {
             this.hostTemplate = hostTemplate;
+            return this;
+        }
+
+        /** Set {@code port}. */
+        public Builder port(@Nullable Integer port) {
+            this.port = port;
             return this;
         }
 
@@ -62,7 +73,7 @@ public record ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVari
 
         /** Build the {@link ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVariant0}. */
         public ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVariant0 build() {
-            return new ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVariant0(hostTemplate, scheme, source);
+            return new ConnectPublicEnvironmentRequestConnectionVariant0KubernetesUrlVariant0(hostTemplate, port, scheme, source);
         }
     }
 }
