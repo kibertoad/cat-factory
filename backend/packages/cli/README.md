@@ -45,6 +45,14 @@ It does the fiddly setup for you:
   is **not** needed to boot; add providers/keys through the UI after sign-in (the `.env` leaves
   them as commented hints), so the generated file runs local mode with no manual edits.
 - **`cat-factory k3s`**: guided local Kubernetes setup for ephemeral environments (see `--help`).
+  It probes the host, creates or reuses a cluster, applies a least-privilege ServiceAccount, mints a
+  token, and hands the values to the SPA's connect form. It also CHECKS, rather than assumes, whether
+  the cluster can serve an ingress-derived environment URL: that needs an ingress controller inside
+  the cluster and a host port published into it (`--ingress-port`, default 80). When either is
+  missing the summary says so and names the fix instead of printing a host template that resolves to
+  nothing. A published host port is fixed when the cluster is created, so `--recreate` destroys the
+  named k3d/kind cluster and builds it again from the current flags. It names what is on the cluster
+  before deleting it, and `-y` on its own never selects it.
 - **`cat-factory supervise`**: run a dev command under a self-healing watchdog (see
   [Supervising local dev](#supervising-local-dev)).
 

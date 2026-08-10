@@ -14,6 +14,21 @@ export interface ShellResult {
 /** Conventional exit code for a missing binary — returned by {@link HostShell.run} on `ENOENT`. */
 export const COMMAND_NOT_FOUND = 127
 
+/**
+ * A single command to run through the {@link HostShell}, optionally with stdin `input`.
+ *
+ * Lives here rather than beside one of its planners because several modules now plan commands
+ * (provisioning, the ingress probe) and a shared type in either of them would make the pair
+ * import each other.
+ */
+export interface Command {
+  cmd: string
+  args: string[]
+  input?: string
+  /** Per-command watchdog override (ms). Absent ⇒ the {@link HostShell} default applies. */
+  timeoutMs?: number
+}
+
 /** Conventional exit code for a command killed by the watchdog timeout (mirrors `timeout(1)`). */
 export const COMMAND_TIMED_OUT = 124
 
@@ -52,6 +67,27 @@ export interface HostShell {
     args: string[],
     opts?: { timeoutMs?: number; input?: string; cwd?: string },
   ): Promise<ShellResult>
+}
+
+/**
+ * Run a planned {@link Command} through a shell, honouring every field it carries.
+ *
+ * Use this for a READ whose non-zero exit is data rather than a failure (a probe, a best-effort
+ * list). `shell.run(command.cmd, command.args)` at a call site looks equivalent and is not: it
+ * silently drops `input` and the per-command `timeoutMs`, and hard-codes the binary the planner
+ * was there to name, so changing `cmd` keeps invoking the old one and the read gets the 10s
+ * default watchdog instead of its own.
+ */
+export function runCommand(shell: HostShell, command: Command): Promise<ShellResult> {
+  return shell.run(command.cmd, command.args, {
+    input: command.input,
+    timeoutMs: command.timeoutMs,
+  })
+}
+
+/** A planned command rendered as the shell line a human would type, for printed guidance. */
+export function renderCommandLine(command: Command): string {
+  return [command.cmd, ...command.args].join(' ')
 }
 
 /** The real, process-backed {@link HostShell}. */

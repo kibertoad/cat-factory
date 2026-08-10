@@ -369,3 +369,14 @@ Every request body here states its omitted-value rule in prose and carries no sc
 default means "always present" on the way out and "may be omitted" on the way in, and the SDK
 emitter refuses that ambiguity outright; the defaults are applied in
 `PublicProvisioningController`.
+
+1.42.0: one new optional field, nothing else, so a consumer built against 1.41.0 reads and writes
+exactly what it did before. The `ingressTemplate` environment-URL source gains `port`.
+
+An ingress-template URL is derived as `scheme://<rendered hostTemplate>`, so a cluster whose ingress
+controller answers on anything but the scheme's default port had nowhere to say so. The obvious
+workaround, writing `{{branch}}.example.com:8080` into `hostTemplate`, yields the right URL and an
+unusable manifest: that same rendered value is the Ingress `spec.rules[].host` a service declares,
+and Kubernetes rejects a `host` carrying a port. `port` is therefore its own field, matching
+`serviceStatus.port` beside it. Absent means the scheme default, which is what every existing
+connection means today.

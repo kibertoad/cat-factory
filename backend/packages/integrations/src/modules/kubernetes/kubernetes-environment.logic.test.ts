@@ -151,6 +151,24 @@ describe('deriveUrl', () => {
     ).toBe('https://feat.preview.example.com')
   })
 
+  it('appends a configured ingress-template port, which the host template cannot carry', () => {
+    // The rendered host template is also the Ingress `spec.rules[].host` the manifests declare, and
+    // Kubernetes rejects a `host` with a port, so a cluster whose controller is published on a
+    // non-default host port needs the port as its own field for the URL to be right.
+    expect(
+      deriveUrl(
+        {
+          source: 'ingressTemplate',
+          hostTemplate: '{{branch}}.127.0.0.1.nip.io',
+          port: 18080,
+          scheme: 'http',
+        },
+        { branch: 'feat' },
+        null,
+      ),
+    ).toBe('http://feat.127.0.0.1.nip.io:18080')
+  })
+
   it('returns null for a status source until the live address is known', () => {
     expect(deriveUrl({ source: 'serviceStatus', serviceName: 'web' }, {}, null)).toBeNull()
   })
