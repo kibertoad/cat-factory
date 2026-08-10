@@ -2,10 +2,10 @@
 //
 // The wait is worth its own module because a bootstrap run fails in ways that look identical from
 // a status field and need completely different fixes: no VCS credential, a repository name already
-// taken, a container that never became healthy, a model that ran out of budget. The job carries a
-// job carries `failureKind`, `failureDetail` and `failureHint` alongside the one-line `error` for
-// exactly that reason, and this module's job is to make sure all of them reach the person rather
-// than being flattened into "bootstrap failed".
+// taken, a container that never became healthy, a model that ran out of budget. The job carries
+// `failureKind`, `failureDetail` and `failureHint` alongside the one-line `error` for exactly that
+// reason, and this module's job is to make sure all of them reach the person rather than being
+// flattened into "bootstrap failed".
 
 import type { PublicBootstrapJob, PublicBootstrapRepoInput } from '@cat-factory/contracts'
 import type { CatFactoryClient } from '@cat-factory/sdk'

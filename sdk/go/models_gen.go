@@ -331,7 +331,7 @@ type CreatePublicServiceRequest struct {
 	// Title may be absent entirely.
 	Title *string `json:"title,omitempty"`
 	// Type may be absent entirely.
-	Type *StartPublicRepoBootstrapRequestType `json:"type,omitempty"`
+	Type *CreatePublicServiceRequestType `json:"type,omitempty"`
 }
 
 // CreatePublicServiceRequestRepo is the `CreatePublicServiceRequestRepo` wire model.
@@ -342,6 +342,22 @@ type CreatePublicServiceRequestRepo struct {
 	Monorepo *bool   `json:"monorepo,omitempty"`
 	RepoID   float64 `json:"repoId"`
 }
+
+// CreatePublicServiceRequestType is the `CreatePublicServiceRequestType` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type CreatePublicServiceRequestType string
+
+const (
+	CreatePublicServiceRequestTypeService  CreatePublicServiceRequestType = "service"
+	CreatePublicServiceRequestTypeFrontend CreatePublicServiceRequestType = "frontend"
+	CreatePublicServiceRequestTypeLibrary  CreatePublicServiceRequestType = "library"
+	CreatePublicServiceRequestTypeDocument CreatePublicServiceRequestType = "document"
+)
+
+// CreatePublicServiceRequestTypeValues lists every CreatePublicServiceRequestType this SDK release knows.
+var CreatePublicServiceRequestTypeValues = []CreatePublicServiceRequestType{CreatePublicServiceRequestTypeService, CreatePublicServiceRequestTypeFrontend, CreatePublicServiceRequestTypeLibrary, CreatePublicServiceRequestTypeDocument}
 
 // CreatePublicTask is the `CreatePublicTask` wire model.
 type CreatePublicTask struct {
@@ -2110,12 +2126,13 @@ type ListPublicMergePresetsResponse struct {
 
 // ListPublicMergePresetsResponsePreset is the `ListPublicMergePresetsResponsePreset` wire model.
 type ListPublicMergePresetsResponsePreset struct {
-	AutoMergeEnabled bool                                             `json:"autoMergeEnabled"`
-	CIMaxAttempts    float64                                          `json:"ciMaxAttempts"`
-	DryRunRoles      []ListPublicMergePresetsResponsePresetDryRunRole `json:"dryRunRoles"`
-	IsDefault        bool                                             `json:"isDefault"`
-	Name             string                                           `json:"name"`
-	PresetID         string                                           `json:"presetId"`
+	AutoMergeEnabled          bool                                             `json:"autoMergeEnabled"`
+	CIMaxAttempts             float64                                          `json:"ciMaxAttempts"`
+	DryRunRoles               []ListPublicMergePresetsResponsePresetDryRunRole `json:"dryRunRoles"`
+	IsDefault                 bool                                             `json:"isDefault"`
+	Name                      string                                           `json:"name"`
+	PresetID                  string                                           `json:"presetId"`
+	SubmissionRestrictedRoles []ListPublicMergePresetsResponsePresetDryRunRole `json:"submissionRestrictedRoles"`
 }
 
 // ListPublicMergePresetsResponsePresetDryRunRole is the `ListPublicMergePresetsResponsePresetDryRunRole` vocabulary as carried on the wire.
@@ -2255,7 +2272,8 @@ var ListPublicTaskTypesResponseTaskTypeFieldTypeValues = []ListPublicTaskTypesRe
 
 // ListPublicWiredModelsResponse is the `ListPublicWiredModelsResponse` wire model.
 type ListPublicWiredModelsResponse struct {
-	Models []ListPublicWiredModelsResponseModel `json:"models"`
+	ExcludesUserScopedModels bool                                 `json:"excludesUserScopedModels"`
+	Models                   []ListPublicWiredModelsResponseModel `json:"models"`
 }
 
 // ListPublicWiredModelsResponseModel is the `ListPublicWiredModelsResponseModel` wire model.
@@ -5283,24 +5301,8 @@ type StartPublicRepoBootstrapRequest struct {
 	ReferenceArchitectureID *string `json:"referenceArchitectureId,omitempty"`
 	RepoName                string  `json:"repoName"`
 	// Type may be absent entirely.
-	Type *StartPublicRepoBootstrapRequestType `json:"type,omitempty"`
+	Type *CreatePublicServiceRequestType `json:"type,omitempty"`
 }
-
-// StartPublicRepoBootstrapRequestType is the `StartPublicRepoBootstrapRequestType` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type StartPublicRepoBootstrapRequestType string
-
-const (
-	StartPublicRepoBootstrapRequestTypeService  StartPublicRepoBootstrapRequestType = "service"
-	StartPublicRepoBootstrapRequestTypeFrontend StartPublicRepoBootstrapRequestType = "frontend"
-	StartPublicRepoBootstrapRequestTypeLibrary  StartPublicRepoBootstrapRequestType = "library"
-	StartPublicRepoBootstrapRequestTypeDocument StartPublicRepoBootstrapRequestType = "document"
-)
-
-// StartPublicRepoBootstrapRequestTypeValues lists every StartPublicRepoBootstrapRequestType this SDK release knows.
-var StartPublicRepoBootstrapRequestTypeValues = []StartPublicRepoBootstrapRequestType{StartPublicRepoBootstrapRequestTypeService, StartPublicRepoBootstrapRequestTypeFrontend, StartPublicRepoBootstrapRequestTypeLibrary, StartPublicRepoBootstrapRequestTypeDocument}
 
 // StartPublicRepoBootstrapResponse is the `StartPublicRepoBootstrapResponse` wire model.
 type StartPublicRepoBootstrapResponse struct {

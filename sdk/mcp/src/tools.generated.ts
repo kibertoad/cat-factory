@@ -561,7 +561,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: true,
     description: 'List the models a run in this workspace could dispatch to\n\nThe workspace’s model catalog with the two flags that decide whether an agent step can run at all: `available`, and `policyBlocked` for a model that is configured but refused by the account’s model-family policy. Those two need OPPOSITE fixes, which is why they are separate: everything blocked by policy is already configured, so adding another provider key changes nothing.\n\nCalls `GET /api/v1/models` (operation `listPublicWiredModels`).',
     inputSchema: {"type":"object","properties":{},"additionalProperties":false},
-    outputSchema: {"type":"object","properties":{"models":{"type":"array","items":{"type":"object","properties":{"available":{"type":"boolean"},"label":{"type":"string"},"modelId":{"type":"string"},"policyBlocked":{"type":"boolean"},"provider":{"type":"string"}}}}}},
+    outputSchema: {"type":"object","properties":{"excludesUserScopedModels":{"type":"boolean"},"models":{"type":"array","items":{"type":"object","properties":{"available":{"type":"boolean"},"label":{"type":"string"},"modelId":{"type":"string"},"policyBlocked":{"type":"boolean"},"provider":{"type":"string"}}}}}},
     invoke: (client, args) => client.models.list(),
   },
   {
@@ -583,7 +583,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: true,
     description: 'List the workspace’s merge-threshold presets\n\nThe preset library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the preset forces into dry-run mode, which is the difference between “this preset merges” and “this preset merges for everyone except one role”.\n\nCalls `GET /api/v1/merge-presets` (operation `listPublicMergePresets`).',
     inputSchema: {"type":"object","properties":{},"additionalProperties":false},
-    outputSchema: {"type":"object","properties":{"presets":{"type":"array","items":{"type":"object","properties":{"autoMergeEnabled":{"type":"boolean"},"ciMaxAttempts":{"type":"number"},"dryRunRoles":{"type":"array","items":{"type":"string","description":"One of: admin, member, viewer. A newer deployment may report a member not in this list."}},"isDefault":{"type":"boolean"},"name":{"type":"string"},"presetId":{"type":"string"}}}}}},
+    outputSchema: {"type":"object","properties":{"presets":{"type":"array","items":{"type":"object","properties":{"autoMergeEnabled":{"type":"boolean"},"ciMaxAttempts":{"type":"number"},"dryRunRoles":{"type":"array","items":{"type":"string","description":"One of: admin, member, viewer. A newer deployment may report a member not in this list."}},"isDefault":{"type":"boolean"},"name":{"type":"string"},"presetId":{"type":"string"},"submissionRestrictedRoles":{"type":"array","items":{"type":"string","description":"One of: admin, member, viewer. A newer deployment may report a member not in this list."}}}}}}},
     invoke: (client, args) => client.mergePresets.list(),
   },
   {

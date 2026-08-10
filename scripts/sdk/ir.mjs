@@ -116,6 +116,12 @@ const INLINE_ENUM_NAMES = {
   // (`GetPublicSpendWindow`, `GetPublicSpendResponseSource`), so a later operation sharing a value
   // set would RENAME a type in four released SDKs, arriving as a clean generated diff nobody
   // reads. The window and the source are ordinary enough sets for that to be a matter of time.
+  // A service's role on the board, shared verbatim by `POST /api/v1/services` and the repo
+  // bootstrap that CREATES one. Pinned on exactly the precedent above: the service creation route
+  // shipped first and published this name, and the bootstrap operation is walked first, so
+  // unpinned the deduped enum renames a type in four released SDKs (the Java model file moves,
+  // every Go constant is respelled) while the diff looks like ordinary generated churn.
+  'document,frontend,library,service': 'CreatePublicServiceRequestType',
   '24h,30d,7d,90d': 'PublicSpendWindow',
   'daily-rollup,ledger': 'PublicSpendSource',
   'agentKind,model,repo,run,service,taskType,ticket': 'PublicSpendDimension',

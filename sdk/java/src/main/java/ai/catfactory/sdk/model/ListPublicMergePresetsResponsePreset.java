@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @param isDefault the {@code isDefault} field.
  * @param name the {@code name} field.
  * @param presetId the {@code presetId} field.
+ * @param submissionRestrictedRoles the {@code submissionRestrictedRoles} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ListPublicMergePresetsResponsePreset(
@@ -29,7 +30,9 @@ public record ListPublicMergePresetsResponsePreset(
 
     @JsonProperty("name") String name,
 
-    @JsonProperty("presetId") String presetId
+    @JsonProperty("presetId") String presetId,
+
+    @JsonProperty("submissionRestrictedRoles") List<ListPublicMergePresetsResponsePresetDryRunRole> submissionRestrictedRoles
 ) {
 
     /** A new builder for {@link ListPublicMergePresetsResponsePreset}. */
@@ -50,6 +53,7 @@ public record ListPublicMergePresetsResponsePreset(
         private @Nullable Boolean isDefault;
         private @Nullable String name;
         private @Nullable String presetId;
+        private @Nullable List<ListPublicMergePresetsResponsePresetDryRunRole> submissionRestrictedRoles;
 
         /** Set {@code autoMergeEnabled}. */
         public Builder autoMergeEnabled(@Nullable Boolean autoMergeEnabled) {
@@ -87,9 +91,15 @@ public record ListPublicMergePresetsResponsePreset(
             return this;
         }
 
+        /** Set {@code submissionRestrictedRoles}. */
+        public Builder submissionRestrictedRoles(@Nullable List<ListPublicMergePresetsResponsePresetDryRunRole> submissionRestrictedRoles) {
+            this.submissionRestrictedRoles = submissionRestrictedRoles;
+            return this;
+        }
+
         /** Build the {@link ListPublicMergePresetsResponsePreset}. */
         public ListPublicMergePresetsResponsePreset build() {
-            return new ListPublicMergePresetsResponsePreset(autoMergeEnabled, ciMaxAttempts, dryRunRoles, isDefault, name, presetId);
+            return new ListPublicMergePresetsResponsePreset(autoMergeEnabled, ciMaxAttempts, dryRunRoles, isDefault, name, presetId, submissionRestrictedRoles);
         }
     }
 }

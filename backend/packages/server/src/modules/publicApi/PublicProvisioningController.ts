@@ -12,11 +12,16 @@ import {
   type EnvironmentHandlerView,
   type GitHubConnection,
   type InfraHandlerConfig,
+  type KubernetesManifestSource,
+  type KubernetesUrlSource,
   type ModelCatalog,
   type PublicBootstrapJob,
   type PublicEnvironmentConnection,
   type PublicEnvironmentConnectionView,
+  type PublicKubernetesManifestSource,
+  type PublicKubernetesUrlSource,
   type PublicMergePreset,
+  type PublicServiceProvisioning,
   type PublicVcsConnection,
   type PublicWiredModel,
   type RiskPolicy,
@@ -33,7 +38,7 @@ import { NotFoundError, UnavailableError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import type { AppEnv } from '../../http/env.js'
+import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
 import { resolveWorkspaceModelCatalog } from '../models/workspaceCatalog.js'
 import { toPublicService } from './boardProjection.js'
@@ -79,12 +84,44 @@ function requireEnvironments<E extends AppEnv>(c: Context<E>): EnvironmentsModul
   )
 }
 
-/** The source-control module, or the 503. Provider-routing, so a GitLab workspace answers here too. */
-function requireVcs<E extends AppEnv>(c: Context<E>): GitHubModule {
-  return requireCapability(
-    c.get('container').github,
+/**
+ * The workspace's source-control connection, whichever seam holds it, or the 503 when this
+ * deployment wires no source control at all.
+ *
+ * Two seams and not one, because a GitLab-only deployment builds no `github` module: that module
+ * requires the App's webhook verifier, which is App-specific (a GitLab workspace ingests through
+ * the neutral `/vcs/:provider/webhooks` route instead), so it is absent exactly when the PAT
+ * connect service is the thing holding the connection. Reading only the module answered a
+ * provider-neutral question with "source control is not configured" at a workspace that plainly
+ * had a connection, and the acceptance preflight then reported an unknown probe failure for a row
+ * it could read.
+ *
+ * The module is preferred when present, because with BOTH wired it is the one that routes an
+ * installation to its provider's client; the PAT service is the fallback, not a second opinion.
+ */
+export async function readVcsConnection(
+  container: ServerContainer,
+  workspaceId: string,
+): Promise<GitHubConnection | null> {
+  const github: GitHubModule | undefined = container.github
+  if (github) return github.installationService.getConnection(workspaceId)
+  const pat = requireCapability(
+    container.vcsConnectionService,
     'Source-control integration is not configured',
   )
+  return pat.getConnection(workspaceId)
+}
+
+/**
+ * Whether this deployment serves per-user locally-run model endpoints.
+ *
+ * A named predicate over a TYPED container rather than an `!== undefined` in the route, because
+ * this is the one optional-capability read on this surface whose answer is DATA rather than a
+ * refusal: it is reported to the caller, so it has to be as legible as the `require*` accessors
+ * next to it, and the field it names has to fail to compile if it is ever renamed.
+ */
+function servesUserScopedModels(container: ServerContainer): boolean {
+  return container.localModelEndpoints !== undefined
 }
 
 /** The merge-preset module, or the 503. */
@@ -182,17 +219,94 @@ function registerBootstrapRoutes(app: Hono<AppEnv>): void {
     const { jobId } = c.req.valid('param')
     // Scoped to the key's own workspace by the service, so another workspace's job is absent here
     // rather than forbidden: the same 404-hides-everything rule the rest of this surface follows.
-    const job = await bootstrap.service.getJob(auth.workspaceId, jobId)
-    if (!job) throw new NotFoundError('Bootstrap job', jobId, { reason: 'bootstrap_job_not_found' })
-    return c.json(toPublicBootstrapJob(job), 200)
+    // The service raises that 404 itself, carrying `bootstrap_job_not_found`; a local `if (!job)`
+    // beside it would be dead code, and the reason a caller branches on would ship from nowhere.
+    return c.json(
+      toPublicBootstrapJob(await bootstrap.service.getJob(auth.workspaceId, jobId)),
+      200,
+    )
   })
 }
 
 // ---- the environment connection (the ENGINE half) ---------------------------
 
+/**
+ * Lower a public URL source onto the internal one.
+ *
+ * Rebuilt member by member rather than passed through, because the two are separate types by
+ * design (see the contracts header): the internal variant is free to gain a source or rename a
+ * field, and this switch is where that stops being a silent public change. The `never` default is
+ * what makes it stop at COMPILE time.
+ */
+function toKubernetesUrlSource(url: PublicKubernetesUrlSource): KubernetesUrlSource {
+  switch (url.source) {
+    case 'ingressTemplate':
+      return { source: 'ingressTemplate', hostTemplate: url.hostTemplate, ...scheme(url.scheme) }
+    case 'ingressStatus':
+      return {
+        source: 'ingressStatus',
+        ...(url.ingressName === undefined ? {} : { ingressName: url.ingressName }),
+        ...scheme(url.scheme),
+      }
+    case 'serviceStatus':
+      return {
+        source: 'serviceStatus',
+        serviceName: url.serviceName,
+        ...(url.port === undefined ? {} : { port: url.port }),
+        ...scheme(url.scheme),
+      }
+    case 'gatewayStatus':
+      return {
+        source: 'gatewayStatus',
+        ...(url.gatewayName === undefined ? {} : { gatewayName: url.gatewayName }),
+        ...scheme(url.scheme),
+      }
+    case 'httpRouteStatus':
+      return {
+        source: 'httpRouteStatus',
+        ...(url.httpRouteName === undefined ? {} : { httpRouteName: url.httpRouteName }),
+        ...scheme(url.scheme),
+      }
+    default:
+      return unreachableSource(url)
+  }
+}
+
+/** An omitted `scheme` stays omitted, so the engine's own default decides rather than this mapper. */
+function scheme(value: 'http' | 'https' | undefined): { scheme?: 'http' | 'https' } {
+  return value === undefined ? {} : { scheme: value }
+}
+
+/** The compile-time half of the projection: a new public member has to be lowered explicitly. */
+function unreachableSource(value: never): never {
+  throw new Error(`unmapped public Kubernetes URL source: ${JSON.stringify(value)}`)
+}
+
+/**
+ * Lower a public manifest source onto the internal one, for the same reason and with the same
+ * exhaustiveness as the URL source above.
+ */
+export function toKubernetesManifestSource(
+  source: PublicKubernetesManifestSource,
+): KubernetesManifestSource {
+  const renderer = source.renderer === undefined ? {} : { renderer: source.renderer }
+  return source.type === 'colocated'
+    ? { type: 'colocated', path: source.path, ...renderer }
+    : {
+        type: 'separate',
+        repo: source.repo,
+        ...(source.ref === undefined ? {} : { ref: source.ref }),
+        path: source.path,
+        ...renderer,
+      }
+}
+
 /** Lower a public connection onto the internal per-engine handler config. */
 function toInfraHandlerConfig(connection: PublicEnvironmentConnection): InfraHandlerConfig {
-  return { engine: KUBERNETES_ENGINE, kubernetes: connection.kubernetes }
+  return {
+    engine: KUBERNETES_ENGINE,
+    kubernetes: { ...connection.kubernetes, url: toKubernetesUrlSource(connection.kubernetes.url) },
+  }
 }
 
 /**
@@ -259,7 +373,7 @@ function registerServiceRoutes(app: Hono<AppEnv>): void {
     const block = await container.boardService.updateBlock(
       auth.workspaceId,
       serviceId,
-      toBlockPatch(c.req.valid('json')),
+      toBlockPatch(c.req.valid('json'), service.provisioning),
       // Unattributed by the same reading a headless start gets (ADR 0037): an API key holds
       // scopes, not a workspace tier.
       UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
@@ -275,7 +389,10 @@ function registerServiceRoutes(app: Hono<AppEnv>): void {
  * keys present, so spreading an absent `provisioning` through would clear the stored one and
  * silently un-deploy a service whose title was being corrected.
  */
-export function toBlockPatch(input: UpdatePublicServiceInput): {
+export function toBlockPatch(
+  input: UpdatePublicServiceInput,
+  stored: ServiceProvisioning | undefined,
+): {
   title?: string
   description?: string
   provisioning?: ServiceProvisioning
@@ -285,12 +402,34 @@ export function toBlockPatch(input: UpdatePublicServiceInput): {
     ...(input.description === undefined ? {} : { description: input.description }),
     ...(input.provisioning === undefined
       ? {}
-      : {
-          provisioning: {
-            type: input.provisioning.type,
-            manifestSource: input.provisioning.manifestSource,
-          },
-        }),
+      : { provisioning: mergeProvisioning(input.provisioning, stored) }),
+  }
+}
+
+/**
+ * Overlay a public provisioning patch onto what the service already declares.
+ *
+ * `provisioning` is ONE JSON column and `updateBlock` REPLACES it wholesale, where this surface
+ * publishes two of its dozen fields. Writing just the pair would therefore delete every field the
+ * public shape cannot express: a Kubernetes service's `images`, `secretInjections` and
+ * `helmReleases`, authored in the app by someone who is not the caller. The next deploy would
+ * render manifests with no image overrides and no Secrets, which is the "empty environment that
+ * looks like a cluster fault" failure one field deeper, and the caller that caused it was only
+ * correcting a manifest path.
+ *
+ * A patch that CHANGES the provision type replaces instead of overlaying: the stored remainder
+ * belongs to the type being left behind, so carrying it forward would attach one engine's
+ * configuration to another.
+ */
+function mergeProvisioning(
+  patch: PublicServiceProvisioning,
+  stored: ServiceProvisioning | undefined,
+): ServiceProvisioning {
+  const base = stored?.type === patch.type ? stored : undefined
+  return {
+    ...base,
+    type: patch.type,
+    manifestSource: toKubernetesManifestSource(patch.manifestSource),
   }
 }
 
@@ -338,6 +477,12 @@ function toPublicMergePreset(preset: RiskPolicy): PublicMergePreset {
     autoMergeEnabled: preset.autoMergeEnabled,
     ciMaxAttempts: preset.ciMaxAttempts,
     dryRunRoles: [...preset.dryRunRoles],
+    // The roles the allowlist SCOPES, not the classes it allows: a role with an entry may land only
+    // what that entry names (an EMPTY entry lands nothing, which is a restriction and not an
+    // absence), and the class vocabulary itself stays internal.
+    submissionRestrictedRoles: Object.entries(preset.submissionClassesByRole)
+      .filter(([, classes]) => classes !== undefined)
+      .map(([role]) => role as PublicMergePreset['submissionRestrictedRoles'][number]),
   }
 }
 
@@ -345,16 +490,28 @@ function registerWiringRoutes(app: Hono<AppEnv>): void {
   // No user id is passed, and that absence is load-bearing rather than an omission: locally-run
   // models are one developer's own endpoints, and a key-authenticated call has no developer. See
   // `resolveWorkspaceModelCatalog`.
+  //
+  // Which is exactly why the omission is REPORTED. Those endpoints do not appear in this catalog at
+  // all, so on a deployment whose only wired models are local ones the answer is a list where
+  // nothing is available, which reads as "add a provider key" and would send an operator to change
+  // a setting that is already correct. The flag says whether this deployment has that capability
+  // wired at all, which is the most a key-authenticated read can honestly know.
   buildHonoRoute(app, listPublicWiredModelsContract, async (c) => {
     const auth = await authorizeOrThrow(c, listPublicWiredModelsContract.minScope)
-    const catalog = await resolveWorkspaceModelCatalog(c.get('container'), auth.workspaceId)
-    return c.json({ models: catalog.map(toPublicWiredModel) }, 200)
+    const container = c.get('container')
+    const catalog = await resolveWorkspaceModelCatalog(container, auth.workspaceId)
+    return c.json(
+      {
+        models: catalog.map(toPublicWiredModel),
+        excludesUserScopedModels: servesUserScopedModels(container),
+      },
+      200,
+    )
   })
 
   buildHonoRoute(app, getPublicVcsConnectionContract, async (c) => {
     const auth = await authorizeOrThrow(c, getPublicVcsConnectionContract.minScope)
-    const vcs = requireVcs(c)
-    const connection = await vcs.installationService.getConnection(auth.workspaceId)
+    const connection = await readVcsConnection(c.get('container'), auth.workspaceId)
     // Null is an ANSWER ("nothing connected"), which is the state a caller setting a workspace up
     // is most likely to be in, so it is a 200 carrying null rather than a 404.
     return c.json({ connection: connection ? toPublicVcsConnection(connection) : null }, 200)

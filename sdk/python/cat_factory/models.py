@@ -672,7 +672,7 @@ class CreatePublicServiceRequest:
     #: May be absent entirely.
     title: str | None = None
     #: May be absent entirely.
-    type_: StartPublicRepoBootstrapRequestType | None = None
+    type_: CreatePublicServiceRequestType | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -687,7 +687,7 @@ class CreatePublicServiceRequest:
             description=data.get("description"),
             repo=None if data.get("repo") is None else CreatePublicServiceRequestRepo.from_dict(data.get("repo")),
             title=data.get("title"),
-            type_=None if data.get("type") is None else _enum(StartPublicRepoBootstrapRequestType, data.get("type")),
+            type_=None if data.get("type") is None else _enum(CreatePublicServiceRequestType, data.get("type")),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -740,6 +740,22 @@ class CreatePublicServiceRequestRepo:
         if self.monorepo is not None:
             out["monorepo"] = self.monorepo
         return out
+
+
+class CreatePublicServiceRequestType(StrEnum):
+    """The `CreatePublicServiceRequestType` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    SERVICE = "service"
+    FRONTEND = "frontend"
+    LIBRARY = "library"
+    DOCUMENT = "document"
 
 
 @dataclass(frozen=True, slots=True)
@@ -4606,6 +4622,7 @@ class ListPublicMergePresetsResponsePreset:
     is_default: bool
     name: str
     preset_id: str
+    submission_restricted_roles: list[ListPublicMergePresetsResponsePresetDryRunRole]
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -4615,7 +4632,7 @@ class ListPublicMergePresetsResponsePreset:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicMergePresetsResponsePreset":
         """Decode a `ListPublicMergePresetsResponsePreset` from its JSON object."""
-        known = {"autoMergeEnabled", "ciMaxAttempts", "dryRunRoles", "isDefault", "name", "presetId"}
+        known = {"autoMergeEnabled", "ciMaxAttempts", "dryRunRoles", "isDefault", "name", "presetId", "submissionRestrictedRoles"}
         return cls(
             auto_merge_enabled=data.get("autoMergeEnabled"),
             ci_max_attempts=data.get("ciMaxAttempts"),
@@ -4623,6 +4640,7 @@ class ListPublicMergePresetsResponsePreset:
             is_default=data.get("isDefault"),
             name=data.get("name"),
             preset_id=data.get("presetId"),
+            submission_restricted_roles=[_enum(ListPublicMergePresetsResponsePresetDryRunRole, item) for item in data.get("submissionRestrictedRoles") or []],
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -4635,6 +4653,7 @@ class ListPublicMergePresetsResponsePreset:
         out["isDefault"] = self.is_default
         out["name"] = self.name
         out["presetId"] = self.preset_id
+        out["submissionRestrictedRoles"] = [_encode(item) for item in self.submission_restricted_roles]
         return out
 
 
@@ -5057,6 +5076,7 @@ class ListPublicTaskTypesResponseTaskTypeFieldType(StrEnum):
 class ListPublicWiredModelsResponse:
     """`ListPublicWiredModelsResponse`, as carried on the wire."""
 
+    excludes_user_scoped_models: bool
     models: list[ListPublicWiredModelsResponseModel]
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -5067,8 +5087,9 @@ class ListPublicWiredModelsResponse:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicWiredModelsResponse":
         """Decode a `ListPublicWiredModelsResponse` from its JSON object."""
-        known = {"models"}
+        known = {"excludesUserScopedModels", "models"}
         return cls(
+            excludes_user_scoped_models=data.get("excludesUserScopedModels"),
             models=[ListPublicWiredModelsResponseModel.from_dict(item) for item in data.get("models") or []],
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -5076,6 +5097,7 @@ class ListPublicWiredModelsResponse:
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
+        out["excludesUserScopedModels"] = self.excludes_user_scoped_models
         out["models"] = [_encode(item) for item in self.models]
         return out
 
@@ -11746,7 +11768,7 @@ class StartPublicRepoBootstrapRequest:
     #: May be absent entirely.
     reference_architecture_id: str | None = None
     #: May be absent entirely.
-    type_: StartPublicRepoBootstrapRequestType | None = None
+    type_: CreatePublicServiceRequestType | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -11763,7 +11785,7 @@ class StartPublicRepoBootstrapRequest:
             instructions=data.get("instructions"),
             private=data.get("private"),
             reference_architecture_id=data.get("referenceArchitectureId"),
-            type_=None if data.get("type") is None else _enum(StartPublicRepoBootstrapRequestType, data.get("type")),
+            type_=None if data.get("type") is None else _enum(CreatePublicServiceRequestType, data.get("type")),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -11782,22 +11804,6 @@ class StartPublicRepoBootstrapRequest:
         if self.type_ is not None:
             out["type"] = _encode(self.type_)
         return out
-
-
-class StartPublicRepoBootstrapRequestType(StrEnum):
-    """The `StartPublicRepoBootstrapRequestType` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    SERVICE = "service"
-    FRONTEND = "frontend"
-    LIBRARY = "library"
-    DOCUMENT = "document"
 
 
 @dataclass(frozen=True, slots=True)

@@ -35,7 +35,7 @@ public record StartPublicRepoBootstrapRequest(
     @JsonProperty("repoName") String repoName,
 
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("type") @Nullable StartPublicRepoBootstrapRequestType type
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("type") @Nullable CreatePublicServiceRequestType type
 ) {
 
     /** A new builder for {@link StartPublicRepoBootstrapRequest}. */
@@ -55,7 +55,7 @@ public record StartPublicRepoBootstrapRequest(
         private @Nullable Boolean isPrivate;
         private @Nullable String referenceArchitectureId;
         private @Nullable String repoName;
-        private @Nullable StartPublicRepoBootstrapRequestType type;
+        private @Nullable CreatePublicServiceRequestType type;
 
         /** Set {@code description}. */
         public Builder description(@Nullable String description) {
@@ -88,7 +88,7 @@ public record StartPublicRepoBootstrapRequest(
         }
 
         /** Set {@code type}. */
-        public Builder type(@Nullable StartPublicRepoBootstrapRequestType type) {
+        public Builder type(@Nullable CreatePublicServiceRequestType type) {
             this.type = type;
             return this;
         }

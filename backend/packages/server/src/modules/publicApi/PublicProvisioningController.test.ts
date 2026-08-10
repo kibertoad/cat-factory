@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import type { Block, BootstrapJob } from '@cat-factory/contracts'
-import { toBlockPatch, toPublicBootstrapJob } from './PublicProvisioningController.js'
+import type {
+  Block,
+  BootstrapJob,
+  GitHubConnection,
+  ServiceProvisioning,
+} from '@cat-factory/contracts'
+import { UnavailableError } from '@cat-factory/kernel'
+import type { ServerContainer } from '../../http/env.js'
+import {
+  readVcsConnection,
+  toBlockPatch,
+  toPublicBootstrapJob,
+} from './PublicProvisioningController.js'
 import { toPublicService } from './boardProjection.js'
 
 // The two mappers whose bugs are SILENT, which is why they are the ones tested here rather than the
@@ -26,31 +37,109 @@ describe('toBlockPatch', () => {
     // an absent `provisioning` through as `undefined` would clear the stored value. A caller
     // correcting a title would silently un-deploy the service, and nothing would report it until a
     // later run's deploy step read an empty manifest source.
-    expect('provisioning' in toBlockPatch({ title: 'Renamed' })).toBe(false)
-  })
-
-  it('carries an empty patch as an empty patch rather than inventing keys', () => {
-    expect(toBlockPatch({})).toEqual({})
+    expect('provisioning' in toBlockPatch({ title: 'Renamed' }, undefined)).toBe(false)
   })
 
   it('passes a supplied provisioning through with its manifest source intact', () => {
-    const patch = toBlockPatch({
-      provisioning: {
-        type: 'kubernetes',
-        manifestSource: { type: 'colocated', path: 'deploy/k8s', renderer: 'raw' },
+    const patch = toBlockPatch(
+      {
+        provisioning: {
+          type: 'kubernetes',
+          manifestSource: { type: 'colocated', path: 'deploy/k8s', renderer: 'raw' },
+        },
       },
-    })
+      undefined,
+    )
     expect(patch.provisioning).toEqual({
       type: 'kubernetes',
       manifestSource: { type: 'colocated', path: 'deploy/k8s', renderer: 'raw' },
     })
   })
 
+  it('keeps the stored fields this surface cannot express', () => {
+    // The data-loss this exists for: `provisioning` is ONE json column, replaced wholesale, and a
+    // service configured in the app carries far more than the two fields published here. Writing
+    // just the pair would drop the image overrides and the Secret injections an operator authored,
+    // and the next deploy would come up with neither — from a caller that only fixed a path.
+    const patch = toBlockPatch(
+      {
+        provisioning: {
+          type: 'kubernetes',
+          manifestSource: { type: 'colocated', path: 'deploy/prod' },
+        },
+      },
+      {
+        type: 'kubernetes',
+        manifestSource: { type: 'colocated', path: 'deploy/k8s' },
+        images: [{ name: 'api', newTagTemplate: '{{sha}}' }],
+        secretInjections: [{ mode: 'secret', secretName: 'db', entries: [{ key: 'PGPASSWORD' }] }],
+      } as ServiceProvisioning,
+    )
+    expect(patch.provisioning).toMatchObject({
+      type: 'kubernetes',
+      manifestSource: { type: 'colocated', path: 'deploy/prod' },
+      images: [{ name: 'api', newTagTemplate: '{{sha}}' }],
+      secretInjections: [{ mode: 'secret', secretName: 'db', entries: [{ key: 'PGPASSWORD' }] }],
+    })
+  })
+
+  it('replaces rather than overlays when the provision type changes', () => {
+    // The remainder describes the type being left behind: a compose path carried onto a kubernetes
+    // provisioning would attach one engine's configuration to another.
+    const patch = toBlockPatch(
+      {
+        provisioning: {
+          type: 'kubernetes',
+          manifestSource: { type: 'colocated', path: 'deploy/k8s' },
+        },
+      },
+      { type: 'docker-compose', composePath: 'compose.yml' } as ServiceProvisioning,
+    )
+    expect(patch.provisioning).toEqual({
+      type: 'kubernetes',
+      manifestSource: { type: 'colocated', path: 'deploy/k8s' },
+    })
+  })
+
   it('distinguishes an empty-string description from an omitted one', () => {
     // `''` is a real edit (clear the description) and `undefined` is "leave it alone". Collapsing
     // them with a truthiness check would make clearing a description impossible through this route.
-    expect(toBlockPatch({ description: '' })).toEqual({ description: '' })
-    expect('description' in toBlockPatch({ title: 'x' })).toBe(false)
+    expect(toBlockPatch({ description: '' }, undefined)).toEqual({ description: '' })
+    expect('description' in toBlockPatch({ title: 'x' }, undefined)).toBe(false)
+  })
+})
+
+describe('readVcsConnection', () => {
+  const connection = { provider: 'gitlab', accountLogin: 'acme', method: 'pat' } as GitHubConnection
+
+  it('reads a GitLab-only deployment through the PAT connect service', () => {
+    // The refusal this exists for: a GitLab-only deployment builds NO `github` module (that module
+    // needs the App's webhook verifier), so reading only the module answered "source control is
+    // not configured" at a workspace whose connection is sitting in the database.
+    const container = { vcsConnectionService: { getConnection: async () => connection } }
+    return expect(
+      readVcsConnection(container as unknown as ServerContainer, 'ws_1'),
+    ).resolves.toEqual(connection)
+  })
+
+  it('prefers the module when both are wired, since that is the one that routes by provider', () => {
+    const container = {
+      github: { installationService: { getConnection: async () => connection } },
+      vcsConnectionService: {
+        getConnection: async () => {
+          throw new Error('the PAT service must not be consulted when the module is present')
+        },
+      },
+    }
+    return expect(
+      readVcsConnection(container as unknown as ServerContainer, 'ws_1'),
+    ).resolves.toEqual(connection)
+  })
+
+  it('refuses with a 503 when this deployment wires no source control at all', async () => {
+    await expect(readVcsConnection({} as ServerContainer, 'ws_1')).rejects.toBeInstanceOf(
+      UnavailableError,
+    )
   })
 })
 

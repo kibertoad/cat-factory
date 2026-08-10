@@ -971,7 +971,7 @@ POST /api/v1/repos/bootstrap
 { "repoName": "payments-api", "type": "service",
   "instructions": "A Fastify service exposing a paginated catalog over Postgres." }
 
-201 { "jobId": "bsj_...", "status": "pending", "repoName": "payments-api",
+201 { "jobId": "bsj_...", "status": "running", "repoName": "payments-api",
       "repoOwner": null, "repoUrl": null, "serviceId": "blk_...", "progress": null,
       "error": null, "failureKind": null, "failureDetail": null, "failureHint": null,
       "createdAt": 1760000000000, "updatedAt": 1760000000000 }
@@ -980,6 +980,11 @@ POST /api/v1/repos/bootstrap
 Either `instructions` or a `referenceArchitectureId` is required: a request with neither describes no
 work. `serviceId` is the board frame the run materialises, and it exists from the first response, so
 work can be filed against the service before the repository has finished being written.
+
+A creation answers `running` or, when the pre-flight refuses it outright (nothing connected, the
+target repository already has content), `failed` with the reason already filled in. So the terminal
+state can arrive in the 201 itself, and a caller that treats a `failed` creation as impossible skips
+the branch it will actually hit first.
 
 **Poll until `status` is `succeeded` or `failed`.** On a failure, read `failureKind` before deciding
 to retry: a `preflight` refusal (the target repository already has content, nothing is connected)
@@ -1020,6 +1025,14 @@ the response rather than trusting the `200`: a wrong-shaped patch is accepted an
 the deploy step later reads as "no manifests". An omitted `provisioning` leaves the stored one alone,
 so patching a title cannot silently un-deploy a service.
 
+A supplied `provisioning` OVERLAYS the stored one rather than replacing it, as long as the provision
+type is the same. A service configured in the app can carry more than this surface publishes (image
+overrides, Secret injections, helm releases), and a caller correcting a manifest path has no way to
+restate what it never saw; a wholesale write would drop it and the next deploy would come up with no
+images and no Secrets. Changing the provision type does replace, because the remainder describes the
+type being left behind. The patch must name at least one field: an empty body is refused rather than
+spent on a write whose only outcome is the state it started in.
+
 The public engine is `kubernetes`, singular. The platform's internal vocabulary splits it in two, and
 that split is not published because one backend serves both and they lower to the same config: it was
 never observable in anything a run does.
@@ -1032,15 +1045,23 @@ never observable in anything a run does.
 adding a key changes nothing and the fix is the policy. Collapsing the two is why "no model
 available" so often sends someone to change a setting that was already correct.
 
+There is a third state, and it is on the RESPONSE rather than on a model: `excludesUserScopedModels`
+reports that this deployment serves per-user locally-run endpoints, which this read cannot
+enumerate. They belong to one signed-in developer's machine and an API key has no developer, so they
+are absent from `models` entirely. On a deployment wired that way alone, every catalog row reads
+`available: false` and the honest remedy is a run started by that user, not a provider key.
+
 `GET /api/v1/vcs/connection` exists for `canCreateRepos` and `canManageWorkflows`. Both are enforced
 by the provider at PUSH time, so a caller that does not check them discovers a missing workflow
 permission as a repository that bootstrapped and then failed to gain its CI workflow, which reads as
 a broken bootstrap.
 
 `GET /api/v1/merge-presets`: `autoMergeEnabled` on the `isDefault` row decides whether a run can land
-its pull request without a person. `dryRunRoles` is the caveat this API cannot resolve for you, since
-it does not report which workspace role your key's runs are admitted under: a non-empty list means
-the preset merges for some roles and not others.
+its pull request without a person. `dryRunRoles` and `submissionRestrictedRoles` are the two caveats
+this API cannot resolve for you, since it does not report which workspace role your key's runs are
+admitted under: the first names roles whose runs open a pull request and never merge it, the second
+names roles that may land only certain change classes. Either being non-empty means the preset merges
+for some roles and not others, so report the caveat rather than concluding "this preset merges".
 
 ### Task runs & streaming
 

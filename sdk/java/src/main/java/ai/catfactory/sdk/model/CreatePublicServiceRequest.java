@@ -27,7 +27,7 @@ public record CreatePublicServiceRequest(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("title") @Nullable String title,
 
     /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("type") @Nullable StartPublicRepoBootstrapRequestType type
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("type") @Nullable CreatePublicServiceRequestType type
 ) {
 
     /** A new builder for {@link CreatePublicServiceRequest}. */
@@ -45,7 +45,7 @@ public record CreatePublicServiceRequest(
         private @Nullable String description;
         private @Nullable CreatePublicServiceRequestRepo repo;
         private @Nullable String title;
-        private @Nullable StartPublicRepoBootstrapRequestType type;
+        private @Nullable CreatePublicServiceRequestType type;
 
         /** Set {@code description}. */
         public Builder description(@Nullable String description) {
@@ -66,7 +66,7 @@ public record CreatePublicServiceRequest(
         }
 
         /** Set {@code type}. */
-        public Builder type(@Nullable StartPublicRepoBootstrapRequestType type) {
+        public Builder type(@Nullable CreatePublicServiceRequestType type) {
             this.type = type;
             return this;
         }

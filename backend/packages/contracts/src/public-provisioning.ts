@@ -1,8 +1,4 @@
 import * as v from 'valibot'
-import {
-  kubernetesManifestSourceSchema,
-  kubernetesUrlSourceSchema,
-} from './environments-kubernetes.js'
 import { frameRepoTypeSchema } from './primitives.js'
 import { stepSubtasksSchema } from './execution.js'
 import { bootstrapStatusSchema } from './bootstrap.js'
@@ -20,9 +16,10 @@ import { workspaceRoleSchema } from './workspace-members.js'
 // deploys onto; tell one service where its manifests live; and tell me what this deployment has
 // actually wired.
 //
-// **Every shape here is a PROJECTION, never a re-export of the internal one**, and that is the
-// load-bearing decision in this file. The internal shapes it projects from (`infraHandlerConfig`'s
-// five-engine variant, `serviceProvisioning`'s per-engine bag, `modelOption`, `githubConnection`,
+// **Every STRUCTURAL shape here is a PROJECTION, never a re-export of the internal one**, and that
+// is the load-bearing decision in this file. The internal shapes it projects from
+// (`infraHandlerConfig`'s five-engine variant, `serviceProvisioning`'s per-engine bag,
+// `kubernetesManifestSource`, `kubernetesUrlSource`, `modelOption`, `githubConnection`,
 // `riskPolicy`) are INTERNAL wire shapes, which this repo evolves freely and deliberately without
 // migrations. `/api/v1` is the opposite: frozen, and broken only through a version change plus a
 // migration path (ADR 0034). Re-exporting one onto the other would silently bind the frozen surface
@@ -30,6 +27,16 @@ import { workspaceRoleSchema } from './workspace-members.js'
 // break nobody reviewed as one. The projections cost a mapper each, in
 // `PublicProvisioningController`, and that mapper is exactly where the two vocabularies are allowed
 // to differ.
+//
+// **The shared closed VOCABULARIES are the stated exception, and they are pinned rather than
+// copied**: `bootstrapStatus`, `agentFailureKind`, `vcsProvider`, `vcsConnectMethod`,
+// `workspaceRole` and the three counters of `stepSubtasks` are imported and used as they are. A
+// second copy of a picklist buys nothing a projection buys: the members ARE meant to be the same
+// set, and duplicating them creates the stale-value hazard the repo warns about (a value a stored
+// row still holds, mapped through a lookup that no longer has it). What a projection would have
+// caught is caught instead by `public-provisioning.test.ts`, which pins each published member list,
+// so editing one of these internally fails a test that names the public break rather than
+// regenerating four SDKs quietly.
 //
 // **A secret goes IN and never comes back.** The connection calls accept a secret bundle because
 // reaching an apiserver requires one; every response projects the KEYS that were supplied and no
@@ -148,6 +155,87 @@ export type PublicBootstrapJob = v.InferOutput<typeof publicBootstrapJobSchema>
 // ---- 2. The environment connection (the ENGINE half) ------------------------
 
 /**
+ * How the manifests at `path` are rendered. `raw` (the default) treats the path as a manifest file
+ * or a flat directory of valid YAML; `kustomize` treats it as an overlay directory, which only the
+ * container-backed deploy adapter can build.
+ *
+ * A projection of the internal renderer picklist rather than the picklist itself, for the reason
+ * the header states: these two Kubernetes shapes are the largest STRUCTURAL surfaces this file
+ * publishes, and a renderer the internal adapter grows is a public member only once someone adds it
+ * here.
+ */
+export const publicKubernetesRendererSchema = v.picklist(['raw', 'kustomize'])
+export type PublicKubernetesRenderer = v.InferOutput<typeof publicKubernetesRendererSchema>
+
+/**
+ * Where a service's per-PR manifests are read from. `colocated` reads them from the service's own
+ * repository at the pull request's head; `separate` reads them from another repository, which is
+ * where a platform team's manifests usually live.
+ */
+export const publicKubernetesManifestSourceSchema = v.variant('type', [
+  v.object({
+    type: v.literal('colocated'),
+    /** File or directory path within the pull request's repository. */
+    path: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+    /** Omitted ⇒ `raw`. */
+    renderer: v.optional(publicKubernetesRendererSchema),
+  }),
+  v.object({
+    type: v.literal('separate'),
+    /** `owner/repo` of the manifests repository. */
+    repo: v.pipe(v.string(), v.trim(), v.regex(/^[^/\s]+\/[^/\s]+$/, 'must be "owner/repo"')),
+    /** Branch, tag or sha to read at; omitted ⇒ that repository's default branch. */
+    ref: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+    /** File or directory path within the manifests repository. */
+    path: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+    /** Omitted ⇒ `raw`. */
+    renderer: v.optional(publicKubernetesRendererSchema),
+  }),
+])
+export type PublicKubernetesManifestSource = v.InferOutput<
+  typeof publicKubernetesManifestSourceSchema
+>
+
+/**
+ * How the environment's URL is derived once the manifests are applied: from a host template the
+ * platform renders itself, or by reading the address back off one of four applied objects.
+ */
+export const publicKubernetesUrlSourceSchema = v.variant('source', [
+  v.object({
+    source: v.literal('ingressTemplate'),
+    /** Host template, e.g. `{{branch}}.preview.example.com`, rendered with the provision vars. */
+    hostTemplate: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+    scheme: v.optional(v.picklist(['http', 'https'])),
+  }),
+  v.object({
+    source: v.literal('ingressStatus'),
+    /** Ingress to read `.status.loadBalancer` from; omitted ⇒ the only Ingress applied. */
+    ingressName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+    scheme: v.optional(v.picklist(['http', 'https'])),
+  }),
+  v.object({
+    source: v.literal('serviceStatus'),
+    /** Service to read `.status.loadBalancer` from. */
+    serviceName: v.pipe(v.string(), v.trim(), v.minLength(1)),
+    port: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
+    scheme: v.optional(v.picklist(['http', 'https'])),
+  }),
+  v.object({
+    source: v.literal('gatewayStatus'),
+    /** Gateway-API `Gateway` to read `.status.addresses[]` from; omitted ⇒ the only one applied. */
+    gatewayName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+    scheme: v.optional(v.picklist(['http', 'https'])),
+  }),
+  v.object({
+    source: v.literal('httpRouteStatus'),
+    /** `HTTPRoute` whose `parentRefs` resolve the address; omitted ⇒ the only one applied. */
+    httpRouteName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+    scheme: v.optional(v.picklist(['http', 'https'])),
+  }),
+])
+export type PublicKubernetesUrlSource = v.InferOutput<typeof publicKubernetesUrlSourceSchema>
+
+/**
  * A Kubernetes cluster the platform provisions per-run environments against.
  *
  * Narrower than the internal engine config on purpose. Left off are the fields that only mean
@@ -172,7 +260,7 @@ export const publicKubernetesConnectionSchema = v.object({
   /** Namespace template for the per-run environment, e.g. `env-{{pullNumber}}`. */
   namespaceTemplate: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
   /** How the environment URL is derived once the manifests are applied. */
-  url: kubernetesUrlSourceSchema,
+  url: publicKubernetesUrlSourceSchema,
   /** Image reference exposed to the manifests as `{{image}}`. */
   imageTemplate: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** Backstop TTL (ms) after which an environment is swept and torn down. */
@@ -194,8 +282,11 @@ export type PublicKubernetesConnection = v.InferOutput<typeof publicKubernetesCo
  *
  * The internal engine vocabulary splits Kubernetes in two (`local-k3s` and `remote-kubernetes`,
  * which differ in how the deployment reaches the cluster, not in what a caller supplies). That
- * split is not a public fact: the controller resolves it from the apiserver URL, so a caller
- * describes its cluster and the platform decides how to talk to it.
+ * split is not a public fact, and it is not a public DECISION either: one backend serves both
+ * names, both lower to the same provision type and the same config, so a connection made here is
+ * registered under the one name the controller states (`remote-kubernetes`) and nothing a run does
+ * can observe the difference. A caller describes its cluster; which internal name that is stored
+ * under is the platform's business.
  */
 export const publicEnvironmentConnectionSchema = v.variant('engine', [
   v.object({ engine: v.literal('kubernetes'), kubernetes: publicKubernetesConnectionSchema }),
@@ -263,19 +354,34 @@ export type PublicEnvironmentConnectionView = v.InferOutput<
  * caller adding a second service to an existing cluster changes one thing.
  */
 export const publicServiceProvisioningSchema = v.variant('type', [
-  v.object({ type: v.literal('kubernetes'), manifestSource: kubernetesManifestSourceSchema }),
+  v.object({ type: v.literal('kubernetes'), manifestSource: publicKubernetesManifestSourceSchema }),
 ])
 export type PublicServiceProvisioning = v.InferOutput<typeof publicServiceProvisioningSchema>
 
 /**
  * Patch a service. Only the supplied fields change, and an omitted `provisioning` LEAVES the stored
  * one alone rather than clearing it: a caller renaming a service must not silently un-deploy it.
+ *
+ * At least one field is REQUIRED, on the same reading as the bootstrap body above: a patch naming
+ * nothing describes no edit, and admitting it would spend a write, a re-read and a board-wide
+ * event broadcast on a request whose only possible outcome is the state it started in. The generated
+ * clients default the body, so an empty one is a call a caller makes by accident rather than on
+ * purpose.
  */
-export const updatePublicServiceSchema = v.object({
-  title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
-  description: v.optional(descriptionField),
-  provisioning: v.optional(publicServiceProvisioningSchema),
-})
+export const updatePublicServiceSchema = v.pipe(
+  v.object({
+    title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+    description: v.optional(descriptionField),
+    provisioning: v.optional(publicServiceProvisioningSchema),
+  }),
+  v.check(
+    (input) =>
+      input.title !== undefined ||
+      input.description !== undefined ||
+      input.provisioning !== undefined,
+    'Supply at least one of title, description or provisioning.',
+  ),
+)
 export type UpdatePublicServiceInput = v.InferOutput<typeof updatePublicServiceSchema>
 
 // ---- 4. What this deployment has WIRED --------------------------------------
@@ -301,7 +407,22 @@ export const publicWiredModelSchema = v.object({
 })
 export type PublicWiredModel = v.InferOutput<typeof publicWiredModelSchema>
 
-export const publicWiredModelListSchema = v.object({ models: v.array(publicWiredModelSchema) })
+/**
+ * The catalog, plus the one thing the catalog itself cannot say.
+ *
+ * `excludesUserScopedModels` reports that this deployment serves per-user locally-run model
+ * endpoints, which a key-authenticated read does not see: they are one developer's own machine, and
+ * an API key has no developer, so folding them in would attribute someone else's endpoints to the
+ * caller. Without this flag their absence is byte-for-byte "this deployment has nothing wired", and
+ * those two need OPPOSITE remedies: the first is a run that must be started by a signed-in user,
+ * the second is a provider key. That is the same conflation `policyBlocked` exists to prevent, one
+ * level up: a third state, stated rather than collapsed into a false.
+ */
+export const publicWiredModelListSchema = v.object({
+  models: v.array(publicWiredModelSchema),
+  /** Whether per-user locally-run endpoints exist here that this read cannot enumerate. */
+  excludesUserScopedModels: v.boolean(),
+})
 export type PublicWiredModelList = v.InferOutput<typeof publicWiredModelListSchema>
 
 /**
@@ -341,6 +462,15 @@ export type PublicVcsConnectionView = v.InferOutput<typeof publicVcsConnectionVi
  * under: a non-empty list is the difference between "this preset merges" and "this preset merges
  * for everyone except the role you might be", and stating it lets a caller report the caveat
  * rather than assert a verdict it has not earned.
+ *
+ * `submissionRestrictedRoles` is the SECOND such caveat and rides for the same reason. A preset
+ * carries two role-scoped bars on LANDING (ADR 0039's per-role change-class allowlist, enforced at
+ * both merge exits, and the dry-run list), and publishing one of them made the other read as
+ * absent: `autoMergeEnabled: true` with an empty `dryRunRoles` says "this preset merges" while a
+ * role allowlist holds every run outside its classes for a human. What is deliberately NOT here is
+ * the per-role narrowing of the score CEILINGS (`classRulesByRole`), on the same line this
+ * projection already draws for the ceilings themselves: it decides how much review landing takes,
+ * where these two decide whether landing happens at all.
  */
 export const publicMergePresetSchema = v.object({
   presetId: v.string(),
@@ -353,6 +483,12 @@ export const publicMergePresetSchema = v.object({
   ciMaxAttempts: v.number(),
   /** Workspace roles whose runs this preset forces into dry-run mode. */
   dryRunRoles: v.array(workspaceRoleSchema),
+  /**
+   * Workspace roles whose runs may land only the change classes an allowlist names, so a run
+   * outside them is held for a person however good its scores are. A role absent from this list is
+   * unrestricted; the classes themselves are internal vocabulary and stay off this surface.
+   */
+  submissionRestrictedRoles: v.array(workspaceRoleSchema),
 })
 export type PublicMergePreset = v.InferOutput<typeof publicMergePresetSchema>
 

@@ -10,10 +10,13 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code ListPublicWiredModelsResponse} wire model.
+ * @param excludesUserScopedModels the {@code excludesUserScopedModels} field.
  * @param models the {@code models} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ListPublicWiredModelsResponse(
+    @JsonProperty("excludesUserScopedModels") Boolean excludesUserScopedModels,
+
     @JsonProperty("models") List<ListPublicWiredModelsResponseModel> models
 ) {
 
@@ -29,7 +32,14 @@ public record ListPublicWiredModelsResponse(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable Boolean excludesUserScopedModels;
         private @Nullable List<ListPublicWiredModelsResponseModel> models;
+
+        /** Set {@code excludesUserScopedModels}. */
+        public Builder excludesUserScopedModels(@Nullable Boolean excludesUserScopedModels) {
+            this.excludesUserScopedModels = excludesUserScopedModels;
+            return this;
+        }
 
         /** Set {@code models}. */
         public Builder models(@Nullable List<ListPublicWiredModelsResponseModel> models) {
@@ -39,7 +49,7 @@ public record ListPublicWiredModelsResponse(
 
         /** Build the {@link ListPublicWiredModelsResponse}. */
         public ListPublicWiredModelsResponse build() {
-            return new ListPublicWiredModelsResponse(models);
+            return new ListPublicWiredModelsResponse(excludesUserScopedModels, models);
         }
     }
 }

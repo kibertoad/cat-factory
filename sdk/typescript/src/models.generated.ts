@@ -155,7 +155,7 @@ export interface CreatePublicServiceRequest {
   repo?: CreatePublicServiceRequestRepo
   /** Length 1..200. */
   title?: string
-  type?: StartPublicRepoBootstrapRequestType
+  type?: CreatePublicServiceRequestType
 }
 
 export interface CreatePublicServiceRequestRepo {
@@ -164,6 +164,11 @@ export interface CreatePublicServiceRequestRepo {
   monorepo?: boolean
   repoId: number
 }
+
+export type CreatePublicServiceRequestType = 'service' | 'frontend' | 'library' | 'document'
+
+/** Every `CreatePublicServiceRequestType` value, for exhaustive handling and runtime validation. */
+export const CREATE_PUBLIC_SERVICE_REQUEST_TYPE_VALUES = ['service', 'frontend', 'library', 'document'] as const
 
 export interface CreatePublicTask {
   /** Length 0..2000. */
@@ -1141,6 +1146,7 @@ export interface ListPublicMergePresetsResponsePreset {
   isDefault: boolean
   name: string
   presetId: string
+  submissionRestrictedRoles: ListPublicMergePresetsResponsePresetDryRunRole[]
 }
 
 export type ListPublicMergePresetsResponsePresetDryRunRole = 'admin' | 'member' | 'viewer'
@@ -1240,6 +1246,7 @@ export type ListPublicTaskTypesResponseTaskTypeFieldType = 'text' | 'password' |
 export const LIST_PUBLIC_TASK_TYPES_RESPONSE_TASK_TYPE_FIELD_TYPE_VALUES = ['text', 'password', 'select', 'number', 'checkbox', 'textarea', 'checkbox-group', 'path'] as const
 
 export interface ListPublicWiredModelsResponse {
+  excludesUserScopedModels: boolean
   models: ListPublicWiredModelsResponseModel[]
 }
 
@@ -2846,13 +2853,8 @@ export interface StartPublicRepoBootstrapRequest {
   referenceArchitectureId?: string
   /** Length 1..100. */
   repoName: string
-  type?: StartPublicRepoBootstrapRequestType
+  type?: CreatePublicServiceRequestType
 }
-
-export type StartPublicRepoBootstrapRequestType = 'service' | 'frontend' | 'library' | 'document'
-
-/** Every `StartPublicRepoBootstrapRequestType` value, for exhaustive handling and runtime validation. */
-export const START_PUBLIC_REPO_BOOTSTRAP_REQUEST_TYPE_VALUES = ['service', 'frontend', 'library', 'document'] as const
 
 export interface StartPublicRepoBootstrapResponse {
   createdAt: number

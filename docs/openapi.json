@@ -11351,6 +11351,17 @@
                           },
                           "presetId": {
                             "type": "string"
+                          },
+                          "submissionRestrictedRoles": {
+                            "items": {
+                              "enum": [
+                                "admin",
+                                "member",
+                                "viewer"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array"
                           }
                         },
                         "required": [
@@ -11359,7 +11370,8 @@
                           "isDefault",
                           "autoMergeEnabled",
                           "ciMaxAttempts",
-                          "dryRunRoles"
+                          "dryRunRoles",
+                          "submissionRestrictedRoles"
                         ],
                         "type": "object"
                       },
@@ -12078,6 +12090,9 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "excludesUserScopedModels": {
+                      "type": "boolean"
+                    },
                     "models": {
                       "items": {
                         "properties": {
@@ -12110,7 +12125,8 @@
                     }
                   },
                   "required": [
-                    "models"
+                    "models",
+                    "excludesUserScopedModels"
                   ],
                   "type": "object"
                 }

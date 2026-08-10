@@ -224,7 +224,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     what: 'a model is wired that agent steps can actually dispatch to',
     disposition: 'required',
     check: async ({ client, config }) => {
-      const { models } = await client.models.list()
+      const { models, excludesUserScopedModels } = await client.models.list()
       const available = models.filter((model) => model.available)
       if (available.length > 0) {
         const names = available
@@ -264,6 +264,19 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
                 'In the SPA: Model providers, and add a provider API key or connect a subscription ' +
                   'for at least one model.',
                 'An entry becomes selectable as soon as its provider is wired, with no restart.',
+                // The THIRD cause, and the only one this read cannot see for itself: a deployment
+                // whose models are one developer's local endpoints answers exactly like a
+                // deployment with nothing wired, because a key has no developer to attribute them
+                // to. Naming it here keeps the remedy from being "add a key" when a key is not
+                // what is missing.
+                ...(excludesUserScopedModels
+                  ? [
+                      'This deployment also serves per-user locally-run endpoints, which an API ' +
+                        'key cannot see or dispatch to. If those are the only models wired, the ' +
+                        'suite needs a provider key or a subscription of its own rather than one ' +
+                        'more local endpoint.',
+                    ]
+                  : []),
               ],
               commands: [catalogRead],
               docs: 'backend/docs/model-support.md',
@@ -342,13 +355,13 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       }
       if (problems.length === 0) {
         return satisfied(
-          `${connection.provider ?? 'github'} connection to '${connection.accountLogin}' ` +
+          `${connection.provider} connection to '${connection.accountLogin}' ` +
             `(${connection.method}) can create repositories and write workflows`,
         )
       }
       commands.push(connectionRead)
       return unsatisfied(
-        `the ${connection.provider ?? 'github'} connection to '${connection.accountLogin}' is ` +
+        `the ${connection.provider} connection to '${connection.accountLogin}' is ` +
           `not sufficient:\n    ${problems.join('\n    ')}`,
         { steps, commands },
       )
