@@ -233,7 +233,7 @@ with the real sentence hidden behind a disclosure. Client-side validation stays 
 The still-open remainder is the INLINE family: `error.value = e.message` rendered in a panel, and
 `testResult = { ok: false, message }` rendered by `ConnectionTestVerdict`. Those need a render
 surface rather than a toast, and are tracked as G4 in
-[`error-message-coverage.md`](../../docs/initiatives/error-message-coverage.md).
+[`error-message-coverage.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/error-message-coverage.md).
 
 ### Type a chip map with `BadgeColor`, never `string`
 
