@@ -3,6 +3,7 @@ import { PipelineRegistry } from '@cat-factory/kernel'
 import type { ExecutionInstance, Pipeline, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
+import { mintPublicApiKey } from './shared.js'
 
 // Cross-runtime conformance for the PUBLIC parked-decision surface (`/api/v1/runs/:runId/…`) and
 // the intake-origin marker that slice 2 keys off.
@@ -15,21 +16,6 @@ import type { ConformanceHarness } from '../harness.js'
 // persists `intakeOrigin` on one runtime only — fails here instead of shipping divergent behaviour.
 //
 // See backend/docs/adr/0047-headless-clarification-loop.md.
-
-/** Mint a public-API key of the given scope and return its bearer header. */
-async function mintKey(
-  app: Awaited<ReturnType<ConformanceHarness['makeApp']>>,
-  workspaceId: string,
-  scope: 'read' | 'write' | 'decide' | 'admin',
-): Promise<Record<string, string>> {
-  const created = await app.call<{ key: { id: string }; secret: string }>(
-    'POST',
-    `/workspaces/${workspaceId}/public-api-keys`,
-    { label: `conformance-${scope}`, scope },
-  )
-  expect(created.status).toBe(201)
-  return { authorization: `Bearer ${created.body.secret}` }
-}
 
 export function definePublicDecisionsConformance(harness: ConformanceHarness): void {
   describe('public API — parked decisions', () => {
@@ -76,7 +62,7 @@ function registerCompanionAnsweringTests(harness: ConformanceHarness): void {
     const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
     expect(parked.status).toBe('blocked')
 
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const listed = await app.call<{
       parked: boolean
       decisions: {
@@ -169,7 +155,7 @@ function registerCompanionAnsweringTests(harness: ConformanceHarness): void {
       initiatedBy: null,
     })
 
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const listed = await app.call<{
       parked: boolean
       decisions: {
@@ -236,7 +222,7 @@ function registerCompanionAnsweringTests(harness: ConformanceHarness): void {
       status: 'running',
       initiatedBy: null,
     })
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const refused = await app.call<{ error: { code: string } }>(
       'POST',
       `/api/v1/runs/exec_no_interview/decisions/interview/continue`,
@@ -313,7 +299,7 @@ function registerCompanionEdgeTests(harness: ConformanceHarness): void {
       initiatedBy: null,
     })
 
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const listed = await app.call<{
       parked: boolean
       status: string
@@ -370,7 +356,7 @@ function registerCompanionEdgeTests(harness: ConformanceHarness): void {
       status: 'running',
       initiatedBy: null,
     })
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
 
     const base = `/api/v1/runs/exec_followup_refusals/decisions/follow-ups/items`
     const filed = await app.call('POST', `${base}/fu_loose_end/file`, {}, decideAuth)
@@ -426,7 +412,7 @@ function registerCompanionEdgeTests(harness: ConformanceHarness): void {
       initiatedBy: null,
     })
 
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const listed = await app.call<{ parked: boolean; decisions: { kind: string }[] }>(
       'GET',
       `/api/v1/runs/exec_unwired_interview/decisions`,
@@ -465,7 +451,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     // container pipeline as headless-startable) while the pure logic stayed green.
     const app = harness.makeApp()
     const { workspace } = await app.createOrgWorkspace({ seed: true })
-    const auth = await mintKey(app, workspace.id, 'read')
+    const auth = await mintPublicApiKey(app, workspace.id, 'read', 'decisions')
 
     const listed = await app.call<{
       pipelines: { pipelineId: string; public: boolean; headlessStartable: boolean }[]
@@ -496,7 +482,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     // case here uses an org-owned, seeded workspace (the seed also brings the demo tasks).
     const { workspace } = await app.createOrgWorkspace({ seed: true })
     const wsId = workspace.id
-    const auth = await mintKey(app, wsId, 'write')
+    const auth = await mintPublicApiKey(app, wsId, 'write', 'decisions')
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Coder only',
@@ -553,7 +539,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
       gates: [true],
     })
 
-    const writeAuth = await mintKey(app, wsId, 'write')
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'decisions')
     const refused = await app.call<{ error: { code: string; message: string } }>(
       'POST',
       `/api/v1/tasks/task_login/start`,
@@ -569,7 +555,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     expect(refused.body.error.message).toContain('/api/v1/runs/:runId/decisions')
     expect(refused.body.error.message).not.toContain('cancel')
 
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const started = await app.call(
       'POST',
       `/api/v1/tasks/task_login/start`,
@@ -607,7 +593,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
     expect(snapshot.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
 
-    const writeAuth = await mintKey(app, wsId, 'write')
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'decisions')
     const refused = await app.call<{ error: { code: string } }>(
       'POST',
       `/api/v1/tasks/task_login/start`,
@@ -622,7 +608,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     expect(after.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
 
     // And the same key ladder still ADMITS it: a `decide` key starts the run, which adopts the row.
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const started = await app.call(
       'POST',
       `/api/v1/tasks/task_login/start`,
@@ -647,7 +633,7 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     const app = harness.makeApp()
     const { workspace } = await app.createOrgWorkspace({ seed: true })
     const wsId = workspace.id
-    const writeAuth = await mintKey(app, wsId, 'write')
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'decisions')
 
     const parking = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Coder then human review',
@@ -719,7 +705,7 @@ function registerAnsweringTests(harness: ConformanceHarness): void {
     expect(started.status).toBe(201)
     const runId = started.body.id
 
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const listed = await app.call<{
       runId: string
       decisions: { kind: string; findings: { itemId: string; status: string }[] }[]
@@ -772,7 +758,7 @@ function registerAnsweringTests(harness: ConformanceHarness): void {
       },
     )
 
-    const writeAuth = await mintKey(app, wsId, 'write')
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'decisions')
     const refused = await app.call<{ error: { code: string; message: string } }>(
       'POST',
       `/api/v1/tasks/${task.body.id}/start`,
@@ -808,7 +794,7 @@ function registerAnsweringTests(harness: ConformanceHarness): void {
     const app = harness.makeApp()
     const { workspace } = await app.createOrgWorkspace({ seed: true })
     const wsId = workspace.id
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const task = await app.call<{ id: string }>(
       'POST',
       `/workspaces/${wsId}/blocks/blk_auth/tasks`,
@@ -902,7 +888,7 @@ function registerApprovalAnsweringTests(harness: ConformanceHarness): void {
     const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
     expect(parked.status).toBe('blocked')
 
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const listed = await app.call<{
       parked: boolean
       decisions: {
@@ -954,7 +940,7 @@ function registerApprovalAnsweringTests(harness: ConformanceHarness): void {
     const app = harness.makeApp()
     const { workspace } = await app.createOrgWorkspace({ seed: true })
     const wsId = workspace.id
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const task = await app.call<{ id: string }>(
       'POST',
       `/workspaces/${wsId}/blocks/blk_auth/tasks`,
@@ -1028,7 +1014,7 @@ function registerDialogueAnsweringTests(harness: ConformanceHarness): void {
     const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
     expect(parked.status).toBe('blocked')
 
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const listed = await app.call<{
       parked: boolean
       decisions: {
@@ -1126,7 +1112,7 @@ function registerStaleRunTests(harness: ConformanceHarness): void {
     expect(second.status).toBe(201)
     expect(second.body.id).not.toBe(staleRunId)
 
-    const decideAuth = await mintKey(app, wsId, 'decide')
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
     const refused = await app.call<{ error: { code: string } }>(
       'POST',
       `/api/v1/runs/${staleRunId}/decisions/requirements/proceed`,
@@ -1175,7 +1161,7 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
       `/workspaces/${wsId}/blocks/task_login/executions`,
       { pipelineId: pipeline.body.id },
     )
-    const writeAuth = await mintKey(app, wsId, 'write')
+    const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'decisions')
     const refused = await app.call<{ error: { code: string } }>(
       'POST',
       `/api/v1/runs/${started.body.id}/decisions/requirements/proceed`,
@@ -1206,7 +1192,7 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
     )
     expect(started.status).toBe(201)
 
-    const foreignAuth = await mintKey(app, b.id, 'decide')
+    const foreignAuth = await mintPublicApiKey(app, b.id, 'decide', 'decisions')
     const denied = await app.call<{ error: { code: string } }>(
       'GET',
       `/api/v1/runs/${started.body.id}/decisions`,
@@ -1229,7 +1215,7 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
     // would keep leaking slots, and the caller would see a `failed` job either way.
     const app = harness.makeApp()
     const { workspace } = await app.createOrgWorkspace({ seed: true })
-    const auth = await mintKey(app, workspace.id, 'write')
+    const auth = await mintPublicApiKey(app, workspace.id, 'write', 'decisions')
 
     const created = await app.call<{ jobId: string }>(
       'POST',
@@ -1278,8 +1264,8 @@ function registerScopeAndCancelTests(harness: ConformanceHarness): void {
     const app = harness.makeApp()
     const { workspace: a } = await app.createOrgWorkspace({ seed: true })
     const { workspace: b } = await app.createOrgWorkspace({ seed: true })
-    const ownerAuth = await mintKey(app, a.id, 'write')
-    const foreignAuth = await mintKey(app, b.id, 'admin')
+    const ownerAuth = await mintPublicApiKey(app, a.id, 'write', 'decisions')
+    const foreignAuth = await mintPublicApiKey(app, b.id, 'admin', 'decisions')
 
     const created = await app.call<{ jobId: string }>(
       'POST',

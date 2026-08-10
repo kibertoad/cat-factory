@@ -29,6 +29,7 @@ import type {
   InitiativeRepository,
   DocumentRepository,
   Logger,
+  ModelPresetRepository,
   RepoProjectionRepository,
   ResolveRunRepoContext,
   RiskPolicyRepository,
@@ -71,6 +72,8 @@ import { applyTaskTypeFieldsPatch } from './taskTypeFieldsPatch.js'
 import type { TaskTypeFieldsPatchDeps } from './taskTypeFieldsPatch.js'
 import type { TaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
+import type { PresetPinGuard } from './presetPinGuard.js'
+import { createPresetPinGuard } from './presetPinGuard.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
 import { createRiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
 import { createSharedServiceMount } from './sharedServiceMount.js'
@@ -208,8 +211,18 @@ export interface BoardServiceDependencies {
    * at: every task resolves the built-in `FALLBACK_RISK_POLICY`, whose role layer is empty and
    * therefore holds nobody to anything, so the guard is VACUOUS rather than skipped: the same
    * answer it gives on a workspace whose presets treat every initiator alike.
+   *
+   * Also read by the preset-PIN guard, where absent means something else entirely (`503`): see
+   * {@link PresetPinGuard}.
    */
   riskPolicyRepository?: RiskPolicyRepository
+  /**
+   * The workspace's model-preset library, read only by the preset-PIN guard: a task's
+   * `modelPresetId` decides which model every one of its agent steps runs on, and a dangling id
+   * resolves to the workspace default rather than failing, so an unchecked typo is a run that
+   * succeeds while being about something else ({@link PresetPinGuard}).
+   */
+  modelPresetRepository?: ModelPresetRepository
 }
 
 // The board-changed reason vocabulary lives in `board.logic.ts` (pure, and shared with the
@@ -287,6 +300,12 @@ export class BoardService {
    * those a caller reaches for.
    */
   private readonly riskPolicySelection: RiskPolicySelectionGuard
+  /**
+   * Refuses a task pinning a model preset or risk policy the workspace does not hold, on the same
+   * reading as the selection guard above: both ids are writable at creation and by patch, so a
+   * check at either door alone is a check a caller reaches around by using the other.
+   */
+  private readonly presetPins: PresetPinGuard
 
   constructor({
     workspaceRepository,
@@ -310,6 +329,7 @@ export class BoardService {
     reviewFrictionNotifications,
     resolveRunRepoContext,
     riskPolicyRepository,
+    modelPresetRepository,
     logger,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -356,6 +376,7 @@ export class BoardService {
       logger: this.log,
     })
     this.riskPolicySelection = createRiskPolicySelectionGuard({ riskPolicyRepository })
+    this.presetPins = createPresetPinGuard({ riskPolicyRepository, modelPresetRepository })
     // Bound callbacks rather than the service, so the narrowing depends on the two reads it
     // actually uses instead of on everything `BoardService` can do.
     this.patchNarrowing = createBlockPatchNarrowing({
@@ -769,6 +790,14 @@ export class BoardService {
       currentId: null,
       nextId: input.riskPolicyId,
     })
+    // Two questions about the same two ids, and they are not the same question: the guard above
+    // asks whether this editor MAY point here, this one whether "here" is anywhere at all. Both
+    // resolve against the HOME library, and both land before any side effect.
+    await this.presetPins.assertPinsExist({
+      homeWorkspaceId,
+      modelPresetId: input.modelPresetId,
+      riskPolicyId: input.riskPolicyId,
+    })
     if (container.level === 'task') {
       throw new ValidationError('Tasks cannot contain other tasks')
     }
@@ -1145,6 +1174,14 @@ export class BoardService {
         nextId: patch.riskPolicyId,
       })
     }
+    // Whether the ids the patch NAMES exist at all (see `presetPinGuard.ts`), on the same
+    // only-when-named rule as the selection guard: re-pointing at nothing resolves to the
+    // workspace default and reads afterwards exactly like a task that was never re-pointed.
+    await this.presetPins.assertPinsExist({
+      homeWorkspaceId,
+      modelPresetId: patch.modelPresetId,
+      riskPolicyId: patch.riskPolicyId,
+    })
     // Each patch field that belongs to a DIFFERENT kind of block than the one addressed is
     // dropped rather than persisted as dead data, and the three that name other entities are
     // validated against them. One collaborator (`blockPatchNarrowing.ts`) owns all of it.

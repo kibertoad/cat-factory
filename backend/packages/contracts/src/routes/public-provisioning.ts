@@ -5,7 +5,8 @@ import {
   publicBootstrapRepoSchema,
   publicEnvironmentConnectionTestSchema,
   publicEnvironmentConnectionViewSchema,
-  publicMergePresetListSchema,
+  publicModelPresetListSchema,
+  publicRiskPolicyListSchema,
   publicVcsConnectionViewSchema,
   publicWiredModelListSchema,
   testPublicEnvironmentConnectionSchema,
@@ -163,14 +164,43 @@ export const getPublicVcsConnectionContract = withMinScope(
 )
 
 /**
- * The workspace's merge-preset library. The `isDefault` row is the policy a task that pins none
+ * The workspace's risk-policy library. The `isDefault` row is the policy a task that pins none
  * resolves, so it is the one that decides whether this caller's runs can land without a person.
+ *
+ * The id a caller reads here is the one it pins as `riskPolicyId`. It answered at
+ * `/api/v1/merge-presets` in 1.41.0, under the name the product renamed away from a month before
+ * that release; the correction is a rename in place rather than a dual-served migration because
+ * 1.41.0 had no adopters, and `backend/docs/public-api-versions.md` records the exception.
  */
-export const listPublicMergePresetsContract = withMinScope(
+export const listPublicRiskPoliciesContract = withMinScope(
   'admin',
   defineApiContract({
     method: 'get',
-    pathResolver: () => '/api/v1/merge-presets',
-    responsesByStatusCode: { 200: publicMergePresetListSchema, ...errorResponses },
+    pathResolver: () => '/api/v1/risk-policies',
+    responsesByStatusCode: { 200: publicRiskPolicyListSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * The workspace's model-preset library, and which one a task pinning none resolves.
+ *
+ * Beside the risk policies rather than beside the pipelines because the two libraries are siblings:
+ * a caller setting a workspace up reads both to learn what its runs will cost and whether they can
+ * land. It is what makes `modelPresetId` on task create usable, since an id a caller cannot
+ * discover is one it has to hard-code.
+ *
+ * `admin` follows this file's rule and ADR 0034's reversibility argument, not a claim that a lower
+ * rung would be wrong. A `write` key can PIN a preset and cannot LIST one, which is the same gap the
+ * public pipeline list was added to close, so relaxing this to `read` is the likely next step. That
+ * direction is available; the other one is not. What a refused pin may NOT do is close the gap by
+ * accident: the `422` names the id that missed and never the library's contents, or a `write` key
+ * would read by typo what this route holds at `admin`.
+ */
+export const listPublicModelPresetsContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/model-presets',
+    responsesByStatusCode: { 200: publicModelPresetListSchema, ...errorResponses },
   }),
 )

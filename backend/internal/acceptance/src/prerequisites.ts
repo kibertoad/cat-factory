@@ -369,25 +369,25 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
   },
   {
     id: 'auto-merge-policy',
-    what: 'the default merge preset permits the auto-merge every spec ends on',
+    what: 'the default risk policy permits the auto-merge every spec ends on',
     disposition: 'required',
     check: async ({ client, config }) => {
-      const { presets } = await client.mergePresets.list()
+      const { policies } = await client.riskPolicies.list()
       const policyRead = publicApiRead(
         config,
-        '/merge-presets',
-        'read the preset library back, with `isDefault` and `autoMergeEnabled` on each row',
+        '/risk-policies',
+        'read the policy library back, with `isDefault` and `autoMergeEnabled` on each row',
       )
-      const fallback = presets.find((preset) => preset.isDefault)
+      const fallback = policies.find((policy) => policy.isDefault)
       if (!fallback) {
         return unsatisfied(
-          `none of the ${presets.length} merge preset(s) in this workspace is marked default, so ` +
+          `none of the ${policies.length} risk polic(ies) in this workspace is marked default, so ` +
             `a task that pins none has no policy to resolve`,
           {
             steps: [
-              'In the SPA: Workspace settings, "Risk policies", and mark one preset as the ' +
+              'In the SPA: Workspace settings, "Risk policies", and mark one policy as the ' +
                 'workspace default.',
-              'This suite creates its tasks through /api/v1, which pins no preset, so the default ' +
+              'This suite creates its tasks through /api/v1, which pins no policy, so the default ' +
                 'is the only one its runs can resolve.',
             ],
             commands: [policyRead],
@@ -396,15 +396,15 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       }
       if (!fallback.autoMergeEnabled) {
         return unsatisfied(
-          `the default preset '${fallback.name}' has auto-merge disabled, so every run routes its ` +
+          `the default policy '${fallback.name}' has auto-merge disabled, so every run routes its ` +
             `pull request to a human and stops at 'blocked'. This suite asserts each run reached ` +
             `'done', which the platform reaches only on a real merge.`,
           {
             steps: [
               `In the SPA: Workspace settings, "Risk policies", and either enable auto-merge on ` +
-                `'${fallback.name}' or mark a preset that already permits it as the default.`,
-              'A preset that holds every merge for a person is correctly configured for ordinary ' +
-                'work and will stop this suite, so prefer a separate preset over loosening the ' +
+                `'${fallback.name}' or mark a policy that already permits it as the default.`,
+              'A policy that holds every merge for a person is correctly configured for ordinary ' +
+                'work and will stop this suite, so prefer a separate policy over loosening the ' +
                 'one your real boards run on.',
             ],
             commands: [policyRead],
@@ -419,7 +419,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           ? ` (note: it forces dry-run for role(s) ${fallback.dryRunRoles.join(', ')}; ` +
             `if this key's runs are admitted under one of those, nothing will merge)`
           : ''
-      return satisfied(`default preset '${fallback.name}' permits auto-merge${caveat}`)
+      return satisfied(`default policy '${fallback.name}' permits auto-merge${caveat}`)
     },
   },
   {

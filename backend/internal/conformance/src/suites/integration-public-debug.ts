@@ -2,6 +2,7 @@ import type { ExecutionInstance, Pipeline } from '@cat-factory/kernel'
 import type { DebugLlmExport, DebugRunList, DebugRunOverview } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
+import { mintPublicApiKey } from './shared.js'
 
 // Cross-runtime conformance for the PUBLIC remote-debugging surface (`/api/v1/debug/*`).
 //
@@ -16,21 +17,6 @@ import type { ConformanceHarness } from '../harness.js'
 // wrongly tells callers the deployment retains nothing.
 //
 // See backend/docs/debug-api.md.
-
-/** Mint a public-API key of the given scope and return its bearer header. */
-async function mintKey(
-  app: Awaited<ReturnType<ConformanceHarness['makeApp']>>,
-  workspaceId: string,
-  scope: 'read' | 'write' | 'decide' | 'admin',
-): Promise<Record<string, string>> {
-  const created = await app.call<{ key: { id: string }; secret: string }>(
-    'POST',
-    `/workspaces/${workspaceId}/public-api-keys`,
-    { label: `conformance-debug-${scope}`, scope },
-  )
-  expect(created.status).toBe(201)
-  return { authorization: `Bearer ${created.body.secret}` }
-}
 
 /**
  * The tool-call sink's three routes: the public debug list's `?outcome=` narrowing, and the two
@@ -170,7 +156,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       // Public-API keys are ACCOUNT-scoped, so the mint route refuses an account-less board.
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'read')
+      const auth = await mintPublicApiKey(app, wsId, 'read', 'debug')
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Coder only',
@@ -187,7 +173,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       // A second run on a fresh task under a fresh frame (the other seeded tasks carry
       // dependencies or are done, so they refuse a start), so the one-row page below has a
       // real next page.
-      const writeAuth = await mintKey(app, wsId, 'write')
+      const writeAuth = await mintPublicApiKey(app, wsId, 'write', 'debug')
       const frame = await app.call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
         type: 'service',
         position: { x: 500, y: 500 },
@@ -271,7 +257,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'read')
+      const auth = await mintPublicApiKey(app, wsId, 'read', 'debug')
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Coder only',
@@ -320,7 +306,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
-      const auth = await mintKey(app, wsId, 'read')
+      const auth = await mintPublicApiKey(app, wsId, 'read', 'debug')
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Coder only',
@@ -472,7 +458,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       const app = harness.makeApp()
       const { workspace: mine } = await app.createOrgWorkspace({ seed: true })
       const { workspace: theirs } = await app.createOrgWorkspace({ seed: true })
-      const auth = await mintKey(app, mine.id, 'read')
+      const auth = await mintPublicApiKey(app, mine.id, 'read', 'debug')
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${theirs.id}/pipelines`, {
         name: 'Coder only',

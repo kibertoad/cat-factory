@@ -48,8 +48,9 @@ from .models import (
     ListDebugToolCallsResponse,
     ListPublicJobsResponse,
     ListPublicMergeClassRollupsResponse,
-    ListPublicMergePresetsResponse,
+    ListPublicModelPresetsResponse,
     ListPublicReposResponse,
+    ListPublicRiskPoliciesResponse,
     ListPublicTaskDocumentsResponse,
     ListPublicTaskDocumentsResponseDocument,
     ListPublicTaskTypesResponse,
@@ -880,30 +881,65 @@ class VcsResource:
         return GetPublicVcsConnectionResponse.from_dict(raw)
 
 
-class MergePresetsResource:
-    """The merge-threshold presets a task can resolve, including which is the workspace
-    default: what decides whether a run can land its pull request without a person.
+class RiskPoliciesResource:
+    """The risk policies a task can pin, including which is the workspace default: what decides
+    whether a run can land its pull request without a person, and how many attempts its CI
+    fixer, requirement rounds and release watch are given. Broader than merging, which is
+    why it is not called a merge preset.
     """
 
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def list(self, *, timeout: float | None = None) -> ListPublicMergePresetsResponse:
-        """List the workspace’s merge-threshold presets
-        The preset library, including which row is the workspace default that a task pinning
+    def list(self, *, timeout: float | None = None) -> ListPublicRiskPoliciesResponse:
+        """List the workspace’s risk policies
+        The policy library, including which row is the workspace default that a task pinning
         none resolves. `autoMergeEnabled` is the master switch that decides whether a run
         can land its pull request without a person; `dryRunRoles` names the roles whose runs
-        the preset forces into dry-run mode, which is the difference between “this preset
-        merges” and “this preset merges for everyone except one role”.
-        `GET /api/v1/merge-presets` (operation `listPublicMergePresets`).
+        the policy forces into dry-run mode, which is the difference between “this policy
+        merges” and “this policy merges for everyone except one role”. A policy also caps
+        CI-fixer attempts, requirement and tester iteration rounds and the release-health
+        watch, which is why it is not called a merge preset; the id is what a task pins as
+        `riskPolicyId`.
+        `GET /api/v1/risk-policies` (operation `listPublicRiskPolicies`).
         """
         raw = self._transport.request(
             "GET",
-            f"/api/v1/merge-presets",
+            f"/api/v1/risk-policies",
             query=None,
             timeout=timeout,
         )
-        return ListPublicMergePresetsResponse.from_dict(raw)
+        return ListPublicRiskPoliciesResponse.from_dict(raw)
+
+
+class ModelPresetsResource:
+    """The model presets a task can pin, including which is the workspace default: what decides
+    which model each agent step runs on, and so what a run costs. Availability is not
+    repeated here; join `baseModelId` against the models group, which keeps unconfigured and
+    policy-refused apart.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def list(self, *, timeout: float | None = None) -> ListPublicModelPresetsResponse:
+        """List the workspace’s model presets
+        The preset library, including which row is the workspace default that a task pinning
+        none resolves. `baseModelId` is the model every agent step runs on under the preset,
+        and `overrides` names the agent kinds that run on something else, which is usually
+        the one that matters: two presets often differ only in what the CODER gets. Whether
+        a preset can actually be dispatched to is NOT repeated here, because the models
+        endpoint already answers it while keeping unconfigured apart from refused-by-policy;
+        join on `baseModelId`.
+        `GET /api/v1/model-presets` (operation `listPublicModelPresets`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/model-presets",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicModelPresetsResponse.from_dict(raw)
 
 
 class WebhookResource:
@@ -2330,7 +2366,8 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "environments": EnvironmentsResource(transport),
         "models": ModelsResource(transport),
         "vcs": VcsResource(transport),
-        "merge_presets": MergePresetsResource(transport),
+        "risk_policies": RiskPoliciesResource(transport),
+        "model_presets": ModelPresetsResource(transport),
         "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),
         "me": MeResource(transport),

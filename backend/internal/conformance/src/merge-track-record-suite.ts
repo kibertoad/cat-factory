@@ -12,6 +12,7 @@ import type {
 import { CHANGE_CLASSES, type PublicMergeRecord } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from './harness.js'
+import { mintPublicApiKey } from './suites/shared.js'
 
 // Cross-runtime parity for the MERGE TRACK RECORD (backend/docs/adr/0046-merge-track-record.md):
 // the deterministic change classification, the per-class auto-merge rules on a merge preset, the
@@ -928,21 +929,6 @@ function registerSubmissionAllowlistTests(harness: ConformanceHarness): void {
  */
 function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void {
   describe('public API: merge evidence', () => {
-    /** Mint a public-API key at a chosen rung and return its bearer header. */
-    async function mintKey(
-      app: ConformanceApp,
-      wsId: string,
-      scope: 'read' | 'write' | 'admin',
-    ): Promise<Record<string, string>> {
-      const created = await app.call<{ secret: string }>(
-        'POST',
-        `/workspaces/${wsId}/public-api-keys`,
-        { label: `conformance-merge-evidence-${scope}`, scope },
-      )
-      expect(created.status).toBe(201)
-      return { authorization: `Bearer ${created.body.secret}` }
-    }
-
     /**
      * Call a route expecting a REFUSAL, and surface its status beside the machine-readable
      * `details.reason` a caller actually branches on.
@@ -980,7 +966,7 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
 
     it('serves a run’s merge decision to a read-scoped key', async () => {
       const run = await pendingRun()
-      const auth = await mintKey(run.app, run.wsId, 'read')
+      const auth = await mintPublicApiKey(run.app, run.wsId, 'read', 'merge-evidence')
 
       const read = await run.app.call<PublicMergeRecord>(
         'GET',
@@ -1016,8 +1002,8 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
 
     it('tags the reviewer effort with a WRITE key, which can merge nothing', async () => {
       const run = await pendingRun()
-      const readAuth = await mintKey(run.app, run.wsId, 'read')
-      const writeAuth = await mintKey(run.app, run.wsId, 'write')
+      const readAuth = await mintPublicApiKey(run.app, run.wsId, 'read', 'merge-evidence')
+      const writeAuth = await mintPublicApiKey(run.app, run.wsId, 'write', 'merge-evidence')
       const record = await run.app.call<PublicMergeRecord>(
         'GET',
         `/api/v1/runs/${run.executionId}/merge-record`,
@@ -1057,7 +1043,7 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
 
     it('rolls every change class up in one request, including the ones with no records', async () => {
       const run = await pendingRun()
-      const auth = await mintKey(run.app, run.wsId, 'read')
+      const auth = await mintPublicApiKey(run.app, run.wsId, 'read', 'merge-evidence')
 
       const rolled = await run.app.call<{ rollups: MergeClassRollup[] }>(
         'GET',
@@ -1081,7 +1067,7 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
 
     it('tells apart an unreadable run, a run that decided nothing, and an unknown record', async () => {
       const run = await pendingRun()
-      const auth = await mintKey(run.app, run.wsId, 'read')
+      const auth = await mintPublicApiKey(run.app, run.wsId, 'read', 'merge-evidence')
 
       // An id naming no run this key may read. Its own reason, because the fix differs: stop
       // asking, where `no_merge_record` below means keep watching a run that is genuinely there.
@@ -1130,7 +1116,7 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
       expect(unknownRead.status).toBe(404)
       expect(unknownRead.reason).toBe('merge_record_not_found')
 
-      const writeAuth = await mintKey(run.app, run.wsId, 'write')
+      const writeAuth = await mintPublicApiKey(run.app, run.wsId, 'write', 'merge-evidence')
       const unknownTag = await refusal(
         run.app,
         'POST',
@@ -1148,8 +1134,8 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
       // interleave with anything; now the tag lands in the same request that merges, which is
       // what the app's one-tap confirm-and-tag has always done.
       const run = await pendingRun()
-      const adminAuth = await mintKey(run.app, run.wsId, 'admin')
-      const readAuth = await mintKey(run.app, run.wsId, 'read')
+      const adminAuth = await mintPublicApiKey(run.app, run.wsId, 'admin', 'merge-evidence')
+      const readAuth = await mintPublicApiKey(run.app, run.wsId, 'read', 'merge-evidence')
 
       const inbox = await run.app.call<{ notifications: PublicNotificationCard[] }>(
         'GET',
@@ -1189,8 +1175,8 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
       // `c.req.json()` before the schema, so without `optionalJsonBody` on the route the tag
       // field would have turned every one of those callers into a 400 on upgrade.
       const run = await pendingRun()
-      const adminAuth = await mintKey(run.app, run.wsId, 'admin')
-      const readAuth = await mintKey(run.app, run.wsId, 'read')
+      const adminAuth = await mintPublicApiKey(run.app, run.wsId, 'admin', 'merge-evidence')
+      const readAuth = await mintPublicApiKey(run.app, run.wsId, 'read', 'merge-evidence')
       const inbox = await run.app.call<{ notifications: PublicNotificationCard[] }>(
         'GET',
         '/api/v1/notifications',
@@ -1231,15 +1217,15 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
         'GET',
         `/api/v1/runs/${run.executionId}/merge-record`,
         undefined,
-        await mintKey(run.app, run.wsId, 'read'),
+        await mintPublicApiKey(run.app, run.wsId, 'read', 'merge-evidence'),
       )
       expect(record.status).toBe(200)
 
       // A second org board on the SAME deployment, so both rows live in one store and only the
       // workspace predicate stands between them.
       const { workspace: other } = await run.app.createOrgWorkspace({ seed: true })
-      const foreignRead = await mintKey(run.app, other.id, 'read')
-      const foreignWrite = await mintKey(run.app, other.id, 'write')
+      const foreignRead = await mintPublicApiKey(run.app, other.id, 'read', 'merge-evidence')
+      const foreignWrite = await mintPublicApiKey(run.app, other.id, 'write', 'merge-evidence')
 
       // Every door onto the record, each refusing with the reason its own address implies: the
       // run-scoped read never confirms the run exists, and the two record-addressed routes never
@@ -1279,7 +1265,7 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
         'GET',
         `/api/v1/merge-records/${record.body.recordId}`,
         undefined,
-        await mintKey(run.app, run.wsId, 'read'),
+        await mintPublicApiKey(run.app, run.wsId, 'read', 'merge-evidence'),
       )
       expect(stillOwned.status).toBe(200)
       expect(stillOwned.body.reviewEffort).toBeNull()

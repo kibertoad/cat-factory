@@ -80,7 +80,8 @@ const SURFACE = {
   // to probe.
   listPublicWiredModels: { group: 'models', method: 'list' },
   getPublicVcsConnection: { group: 'vcs', method: 'getConnection' },
-  listPublicMergePresets: { group: 'mergePresets', method: 'list' },
+  listPublicRiskPolicies: { group: 'riskPolicies', method: 'list' },
+  listPublicModelPresets: { group: 'modelPresets', method: 'list' },
 
   // ---- Notifications --------------------------------------------------------------------
   listPublicNotifications: { group: 'notifications', method: 'list' },
@@ -302,8 +303,10 @@ export const GROUP_DOCS = {
   models:
     'The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes.',
   vcs: "The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup.",
-  mergePresets:
-    'The merge-threshold presets a task can resolve, including which is the workspace default: what decides whether a run can land its pull request without a person.',
+  riskPolicies:
+    'The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset.',
+  modelPresets:
+    'The model presets a task can pin, including which is the workspace default: what decides which model each agent step runs on, and so what a run costs. Availability is not repeated here; join `baseModelId` against the models group, which keeps unconfigured and policy-refused apart.',
   webhook:
     "The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered.",
   usage:

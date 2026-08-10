@@ -15,6 +15,8 @@ import org.jspecify.annotations.Nullable;
  * @param description May be absent entirely. Length 0..2000.
  * @param documents May be absent entirely.
  * @param fields May be absent entirely.
+ * @param modelPresetId May be absent entirely. Length 1..120.
+ * @param riskPolicyId May be absent entirely. Length 1..120.
  * @param taskType May be absent entirely.
  * @param ticket May be absent entirely.
  * @param title Length 1..200.
@@ -29,6 +31,12 @@ public record CreatePublicTask(
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("fields") @Nullable Map<String, CreatePublicTaskFieldsValue> fields,
+
+    /** May be absent entirely. Length 1..120. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("modelPresetId") @Nullable String modelPresetId,
+
+    /** May be absent entirely. Length 1..120. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("riskPolicyId") @Nullable String riskPolicyId,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("taskType") @Nullable String taskType,
@@ -55,6 +63,8 @@ public record CreatePublicTask(
         private @Nullable String description;
         private @Nullable List<PublicTaskDocument> documents;
         private @Nullable Map<String, CreatePublicTaskFieldsValue> fields;
+        private @Nullable String modelPresetId;
+        private @Nullable String riskPolicyId;
         private @Nullable String taskType;
         private @Nullable PublicTaskTicket ticket;
         private @Nullable String title;
@@ -74,6 +84,18 @@ public record CreatePublicTask(
         /** Set {@code fields}. */
         public Builder fields(@Nullable Map<String, CreatePublicTaskFieldsValue> fields) {
             this.fields = fields;
+            return this;
+        }
+
+        /** Set {@code modelPresetId}. */
+        public Builder modelPresetId(@Nullable String modelPresetId) {
+            this.modelPresetId = modelPresetId;
+            return this;
+        }
+
+        /** Set {@code riskPolicyId}. */
+        public Builder riskPolicyId(@Nullable String riskPolicyId) {
+            this.riskPolicyId = riskPolicyId;
             return this;
         }
 
@@ -97,7 +119,7 @@ public record CreatePublicTask(
 
         /** Build the {@link CreatePublicTask}. */
         public CreatePublicTask build() {
-            return new CreatePublicTask(description, documents, fields, taskType, ticket, title);
+            return new CreatePublicTask(description, documents, fields, modelPresetId, riskPolicyId, taskType, ticket, title);
         }
     }
 }

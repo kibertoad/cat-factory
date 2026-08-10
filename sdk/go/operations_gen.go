@@ -1228,25 +1228,56 @@ func (s *VcsService) GetConnection(ctx context.Context) (*GetPublicVcsConnection
 	return &out, nil
 }
 
-// MergePresetsService the merge-threshold presets a task can resolve, including which is the workspace default: what
-// decides whether a run can land its pull request without a person.
-type MergePresetsService struct {
+// RiskPoliciesService the risk policies a task can pin, including which is the workspace default: what decides
+// whether a run can land its pull request without a person, and how many attempts its CI fixer,
+// requirement rounds and release watch are given. Broader than merging, which is why it is not
+// called a merge preset.
+type RiskPoliciesService struct {
 	client *Client
 }
 
-// List list the workspace’s merge-threshold presets
-// The preset library, including which row is the workspace default that a task pinning none
+// List list the workspace’s risk policies
+// The policy library, including which row is the workspace default that a task pinning none
 // resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull
-// request without a person; `dryRunRoles` names the roles whose runs the preset forces into
-// dry-run mode, which is the difference between “this preset merges” and “this preset merges for
-// everyone except one role”.
-// GET /api/v1/merge-presets (operation listPublicMergePresets).
-func (s *MergePresetsService) List(ctx context.Context) (*ListPublicMergePresetsResponse, error) {
+// request without a person; `dryRunRoles` names the roles whose runs the policy forces into
+// dry-run mode, which is the difference between “this policy merges” and “this policy merges for
+// everyone except one role”. A policy also caps CI-fixer attempts, requirement and tester
+// iteration rounds and the release-health watch, which is why it is not called a merge preset;
+// the id is what a task pins as `riskPolicyId`.
+// GET /api/v1/risk-policies (operation listPublicRiskPolicies).
+func (s *RiskPoliciesService) List(ctx context.Context) (*ListPublicRiskPoliciesResponse, error) {
 	req := requestSpec{
 		Method: "GET",
-		Path:   "/api/v1/merge-presets",
+		Path:   "/api/v1/risk-policies",
 	}
-	var out ListPublicMergePresetsResponse
+	var out ListPublicRiskPoliciesResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ModelPresetsService the model presets a task can pin, including which is the workspace default: what decides which
+// model each agent step runs on, and so what a run costs. Availability is not repeated here; join
+// `baseModelId` against the models group, which keeps unconfigured and policy-refused apart.
+type ModelPresetsService struct {
+	client *Client
+}
+
+// List list the workspace’s model presets
+// The preset library, including which row is the workspace default that a task pinning none
+// resolves. `baseModelId` is the model every agent step runs on under the preset, and `overrides`
+// names the agent kinds that run on something else, which is usually the one that matters: two
+// presets often differ only in what the CODER gets. Whether a preset can actually be dispatched
+// to is NOT repeated here, because the models endpoint already answers it while keeping
+// unconfigured apart from refused-by-policy; join on `baseModelId`.
+// GET /api/v1/model-presets (operation listPublicModelPresets).
+func (s *ModelPresetsService) List(ctx context.Context) (*ListPublicModelPresetsResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/model-presets",
+	}
+	var out ListPublicModelPresetsResponse
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

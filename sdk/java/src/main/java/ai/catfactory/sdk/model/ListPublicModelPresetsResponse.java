@@ -9,37 +9,37 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicMergePresetsResponse} wire model.
+ * The {@code ListPublicModelPresetsResponse} wire model.
  * @param presets the {@code presets} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicMergePresetsResponse(
-    @JsonProperty("presets") List<ListPublicMergePresetsResponsePreset> presets
+public record ListPublicModelPresetsResponse(
+    @JsonProperty("presets") List<ListPublicModelPresetsResponsePreset> presets
 ) {
 
-    /** A new builder for {@link ListPublicMergePresetsResponse}. */
+    /** A new builder for {@link ListPublicModelPresetsResponse}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicMergePresetsResponse}.
+     * Fluent builder for {@link ListPublicModelPresetsResponse}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable List<ListPublicMergePresetsResponsePreset> presets;
+        private @Nullable List<ListPublicModelPresetsResponsePreset> presets;
 
         /** Set {@code presets}. */
-        public Builder presets(@Nullable List<ListPublicMergePresetsResponsePreset> presets) {
+        public Builder presets(@Nullable List<ListPublicModelPresetsResponsePreset> presets) {
             this.presets = presets;
             return this;
         }
 
-        /** Build the {@link ListPublicMergePresetsResponse}. */
-        public ListPublicMergePresetsResponse build() {
-            return new ListPublicMergePresetsResponse(presets);
+        /** Build the {@link ListPublicModelPresetsResponse}. */
+        public ListPublicModelPresetsResponse build() {
+            return new ListPublicModelPresetsResponse(presets);
         }
     }
 }

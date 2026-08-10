@@ -14,6 +14,8 @@ import org.jspecify.annotations.Nullable;
  * @param autoStartDependents May be absent entirely.
  * @param description May be absent entirely. Length 0..2000.
  * @param fields May be absent entirely.
+ * @param modelPresetId May be absent entirely. Length 1..120.
+ * @param riskPolicyId May be absent entirely. Length 1..120.
  * @param title May be absent entirely. Length 1..200.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -26,6 +28,12 @@ public record UpdatePublicTask(
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("fields") @Nullable Map<String, CreatePublicTaskFieldsValue> fields,
+
+    /** May be absent entirely. Length 1..120. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("modelPresetId") @Nullable String modelPresetId,
+
+    /** May be absent entirely. Length 1..120. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("riskPolicyId") @Nullable String riskPolicyId,
 
     /** May be absent entirely. Length 1..200. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("title") @Nullable String title
@@ -46,6 +54,8 @@ public record UpdatePublicTask(
         private @Nullable Boolean autoStartDependents;
         private @Nullable String description;
         private @Nullable Map<String, CreatePublicTaskFieldsValue> fields;
+        private @Nullable String modelPresetId;
+        private @Nullable String riskPolicyId;
         private @Nullable String title;
 
         /** Set {@code autoStartDependents}. */
@@ -66,6 +76,18 @@ public record UpdatePublicTask(
             return this;
         }
 
+        /** Set {@code modelPresetId}. */
+        public Builder modelPresetId(@Nullable String modelPresetId) {
+            this.modelPresetId = modelPresetId;
+            return this;
+        }
+
+        /** Set {@code riskPolicyId}. */
+        public Builder riskPolicyId(@Nullable String riskPolicyId) {
+            this.riskPolicyId = riskPolicyId;
+            return this;
+        }
+
         /** Set {@code title}. */
         public Builder title(@Nullable String title) {
             this.title = title;
@@ -74,7 +96,7 @@ public record UpdatePublicTask(
 
         /** Build the {@link UpdatePublicTask}. */
         public UpdatePublicTask build() {
-            return new UpdatePublicTask(autoStartDependents, description, fields, title);
+            return new UpdatePublicTask(autoStartDependents, description, fields, modelPresetId, riskPolicyId, title);
         }
     }
 }

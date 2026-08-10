@@ -2,7 +2,8 @@ import {
   connectPublicEnvironmentContract,
   getPublicRepoBootstrapContract,
   getPublicVcsConnectionContract,
-  listPublicMergePresetsContract,
+  listPublicModelPresetsContract,
+  listPublicRiskPoliciesContract,
   listPublicWiredModelsContract,
   startPublicRepoBootstrapContract,
   testPublicEnvironmentConnectionContract,
@@ -15,12 +16,14 @@ import {
   type KubernetesManifestSource,
   type KubernetesUrlSource,
   type ModelCatalog,
+  type ModelPreset,
   type PublicBootstrapJob,
   type PublicEnvironmentConnection,
   type PublicEnvironmentConnectionView,
   type PublicKubernetesManifestSource,
   type PublicKubernetesUrlSource,
-  type PublicMergePreset,
+  type PublicModelPreset,
+  type PublicRiskPolicy,
   type PublicServiceProvisioning,
   type PublicVcsConnection,
   type PublicWiredModel,
@@ -32,6 +35,7 @@ import type {
   BootstrapModule,
   EnvironmentsModule,
   GitHubModule,
+  ModelPresetsModule,
   RiskPoliciesModule,
 } from '@cat-factory/orchestration'
 import { NotFoundError, UnavailableError } from '@cat-factory/kernel'
@@ -124,9 +128,29 @@ function servesUserScopedModels(container: ServerContainer): boolean {
   return container.localModelEndpoints !== undefined
 }
 
-/** The merge-preset module, or the 503. */
-function requireMergePresets<E extends AppEnv>(c: Context<E>): RiskPoliciesModule {
-  return requireCapability(c.get('container').riskPolicies, 'Merge presets are not configured')
+/**
+ * The risk-policy module, or the 503 — carrying the SAME `details.reason` a refused pin does.
+ *
+ * One deployment fact ("this facade wired no risk-policy repository") reaches a caller by two
+ * routes: this list, and the `422`/`503` a task pinning one gets back. Answering the discovery
+ * call with a bare `unavailable` and the pin with a reason would make a client parse prose on
+ * whichever it happened to hit first.
+ */
+function requireRiskPolicies<E extends AppEnv>(c: Context<E>): RiskPoliciesModule {
+  return requireCapability(
+    c.get('container').riskPolicies,
+    'Risk policies are not configured',
+    'risk_policies_unwired',
+  )
+}
+
+/** The model-preset module, or the 503; same pairing as {@link requireRiskPolicies}. */
+function requireModelPresets<E extends AppEnv>(c: Context<E>): ModelPresetsModule {
+  return requireCapability(
+    c.get('container').modelPresets,
+    'Model presets are not configured',
+    'model_presets_unwired',
+  )
 }
 
 /**
@@ -474,20 +498,40 @@ function toPublicVcsConnection(connection: GitHubConnection): PublicVcsConnectio
   }
 }
 
-function toPublicMergePreset(preset: RiskPolicy): PublicMergePreset {
+/**
+ * A model preset as this surface serves it.
+ *
+ * `version` and `providerPreference` stay off. The first is the SPA's reseed prompt, which is a
+ * question about a library the operator maintains rather than about a run. The second names the
+ * ROUTE order a resolution walks (direct, Bedrock, OpenRouter, …), and publishing it would put a
+ * caller in the position of reading a preference whose members it cannot act on: nothing on this
+ * surface picks a route, and the vocabulary is closed-but-persisted, so a retired member reaching a
+ * public response is a shape this projection would then owe an answer for.
+ */
+function toPublicModelPreset(preset: ModelPreset): PublicModelPreset {
   return {
     presetId: preset.id,
     name: preset.name,
     isDefault: preset.isDefault,
-    autoMergeEnabled: preset.autoMergeEnabled,
-    ciMaxAttempts: preset.ciMaxAttempts,
-    dryRunRoles: [...preset.dryRunRoles],
+    baseModelId: preset.baseModelId,
+    overrides: { ...preset.overrides },
+  }
+}
+
+function toPublicRiskPolicy(policy: RiskPolicy): PublicRiskPolicy {
+  return {
+    policyId: policy.id,
+    name: policy.name,
+    isDefault: policy.isDefault,
+    autoMergeEnabled: policy.autoMergeEnabled,
+    ciMaxAttempts: policy.ciMaxAttempts,
+    dryRunRoles: [...policy.dryRunRoles],
     // The roles the allowlist SCOPES, not the classes it allows: a role with an entry may land only
     // what that entry names (an EMPTY entry lands nothing, which is a restriction and not an
     // absence), and the class vocabulary itself stays internal.
-    submissionRestrictedRoles: Object.entries(preset.submissionClassesByRole)
+    submissionRestrictedRoles: Object.entries(policy.submissionClassesByRole)
       .filter(([, classes]) => classes !== undefined)
-      .map(([role]) => role as PublicMergePreset['submissionRestrictedRoles'][number]),
+      .map(([role]) => role as PublicRiskPolicy['submissionRestrictedRoles'][number]),
   }
 }
 
@@ -522,10 +566,17 @@ function registerWiringRoutes(app: Hono<AppEnv>): void {
     return c.json({ connection: connection ? toPublicVcsConnection(connection) : null }, 200)
   })
 
-  buildHonoRoute(app, listPublicMergePresetsContract, async (c) => {
-    const auth = await authorizeOrThrow(c, listPublicMergePresetsContract.minScope)
-    const presets = requireMergePresets(c)
+  buildHonoRoute(app, listPublicRiskPoliciesContract, async (c) => {
+    const auth = await authorizeOrThrow(c, listPublicRiskPoliciesContract.minScope)
+    const policies = requireRiskPolicies(c)
+    const rows = await policies.service.list(auth.workspaceId)
+    return c.json({ policies: rows.map(toPublicRiskPolicy) }, 200)
+  })
+
+  buildHonoRoute(app, listPublicModelPresetsContract, async (c) => {
+    const auth = await authorizeOrThrow(c, listPublicModelPresetsContract.minScope)
+    const presets = requireModelPresets(c)
     const rows = await presets.service.list(auth.workspaceId)
-    return c.json({ presets: rows.map(toPublicMergePreset) }, 200)
+    return c.json({ presets: rows.map(toPublicModelPreset) }, 200)
   })
 }

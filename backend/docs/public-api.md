@@ -463,26 +463,26 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                                    | Scope    | Behaviour                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/services`                           | `read`   | The board's service frames: the service projection.                                                                                                                                                                                                                                                                     |
-| `POST /api/v1/services/:serviceId/tasks`         | `write`  | Create a task. Create a task. `taskType` defaults to `feature`; `recurring` is not creatable here. See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
-| `GET /api/v1/services/:serviceId/tasks`          | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                       |
-| `GET /api/v1/tasks/:taskId`                      | `read`   | One task: the task projection.                                                                                                                                                                                                                                                                                          |
-| `PATCH /api/v1/tasks/:taskId`                    | `write`  | Edit the task's authored input; an empty patch is a no-op. `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                  |
-| `POST /api/v1/tasks/:taskId/start`               | `write`¹ | Run it. Start the task's run, falling back to its pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                               |
-| `POST /api/v1/tasks/:taskId/stop`                | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                           |
-| `POST /api/v1/tasks/:taskId/retry`               | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                        |
-| `DELETE /api/v1/tasks/:taskId`                   | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                            |
-| `POST /api/v1/services`                          | `admin`  | Create a service, optionally backed by a repository. See [Provisioning the board](#provisioning-the-board).                                                                                                                                                                                                             |
-| `PATCH /api/v1/services/:serviceId`              | `admin`  | Patch a service's authored fields, and declare its `provisioning`: where a per-run environment's manifests are read from. See [Deployment provisioning](#deployment-provisioning).                                                                                                                                      |
-| `GET /api/v1/repos`                              | `read`   | The repositories a service can be created against, and which service each already backs.                                                                                                                                                                                                                                |
-| `GET /api/v1/services/:serviceId/spec`           | `read`   | The service's in-repo **specification**: the requirement tree, the Gherkin rendered from it, and the commit both were read at. See [Service specification](#service-specification).                                                                                                                                     |
-| `POST /api/v1/tasks/:taskId/dependencies`        | `write`  | Declare that this task waits for another. Declare a dependency. Idempotent. See [Ordering a batch of tasks](#ordering-a-batch-of-tasks).                                                                                                                                                                                |
-| `POST /api/v1/tasks/:taskId/dependencies/remove` | `write`  | Drop the edge. Idempotent.                                                                                                                                                                                                                                                                                              |
-| `GET /api/v1/tasks/:taskId/documents`            | `read`   | The requirements documents attached to the task, in reading order.                                                                                                                                                                                                                                                      |
-| `POST /api/v1/tasks/:taskId/documents`           | `write`  | Attach one, in either form creation takes. See [Attaching requirements documents](#attaching-requirements-documents).                                                                                                                                                                                                   |
-| `POST /api/v1/tasks/:taskId/documents/detach`    | `write`  | Detach one by its `(source, externalId)` pair. Idempotent; `204`. The document itself stays in the workspace.                                                                                                                                                                                                           |
+| Method / path                                    | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                           | `read`   | The board's service frames: the service projection.                                                                                                                                                                                                                                                                                                                   |
+| `POST /api/v1/services/:serviceId/tasks`         | `write`  | Create a task. `taskType` defaults to `feature`; `recurring` is not creatable here. See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket), [Attaching requirements documents](#attaching-requirements-documents) and [Pinning what a task runs on](#pinning-what-a-task-runs-on). |
+| `GET /api/v1/services/:serviceId/tasks`          | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                                                                     |
+| `GET /api/v1/tasks/:taskId`                      | `read`   | One task: the task projection.                                                                                                                                                                                                                                                                                                                                        |
+| `PATCH /api/v1/tasks/:taskId`                    | `write`  | Edit the task's authored input and its two pins; an empty patch is a no-op. `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                                               |
+| `POST /api/v1/tasks/:taskId/start`               | `write`¹ | Run it. Start the task's run, falling back to its pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                                                             |
+| `POST /api/v1/tasks/:taskId/stop`                | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                                                         |
+| `POST /api/v1/tasks/:taskId/retry`               | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                                                      |
+| `DELETE /api/v1/tasks/:taskId`                   | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                                                          |
+| `POST /api/v1/services`                          | `admin`  | Create a service, optionally backed by a repository. See [Provisioning the board](#provisioning-the-board).                                                                                                                                                                                                                                                           |
+| `PATCH /api/v1/services/:serviceId`              | `admin`  | Patch a service's authored fields, and declare its `provisioning`: where a per-run environment's manifests are read from. See [Deployment provisioning](#deployment-provisioning).                                                                                                                                                                                    |
+| `GET /api/v1/repos`                              | `read`   | The repositories a service can be created against, and which service each already backs.                                                                                                                                                                                                                                                                              |
+| `GET /api/v1/services/:serviceId/spec`           | `read`   | The service's in-repo **specification**: the requirement tree, the Gherkin rendered from it, and the commit both were read at. See [Service specification](#service-specification).                                                                                                                                                                                   |
+| `POST /api/v1/tasks/:taskId/dependencies`        | `write`  | Declare that this task waits for another. Declare a dependency. Idempotent. See [Ordering a batch of tasks](#ordering-a-batch-of-tasks).                                                                                                                                                                                                                              |
+| `POST /api/v1/tasks/:taskId/dependencies/remove` | `write`  | Drop the edge. Idempotent.                                                                                                                                                                                                                                                                                                                                            |
+| `GET /api/v1/tasks/:taskId/documents`            | `read`   | The requirements documents attached to the task, in reading order.                                                                                                                                                                                                                                                                                                    |
+| `POST /api/v1/tasks/:taskId/documents`           | `write`  | Attach one, in either form creation takes. See [Attaching requirements documents](#attaching-requirements-documents).                                                                                                                                                                                                                                                 |
+| `POST /api/v1/tasks/:taskId/documents/detach`    | `write`  | Detach one by its `(source, externalId)` pair. Idempotent; `204`. The document itself stays in the workspace.                                                                                                                                                                                                                                                         |
 
 ¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
 the paragraph below for what counts as a park.
@@ -956,13 +956,19 @@ a service where its manifests live, and read back what the deployment actually h
 | `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                 |
 | `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                  |
 | `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                 |
-| `GET /api/v1/merge-presets`                  | `admin` | The merge-threshold presets, including which is the workspace default.                                          |
+| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the workspace default. Pin one as `riskPolicyId`.                         |
+| `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                        |
 
-**The three reads are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
+**The four reads are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
 is what they name: those name board CONTENT, where these name what the DEPLOYMENT has wired,
 including the permissions its source-control credential holds. A caller that can read them is
 already at the rung that could change them. (A scope can be relaxed later and never tightened, so
 where the reading was close the reversible one wins.)
+
+That does leave the two preset reads at a higher rung than the `write` needed to PIN one, which is
+the gap the public pipeline list was added to close, so relaxing them to `read` is the likely next
+step. Until then a refused pin names the id that MISSED and never what the workspace holds: a `422`
+listing the library would hand a `write` key, by typo, exactly what `admin` gates.
 
 #### Bootstrapping a repository
 
@@ -1056,12 +1062,40 @@ by the provider at PUSH time, so a caller that does not check them discovers a m
 permission as a repository that bootstrapped and then failed to gain its CI workflow, which reads as
 a broken bootstrap.
 
-`GET /api/v1/merge-presets`: `autoMergeEnabled` on the `isDefault` row decides whether a run can land
+`GET /api/v1/risk-policies`: `autoMergeEnabled` on the `isDefault` row decides whether a run can land
 its pull request without a person. `dryRunRoles` and `submissionRestrictedRoles` are the two caveats
 this API cannot resolve for you, since it does not report which workspace role your key's runs are
 admitted under: the first names roles whose runs open a pull request and never merge it, the second
-names roles that may land only certain change classes. Either being non-empty means the preset merges
-for some roles and not others, so report the caveat rather than concluding "this preset merges".
+names roles that may land only certain change classes. Either being non-empty means the policy merges
+for some roles and not others, so report the caveat rather than concluding "this policy merges".
+
+`GET /api/v1/model-presets`: `baseModelId` is the model every agent step runs on under that preset,
+and `overrides` names the kinds that run on something else, which is usually what separates two
+presets: they often differ only in what the CODER gets. Whether a preset can actually be dispatched
+to is NOT repeated here, because `/models` already answers it while keeping unconfigured apart from
+refused-by-policy; join on `baseModelId`.
+
+#### Pinning what a task runs on
+
+`POST /api/v1/services/:serviceId/tasks` and `PATCH /api/v1/tasks/:taskId` both accept
+`modelPresetId` and `riskPolicyId`, and {@link PublicTask} reads both back (null ⇒ the task follows
+the workspace default rather than holding a copy of its id). Pinning is what makes a pass
+reproducible: without it the only way to run one task on another model is to move the workspace
+default, which changes every other caller's runs to settle one task.
+
+**An id no library carries is refused, never resolved to the default.** `422` with
+`details.reason: 'model_preset_not_found'` / `'risk_policy_not_found'`, because the two outcomes are
+indistinguishable afterwards from anything a caller can read, and a run that quietly used another
+model succeeds while being about something else. A deployment with the library unwired answers `503`
+(`'model_presets_unwired'` / `'risk_policies_unwired'`) instead: a different fact, needing a
+different fix. The same refusals apply to every other door into the board, so an id the SPA or a
+tracker import supplies is checked identically.
+
+Pinning a preset does NOT widen what the account allows: the base model still resolves through the
+account's model-family policy, so a preset naming a blocked model fails at dispatch exactly as it
+would have on the workspace default. And pinning a risk policy is a real authority question, tracked
+in `docs/initiatives/role-scoped-risk-policy-admission.md`: an API key is `UNATTRIBUTED` at the merge
+exits (ADR 0037), so no role-scoped bar narrows what it may select today.
 
 ### Task runs & streaming
 
@@ -1693,7 +1727,7 @@ A **rollup** carries `total`, `merged` (the landed denominator: auto + through t
 the provider), each decision's own count, and the distribution of effort tags including `untagged`.
 Every class is present, as zeros when it holds nothing, so "no data yet" never reads as a class the
 response left out. This is the number that justifies **widening** a per-class rule, and nothing
-widens one automatically: the rules live on the workspace's merge presets and a human edits them.
+widens one automatically: the rules live on the workspace's risk policies and a human edits them.
 
 Refusals carry `error.details.reason`: `run_not_found` (the id names no run this key may read),
 `no_merge_record` (the run is readable and simply made no merge decision, because its pipeline has no

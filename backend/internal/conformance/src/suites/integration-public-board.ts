@@ -1,6 +1,7 @@
 import type { PublicAttachedDocumentList, PublicRepoList, PublicTask } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
+import { mintPublicApiKey } from './shared.js'
 
 // Cross-runtime conformance for the public BOARD-PROVISIONING surface (`GET /api/v1/repos`,
 // `POST /api/v1/services`) and for the two task relationships that outlive a create call
@@ -13,21 +14,6 @@ import type { ConformanceHarness } from '../harness.js'
 //
 // See backend/docs/public-api.md and backend/docs/adr/0050-public-api-headless-completeness.md.
 
-/** Mint a public-API key through the SESSION surface and return its bearer header. */
-async function mintKey(
-  app: Awaited<ReturnType<ConformanceHarness['makeApp']>>,
-  workspaceId: string,
-  scope: 'read' | 'write' | 'decide' | 'admin',
-): Promise<Record<string, string>> {
-  const created = await app.call<{ key: { id: string }; secret: string }>(
-    'POST',
-    `/workspaces/${workspaceId}/public-api-keys`,
-    { label: `conformance-board-${scope}`, scope },
-  )
-  expect(created.status).toBe(201)
-  return { authorization: `Bearer ${created.body.secret}` }
-}
-
 export function definePublicBoardConformance(harness: ConformanceHarness): void {
   describe('public API: board provisioning', () => {
     it('creates a service headlessly and files a task under it', async () => {
@@ -37,7 +23,7 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
       const wsId = workspace.id
-      const admin = await mintKey(app, wsId, 'admin')
+      const admin = await mintPublicApiKey(app, wsId, 'admin', 'board')
 
       const created = await app.call<{ serviceId: string; title: string; type: string }>(
         'POST',
@@ -74,7 +60,7 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       // answers an empty list. It is the CREATE that distinguishes them, by refusing with a reason.
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
-      const read = await mintKey(app, workspace.id, 'read')
+      const read = await mintPublicApiKey(app, workspace.id, 'read', 'board')
       const repos = await app.call<PublicRepoList>('GET', '/api/v1/repos', undefined, read)
       expect(repos.status).toBe(200)
       expect(repos.body.repos).toEqual([])
@@ -86,7 +72,7 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       // on, with nothing at creation time saying why.
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
-      const admin = await mintKey(app, workspace.id, 'admin')
+      const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'board')
       const refused = await app.call(
         'POST',
         '/api/v1/services',
@@ -101,7 +87,7 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       // ticket-filing integration holds, and creating services is board STRUCTURE.
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
-      const write = await mintKey(app, workspace.id, 'write')
+      const write = await mintPublicApiKey(app, workspace.id, 'write', 'board')
       const refused = await app.call('POST', '/api/v1/services', { title: 'Nope' }, write)
       expect(refused.status).toBe(403)
       // The discovery read is the floor, so the same key still sees what it could create against.
@@ -114,7 +100,7 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
       const wsId = workspace.id
-      const admin = await mintKey(app, wsId, 'admin')
+      const admin = await mintPublicApiKey(app, wsId, 'admin', 'board')
       const service = await app.call<{ serviceId: string }>(
         'POST',
         '/api/v1/services',
@@ -187,7 +173,7 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
     it('names WHICH id was wrong, and toggles auto-start on the blocker', async () => {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
-      const admin = await mintKey(app, workspace.id, 'admin')
+      const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'board')
       const service = await app.call<{ serviceId: string }>(
         'POST',
         '/api/v1/services',
@@ -242,7 +228,7 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       // documents it already carried.
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
-      const admin = await mintKey(app, workspace.id, 'admin')
+      const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'board')
       const service = await app.call<{ serviceId: string }>(
         'POST',
         '/api/v1/services',
@@ -317,18 +303,18 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
       const { workspace: other } = await app.createOrgWorkspace()
-      const admin = await mintKey(app, workspace.id, 'admin')
+      const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'board')
       const service = await app.call<{ serviceId: string }>(
         'POST',
         '/api/v1/services',
         { title: 'Elsewhere' },
-        await mintKey(app, other.id, 'admin'),
+        await mintPublicApiKey(app, other.id, 'admin', 'board'),
       )
       const foreign = await app.call<PublicTask>(
         'POST',
         `/api/v1/services/${service.body.serviceId}/tasks`,
         { title: "Someone else's task" },
-        await mintKey(app, other.id, 'admin'),
+        await mintPublicApiKey(app, other.id, 'admin', 'board'),
       )
       // The key's workspace is the boundary on every one of these routes, exactly as it is on the
       // task lifecycle they hang off.
