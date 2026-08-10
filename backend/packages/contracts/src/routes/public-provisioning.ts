@@ -6,6 +6,7 @@ import {
   publicEnvironmentConnectionTestSchema,
   publicEnvironmentConnectionViewSchema,
   publicMergePresetListSchema,
+  publicModelPresetListSchema,
   publicVcsConnectionViewSchema,
   publicWiredModelListSchema,
   testPublicEnvironmentConnectionSchema,
@@ -172,5 +173,27 @@ export const listPublicMergePresetsContract = withMinScope(
     method: 'get',
     pathResolver: () => '/api/v1/merge-presets',
     responsesByStatusCode: { 200: publicMergePresetListSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * The workspace's model-preset library, and which one a task pinning none resolves.
+ *
+ * Beside the merge presets rather than beside the pipelines because the two preset libraries are
+ * siblings: a caller setting a workspace up reads both to learn what its runs will cost and whether
+ * they can land. It is what makes `modelPresetId` on task create usable, since an id a caller cannot
+ * discover is one it has to hard-code.
+ *
+ * `admin` follows this file's rule and ADR 0034's reversibility argument, not a claim that a lower
+ * rung would be wrong. A `write` key can PIN a preset and cannot LIST one, which is the same gap the
+ * public pipeline list was added to close, so relaxing this to `read` is the likely next step. That
+ * direction is available; the other one is not.
+ */
+export const listPublicModelPresetsContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/model-presets',
+    responsesByStatusCode: { 200: publicModelPresetListSchema, ...errorResponses },
   }),
 )

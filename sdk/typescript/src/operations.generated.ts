@@ -41,6 +41,7 @@ import type {
   ListPublicJobsResponse,
   ListPublicMergeClassRollupsResponse,
   ListPublicMergePresetsResponse,
+  ListPublicModelPresetsResponse,
   ListPublicReposResponse,
   ListPublicTaskDocumentsResponse,
   ListPublicTaskDocumentsResponseDocument,
@@ -836,6 +837,28 @@ export class MergePresetsResource {
     return this.#transport.request<ListPublicMergePresetsResponse>({
       method: 'GET',
       path: `/api/v1/merge-presets`,
+      options,
+    })
+  }
+}
+
+/** The model presets a task can pin, including which is the workspace default: what decides which model each agent step runs on, and so what a run costs. Availability is not repeated here; join `baseModelId` against the models group, which keeps unconfigured and policy-refused apart. */
+export class ModelPresetsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the workspace’s model presets
+   * The preset library, including which row is the workspace default that a task pinning none resolves. `baseModelId` is the model every agent step runs on under the preset, and `overrides` names the agent kinds that run on something else, which is usually the one that matters: two presets often differ only in what the CODER gets. Whether a preset can actually be dispatched to is NOT repeated here, because the models endpoint already answers it while keeping unconfigured apart from refused-by-policy; join on `baseModelId`.
+   * `GET /api/v1/model-presets` — operation `listPublicModelPresets`.
+   */
+  list(options: RequestOptions = {}): Promise<ListPublicModelPresetsResponse> {
+    return this.#transport.request<ListPublicModelPresetsResponse>({
+      method: 'GET',
+      path: `/api/v1/model-presets`,
       options,
     })
   }
@@ -2018,6 +2041,8 @@ export abstract class CatFactoryResources {
   readonly vcs: VcsResource
   /** The merge-threshold presets a task can resolve, including which is the workspace default: what decides whether a run can land its pull request without a person. */
   readonly mergePresets: MergePresetsResource
+  /** The model presets a task can pin, including which is the workspace default: what decides which model each agent step runs on, and so what a run costs. Availability is not repeated here; join `baseModelId` against the models group, which keeps unconfigured and policy-refused apart. */
+  readonly modelPresets: ModelPresetsResource
   /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */
   readonly webhook: WebhookResource
   /** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
@@ -2048,6 +2073,7 @@ export abstract class CatFactoryResources {
     this.models = new ModelsResource(transport)
     this.vcs = new VcsResource(transport)
     this.mergePresets = new MergePresetsResource(transport)
+    this.modelPresets = new ModelPresetsResource(transport)
     this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)
     this.me = new MeResource(transport)

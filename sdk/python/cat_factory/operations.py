@@ -49,6 +49,7 @@ from .models import (
     ListPublicJobsResponse,
     ListPublicMergeClassRollupsResponse,
     ListPublicMergePresetsResponse,
+    ListPublicModelPresetsResponse,
     ListPublicReposResponse,
     ListPublicTaskDocumentsResponse,
     ListPublicTaskDocumentsResponseDocument,
@@ -904,6 +905,36 @@ class MergePresetsResource:
             timeout=timeout,
         )
         return ListPublicMergePresetsResponse.from_dict(raw)
+
+
+class ModelPresetsResource:
+    """The model presets a task can pin, including which is the workspace default: what decides
+    which model each agent step runs on, and so what a run costs. Availability is not
+    repeated here; join `baseModelId` against the models group, which keeps unconfigured and
+    policy-refused apart.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def list(self, *, timeout: float | None = None) -> ListPublicModelPresetsResponse:
+        """List the workspace’s model presets
+        The preset library, including which row is the workspace default that a task pinning
+        none resolves. `baseModelId` is the model every agent step runs on under the preset,
+        and `overrides` names the agent kinds that run on something else, which is usually
+        the one that matters: two presets often differ only in what the CODER gets. Whether
+        a preset can actually be dispatched to is NOT repeated here, because the models
+        endpoint already answers it while keeping unconfigured apart from refused-by-policy;
+        join on `baseModelId`.
+        `GET /api/v1/model-presets` (operation `listPublicModelPresets`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/model-presets",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicModelPresetsResponse.from_dict(raw)
 
 
 class WebhookResource:
@@ -2331,6 +2362,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "models": ModelsResource(transport),
         "vcs": VcsResource(transport),
         "merge_presets": MergePresetsResource(transport),
+        "model_presets": ModelPresetsResource(transport),
         "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),
         "me": MeResource(transport),

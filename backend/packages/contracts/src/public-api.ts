@@ -389,10 +389,27 @@ export const publicTaskDocumentSchema = v.variant('kind', [
 export type PublicTaskDocument = v.InferOutput<typeof publicTaskDocumentSchema>
 
 /**
- * Create a task under a service. A deliberately MINIMAL external input mapped onto the
- * internal `AddTaskInput`: it exposes only title/description/taskType/ticket/documents, not the
- * rich internal knobs (risk/model presets, pinned pipeline, agent config), so the public
- * surface stays small and stable.
+ * Create a task under a service: a NARROW external input mapped onto the internal `AddTaskInput`.
+ *
+ * Narrow is not the same as minimal, and the line has moved. It first exposed only
+ * title/description/taskType/ticket/documents on the reasoning that fewer fields meant a smaller
+ * thing to keep stable. What that missed is that a knob withheld does not go away, it just gets
+ * reached another way: the only route to "run this task on the cheap model" without
+ * `modelPresetId` is to move the WORKSPACE default, which changes every other caller's runs to
+ * settle one task. A per-task field is the smaller blast radius, not the larger one.
+ *
+ * So the two preset knobs are here, discoverable through `GET /api/v1/model-presets` and
+ * `GET /api/v1/merge-presets` (the same pairing the pipeline list has with `start`'s `pipelineId`).
+ * What stays off is what a caller cannot act on meaningfully: per-agent-kind model overrides,
+ * consensus wiring, and the rest of the internal agent config, which are workspace-shaped
+ * decisions with no per-task question behind them.
+ *
+ * **`riskPolicyId` selects how much oversight this task's merge takes, so read
+ * `docs/initiatives/role-scoped-risk-policy-admission.md` before treating it as ordinary.** An API
+ * key holds scopes rather than a workspace role, so it is already `UNATTRIBUTED` at the merge exits
+ * (ADR 0037) and no role-scoped restriction narrows it today. That is precisely why WHICH presets a
+ * caller may pin needs to become a real admission rule rather than staying an accident of what the
+ * surface happens not to expose.
  */
 export const createPublicTaskSchema = v.object({
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
@@ -445,6 +462,37 @@ export const createPublicTaskSchema = v.object({
    * what it actually decides.
    */
   fields: v.optional(descriptorFieldValuesSchema),
+  /**
+   * The model preset this task's agent steps run on, from `GET /api/v1/model-presets`. Omitted ⇒
+   * the workspace's default preset, exactly as before.
+   *
+   * An id no preset in this workspace carries is a `422` (`details.reason:
+   * 'model_preset_not_found'`) rather than a silent fallback to the default. The two outcomes are
+   * indistinguishable afterwards from anything a caller can read, and a pass that quietly ran on
+   * another model is worse than one that refused: the run still succeeds, the numbers are just
+   * about something else.
+   *
+   * Pinning a preset does NOT widen what the account allows. The base model still resolves through
+   * the account's model-family policy, so a preset naming a blocked model fails at dispatch with
+   * the same refusal it would have had on the workspace default. `GET /api/v1/models` reports that
+   * up front, keeping "unconfigured" and "refused by policy" apart.
+   */
+  modelPresetId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+  /**
+   * The merge-threshold preset this task's `merger` step resolves, from
+   * `GET /api/v1/merge-presets`. Omitted ⇒ the workspace's default preset, exactly as before.
+   *
+   * Unknown ids refuse the same way (`details.reason: 'merge_preset_not_found'`).
+   *
+   * **This one chooses how much oversight landing takes**, since a preset carries
+   * `autoMergeEnabled` and the score ceilings. It is exposed because withholding it was never the
+   * control it looked like: a caller wanting a different policy could always move the workspace
+   * default, which is the same power aimed at every other task as well. The real control is an
+   * admission rule over WHICH presets a caller may pin, tracked in
+   * `docs/initiatives/role-scoped-risk-policy-admission.md`. Until that lands, an `admin` key can
+   * pin any preset its workspace holds, which is the same authority it already had by editing one.
+   */
+  riskPolicyId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
 })
 export type CreatePublicTaskInput = v.InferOutput<typeof createPublicTaskSchema>
 

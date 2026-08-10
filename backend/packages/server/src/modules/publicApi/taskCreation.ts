@@ -3,6 +3,7 @@ import type { Block, CreatePublicTaskInput } from '@cat-factory/contracts'
 import type { Logger } from '@cat-factory/kernel'
 import type { ServerContainer } from '../../http/env.js'
 import { releaseUnattachedTask, resolveDocuments } from './documentAttachment.js'
+import { assertPinnedPresetsExist, presetPinDeps, type PresetPinDeps } from './presetPins.js'
 import { resolveTaskTypeFields } from './taskTypeFields.js'
 import { resolveTicket } from './ticketLinkage.js'
 
@@ -27,6 +28,8 @@ export interface PublicTaskCreationDeps {
   taskTypeRegistry: ServerContainer['taskTypeRegistry']
   tasks: ServerContainer['tasks']
   documents: ServerContainer['documents']
+  /** The preset libraries a pinned `modelPresetId` / `riskPolicyId` is checked against. */
+  presets: PresetPinDeps
   logger: Logger
 }
 
@@ -37,6 +40,7 @@ export function taskCreationDeps(container: ServerContainer): PublicTaskCreation
     taskTypeRegistry: container.taskTypeRegistry,
     tasks: container.tasks,
     documents: container.documents,
+    presets: presetPinDeps(container),
     logger: container.logger,
   }
 }
@@ -61,6 +65,11 @@ export async function createTaskWithAttachments(
   // fetches, exactly like the container check below.
   const taskTypeFields = resolveTaskTypeFields(body, deps.taskTypeRegistry)
   const input = { ...rest, ...(taskTypeFields ? { taskTypeFields } : {}) }
+  // Same half of the sequence as the fields check above, and for the same reason: a pinned preset
+  // that does not exist is refusable from what the workspace already holds, so it is refused before
+  // the board changes rather than after a `201` for a task running on the default it silently fell
+  // back to.
+  await assertPinnedPresetsExist(deps.presets, workspaceId, body)
   if (ticket || documents?.length) {
     // The container is checked FIRST because resolving a ticket or a source document is an
     // outbound call to the workspace's own tracker/wiki: a bad `serviceId` should be answered by

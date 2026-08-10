@@ -3,6 +3,7 @@ import {
   getPublicRepoBootstrapContract,
   getPublicVcsConnectionContract,
   listPublicMergePresetsContract,
+  listPublicModelPresetsContract,
   listPublicWiredModelsContract,
   startPublicRepoBootstrapContract,
   testPublicEnvironmentConnectionContract,
@@ -15,12 +16,14 @@ import {
   type KubernetesManifestSource,
   type KubernetesUrlSource,
   type ModelCatalog,
+  type ModelPreset,
   type PublicBootstrapJob,
   type PublicEnvironmentConnection,
   type PublicEnvironmentConnectionView,
   type PublicKubernetesManifestSource,
   type PublicKubernetesUrlSource,
   type PublicMergePreset,
+  type PublicModelPreset,
   type PublicServiceProvisioning,
   type PublicVcsConnection,
   type PublicWiredModel,
@@ -32,6 +35,7 @@ import type {
   BootstrapModule,
   EnvironmentsModule,
   GitHubModule,
+  ModelPresetsModule,
   RiskPoliciesModule,
 } from '@cat-factory/orchestration'
 import { NotFoundError, UnavailableError } from '@cat-factory/kernel'
@@ -127,6 +131,11 @@ function servesUserScopedModels(container: ServerContainer): boolean {
 /** The merge-preset module, or the 503. */
 function requireMergePresets<E extends AppEnv>(c: Context<E>): RiskPoliciesModule {
   return requireCapability(c.get('container').riskPolicies, 'Merge presets are not configured')
+}
+
+/** The model-preset module, or the 503. */
+function requireModelPresets<E extends AppEnv>(c: Context<E>): ModelPresetsModule {
+  return requireCapability(c.get('container').modelPresets, 'Model presets are not configured')
 }
 
 /**
@@ -469,6 +478,26 @@ function toPublicVcsConnection(connection: GitHubConnection): PublicVcsConnectio
   }
 }
 
+/**
+ * A model preset as this surface serves it.
+ *
+ * `version` and `providerPreference` stay off. The first is the SPA's reseed prompt, which is a
+ * question about a library the operator maintains rather than about a run. The second names the
+ * ROUTE order a resolution walks (direct, Bedrock, OpenRouter, …), and publishing it would put a
+ * caller in the position of reading a preference whose members it cannot act on: nothing on this
+ * surface picks a route, and the vocabulary is closed-but-persisted, so a retired member reaching a
+ * public response is a shape this projection would then owe an answer for.
+ */
+function toPublicModelPreset(preset: ModelPreset): PublicModelPreset {
+  return {
+    presetId: preset.id,
+    name: preset.name,
+    isDefault: preset.isDefault,
+    baseModelId: preset.baseModelId,
+    overrides: { ...preset.overrides },
+  }
+}
+
 function toPublicMergePreset(preset: RiskPolicy): PublicMergePreset {
   return {
     presetId: preset.id,
@@ -522,5 +551,12 @@ function registerWiringRoutes(app: Hono<AppEnv>): void {
     const presets = requireMergePresets(c)
     const rows = await presets.service.list(auth.workspaceId)
     return c.json({ presets: rows.map(toPublicMergePreset) }, 200)
+  })
+
+  buildHonoRoute(app, listPublicModelPresetsContract, async (c) => {
+    const auth = await authorizeOrThrow(c, listPublicModelPresetsContract.minScope)
+    const presets = requireModelPresets(c)
+    const rows = await presets.service.list(auth.workspaceId)
+    return c.json({ presets: rows.map(toPublicModelPreset) }, 200)
   })
 }

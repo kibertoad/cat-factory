@@ -369,3 +369,24 @@ Every request body here states its omitted-value rule in prose and carries no sc
 default means "always present" on the way out and "may be omitted" on the way in, and the SDK
 emitter refuses that ambiguity outright; the defaults are applied in
 `PublicProvisioningController`.
+
+1.42.0: the two preset knobs become callable. `GET /api/v1/model-presets` lists the workspace's
+model presets and which is the default (the merge-preset list's sibling, and the same
+list-beside-the-id pairing the pipeline list has with `start`), and task create gains optional
+`modelPresetId` and `riskPolicyId`. Additive throughout, so a consumer built against 1.41.0 keeps
+working unchanged: both fields omitted still resolve the workspace default.
+
+What a consumer NOTICES is the refusal, not the fields. A pinned id no preset carries is a `422`
+(`details.reason: 'model_preset_not_found'` / `'merge_preset_not_found'`, with an `available` list)
+rather than a silent fall back to the default, because the two are indistinguishable afterwards and
+a run that quietly used another model succeeds while being about something else. A deployment with
+the preset repository unwired answers `503` for a caller that pinned one, which is a different fact
+from an unknown id and needs a different fix.
+
+`riskPolicyId` is the one that changes what a caller may DO rather than what it may say: a merge
+preset carries `autoMergeEnabled` and the score ceilings, so pinning one selects how much oversight
+landing takes. It is exposed because withholding it was never the control it resembled (a caller
+could always move the workspace default, which aims the same power at every other task too), and
+the actual control is an admission rule over which presets a caller may pin:
+`docs/initiatives/role-scoped-risk-policy-admission.md`. Until that lands, an `admin` key may pin
+any preset its workspace holds, which is the authority it already had by editing one.

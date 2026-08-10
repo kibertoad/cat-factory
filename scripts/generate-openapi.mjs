@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.41.0'
+const API_VERSION = '1.42.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -316,6 +316,12 @@ const OPERATION_DOCS = {
     summary: 'List the workspace’s merge-threshold presets',
     description:
       'The preset library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the preset forces into dry-run mode, which is the difference between “this preset merges” and “this preset merges for everyone except one role”.',
+  },
+  listPublicModelPresets: {
+    tag: 'Model presets',
+    summary: 'List the workspace’s model presets',
+    description:
+      'The preset library, including which row is the workspace default that a task pinning none resolves. `baseModelId` is the model every agent step runs on under the preset, and `overrides` names the agent kinds that run on something else, which is usually the one that matters: two presets often differ only in what the CODER gets. Whether a preset can actually be dispatched to is NOT repeated here, because the models endpoint already answers it while keeping unconfigured apart from refused-by-policy; join on `baseModelId`.',
   },
   listPublicRepos: {
     tag: 'Repos',

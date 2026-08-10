@@ -1253,6 +1253,33 @@ func (s *MergePresetsService) List(ctx context.Context) (*ListPublicMergePresets
 	return &out, nil
 }
 
+// ModelPresetsService the model presets a task can pin, including which is the workspace default: what decides which
+// model each agent step runs on, and so what a run costs. Availability is not repeated here; join
+// `baseModelId` against the models group, which keeps unconfigured and policy-refused apart.
+type ModelPresetsService struct {
+	client *Client
+}
+
+// List list the workspace’s model presets
+// The preset library, including which row is the workspace default that a task pinning none
+// resolves. `baseModelId` is the model every agent step runs on under the preset, and `overrides`
+// names the agent kinds that run on something else, which is usually the one that matters: two
+// presets often differ only in what the CODER gets. Whether a preset can actually be dispatched
+// to is NOT repeated here, because the models endpoint already answers it while keeping
+// unconfigured apart from refused-by-policy; join on `baseModelId`.
+// GET /api/v1/model-presets (operation listPublicModelPresets).
+func (s *ModelPresetsService) List(ctx context.Context) (*ListPublicModelPresetsResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/model-presets",
+	}
+	var out ListPublicModelPresetsResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // WebhookService the workspace's outbound endpoints: register, inspect or remove the receivers that
 // notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address
 // the `default` endpoint; the named ones let an integration enroll its own receiver, with its own

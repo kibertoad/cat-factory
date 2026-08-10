@@ -494,3 +494,39 @@ export type PublicMergePreset = v.InferOutput<typeof publicMergePresetSchema>
 
 export const publicMergePresetListSchema = v.object({ presets: v.array(publicMergePresetSchema) })
 export type PublicMergePresetList = v.InferOutput<typeof publicMergePresetListSchema>
+
+/**
+ * One model preset: which model a task pinning it runs its agent steps on.
+ *
+ * Published so a caller can PICK one by id rather than guess at it, which is the same reason the
+ * pipeline list exists beside a `start` that takes a `pipelineId`. The ids are the workspace's own
+ * (`mdp_*` for the built-ins), so a caller reads them here rather than hard-coding a vocabulary
+ * this surface would then owe forever.
+ *
+ * **Availability is deliberately NOT here.** Whether a preset's model can actually be dispatched to
+ * is a fact about wiring and account policy, and `GET /api/v1/models` already answers it with the
+ * two causes kept apart (unconfigured, versus refused by the account model-family policy) because
+ * they need opposite fixes. Repeating a derived yes/no here would be a second place to keep honest,
+ * and the first one to go stale. Join on `baseModelId`.
+ */
+export const publicModelPresetSchema = v.object({
+  presetId: v.string(),
+  name: v.string(),
+  /** Whether a task that pins no preset resolves this one. */
+  isDefault: v.boolean(),
+  /** The model every agent kind runs on under this preset, unless overridden below. */
+  baseModelId: v.string(),
+  /**
+   * Per-agent-kind model overrides on top of the base, keyed by agent kind.
+   *
+   * Published because a preset is not always uniform, and a caller choosing between two of them is
+   * choosing what the CODER runs on more than what the base is. The keys are an open set (a
+   * deployment's custom agent kinds appear here too), so a reader matches what it knows and ignores
+   * the rest rather than switching exhaustively.
+   */
+  overrides: v.record(v.string(), v.string()),
+})
+export type PublicModelPreset = v.InferOutput<typeof publicModelPresetSchema>
+
+export const publicModelPresetListSchema = v.object({ presets: v.array(publicModelPresetSchema) })
+export type PublicModelPresetList = v.InferOutput<typeof publicModelPresetListSchema>
