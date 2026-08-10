@@ -29,7 +29,12 @@
 //     `deployment-health` passes those through verbatim. A paraphrase here would be a second,
 //     staler copy of a message the deployment already writes better.
 
-import type { CatFactoryClient } from '@cat-factory/sdk'
+import type {
+  CatFactoryClient,
+  ListPublicModelPresetsResponsePreset,
+  ListPublicWiredModelsResponseModel,
+} from '@cat-factory/sdk'
+import { findRepo } from './adopt.ts'
 import type { DeploymentApi } from './deploymentApi.ts'
 import type { AcceptanceConfig } from './config.ts'
 import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3s.ts'
@@ -42,8 +47,8 @@ export type PreflightContext = {
   deployment: DeploymentApi
   /** Board titles this pass will use. Supplied rather than derived: `fixtures.ts` owns them. */
   serviceTitles: readonly string[]
-  /** True when the ledger already names bootstrapped services, i.e. this is a RESUMED pass. */
-  hasBootstrappedServices: boolean
+  /** True when the ledger already names adopted services, i.e. this is a RESUMED pass. */
+  hasAdoptedServices: boolean
 }
 
 const satisfied = (detail: string): PrerequisiteVerdict => ({ status: 'satisfied', detail })
@@ -69,6 +74,31 @@ function publicApiRead(config: AcceptanceConfig, path: string, purpose: string):
     run: `curl -sS -H "Authorization: Bearer $CAT_FACTORY_API_KEY" '${config.baseUrl}/api/v1${path}'`,
     purpose,
   }
+}
+
+/** Every preset the deployment offers, as `id (name → model)`, for a refusal that names the choice. */
+function describePresets(presets: readonly ListPublicModelPresetsResponsePreset[]): string {
+  const listed = presets.map(
+    (preset) => `${preset.presetId} ('${preset.name}' → ${preset.baseModelId})`,
+  )
+  return listed.join(', ') || '(none: this workspace holds no preset library)'
+}
+
+/**
+ * The presets whose base model IS selectable right now.
+ *
+ * Joined against the catalog rather than listing every preset, because a refusal that offers an
+ * alternative the deployment cannot dispatch to either has sent the reader round the same loop.
+ */
+function describeAvailablePresets(
+  presets: readonly ListPublicModelPresetsResponsePreset[],
+  models: readonly ListPublicWiredModelsResponseModel[],
+): string {
+  const selectable = new Set(
+    models.filter((model) => model.available).map((model) => model.modelId),
+  )
+  const usable = presets.filter((preset) => selectable.has(preset.baseModelId))
+  return usable.map((preset) => `${preset.presetId} ('${preset.name}')`).join(', ') || '(none)'
 }
 
 /**
@@ -285,8 +315,95 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     },
   },
   {
+    id: 'model-preset',
+    what: 'ACCEPTANCE_MODEL_PRESET names a preset on this deployment whose model can be dispatched to',
+    disposition: 'required',
+    check: async ({ client, config }) => {
+      // The check that would have turned the first live setup attempt's empty-model-catalog finding
+      // into a PRESET problem instead of a mystery at the first dispatch. `agent-model` above says
+      // whether ANY model is selectable; this one says whether the model THIS PASS pins is, which
+      // are different questions the moment a pass names a preset.
+      const presetRead = publicApiRead(
+        config,
+        '/model-presets',
+        'list the preset library, with each row’s presetId, baseModelId and isDefault',
+      )
+      const { presets } = await client.modelPresets.list()
+      const preset = presets.find((entry) => entry.presetId === config.modelPresetId)
+      if (!preset) {
+        return unsatisfied(
+          `no preset in this workspace has id '${config.modelPresetId}', so every task this pass ` +
+            `files would be refused at creation`,
+          {
+            steps: [
+              `This deployment's presets are: ${describePresets(presets)}.`,
+              'Set ACCEPTANCE_MODEL_PRESET to one of those ids, or unset it to take the built-in ' +
+                "Claude preset ('mdp_claude').",
+              '`pnpm --filter @cat-factory/acceptance run configure` offers the library as a menu, ' +
+                'so the id never has to be typed.',
+            ],
+            commands: [presetRead],
+          },
+        )
+      }
+
+      const { models } = await client.models.list()
+      const base = models.find((model) => model.modelId === preset.baseModelId)
+      // Three states, not two: a preset whose base model the catalog does not name at all is a
+      // different fault from one the deployment refuses, and both differ from a preset that is
+      // fine. Rolling them together would send an operator to add a provider key for a model id
+      // that no longer exists.
+      if (!base) {
+        return unsatisfied(
+          `preset '${preset.name}' runs on model '${preset.baseModelId}', which this deployment's ` +
+            `catalog does not list, so every agent step would fail at dispatch`,
+          {
+            steps: [
+              'The preset outlived the model it names. Edit it in the SPA (Workspace settings, ' +
+                '"Model presets") to a model the catalog carries, or point the suite at another preset.',
+              `The catalog holds: ${models.map((model) => model.modelId).join(', ') || '(nothing)'}.`,
+            ],
+            commands: [presetRead, publicApiRead(config, '/models', 'list the catalog')],
+          },
+        )
+      }
+      if (!base.available) {
+        return unsatisfied(
+          `preset '${preset.name}' runs on '${base.label}' (${base.modelId}), which is in the ` +
+            `catalog but not selectable${base.policyBlocked ? ' (refused by the account model-family policy)' : ' (no provider wired for it)'}`,
+          {
+            steps: base.policyBlocked
+              ? [
+                  'The model is CONFIGURED and refused, so adding a provider key changes nothing: ' +
+                    "permit its family on the account's model policy, or pin a preset whose model " +
+                    'the policy already permits.',
+                ]
+              : [
+                  `In the SPA: Model providers, and wire a provider for '${base.modelId}' (a ` +
+                    'provider API key, or a connected subscription).',
+                  'Or pin a preset whose base model is already selectable: ' +
+                    `${describeAvailablePresets(presets, models)}.`,
+                ],
+            commands: [publicApiRead(config, '/models', "read each entry's available flag back")],
+            docs: 'backend/docs/model-support.md',
+          },
+        )
+      }
+      const overrides = Object.keys(preset.overrides).length
+      // Overrides are COUNTED, not graded. Each names a per-kind model whose availability the same
+      // join would answer, but a preset overriding one agent kind is a normal, deliberate
+      // configuration and refusing a pass over it would grade the workspace's taste rather than
+      // its wiring. The count is stated so a surprising dispatch model is not a surprise.
+      return satisfied(
+        `'${preset.name}' (${preset.presetId}) runs on ${base.label}` +
+          (overrides > 0 ? `, with ${overrides} per-kind override(s)` : '') +
+          (preset.isDefault ? ', and is this workspace’s default' : ''),
+      )
+    },
+  },
+  {
     id: 'vcs-connection',
-    what: 'the workspace can create repositories under ACCEPTANCE_REPO_OWNER and push workflows',
+    what: 'the workspace is connected to ACCEPTANCE_REPO_OWNER and may write workflow files',
     disposition: 'required',
     check: async ({ client, config }) => {
       const connectionRead = publicApiRead(
@@ -297,14 +414,15 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       const { connection } = await client.vcs.getConnection()
       if (!connection) {
         return unsatisfied(
-          'the workspace has no VCS connection, so spec 01 has nothing to create repositories with',
+          'the workspace has no VCS connection, so it can neither see the two repositories this ' +
+            'pass adopts nor push to them',
           {
             steps: [
               'In the SPA: Integrations, and connect the workspace to its VCS provider.',
-              'A GitHub App installation must be granted repository CREATION on ' +
-                `'${config.repoOwner}' plus "Workflows: read and write".`,
+              `A GitHub App installation must be granted access to both repositories under ` +
+                `'${config.repoOwner}', plus "Workflows: read and write".`,
               'A personal access token must carry `repo` and `workflow` (GitHub classic) or `api` ' +
-                '(GitLab). The bootstrapped repositories push a CI workflow, which the provider ' +
+                '(GitLab). The scaffolded repositories push a CI workflow, which the provider ' +
                 'rejects outright without the workflow permission.',
             ],
             commands: [connectionRead],
@@ -314,13 +432,19 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // Collected rather than returned one at a time: three separate afternoons is the exact
       // failure the whole gate exists to prevent. Each problem contributes its own step, so the
       // instructions stay in step with the diagnosis rather than restating a generic reconnect.
+      //
+      // `canCreateRepos` is deliberately NOT among them any more. The operator creates the two
+      // repositories and `target-repos` below checks they arrived, so a connection that cannot
+      // create one is now perfectly sufficient: that permission was the prerequisite no
+      // configuration could satisfy on a PAT deployment, which is the whole reason for the change.
       const problems: string[] = []
       const steps: string[] = []
       const commands: RemedyCommand[] = []
       if (connection.accountLogin.toLowerCase() !== config.repoOwner.toLowerCase()) {
         problems.push(
           `it is connected to '${connection.accountLogin}' but ACCEPTANCE_REPO_OWNER is ` +
-            `'${config.repoOwner}', so every bootstrap would target an account this workspace cannot reach`,
+            `'${config.repoOwner}', so the repositories this pass adopts live under an account ` +
+            `this workspace cannot reach`,
         )
         steps.push(
           `Either point the suite at the connected account (the export below), or re-connect the ` +
@@ -328,24 +452,16 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         )
         commands.push({
           run: `export ACCEPTANCE_REPO_OWNER=${connection.accountLogin}`,
-          purpose: 'create the bootstrapped repositories under the account already connected',
+          purpose: 'adopt the repositories under the account already connected',
         })
       }
-      if (!connection.canCreateRepos) {
-        problems.push('it cannot create repositories, which is the first thing spec 01 asks of it')
-        steps.push(
-          'Grant repository creation: on a GitHub App installation that is an account-level ' +
-            'permission rather than a per-repository one, and on a PAT it is the `repo` scope ' +
-            '(GitHub classic) or `api` (GitLab).',
-        )
-      }
       if (!connection.canManageWorkflows) {
-        // The bootstrapped repositories ship a build-and-push workflow, and spec 02 asserts a
-        // real CI gate. Without `workflows: write` the provider REJECTS the push that adds it,
-        // which surfaces as a bootstrap that half-worked.
+        // The scaffold runs ship a build-and-push workflow, and spec 02 asserts a real CI gate.
+        // Without `workflows: write` the provider REJECTS the push that adds it, which surfaces as
+        // a scaffold pull request that half-worked.
         problems.push(
-          'it was not granted permission to write workflow files, so the bootstrapped ' +
-            "repositories' CI workflow cannot be pushed and spec 02's CI gate has nothing to gate on",
+          'it was not granted permission to write workflow files, so the scaffolded CI workflow ' +
+            "cannot be pushed and spec 02's CI gate has nothing to gate on",
         )
         steps.push(
           'Grant workflow writes: "Workflows: read and write" on a GitHub App installation, or ' +
@@ -356,7 +472,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       if (problems.length === 0) {
         return satisfied(
           `${connection.provider} connection to '${connection.accountLogin}' ` +
-            `(${connection.method}) can create repositories and write workflows`,
+            `(${connection.method}) may write workflow files`,
         )
       }
       commands.push(connectionRead)
@@ -364,6 +480,122 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         `the ${connection.provider} connection to '${connection.accountLogin}' is ` +
           `not sufficient:\n    ${problems.join('\n    ')}`,
         { steps, commands },
+      )
+    },
+  },
+  {
+    id: 'target-repos',
+    what: 'both repositories this pass adopts exist and are reachable, and neither is already in use',
+    disposition: 'required',
+    check: async ({ client, config, hasAdoptedServices }) => {
+      const repoRead = publicApiRead(
+        config,
+        '/repos',
+        'list the repositories this workspace can back a service with, and what already backs each',
+      )
+      const { repos } = await client.repos.list()
+      const wanted = [
+        { role: 'backend', name: config.repos.backend },
+        { role: 'frontend', name: config.repos.frontend },
+      ]
+      const found = wanted.map((entry) => ({
+        ...entry,
+        repo: findRepo(repos, config.repoOwner, entry.name),
+      }))
+
+      const missing = found.filter((entry) => !entry.repo)
+      if (missing.length > 0) {
+        const visible = repos.map((repo) => `${repo.owner}/${repo.name}`)
+        return unsatisfied(
+          `${missing.map((entry) => `'${config.repoOwner}/${entry.name}'`).join(' and ')} ` +
+            `${missing.length === 1 ? 'is' : 'are'} not listed by GET /api/v1/repos, so there is ` +
+            `nothing for spec 01 to adopt`,
+          {
+            steps: [
+              'Create each missing repository yourself, EMPTY except for a README: the scaffold ' +
+                'runs open a pull request, which needs a default branch to target, and a ' +
+                'repository with no commits has none.',
+              'Then make sure this workspace reaches it: a GitHub App installation must include ' +
+                'that repository, and a PAT must carry `repo`. A repository that exists and is ' +
+                'invisible here answers identically to one that was never created.',
+              `Visible to this workspace right now: ${visible.join(', ') || '(none)'}.`,
+              'The `configure` command below opens a prefilled creation page per repository and ' +
+                're-reads this list, so the next click is the thing the suite needs.',
+            ],
+            commands: [
+              {
+                run: 'pnpm --filter @cat-factory/acceptance run configure',
+                purpose: 'open the creation page for each missing repository, then re-check',
+              },
+              repoRead,
+            ],
+          },
+        )
+      }
+
+      // A repository already backing a service is the REPO half of what `board-titles` catches for
+      // frames, and it needs the same split: on a resumed pass the link is this pass's own and is
+      // the point, and on a fresh one it means the frame would be a second one over someone's
+      // repository. Withheld from a resume rather than graded, because the ledger is what tells
+      // "mine, yesterday" from "someone else's".
+      const taken = found.filter((entry) => entry.repo?.serviceId)
+      if (taken.length > 0 && !hasAdoptedServices) {
+        return unsatisfied(
+          `${taken.map((entry) => `'${entry.name}' already backs service ${entry.repo?.serviceId}`).join(', ')}` +
+            `, but this pass's ledger names no services. A fresh pass would adopt a repository ` +
+            `whose work belongs to another pass, and its scaffold run would open a pull request ` +
+            `against a tree that is already built.`,
+          {
+            steps: [
+              'If that service is from an earlier pass of yours, RESUME it rather than starting ' +
+                'over: the ledger it left behind is what makes the two tellable apart.',
+              'Otherwise point ACCEPTANCE_BACKEND_REPO / ACCEPTANCE_FRONTEND_REPO at two fresh ' +
+                'empty repositories, or delete the service frame that holds this one.',
+            ],
+            commands: [
+              {
+                run: 'ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance',
+                purpose: 'resume the most recent pass instead of starting a second one',
+              },
+              repoRead,
+            ],
+          },
+        )
+      }
+
+      // Past the `missing` guard every entry has a repository, but narrowed through a predicate
+      // rather than asserted with `!`: the alternative renders `undefined/undefined` into the very
+      // verdict a reader would rely on if this ever stopped being true.
+      const resolved = found.flatMap((entry) => (entry.repo ? [entry.repo] : []))
+      const monorepo = resolved.filter((repo) => repo.monorepo)
+      if (monorepo.length > 0) {
+        return unsatisfied(
+          `${monorepo.map((repo) => `'${repo.name}'`).join(' and ')} ` +
+            `${monorepo.length === 1 ? 'is' : 'are'} registered as a MONOREPO, which backs a ` +
+            `service only with a subdirectory this suite does not configure`,
+          {
+            steps: [
+              'Point the suite at two whole-repository targets. The two services here are two ' +
+                'deployable applications with their own Dockerfiles, images and per-PR manifests, ' +
+                'so a shared repository is a different scenario rather than a smaller one.',
+            ],
+            commands: [repoRead],
+          },
+        )
+      }
+
+      // Emptiness is STATED, never graded, and this is the one thing this check deliberately does
+      // not claim. No `/api/v1` read publishes whether a repository holds content: the bootstrapper
+      // used to answer it inside its container pre-flight, and putting it on the repository LIST
+      // would mean one provider round-trip per row on every call. What a non-empty target actually
+      // costs is a scaffold run that builds on top of whatever is there, which is a strange result
+      // rather than a failure, so the honest disposition is to say the probe cannot see it.
+      const names = resolved.map((repo) => `${repo.owner}/${repo.name}`).join(' and ')
+      return satisfied(
+        `${names} are reachable and ` +
+          (taken.length > 0 ? `back this resumed pass's own service(s)` : 'back no service yet') +
+          ` (whether they are EMPTY is not readable over /api/v1; a repository with content is ` +
+          `scaffolded on top of)`,
       )
     },
   },
@@ -426,31 +658,32 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'board-titles',
     what: 'this pass will not adopt or collide with another pass’s service frames',
     disposition: 'required',
-    check: async ({ client, config, serviceTitles, hasBootstrappedServices }) => {
+    check: async ({ client, config, serviceTitles, hasAdoptedServices }) => {
       const { services } = await client.services.list()
       const taken = serviceTitles.filter((title) =>
         services.some((service) => service.title === title),
       )
-      if (taken.length === 0 || hasBootstrappedServices) {
+      if (taken.length === 0 || hasAdoptedServices) {
         // On a RESUMED pass the frames existing is the point: the ledger names them and spec 01
         // re-reads the board to confirm they are still there.
         return satisfied(
-          hasBootstrappedServices
+          hasAdoptedServices
             ? 'resuming a pass whose services the ledger already names'
             : `neither '${serviceTitles.join("' nor '")}' exists on this board yet`,
         )
       }
       return unsatisfied(
         `this board already has ${taken.map((title) => `'${title}'`).join(' and ')}, but this ` +
-          `pass’s ledger names no services. A fresh pass would bootstrap a SECOND frame under ` +
-          `the same title, and a later resume would have no way to tell the two apart.`,
+          `pass’s ledger names no services. A fresh pass would raise a SECOND frame under the ` +
+          `same title, and a later resume would have no way to tell the two apart.`,
         {
           steps: [
             'If those frames belong to an earlier pass of yours, RESUME it rather than starting ' +
               'over: the ledger it left behind is what makes the two tellable apart.',
             `If they belong to someone else, take a prefix of your own (today's is ` +
-              `'${config.namePrefix}'), which renames every repository, service and task this ` +
-              'pass creates.',
+              `'${config.namePrefix}'), which renames every service frame and task this pass ` +
+              'creates. The repository names are ACCEPTANCE_BACKEND_REPO / ' +
+              'ACCEPTANCE_FRONTEND_REPO and move separately.',
             'Otherwise delete the leftover frames from the board and re-run.',
           ],
           commands: [
@@ -464,9 +697,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
             },
             {
               run: `export ACCEPTANCE_NAME_PREFIX="${config.namePrefix}-$(whoami)"`,
-              purpose:
-                'take a per-person prefix, which repository names need anyway (they are ' +
-                'taken account-wide)',
+              purpose: 'take a per-person prefix, so two people share one board without colliding',
             },
           ],
         },

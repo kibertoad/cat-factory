@@ -11,6 +11,8 @@ const COMPLETE = {
   CAT_FACTORY_API_KEY: 'cf_live_pak_test.secret',
   ACCEPTANCE_WORKSPACE_ID: 'ws_1',
   ACCEPTANCE_REPO_OWNER: 'acme',
+  ACCEPTANCE_BACKEND_REPO: 'cf-acc-catalog-api',
+  ACCEPTANCE_FRONTEND_REPO: 'cf-acc-catalog-web',
   ACCEPTANCE_K3S_API_SERVER: 'https://127.0.0.1:6443',
   ACCEPTANCE_K3S_TOKEN: 'sa-token',
   ACCEPTANCE_K3S_INSECURE: 'true',
@@ -101,5 +103,20 @@ describe('resolveConfig', () => {
     expect(config.runBudgetMs).toBe(90 * 60 * 1000)
     // nip.io resolves `<anything>.127.0.0.1` to loopback, so the default template needs no DNS.
     expect(config.cluster.ingressHostTemplate).toContain('127.0.0.1.nip.io')
+    // The built-in Claude preset every deployment seeds, so an operator who configured no preset
+    // still pins one that exists rather than an empty id the gate reports as "no such preset".
+    expect(config.modelPresetId).toBe('mdp_claude')
+  })
+
+  it('refuses one repository name used for both services', () => {
+    // Two services, two repositories: the defect the suite hunts exists only BETWEEN them, so one
+    // name for both would back the frontend frame with the backend's repository and every
+    // cross-service assertion afterwards would be about a single service.
+    const problems = expectProblems({
+      ...COMPLETE,
+      ACCEPTANCE_FRONTEND_REPO: 'CF-ACC-CATALOG-API',
+    })
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toContain('two repositories')
   })
 })

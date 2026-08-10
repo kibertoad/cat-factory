@@ -7,7 +7,14 @@
 // integration breaks this suite at COMPILE time instead of at 3am against a live cluster.
 
 import { CatFactoryClient } from '@cat-factory/sdk'
-import type { PublicDecisionList, PublicIdentity, PublicRun, PublicService } from '@cat-factory/sdk'
+import type {
+  CreatePublicTask,
+  PublicDecisionList,
+  PublicIdentity,
+  PublicRun,
+  PublicService,
+  PublicTask,
+} from '@cat-factory/sdk'
 import type { AcceptanceConfig } from './config.ts'
 import { waitFor } from './deadline.ts'
 import { isActionable } from './decisions.ts'
@@ -17,6 +24,28 @@ export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
 
 export function createClient(config: AcceptanceConfig): CatFactoryClient {
   return new CatFactoryClient({ baseUrl: config.baseUrl, apiKey: config.apiKey })
+}
+
+/**
+ * File a task with the pass's model preset PINNED. The suite's only door onto task creation.
+ *
+ * One helper rather than the field repeated at each `client.tasks.create` call, because the value
+ * of pinning is that EVERY run of a pass runs on the model the pass names, and a site that forgot
+ * the field would silently resolve the workspace default instead: a result that reads exactly like
+ * the others and was produced by a different model. There are five such sites (two scaffolds, two
+ * feature halves, one bug report) and nothing would fail if one of them drifted.
+ *
+ * Only the model preset is pinned. The RISK POLICY is deliberately left to resolve, because
+ * `auto-merge-policy` grades the workspace default and a pin here would make that gate a check on
+ * a policy no run of this suite uses.
+ */
+export function filePinnedTask(
+  client: CatFactoryClient,
+  config: AcceptanceConfig,
+  serviceId: string,
+  task: Omit<CreatePublicTask, 'modelPresetId'>,
+): Promise<PublicTask> {
+  return client.tasks.create(serviceId, { ...task, modelPresetId: config.modelPresetId })
 }
 
 /**
@@ -168,13 +197,4 @@ function reportObservation(journal: Journal): (state: string, elapsedMs: number)
   return (state, elapsedMs) => {
     journal.say('observation', `[${Math.round(elapsedMs / 1000)}s] ${state}`)
   }
-}
-
-/** Find a service frame by exact title; null when the board has none. */
-export async function findServiceByTitle(
-  client: CatFactoryClient,
-  title: string,
-): Promise<PublicService | null> {
-  const { services } = await client.services.list()
-  return services.find((service) => service.title === title) ?? null
 }

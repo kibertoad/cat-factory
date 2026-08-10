@@ -1,4 +1,4 @@
-// The briefs the suite hands the platform: two bootstrap prompts, a feature, and a bug report.
+// The briefs the suite hands the platform: two scaffold prompts, a feature, and a bug report.
 //
 // These are the suite's INPUT, and they carry its single most important design decision, so they
 // live in one file with the reasoning attached rather than being scattered inline.
@@ -26,17 +26,12 @@
 
 import { MANIFEST_DIR } from './k3s.ts'
 
-/** Repository names are derived once so the ledger, the briefs and the board all agree. */
-export function backendRepoName(prefix: string, runId: string): string {
-  return `${prefix}-catalog-api-${runId}`
-}
-
-export function frontendRepoName(prefix: string, runId: string): string {
-  return `${prefix}-catalog-web-${runId}`
-}
-
 /**
  * The manifest brief both services share.
+ *
+ * Also the reason the two scaffold briefs below are written for an ORDINARY pipeline run rather
+ * than for the bootstrapper agent: they now arrive as the `description` of a `pl_build` task
+ * against an adopted repository, so what they ask for has to be a pull request's worth of work.
  *
  * `{{image}}`, `{{namespace}}` and `{{branch}}` are rendered by the platform at provision time
  * (see `backend/docs/local-k3s-environments.md`); the agent must emit them VERBATIM rather than
@@ -68,8 +63,8 @@ Also ship a GitHub Actions workflow that builds the Dockerfile and pushes the im
 to any branch, tagged with the commit SHA, so a branch always has an image to pull.`.trim()
 }
 
-/** The backend brief. Note the 1-based \`offset\`: one half of the planted mismatch. */
-export function backendBootstrapInstructions(ingressHostTemplate: string): string {
+/** The backend scaffold brief. Note the 1-based \`offset\`: one half of the planted mismatch. */
+export function backendScaffoldBrief(ingressHostTemplate: string): string {
   return `
 Create a small, production-shaped HTTP backend service in TypeScript on Node 22, using Fastify.
 
@@ -88,11 +83,8 @@ Engineering expectations:
 ${manifestBrief(3000, ingressHostTemplate)}`.trim()
 }
 
-/** The frontend brief. Deliberately says nothing about pagination yet; the feature adds it. */
-export function frontendBootstrapInstructions(
-  backendRepo: string,
-  ingressHostTemplate: string,
-): string {
+/** The frontend scaffold brief. Deliberately says nothing about pagination yet; the feature adds it. */
+export function frontendScaffoldBrief(backendRepo: string, ingressHostTemplate: string): string {
   return `
 Create a small single-page web frontend in TypeScript using Vite and plain TypeScript (no UI
 framework), which renders the catalog served by the companion backend service (\`${backendRepo}\`).

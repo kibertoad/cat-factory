@@ -32,6 +32,11 @@ export {
   type K3sHandlerInput,
   KUBERNETES_ENV_TOKEN_SECRET_KEY,
 } from './k3s-handler.js'
+// The three cluster READS, exported so other in-repo tooling asks the same questions of a
+// kubeconfig that `cat-factory k3s` does: the acceptance suite's `configure` command resolves its
+// apiserver URL and ServiceAccount token through these rather than restating the namespace and
+// secret name, which would drift the moment the guided setup moved either.
+export { decodeToken, readApiServerCommand, readTokenCommand } from './k3s-provision.js'
 export {
   DEFAULT_INGRESS_PORT,
   INGRESS_HOST_TEMPLATE,

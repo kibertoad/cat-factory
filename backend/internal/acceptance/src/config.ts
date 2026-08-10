@@ -25,6 +25,20 @@ export type ClusterConfig = {
   namespaceTemplate: string
 }
 
+/**
+ * The two repositories a pass runs against, BY NAME.
+ *
+ * Named rather than derived, because the operator creates them: repository creation is the one
+ * setup step this suite cannot perform (a PAT connection reports `canCreateRepos: false`, and the
+ * App path creates only under `/orgs/{org}/repos`), so the names are an input rather than a
+ * `${prefix}-catalog-api-${runId}` the suite mints for itself. See
+ * `docs/initiatives/acceptance-suite-operator-setup.md`.
+ */
+export type RepoNames = {
+  backend: string
+  frontend: string
+}
+
 export type AcceptanceConfig = {
   /** Backend origin serving `/api/v1`, plus the two unauthenticated deployment root reads. */
   baseUrl: string
@@ -39,14 +53,25 @@ export type AcceptanceConfig = {
    * two repositories onto a board nobody was watching, and every later assertion still passes.
    */
   workspaceId: string
-  /** GitHub owner (user or org) the bootstrapped repositories are created under. */
+  /** GitHub owner (user or org) the two adopted repositories live under. */
   repoOwner: string
   /**
-   * Prefix for every repository, service and task the suite creates. Defaults to `cf-acc`; set it
-   * per-operator when several people share one GitHub org, since a repository name is taken
-   * account-wide and a collision fails the bootstrap rather than the assertion.
+   * Prefix for every service frame and task the suite creates. Defaults to `cf-acc`; set it
+   * per-operator when several people share one board, since `board-titles` refuses a fresh pass
+   * whose frame titles a previous one already took.
+   *
+   * It no longer names the REPOSITORIES: those are `repos`, chosen by whoever created them.
    */
   namePrefix: string
+  repos: RepoNames
+  /**
+   * The model preset every task this pass files pins (`ACCEPTANCE_MODEL_PRESET`, default `claude`).
+   *
+   * Pinned rather than left to resolve, so a pass runs on the model it says it ran on: the
+   * workspace default is whatever someone last chose on that board, and a pass that silently
+   * adopted it would report a result nobody can reproduce.
+   */
+  modelPresetId: string
   cluster: ClusterConfig
   /** Where the resumable ledger lives. Relative paths resolve against the package directory. */
   stateDir: string
@@ -77,7 +102,15 @@ const REQUIRED: readonly Requirement[] = [
   },
   {
     name: 'ACCEPTANCE_REPO_OWNER',
-    purpose: 'GitHub owner the bootstrapped repositories are created under',
+    purpose: 'GitHub owner the two repositories live under (GET /api/v1/vcs/connection reports it)',
+  },
+  {
+    name: 'ACCEPTANCE_BACKEND_REPO',
+    purpose: 'name of the empty repository the backend service adopts; you create it',
+  },
+  {
+    name: 'ACCEPTANCE_FRONTEND_REPO',
+    purpose: 'name of the empty repository the frontend service adopts; you create it',
   },
   { name: 'ACCEPTANCE_K3S_API_SERVER', purpose: 'kube-apiserver URL, e.g. https://127.0.0.1:6443' },
   {
@@ -125,6 +158,18 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
     )
   }
 
+  // Two services, two repositories: the planted defect lives BETWEEN them (`instructions.ts`), and
+  // one name for both would back the frontend frame with the repository the backend frame already
+  // holds, so every "cross-service" assertion afterwards would be about a single service.
+  const backendRepo = trimmed(env.ACCEPTANCE_BACKEND_REPO)
+  const frontendRepo = trimmed(env.ACCEPTANCE_FRONTEND_REPO)
+  if (backendRepo && frontendRepo && backendRepo.toLowerCase() === frontendRepo.toLowerCase()) {
+    problems.push(
+      `ACCEPTANCE_BACKEND_REPO and ACCEPTANCE_FRONTEND_REPO both name '${backendRepo}'. This ` +
+        `suite needs two repositories, because the defect it hunts exists only between them.`,
+    )
+  }
+
   if (problems.length > 0) return { ok: false, problems }
 
   return {
@@ -135,6 +180,16 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
       workspaceId: required(env, 'ACCEPTANCE_WORKSPACE_ID'),
       repoOwner: required(env, 'ACCEPTANCE_REPO_OWNER'),
       namePrefix: trimmed(env.ACCEPTANCE_NAME_PREFIX) ?? 'cf-acc',
+      repos: {
+        backend: required(env, 'ACCEPTANCE_BACKEND_REPO'),
+        frontend: required(env, 'ACCEPTANCE_FRONTEND_REPO'),
+      },
+      // The built-in Claude preset, which every deployment seeds, so an operator who configured
+      // nothing still names a preset that exists. It is the id `/api/v1` reports rather than a
+      // friendlier `claude` alias: a second naming scheme for one preset would have to be resolved
+      // by guessing (`mdp_` prefix? the display name?), and `configure` removes the reason to want
+      // one by offering the library as a menu.
+      modelPresetId: trimmed(env.ACCEPTANCE_MODEL_PRESET) ?? 'mdp_claude',
       cluster: {
         apiServerUrl: stripTrailingSlash(required(env, 'ACCEPTANCE_K3S_API_SERVER')),
         apiToken: required(env, 'ACCEPTANCE_K3S_TOKEN'),

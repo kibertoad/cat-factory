@@ -2,7 +2,7 @@
 //
 // Why a file rather than module state: one full pass costs real model spend and the better part
 // of an afternoon, and the specs form a chain (03 files a bug against the feature 02 shipped
-// into the repositories 01 bootstrapped). A crash in 03 must not mean re-bootstrapping two
+// into the repositories 01 scaffolded). A crash in 03 must not mean re-scaffolding two
 // repositories and re-shipping a feature. So each spec RECORDS what it created and each spec
 // starts by asking whether its own output already exists; a re-run against the same
 // `ACCEPTANCE_RUN_ID` resumes at the first unfinished step.
@@ -33,14 +33,21 @@ export function resolveStateDir(stateDir: string): string {
  */
 const LATEST_POINTER = 'latest.json'
 
-/** One repository the suite bootstrapped, and the board service frame it materialised. */
+/** One repository the suite adopted, and the board service frame backed by it. */
 export type ServiceRecord = {
   /** The board block id of the service frame, which `/api/v1` addresses as a `serviceId`. */
   blockId: string
   /** The same frame as `/api/v1` names it. Identical value; both spellings appear in the specs. */
   serviceId: string
+  /**
+   * `owner/name`, as `GET /api/v1/repos` reports the adopted repository.
+   *
+   * There is no URL beside it, deliberately. Neither the repository list nor the service read
+   * publishes one, and deriving `https://github.com/owner/name` here would hard-code the provider
+   * this platform is explicitly neutral about (CLAUDE.md, "never re-hardcode GitHub"). A field that
+   * could only ever hold null is worse than its absence.
+   */
   repoName: string
-  repoUrl: string | null
 }
 
 /** One pipeline run the suite started, keyed by the task that owns it. */
@@ -61,26 +68,21 @@ export type RunRecord = {
   answeredKinds: readonly string[]
 }
 
-/** Bootstrap jobs started but not yet seen to settle. Keyed by the service each will become. */
-export type BootstrapJobs = {
-  backend: string | null
-  frontend: string | null
-}
-
 export type World = {
-  /** Groups everything one pass created; also the repository-name suffix, so passes never collide. */
+  /** Groups everything one pass created, and names its ledger. */
   runId: string
   backend: ServiceRecord | null
   frontend: ServiceRecord | null
   /**
-   * The in-flight half of the two records above.
+   * Spec 01's two scaffold runs, one per service.
    *
-   * A bootstrap creates the repository long before its frame is a service, so between those two
-   * moments the ledger would otherwise hold nothing at all. A pass interrupted there and re-run
-   * would start a SECOND bootstrap under a name its own predecessor had already taken, and the
-   * collision reads exactly like someone else's leftovers on a shared account.
+   * Ordinary `pl_build` runs like spec 02's, so they resume the same way rather than through a
+   * bootstrap job id: a pass interrupted mid-scaffold re-attaches to the live run. Recorded
+   * separately from `featureBackend`/`featureFrontend` because they are separate pull requests
+   * against the same repository, and adopting one for the other would skip a whole phase.
    */
-  bootstrapJobs: BootstrapJobs
+  scaffoldBackend: RunRecord | null
+  scaffoldFrontend: RunRecord | null
   /**
    * Spec 02, per service. Two records rather than one because the planted mismatch has two halves
    * and spec 02 asserts the ephemeral-environment evidence of EACH: collapsing them would make
@@ -97,7 +99,8 @@ export function emptyWorld(runId: string): World {
     runId,
     backend: null,
     frontend: null,
-    bootstrapJobs: { backend: null, frontend: null },
+    scaffoldBackend: null,
+    scaffoldFrontend: null,
     featureBackend: null,
     featureFrontend: null,
     bugfix: null,
@@ -113,8 +116,8 @@ export function emptyWorld(runId: string): World {
  * "resume the thing that broke" a command someone can type from memory at 9am.
  *
  * An absent or unreadable pointer with `latest` asked for is a REFUSAL rather than a fresh pass.
- * The two are opposite intents, and silently starting a new one would bootstrap two repositories
- * for an operator who asked to continue.
+ * The two are opposite intents, and silently starting a new one would spend an afternoon of real
+ * model money for an operator who asked to continue.
  */
 export function resolveRunId(
   env: Readonly<Record<string, string | undefined>>,
@@ -128,11 +131,11 @@ export function resolveRunId(
     throw new Error(
       `ACCEPTANCE_RUN_ID=latest, but ${join(resolveStateDir(stateDir), LATEST_POINTER)} names no ` +
         `previous pass. Name a run id explicitly, or unset ACCEPTANCE_RUN_ID to start a new pass ` +
-        `(which bootstraps two repositories and spends real money).`,
+        `(which scaffolds two repositories and spends real money).`,
     )
   }
-  // Seconds granularity, no separators: it becomes part of a GitHub repository name, where the
-  // character set is narrow and the length budget is not generous.
+  // Seconds granularity, no separators: it names this pass's ledger and journal files, so it has
+  // to be safe in a filename on every platform an operator runs this from.
   return new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
 }
 
@@ -257,18 +260,11 @@ export function coerceWorld(value: unknown): World | null {
     runId: record.runId,
     backend: coerceService(record.backend),
     frontend: coerceService(record.frontend),
-    bootstrapJobs: coerceBootstrapJobs(record.bootstrapJobs),
+    scaffoldBackend: coerceRun(record.scaffoldBackend),
+    scaffoldFrontend: coerceRun(record.scaffoldFrontend),
     featureBackend: coerceRun(record.featureBackend),
     featureFrontend: coerceRun(record.featureFrontend),
     bugfix: coerceRun(record.bugfix),
-  }
-}
-
-function coerceBootstrapJobs(value: unknown): BootstrapJobs {
-  const record = asRecord(value)
-  return {
-    backend: typeof record?.backend === 'string' ? record.backend : null,
-    frontend: typeof record?.frontend === 'string' ? record.frontend : null,
   }
 }
 
@@ -283,12 +279,7 @@ function coerceService(value: unknown): ServiceRecord | null {
   ) {
     return null
   }
-  return {
-    blockId,
-    serviceId,
-    repoName,
-    repoUrl: typeof record.repoUrl === 'string' ? record.repoUrl : null,
-  }
+  return { blockId, serviceId, repoName }
 }
 
 function coerceRun(value: unknown): RunRecord | null {

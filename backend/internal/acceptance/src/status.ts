@@ -32,8 +32,6 @@ export type PassStatus = {
   phases: readonly PhaseStatus[]
   services: readonly { role: string; record: ServiceRecord }[]
   runs: readonly { role: string; record: RunRecord }[]
-  /** In-flight bootstraps: started, not yet seen to produce a service. */
-  pendingBootstraps: readonly { role: string; jobId: string }[]
   /** Since the last journal line. Null when the journal is empty. */
   idleMs: number | null
 }
@@ -53,10 +51,13 @@ export function summarisePass(input: {
     journalPath: input.journalPath,
     phases: reducePhases(events),
     services: collect(world, ['backend', 'frontend'] as const),
-    runs: collect(world, ['featureBackend', 'featureFrontend', 'bugfix'] as const),
-    pendingBootstraps: (['backend', 'frontend'] as const).flatMap((role) =>
-      world.bootstrapJobs[role] ? [{ role, jobId: world.bootstrapJobs[role] }] : [],
-    ),
+    runs: collect(world, [
+      'scaffoldBackend',
+      'scaffoldFrontend',
+      'featureBackend',
+      'featureFrontend',
+      'bugfix',
+    ] as const),
     idleMs: last ? Math.max(0, now - last.at) : null,
   }
 }
@@ -136,19 +137,10 @@ export function formatPassStatus(
     }
   }
 
-  if (status.pendingBootstraps.length > 0) {
-    lines.push('', 'Bootstraps started but not settled')
-    for (const entry of status.pendingBootstraps) {
-      lines.push(`  ${entry.role}: job ${entry.jobId}`)
-    }
-  }
-
   if (status.services.length > 0) {
     lines.push('', 'Services')
     for (const { role, record } of status.services) {
-      lines.push(
-        `  ${role}: ${record.repoName} → frame ${record.blockId} ${record.repoUrl ?? ''}`.trimEnd(),
-      )
+      lines.push(`  ${role}: ${record.repoName} → frame ${record.blockId}`)
     }
   }
 

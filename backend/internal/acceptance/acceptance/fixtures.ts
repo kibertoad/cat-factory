@@ -97,7 +97,7 @@ export function preflightReport(): Promise<PreflightReport> {
       client,
       deployment,
       serviceTitles: Object.values(serviceTitles(config.namePrefix)),
-      hasBootstrappedServices: Boolean(world.value.backend ?? world.value.frontend),
+      hasAdoptedServices: Boolean(world.value.backend ?? world.value.frontend),
     },
     (result) => {
       journal.record('prerequisite', formatPreflightLine(result).trim())

@@ -29,6 +29,7 @@ import {
 } from '../src/evidence.ts'
 import { backendFeatureBrief, frontendFeatureBrief } from '../src/instructions.ts'
 import { hostSuffix } from '../src/k3s.ts'
+import { filePinnedTask } from '../src/publicApi.ts'
 import { fileAndDrive } from '../src/resume.ts'
 import { requireRunDone } from '../src/runDriver.ts'
 import type { RunRecord } from '../src/world.ts'
@@ -130,7 +131,7 @@ describe('feature delivery: two services ship through pl_build onto k3s', () => 
       existing: world.value[options.ledgerKey],
       label: options.title,
       createTask: () =>
-        client.tasks.create(options.serviceId, {
+        filePinnedTask(client, config, options.serviceId, {
           title: options.title,
           taskType: 'feature',
           description: options.brief,
