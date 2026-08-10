@@ -43,6 +43,7 @@ const ui = useUiStore()
 const tasks = useTasksStore()
 const hunt = useBugHuntStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.bugHunt !== null,
@@ -212,12 +213,7 @@ async function adopt(candidate: BugHuntCandidate) {
       icon: 'i-lucide-bug-play',
     })
   } catch (e) {
-    toast.add({
-      title: t('bugHunt.adoptFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'bugHunt.adoptFailed')
   }
 }
 

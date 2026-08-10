@@ -32,7 +32,7 @@ const agents = useAgentsStore()
 const agentTier = useAgentTierStore()
 const creds = useVendorCredentialsStore()
 const workspace = useWorkspaceStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -180,7 +180,7 @@ async function setDefault(p: ModelPreset) {
   try {
     await presets.update(p.id, { isDefault: true })
   } catch (e) {
-    fail(t('settings.modelConfiguration.toast.setDefaultFailed'), e)
+    present(e, 'settings.modelConfiguration.toast.setDefaultFailed')
   } finally {
     busy.value = false
   }
@@ -199,7 +199,7 @@ async function remove(p: ModelPreset) {
   try {
     await presets.remove(p.id)
   } catch (e) {
-    fail(t('settings.modelConfiguration.toast.deleteFailed'), e)
+    present(e, 'settings.modelConfiguration.toast.deleteFailed')
   } finally {
     busy.value = false
   }
@@ -251,9 +251,9 @@ async function save() {
   const e = editor.value
   if (!e) return
   if (!e.name.trim()) {
-    fail(
-      t('settings.modelConfiguration.toast.nameRequiredTitle'),
+    present(
       new Error(t('settings.modelConfiguration.toast.nameRequiredBody')),
+      'settings.modelConfiguration.toast.nameRequiredTitle',
     )
     return
   }
@@ -280,19 +280,10 @@ async function save() {
     }
     editor.value = null
   } catch (err) {
-    fail(t('settings.modelConfiguration.toast.saveFailed'), err)
+    present(err, 'settings.modelConfiguration.toast.saveFailed')
   } finally {
     busy.value = false
   }
-}
-
-function fail(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 </script>
 

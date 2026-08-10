@@ -168,10 +168,49 @@ operation with the cause attached, and returns `undefined`. It never rejects.
 - Where a bespoke `catch` is right (you need a fallback value, or a different level), still bind
   the cause with `describeError(error)` rather than discarding it.
 
-`describeError` returns `{ err, errKind }` with the message run through `redactSecrets`, because
+`describeError` returns `{ err, errKind }` with the text run through `redactSecrets`, because
 an error surfaced from `fetch`, a shell spawn or a provider SDK routinely echoes the request URL
 (with its query) or an auth header back in its text. It deliberately omits the stack: high volume,
 rarely what identifies the failure. Pass one explicitly at a site that needs it.
+
+### Three describers, one cause chain
+
+`err` is not `error.message`. It is the whole CAUSE CHAIN, and that is the single most useful thing
+in a log line about a failed outbound call.
+
+On Node a transport failure IS `TypeError: fetch failed`. What actually happened
+(`connect ECONNREFUSED 127.0.0.1:6443`, `self-signed certificate`, `getaddrinfo ENOTFOUND`) hangs
+off `.cause`, or off an `AggregateError`'s `.errors` (one entry per resolved address, which is what
+a dual-stack `localhost` produces). So a describer that stops at the message reports an unreachable
+host, an untrusted certificate and a DNS typo with the same three words. That is not hypothetical:
+the connection PROBES were taught to walk the chain first, and for a while everything else in the
+product, logs included, still said `fetch failed`.
+
+There are exactly THREE describers, and they all flatten through `shared/error-chain.logic.ts`:
+
+| describer | answers | used by |
+| --- | --- | --- |
+| `getErrorMessage` (`domain/errors.ts`) | the string a HUMAN is shown, or a row records | a `DomainError` message, a persisted failure `reason`, a PR comment, a `ConnectionTestResult` |
+| `describeError` (`shared/best-effort.ts`) | `{ err, errKind }` log fields | every `logger.*` site, `runBestEffort` |
+| `describeConnectionFailure` (`shared/connection-failure.logic.ts`) | the chain PLUS a machine cause class and a remedy | the "Test connection" probes |
+
+**Never hand-roll `error instanceof Error ? error.message : String(error)`.** That expression is the
+bug above, spelled out. It was in ~90 places; the sweep that removed them is why the chain now shows
+up everywhere. Reach for `getErrorMessage` (a human-facing string) or `describeError` (log fields).
+
+Two properties of the shared core are worth knowing when you read its output:
+
+- **The chain is capped**, and it SAYS how much it dropped (`[…N more characters of the cause
+  chain]`), because a silent slice reads as the whole chain.
+- **The outermost link is KEPT**, `fetch failed` and all, unlike `describeConnectionFailure`, which
+  drops it so a probe's verdict leads with the real cause. The divergence is deliberate: a log line
+  and a `DispatchError` message are matched downstream by their OPENING phrase (`/dispatch failed/i`,
+  the eviction sentinels), so appending causes is safe where dropping a leading link is not.
+
+The ONE deliberate exception in the repo is `ReadinessCheck.error` (Node's `/ready`), which is
+PUBLIC and unauthenticated: the inner link of a pool failure is the deployment's own database
+address, so that site keeps the outermost message and says why at the call site. If you add another
+public unauthenticated surface, make the same call there and write down why.
 
 ### The guard, and the escape hatch
 

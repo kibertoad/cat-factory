@@ -830,7 +830,7 @@ export class RecurringPipelineService {
         status: 'failed',
         startedAt: now,
         finishedAt: now,
-        outcome: error instanceof Error ? error.message : 'Failed to start run.',
+        outcome: error instanceof Error ? getErrorMessage(error) : 'Failed to start run.',
       })
       await this.advanceCadence(workspaceId, schedule, now)
       return false

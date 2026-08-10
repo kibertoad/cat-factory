@@ -1,4 +1,9 @@
-import { isAllowedMcpHttpUrl, isCloudMetadataHost, redactSecrets } from '@cat-factory/kernel'
+import {
+  getErrorMessage,
+  isAllowedMcpHttpUrl,
+  isCloudMetadataHost,
+  redactSecrets,
+} from '@cat-factory/kernel'
 import { safeFetch } from '../shared/safe-fetch.js'
 
 // ---------------------------------------------------------------------------
@@ -490,7 +495,7 @@ function preview(text: string): string {
 }
 
 function describe(error: unknown): string {
-  return preview(error instanceof Error ? error.message : String(error))
+  return preview(getErrorMessage(error))
 }
 
 /** base64 (not url-safe) of a UTF-8 string, for the HTTP Basic header. */

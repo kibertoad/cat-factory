@@ -11,7 +11,7 @@ import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.documentTemplates,
@@ -34,12 +34,7 @@ watch(
       // Surface a load failure instead of silently rendering an empty panel (which would invite
       // re-linking over links that still exist server-side).
       Promise.all([documents.loadDocuments(), documents.loadRoleLinks()]).catch((e) => {
-        toast.add({
-          title: t('documents.templates.loadFailed'),
-          description: e instanceof Error ? e.message : String(e),
-          icon: 'i-lucide-triangle-alert',
-          color: 'error',
-        })
+        present(e, 'documents.templates.loadFailed')
       })
     }
   },
@@ -73,12 +68,7 @@ async function link(role: DocumentLinkRole) {
     await documents.linkForKind(doc.source, doc.externalId, role, kind.value)
     pick.value = undefined
   } catch (e) {
-    toast.add({
-      title: t('documents.templates.linkFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.templates.linkFailed')
   } finally {
     busy.value = false
   }
@@ -89,12 +79,7 @@ async function unlink(doc: SourceDocument) {
   try {
     await documents.unlinkForKind(doc.source, doc.externalId)
   } catch (e) {
-    toast.add({
-      title: t('documents.templates.linkFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.templates.linkFailed')
   } finally {
     busy.value = false
   }

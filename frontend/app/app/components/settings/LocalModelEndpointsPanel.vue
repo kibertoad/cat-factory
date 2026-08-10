@@ -19,6 +19,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const store = useLocalModelsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 const open = computed({
@@ -96,15 +97,6 @@ watch(provider, (p) => {
   tested.value = false
 })
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function test() {
   if (!baseUrl.value.trim()) return
   testing.value = true
@@ -166,7 +158,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.localModelEndpoints.toast.saveFailed'), e)
+    present(e, 'settings.localModelEndpoints.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -195,7 +187,7 @@ async function remove(p: LocalRunner) {
     }
     toast.add({ title: t('settings.localModelEndpoints.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
-    notifyError(t('settings.localModelEndpoints.toast.removeFailed'), e)
+    present(e, 'settings.localModelEndpoints.toast.removeFailed')
   } finally {
     busy.value = false
   }

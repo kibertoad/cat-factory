@@ -1,4 +1,5 @@
 import type { InfraSetup, InfraSetupArea } from '@cat-factory/contracts'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 import { logger as sharedLogger } from '../../observability/logger.js'
 
@@ -58,7 +59,7 @@ export async function areaStatus(
   } catch (err) {
     opts.logger?.warn('infra-setup probe failed; degrading area to not_applicable', {
       area: opts.area,
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
     return 'not_applicable'
   } finally {

@@ -6,7 +6,7 @@ import type {
   PreviewRef,
   PreviewTransport,
 } from '@cat-factory/kernel'
-import { PREVIEW_PROVISION_TYPE } from '@cat-factory/kernel'
+import { getErrorMessage, PREVIEW_PROVISION_TYPE } from '@cat-factory/kernel'
 import type { PreviewState } from '@cat-factory/contracts'
 
 // The browsable frontend PREVIEW service (slice 5c of the frontend-preview initiative). It is
@@ -93,7 +93,7 @@ export class PreviewService {
     try {
       await this.deps.previewTransport.start(ref, plan.spec, plan.servePort)
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = getErrorMessage(err)
       await this.deps.environmentRegistryRepository.update(workspaceId, id, {
         status: 'failed',
         lastError: message,

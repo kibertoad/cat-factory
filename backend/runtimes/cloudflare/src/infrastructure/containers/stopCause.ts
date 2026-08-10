@@ -16,6 +16,8 @@
  *   crash, and two hiccups in one step then exhaust the single crash-eviction budget and fail
  *   a healthy run (stuck-run audit F12).
  */
+import { getErrorMessage } from '@cat-factory/kernel'
+
 export type ContainerStopCause = 'rollout' | 'idle'
 
 /** DO-storage key holding the {@link StopCauseRecord} of the most recent self-observed stop. */
@@ -128,9 +130,11 @@ export interface StopObservation {
  * which is why that case reaches `onError` at all.
  */
 export function isRolloutSignal(error: unknown): boolean {
-  const message =
-    error instanceof Error ? error.message : typeof error === 'string' ? error : String(error)
-  return /new version rollout|runtime signalled the container to exit/i.test(message)
+  // The whole CHAIN, not just the outermost message: the runtime's signal arrives wrapped when it
+  // crosses the container binding, and the phrase this matches is then one `.cause` down. Widening
+  // where the phrase is looked for cannot lose a match (the message is a prefix of the chain text),
+  // and a nested rollout signal IS a rollout signal.
+  return /new version rollout|runtime signalled the container to exit/i.test(getErrorMessage(error))
 }
 
 /**

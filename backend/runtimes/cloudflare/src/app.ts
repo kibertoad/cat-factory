@@ -9,6 +9,7 @@ import {
   registerCoreControllers,
 } from '@cat-factory/server'
 import type { CoreDependencies, RegistrationProblem } from '@cat-factory/orchestration'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { ToolSecretResolver } from '@cat-factory/kernel'
 import type { Env } from './infrastructure/env'
 import { Hono } from 'hono'
@@ -225,7 +226,7 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
       } catch (err) {
         // Kept to a short diagnostic: this endpoint is unauthenticated, so it must never carry
         // a connection string or a binding's internals — the same rule as the Node twin's.
-        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+        return { ok: false, error: getErrorMessage(err) }
       }
     }
     const checks: Record<string, { ok: boolean; error?: string }> = {

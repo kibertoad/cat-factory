@@ -14,6 +14,8 @@
 // (Figma serves rendered PNGs from signed S3 URLs), which is still a constant and still not a
 // per-connection value: a hop to anything outside the set is refused exactly as before.
 
+import { getErrorMessage } from '@cat-factory/kernel'
+
 /** Carries the HTTP status so a provider can surface a meaningful error to the caller. */
 export class DocumentHttpError extends Error {
   constructor(
@@ -86,7 +88,7 @@ export function createHostPinnedFetch(
       } catch (err) {
         throw new DocumentHttpError(
           502,
-          err instanceof Error ? err.message : `${opts.label} request blocked`,
+          err instanceof Error ? getErrorMessage(err) : `${opts.label} request blocked`,
         )
       }
       const res = await fetch(current, { ...init, redirect: 'manual' })

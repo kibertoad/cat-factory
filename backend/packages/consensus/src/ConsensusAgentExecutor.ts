@@ -10,6 +10,7 @@ import {
   type ConsensusStrategy,
   describeError,
   type ExecutionEventPublisher,
+  getErrorMessage,
   inlineModelRef,
   isAsyncAgentExecutor,
   type Logger,
@@ -349,7 +350,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       }
     } catch (error) {
       session.status = 'failed'
-      session.error = error instanceof Error ? error.message : String(error)
+      session.error = getErrorMessage(error)
       session.updatedAt = this.now()
       await this.emit(context, session)
       this.deps.logger?.warn('consensus session failed', {

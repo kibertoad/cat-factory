@@ -16,6 +16,7 @@ import type {
 const { t } = useI18n()
 const store = useSharedStacksStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const stacks = computed(() => store.stacks)
@@ -169,19 +170,10 @@ async function autodetect() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.sharedStacks.detect.failed'), e)
+    present(e, 'settings.sharedStacks.detect.failed')
   } finally {
     detecting.value = false
   }
-}
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 
 /** Create a new stack, or save edits to the one being edited (same form, mode toggled by `editingId`). */
@@ -223,13 +215,11 @@ async function saveStack() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(
-      t(
-        editing
-          ? 'settings.sharedStacks.toast.updateFailed'
-          : 'settings.sharedStacks.toast.createFailed',
-      ),
+    present(
       e,
+      editing
+        ? 'settings.sharedStacks.toast.updateFailed'
+        : 'settings.sharedStacks.toast.createFailed',
     )
   } finally {
     saving.value = false
@@ -243,10 +233,10 @@ async function start(stack: SharedStack) {
     // surface that as an error toast too — not only a thrown transport/unavailable error.
     const updated = await store.ensureUp(stack.id)
     if (updated.status === 'failed') {
-      notifyError(t('settings.sharedStacks.toast.startFailed'), updated.lastError ?? '')
+      present(updated.lastError ?? '', 'settings.sharedStacks.toast.startFailed')
     }
   } catch (e) {
-    notifyError(t('settings.sharedStacks.toast.startFailed'), e)
+    present(e, 'settings.sharedStacks.toast.startFailed')
   } finally {
     busyId.value = null
   }
@@ -257,7 +247,7 @@ async function stop(stack: SharedStack) {
   try {
     await store.teardown(stack.id)
   } catch (e) {
-    notifyError(t('settings.sharedStacks.toast.stopFailed'), e)
+    present(e, 'settings.sharedStacks.toast.stopFailed')
   } finally {
     busyId.value = null
   }
@@ -271,7 +261,7 @@ async function remove(stack: SharedStack) {
     await store.remove(stack.id)
     toastDone('remove', noun)
   } catch (e) {
-    notifyError(t('settings.sharedStacks.toast.removeFailed'), e)
+    present(e, 'settings.sharedStacks.toast.removeFailed')
   } finally {
     busyId.value = null
   }

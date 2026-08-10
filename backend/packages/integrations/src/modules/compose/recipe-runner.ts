@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { RecipeHealthGate, RecipeStep } from '@cat-factory/kernel'
 import {
   type ComposeRuntime,
@@ -90,7 +91,7 @@ export async function runRecipeStep(step: RecipeStep, ctx: RecipeRunContext): Pr
         }
     }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false, error: getErrorMessage(err) }
   }
 }
 
@@ -154,7 +155,7 @@ async function probeHttp(
       ? { done: true }
       : { done: false, error: `HTTP ${res.status}` }
   } catch (err) {
-    return { done: false, error: err instanceof Error ? err.message : String(err) }
+    return { done: false, error: getErrorMessage(err) }
   }
 }
 

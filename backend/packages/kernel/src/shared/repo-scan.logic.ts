@@ -17,6 +17,8 @@
 // truncation note. `docs-detect` ignores `readFault` (it degrades to defaults instead).
 // ---------------------------------------------------------------------------
 
+import { errorChainText } from './error-chain.logic.js'
+
 /** A directory-listing entry as returned by the checkout-free contents API. */
 export interface RepoScanEntry {
   name: string
@@ -93,7 +95,7 @@ export class BudgetedRepoScanner {
 
   private recordFault(err: unknown): void {
     if (this.firstFault === undefined) {
-      this.firstFault = err instanceof Error ? err.message : String(err)
+      this.firstFault = errorChainText(err)
     }
   }
 

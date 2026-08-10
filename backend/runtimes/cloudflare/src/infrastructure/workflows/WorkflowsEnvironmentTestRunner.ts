@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { EnvironmentTestRunner } from '@cat-factory/kernel'
 import type { Workflow } from '@cloudflare/workers-types'
 import type { EnvironmentTestWorkflowParams } from './EnvironmentTestWorkflow'
@@ -25,7 +26,7 @@ export class WorkflowsEnvironmentTestRunner implements EnvironmentTestRunner {
       // the cron env-test sweep re-drives it, and this line is the only trace of why.
       logger.warn(
         'env-test workflow create was rejected; relying on the existing instance or the sweeper',
-        { workspaceId, runId: id, err: error instanceof Error ? error.message : String(error) },
+        { workspaceId, runId: id, err: getErrorMessage(error) },
       )
     }
   }

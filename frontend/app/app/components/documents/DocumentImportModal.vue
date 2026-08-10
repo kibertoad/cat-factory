@@ -11,6 +11,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const documents = useDocumentsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const open = computed({
   get: () => ui.documentImport !== null,
@@ -61,12 +62,7 @@ async function doImport() {
       icon: 'i-lucide-file-down',
     })
   } catch (e) {
-    toast.add({
-      title: t('documents.import.importFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
+    present(e, 'documents.import.importFailed')
   } finally {
     importing.value = false
   }

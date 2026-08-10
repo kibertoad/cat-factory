@@ -27,13 +27,14 @@ import {
   setLogLevel,
 } from '@cat-factory/server'
 import {
-  runBestEffort,
   type BinaryStoreRegistry,
   type CreateSharedStackInput,
   type GateRegistry,
+  getErrorMessage,
   type JudgeRegistry,
   type PipelineRegistry,
   type PromptFragmentRegistry,
+  runBestEffort,
   type StepResolverRegistry,
   type ToolSecretResolver,
   type VcsProviderRegistry,
@@ -746,7 +747,7 @@ async function preflightRuntime(localized: NodeJS.ProcessEnv): Promise<void> {
       `local mode: container CLI '${adapter.binary}' is not runnable — repo-operating agent ` +
         `steps will fail until it is installed and on PATH (or set LOCAL_DOCKER_BINARY / ` +
         `LOCAL_CONTAINER_RUNTIME).`,
-      { err: err instanceof Error ? err.message : String(err), binary: adapter.binary },
+      { err: getErrorMessage(err), binary: adapter.binary },
     )
   }
 }

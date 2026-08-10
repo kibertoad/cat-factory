@@ -18,6 +18,7 @@ import type {
 import {
   assertFound,
   ConflictError,
+  getErrorMessage,
   inlineModelRef,
   requireWorkspace,
   resolveScopedModelProvider,
@@ -226,7 +227,7 @@ export class SandboxRunService {
           }
           await this.deps.sandboxRunRepository.upsert(workspaceId, done)
         } catch (e) {
-          await this.failRun(workspaceId, run, e instanceof Error ? e.message : String(e))
+          await this.failRun(workspaceId, run, getErrorMessage(e))
           return { tokensSpent: cellSpent, graded: false }
         }
 
@@ -275,7 +276,7 @@ export class SandboxRunService {
         } catch (e) {
           await this.deps.sandboxRunRepository.upsert(workspaceId, {
             ...done,
-            error: `Grading failed: ${e instanceof Error ? e.message : String(e)}`,
+            error: `Grading failed: ${getErrorMessage(e)}`,
           })
           return { tokensSpent: cellSpent, graded: false }
         }

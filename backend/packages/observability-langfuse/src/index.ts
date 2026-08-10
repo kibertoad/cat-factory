@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   LlmGenerationEvent,
   LlmToolSpan,
@@ -217,7 +218,7 @@ export class LangfuseTraceSink implements LlmTraceSink {
     } catch (err) {
       this.logger?.warn('langfuse: failed to post ingestion batch', {
         scope: 'langfuse',
-        err: err instanceof Error ? err.message : String(err),
+        err: getErrorMessage(err),
       })
     }
   }

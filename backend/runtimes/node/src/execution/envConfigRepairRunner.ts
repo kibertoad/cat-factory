@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { EnvConfigRepairRunner } from '@cat-factory/kernel'
 import { createQueueWithDeadLetter } from './deadLetter.js'
 import type { Logger, ServerContainer } from '@cat-factory/server'
@@ -103,7 +104,7 @@ export async function startEnvConfigRepairWorker(
           log.error('env-config-repair drive failed', {
             workspaceId,
             jobId,
-            err: error instanceof Error ? error.message : String(error),
+            err: getErrorMessage(error),
           })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }

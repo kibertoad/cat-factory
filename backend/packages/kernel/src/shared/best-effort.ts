@@ -8,22 +8,28 @@
 // when to use it: `backend/docs/logging.md`.
 
 import type { LogFields, Logger } from '../ports/logging.js'
-import { redactSecrets } from './redact-secrets.logic.js'
+import { errorChainText } from './error-chain.logic.js'
 
 /**
  * Describe a thrown value as log fields. The message is scrubbed with `redactSecrets`
  * because an error surfaced from `fetch`, a shell spawn or a provider SDK routinely
  * echoes the URL (with its query) or an auth header back in its text.
  *
- * Only the message and the constructor name are kept: a stack is high-volume and rarely
+ * `err` is the whole CAUSE CHAIN, not just `error.message` (see `error-chain.logic.ts`). A
+ * transport failure's message is undici's contentless `fetch failed` and what happened lives one
+ * `.cause` down, so a line built from the message alone reported every unreachable host, untrusted
+ * certificate and DNS typo as the same three words: the operator's log said nothing the moment it
+ * mattered most.
+ *
+ * Only the chain and the constructor name are kept: a stack is high-volume and rarely
  * the thing that identifies the failure in a structured log. Pass one explicitly when a
  * specific site needs it.
  */
 export function describeError(error: unknown): LogFields {
-  if (error instanceof Error) {
-    return { err: redactSecrets(error.message) ?? '', errKind: error.name }
+  return {
+    err: errorChainText(error),
+    errKind: error instanceof Error ? error.name : typeof error,
   }
-  return { err: redactSecrets(String(error)) ?? '', errKind: typeof error }
 }
 
 /**

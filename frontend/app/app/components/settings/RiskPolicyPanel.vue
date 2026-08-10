@@ -70,6 +70,7 @@ const CONCERN_LEVELS = computed<{ value: RequirementConcernLevel; label: string 
 
 const store = useRiskPoliciesStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 // Local editable copy per preset, kept in sync with the store. Percentages are
@@ -153,15 +154,6 @@ watch(
 
 const busy = ref<string | null>(null)
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 async function save(p: RiskPolicy) {
   const d = drafts[p.id]
   if (!d) return
@@ -188,7 +180,7 @@ async function save(p: RiskPolicy) {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.riskPolicy.toast.saveFailed'), e)
+    present(e, 'settings.riskPolicy.toast.saveFailed')
   } finally {
     busy.value = null
   }
@@ -199,7 +191,7 @@ async function makeDefault(p: RiskPolicy) {
   try {
     await store.update(p.id, { isDefault: true })
   } catch (e) {
-    notifyError(t('settings.riskPolicy.toast.defaultFailed'), e)
+    present(e, 'settings.riskPolicy.toast.defaultFailed')
   } finally {
     busy.value = null
   }
@@ -218,7 +210,7 @@ async function remove(p: RiskPolicy) {
   try {
     await store.remove(p.id)
   } catch (e) {
-    notifyError(t('settings.riskPolicy.toast.deleteFailed'), e)
+    present(e, 'settings.riskPolicy.toast.deleteFailed')
   } finally {
     busy.value = null
   }
@@ -274,7 +266,7 @@ async function create() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.riskPolicy.toast.createFailed'), e)
+    present(e, 'settings.riskPolicy.toast.createFailed')
   } finally {
     creating.value = false
   }

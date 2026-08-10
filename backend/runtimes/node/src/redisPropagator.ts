@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { missingIoredisProblem } from '@cat-factory/server'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 import type { RealtimeMessage, WebSocketPropagator } from './propagator.js'
 
@@ -143,7 +144,7 @@ export class RedisWebSocketPropagator implements WebSocketPropagator {
     void this.pub.publish(this.channel, JSON.stringify(envelope)).catch((err) => {
       this.log.warn(
         'real-time redis publish failed (event delivered locally; peers reconcile on reconnect)',
-        { err: err instanceof Error ? err.message : String(err) },
+        { err: getErrorMessage(err) },
       )
     })
   }
@@ -196,7 +197,7 @@ export class RedisWebSocketPropagator implements WebSocketPropagator {
   private onConnectionError(role: string, err: unknown): void {
     this.log.warn('real-time redis connection error (ioredis will retry)', {
       role,
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
   }
 

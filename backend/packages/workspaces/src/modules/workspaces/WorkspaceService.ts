@@ -2,19 +2,20 @@ import type { CreateWorkspaceInput } from '@cat-factory/contracts'
 import {
   applyMountLayout,
   describeError,
-  finalSpendFoldPlan,
-  noopLogger,
   FINAL_SPEND_FOLD_BUDGET_MS,
+  finalSpendFoldPlan,
+  getErrorMessage,
+  noopLogger,
+  offeredPipelines,
   registerServiceForFrame,
   requireWorkspace,
-  offeredPipelines,
   retiredPipelines,
+  riskPolicySeedRows,
   runBestEffort,
   seedBlocks,
-  seedRiskPolicies,
-  riskPolicySeedRows,
   seedModelPresets,
   seedPipelines,
+  seedRiskPolicies,
 } from '@cat-factory/kernel'
 import type {
   Block,
@@ -623,7 +624,7 @@ export class WorkspaceService {
       // the residual leak (bytes + rows) so it's visible for an out-of-band reclaim, not silent.
       this.logger?.info(
         'workspace-delete binary-artifact purge failed; artifacts retained for out-of-band reclaim',
-        { workspaceId: id, err: error instanceof Error ? error.message : String(error) },
+        { workspaceId: id, err: getErrorMessage(error) },
       )
     }
   }

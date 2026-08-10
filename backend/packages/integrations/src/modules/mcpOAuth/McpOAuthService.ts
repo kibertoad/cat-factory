@@ -8,11 +8,12 @@ import type {
   SecretCipher,
 } from '@cat-factory/kernel'
 import {
+  getErrorMessage,
   MCP_OAUTH_DEFAULT_HEADER,
   MCP_OAUTH_DEFAULT_HEADER_TEMPLATE,
-  ValidationError,
   noopLogger,
   redactSecrets,
+  ValidationError,
 } from '@cat-factory/kernel'
 import type { ToolServerOAuthStatus } from '@cat-factory/contracts'
 import {
@@ -625,7 +626,7 @@ function dropError(summary: GrantSummary): GrantSummary {
  * would bury the one part of it that names the fix.
  */
 function describeOAuthError(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error)
+  const raw = getErrorMessage(error)
   return redactSecrets(raw) ?? 'unknown error'
 }
 

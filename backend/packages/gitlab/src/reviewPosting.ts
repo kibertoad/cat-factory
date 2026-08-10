@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   CreateReviewInput,
   CreateReviewResult,
@@ -23,8 +24,7 @@ interface GlDiffRefs {
   head_sha?: string | null
 }
 
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
+const errorMessage = (error: unknown): string => getErrorMessage(error)
 
 /**
  * Publish an MR review's findings on GitLab, posting each inline comment INDIVIDUALLY as its own

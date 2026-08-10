@@ -35,21 +35,13 @@ const catalog =
     : useFoundationalServices(props.kind, props.ownerId)
 const github = useGitHubStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
 
 // The rich GitHub pickers reuse the active board's App installation; without it the form falls
 // back to manual text entry.
 const githubReady = computed(() => github.available === true && github.connected)
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 
 // Per-row in-flight tracking so only the control that triggered an action spins.
 const busyRows = reactive(new Set<string>())
@@ -182,7 +174,7 @@ async function link() {
     toast.add({ title: t('foundational.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
     return result
   } catch (e) {
-    notifyError(t('foundational.toast.linkSourceFailed'), e)
+    present(e, 'foundational.toast.linkSourceFailed')
   } finally {
     linking.value = false
   }
@@ -213,7 +205,7 @@ async function sync(id: string) {
         color: coverage ? 'warning' : 'info',
       })
     } catch (e) {
-      notifyError(t('foundational.toast.syncFailed'), e)
+      present(e, 'foundational.toast.syncFailed')
     }
   })
 }
@@ -229,7 +221,7 @@ async function check(id: string) {
         icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
       })
     } catch (e) {
-      notifyError(t('foundational.toast.checkSourceFailed'), e)
+      present(e, 'foundational.toast.checkSourceFailed')
     }
   })
 }
@@ -251,7 +243,7 @@ async function unlink(id: string) {
       await catalog.unlinkSource(id)
       toast.add({ title: t('foundational.toast.sourceUnlinked'), icon: 'i-lucide-unplug' })
     } catch (e) {
-      notifyError(t('foundational.toast.unlinkSourceFailed'), e)
+      present(e, 'foundational.toast.unlinkSourceFailed')
     }
   })
 }

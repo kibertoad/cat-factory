@@ -18,6 +18,7 @@ import {
   createRemoteRepositoryRegistry,
   logger,
 } from '@cat-factory/server'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { AgentRunRepository, WorkRunner } from '@cat-factory/kernel'
 import { MothershipWebSocketPropagator } from './mothershipPropagator.js'
 import { withTelemetryReadThrough } from './telemetryReadThrough.js'
@@ -308,7 +309,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     client: new HttpMachineNotificationClient({ baseUrl, token: machineToken }),
     onError: (error, ctx) =>
       logger.warn('mothership notification delivery failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
         ...ctx,
       }),
   })
@@ -388,7 +389,7 @@ export function createMothershipConnector(opts: {
         return {
           ok: false,
           status: 502,
-          message: `Could not reach the mothership: ${err instanceof Error ? err.message : String(err)}`,
+          message: `Could not reach the mothership: ${getErrorMessage(err)}`,
         }
       }
       const body = (await res.json().catch(() => null)) as {
@@ -615,7 +616,7 @@ export class SqliteWorkRunner implements WorkRunner {
       this.log.error('mothership in-process execution driver failed', {
         workspaceId,
         executionId,
-        err: err instanceof Error ? err.message : String(err),
+        err: getErrorMessage(err),
       })
       // Hold the run for a backoff'd retry, bumping the consecutive-failure count; once it reaches
       // the cap the next drain evicts it (and fails it loudly) rather than re-driving forever.
@@ -663,7 +664,7 @@ export class SqliteWorkRunner implements WorkRunner {
       this.log.error('mothership work queue: failed to mark an evicted run failed', {
         workspaceId,
         executionId,
-        err: err instanceof Error ? err.message : String(err),
+        err: getErrorMessage(err),
       })
     }
   }

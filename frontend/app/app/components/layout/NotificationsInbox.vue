@@ -16,19 +16,9 @@ const access = useWorkspaceAccess()
 const execution = useExecutionStore()
 const trackRecords = useMergeTrackRecordsStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 
 const busy = ref<string | null>(null)
-
-/** Toast a failed act/dismiss — the store throws, so without this a failure was silent and the
- * item just stayed in the inbox with no explanation. */
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
 
 /** Per-type display metadata (icon, colour). The primary-action label is resolved
  * separately through the i18n catalog (`ACTION_KEYS`). */
@@ -203,7 +193,7 @@ async function act(n: Notification) {
       icon: 'i-lucide-check',
     })
   } catch (e) {
-    notifyError(t('layout.notifications.toast.actFailed'), e)
+    present(e, 'layout.notifications.toast.actFailed')
   } finally {
     busy.value = null
   }
@@ -219,7 +209,7 @@ async function dismiss(n: Notification) {
       icon: 'i-lucide-check',
     })
   } catch (e) {
-    notifyError(t('layout.notifications.toast.dismissFailed'), e)
+    present(e, 'layout.notifications.toast.dismissFailed')
   } finally {
     busy.value = null
   }

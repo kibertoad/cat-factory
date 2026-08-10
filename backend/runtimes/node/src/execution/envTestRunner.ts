@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   EnvironmentTestRunner,
   EnvironmentTestRunRepository,
@@ -129,7 +130,7 @@ export function startEnvTestSweeper(
       health.recordSuccess('env-test')
     } catch (error) {
       log.error('env-test sweep failed', {
-        err: error instanceof Error ? error.message : String(error),
+        err: getErrorMessage(error),
       })
       health.recordFailure('env-test')
     }
@@ -161,7 +162,7 @@ export async function startEnvTestWorker(
           log.error('env-test drive failed', {
             workspaceId,
             id,
-            err: error instanceof Error ? error.message : String(error),
+            err: getErrorMessage(error),
           })
           throw error // let pg-boss retry/backoff (the durable backstop)
         }

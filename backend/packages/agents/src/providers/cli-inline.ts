@@ -13,7 +13,12 @@ import type {
   InlineLlmCallRecorder,
   Logger,
 } from '@cat-factory/kernel'
-import { noopLogger, resolveInlineAttribution, runBestEffort } from '@cat-factory/kernel'
+import {
+  getErrorMessage,
+  noopLogger,
+  resolveInlineAttribution,
+  runBestEffort,
+} from '@cat-factory/kernel'
 
 // An AI SDK `LanguageModelV3` that runs a one-shot inline completion through a subscription
 // HARNESS CLI (Claude Code / Codex) instead of an HTTP provider. It exists so a deployment
@@ -419,7 +424,7 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
       finishReason: null,
       durationMs,
       ok: false,
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: getErrorMessage(error),
       promptText: () => safeJson(options.prompt),
       responseText: () => '',
       reasoningText: () => '',

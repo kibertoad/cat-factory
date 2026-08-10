@@ -8,6 +8,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { InitiativePresetRegistry } from '@cat-factory/kernel'
 import {
+  getErrorMessage,
   INITIATIVE_INTERVIEWER_AGENT_KIND,
   resolveScopedModelProvider,
   ValidationError,
@@ -254,9 +255,7 @@ export class InitiativeInterviewService {
       text = result.text
     } catch (e) {
       throw new ValidationError(
-        `The initiative interviewer (${ref.provider}:${ref.model}) failed: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `The initiative interviewer (${ref.provider}:${ref.model}) failed: ${getErrorMessage(e)}`,
       )
     }
     return coerceInterviewOutput(extractJson(text), { finalize: opts.finalize })
@@ -294,9 +293,9 @@ export class InitiativeInterviewService {
       return result.text.trim()
     } catch (e) {
       throw new ValidationError(
-        `The initiative interviewer (${ref.provider}:${ref.model}) could not recommend an answer: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `The initiative interviewer (${ref.provider}:${ref.model}) could not recommend an answer: ${getErrorMessage(
+          e,
+        )}`,
       )
     }
   }

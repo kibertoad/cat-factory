@@ -73,7 +73,17 @@ export interface ReadinessProbeDeps {
   timeoutMs?: number
 }
 
-function message(err: unknown): string {
+/**
+ * The OUTERMOST message only, deliberately NOT kernel's `getErrorMessage`.
+ *
+ * This is the one place in the backend that wants less than the full cause chain, and the reason is
+ * the field it feeds: `ReadinessCheck.error` is served by `/ready`, which is PUBLIC and
+ * unauthenticated. A flattened chain is exactly what makes that field useful everywhere else and
+ * what makes it a leak here, since a pool failure's inner link is `connect ECONNREFUSED
+ * 10.x.y.z:5432`, the deployment's database address, handed to any caller who curls the endpoint.
+ * The operator's copy of the same failure is the boot/probe LOG line, which does carry the chain.
+ */
+function publicDiagnostic(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
@@ -115,7 +125,7 @@ export async function checkReadiness(deps: ReadinessProbeDeps): Promise<Readines
       await withTimeout(run(), timeoutMs)
       return { ok: true }
     } catch (err) {
-      return { ok: false, error: message(err) }
+      return { ok: false, error: publicDiagnostic(err) }
     }
   }
   const checks: Record<string, ReadinessCheck> = {}

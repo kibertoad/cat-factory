@@ -25,6 +25,9 @@
  */
 
 import { createBespokeConflictToasts } from '~/composables/pipelineErrorToast/bespokeConflicts'
+// Imported by path rather than left to Nuxt's auto-import: this module is also loaded directly by
+// unit tests (and from store setup), where the auto-import globals are not installed.
+import { useCopyToClipboard } from '~/composables/useCopyToClipboard'
 import type { ApiErrorCode, ConflictReason, UnavailableReason } from '@cat-factory/contracts'
 import { apiErrorEnvelope, apiErrorReason, apiErrorStatus } from './api/errors'
 
@@ -424,6 +427,9 @@ export function usePipelineErrorToast() {
   // tier 1 only sees literal keys written in a `<script setup>`, never in a `.ts` composable —
   // the drift guard here is the exhaustive `CONFLICT_INFO` / `ApiErrorCode` records above.
   const { t, te } = useNuxtApp().$i18n as ReturnType<typeof useI18n>
+  // The shared clipboard seam (feedback toast included), so "Copy details" behaves like every other
+  // copy affordance in the product instead of silently failing where the API is unavailable.
+  const { copyAction } = useCopyToClipboard()
 
   // The five bespoke conflict reasons (a runtime-interpolated body + a "configure X" jump each)
   // live in a sibling factory over the same toast/ui/i18n handles, so this composable stays
@@ -437,13 +443,17 @@ export function usePipelineErrorToast() {
    * title falls to the caller's key, the description to the raw backend `message`. An unknown
    * reason (not in the map) gets the same generic title + raw-message fallback.
    */
-  function presentMappedConflict(conflict: ParsedConflict, fallbackTitleKey: string): void {
+  function presentMappedConflict(
+    conflict: ParsedConflict,
+    fallbackTitleKey: string,
+    titleParams?: Record<string, unknown>,
+  ): void {
     const info = conflict.reason
       ? CONFLICT_INFO[conflict.reason as Exclude<ConflictReason, BespokeConflictReason>]
       : undefined
     if (info) {
       toast.add({
-        title: te(info.titleKey) ? t(info.titleKey) : t(fallbackTitleKey),
+        title: te(info.titleKey) ? t(info.titleKey) : t(fallbackTitleKey, titleParams ?? {}),
         description: te(info.descriptionKey)
           ? t(info.descriptionKey)
           : (conflict.message ?? t('errors.conflict.fallbackMessage')),
@@ -467,7 +477,7 @@ export function usePipelineErrorToast() {
       return
     }
     toast.add({
-      title: t(fallbackTitleKey),
+      title: t(fallbackTitleKey, titleParams ?? {}),
       description: conflict.message ?? t('errors.conflict.fallbackMessage'),
       color: 'warning',
       icon: 'i-lucide-triangle-alert',
@@ -479,15 +489,32 @@ export function usePipelineErrorToast() {
    * behind a "Show details" button that swaps it into the same toast (G2).
    *
    * The reveal is an UPDATE rather than a second toast so the two readings can't sit on screen
-   * disagreeing, and it makes the toast sticky at the same time — the detail is what someone
-   * copies into a bug report, and a ~5s auto-dismiss takes it away mid-copy. `actions: []` has to
-   * be passed explicitly: `update` merges over the existing toast, so an omitted `actions` would
-   * leave a "Show details" button that is now a no-op.
+   * disagreeing. `actions: []` is passed explicitly on the reveal: `update` merges over the
+   * existing toast, so an omitted `actions` would leave a "Show details" button that is now a
+   * no-op. The COPY action is re-passed, because it is still the point after the reveal.
+   *
+   * Two properties of this toast are the whole reason a failure goes through this funnel rather
+   * than a hand-built `toast.add`, and both were learned from someone trying to report a bug:
+   *
+   * - It does NOT auto-dismiss. A failure is the one toast a user needs to finish reading, quote,
+   *   or act on, and a ~5s dismissal took the detail away mid-sentence. It carries a close button
+   *   like every other toast, so staying is a decision the reader makes.
+   * - The detail is COPYABLE with one click, through the shared clipboard seam (so the copy's own
+   *   success/failure is reported rather than silently no-op'ing in an insecure context). Selecting
+   *   text inside a toast is fiddly at the best of times and impossible once it has gone, and what
+   *   the person needs to paste is the whole of it: the failed action, the class of failure, the
+   *   backend's prose, and above all the `requestId` that joins it to the one server log line
+   *   explaining it. Retyping that id off a screenshot is how a report arrives without it.
    *
    * No detail worth showing (a network fault with an unhelpful `message` and no correlation id)
-   * ⇒ no button at all, rather than a disclosure that reveals nothing.
+   * ⇒ no disclosure and nothing to copy beyond the two translated lines, which the copy action
+   * still carries.
    */
-  function presentGenericFailure(error: unknown, fallbackTitleKey: string): void {
+  function presentGenericFailure(
+    error: unknown,
+    fallbackTitleKey: string,
+    titleParams?: Record<string, unknown>,
+  ): void {
     const failure = describeGenericFailure(error)
     const detail = [
       failure.message,
@@ -499,38 +526,54 @@ export function usePipelineErrorToast() {
     // No `te` guard: the key comes from a Record exhaustive over the wire union and every entry
     // ships in the base `en` catalog, so a locale missing it renders English via `fallbackLocale`
     // (better than the raw prose this replaced) and a bare key can never leak.
+    const title = t(fallbackTitleKey, titleParams ?? {})
+    const description = t(failure.descriptionKey)
+    const report = [title, description, detail].filter((part) => part.length > 0).join('\n')
     const added = toast.add({
-      title: t(fallbackTitleKey),
-      description: t(failure.descriptionKey),
+      title,
+      description,
       color: 'error',
       icon: 'i-lucide-triangle-alert',
-      ...(detail
-        ? {
-            actions: [
+      duration: 0,
+      // Selectable in place too: the copy button is the reliable path, but a reader who only wants
+      // the request id should be able to drag over it.
+      ui: { description: 'select-text' },
+      actions: [
+        ...(detail
+          ? [
               {
                 label: t('errors.generic.showDetail'),
                 icon: 'i-lucide-info',
                 onClick: () =>
-                  toast.update(added.id, { description: detail, duration: 0, actions: [] }),
+                  toast.update(added.id, {
+                    description: detail,
+                    actions: [copyAction(report)],
+                  }),
               },
-            ],
-          }
-        : {}),
+            ]
+          : []),
+        copyAction(report),
+      ],
     })
   }
 
   /**
    * Present `error` as a toast. `fallbackTitleKey` is an i18n message key used for
-   * non-conflict failures and any conflict reason without a dedicated title.
+   * non-conflict failures and any conflict reason without a dedicated title; `titleParams` carries
+   * that key's interpolation when it takes any (a title naming the thing that failed).
    */
-  function present(error: unknown, fallbackTitleKey = 'common.actionFailed'): void {
+  function present(
+    error: unknown,
+    fallbackTitleKey = 'common.actionFailed',
+    titleParams?: Record<string, unknown>,
+  ): void {
     const conflict = parseConflict(error)
     if (conflict) {
       if (presentBespokeConflict(conflict)) return
-      presentMappedConflict(conflict, fallbackTitleKey)
+      presentMappedConflict(conflict, fallbackTitleKey, titleParams)
       return
     }
-    presentGenericFailure(error, fallbackTitleKey)
+    presentGenericFailure(error, fallbackTitleKey, titleParams)
   }
 
   return { present }

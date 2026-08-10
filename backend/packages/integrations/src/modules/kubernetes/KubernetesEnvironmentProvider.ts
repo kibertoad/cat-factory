@@ -20,7 +20,11 @@ import type {
   SecretResolver,
   TeardownProbe,
 } from '@cat-factory/kernel'
-import { connectionFailureResult, describeConnectionFailure } from '@cat-factory/kernel'
+import {
+  connectionFailureResult,
+  describeConnectionFailure,
+  getErrorMessage,
+} from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
 import {
   apiBase,
@@ -261,7 +265,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       return {
         state: 'unknown',
         retryable: false,
-        reason: err instanceof Error ? err.message : String(err),
+        reason: getErrorMessage(err),
       }
     }
     const client = this.makeClient(config, req.resolveSecret)
@@ -302,7 +306,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     try {
       config = this.parseConfig(req.manifest)
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      return { ok: false, message: getErrorMessage(err) }
     }
     const client = this.makeClient(config, req.resolveSecret)
     try {

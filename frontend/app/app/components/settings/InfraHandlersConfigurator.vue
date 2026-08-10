@@ -36,6 +36,7 @@ const infra = useInfraConfigStore()
 const auth = useAuthStore()
 const ui = useUiStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction } = useConfirmAction()
 
 const isLocal = computed(() => auth.localMode?.enabled === true)
@@ -221,7 +222,7 @@ async function saveKube(payload: { config: KubeHandlerConfig; secrets: Record<st
     })
     toastSaved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -234,7 +235,7 @@ async function removeKube() {
     await infra.unregisterHandler('kubernetes')
     toastRemoved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -258,7 +259,7 @@ async function saveKubeOverride(payload: {
     })
     toastSaved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -272,7 +273,7 @@ async function removeKubeOverride() {
     await infra.removeUserHandler('kubernetes')
     toastRemoved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -380,7 +381,7 @@ async function saveCustom(payload: {
     })
     toastSaved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -394,7 +395,7 @@ async function removeCustom() {
     await infra.unregisterHandler('custom', selectedCustomId.value)
     toastRemoved()
   } catch (e) {
-    notifyError(e)
+    present(e, 'settings.infrastructure.handler.saveFailed')
   } finally {
     busy.value = false
   }
@@ -409,14 +410,6 @@ function toastSaved() {
 }
 function toastRemoved() {
   toast.add({ title: t('settings.infrastructure.handler.removed'), icon: 'i-lucide-check' })
-}
-function notifyError(e: unknown) {
-  toast.add({
-    title: t('settings.infrastructure.handler.saveFailed'),
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 </script>
 

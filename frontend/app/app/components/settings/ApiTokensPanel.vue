@@ -58,6 +58,7 @@ function minterLabel(key: PublicApiKey): string | null {
     : key.createdByUserId
 }
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
 
 const open = computed({
@@ -74,15 +75,6 @@ const busy = ref(false)
 // re-fetchable, so it lives only in this transient ref (not the store).
 const newSecret = ref<string | null>(null)
 
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
-}
-
 watch(
   open,
   async (isOpen) => {
@@ -94,7 +86,7 @@ watch(
     try {
       await store.ensureLoaded()
     } catch (e) {
-      notifyError(t('settings.apiTokens.toast.loadFailed'), e)
+      present(e, 'settings.apiTokens.toast.loadFailed')
     }
   },
   { immediate: true },
@@ -115,7 +107,7 @@ async function createToken() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.apiTokens.toast.createFailed'), e)
+    present(e, 'settings.apiTokens.toast.createFailed')
   } finally {
     busy.value = false
   }
@@ -132,7 +124,7 @@ async function revokeToken(key: PublicApiKey) {
     await store.revoke(key.id)
     toastDone('revoke', key.label)
   } catch (e) {
-    notifyError(t('settings.apiTokens.toast.revokeFailed'), e)
+    present(e, 'settings.apiTokens.toast.revokeFailed')
   } finally {
     busy.value = false
   }

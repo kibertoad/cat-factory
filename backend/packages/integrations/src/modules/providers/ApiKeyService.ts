@@ -9,7 +9,7 @@ import type {
   SecretCipher,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { ConflictError, NotFoundError } from '@cat-factory/kernel'
+import { ConflictError, getErrorMessage, NotFoundError } from '@cat-factory/kernel'
 import { DEFAULT_USAGE_WINDOW_MS } from './providers.logic.js'
 
 // ApiKeyService: owns the direct-provider API-key pool (OpenAI/Anthropic/Qwen/
@@ -233,9 +233,7 @@ export class ApiKeyService {
       // than surfacing the cipher's opaque error with no context. The cipher already
       // explains the likely encryption-key mismatch; prepend which key it was.
       throw new Error(
-        `Could not decrypt the leased '${provider}' API key '${chosen.id}': ${
-          e instanceof Error ? e.message : String(e)
-        }`,
+        `Could not decrypt the leased '${provider}' API key '${chosen.id}': ${getErrorMessage(e)}`,
         { cause: e },
       )
     }

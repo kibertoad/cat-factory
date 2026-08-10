@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@cat-factory/kernel'
 import type {
   Logger,
   OperationalCounterSample,
@@ -66,7 +67,7 @@ export async function flushOperationalMetrics(deps: OperationalMetricsFlushDeps)
     } catch (err) {
       deps.logger?.warn('operational-metrics: gauge probe failed; exporting counters only', {
         scope: 'operational-metrics',
-        err: err instanceof Error ? err.message : String(err),
+        err: getErrorMessage(err),
       })
     }
   }
@@ -78,7 +79,7 @@ export async function flushOperationalMetrics(deps: OperationalMetricsFlushDeps)
       scope: 'operational-metrics',
       counters: counters.length,
       gauges: gauges.length,
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
     return 0
   }

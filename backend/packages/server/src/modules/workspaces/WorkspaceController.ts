@@ -31,6 +31,7 @@ import type {
 import type { AgentKindRegistry, AgentRouting } from '@cat-factory/agents'
 import {
   applyInfraReachability,
+  getErrorMessage,
   recordedUnreachableAreas,
   resolveWorkspaceAccess,
   runBestEffort,
@@ -419,7 +420,7 @@ async function snapshotSkills(
     // library is visible in the operator log, but never let it 500 the board snapshot.
     sharedLogger.warn('skill catalog read failed; degrading snapshot skills to none', {
       accountId,
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
     return undefined
   }

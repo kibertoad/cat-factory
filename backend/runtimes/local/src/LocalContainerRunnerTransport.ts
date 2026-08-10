@@ -10,7 +10,12 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
-import { composePostMortem, describeError, runBestEffort } from '@cat-factory/kernel'
+import {
+  composePostMortem,
+  describeError,
+  getErrorMessage,
+  runBestEffort,
+} from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
@@ -789,9 +794,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
           // A failed pre-warm is skipped (the pool fills a member on demand instead), but
           // surface WHY: a version-handshake mismatch throws here too, and swallowing it
           // silently would hide the misconfiguration until the first real dispatch.
-          logger.warn(
-            `Local harness pool pre-warm skipped a member: ${err instanceof Error ? err.message : String(err)}`,
-          )
+          logger.warn(`Local harness pool pre-warm skipped a member: ${getErrorMessage(err)}`)
         }
       }),
     )
@@ -948,8 +951,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     lastError?: unknown,
   ): Promise<string> {
     const parts = [`Container ${containerId} ${what}.`]
-    const reason =
-      lastError instanceof Error ? lastError.message : lastError ? String(lastError) : ''
+    const reason = lastError ? getErrorMessage(lastError) : ''
     if (reason.trim()) parts.push(`Last error: ${reason.trim()}`)
     const logs = (await this.adapter.logs(this.exec, containerId)).trim()
     if (logs) parts.push(`Container logs:\n${logs}`)

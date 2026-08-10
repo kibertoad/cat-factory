@@ -16,6 +16,7 @@ export function useBlockDeletion() {
   const ui = useUiStore()
   const recurring = useRecurringPipelinesStore()
   const toast = useToast()
+  const { present } = usePipelineErrorToast()
   const { confirm } = useConfirm()
   const { t } = useI18n()
   const access = useWorkspaceAccess()
@@ -57,12 +58,7 @@ export function useBlockDeletion() {
         color: 'neutral',
       })
     } catch (e) {
-      toast.add({
-        title: t('board.toast.archiveFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+      present(e, 'board.toast.archiveFailed')
     }
     return true
   }

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { getErrorMessage } from '@cat-factory/kernel'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { ArgError, HELP_TEXT, parseArgs } from './args.js'
@@ -54,6 +55,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  process.stderr.write(`\ncat-factory: ${err instanceof Error ? err.message : String(err)}\n`)
+  process.stderr.write(`\ncat-factory: ${getErrorMessage(err)}\n`)
   process.exit(1)
 })

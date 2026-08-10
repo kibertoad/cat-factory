@@ -176,6 +176,18 @@ else imports its **ports** and domain types from here.
   `shared/best-effort.ts` (`runBestEffort` / `describeError`), the convention that replaces
   `.catch(() => {})`: keep the swallow, add one scrubbed `warn`. See
   [`backend/docs/logging.md`](../../docs/logging.md).
+- `shared/error-chain.logic.ts`: **`errorChainText` / `flattenErrorChain`**, how a THROWN VALUE
+  becomes text for every reader in the repo. It walks `.cause` and each `AggregateError` branch
+  (bounded by depth and by link IDENTITY, so a cause cycle terminates), folds links that render
+  identically into an `(xN)` count rather than dropping one, scrubs through `redactSecrets` and caps
+  the result SAYING what it dropped. The three describers that read it are `getErrorMessage`
+  (`domain/errors.ts`, what a human is shown), `describeError` (`shared/best-effort.ts`, log fields)
+  and `describeConnectionFailure` (below, which adds a cause class and remedy). They were three
+  answers to one question before this existed, two of them stopping at `error.message`: that is why
+  a probe named `connect ECONNREFUSED` while the log line for the SAME failure said `fetch failed`.
+  The one asymmetry that stays: this KEEPS undici's contentless outer link, because a log line and a
+  `DispatchError` message are matched downstream by their opening phrase, while a probe's verdict
+  drops it to lead with the real cause. Full model: [`backend/docs/logging.md`](../../docs/logging.md).
 - `shared/connection-failure.logic.ts`: **`describeConnectionFailure` / `connectionFailureResult`**,
   what every "Test connection" button reports when the probe got no ANSWER at all. On Node/undici a
   transport failure arrives as a generic `TypeError: fetch failed` with the real cause on `.cause`

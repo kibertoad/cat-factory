@@ -5,7 +5,7 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from 'cloudflare:workers'
-import { type Logger, redactSecrets } from '@cat-factory/kernel'
+import { getErrorMessage, type Logger, redactSecrets } from '@cat-factory/kernel'
 import type { AdvanceResult, RunFailure } from '@cat-factory/orchestration'
 import {
   failureFromAdvanceError,
@@ -259,7 +259,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         // Scrubbed HERE, once, because this message is both logged and folded into the run's
         // user-visible failure text — and a poll error surfaced from `fetch` routinely echoes
         // the request URL (with its query) or an auth header back in its own message.
-        const raw = error instanceof Error ? error.message : String(error)
+        const raw = getErrorMessage(error)
         return { kind: 'read_failed', message: redactSecrets(raw) ?? '' }
       }
     }

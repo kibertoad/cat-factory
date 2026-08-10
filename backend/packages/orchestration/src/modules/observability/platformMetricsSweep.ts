@@ -1,4 +1,5 @@
 import type { PlatformObservability, PlatformObservabilityWindow } from '@cat-factory/contracts'
+import { getErrorMessage } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 
 // Runtime-neutral sweep that publishes the deployment-level (platform-operator)
@@ -69,7 +70,7 @@ export async function sweepPlatformMetrics(deps: PlatformMetricsSweepDeps): Prom
   } catch (err) {
     deps.logger?.warn('platform-metrics: failed to list accounts', {
       scope: 'platform-metrics',
-      err: err instanceof Error ? err.message : String(err),
+      err: getErrorMessage(err),
     })
     return 0
   }
@@ -84,7 +85,7 @@ export async function sweepPlatformMetrics(deps: PlatformMetricsSweepDeps): Prom
       deps.logger?.warn('platform-metrics: failed to export account', {
         scope: 'platform-metrics',
         accountId,
-        err: err instanceof Error ? err.message : String(err),
+        err: getErrorMessage(err),
       })
     }
   }

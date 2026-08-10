@@ -18,7 +18,7 @@ const groups = useConsensusGroupsStore()
 const models = useModelsStore()
 const creds = useVendorCredentialsStore()
 const uiMode = useUiModeStore()
-const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { confirm } = useConfirm()
 
 /**
@@ -184,7 +184,7 @@ async function save() {
     else await groups.create(body)
     editor.value = null
   } catch (err) {
-    fail(t('settings.consensusGroups.toast.saveFailed'), err)
+    present(err, 'settings.consensusGroups.toast.saveFailed')
   } finally {
     busy.value = false
   }
@@ -203,19 +203,10 @@ async function remove(group: ConsensusGroup) {
   try {
     await groups.remove(group.id)
   } catch (err) {
-    fail(t('settings.consensusGroups.toast.deleteFailed'), err)
+    present(err, 'settings.consensusGroups.toast.deleteFailed')
   } finally {
     busy.value = false
   }
-}
-
-function fail(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 </script>
 

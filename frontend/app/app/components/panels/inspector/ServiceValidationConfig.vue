@@ -20,6 +20,7 @@ const props = defineProps<{ block: Block }>()
 
 const store = useValidationChecksStore()
 const toast = useToast()
+const { present } = usePipelineErrorToast()
 const { t, te } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -63,15 +64,6 @@ function addRow() {
 
 function removeRow(index: number) {
   rows.value.splice(index, 1)
-}
-
-function notifyError(title: string, e: unknown) {
-  toast.add({
-    title,
-    description: e instanceof Error ? e.message : String(e),
-    icon: 'i-lucide-triangle-alert',
-    color: 'error',
-  })
 }
 
 // Ecosystem label KEYS, exhaustive over the contracts `ValidationEcosystem` union: a new
@@ -162,7 +154,7 @@ async function detect() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('inspector.validationChecks.detect.failed'), e)
+    present(e, 'inspector.validationChecks.detect.failed')
   } finally {
     detecting.value = false
   }
@@ -183,7 +175,7 @@ async function save() {
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('inspector.validationChecks.saveFailed'), e)
+    present(e, 'inspector.validationChecks.saveFailed')
   } finally {
     busy.value = false
   }
@@ -199,7 +191,7 @@ async function clear() {
     dependencyInstall.value = ''
     toastDone('clear', noun)
   } catch (e) {
-    notifyError(t('inspector.validationChecks.clearFailed'), e)
+    present(e, 'inspector.validationChecks.clearFailed')
   } finally {
     busy.value = false
   }
