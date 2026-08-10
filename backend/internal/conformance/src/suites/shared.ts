@@ -4,6 +4,34 @@ import type {
   Initiative,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
+import { expect } from 'vitest'
+import type { ConformanceApp } from '../harness.js'
+
+/**
+ * Mint a public-API key through the SESSION surface and return its bearer header.
+ *
+ * Here rather than copied into each `integration-public-*.ts` suite, which is where it lived five
+ * times over: every public-API suite starts by minting a key, so the day the mint route changes
+ * shape (a required field, a different response envelope) it is one edit and not five, and a
+ * missed one fails a whole facade's suite at setup with no clue why.
+ *
+ * The label carries the caller's own `purpose` so a leaked key row in a failing run still says
+ * which suite made it.
+ */
+export async function mintPublicApiKey(
+  app: ConformanceApp,
+  workspaceId: string,
+  scope: 'read' | 'write' | 'decide' | 'admin',
+  purpose: string,
+): Promise<Record<string, string>> {
+  const created = await app.call<{ key: { id: string }; secret: string }>(
+    'POST',
+    `/workspaces/${workspaceId}/public-api-keys`,
+    { label: `conformance-${purpose}-${scope}`, scope },
+  )
+  expect(created.status).toBe(201)
+  return { authorization: `Bearer ${created.body.secret}` }
+}
 
 // Binary-storage start-gate helpers (see the `visual-confirmation` / UI-tester tests).
 // The Worker test env binds R2 (storage ON by default) while Node/local default to OFF and

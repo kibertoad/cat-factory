@@ -1139,25 +1139,6 @@ export interface ListPublicMergeClassRollupsResponseRollupEffort {
   untagged: number
 }
 
-export interface ListPublicMergePresetsResponse {
-  presets: ListPublicMergePresetsResponsePreset[]
-}
-
-export interface ListPublicMergePresetsResponsePreset {
-  autoMergeEnabled: boolean
-  ciMaxAttempts: number
-  dryRunRoles: ListPublicMergePresetsResponsePresetDryRunRole[]
-  isDefault: boolean
-  name: string
-  presetId: string
-  submissionRestrictedRoles: ListPublicMergePresetsResponsePresetDryRunRole[]
-}
-
-export type ListPublicMergePresetsResponsePresetDryRunRole = 'admin' | 'member' | 'viewer'
-
-/** Every `ListPublicMergePresetsResponsePresetDryRunRole` value, for exhaustive handling and runtime validation. */
-export const LIST_PUBLIC_MERGE_PRESETS_RESPONSE_PRESET_DRY_RUN_ROLE_VALUES = ['admin', 'member', 'viewer'] as const
-
 export interface ListPublicModelPresetsResponse {
   presets: ListPublicModelPresetsResponsePreset[]
 }
@@ -1186,6 +1167,25 @@ export interface ListPublicReposResponseRepo {
   /** Always present; `null` when the server has no value for it. */
   serviceId: string | null
 }
+
+export interface ListPublicRiskPoliciesResponse {
+  policies: ListPublicRiskPoliciesResponsePolicy[]
+}
+
+export interface ListPublicRiskPoliciesResponsePolicy {
+  autoMergeEnabled: boolean
+  ciMaxAttempts: number
+  dryRunRoles: ListPublicRiskPoliciesResponsePolicyDryRunRole[]
+  isDefault: boolean
+  name: string
+  policyId: string
+  submissionRestrictedRoles: ListPublicRiskPoliciesResponsePolicyDryRunRole[]
+}
+
+export type ListPublicRiskPoliciesResponsePolicyDryRunRole = 'admin' | 'member' | 'viewer'
+
+/** Every `ListPublicRiskPoliciesResponsePolicyDryRunRole` value, for exhaustive handling and runtime validation. */
+export const LIST_PUBLIC_RISK_POLICIES_RESPONSE_POLICY_DRY_RUN_ROLE_VALUES = ['admin', 'member', 'viewer'] as const
 
 export interface ListPublicTaskDocumentsResponse {
   documents: ListPublicTaskDocumentsResponseDocument[]
@@ -2647,9 +2647,13 @@ export interface PublicTask {
   autoStartDependents: boolean
   dependsOn: string[]
   description: string
+  /** Always present; `null` when the server has no value for it. */
+  modelPresetId: string | null
   progress: number
   /** Always present; `null` when the server has no value for it. */
   pullRequestUrl: string | null
+  /** Always present; `null` when the server has no value for it. */
+  riskPolicyId: string | null
   /** Always present; `null` when the server has no value for it. */
   runId: string | null
   serviceId: string
@@ -2945,6 +2949,10 @@ export interface UpdatePublicTask {
   /** Length 0..2000. */
   description?: string
   fields?: Record<string, CreatePublicTaskFieldsValue>
+  /** Length 1..120. */
+  modelPresetId?: string
+  /** Length 1..120. */
+  riskPolicyId?: string
   /** Length 1..200. */
   title?: string
 }

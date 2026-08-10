@@ -2123,37 +2123,6 @@ type ListPublicMergeClassRollupsResponseRollupEffort struct {
 	Untagged float64 `json:"untagged"`
 }
 
-// ListPublicMergePresetsResponse is the `ListPublicMergePresetsResponse` wire model.
-type ListPublicMergePresetsResponse struct {
-	Presets []ListPublicMergePresetsResponsePreset `json:"presets"`
-}
-
-// ListPublicMergePresetsResponsePreset is the `ListPublicMergePresetsResponsePreset` wire model.
-type ListPublicMergePresetsResponsePreset struct {
-	AutoMergeEnabled          bool                                             `json:"autoMergeEnabled"`
-	CIMaxAttempts             float64                                          `json:"ciMaxAttempts"`
-	DryRunRoles               []ListPublicMergePresetsResponsePresetDryRunRole `json:"dryRunRoles"`
-	IsDefault                 bool                                             `json:"isDefault"`
-	Name                      string                                           `json:"name"`
-	PresetID                  string                                           `json:"presetId"`
-	SubmissionRestrictedRoles []ListPublicMergePresetsResponsePresetDryRunRole `json:"submissionRestrictedRoles"`
-}
-
-// ListPublicMergePresetsResponsePresetDryRunRole is the `ListPublicMergePresetsResponsePresetDryRunRole` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type ListPublicMergePresetsResponsePresetDryRunRole string
-
-const (
-	ListPublicMergePresetsResponsePresetDryRunRoleAdmin  ListPublicMergePresetsResponsePresetDryRunRole = "admin"
-	ListPublicMergePresetsResponsePresetDryRunRoleMember ListPublicMergePresetsResponsePresetDryRunRole = "member"
-	ListPublicMergePresetsResponsePresetDryRunRoleViewer ListPublicMergePresetsResponsePresetDryRunRole = "viewer"
-)
-
-// ListPublicMergePresetsResponsePresetDryRunRoleValues lists every ListPublicMergePresetsResponsePresetDryRunRole this SDK release knows.
-var ListPublicMergePresetsResponsePresetDryRunRoleValues = []ListPublicMergePresetsResponsePresetDryRunRole{ListPublicMergePresetsResponsePresetDryRunRoleAdmin, ListPublicMergePresetsResponsePresetDryRunRoleMember, ListPublicMergePresetsResponsePresetDryRunRoleViewer}
-
 // ListPublicModelPresetsResponse is the `ListPublicModelPresetsResponse` wire model.
 type ListPublicModelPresetsResponse struct {
 	Presets []ListPublicModelPresetsResponsePreset `json:"presets"`
@@ -2186,6 +2155,37 @@ type ListPublicReposResponseRepo struct {
 	// ServiceID always present; nil when the server has no value for it.
 	ServiceID *string `json:"serviceId"`
 }
+
+// ListPublicRiskPoliciesResponse is the `ListPublicRiskPoliciesResponse` wire model.
+type ListPublicRiskPoliciesResponse struct {
+	Policies []ListPublicRiskPoliciesResponsePolicy `json:"policies"`
+}
+
+// ListPublicRiskPoliciesResponsePolicy is the `ListPublicRiskPoliciesResponsePolicy` wire model.
+type ListPublicRiskPoliciesResponsePolicy struct {
+	AutoMergeEnabled          bool                                             `json:"autoMergeEnabled"`
+	CIMaxAttempts             float64                                          `json:"ciMaxAttempts"`
+	DryRunRoles               []ListPublicRiskPoliciesResponsePolicyDryRunRole `json:"dryRunRoles"`
+	IsDefault                 bool                                             `json:"isDefault"`
+	Name                      string                                           `json:"name"`
+	PolicyID                  string                                           `json:"policyId"`
+	SubmissionRestrictedRoles []ListPublicRiskPoliciesResponsePolicyDryRunRole `json:"submissionRestrictedRoles"`
+}
+
+// ListPublicRiskPoliciesResponsePolicyDryRunRole is the `ListPublicRiskPoliciesResponsePolicyDryRunRole` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type ListPublicRiskPoliciesResponsePolicyDryRunRole string
+
+const (
+	ListPublicRiskPoliciesResponsePolicyDryRunRoleAdmin  ListPublicRiskPoliciesResponsePolicyDryRunRole = "admin"
+	ListPublicRiskPoliciesResponsePolicyDryRunRoleMember ListPublicRiskPoliciesResponsePolicyDryRunRole = "member"
+	ListPublicRiskPoliciesResponsePolicyDryRunRoleViewer ListPublicRiskPoliciesResponsePolicyDryRunRole = "viewer"
+)
+
+// ListPublicRiskPoliciesResponsePolicyDryRunRoleValues lists every ListPublicRiskPoliciesResponsePolicyDryRunRole this SDK release knows.
+var ListPublicRiskPoliciesResponsePolicyDryRunRoleValues = []ListPublicRiskPoliciesResponsePolicyDryRunRole{ListPublicRiskPoliciesResponsePolicyDryRunRoleAdmin, ListPublicRiskPoliciesResponsePolicyDryRunRoleMember, ListPublicRiskPoliciesResponsePolicyDryRunRoleViewer}
 
 // ListPublicTaskDocumentsResponse is the `ListPublicTaskDocumentsResponse` wire model.
 type ListPublicTaskDocumentsResponse struct {
@@ -4944,9 +4944,13 @@ type PublicTask struct {
 	AutoStartDependents bool     `json:"autoStartDependents"`
 	DependsOn           []string `json:"dependsOn"`
 	Description         string   `json:"description"`
-	Progress            float64  `json:"progress"`
+	// ModelPresetID always present; nil when the server has no value for it.
+	ModelPresetID *string `json:"modelPresetId"`
+	Progress      float64 `json:"progress"`
 	// PullRequestURL always present; nil when the server has no value for it.
 	PullRequestURL *string `json:"pullRequestUrl"`
+	// RiskPolicyID always present; nil when the server has no value for it.
+	RiskPolicyID *string `json:"riskPolicyId"`
 	// RunID always present; nil when the server has no value for it.
 	RunID     *string    `json:"runId"`
 	ServiceID string     `json:"serviceId"`
@@ -5441,6 +5445,10 @@ type UpdatePublicTask struct {
 	Description *string `json:"description,omitempty"`
 	// Fields may be absent entirely.
 	Fields map[string]CreatePublicTaskFieldsValue `json:"fields,omitempty"`
+	// ModelPresetID may be absent entirely.
+	ModelPresetID *string `json:"modelPresetId,omitempty"`
+	// RiskPolicyID may be absent entirely.
+	RiskPolicyID *string `json:"riskPolicyId,omitempty"`
 	// Title may be absent entirely.
 	Title *string `json:"title,omitempty"`
 }

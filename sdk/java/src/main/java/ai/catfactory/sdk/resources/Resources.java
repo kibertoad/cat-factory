@@ -25,7 +25,7 @@ public abstract class Resources {
     private final EnvironmentsClient environments;
     private final ModelsClient models;
     private final VcsClient vcs;
-    private final MergePresetsClient mergePresets;
+    private final RiskPoliciesClient riskPolicies;
     private final ModelPresetsClient modelPresets;
     private final WebhookClient webhook;
     private final UsageClient usage;
@@ -48,7 +48,7 @@ public abstract class Resources {
         this.environments = new EnvironmentsClient(transport);
         this.models = new ModelsClient(transport);
         this.vcs = new VcsClient(transport);
-        this.mergePresets = new MergePresetsClient(transport);
+        this.riskPolicies = new RiskPoliciesClient(transport);
         this.modelPresets = new ModelPresetsClient(transport);
         this.webhook = new WebhookClient(transport);
         this.usage = new UsageClient(transport);
@@ -115,9 +115,9 @@ public abstract class Resources {
         return vcs;
     }
 
-    /** The merge-threshold presets a task can resolve, including which is the workspace default: what decides whether a run can land its pull request without a person. */
-    public MergePresetsClient mergePresets() {
-        return mergePresets;
+    /** The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset. */
+    public RiskPoliciesClient riskPolicies() {
+        return riskPolicies;
     }
 
     /** The model presets a task can pin, including which is the workspace default: what decides which model each agent step runs on, and so what a run costs. Availability is not repeated here; join `baseModelId` against the models group, which keeps unconfigured and policy-refused apart. */

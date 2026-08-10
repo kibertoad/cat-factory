@@ -456,26 +456,34 @@ export const publicVcsConnectionViewSchema = v.object({
 export type PublicVcsConnectionView = v.InferOutput<typeof publicVcsConnectionViewSchema>
 
 /**
- * One merge preset, reduced to what decides whether a run can LAND without a person.
+ * One risk policy, reduced to what decides whether a run can LAND without a person.
+ *
+ * **The name is the product's**, and it is broader than merging on purpose: one policy row also
+ * caps CI-fixer attempts, requirement and tester iteration rounds, judge scores and the
+ * release-health watch window. This surface first shipped it as a "merge preset", which was the
+ * name the platform had already moved off, and the id a caller reads here is the one it pins as
+ * `riskPolicyId` on task create, so the two spellings met on one wire. See
+ * `backend/docs/public-api-versions.md` for why the correction is a rename rather than a
+ * dual-served migration.
  *
  * `dryRunRoles` is projected even though a caller cannot resolve which role its own key runs
- * under: a non-empty list is the difference between "this preset merges" and "this preset merges
+ * under: a non-empty list is the difference between "this policy merges" and "this policy merges
  * for everyone except the role you might be", and stating it lets a caller report the caveat
  * rather than assert a verdict it has not earned.
  *
- * `submissionRestrictedRoles` is the SECOND such caveat and rides for the same reason. A preset
+ * `submissionRestrictedRoles` is the SECOND such caveat and rides for the same reason. A policy
  * carries two role-scoped bars on LANDING (ADR 0039's per-role change-class allowlist, enforced at
  * both merge exits, and the dry-run list), and publishing one of them made the other read as
- * absent: `autoMergeEnabled: true` with an empty `dryRunRoles` says "this preset merges" while a
+ * absent: `autoMergeEnabled: true` with an empty `dryRunRoles` says "this policy merges" while a
  * role allowlist holds every run outside its classes for a human. What is deliberately NOT here is
  * the per-role narrowing of the score CEILINGS (`classRulesByRole`), on the same line this
  * projection already draws for the ceilings themselves: it decides how much review landing takes,
  * where these two decide whether landing happens at all.
  */
-export const publicMergePresetSchema = v.object({
-  presetId: v.string(),
+export const publicRiskPolicySchema = v.object({
+  policyId: v.string(),
   name: v.string(),
-  /** Whether a task that pins no preset resolves this one. */
+  /** Whether a task that pins no policy resolves this one. */
   isDefault: v.boolean(),
   /** The master switch: false holds every pull request for a person. */
   autoMergeEnabled: v.boolean(),
@@ -490,10 +498,10 @@ export const publicMergePresetSchema = v.object({
    */
   submissionRestrictedRoles: v.array(workspaceRoleSchema),
 })
-export type PublicMergePreset = v.InferOutput<typeof publicMergePresetSchema>
+export type PublicRiskPolicy = v.InferOutput<typeof publicRiskPolicySchema>
 
-export const publicMergePresetListSchema = v.object({ presets: v.array(publicMergePresetSchema) })
-export type PublicMergePresetList = v.InferOutput<typeof publicMergePresetListSchema>
+export const publicRiskPolicyListSchema = v.object({ policies: v.array(publicRiskPolicySchema) })
+export type PublicRiskPolicyList = v.InferOutput<typeof publicRiskPolicyListSchema>
 
 /**
  * One model preset: which model a task pinning it runs its agent steps on.
@@ -501,7 +509,8 @@ export type PublicMergePresetList = v.InferOutput<typeof publicMergePresetListSc
  * Published so a caller can PICK one by id rather than guess at it, which is the same reason the
  * pipeline list exists beside a `start` that takes a `pipelineId`. The ids are the workspace's own
  * (`mdp_*` for the built-ins), so a caller reads them here rather than hard-coding a vocabulary
- * this surface would then owe forever.
+ * this surface would then owe forever. A caller pins what it reads here as `modelPresetId`, the
+ * same word: unlike the risk-policy list beside it, this one is a preset all the way down.
  *
  * **Availability is deliberately NOT here.** Whether a preset's model can actually be dispatched to
  * is a fact about wiring and account policy, and `GET /api/v1/models` already answers it with the

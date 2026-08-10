@@ -349,7 +349,8 @@ its own keys, enrol its own webhook and file its own work still had to open a br
 - `PATCH /api/v1/services/{serviceId}`: patch a service, including the `provisioning` that says
   where its manifests live. A connected cluster alone provisions nothing without it.
 - `GET /api/v1/models`, `GET /api/v1/vcs/connection`, `GET /api/v1/merge-presets`: what this
-  deployment has WIRED.
+  deployment has WIRED. (The last of those is renamed to `GET /api/v1/risk-policies` in 1.42.0
+  below, in place and with no dual-serving; the exception is argued there.)
 
 All eight are `admin`. The three reads are `admin` rather than `read` even though `/repos` and
 `/pipelines` are `read`, and the distinction is what each names: those name board CONTENT, where
@@ -370,23 +371,53 @@ default means "always present" on the way out and "may be omitted" on the way in
 emitter refuses that ambiguity outright; the defaults are applied in
 `PublicProvisioningController`.
 
-1.42.0: the two preset knobs become callable. `GET /api/v1/model-presets` lists the workspace's
-model presets and which is the default (the merge-preset list's sibling, and the same
-list-beside-the-id pairing the pipeline list has with `start`), and task create gains optional
-`modelPresetId` and `riskPolicyId`. Additive throughout, so a consumer built against 1.41.0 keeps
-working unchanged: both fields omitted still resolve the workspace default.
+1.42.0: the two preset knobs become callable, and the one that shipped in 1.41.0 is renamed. Task
+create and task PATCH gain optional `modelPresetId` and `riskPolicyId`, `GET /api/v1/model-presets`
+lists the model library, and `PublicTask` reads both pins back (null ⇒ the task follows the
+workspace default rather than holding a copy of its id). Additive, except for the rename below: a
+consumer built against 1.41.0 keeps resolving the workspace default when it omits both fields.
 
-What a consumer NOTICES is the refusal, not the fields. A pinned id no preset carries is a `422`
-(`details.reason: 'model_preset_not_found'` / `'merge_preset_not_found'`, with an `available` list)
-rather than a silent fall back to the default, because the two are indistinguishable afterwards and
-a run that quietly used another model succeeds while being about something else. A deployment with
-the preset repository unwired answers `503` for a caller that pinned one, which is a different fact
-from an unknown id and needs a different fix.
+**`GET /api/v1/merge-presets` becomes `GET /api/v1/risk-policies`, in place**, with the response
+key `presets` → `policies`, each row's `presetId` → `policyId`, the SDK group `mergePresets` →
+`riskPolicies`, the OpenAPI tag "Merge presets" → "Risk policies", and the refusal reasons
+`merge_preset_not_found` / `merge_presets_unwired` → `risk_policy_not_found` /
+`risk_policies_unwired`. The old path is REMOVED rather than served beside the new one.
 
-`riskPolicyId` is the one that changes what a caller may DO rather than what it may say: a merge
-preset carries `autoMergeEnabled` and the score ceilings, so pinning one selects how much oversight
+That is a break, and ADR 0034 says a break takes an incremental migration path plus a version step.
+This is a deliberate, owner-approved exception, and the argument for it is narrow enough to be
+worth writing down so it is not read as precedent:
+
+- The endpoint is one release old. It shipped in 1.41.0 the same day, and it has no known adopter,
+  so the migration window a dual-served path exists to provide would protect nobody.
+- The name it shipped under was already wrong. "Merge threshold preset" was renamed to **risk
+  policy** across the domain, the SPA and the internal routes a month earlier, precisely because
+  one policy row also caps CI-fixer attempts, requirement and tester iteration rounds, judge scores
+  and the release-health watch window. The public surface was the last place still saying the old
+  word.
+- The alternative made it permanent. Keeping `merge-presets` while task create takes `riskPolicyId`
+  puts two names for one concept on one wire: a caller reads an id from one and posts it under the
+  other. Dual-serving the correction would leave both names on the surface for a release window
+  and add a second SDK group and MCP tool for the same rows.
+
+So the version step is a MINOR rather than a major: the exception is being taken because the
+surface has no adopters, and a major would announce a migration nobody has to make.
+
+What a consumer NOTICES about the pins is the refusal, not the fields. An id no library carries is
+a `422` (`details.reason: 'model_preset_not_found'` / `'risk_policy_not_found'`) rather than a
+silent fall back to the default, because the two are indistinguishable afterwards and a run that
+quietly used another model succeeds while being about something else. A deployment with the library
+unwired answers `503` (`'model_presets_unwired'` / `'risk_policies_unwired'`) for a caller that
+pinned one, which is a different fact from an unknown id and needs a different fix; both list
+endpoints answer with the same two reasons, so one condition is not reported two ways.
+
+**The refusal does not name the library's contents.** Pinning takes `write` and listing takes
+`admin`, so a `422` carrying the available ids would let the lower rung enumerate by typo exactly
+what the higher one gates. It names the id that missed and which library it missed.
+
+`riskPolicyId` is the one that changes what a caller may DO rather than what it may say: a policy
+carries `autoMergeEnabled` and the score ceilings, so pinning one selects how much oversight
 landing takes. It is exposed because withholding it was never the control it resembled (a caller
 could always move the workspace default, which aims the same power at every other task too), and
-the actual control is an admission rule over which presets a caller may pin:
+the actual control is an admission rule over which policies a caller may pin:
 `docs/initiatives/role-scoped-risk-policy-admission.md`. Until that lands, an `admin` key may pin
-any preset its workspace holds, which is the authority it already had by editing one.
+any policy its workspace holds, which is the authority it already had by editing one.

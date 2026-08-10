@@ -51,20 +51,31 @@ is the suite working as designed.
 
 Ordered by what unblocks a live pass soonest. A is independent and can land at any point.
 
-| #   | Slice                                                                        | PR  |
-| --- | ---------------------------------------------------------------------------- | --- |
-| B   | Public model-preset surface: list, plus `modelPresetId` on task create       |     |
-| C   | Suite adopts operator-created repos, and pins the configured preset          |     |
-| D   | `configure` command: defaults, the token, the repo names, the creation pages |     |
-| A   | OpenAI catalog entry and a `chatgpt` built-in preset                         |     |
+| #   | Slice                                                                        | PR                                                     |
+| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------ |
+| B   | Public model-preset surface: list, plus `modelPresetId` on task create       | [#1940](https://github.com/kibertoad/cat-factory/pull/1940) |
+| C   | Suite adopts operator-created repos, and pins the configured preset          |                                                        |
+| D   | `configure` command: defaults, the token, the repo names, the creation pages |                                                        |
+| A   | OpenAI catalog entry and a `chatgpt` built-in preset                         |                                                        |
 
 ### B. Public preset surface
 
-Additive, so the normal mode for `/api/v1`: `GET /api/v1/model-presets` listing the workspace's
-presets and which is the default (the merge-preset endpoint is the shape it copies, since that one
-already reports a default), plus optional `modelPresetId` AND `riskPolicyId` on public task create.
-Carries the full public-API cost: an entry in `scripts/sdk/surface.mjs`, `pnpm gen:sdk` across four
-clients, the OpenAPI `info.version` minor, and conformance assertions.
+Mostly additive, the normal mode for `/api/v1`: `GET /api/v1/model-presets` listing the workspace's
+presets and which is the default (the risk-policy endpoint is the shape it copies, since that one
+already reports a default), plus optional `modelPresetId` AND `riskPolicyId` on public task create
+and PATCH, both read back on the task projection. Carries the full public-API cost: an entry in
+`scripts/sdk/surface.mjs`, `pnpm gen:sdk` across four clients, the OpenAPI `info.version` minor, and
+conformance assertions.
+
+**One deliberate break rode along.** `GET /api/v1/merge-presets` shipped in 1.41.0 under the name
+the product renamed to "risk policy" a month earlier, and the id it serves is what a task pins as
+`riskPolicyId`, so the surface would have carried two names for one concept forever. Renamed in
+place rather than dual-served, because 1.41.0 has no adopters; the exception is argued in
+`backend/docs/public-api-versions.md`.
+
+**Where the dangling-id check lives.** On `BoardService`, not on the public route: `addTask` and
+`updateBlock` are reached by the SPA, the internal API, tracker intake, an initiative spawn and
+blueprint reconciliation, and a check at one door leaves every other one falling back silently.
 
 **Both knobs, not just the model one.** The first reading here was that a merge preset should stay
 read-only, because pinning one selects how much oversight landing takes and a caller choosing its

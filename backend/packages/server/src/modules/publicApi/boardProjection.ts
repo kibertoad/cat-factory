@@ -34,6 +34,11 @@ export function toPublicTask(block: Block, serviceId: string): PublicTask {
     // Absent is OFF, which is what the engine's post-merge hook reads it as: a task nobody has
     // toggled leaves its dependents to be started deliberately.
     autoStartDependents: block.autoStartDependents === true,
+    // Null, never the default's id: a task pinning nothing FOLLOWS the workspace default, so
+    // resolving one in here would report a task as pinned that moves the day the default does.
+    // The row spells "unpinned" as absent OR as the empty string (`addTask` treats both alike).
+    modelPresetId: block.modelPresetId || null,
+    riskPolicyId: block.riskPolicyId || null,
   }
 }
 

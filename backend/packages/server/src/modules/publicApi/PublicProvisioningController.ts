@@ -2,8 +2,8 @@ import {
   connectPublicEnvironmentContract,
   getPublicRepoBootstrapContract,
   getPublicVcsConnectionContract,
-  listPublicMergePresetsContract,
   listPublicModelPresetsContract,
+  listPublicRiskPoliciesContract,
   listPublicWiredModelsContract,
   startPublicRepoBootstrapContract,
   testPublicEnvironmentConnectionContract,
@@ -22,8 +22,8 @@ import {
   type PublicEnvironmentConnectionView,
   type PublicKubernetesManifestSource,
   type PublicKubernetesUrlSource,
-  type PublicMergePreset,
   type PublicModelPreset,
+  type PublicRiskPolicy,
   type PublicServiceProvisioning,
   type PublicVcsConnection,
   type PublicWiredModel,
@@ -128,14 +128,29 @@ function servesUserScopedModels(container: ServerContainer): boolean {
   return container.localModelEndpoints !== undefined
 }
 
-/** The merge-preset module, or the 503. */
-function requireMergePresets<E extends AppEnv>(c: Context<E>): RiskPoliciesModule {
-  return requireCapability(c.get('container').riskPolicies, 'Merge presets are not configured')
+/**
+ * The risk-policy module, or the 503 — carrying the SAME `details.reason` a refused pin does.
+ *
+ * One deployment fact ("this facade wired no risk-policy repository") reaches a caller by two
+ * routes: this list, and the `422`/`503` a task pinning one gets back. Answering the discovery
+ * call with a bare `unavailable` and the pin with a reason would make a client parse prose on
+ * whichever it happened to hit first.
+ */
+function requireRiskPolicies<E extends AppEnv>(c: Context<E>): RiskPoliciesModule {
+  return requireCapability(
+    c.get('container').riskPolicies,
+    'Risk policies are not configured',
+    'risk_policies_unwired',
+  )
 }
 
-/** The model-preset module, or the 503. */
+/** The model-preset module, or the 503; same pairing as {@link requireRiskPolicies}. */
 function requireModelPresets<E extends AppEnv>(c: Context<E>): ModelPresetsModule {
-  return requireCapability(c.get('container').modelPresets, 'Model presets are not configured')
+  return requireCapability(
+    c.get('container').modelPresets,
+    'Model presets are not configured',
+    'model_presets_unwired',
+  )
 }
 
 /**
@@ -498,20 +513,20 @@ function toPublicModelPreset(preset: ModelPreset): PublicModelPreset {
   }
 }
 
-function toPublicMergePreset(preset: RiskPolicy): PublicMergePreset {
+function toPublicRiskPolicy(policy: RiskPolicy): PublicRiskPolicy {
   return {
-    presetId: preset.id,
-    name: preset.name,
-    isDefault: preset.isDefault,
-    autoMergeEnabled: preset.autoMergeEnabled,
-    ciMaxAttempts: preset.ciMaxAttempts,
-    dryRunRoles: [...preset.dryRunRoles],
+    policyId: policy.id,
+    name: policy.name,
+    isDefault: policy.isDefault,
+    autoMergeEnabled: policy.autoMergeEnabled,
+    ciMaxAttempts: policy.ciMaxAttempts,
+    dryRunRoles: [...policy.dryRunRoles],
     // The roles the allowlist SCOPES, not the classes it allows: a role with an entry may land only
     // what that entry names (an EMPTY entry lands nothing, which is a restriction and not an
     // absence), and the class vocabulary itself stays internal.
-    submissionRestrictedRoles: Object.entries(preset.submissionClassesByRole)
+    submissionRestrictedRoles: Object.entries(policy.submissionClassesByRole)
       .filter(([, classes]) => classes !== undefined)
-      .map(([role]) => role as PublicMergePreset['submissionRestrictedRoles'][number]),
+      .map(([role]) => role as PublicRiskPolicy['submissionRestrictedRoles'][number]),
   }
 }
 
@@ -546,11 +561,11 @@ function registerWiringRoutes(app: Hono<AppEnv>): void {
     return c.json({ connection: connection ? toPublicVcsConnection(connection) : null }, 200)
   })
 
-  buildHonoRoute(app, listPublicMergePresetsContract, async (c) => {
-    const auth = await authorizeOrThrow(c, listPublicMergePresetsContract.minScope)
-    const presets = requireMergePresets(c)
-    const rows = await presets.service.list(auth.workspaceId)
-    return c.json({ presets: rows.map(toPublicMergePreset) }, 200)
+  buildHonoRoute(app, listPublicRiskPoliciesContract, async (c) => {
+    const auth = await authorizeOrThrow(c, listPublicRiskPoliciesContract.minScope)
+    const policies = requireRiskPolicies(c)
+    const rows = await policies.service.list(auth.workspaceId)
+    return c.json({ policies: rows.map(toPublicRiskPolicy) }, 200)
   })
 
   buildHonoRoute(app, listPublicModelPresetsContract, async (c) => {

@@ -210,9 +210,9 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
     signature: '  vcs_get_connection(): Promise<unknown>\n',
   },
   {
-    name: 'merge_presets_list',
-    doc: '  /**\n   * List the workspace’s merge-threshold presets\n   *\n   * `GET /api/v1/merge-presets`, scope floor `admin`.\n   */\n',
-    signature: '  merge_presets_list(): Promise<unknown>\n',
+    name: 'risk_policies_list',
+    doc: '  /**\n   * List the workspace’s risk policies\n   *\n   * `GET /api/v1/risk-policies`, scope floor `admin`.\n   */\n',
+    signature: '  risk_policies_list(): Promise<unknown>\n',
   },
   {
     name: 'model_presets_list',

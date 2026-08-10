@@ -37,9 +37,14 @@ export function requireUser<E extends AppEnv>(c: Context<E>, message: string): S
  * An optional container capability (an opt-in integration module, a facade-wired repository),
  * or a 503 naming what isn't wired. The request is well-formed and the caller is entitled to
  * it — this deployment just has nothing behind the route.
+ *
+ * `reason` is the machine-readable half, and a route owes one wherever the SAME unwired fact is
+ * already reported with a reason somewhere else: a client that branches on
+ * `details.reason: 'model_presets_unwired'` from a refused pin, and then string-matches prose on
+ * the list endpoint it hits first, is being asked to handle one condition two ways.
  */
-export function requireCapability<T>(value: T | undefined | null, message: string): T {
-  if (value === undefined || value === null) throw new UnavailableError(message)
+export function requireCapability<T>(value: T | undefined | null, message: string, reason?: string): T {
+  if (value === undefined || value === null) throw new UnavailableError(message, reason)
   return value
 }
 
@@ -57,6 +62,6 @@ export function assertUser<E extends AppEnv>(c: Context<E>, message: string): vo
  * The refusal is the whole point of the line: without it the route answers as though the
  * integration were present, on a deployment that never wired it.
  */
-export function assertCapability(value: unknown, message: string): void {
-  requireCapability(value, message)
+export function assertCapability(value: unknown, message: string, reason?: string): void {
+  requireCapability(value, message, reason)
 }

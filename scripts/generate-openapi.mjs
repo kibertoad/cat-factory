@@ -311,11 +311,11 @@ const OPERATION_DOCS = {
     description:
       'The connected account, how the workspace authenticates to it, and the two permissions that decide whether an automated flow can complete: whether the platform may create repositories, and whether it may write workflow files. Both are enforced by the provider at push time, so a caller that cannot read them discovers a missing workflow permission as a repository that bootstrapped and then failed to gain its CI workflow. Provider-neutral: a GitLab-connected workspace answers here too. `connection` is null when nothing is connected, which is a state rather than an error.',
   },
-  listPublicMergePresets: {
-    tag: 'Merge presets',
-    summary: 'List the workspace’s merge-threshold presets',
+  listPublicRiskPolicies: {
+    tag: 'Risk policies',
+    summary: 'List the workspace’s risk policies',
     description:
-      'The preset library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the preset forces into dry-run mode, which is the difference between “this preset merges” and “this preset merges for everyone except one role”.',
+      'The policy library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the policy forces into dry-run mode, which is the difference between “this policy merges” and “this policy merges for everyone except one role”. A policy also caps CI-fixer attempts, requirement and tester iteration rounds and the release-health watch, which is why it is not called a merge preset; the id is what a task pins as `riskPolicyId`.',
   },
   listPublicModelPresets: {
     tag: 'Model presets',

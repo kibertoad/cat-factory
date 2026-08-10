@@ -40,9 +40,9 @@ import type {
   ListDebugToolCallsResponse,
   ListPublicJobsResponse,
   ListPublicMergeClassRollupsResponse,
-  ListPublicMergePresetsResponse,
   ListPublicModelPresetsResponse,
   ListPublicReposResponse,
+  ListPublicRiskPoliciesResponse,
   ListPublicTaskDocumentsResponse,
   ListPublicTaskDocumentsResponseDocument,
   ListPublicTaskTypesResponse,
@@ -820,8 +820,8 @@ export class VcsResource {
   }
 }
 
-/** The merge-threshold presets a task can resolve, including which is the workspace default: what decides whether a run can land its pull request without a person. */
-export class MergePresetsResource {
+/** The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset. */
+export class RiskPoliciesResource {
   readonly #transport: Transport
 
   constructor(transport: Transport) {
@@ -829,14 +829,14 @@ export class MergePresetsResource {
   }
 
   /**
-   * List the workspace’s merge-threshold presets
-   * The preset library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the preset forces into dry-run mode, which is the difference between “this preset merges” and “this preset merges for everyone except one role”.
-   * `GET /api/v1/merge-presets` — operation `listPublicMergePresets`.
+   * List the workspace’s risk policies
+   * The policy library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the policy forces into dry-run mode, which is the difference between “this policy merges” and “this policy merges for everyone except one role”. A policy also caps CI-fixer attempts, requirement and tester iteration rounds and the release-health watch, which is why it is not called a merge preset; the id is what a task pins as `riskPolicyId`.
+   * `GET /api/v1/risk-policies` — operation `listPublicRiskPolicies`.
    */
-  list(options: RequestOptions = {}): Promise<ListPublicMergePresetsResponse> {
-    return this.#transport.request<ListPublicMergePresetsResponse>({
+  list(options: RequestOptions = {}): Promise<ListPublicRiskPoliciesResponse> {
+    return this.#transport.request<ListPublicRiskPoliciesResponse>({
       method: 'GET',
-      path: `/api/v1/merge-presets`,
+      path: `/api/v1/risk-policies`,
       options,
     })
   }
@@ -2039,8 +2039,8 @@ export abstract class CatFactoryResources {
   readonly models: ModelsResource
   /** The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup. */
   readonly vcs: VcsResource
-  /** The merge-threshold presets a task can resolve, including which is the workspace default: what decides whether a run can land its pull request without a person. */
-  readonly mergePresets: MergePresetsResource
+  /** The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset. */
+  readonly riskPolicies: RiskPoliciesResource
   /** The model presets a task can pin, including which is the workspace default: what decides which model each agent step runs on, and so what a run costs. Availability is not repeated here; join `baseModelId` against the models group, which keeps unconfigured and policy-refused apart. */
   readonly modelPresets: ModelPresetsResource
   /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */
@@ -2072,7 +2072,7 @@ export abstract class CatFactoryResources {
     this.environments = new EnvironmentsResource(transport)
     this.models = new ModelsResource(transport)
     this.vcs = new VcsResource(transport)
-    this.mergePresets = new MergePresetsResource(transport)
+    this.riskPolicies = new RiskPoliciesResource(transport)
     this.modelPresets = new ModelPresetsResource(transport)
     this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)

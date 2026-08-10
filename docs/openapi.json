@@ -5073,10 +5073,30 @@
           "description": {
             "type": "string"
           },
+          "modelPresetId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "progress": {
             "type": "number"
           },
           "pullRequestUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "riskPolicyId": {
             "anyOf": [
               {
                 "type": "string"
@@ -5148,7 +5168,9 @@
           "runId",
           "pullRequestUrl",
           "dependsOn",
-          "autoStartDependents"
+          "autoStartDependents",
+          "modelPresetId",
+          "riskPolicyId"
         ],
         "type": "object"
       },
@@ -5781,6 +5803,16 @@
               "type": "string"
             },
             "type": "object"
+          },
+          "modelPresetId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "riskPolicyId": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
           },
           "title": {
             "maxLength": 200,
@@ -11323,108 +11355,6 @@
         "x-min-scope": "read"
       }
     },
-    "/api/v1/merge-presets": {
-      "get": {
-        "description": "The preset library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the preset forces into dry-run mode, which is the difference between “this preset merges” and “this preset merges for everyone except one role”.",
-        "operationId": "listPublicMergePresets",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "presets": {
-                      "items": {
-                        "properties": {
-                          "autoMergeEnabled": {
-                            "type": "boolean"
-                          },
-                          "ciMaxAttempts": {
-                            "type": "number"
-                          },
-                          "dryRunRoles": {
-                            "items": {
-                              "enum": [
-                                "admin",
-                                "member",
-                                "viewer"
-                              ],
-                              "type": "string"
-                            },
-                            "type": "array"
-                          },
-                          "isDefault": {
-                            "type": "boolean"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "presetId": {
-                            "type": "string"
-                          },
-                          "submissionRestrictedRoles": {
-                            "items": {
-                              "enum": [
-                                "admin",
-                                "member",
-                                "viewer"
-                              ],
-                              "type": "string"
-                            },
-                            "type": "array"
-                          }
-                        },
-                        "required": [
-                          "presetId",
-                          "name",
-                          "isDefault",
-                          "autoMergeEnabled",
-                          "ciMaxAttempts",
-                          "dryRunRoles",
-                          "submissionRestrictedRoles"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    }
-                  },
-                  "required": [
-                    "presets"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Success"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "List the workspace’s merge-threshold presets",
-        "tags": [
-          "Merge presets"
-        ],
-        "x-min-scope": "admin"
-      }
-    },
     "/api/v1/merge-records/rollups": {
       "get": {
         "description": "Every change class’s accumulated track record for the workspace, as one aggregate: how many records it holds, how many landed and by which route (auto-merged, merged through the app, merged directly on the provider), how many were rejected or are still awaiting review, and the distribution of reviewer-effort tags. This is the evidence that justifies widening a per-class auto-merge rule; nothing widens one automatically. A class with no records is present as zeros rather than absent, so \"nothing has landed here yet\" never reads as a class the response left out. `unknown` is a real class (no changed-file list was available) and never matches a per-class rule.",
@@ -13385,6 +13315,108 @@
         "summary": "Poll one repository bootstrap",
         "tags": [
           "Repos"
+        ],
+        "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/risk-policies": {
+      "get": {
+        "description": "The policy library, including which row is the workspace default that a task pinning none resolves. `autoMergeEnabled` is the master switch that decides whether a run can land its pull request without a person; `dryRunRoles` names the roles whose runs the policy forces into dry-run mode, which is the difference between “this policy merges” and “this policy merges for everyone except one role”. A policy also caps CI-fixer attempts, requirement and tester iteration rounds and the release-health watch, which is why it is not called a merge preset; the id is what a task pins as `riskPolicyId`.",
+        "operationId": "listPublicRiskPolicies",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "policies": {
+                      "items": {
+                        "properties": {
+                          "autoMergeEnabled": {
+                            "type": "boolean"
+                          },
+                          "ciMaxAttempts": {
+                            "type": "number"
+                          },
+                          "dryRunRoles": {
+                            "items": {
+                              "enum": [
+                                "admin",
+                                "member",
+                                "viewer"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "isDefault": {
+                            "type": "boolean"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "policyId": {
+                            "type": "string"
+                          },
+                          "submissionRestrictedRoles": {
+                            "items": {
+                              "enum": [
+                                "admin",
+                                "member",
+                                "viewer"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "policyId",
+                          "name",
+                          "isDefault",
+                          "autoMergeEnabled",
+                          "ciMaxAttempts",
+                          "dryRunRoles",
+                          "submissionRestrictedRoles"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "policies"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the workspace’s risk policies",
+        "tags": [
+          "Risk policies"
         ],
         "x-min-scope": "admin"
       }
@@ -19021,9 +19053,6 @@
       "name": "Keys"
     },
     {
-      "name": "Merge presets"
-    },
-    {
       "name": "Merge records"
     },
     {
@@ -19042,6 +19071,9 @@
     },
     {
       "name": "Repos"
+    },
+    {
+      "name": "Risk policies"
     },
     {
       "description": "The workspace’s board services.",

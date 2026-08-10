@@ -4596,93 +4596,6 @@ class ListPublicMergeClassRollupsResponseRollupEffort:
 
 
 @dataclass(frozen=True, slots=True)
-class ListPublicMergePresetsResponse:
-    """`ListPublicMergePresetsResponse`, as carried on the wire."""
-
-    presets: list[ListPublicMergePresetsResponsePreset]
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicMergePresetsResponse":
-        """Decode a `ListPublicMergePresetsResponse` from its JSON object."""
-        known = {"presets"}
-        return cls(
-            presets=[ListPublicMergePresetsResponsePreset.from_dict(item) for item in data.get("presets") or []],
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["presets"] = [_encode(item) for item in self.presets]
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicMergePresetsResponsePreset:
-    """`ListPublicMergePresetsResponsePreset`, as carried on the wire."""
-
-    auto_merge_enabled: bool
-    ci_max_attempts: float
-    dry_run_roles: list[ListPublicMergePresetsResponsePresetDryRunRole]
-    is_default: bool
-    name: str
-    preset_id: str
-    submission_restricted_roles: list[ListPublicMergePresetsResponsePresetDryRunRole]
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicMergePresetsResponsePreset":
-        """Decode a `ListPublicMergePresetsResponsePreset` from its JSON object."""
-        known = {"autoMergeEnabled", "ciMaxAttempts", "dryRunRoles", "isDefault", "name", "presetId", "submissionRestrictedRoles"}
-        return cls(
-            auto_merge_enabled=data.get("autoMergeEnabled"),
-            ci_max_attempts=data.get("ciMaxAttempts"),
-            dry_run_roles=[_enum(ListPublicMergePresetsResponsePresetDryRunRole, item) for item in data.get("dryRunRoles") or []],
-            is_default=data.get("isDefault"),
-            name=data.get("name"),
-            preset_id=data.get("presetId"),
-            submission_restricted_roles=[_enum(ListPublicMergePresetsResponsePresetDryRunRole, item) for item in data.get("submissionRestrictedRoles") or []],
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["autoMergeEnabled"] = self.auto_merge_enabled
-        out["ciMaxAttempts"] = self.ci_max_attempts
-        out["dryRunRoles"] = [_encode(item) for item in self.dry_run_roles]
-        out["isDefault"] = self.is_default
-        out["name"] = self.name
-        out["presetId"] = self.preset_id
-        out["submissionRestrictedRoles"] = [_encode(item) for item in self.submission_restricted_roles]
-        return out
-
-
-class ListPublicMergePresetsResponsePresetDryRunRole(StrEnum):
-    """The `ListPublicMergePresetsResponsePresetDryRunRole` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    ADMIN = "admin"
-    MEMBER = "member"
-    VIEWER = "viewer"
-
-
-@dataclass(frozen=True, slots=True)
 class ListPublicModelPresetsResponse:
     """`ListPublicModelPresetsResponse`, as carried on the wire."""
 
@@ -4825,6 +4738,93 @@ class ListPublicReposResponseRepo:
         out["repoId"] = self.repo_id
         out["serviceId"] = self.service_id
         return out
+
+
+@dataclass(frozen=True, slots=True)
+class ListPublicRiskPoliciesResponse:
+    """`ListPublicRiskPoliciesResponse`, as carried on the wire."""
+
+    policies: list[ListPublicRiskPoliciesResponsePolicy]
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicRiskPoliciesResponse":
+        """Decode a `ListPublicRiskPoliciesResponse` from its JSON object."""
+        known = {"policies"}
+        return cls(
+            policies=[ListPublicRiskPoliciesResponsePolicy.from_dict(item) for item in data.get("policies") or []],
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["policies"] = [_encode(item) for item in self.policies]
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class ListPublicRiskPoliciesResponsePolicy:
+    """`ListPublicRiskPoliciesResponsePolicy`, as carried on the wire."""
+
+    auto_merge_enabled: bool
+    ci_max_attempts: float
+    dry_run_roles: list[ListPublicRiskPoliciesResponsePolicyDryRunRole]
+    is_default: bool
+    name: str
+    policy_id: str
+    submission_restricted_roles: list[ListPublicRiskPoliciesResponsePolicyDryRunRole]
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicRiskPoliciesResponsePolicy":
+        """Decode a `ListPublicRiskPoliciesResponsePolicy` from its JSON object."""
+        known = {"autoMergeEnabled", "ciMaxAttempts", "dryRunRoles", "isDefault", "name", "policyId", "submissionRestrictedRoles"}
+        return cls(
+            auto_merge_enabled=data.get("autoMergeEnabled"),
+            ci_max_attempts=data.get("ciMaxAttempts"),
+            dry_run_roles=[_enum(ListPublicRiskPoliciesResponsePolicyDryRunRole, item) for item in data.get("dryRunRoles") or []],
+            is_default=data.get("isDefault"),
+            name=data.get("name"),
+            policy_id=data.get("policyId"),
+            submission_restricted_roles=[_enum(ListPublicRiskPoliciesResponsePolicyDryRunRole, item) for item in data.get("submissionRestrictedRoles") or []],
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["autoMergeEnabled"] = self.auto_merge_enabled
+        out["ciMaxAttempts"] = self.ci_max_attempts
+        out["dryRunRoles"] = [_encode(item) for item in self.dry_run_roles]
+        out["isDefault"] = self.is_default
+        out["name"] = self.name
+        out["policyId"] = self.policy_id
+        out["submissionRestrictedRoles"] = [_encode(item) for item in self.submission_restricted_roles]
+        return out
+
+
+class ListPublicRiskPoliciesResponsePolicyDryRunRole(StrEnum):
+    """The `ListPublicRiskPoliciesResponsePolicyDryRunRole` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    ADMIN = "admin"
+    MEMBER = "member"
+    VIEWER = "viewer"
 
 
 @dataclass(frozen=True, slots=True)
@@ -10957,7 +10957,11 @@ class PublicTask:
     task_type: str
     title: str
     #: Always present; ``None`` when the server has no value for it.
+    model_preset_id: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
     pull_request_url: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    risk_policy_id: str | None = None
     #: Always present; ``None`` when the server has no value for it.
     run_id: str | None = None
 
@@ -10969,7 +10973,7 @@ class PublicTask:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicTask":
         """Decode a `PublicTask` from its JSON object."""
-        known = {"autoStartDependents", "dependsOn", "description", "progress", "serviceId", "status", "taskId", "taskType", "title", "pullRequestUrl", "runId"}
+        known = {"autoStartDependents", "dependsOn", "description", "progress", "serviceId", "status", "taskId", "taskType", "title", "modelPresetId", "pullRequestUrl", "riskPolicyId", "runId"}
         return cls(
             auto_start_dependents=data.get("autoStartDependents"),
             depends_on=[item for item in data.get("dependsOn") or []],
@@ -10980,7 +10984,9 @@ class PublicTask:
             task_id=data.get("taskId"),
             task_type=data.get("taskType"),
             title=data.get("title"),
+            model_preset_id=data.get("modelPresetId"),
             pull_request_url=data.get("pullRequestUrl"),
+            risk_policy_id=data.get("riskPolicyId"),
             run_id=data.get("runId"),
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -10997,7 +11003,9 @@ class PublicTask:
         out["taskId"] = self.task_id
         out["taskType"] = self.task_type
         out["title"] = self.title
+        out["modelPresetId"] = self.model_preset_id
         out["pullRequestUrl"] = self.pull_request_url
+        out["riskPolicyId"] = self.risk_policy_id
         out["runId"] = self.run_id
         return out
 
@@ -12173,6 +12181,10 @@ class UpdatePublicTask:
     #: May be absent entirely.
     fields: dict[str, CreatePublicTaskFieldsValue] | None = None
     #: May be absent entirely.
+    model_preset_id: str | None = None
+    #: May be absent entirely.
+    risk_policy_id: str | None = None
+    #: May be absent entirely.
     title: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -12183,11 +12195,13 @@ class UpdatePublicTask:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "UpdatePublicTask":
         """Decode a `UpdatePublicTask` from its JSON object."""
-        known = {"autoStartDependents", "description", "fields", "title"}
+        known = {"autoStartDependents", "description", "fields", "modelPresetId", "riskPolicyId", "title"}
         return cls(
             auto_start_dependents=data.get("autoStartDependents"),
             description=data.get("description"),
             fields=None if data.get("fields") is None else {key: CreatePublicTaskFieldsValue.from_dict(val) for key, val in (data.get("fields") or {}).items()},
+            model_preset_id=data.get("modelPresetId"),
+            risk_policy_id=data.get("riskPolicyId"),
             title=data.get("title"),
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -12201,6 +12215,10 @@ class UpdatePublicTask:
             out["description"] = self.description
         if self.fields is not None:
             out["fields"] = {key: _encode(val) for key, val in self.fields.items()}
+        if self.model_preset_id is not None:
+            out["modelPresetId"] = self.model_preset_id
+        if self.risk_policy_id is not None:
+            out["riskPolicyId"] = self.risk_policy_id
         if self.title is not None:
             out["title"] = self.title
         return out

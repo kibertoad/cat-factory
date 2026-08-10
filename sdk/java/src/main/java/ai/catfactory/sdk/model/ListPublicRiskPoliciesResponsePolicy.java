@@ -9,39 +9,39 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicMergePresetsResponsePreset} wire model.
+ * The {@code ListPublicRiskPoliciesResponsePolicy} wire model.
  * @param autoMergeEnabled the {@code autoMergeEnabled} field.
  * @param ciMaxAttempts the {@code ciMaxAttempts} field.
  * @param dryRunRoles the {@code dryRunRoles} field.
  * @param isDefault the {@code isDefault} field.
  * @param name the {@code name} field.
- * @param presetId the {@code presetId} field.
+ * @param policyId the {@code policyId} field.
  * @param submissionRestrictedRoles the {@code submissionRestrictedRoles} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicMergePresetsResponsePreset(
+public record ListPublicRiskPoliciesResponsePolicy(
     @JsonProperty("autoMergeEnabled") Boolean autoMergeEnabled,
 
     @JsonProperty("ciMaxAttempts") Double ciMaxAttempts,
 
-    @JsonProperty("dryRunRoles") List<ListPublicMergePresetsResponsePresetDryRunRole> dryRunRoles,
+    @JsonProperty("dryRunRoles") List<ListPublicRiskPoliciesResponsePolicyDryRunRole> dryRunRoles,
 
     @JsonProperty("isDefault") Boolean isDefault,
 
     @JsonProperty("name") String name,
 
-    @JsonProperty("presetId") String presetId,
+    @JsonProperty("policyId") String policyId,
 
-    @JsonProperty("submissionRestrictedRoles") List<ListPublicMergePresetsResponsePresetDryRunRole> submissionRestrictedRoles
+    @JsonProperty("submissionRestrictedRoles") List<ListPublicRiskPoliciesResponsePolicyDryRunRole> submissionRestrictedRoles
 ) {
 
-    /** A new builder for {@link ListPublicMergePresetsResponsePreset}. */
+    /** A new builder for {@link ListPublicRiskPoliciesResponsePolicy}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicMergePresetsResponsePreset}.
+     * Fluent builder for {@link ListPublicRiskPoliciesResponsePolicy}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
@@ -49,11 +49,11 @@ public record ListPublicMergePresetsResponsePreset(
     public static final class Builder {
         private @Nullable Boolean autoMergeEnabled;
         private @Nullable Double ciMaxAttempts;
-        private @Nullable List<ListPublicMergePresetsResponsePresetDryRunRole> dryRunRoles;
+        private @Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> dryRunRoles;
         private @Nullable Boolean isDefault;
         private @Nullable String name;
-        private @Nullable String presetId;
-        private @Nullable List<ListPublicMergePresetsResponsePresetDryRunRole> submissionRestrictedRoles;
+        private @Nullable String policyId;
+        private @Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> submissionRestrictedRoles;
 
         /** Set {@code autoMergeEnabled}. */
         public Builder autoMergeEnabled(@Nullable Boolean autoMergeEnabled) {
@@ -68,7 +68,7 @@ public record ListPublicMergePresetsResponsePreset(
         }
 
         /** Set {@code dryRunRoles}. */
-        public Builder dryRunRoles(@Nullable List<ListPublicMergePresetsResponsePresetDryRunRole> dryRunRoles) {
+        public Builder dryRunRoles(@Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> dryRunRoles) {
             this.dryRunRoles = dryRunRoles;
             return this;
         }
@@ -85,21 +85,21 @@ public record ListPublicMergePresetsResponsePreset(
             return this;
         }
 
-        /** Set {@code presetId}. */
-        public Builder presetId(@Nullable String presetId) {
-            this.presetId = presetId;
+        /** Set {@code policyId}. */
+        public Builder policyId(@Nullable String policyId) {
+            this.policyId = policyId;
             return this;
         }
 
         /** Set {@code submissionRestrictedRoles}. */
-        public Builder submissionRestrictedRoles(@Nullable List<ListPublicMergePresetsResponsePresetDryRunRole> submissionRestrictedRoles) {
+        public Builder submissionRestrictedRoles(@Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> submissionRestrictedRoles) {
             this.submissionRestrictedRoles = submissionRestrictedRoles;
             return this;
         }
 
-        /** Build the {@link ListPublicMergePresetsResponsePreset}. */
-        public ListPublicMergePresetsResponsePreset build() {
-            return new ListPublicMergePresetsResponsePreset(autoMergeEnabled, ciMaxAttempts, dryRunRoles, isDefault, name, presetId, submissionRestrictedRoles);
+        /** Build the {@link ListPublicRiskPoliciesResponsePolicy}. */
+        public ListPublicRiskPoliciesResponsePolicy build() {
+            return new ListPublicRiskPoliciesResponsePolicy(autoMergeEnabled, ciMaxAttempts, dryRunRoles, isDefault, name, policyId, submissionRestrictedRoles);
         }
     }
 }

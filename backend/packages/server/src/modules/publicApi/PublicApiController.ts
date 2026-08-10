@@ -931,11 +931,13 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   // headless anchors) — so an external key can never edit/stop/retry/read an arbitrary
   // in-workspace run. Each delegates to the SAME service method the SPA uses; no new logic.
 
-  // Edit a task's authored input: title, description, and the per-type `fields` bag. Intended for
-  // pre-start authoring, but — like the SPA's inline edit and the underlying `updateBlock` — it is
-  // NOT restricted to the pre-start window; editing a running/finished task does not re-drive the
-  // run. That is deliberate and is what makes the input gate's park recoverable: a run parked on a
-  // missing field is cleared by supplying it here and then `recheck`ing.
+  // Edit a task's authored input: title, description, the per-type `fields` bag, and the two
+  // library ids it pins. Intended for pre-start authoring, but — like the SPA's inline edit and the
+  // underlying `updateBlock` — it is NOT restricted to the pre-start window; editing a
+  // running/finished task does not re-drive the run. That is deliberate and is what makes the input
+  // gate's park recoverable: a run parked on a missing field is cleared by supplying it here and
+  // then `recheck`ing. The pins spell themselves exactly as `UpdateBlockInput` does, so `authored`
+  // lowers them by spread; `updateBlock` refuses an id the workspace does not hold.
   buildHonoRoute(app, updatePublicTaskContract, async (c) => {
     const gate = await authorize(c, updatePublicTaskContract.minScope)
     if ('fail' in gate) {
@@ -963,8 +965,10 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
       taskId,
       patch,
       // Unattributed by the same reading a headless start gets (ADR 0037): an API key holds
-      // scopes, not a workspace tier. The contract exposes authored input only, so no merge
-      // preset can be selected here in any case.
+      // scopes, not a workspace tier, so there is no role for a risk policy to sandbox or narrow
+      // and nothing for the selection guard to judge. This patch CAN re-point `riskPolicyId`, so
+      // that is a real exemption rather than a vacuous one; which policies a key may pin is the
+      // admission rule tracked in `docs/initiatives/role-scoped-risk-policy-admission.md`.
       UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     return c.json(toPublicTask(block, found.service.id), 200)

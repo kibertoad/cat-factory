@@ -269,6 +269,18 @@ export const publicTaskSchema = v.object({
    * dependent is merely refused until its blocker lands, and something has to notice and start it.
    */
   autoStartDependents: v.boolean(),
+  /**
+   * The model preset this task pins, or null when it resolves the workspace default.
+   *
+   * Served for the reason `dependsOn` is: a caller that declared something needs to read back what
+   * the board holds, or the declaration is fire-and-forget. It is the difference between an
+   * acceptance pass that can state which model it measured and one that assumes. Null is not the
+   * default's ID, because a task pinning nothing FOLLOWS the default: move it and this task moves
+   * with it, where a pinned copy of the same id would not.
+   */
+  modelPresetId: v.nullable(v.string()),
+  /** The risk policy this task pins, or null when it resolves the workspace default. */
+  riskPolicyId: v.nullable(v.string()),
 })
 export type PublicTask = v.InferOutput<typeof publicTaskSchema>
 
@@ -389,6 +401,15 @@ export const publicTaskDocumentSchema = v.variant('kind', [
 export type PublicTaskDocument = v.InferOutput<typeof publicTaskDocumentSchema>
 
 /**
+ * A pinned library id (`modelPresetId`, `riskPolicyId`), on create and on patch alike.
+ *
+ * One schema for all four holes rather than the same pipe written out four times: the pins are the
+ * same kind of value everywhere they appear, and the day one of them grows a rule (a prefix check,
+ * a longer bound) the other three want it too.
+ */
+const presetPinSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))
+
+/**
  * Create a task under a service: a NARROW external input mapped onto the internal `AddTaskInput`.
  *
  * Narrow is not the same as minimal, and the line has moved. It first exposed only
@@ -398,8 +419,9 @@ export type PublicTaskDocument = v.InferOutput<typeof publicTaskDocumentSchema>
  * `modelPresetId` is to move the WORKSPACE default, which changes every other caller's runs to
  * settle one task. A per-task field is the smaller blast radius, not the larger one.
  *
- * So the two preset knobs are here, discoverable through `GET /api/v1/model-presets` and
- * `GET /api/v1/merge-presets` (the same pairing the pipeline list has with `start`'s `pipelineId`).
+ * So the two knobs are here, discoverable through `GET /api/v1/model-presets` and
+ * `GET /api/v1/risk-policies` (the same pairing the pipeline list has with `start`'s `pipelineId`),
+ * and read back on {@link publicTaskSchema} so a caller can confirm what a task actually holds.
  * What stays off is what a caller cannot act on meaningfully: per-agent-kind model overrides,
  * consensus wiring, and the rest of the internal agent config, which are workspace-shaped
  * decisions with no per-task question behind them.
@@ -407,9 +429,9 @@ export type PublicTaskDocument = v.InferOutput<typeof publicTaskDocumentSchema>
  * **`riskPolicyId` selects how much oversight this task's merge takes, so read
  * `docs/initiatives/role-scoped-risk-policy-admission.md` before treating it as ordinary.** An API
  * key holds scopes rather than a workspace role, so it is already `UNATTRIBUTED` at the merge exits
- * (ADR 0037) and no role-scoped restriction narrows it today. That is precisely why WHICH presets a
- * caller may pin needs to become a real admission rule rather than staying an accident of what the
- * surface happens not to expose.
+ * (ADR 0037) and no role-scoped restriction narrows it today. That is precisely why WHICH policies
+ * a caller may pin needs to become a real admission rule rather than staying an accident of what
+ * the surface happens not to expose.
  */
 export const createPublicTaskSchema = v.object({
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
@@ -477,22 +499,22 @@ export const createPublicTaskSchema = v.object({
    * the same refusal it would have had on the workspace default. `GET /api/v1/models` reports that
    * up front, keeping "unconfigured" and "refused by policy" apart.
    */
-  modelPresetId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+  modelPresetId: v.optional(presetPinSchema),
   /**
-   * The merge-threshold preset this task's `merger` step resolves, from
-   * `GET /api/v1/merge-presets`. Omitted ⇒ the workspace's default preset, exactly as before.
+   * The risk policy this task's `merger` step resolves, from `GET /api/v1/risk-policies`. Omitted ⇒
+   * the workspace's default policy, exactly as before.
    *
-   * Unknown ids refuse the same way (`details.reason: 'merge_preset_not_found'`).
+   * Unknown ids refuse the same way (`details.reason: 'risk_policy_not_found'`).
    *
-   * **This one chooses how much oversight landing takes**, since a preset carries
+   * **This one chooses how much oversight landing takes**, since a policy carries
    * `autoMergeEnabled` and the score ceilings. It is exposed because withholding it was never the
    * control it looked like: a caller wanting a different policy could always move the workspace
    * default, which is the same power aimed at every other task as well. The real control is an
-   * admission rule over WHICH presets a caller may pin, tracked in
+   * admission rule over WHICH policies a caller may pin, tracked in
    * `docs/initiatives/role-scoped-risk-policy-admission.md`. Until that lands, an `admin` key can
-   * pin any preset its workspace holds, which is the same authority it already had by editing one.
+   * pin any policy its workspace holds, which is the same authority it already had by editing one.
    */
-  riskPolicyId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
+  riskPolicyId: v.optional(presetPinSchema),
 })
 export type CreatePublicTaskInput = v.InferOutput<typeof createPublicTaskSchema>
 
@@ -576,6 +598,22 @@ export const updatePublicTaskSchema = v.object({
    * the caller cannot have it.
    */
   autoStartDependents: v.optional(v.boolean()),
+  /**
+   * Re-point the task at another model preset, or another risk policy. Same ids, same refusals and
+   * same omitted-value rule as on {@link createPublicTaskSchema}: a field you omit is untouched,
+   * which is not the same as pinning nothing.
+   *
+   * Here because a pin a caller can set once and never correct is a pin it has to DELETE THE TASK
+   * to fix, losing the id every stored reference points at, its ticket claim and its attached
+   * documents. Re-pointing does not re-drive a run already in flight, exactly as editing the
+   * authored input does not: the next run resolves what the task holds then.
+   *
+   * There is deliberately no way to CLEAR a pin back to "follow the workspace default" here, on the
+   * same reading as `fields`: an empty value means "not supplied". Adding one later is additive
+   * where guessing at the spelling now would not be.
+   */
+  modelPresetId: v.optional(presetPinSchema),
+  riskPolicyId: v.optional(presetPinSchema),
 })
 export type UpdatePublicTaskInput = v.InferOutput<typeof updatePublicTaskSchema>
 

@@ -9,37 +9,37 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicMergePresetsResponse} wire model.
- * @param presets the {@code presets} field.
+ * The {@code ListPublicRiskPoliciesResponse} wire model.
+ * @param policies the {@code policies} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicMergePresetsResponse(
-    @JsonProperty("presets") List<ListPublicMergePresetsResponsePreset> presets
+public record ListPublicRiskPoliciesResponse(
+    @JsonProperty("policies") List<ListPublicRiskPoliciesResponsePolicy> policies
 ) {
 
-    /** A new builder for {@link ListPublicMergePresetsResponse}. */
+    /** A new builder for {@link ListPublicRiskPoliciesResponse}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicMergePresetsResponse}.
+     * Fluent builder for {@link ListPublicRiskPoliciesResponse}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable List<ListPublicMergePresetsResponsePreset> presets;
+        private @Nullable List<ListPublicRiskPoliciesResponsePolicy> policies;
 
-        /** Set {@code presets}. */
-        public Builder presets(@Nullable List<ListPublicMergePresetsResponsePreset> presets) {
-            this.presets = presets;
+        /** Set {@code policies}. */
+        public Builder policies(@Nullable List<ListPublicRiskPoliciesResponsePolicy> policies) {
+            this.policies = policies;
             return this;
         }
 
-        /** Build the {@link ListPublicMergePresetsResponse}. */
-        public ListPublicMergePresetsResponse build() {
-            return new ListPublicMergePresetsResponse(presets);
+        /** Build the {@link ListPublicRiskPoliciesResponse}. */
+        public ListPublicRiskPoliciesResponse build() {
+            return new ListPublicRiskPoliciesResponse(policies);
         }
     }
 }

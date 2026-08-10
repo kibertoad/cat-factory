@@ -13,8 +13,10 @@ import org.jspecify.annotations.Nullable;
  * @param autoStartDependents the {@code autoStartDependents} field.
  * @param dependsOn the {@code dependsOn} field.
  * @param description the {@code description} field.
+ * @param modelPresetId Always present; {@code null} when the server has no value for it.
  * @param progress the {@code progress} field.
  * @param pullRequestUrl Always present; {@code null} when the server has no value for it.
+ * @param riskPolicyId Always present; {@code null} when the server has no value for it.
  * @param runId Always present; {@code null} when the server has no value for it.
  * @param serviceId the {@code serviceId} field.
  * @param status the {@code status} field.
@@ -30,10 +32,16 @@ public record PublicTask(
 
     @JsonProperty("description") String description,
 
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("modelPresetId") @Nullable String modelPresetId,
+
     @JsonProperty("progress") Double progress,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("pullRequestUrl") @Nullable String pullRequestUrl,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("riskPolicyId") @Nullable String riskPolicyId,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("runId") @Nullable String runId,
@@ -64,8 +72,10 @@ public record PublicTask(
         private @Nullable Boolean autoStartDependents;
         private @Nullable List<String> dependsOn;
         private @Nullable String description;
+        private @Nullable String modelPresetId;
         private @Nullable Double progress;
         private @Nullable String pullRequestUrl;
+        private @Nullable String riskPolicyId;
         private @Nullable String runId;
         private @Nullable String serviceId;
         private @Nullable TaskStatus status;
@@ -91,6 +101,12 @@ public record PublicTask(
             return this;
         }
 
+        /** Set {@code modelPresetId}. */
+        public Builder modelPresetId(@Nullable String modelPresetId) {
+            this.modelPresetId = modelPresetId;
+            return this;
+        }
+
         /** Set {@code progress}. */
         public Builder progress(@Nullable Double progress) {
             this.progress = progress;
@@ -100,6 +116,12 @@ public record PublicTask(
         /** Set {@code pullRequestUrl}. */
         public Builder pullRequestUrl(@Nullable String pullRequestUrl) {
             this.pullRequestUrl = pullRequestUrl;
+            return this;
+        }
+
+        /** Set {@code riskPolicyId}. */
+        public Builder riskPolicyId(@Nullable String riskPolicyId) {
+            this.riskPolicyId = riskPolicyId;
             return this;
         }
 
@@ -141,7 +163,7 @@ public record PublicTask(
 
         /** Build the {@link PublicTask}. */
         public PublicTask build() {
-            return new PublicTask(autoStartDependents, dependsOn, description, progress, pullRequestUrl, runId, serviceId, status, taskId, taskType, title);
+            return new PublicTask(autoStartDependents, dependsOn, description, modelPresetId, progress, pullRequestUrl, riskPolicyId, runId, serviceId, status, taskId, taskType, title);
         }
     }
 }

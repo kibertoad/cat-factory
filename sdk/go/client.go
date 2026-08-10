@@ -94,8 +94,8 @@ type Client struct {
 	Models *ModelsService
 	// The workspace's source-control connection and what it may do.
 	Vcs *VcsService
-	// The merge-threshold presets a task can resolve, and which is the default.
-	MergePresets *MergePresetsService
+	// The risk policies a task can pin, and which is the default.
+	RiskPolicies *RiskPoliciesService
 	// The model presets a task can pin, and which is the default.
 	ModelPresets *ModelPresetsService
 	// The workspace's human-actionable inbox.
@@ -168,7 +168,7 @@ func New(options Options) (*Client, error) {
 	client.Environments = &EnvironmentsService{client: client}
 	client.Models = &ModelsService{client: client}
 	client.Vcs = &VcsService{client: client}
-	client.MergePresets = &MergePresetsService{client: client}
+	client.RiskPolicies = &RiskPoliciesService{client: client}
 	client.ModelPresets = &ModelPresetsService{client: client}
 	client.Notifications = &NotificationsService{client: client}
 	client.Webhook = &WebhookService{client: client}
