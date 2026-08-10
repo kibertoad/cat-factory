@@ -1,5 +1,37 @@
 # @cat-factory/orchestration
 
+## 0.258.0
+
+### Minor Changes
+
+- 07ff467: Let `/api/v1` callers pin what a task runs on (surface 1.43.0). `GET /api/v1/model-presets` lists
+  the model library, task create and task PATCH accept `modelPresetId` and `riskPolicyId`, and the
+  task projection reads both back. A pinned id no library carries is refused with `details.reason`
+  naming which one it missed, rather than falling back to the default, because a run that quietly
+  used another model succeeds while being about something else. The check lives on `BoardService`, so
+  the SPA, tracker intake, an initiative spawn and blueprint reconciliation get the same refusal.
+
+  **Breaking, deliberately, on a surface with no adopters:** `GET /api/v1/merge-presets` is renamed
+  to `GET /api/v1/risk-policies` in place (response `presets` → `policies`, `presetId` → `policyId`,
+  SDK group `mergePresets` → `riskPolicies`, reasons `merge_preset_*` → `risk_policy_*`). It shipped
+  one release ago under the name the product renamed away from a month before that, and the id it
+  serves is what a task pins as `riskPolicyId`, so leaving it would put two names for one concept on
+  one wire permanently. `backend/docs/public-api-versions.md` records why this is an exception to ADR
+  0034 rather than a precedent.
+
+### Patch Changes
+
+- Updated dependencies [07ff467]
+  - @cat-factory/contracts@0.295.0
+  - @cat-factory/agents@0.125.7
+  - @cat-factory/integrations@0.156.1
+  - @cat-factory/kernel@0.286.3
+  - @cat-factory/prompt-fragments@1.0.53
+  - @cat-factory/sandbox@0.11.130
+  - @cat-factory/spend@0.15.71
+  - @cat-factory/workspaces@0.27.15
+  - @cat-factory/caching@0.18.44
+
 ## 0.257.2
 
 ### Patch Changes
