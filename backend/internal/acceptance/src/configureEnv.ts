@@ -41,12 +41,26 @@ export type EnvMerge = {
 }
 
 /**
+ * The header this merge writes above the content it did not manage.
+ *
+ * A named constant because it has to be RECOGNISED on the next run as well as written on this one:
+ * it introduces an UNMANAGED assignment, so `stripAssignments` (which only drops a comment block
+ * sitting above a MANAGED key) carries it over, and a merge that then prepended a fresh copy grew
+ * the file by one identical line per `configure` run.
+ */
+const CARRIED_OVER_HEADER =
+  '# Carried over unchanged from the previous file; `configure` does not manage these.'
+
+/**
  * Merge the managed entries into an existing `.env`, keeping every unmanaged line VERBATIM.
  *
  * Unmanaged content is carried over as its original bytes rather than re-rendered from a parse,
  * and that is not fussiness: `ACCEPTANCE_K3S_CA_PEM` is a multi-line quoted PEM, and a round trip
  * through parse-then-quote is exactly how such a value acquires a stray escape and stops matching
  * the cluster's certificate. Only keys this command owns are rewritten.
+ *
+ * The managed values are quoted on the way out where they need it (see {@link quoteEnvValue}); the
+ * kept/changed comparison stays against the UNQUOTED form, which is what both sides hold.
  */
 export function mergeEnvFile(existing: string | null, entries: readonly ManagedEntry[]): EnvMerge {
   const managed = entries.map((entry) => entry.key)
@@ -63,11 +77,37 @@ export function mergeEnvFile(existing: string | null, entries: readonly ManagedE
 
   const leftover = existing === null ? '' : stripAssignments(existing, managed)
   const preserved = Object.keys(previous).filter((key) => !managed.includes(key))
-  const tail =
-    leftover.length > 0
-      ? `\n# Carried over unchanged from the previous file; \`configure\` does not manage these.\n${leftover}\n`
-      : ''
-  return { text: `${renderEnvFile([...entries])}${tail}`, kept, changed, added, preserved }
+  const tail = leftover.length > 0 ? `\n${CARRIED_OVER_HEADER}\n${leftover}\n` : ''
+  const rendered = renderEnvFile(
+    entries.map((entry) => ({ ...entry, value: quoteEnvValue(entry.value) })),
+  )
+  return { text: `${rendered}${tail}`, kept, changed, added, preserved }
+}
+
+/**
+ * Quote a managed value when leaving it bare would make the reader disagree with the writer.
+ *
+ * `renderEnvFile` emits a bare `KEY=value`, and the suite reads its `.env` with `node:util`'s
+ * `parseEnv`, which treats an unquoted `#` as the start of a comment and strips surrounding
+ * whitespace: `parseEnv('A=with # hash')` is `{ A: 'with' }`. So a value this command READ as
+ * `cf-acc #2` (from a quoted line the operator wrote), offered as a prompt default, and accepted
+ * unchanged would be written back as a DIFFERENT value while `describeMerge` reported it unchanged.
+ *
+ * Double quotes preferred, single quotes when the value contains a double one, because `parseEnv`
+ * supports both delimiters and NO escape inside either (`A="he said \"hi\""` parses as `he said \`).
+ * A value carrying both quote characters is therefore unrepresentable, so it throws rather than
+ * writing a file that reads back as something else: this is a setup command whose entire promise is
+ * that the file it wrote is the file the suite will read.
+ */
+export function quoteEnvValue(value: string): string {
+  if (!/[#\n"']/.test(value) && value.trim() === value) return value
+  if (!value.includes('"')) return `"${value}"`
+  if (!value.includes("'")) return `'${value}'`
+  throw new Error(
+    `A value containing both \` " \` and \` ' \` cannot be written to a .env file: neither quoting ` +
+      `style survives, and \`parseEnv\` supports no escape inside either. Choose a value without ` +
+      `one of them.`,
+  )
 }
 
 /**
@@ -108,11 +148,16 @@ function unquote(raw: string): string {
  * The comments go too because they were written by a previous `configure` run to describe the value
  * beneath them; kept, they would sit above whatever unmanaged variable happened to follow and
  * describe it wrongly.
+ *
+ * {@link CARRIED_OVER_HEADER} is dropped wherever it appears rather than only above a managed key:
+ * this merge re-writes it, and it introduces UNMANAGED content, so the ordinary comment-block rule
+ * carries it over and the file grows by one identical line per run.
  */
 function stripAssignments(text: string, managed: readonly string[]): string {
   const out: string[] = []
   let comments: string[] = []
   for (const line of text.split('\n')) {
+    if (line.trim() === CARRIED_OVER_HEADER) continue
     if (line.trim().startsWith('#')) {
       comments.push(line)
       continue

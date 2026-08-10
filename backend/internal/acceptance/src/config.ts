@@ -65,7 +65,13 @@ export type AcceptanceConfig = {
   namePrefix: string
   repos: RepoNames
   /**
-   * The model preset every task this pass files pins (`ACCEPTANCE_MODEL_PRESET`, default `claude`).
+   * The model preset every task this pass files pins (`ACCEPTANCE_MODEL_PRESET`, default
+   * `mdp_claude`).
+   *
+   * The preset ID `/api/v1` reports, never a friendlier `claude` alias: resolving a second naming
+   * scheme would mean guessing (an `mdp_` prefix? the display name?) against a library a deployment
+   * can fill with anything, and `configure` removes the reason to want one by offering the library
+   * as a menu.
    *
    * Pinned rather than left to resolve, so a pass runs on the model it says it ran on: the
    * workspace default is whatever someone last chose on that board, and a pass that silently

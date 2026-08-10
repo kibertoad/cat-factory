@@ -120,6 +120,25 @@ finding above as a preset problem rather than as a mystery at the first dispatch
   name?) against a library a deployment can fill with anything, and `configure` removes the reason to
   want one by offering the library as a menu with each row's dispatchability joined in.
 
+**A fourth thing the plan got wrong outright: "already backs a service" is not one question.**
+`GET /api/v1/repos` reports the service a repository backs ON THIS BOARD, so `serviceId: null` does
+not mean the repository is free. A whole-repo service homed on another board of the same account has
+no id a workspace-scoped surface can hand back (it would not appear in `GET /api/v1/services`, and a
+task filed under it would 404), so the contract answers null WITH `linkedElsewhere: true` and says
+outright to read the flag before treating null as available. `POST /api/v1/services` then refuses
+that repository with `reason: repo_service_homed_elsewhere`. A gate reading only the id green-lights
+the pass and lets the refusal arrive as a 409 out of the first adopt, which is the exact failure mode
+this whole gate exists to prevent. `target-repos` and `adopt.ts` therefore share one blocker verdict
+(`repoBlocker`) and one remedy, and the monorepo case joins it: both are facts about the REPOSITORY
+rather than about which pass is running.
+
+The pass-identity half is separate and needs the LEDGER's service ids, not a "is this a resume"
+boolean. The first shape of this took `hasAdoptedServices: Boolean(backend ?? frontend)`, which
+answers true for BOTH repositories once either service is adopted: resume a pass holding only the
+backend while a colleague's pass has taken the frontend repository, and the gate states as fact
+something it never read, then spec 01 silently reuses their frame. `PreflightContext` carries
+`adoptedServiceIds` so the comparison is possible at all.
+
 **Two smaller decisions worth recording.** The preset is pinned through ONE task-creation helper
 rather than at the five call sites, because a site that forgot the field would silently resolve the
 workspace default and produce a result that reads exactly like the others. And the risk policy is
@@ -144,6 +163,18 @@ the `cat-factory` CLI is itself driven by, plus a five-method client port), so
 `test/configure.test.ts` drives the whole flow with no deployment, no cluster and no terminal. The
 kubeconfig reads go through the CLI's own `readApiServerCommand` / `readTokenCommand`, newly exported
 for this, rather than a second copy of the namespace and secret name the guided setup owns.
+`normalizeApiServerUrl` is exported beside them because the raw read is not usable on its own: k3d
+writes the wildcard bind address `https://0.0.0.0:6443` into the kubeconfig, `cat-factory k3s` has
+always rewritten it, and a consumer given the read without the rewrite writes an undialable URL and
+fails `cluster-connection` against an address nothing listens on. The lesson generalises: export the
+normalisation WITH the read it belongs to, or the omission is the easy path.
+
+**The cluster pair is the one place the stored value beats what the command can resolve.** A kubectl
+context is a passing state and this file is the pass's configuration, so a re-run to fix a repository
+name must not silently re-point the cluster; the kubeconfig's answer is reported when it DIFFERS
+instead. The token follows from the same rule: it is only read from the kubeconfig when the settled
+URL is the one that kubeconfig serves, because cluster A's URL beside cluster B's bearer token fails
+as a 401 that is indistinguishable from the RBAC problem the fallback warning describes.
 
 Three details the plan did not anticipate:
 

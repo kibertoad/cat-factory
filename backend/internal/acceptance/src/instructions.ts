@@ -27,6 +27,29 @@
 import { MANIFEST_DIR } from './k3s.ts'
 
 /**
+ * What each adopted service IS, in one sentence, for the frame's `description`.
+ *
+ * Part of this file rather than of the spec because it is a brief like the others: a service frame's
+ * description is what kernel's `describeOwnService` lifts into `AgentRunContext.ownService`, so this
+ * text reaches EVERY agent the suite runs (CLAUDE.md: "a step's prompt names the service the work
+ * belongs to"). A pass marker in this field told each coder, tester and reviewer that the system
+ * under work was called `Acceptance pass 20260810203000`, which is the suite degrading the very
+ * context it exists to grade the product on.
+ *
+ * The run id is deliberately NOT here. What identifies a pass is the frame TITLE (prefixed) and the
+ * ledger; the description's only reader is a model deciding what it is building.
+ */
+export const SERVICE_DESCRIPTIONS: Record<'backend' | 'frontend', string> = {
+  backend:
+    'The catalog API: a small production-shaped HTTP backend in TypeScript on Node 22 (Fastify) ' +
+    'serving a paginated product catalog, deployed per pull request to Kubernetes.',
+  frontend:
+    'The catalog web app: a small single-page frontend in TypeScript (Vite, no UI framework) ' +
+    'rendering the catalog served by the companion catalog API, deployed per pull request to ' +
+    'Kubernetes.',
+}
+
+/**
  * The manifest brief both services share.
  *
  * Also the reason the two scaffold briefs below are written for an ORDINARY pipeline run rather

@@ -8,10 +8,11 @@
 // `POST /api/v1/services` already backs a service with an existing repository by `repoId`, and
 // `GET /api/v1/repos` is where a `repoId` comes from.
 //
-// What is left here is the join, and it has exactly two failure modes worth naming separately:
-// a repository this workspace cannot see (created under the wrong account, or outside what a
-// GitHub App installation covers), and one that already backs a service (a previous pass, or
-// someone else's board). Both read identically from a bare "service creation failed".
+// What is left here is the join, and it has four failure modes worth naming separately: a repository
+// this workspace cannot see (created under the wrong account, or outside what a GitHub App
+// installation covers), one that already backs a service on THIS board, one whose service is homed
+// on ANOTHER board of the account, and one whose `serviceId` names a frame the board no longer
+// lists. All four read identically from a bare "service creation failed".
 
 import type { CatFactoryClient, ListPublicReposResponseRepo, PublicService } from '@cat-factory/sdk'
 import type { Journal } from './journal.ts'
@@ -38,12 +39,17 @@ export type AdoptOptions = {
  * Case-insensitive because GitHub and GitLab both treat a repository name that way, so an
  * operator who typed `CF-Acc-Catalog-Api` into the creation form and `cf-acc-catalog-api` into
  * the `.env` has configured one repository rather than two.
+ *
+ * Generic over the row rather than pinned to the SDK's, so the three callers that need this rule
+ * (this module, the `target-repos` prerequisite and `configure`'s visibility loop, the last of
+ * which projects the list down to the fields it uses) share ONE copy of it. Two copies of a
+ * case-folding rule is two places to forget it.
  */
-export function findRepo(
-  repos: readonly ListPublicReposResponseRepo[],
+export function findRepo<T extends { owner: string; name: string }>(
+  repos: readonly T[],
   owner: string,
   name: string,
-): ListPublicReposResponseRepo | null {
+): T | null {
   return (
     repos.find(
       (repo) =>
@@ -51,6 +57,26 @@ export function findRepo(
         repo.owner.toLowerCase() === owner.toLowerCase(),
     ) ?? null
   )
+}
+
+/**
+ * Why a repository cannot be adopted even though the workspace can SEE it, or null.
+ *
+ * `serviceId: null` alone does not mean "available", and the contract says so outright: a whole-repo
+ * service homed on another board of the account has no id this workspace-scoped surface could hand
+ * back, so it answers `serviceId: null` WITH `linkedElsewhere: true`. Reading only the id here is
+ * how a gate whose whole job is to refuse before spending green-lights a pass that then dies on a
+ * `repo_service_homed_elsewhere` 409 out of the first `POST /api/v1/services`.
+ *
+ * Shared with the `target-repos` prerequisite so the gate and the adopt refuse the same things for
+ * the same stated reasons.
+ */
+export function repoBlocker(
+  repo: Pick<ListPublicReposResponseRepo, 'linkedElsewhere' | 'monorepo'>,
+): 'linked-elsewhere' | 'monorepo' | null {
+  if (repo.linkedElsewhere) return 'linked-elsewhere'
+  if (repo.monorepo) return 'monorepo'
+  return null
 }
 
 /**
@@ -69,6 +95,11 @@ export async function adoptRepoAsService(options: AdoptOptions): Promise<Service
     throw new Error(missingRepoMessage(repos, repoOwner, repoName))
   }
 
+  const blocker = repoBlocker(repo)
+  if (blocker) {
+    throw new Error(blockedRepoMessage(`${repo.owner}/${repo.name}`, blocker).join('\n  '))
+  }
+
   if (repo.serviceId) {
     const service = await findServiceById(client, repo.serviceId)
     if (service) {
@@ -78,14 +109,13 @@ export async function adoptRepoAsService(options: AdoptOptions): Promise<Service
       )
       return recordOf(service, repo)
     }
-    // The projection names a frame the board no longer holds. Creating a second service over the
-    // same repository is the right move and is what the platform does anyway, so say so rather
-    // than refusing: the alternative is a pass that cannot start until someone repairs a row.
-    journal.record(
-      'milestone',
-      `'${repo.owner}/${repo.name}' names service ${repo.serviceId}, which the board no longer ` +
-        `lists; creating a fresh frame over the same repository`,
-    )
+    // The projection names a frame the board no longer lists (archived, or deleted mid-cascade).
+    // Refused rather than worked around, because the work-around does not exist: creating a second
+    // service here is not what the platform does. `addServiceFromRepo` looks the repository up
+    // ACCOUNT-wide, finds the service the row names, and routes into `mountExistingService`, which
+    // raises `This repository is already linked to a board service` for a frame it cannot load. So
+    // falling through would spend a round trip to arrive at an opaquer version of this message.
+    throw new Error(staleServiceMessage(`${repo.owner}/${repo.name}`, repo.serviceId))
   }
 
   const service = await client.services.create({
@@ -99,6 +129,51 @@ export async function adoptRepoAsService(options: AdoptOptions): Promise<Service
     `adopted ${repo.owner}/${repo.name} as service ${service.serviceId} ('${title}')`,
   )
   return recordOf(service, repo)
+}
+
+/**
+ * Why a visible repository is still not adoptable, and what to do instead: one sentence per step.
+ *
+ * A LIST rather than a paragraph because it has two readers with different shapes. The
+ * `target-repos` prerequisite spreads these into its numbered remedy steps, where an embedded
+ * newline would break the numbering it renders; this module joins them for a thrown message. One
+ * source, so the gate and the adopt cannot come to differ about the fix.
+ */
+export function blockedRepoMessage(
+  slug: string,
+  blocker: 'linked-elsewhere' | 'monorepo',
+): readonly string[] {
+  if (blocker === 'monorepo') {
+    return [
+      `'${slug}' is registered as a MONOREPO, which backs a service only together with a ` +
+        `subdirectory this suite does not configure.`,
+      `Point ACCEPTANCE_BACKEND_REPO / ACCEPTANCE_FRONTEND_REPO at two whole-repository targets: ` +
+        `the two services here are separate deployable applications with their own Dockerfiles, ` +
+        `images and per-PR manifests.`,
+    ]
+  }
+  return [
+    `'${slug}' already backs a whole-repo service homed on ANOTHER board of this account, so ` +
+      `POST /api/v1/services will refuse it (reason: repo_service_homed_elsewhere).`,
+    `GET /api/v1/repos reports that as \`linkedElsewhere: true\` with \`serviceId: null\`: the ` +
+      `frame exists but has no id this workspace-scoped key could address, which is why the id is ` +
+      `withheld rather than handed back. Reading only \`serviceId\` reads the row as available.`,
+    `Run the pass from the board that HOMES that service (or with a key scoped to it), or point ` +
+      `the suite at a repository no service holds.`,
+  ]
+}
+
+/** Why a repository whose `serviceId` names a frame the board no longer lists cannot be adopted. */
+export function staleServiceMessage(slug: string, serviceId: string): string {
+  return (
+    `'${slug}' is linked to service ${serviceId}, which GET /api/v1/services no longer lists ` +
+    `(an archived or deleted frame leaves the repository projection pointing at it).\n` +
+    `  Adopting it again is not possible from here: POST /api/v1/services finds that same service ` +
+    `account-wide and refuses with 'This repository is already linked to a board service' rather ` +
+    `than raising a second frame over the repository.\n` +
+    `  Restore or fully delete the frame so the projection is released, or point the suite at a ` +
+    `fresh empty repository.`
+  )
 }
 
 /**

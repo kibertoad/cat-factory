@@ -32,11 +32,21 @@ export {
   type K3sHandlerInput,
   KUBERNETES_ENV_TOKEN_SECRET_KEY,
 } from './k3s-handler.js'
-// The three cluster READS, exported so other in-repo tooling asks the same questions of a
-// kubeconfig that `cat-factory k3s` does: the acceptance suite's `configure` command resolves its
-// apiserver URL and ServiceAccount token through these rather than restating the namespace and
-// secret name, which would drift the moment the guided setup moved either.
-export { decodeToken, readApiServerCommand, readTokenCommand } from './k3s-provision.js'
+// The cluster READS plus the normalisation they owe, exported so other in-repo tooling asks the
+// same questions of a kubeconfig that `cat-factory k3s` does: the acceptance suite's `configure`
+// command resolves its apiserver URL and ServiceAccount token through these rather than restating
+// the namespace and secret name, which would drift the moment the guided setup moved either.
+//
+// `normalizeApiServerUrl` travels WITH `readApiServerCommand` because the raw read is not usable:
+// k3d writes the wildcard bind address `https://0.0.0.0:6443` into the kubeconfig, and a consumer
+// that skipped the rewrite would write an undialable URL and fail against an address nothing
+// listens on. Exporting the read without it is what made that omission easy to make.
+export {
+  decodeToken,
+  normalizeApiServerUrl,
+  readApiServerCommand,
+  readTokenCommand,
+} from './k3s-provision.js'
 export {
   DEFAULT_INGRESS_PORT,
   INGRESS_HOST_TEMPLATE,

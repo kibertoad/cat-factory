@@ -105,20 +105,20 @@ diagnosis, `deployment-health` relays it verbatim, doc link included: the backen
 remedy already names the exact `openssl`/`npx` line, and a paraphrase here would be a second copy
 of it, one release behind.
 
-| Prerequisite         | Checked | What it means                                                                                             |
-| -------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
-| `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.      |
-| `api-key`            | yes     | `CAT_FACTORY_API_KEY` names `ACCEPTANCE_WORKSPACE_ID` and is scoped `admin`.                              |
-| `spend-budget`       | yes     | The workspace is not over budget, which pauses every run.                                                 |
-| `agent-model`        | yes     | At least one catalog model is selectable. Distinguishes "unconfigured" from "blocked by account policy".  |
-| `model-preset`       | yes     | `ACCEPTANCE_MODEL_PRESET` exists here AND its base model can be dispatched to (see below).                |
-| `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                        |
-| `target-repos`       | yes     | Both named repositories are visible to this workspace, and neither already backs a service.               |
-| `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                       |
-| `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                  |
-| `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                       |
-| `ingress-template`   | yes     | An environment URL renders from the configured host template.                                             |
-| `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal. |
+| Prerequisite         | Checked | What it means                                                                                                                                                      |
+| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.                                                               |
+| `api-key`            | yes     | `CAT_FACTORY_API_KEY` names `ACCEPTANCE_WORKSPACE_ID` and is scoped `admin`.                                                                                       |
+| `spend-budget`       | yes     | The workspace is not over budget, which pauses every run.                                                                                                          |
+| `agent-model`        | yes     | At least one catalog model is selectable. Distinguishes "unconfigured" from "blocked by account policy".                                                           |
+| `model-preset`       | yes     | `ACCEPTANCE_MODEL_PRESET` exists here AND its base model can be dispatched to (see below).                                                                         |
+| `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                                                                                 |
+| `target-repos`       | yes     | Both named repositories are visible AND adoptable: no monorepo, nothing homed on another board, and any existing service link is one this pass's own ledger names. |
+| `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                                                                                |
+| `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                           |
+| `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                |
+| `ingress-template`   | yes     | An environment URL renders from the configured host template.                                                                                                      |
+| `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal.                                                          |
 
 Three things it deliberately does NOT check, because none is knowable from where it stands:
 
@@ -131,6 +131,15 @@ Three things it deliberately does NOT check, because none is knowable from where
   benchmark and does not grade one.
 - **Whether a container runtime is available to the agent jobs.** Nothing short of dispatching a
   job answers it.
+
+**Why `serviceId: null` is not enough to call a repository free.** `GET /api/v1/repos` reports the
+service a repository backs ON THIS BOARD. A whole-repo service homed on another board of the same
+account has no id this workspace-scoped surface can hand back, so it answers `serviceId: null` **with
+`linkedElsewhere: true`**, and `POST /api/v1/services` then refuses it
+(`reason: repo_service_homed_elsewhere`). `target-repos` reads the flag, so that arrives as a refusal
+with a remedy rather than as a 409 out of spec 01's first adopt. An existing link on this board is
+compared against the ledger's own service ids, not against "is this a resume at all": a ledger holding
+only the backend service cannot vouch for the frontend repository.
 
 **Why the preset is checked separately from the model catalog.** `agent-model` answers "can this
 deployment dispatch to ANYTHING", which is what the first live setup attempt needed: all 21 catalog
@@ -361,6 +370,8 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.         |
 | `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.               |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.            |
+| `src/adopt.ts`               | Repository → board service, and every way that join refuses. Unit-tested.         |
+| `src/presets.ts`             | The one preset-to-catalog join `configure` and `model-preset` share. Pure.        |
 | `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                   |
 | `src/journal.ts`             | The append-only progress record a pass can be watched through.                    |
 | `src/status.ts`              | Ledger + journal → "where is this pass". Pure; unit-tested.                       |

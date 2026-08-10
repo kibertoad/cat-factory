@@ -1,4 +1,4 @@
-// `pnpm --filter @cat-factory/acceptance run configure` — assemble the suite's `.env` by asking.
+// `pnpm --filter @cat-factory/acceptance run configure`: assemble the suite's `.env` by asking.
 //
 // A sibling of `statusCli.ts` and thin for the same reason: everything worth reading lives in
 // `configure.ts` (the flow) and `configureEnv.ts` (the write), both driven by seams so

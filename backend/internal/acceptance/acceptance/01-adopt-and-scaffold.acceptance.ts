@@ -27,7 +27,11 @@
 
 import { beforeAll, describe, expect, it } from 'vitest'
 import { adoptRepoAsService, type ServiceType } from '../src/adopt.ts'
-import { backendScaffoldBrief, frontendScaffoldBrief } from '../src/instructions.ts'
+import {
+  backendScaffoldBrief,
+  frontendScaffoldBrief,
+  SERVICE_DESCRIPTIONS,
+} from '../src/instructions.ts'
 import { buildK3sConnection, buildK3sSecrets, buildServiceProvisioning } from '../src/k3s.ts'
 import { filePinnedTask } from '../src/publicApi.ts'
 import { fileAndDrive } from '../src/resume.ts'
@@ -144,7 +148,10 @@ describe('setup: two empty repositories become two scaffolded board services', (
         journal.say('milestone', `reusing service ${existing.serviceId} from a previous pass`)
         return existing
       }
-      journal.record(
+      // `say`, not `record`: this is the one event on the resume path an operator would want to
+      // interrupt, and `record` appends to the ledger without printing anything (`journal.ts`). The
+      // spec this replaced paired `record` with an explicit `console.warn` for the same reason.
+      journal.say(
         'milestone',
         `the ledger names service ${existing.serviceId} but the board no longer lists it; ` +
           `adopting '${config.repos[role]}' again`,
@@ -157,7 +164,11 @@ describe('setup: two empty repositories become two scaffolded board services', (
       repoOwner: config.repoOwner,
       title: titles[role],
       type: SERVICE_TYPES[role],
-      description: `Acceptance pass ${world.value.runId}`,
+      // What the service IS, never a pass marker: this lands on the frame, and kernel's
+      // `describeOwnService` lifts it into `AgentRunContext.ownService` for every prompt the suite's
+      // three specs assemble. `instructions.ts` owns the text, beside the briefs it has to agree
+      // with. The pass is identified by the prefixed TITLE and the ledger.
+      description: SERVICE_DESCRIPTIONS[role],
     })
   }
 

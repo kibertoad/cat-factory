@@ -47,7 +47,7 @@ async function refusal(
   const verdict = await prerequisite.check({
     config: config(),
     serviceTitles: [],
-    hasAdoptedServices: false,
+    adoptedServiceIds: [],
     ...context,
   } as PreflightContext)
   if (verdict.status !== 'unsatisfied') {
@@ -64,7 +64,7 @@ async function satisfied(id: string, context: Partial<PreflightContext>): Promis
   const verdict = await prerequisite.check({
     config: config(),
     serviceTitles: [],
-    hasAdoptedServices: false,
+    adoptedServiceIds: [],
     ...context,
   } as PreflightContext)
   if (verdict.status !== 'satisfied') {
@@ -292,6 +292,7 @@ describe('target-repos', () => {
     name,
     repoId: 1,
     serviceId: null,
+    linkedElsewhere: false,
     monorepo: false,
     private: true,
     provider: 'github',
@@ -334,16 +335,46 @@ describe('target-repos', () => {
     expect(commandsOf(verdict.remedy)[0]).toContain('ACCEPTANCE_RUN_ID=latest')
   })
 
-  it('allows the same link on a RESUMED pass, where it is this pass’s own', async () => {
-    // The ledger is what tells "mine, yesterday" from "someone else's", which is why this is
-    // withheld from a resume rather than graded.
-    await satisfied('target-repos', {
+  it('allows the link the LEDGER names, on a resumed pass', async () => {
+    // The ledger's ids are what tell "mine, yesterday" from "someone else's".
+    const detail = await satisfied('target-repos', {
       client: client([
         repo('cf-acc-catalog-api', { serviceId: 'blk_9' }),
         repo('cf-acc-catalog-web'),
       ]),
-      hasAdoptedServices: true,
+      adoptedServiceIds: ['blk_9'],
     })
+    expect(detail).toContain('own ledger names')
+  })
+
+  it('still refuses a link the ledger does NOT name, mid-resume', async () => {
+    // The case a boolean "is this a resume" flag answered wrongly: a ledger holding only the BACKEND
+    // service made the flag true for the FRONTEND repository too, so a colleague's frontend service
+    // was silently adopted and both passes then filed work under one frame.
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { serviceId: 'blk_mine' }),
+        repo('cf-acc-catalog-web', { serviceId: 'blk_theirs' }),
+      ]),
+      adoptedServiceIds: ['blk_mine'],
+    })
+    expect(verdict.problem).toContain('blk_theirs')
+    expect(verdict.problem).not.toContain("'cf-acc-catalog-api' already backs")
+    expect(verdict.problem).toContain('it names blk_mine')
+  })
+
+  it('refuses a repository whose service is homed on ANOTHER board, which serviceId cannot state', async () => {
+    // `serviceId: null` with `linkedElsewhere: true` is the contract's honest answer for a service
+    // this workspace-scoped key cannot address. Reading only the id passes the gate and leaves a
+    // `repo_service_homed_elsewhere` 409 for spec 01's first adopt.
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { linkedElsewhere: true }),
+        repo('cf-acc-catalog-web'),
+      ]),
+    })
+    expect(verdict.problem).toContain('ANOTHER board')
+    expect(verdict.remedy.steps.join('\n')).toContain('repo_service_homed_elsewhere')
   })
 
   it('refuses a monorepo, which backs a service only with a subdirectory', async () => {

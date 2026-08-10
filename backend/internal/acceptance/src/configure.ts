@@ -22,8 +22,15 @@
 // flow with fakes.
 
 import type { HostShell, Io } from '@cat-factory/cli'
-import { decodeToken, readApiServerCommand, readTokenCommand, runCommand } from '@cat-factory/cli'
+import {
+  decodeToken,
+  normalizeApiServerUrl,
+  readApiServerCommand,
+  readTokenCommand,
+  runCommand,
+} from '@cat-factory/cli'
 import { CatFactoryClient, type PrReportRunProvider } from '@cat-factory/sdk'
+import { blockedRepoMessage, findRepo, repoBlocker } from './adopt.ts'
 import {
   describeEntries,
   describeMerge,
@@ -32,12 +39,29 @@ import {
   readAssignments,
   REPO_CREATION_URL,
 } from './configureEnv.ts'
+import { usablePresets } from './presets.ts'
 
 /** What this command needs from the deployment, narrowed to the five reads it makes. */
 export type ConfigureClient = {
   identity(): Promise<{ workspaceId: string; scope: string; label: string }>
   connection(): Promise<{ accountLogin: string; provider: PrReportRunProvider } | null>
-  repos(): Promise<readonly { owner: string; name: string; serviceId: string | null }[]>
+  /**
+   * The repository list, carrying what decides whether each row can back a service.
+   *
+   * `linkedElsewhere` and `monorepo` ride along because `serviceId: null` alone does not mean
+   * available: a service homed on another board of the account has no id this workspace-scoped
+   * surface can hand back, so it answers null WITH the flag set. Projecting the flag away here would
+   * have this command report such a repository as ready to use and leave the 409 for the pass.
+   */
+  repos(): Promise<
+    readonly {
+      owner: string
+      name: string
+      serviceId: string | null
+      linkedElsewhere: boolean
+      monorepo: boolean
+    }[]
+  >
   presets(): Promise<
     readonly { presetId: string; name: string; baseModelId: string; isDefault: boolean }[]
   >
@@ -134,6 +158,15 @@ export async function configure(deps: ConfigureDeps): Promise<ConfigureOutcome> 
   }
 
   const owner = await resolveOwner(deps, client, previous.ACCEPTANCE_REPO_OWNER)
+  if (!owner) {
+    io.warn(
+      'Without an owner nothing else in this file means anything: the repository list is matched ' +
+        'under it, the creation link is built from it, and `resolveConfig` refuses the suite ' +
+        'outright when ACCEPTANCE_REPO_OWNER is blank. Nothing was written. Connect the workspace ' +
+        '(SPA: Integrations) so this can be resolved, or re-run and name the account.',
+    )
+    return { ok: false }
+  }
   const prefix = await io.question(
     'Name prefix for the board frames and tasks this pass creates',
     previous.ACCEPTANCE_NAME_PREFIX ?? DEFAULT_PREFIX,
@@ -186,12 +219,20 @@ async function resolveApiKey(io: Io, stored: string | undefined): Promise<string
  */
 type ResolvedOwner = { owner: string; provider: PrReportRunProvider | null }
 
-/** The connected account, resolved from the deployment; asked for only when it cannot be. */
+/**
+ * The connected account, resolved from the deployment; asked for only when it cannot be.
+ *
+ * Null when the operator answered nothing and there was nothing stored to fall back on. `io.question`
+ * ends with `defaultValue ?? ''`, so an unanswered prompt with no default is an EMPTY owner, and
+ * writing that produces a `.env` whose every repository match is against `''`, whose creation link
+ * carries `owner=`, and which `resolveConfig` then refuses as unset. That is a file this command
+ * would have reported as written and done.
+ */
 async function resolveOwner(
   deps: ConfigureDeps,
   client: ConfigureClient,
   stored: string | undefined,
-): Promise<ResolvedOwner> {
+): Promise<ResolvedOwner | null> {
   const connection = await read(() => client.connection())
   if (connection.ok && connection.value) {
     deps.io.info(
@@ -209,7 +250,8 @@ async function resolveOwner(
           'verdict that nothing is connected. Answer with the account the two repositories live ' +
           'under.',
   )
-  return { owner: await deps.io.question('Repository owner (user or org)', stored), provider: null }
+  const answered = (await deps.io.question('Repository owner (user or org)', stored)).trim()
+  return answered ? { owner: answered, provider: null } : null
 }
 
 /**
@@ -256,17 +298,24 @@ async function ensureRepoVisible(
       )
       return
     }
-    const repos = listed.value
-    const found = repos.find(
-      (repo) =>
-        repo.name.toLowerCase() === target.name.toLowerCase() &&
-        repo.owner.toLowerCase() === target.owner.toLowerCase(),
-    )
+    // The same case-folding match `adopt.ts` and the `target-repos` prerequisite use, not a third
+    // copy of it: an operator who typed `CF-Acc-Catalog-Api` into the creation form and
+    // `cf-acc-catalog-api` here has configured one repository, and all three sites have to agree.
+    const found = findRepo(listed.value, target.owner, target.name)
     if (found) {
-      io.info(
-        `${target.owner}/${target.name} is visible to this workspace` +
-          (found.serviceId ? `, and already backs service ${found.serviceId}` : ''),
-      )
+      const slug = `${target.owner}/${target.name}`
+      // Visible is not the same as usable, and this is the difference `serviceId` alone cannot
+      // state: a service homed on another board answers `serviceId: null` WITH
+      // `linkedElsewhere: true`, so reporting only the id would call it ready and leave the
+      // `repo_service_homed_elsewhere` 409 for the first adopt of an hour-long pass.
+      const blocker = repoBlocker(found)
+      if (blocker) io.warn(blockedRepoMessage(slug, blocker).join('\n'))
+      else {
+        io.info(
+          `${slug} is visible to this workspace` +
+            (found.serviceId ? `, and already backs service ${found.serviceId}` : ''),
+        )
+      }
       return
     }
 
@@ -335,10 +384,10 @@ async function resolvePreset(
         'without saying which can be dispatched to.',
     )
   }
+  // The same join `model-preset`'s remedy is built from (`presets.ts`), so this menu never offers
+  // what that gate will refuse.
   const selectable = new Set(
-    (catalog.ok ? catalog.value : [])
-      .filter((model) => model.available)
-      .map((model) => model.modelId),
+    usablePresets(presets, catalog.ok ? catalog.value : []).map((preset) => preset.baseModelId),
   )
   const options = presets.map((preset) => ({
     value: preset.presetId,
@@ -361,42 +410,78 @@ async function resolvePreset(
   )
 }
 
-/** The cluster values, read from the kubeconfig the same way `cat-factory k3s` reads them. */
+/**
+ * The cluster values, read from the kubeconfig the same way `cat-factory k3s` reads them.
+ *
+ * Two rules this path owes that the others do not:
+ *
+ *   - **The stored value still wins as the prompt default.** The kubeconfig's answer is the
+ *     CURRENT kubectl context, which on a re-run to fix a repository name is quite possibly some
+ *     other cluster; letting it displace what the file holds would silently re-point the pass, for
+ *     the one pair of variables where being wrong costs the whole afternoon. It is reported when it
+ *     DIFFERS, so an operator who did mean to move gets there with one keystroke.
+ *   - **The URL and the token must come from the same cluster.** They are read from one context,
+ *     and if the settled URL is not that context's, the token is not offered for it: a `.env`
+ *     holding cluster A's URL with cluster B's bearer token fails with a 401 that reads exactly
+ *     like the RBAC problem below.
+ */
 async function resolveCluster(
   deps: ConfigureDeps,
   previous: Record<string, string>,
 ): Promise<{ apiServerUrl: string; token: string }> {
   const { io, shell } = deps
   const server = await runCommand(shell, readApiServerCommand())
-  const resolvedServer = server.code === 0 ? server.stdout.trim() : ''
-  if (resolvedServer) io.info(`Resolved apiserver ${resolvedServer} from the current kubeconfig.`)
+  // Normalised exactly as `cat-factory k3s` normalises it: k3d writes the wildcard bind address
+  // `https://0.0.0.0:6443` into the kubeconfig, which is not dialable, and writing it unchanged
+  // fails the `cluster-connection` prerequisite against an address nothing listens on.
+  const resolvedServer =
+    server.code === 0 ? normalizeApiServerUrl(stripTrailingSlash(server.stdout.trim())) : ''
+  const stored = previous.ACCEPTANCE_K3S_API_SERVER
+  if (resolvedServer) io.info(`The current kubeconfig context serves ${resolvedServer}.`)
   else {
     io.warn(
       'Could not read an apiserver URL from the current kubeconfig. `npx @cat-factory/cli k3s` ' +
         'provisions a local cluster, its ServiceAccount, the RBAC and a long-lived token.',
     )
   }
+  if (stored && resolvedServer && stored !== resolvedServer) {
+    io.warn(
+      `The file already names ${stored}, which is NOT the current kubeconfig context ` +
+        `(${resolvedServer}). Keeping the stored one, since a kubectl context is a passing state ` +
+        `and this file is the pass's configuration. Answer with the other to move.`,
+    )
+  }
   const apiServerUrl = stripTrailingSlash(
     await io.question(
       'Cluster apiserver URL',
-      resolvedServer || previous.ACCEPTANCE_K3S_API_SERVER || 'https://127.0.0.1:6443',
+      stored || resolvedServer || 'https://127.0.0.1:6443',
     ),
   )
 
-  const secret = await runCommand(shell, readTokenCommand())
-  const resolvedToken = secret.code === 0 ? decodeToken(secret.stdout) : ''
+  // The token is only the kubeconfig's to give when the settled URL is the one that kubeconfig
+  // serves. Anything else and it belongs to a different cluster.
+  const tokenIsForThisCluster = resolvedServer !== '' && apiServerUrl === resolvedServer
+  const secret = tokenIsForThisCluster ? await runCommand(shell, readTokenCommand()) : null
+  const resolvedToken = secret && secret.code === 0 ? decodeToken(secret.stdout) : ''
   if (resolvedToken) {
     io.info('Read the cat-factory ServiceAccount token from the cluster (not shown).')
     return { apiServerUrl, token: resolvedToken }
+  }
+  if (!tokenIsForThisCluster && resolvedServer) {
+    io.info(
+      `Not reading a ServiceAccount token from the current kubeconfig: it serves ${resolvedServer}, ` +
+        `and this pass targets ${apiServerUrl}. A token from the wrong cluster fails as a 401, ` +
+        `which is indistinguishable from a permission problem.`,
+    )
   }
   if (previous.ACCEPTANCE_K3S_TOKEN) {
     io.info('Keeping the ServiceAccount token already in the file (not shown).')
     return { apiServerUrl, token: previous.ACCEPTANCE_K3S_TOKEN }
   }
   io.warn(
-    'No ServiceAccount token found in the `cat-factory` namespace. A token minted against a ' +
-      'cluster that has since been recreated is the usual cause, and it fails exactly like a ' +
-      'permission problem.',
+    'No ServiceAccount token available for that cluster. A token minted against a cluster that ' +
+      'has since been recreated is the usual cause, and it fails exactly like a permission ' +
+      'problem. `npx @cat-factory/cli k3s` mints one against the current context.',
   )
   return { apiServerUrl, token: await io.secret('ServiceAccount bearer token') }
 }
@@ -521,6 +606,8 @@ export function connectDeployment(baseUrl: string, apiKey: string): ConfigureCli
         owner: repo.owner,
         name: repo.name,
         serviceId: repo.serviceId,
+        linkedElsewhere: repo.linkedElsewhere,
+        monorepo: repo.monorepo,
       }))
     },
     async presets() {

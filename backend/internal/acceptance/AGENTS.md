@@ -24,8 +24,13 @@ unmanaged lines over byte for byte, and prints neither token.
 every PAT connection and the App path creates only under `/orgs/{org}/repos`, so bootstrapping was
 the one prerequisite no configuration could satisfy. Spec 01 backs a service with each `repoId` and
 scaffolds both through `pl_build` from the briefs in `src/instructions.ts`, which is why a scaffold
-resumes exactly as a feature run does. `target-repos` gates on the repositories being VISIBLE, and
-says outright that emptiness is not what it checked: no `/api/v1` read publishes it.
+resumes exactly as a feature run does. `target-repos` gates on the repositories being visible AND
+adoptable, and says outright that emptiness is not what it checked: no `/api/v1` read publishes it.
+Trap: `serviceId: null` does NOT mean free. A service homed on another board has no id this
+workspace-scoped surface can return, so it answers null WITH `linkedElsewhere: true` and
+`POST /api/v1/services` refuses; `src/adopt.ts` owns that verdict and the gate shares it. An existing
+link is compared against the LEDGER's service ids, never against "is this a resume", since a ledger
+holding one of the two services cannot vouch for the other.
 
 **Every task the suite files pins `ACCEPTANCE_MODEL_PRESET`**, through the one door
 (`filePinnedTask`), so a pass runs on the model it says it ran on rather than on whatever the

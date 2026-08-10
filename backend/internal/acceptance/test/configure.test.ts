@@ -1,3 +1,4 @@
+import { parseEnv } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { configure, type ConfigureClient } from '../src/configure.ts'
 import { mergeEnvFile, REPO_CREATION_URL, SECRET_KEYS } from '../src/configureEnv.ts'
@@ -86,14 +87,29 @@ function fakeShell(results: Record<string, { code: number; stdout: string }> = {
   }
 }
 
+/** One row of `GET /api/v1/repos`, as `ConfigureClient` narrows it. */
+function repoRow(name: string, overrides: Record<string, unknown> = {}) {
+  return {
+    owner: 'acme',
+    name,
+    serviceId: null,
+    linkedElsewhere: false,
+    monorepo: false,
+    ...overrides,
+  } as {
+    owner: string
+    name: string
+    serviceId: string | null
+    linkedElsewhere: boolean
+    monorepo: boolean
+  }
+}
+
 function fakeClient(overrides: Partial<ConfigureClient> = {}): ConfigureClient {
   return {
     identity: async () => ({ workspaceId: 'ws_live', scope: 'admin', label: 'acceptance' }),
     connection: async () => ({ accountLogin: 'acme', provider: 'github' as const }),
-    repos: async () => [
-      { owner: 'acme', name: 'cf-acc-catalog-api', serviceId: null },
-      { owner: 'acme', name: 'cf-acc-catalog-web', serviceId: null },
-    ],
+    repos: async () => [repoRow('cf-acc-catalog-api'), repoRow('cf-acc-catalog-web')],
     presets: async () => [
       {
         presetId: 'mdp_claude',
@@ -197,11 +213,8 @@ describe('configure', () => {
     const client = fakeClient({
       repos: async () =>
         listed
-          ? [
-              { owner: 'acme', name: 'cf-acc-catalog-api', serviceId: null },
-              { owner: 'acme', name: 'cf-acc-catalog-web', serviceId: null },
-            ]
-          : [{ owner: 'acme', name: 'cf-acc-catalog-web', serviceId: null }],
+          ? [repoRow('cf-acc-catalog-api'), repoRow('cf-acc-catalog-web')]
+          : [repoRow('cf-acc-catalog-web')],
     })
     const io = fakeIo({ secrets: [TOKEN] })
     // The operator creates it between the offer and the re-check, which is exactly the sequence the
@@ -242,7 +255,9 @@ describe('configure', () => {
           throw new Error('500 boom')
         },
       }),
-      script: { secrets: [TOKEN] },
+      // The owner has to be answered for the flow to reach the reads below it: an unresolvable and
+      // unanswered owner is now a refusal in its own right (see the test above).
+      script: { secrets: [TOKEN], answers: { 'Repository owner': 'acme' } },
     })
     const printed = io.output.join('\n')
     expect(printed).toContain('NOT a verdict that nothing is connected')
@@ -319,6 +334,70 @@ describe('configure', () => {
     expect(io.prompted.join('\n')).toContain('Model preset')
   })
 
+  it('refuses to write a file with no repository owner in it', async () => {
+    // `Io.question` ends with `defaultValue ?? ''`, so an unanswered prompt with nothing stored is an
+    // EMPTY owner. Written, that is a `.env` whose repository matches are against `''` and which
+    // `resolveConfig` then refuses as unset: the command's whole job, reported as done.
+    const { outcome, written, io } = await run({
+      client: fakeClient({ connection: async () => null }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(outcome.ok).toBe(false)
+    expect(written).toBeNull()
+    expect(io.output.join('\n')).toContain('Nothing was written')
+  })
+
+  it('reports a repository whose service is homed on ANOTHER board as unusable, not as ready', async () => {
+    // `serviceId: null` with `linkedElsewhere: true` is the contract's honest answer for a frame this
+    // key cannot address. Reporting only the id would call it visible-and-free and leave the 409 for
+    // the pass.
+    const { io } = await run({
+      client: fakeClient({
+        repos: async () => [
+          repoRow('cf-acc-catalog-api', { linkedElsewhere: true }),
+          repoRow('cf-acc-catalog-web'),
+        ],
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    const printed = io.output.join('\n')
+    expect(printed).toContain('repo_service_homed_elsewhere')
+    expect(printed).not.toContain('cf-acc-catalog-api is visible to this workspace')
+  })
+
+  it('normalizes the wildcard bind address k3d writes into the kubeconfig', async () => {
+    // `cat-factory k3s` pipes the same read through `normalizeApiServerUrl` because `0.0.0.0` is not
+    // dialable; writing it unchanged fails `cluster-connection` against an address nothing listens on.
+    const { written } = await run({
+      script: { secrets: [TOKEN] },
+      shell: {
+        'config view': { code: 0, stdout: 'https://0.0.0.0:6443\n' },
+        'get secret': { code: 0, stdout: Buffer.from('cluster-token').toString('base64') },
+      },
+    })
+    expect(written).toContain('ACCEPTANCE_K3S_API_SERVER=https://127.0.0.1:6443\n')
+    expect(written).not.toContain('0.0.0.0')
+  })
+
+  it('keeps the stored apiserver when kubectl points somewhere else, and says so', async () => {
+    // A kubectl context is a passing state; this file is the pass's configuration. Letting the
+    // context win would silently re-point the cluster on a re-run to fix a repository name.
+    const { written, io } = await run({
+      existing: 'ACCEPTANCE_K3S_API_SERVER=https://acceptance:6443\nACCEPTANCE_K3S_TOKEN=stored\n',
+      script: { secrets: [TOKEN] },
+      shell: {
+        'config view': { code: 0, stdout: 'https://elsewhere:6443' },
+        'get secret': { code: 0, stdout: Buffer.from('other-cluster-token').toString('base64') },
+      },
+    })
+    expect(written).toContain('ACCEPTANCE_K3S_API_SERVER=https://acceptance:6443')
+    // And the token is NOT taken from that context: cluster A's URL beside cluster B's bearer token
+    // fails as a 401, which is indistinguishable from the RBAC problem the warning describes.
+    expect(written).toContain('ACCEPTANCE_K3S_TOKEN=stored')
+    expect(written).not.toContain('other-cluster-token')
+    expect(io.output.join('\n')).toContain('NOT the current kubeconfig context')
+  })
+
   it('reads the cluster out of the kubeconfig, and asks only for what it could not read', async () => {
     const { written, io } = await run({
       script: { secrets: [TOKEN, 'typed-sa-token'] },
@@ -331,7 +410,9 @@ describe('configure', () => {
     // resolved one produce the same base.
     expect(written).toContain('ACCEPTANCE_K3S_API_SERVER=https://127.0.0.1:6443\n')
     expect(written).toContain('ACCEPTANCE_K3S_TOKEN=typed-sa-token')
-    expect(io.output.join('\n')).toContain('Resolved apiserver https://127.0.0.1:6443')
+    expect(io.output.join('\n')).toContain(
+      'The current kubeconfig context serves https://127.0.0.1:6443',
+    )
   })
 
   it('decodes the ServiceAccount token the cluster holds rather than asking for it', async () => {
@@ -408,6 +489,51 @@ describe('mergeEnvFile', () => {
     expect(merge.text).toBe('A=1\n')
     expect(merge.added).toEqual(['A'])
     expect(merge.preserved).toEqual([])
+  })
+
+  it('re-writes the carried-over header instead of stacking one copy per run', () => {
+    // The header introduces UNMANAGED content, so the ordinary comment-block rule carries it over,
+    // and a merge that then prepended a fresh copy grew the file by one identical line every run.
+    // A single merge cannot see this, which is why it is asserted across three.
+    let text: string | null = 'ACCEPTANCE_RUN_BUDGET_MS=1200000\n# my own note\n'
+    for (let pass = 0; pass < 3; pass++) {
+      text = mergeEnvFile(text, [{ key: 'A', value: '1', comment: ['managed'] }]).text
+    }
+    expect(text?.match(/Carried over unchanged/g)).toHaveLength(1)
+    expect(text).toContain('ACCEPTANCE_RUN_BUDGET_MS=1200000')
+    expect(text).toContain('# my own note')
+  })
+
+  it('quotes a managed value the reader would otherwise disagree about', () => {
+    // The suite reads its `.env` with `node:util`'s `parseEnv`, which treats an unquoted `#` as a
+    // comment and strips surrounding whitespace, while `renderEnvFile` emits a bare `KEY=value`. So a
+    // value READ from a quoted line, offered as a default and accepted unchanged was written back as
+    // a DIFFERENT value, with `describeMerge` calling it unchanged.
+    const merge = mergeEnvFile('ACCEPTANCE_NAME_PREFIX="cf-acc #2"\n', [
+      { key: 'ACCEPTANCE_NAME_PREFIX', value: 'cf-acc #2' },
+    ])
+    expect(merge.kept).toEqual(['ACCEPTANCE_NAME_PREFIX'])
+    expect(merge.text).toBe('ACCEPTANCE_NAME_PREFIX="cf-acc #2"\n')
+    expect(parseEnv(merge.text).ACCEPTANCE_NAME_PREFIX).toBe('cf-acc #2')
+  })
+
+  it('round-trips every ordinary managed value through parseEnv unchanged', () => {
+    // The property that matters is agreement between this writer and the suite's reader, asserted
+    // over the value shapes that actually occur rather than over one hand-picked string.
+    const values = ['http://127.0.0.1:8787', 'cf_live_pak_a.b-c', 'ws_1', 'cf-acc', 'true', '']
+    for (const value of values) {
+      const text = mergeEnvFile(null, [{ key: 'K', value }]).text
+      expect(parseEnv(text).K ?? '').toBe(value)
+    }
+  })
+
+  it('refuses a value no quoting style can represent, rather than writing a lie', () => {
+    // `parseEnv` supports both delimiters and no escape inside either, so a value carrying both quote
+    // characters cannot survive. This command's promise is that the file it wrote is the file the
+    // suite will read.
+    expect(() => mergeEnvFile(null, [{ key: 'K', value: `he said "hi" to 'them'` }])).toThrow(
+      /cannot be written to a .env file/,
+    )
   })
 })
 

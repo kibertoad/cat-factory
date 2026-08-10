@@ -1,4 +1,4 @@
-// `pnpm --filter @cat-factory/acceptance run status` — read a pass without disturbing it.
+// `pnpm --filter @cat-factory/acceptance run status`: read a pass without disturbing it.
 //
 // Deliberately NOT a vitest spec and deliberately not part of the suite: it opens no connection
 // to the deployment, creates nothing, and reads only the two files a pass writes. That is what

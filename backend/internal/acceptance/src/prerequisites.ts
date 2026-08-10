@@ -34,11 +34,12 @@ import type {
   ListPublicModelPresetsResponsePreset,
   ListPublicWiredModelsResponseModel,
 } from '@cat-factory/sdk'
-import { findRepo } from './adopt.ts'
+import { blockedRepoMessage, findRepo, repoBlocker } from './adopt.ts'
 import type { DeploymentApi } from './deploymentApi.ts'
 import type { AcceptanceConfig } from './config.ts'
 import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3s.ts'
 import type { Prerequisite, PrerequisiteVerdict, Remedy, RemedyCommand } from './preflight.ts'
+import { usablePresets } from './presets.ts'
 import { describeKeyProblem, type KeyProblem, type PublicIdentity } from './publicApi.ts'
 
 export type PreflightContext = {
@@ -47,8 +48,16 @@ export type PreflightContext = {
   deployment: DeploymentApi
   /** Board titles this pass will use. Supplied rather than derived: `fixtures.ts` owns them. */
   serviceTitles: readonly string[]
-  /** True when the ledger already names adopted services, i.e. this is a RESUMED pass. */
-  hasAdoptedServices: boolean
+  /**
+   * The service ids THIS pass's ledger already names, i.e. non-empty on a RESUMED pass.
+   *
+   * The ids rather than a boolean, because `target-repos` has to tell "this repository backs the
+   * service I adopted yesterday" from "this repository backs someone else's, and I happen to have
+   * adopted the OTHER one". A flag derived from `backend ?? frontend` answers true for both, so a
+   * verdict built on it states ownership it never read, and the pass then silently shares a frame
+   * with a colleague's.
+   */
+  adoptedServiceIds: readonly string[]
 }
 
 const satisfied = (detail: string): PrerequisiteVerdict => ({ status: 'satisfied', detail })
@@ -94,10 +103,7 @@ function describeAvailablePresets(
   presets: readonly ListPublicModelPresetsResponsePreset[],
   models: readonly ListPublicWiredModelsResponseModel[],
 ): string {
-  const selectable = new Set(
-    models.filter((model) => model.available).map((model) => model.modelId),
-  )
-  const usable = presets.filter((preset) => selectable.has(preset.baseModelId))
+  const usable = usablePresets(presets, models)
   return usable.map((preset) => `${preset.presetId} ('${preset.name}')`).join(', ') || '(none)'
 }
 
@@ -487,7 +493,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'target-repos',
     what: 'both repositories this pass adopts exist and are reachable, and neither is already in use',
     disposition: 'required',
-    check: async ({ client, config, hasAdoptedServices }) => {
+    check: async ({ client, config, adoptedServiceIds }) => {
       const repoRead = publicApiRead(
         config,
         '/repos',
@@ -533,18 +539,62 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         )
       }
 
-      // A repository already backing a service is the REPO half of what `board-titles` catches for
-      // frames, and it needs the same split: on a resumed pass the link is this pass's own and is
-      // the point, and on a fresh one it means the frame would be a second one over someone's
-      // repository. Withheld from a resume rather than graded, because the ledger is what tells
-      // "mine, yesterday" from "someone else's".
-      const taken = found.filter((entry) => entry.repo?.serviceId)
-      if (taken.length > 0 && !hasAdoptedServices) {
+      // Past the `missing` guard every entry has a repository, but narrowed through a predicate
+      // rather than asserted with `!`: the alternative renders `undefined/undefined` into the very
+      // verdict a reader would rely on if this ever stopped being true.
+      const resolved = found.flatMap((entry) => (entry.repo ? [entry.repo] : []))
+
+      // A repository this workspace can SEE but cannot back a service with. Checked before the
+      // ledger comparison below because neither cause has anything to do with which pass this is:
+      // `linkedElsewhere` is a service homed on another board (whose id this surface deliberately
+      // withholds, so `serviceId` is null and reading only that field reads it as available), and a
+      // monorepo needs a subdirectory this suite does not configure. `adopt.ts` refuses the same two
+      // for the same reasons, and owns the wording.
+      const blocked = resolved.flatMap((repo) => {
+        const blocker = repoBlocker(repo)
+        return blocker ? [{ slug: `${repo.owner}/${repo.name}`, blocker }] : []
+      })
+      if (blocked.length > 0) {
         return unsatisfied(
-          `${taken.map((entry) => `'${entry.name}' already backs service ${entry.repo?.serviceId}`).join(', ')}` +
-            `, but this pass's ledger names no services. A fresh pass would adopt a repository ` +
-            `whose work belongs to another pass, and its scaffold run would open a pull request ` +
-            `against a tree that is already built.`,
+          `${blocked
+            .map(({ slug, blocker }) =>
+              blocker === 'monorepo'
+                ? `'${slug}' is registered as a MONOREPO`
+                : `'${slug}' already backs a service homed on ANOTHER board of this account`,
+            )
+            .join(', ')}, so POST /api/v1/services cannot back a frame with it`,
+          {
+            // `adopt.ts` owns the wording, one sentence per step, so the gate's remedy and the
+            // adopt's own refusal cannot come to describe different fixes.
+            steps: blocked.flatMap(({ slug, blocker }) => [...blockedRepoMessage(slug, blocker)]),
+            commands: [repoRead],
+          },
+        )
+      }
+
+      // A repository already backing a service is the REPO half of what `board-titles` catches for
+      // frames, and it needs the same split: on a resumed pass the link is this pass's OWN and is
+      // the point, on any other pass it means the frame would be a second one over someone's
+      // repository. Decided by comparing the projection's `serviceId` against the ledger's ids,
+      // never by "is this a resume at all": a ledger holding only the backend service makes that
+      // question answer yes for the frontend repository too, which is how two passes end up sharing
+      // a frame.
+      const owned = new Set(adoptedServiceIds)
+      const taken = resolved.flatMap((repo) =>
+        repo.serviceId && !owned.has(repo.serviceId)
+          ? [{ slug: `${repo.owner}/${repo.name}`, serviceId: repo.serviceId }]
+          : [],
+      )
+      if (taken.length > 0) {
+        return unsatisfied(
+          `${taken.map((entry) => `'${entry.slug}' already backs service ${entry.serviceId}`).join(', ')}` +
+            `, which this pass's ledger does not name` +
+            (adoptedServiceIds.length > 0
+              ? ` (it names ${adoptedServiceIds.join(', ')})` +
+                `. Continuing would adopt a frame belonging to another pass, and file this pass's ` +
+                `work under it.`
+              : `. A fresh pass would adopt a repository whose work belongs to another pass, and ` +
+                `its scaffold run would open a pull request against a tree that is already built.`),
           {
             steps: [
               'If that service is from an earlier pass of yours, RESUME it rather than starting ' +
@@ -563,27 +613,6 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         )
       }
 
-      // Past the `missing` guard every entry has a repository, but narrowed through a predicate
-      // rather than asserted with `!`: the alternative renders `undefined/undefined` into the very
-      // verdict a reader would rely on if this ever stopped being true.
-      const resolved = found.flatMap((entry) => (entry.repo ? [entry.repo] : []))
-      const monorepo = resolved.filter((repo) => repo.monorepo)
-      if (monorepo.length > 0) {
-        return unsatisfied(
-          `${monorepo.map((repo) => `'${repo.name}'`).join(' and ')} ` +
-            `${monorepo.length === 1 ? 'is' : 'are'} registered as a MONOREPO, which backs a ` +
-            `service only with a subdirectory this suite does not configure`,
-          {
-            steps: [
-              'Point the suite at two whole-repository targets. The two services here are two ' +
-                'deployable applications with their own Dockerfiles, images and per-PR manifests, ' +
-                'so a shared repository is a different scenario rather than a smaller one.',
-            ],
-            commands: [repoRead],
-          },
-        )
-      }
-
       // Emptiness is STATED, never graded, and this is the one thing this check deliberately does
       // not claim. No `/api/v1` read publishes whether a repository holds content: the bootstrapper
       // used to answer it inside its container pre-flight, and putting it on the repository LIST
@@ -591,9 +620,13 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // costs is a scaffold run that builds on top of whatever is there, which is a strange result
       // rather than a failure, so the honest disposition is to say the probe cannot see it.
       const names = resolved.map((repo) => `${repo.owner}/${repo.name}`).join(' and ')
+      const mine = resolved.filter((repo) => repo.serviceId && owned.has(repo.serviceId))
       return satisfied(
         `${names} are reachable and ` +
-          (taken.length > 0 ? `back this resumed pass's own service(s)` : 'back no service yet') +
+          (mine.length > 0
+            ? `${mine.length === resolved.length ? 'both' : `${mine.length} of ${resolved.length}`} ` +
+              `back a service this pass's own ledger names`
+            : 'back no service yet') +
           ` (whether they are EMPTY is not readable over /api/v1; a repository with content is ` +
           `scaffolded on top of)`,
       )
@@ -658,16 +691,21 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'board-titles',
     what: 'this pass will not adopt or collide with another pass’s service frames',
     disposition: 'required',
-    check: async ({ client, config, serviceTitles, hasAdoptedServices }) => {
+    check: async ({ client, config, serviceTitles, adoptedServiceIds }) => {
       const { services } = await client.services.list()
       const taken = serviceTitles.filter((title) =>
         services.some((service) => service.title === title),
       )
-      if (taken.length === 0 || hasAdoptedServices) {
+      // A TITLE cannot be traced to a ledger id the way `target-repos`' repository link can, so this
+      // one still keys off whether the ledger names anything at all: a duplicate title is a naming
+      // collision rather than a claim about who owns what, and `target-repos` is where ownership is
+      // established per repository.
+      const resuming = adoptedServiceIds.length > 0
+      if (taken.length === 0 || resuming) {
         // On a RESUMED pass the frames existing is the point: the ledger names them and spec 01
         // re-reads the board to confirm they are still there.
         return satisfied(
-          hasAdoptedServices
+          resuming
             ? 'resuming a pass whose services the ledger already names'
             : `neither '${serviceTitles.join("' nor '")}' exists on this board yet`,
         )
