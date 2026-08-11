@@ -57,16 +57,6 @@ export interface AvailableRepoListing {
   truncated: boolean
 }
 
-/**
- * How many rows the realtime search leg asks for.
- *
- * Named here rather than left to the adapter's default because the count is also the only
- * truncation signal a search can give: a result set that exactly fills the cap is where "this is
- * everything" and "there is more" look identical, and the service can only say so if it chose the
- * number.
- */
-const SEARCH_RESULT_CAP = 50
-
 export interface GitHubSyncServiceDependencies {
   githubClient: GitHubClient
   githubInstallationRepository: GitHubInstallationRepository
@@ -164,19 +154,11 @@ export class GitHubSyncService {
     const [trackedRows, searched, directRepo, personal] = await Promise.all([
       this.deps.repoProjectionRepository.list(workspaceId),
       query
-        ? this.deps.githubClient
-            .searchInstallationRepos(installation.installationId, query, {
-              owner: installation.accountLogin || undefined,
-              ownerType: installation.targetType,
-              limit: SEARCH_RESULT_CAP,
-            })
-            // The cap is passed rather than left to the adapter's default so this comparison means
-            // something: a search that filled it exactly is the one shape from which "there may be
-            // more" cannot be told apart, and a caller has to hear the maybe.
-            .then((items) => ({ items, truncated: items.length >= SEARCH_RESULT_CAP }))
-        : this.deps.githubClient
-            .listInstallationRepos(installation.installationId)
-            .then((page) => ({ items: page.items, truncated: page.truncated === true })),
+        ? this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
+            owner: installation.accountLogin || undefined,
+            ownerType: installation.targetType,
+          })
+        : this.deps.githubClient.listInstallationRepos(installation.installationId),
       // An exact `owner/name` query (typed, or collapsed from a pasted URL) is ALSO resolved
       // by a direct point-read, because the search leg alone is not sufficient: the GitHub-App
       // adapter delegates to GitHub's tokenized name search, which can miss an exact slug
@@ -222,7 +204,7 @@ export class GitHubSyncService {
     // caller reading a row's absence has to know which of "not reachable" and "not listed" it is
     // looking at. It says nothing about the point-read leg, which resolves an exact `owner/name`
     // directly and so answers about THAT slug completely either way.
-    return { repos: merged, truncated: searched.truncated || personal.truncated }
+    return { repos: merged, truncated: searched.truncated === true || personal.truncated }
   }
 
   /**

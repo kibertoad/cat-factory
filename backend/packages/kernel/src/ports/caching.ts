@@ -280,7 +280,7 @@ export interface AppCaches {
    * the Worker's isolate-safe profile for the same reasons as `viewerRepos` (the Worker never
    * builds a PAT-backed client anyway).
    */
-  patInstallationRepos: GroupCacheHandle<GitHubRepo[]>
+  patInstallationRepos: GroupCacheHandle<Paged<GitHubRepo>>
   /**
    * A task's resolved merge-threshold preset (`riskPolicyRepository.get(id)` for a task's
    * picked preset, else `getDefault`), grouped by workspace id and keyed by the resolved id

@@ -839,7 +839,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     options,
     tracker,
   )
-  const patInstallationRepos = buildGroupCache<GitHubRepo[]>(
+  const patInstallationRepos = buildGroupCache<Paged<GitHubRepo>>(
     'pat-installation-repos',
     profile.patInstallationRepos,
     options,

@@ -251,9 +251,10 @@ export class FetchGitHubClient implements GitHubClient {
     installationId: number,
     query: string,
     opts: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number } = {},
-  ): Promise<GitHubRepo[]> {
+  ): Promise<Paged<GitHubRepo>> {
     const trimmed = query.trim()
-    if (!trimmed) return []
+    // An empty query asks nothing, so it omitted nothing either.
+    if (!trimmed) return { items: [], truncated: false }
     const syncedAt = this.deps.clock.now()
     const per = Math.min(Math.max(opts.limit ?? 50, 1), 100)
     // Without an account to scope it to, `/search/repositories` would run UNSCOPED across
@@ -262,8 +263,11 @@ export class FetchGitHubClient implements GitHubClient {
     // installation's own bounded repo listing, so a missing account can't leak the search.
     if (!opts.owner) {
       const q = trimmed.toLowerCase()
-      const { items } = await this.listInstallationRepos(installationId)
-      return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)).slice(0, per)
+      const { items, truncated } = await this.listInstallationRepos(installationId)
+      const matched = items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+      // Truncated by EITHER cap: the enumeration this filters may have stopped before the
+      // match existed, which no count of the results could reveal.
+      return { items: matched.slice(0, per), truncated: truncated === true || matched.length > per }
     }
     // Match the typed text against the repo NAME (accepting an `owner/name` paste by
     // matching only the name segment), scoped to the installation's account so results stay
@@ -277,8 +281,11 @@ export class FetchGitHubClient implements GitHubClient {
     const { json } = await this.request(`/search/repositories?q=${q}&per_page=${per}`, {
       installationId,
     })
-    const items = (json as { items?: gp.GhRepoPayload[] } | null)?.items ?? []
-    return items.map((r) => gp.toRepoProjection(r, installationId, syncedAt))
+    const found = (json as { items?: gp.GhRepoPayload[]; total_count?: number } | null) ?? {}
+    const items = (found.items ?? []).map((r) => gp.toRepoProjection(r, installationId, syncedAt))
+    // GitHub reports the full match count, so this leg knows exactly what it left behind
+    // rather than inferring it from a page that happens to be full.
+    return { items, truncated: (found.total_count ?? items.length) > items.length }
   }
 
   // ---- reads --------------------------------------------------------------

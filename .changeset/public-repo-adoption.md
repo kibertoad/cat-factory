@@ -80,6 +80,9 @@ alone: a deployment older than these endpoints answers an unmatched route with t
 reading that as "create the repository" sent an operator to create one they already had.
 
 Internal, breaking for in-repo callers only: `GitHubSyncService.listAvailableRepos` answers
-`{ repos, truncated }` rather than an array, and the `viewerRepos` cache holds the whole page rather
-than its items (an enumeration that stopped at the cap is a prefix, and caching only the rows served
-that prefix to every later keystroke as the complete set).
+`{ repos, truncated }` rather than an array, the kernel `GitHubClient.searchInstallationRepos` port
+answers a `Paged` rather than an array (every adapter caps something, and a search that filters a
+bounded listing can return two rows and still be a prefix, which no row count reveals), and the
+`viewerRepos` / `patInstallationRepos` caches hold the whole page rather than its items (an
+enumeration that stopped at the cap is a prefix, and caching only the rows served that prefix to
+every later keystroke as the complete set).

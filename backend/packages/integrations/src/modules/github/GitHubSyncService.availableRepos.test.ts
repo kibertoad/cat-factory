@@ -60,6 +60,8 @@ function makeService(
     getRepo?: (ref: { owner: string; repo: string }) => Promise<GitHubRepo>
     /** What the browse-all leg reports about its own page cap. */
     browseTruncated?: boolean
+    /** What the search leg reports about its own caps (result count, or the listing it filters). */
+    searchTruncated?: boolean
   } = {},
 ): { service: GitHubSyncService; searches: SearchCall[]; pointReads: string[] } {
   const searches: SearchCall[] = []
@@ -80,11 +82,19 @@ function makeService(
       searchInstallationRepos: async (
         installationId: number,
         query: string,
-        opts?: SearchCall['opts'],
+        // Named apart from the fixture's own `opts`, which the truncation flag below reads.
+        searchOpts?: SearchCall['opts'],
       ) => {
-        searches.push({ installationId, query, opts })
+        searches.push({ installationId, query, opts: searchOpts })
         const q = query.trim().toLowerCase()
-        return q ? items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)) : []
+        const matched = q
+          ? items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+          : []
+        // Paged, like the real adapters: the caps live in the client, so the truncation flag comes
+        // back WITH the rows. A count cannot stand in for it, which is the whole reason the port
+        // carries the flag: a search that filtered a listing which itself truncated may return two
+        // rows and still be a prefix.
+        return { items: matched, truncated: opts.searchTruncated === true }
       },
       // Direct point-read for an exact `owner/name` query. Defaults to the GitHub 404
       // shape (a rejection) so slug-less specs never depend on it.
@@ -119,13 +129,7 @@ describe('GitHubSyncService.listAvailableRepos', () => {
     // Matches `acme/api-gateway` and `globex/API-client`, not `web-app`/`billing`.
     expect(result.map((r) => r.githubId).sort()).toEqual([1, 3])
     expect(searches).toEqual([
-      {
-        installationId: 1,
-        query: 'api',
-        // The result cap is passed rather than defaulted, because it doubles as the only signal a
-        // search can give about having stopped short.
-        opts: { owner: 'acme', ownerType: 'Organization', limit: 50 },
-      },
+      { installationId: 1, query: 'api', opts: { owner: 'acme', ownerType: 'Organization' } },
     ])
   })
 
@@ -149,15 +153,14 @@ describe('GitHubSyncService.listAvailableRepos', () => {
     expect((await service0().listAvailableRepos('ws')).truncated).toBe(false)
   })
 
-  it('reports a search that exactly filled its cap, where "all" and "more" look the same', async () => {
-    // The count IS the only signal a search can give, which is why the service chooses the cap
-    // rather than leaving it to the adapter's default.
-    const many = Array.from({ length: 50 }, (_, i) => repo(100 + i, 'acme', `svc-${i}`))
-    const { service } = makeService(many)
-    expect((await service.listAvailableRepos('ws', { q: 'svc' })).truncated).toBe(true)
-    // One fewer, and the same search is the whole answer.
-    const { service: fewer } = makeService(many.slice(0, 49))
-    expect((await fewer.listAvailableRepos('ws', { q: 'svc' })).truncated).toBe(false)
+  it('reports a search the CLIENT capped, which no row count could have revealed', async () => {
+    // Why the port carries the flag rather than leaving the service to infer it: a search that
+    // filters a bounded listing can return two rows and still be a prefix, because a match beyond
+    // the listing's own page cap was never filtered at all.
+    const { service } = makeService(REPOS, { searchTruncated: true })
+    const listing = await service.listAvailableRepos('ws', { q: 'api' })
+    expect(listing.truncated).toBe(true)
+    expect(listing.repos.length).toBeGreaterThan(0)
   })
 
   it('treats a blank/whitespace query as browse-all, not a search', async () => {
@@ -193,7 +196,7 @@ describe('GitHubSyncService.listAvailableRepos', () => {
       {
         installationId: 1,
         query: 'acme/internal-tool',
-        opts: { owner: 'acme', ownerType: 'Organization', limit: 50 },
+        opts: { owner: 'acme', ownerType: 'Organization' },
       },
     ])
     expect(pointReads).toEqual(['acme/internal-tool'])
@@ -246,9 +249,10 @@ function makePatService(opts: {
       listInstallationRepos: async () => ({ items: opts.appRepos }),
       searchInstallationRepos: async (_id: number, query: string) => {
         const q = query.trim().toLowerCase()
-        return q
+        const matched = q
           ? opts.appRepos.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
           : []
+        return { items: matched, truncated: false }
       },
       listReposForToken: async () => {
         enumerations++
@@ -434,7 +438,10 @@ describe('GitHubSyncService.linkRepoBySlug', () => {
         listInstallationRepos: async () => ({ items }),
         searchInstallationRepos: async (_id: number, query: string) => {
           const q = query.trim().toLowerCase()
-          return q ? items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)) : []
+          const matched = q
+            ? items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+            : []
+          return { items: matched, truncated: false }
         },
         // The resource wave `syncRepo` fires after a link; empty pages settle it at once. Stubbed
         // rather than avoided because the deep sync is part of what linking MEANS, so a test that
