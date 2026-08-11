@@ -2,22 +2,32 @@
 '@cat-factory/acceptance': patch
 ---
 
-Say that a pass has no terminal to ask the personal password on, instead of `setRawMode EPERM`.
+Ask for the personal password on Windows at all, and refuse by the RIGHT cause when it cannot.
 
 A pass pinned to an individual-usage model stops at its first dispatch to ask for the operator's
-personal password, and `openTerminal` promises in as many words to refuse "when there is no terminal
-to reach at all (CI, a daemon), naming what to do instead". It did not. Windows opens `\\.\CONIN$`
-quite happily in a process with NO CONSOLE attached, so the missing-terminal guard passed, the
-`process.stdin.isTTY` fallback was never consulted, and the refusal landed one line later on the
-raw-mode switch as `Error: setRawMode EPERM`, errno -4048. That names neither the password it was
-asking for nor either way out, in precisely the situation where a person has to change how they
-invoked the pass.
+personal password. On Windows it never asked: it failed with `Error: setRawMode EPERM`, errno -4048,
+naming neither the password it wanted nor anything to do about it.
 
-Raw mode is now entered by `openTerminal` rather than by the read, because being readable without
-echo is what that function promises and opening the device does not establish it. A failure there
-becomes the same `noTerminal()` refusal, with the original error kept as its `cause` (an `EPERM` is
-the interesting half only when the failure is something else) and the console handles released so a
-refused prompt does not leak one.
+The cause is the OPEN, not the console. Turning echo off is `SetConsoleMode`, which WRITES to the
+console input buffer, so the handle needs `GENERIC_WRITE`; `\\.\CONIN$` was opened `r`, which reads
+perfectly well and then refuses raw mode with `EPERM` on a machine with a console right there.
+`consoleDevice()` now opens it `r+` and the prompt appears. Verified inside a vitest forked worker,
+the environment that makes this prompt awkward in the first place: `r` throws `EPERM`, `r+` enters
+raw mode and writes to `CONOUT$`.
+
+That also corrects what this file believed. The `EPERM` was read as evidence that a console-less
+process opens `CONIN$` happily, so the missing-terminal refusal was moved onto the raw-mode switch.
+A console-less process cannot open `CONIN$` at all (`EBADF`, the same fact as POSIX's `ENXIO` for
+`/dev/tty`), so that refusal belongs on the OPEN, where it started, and moving it there produced a
+confident refusal with the wrong cause: an operator in a JetBrains terminal was told to "run the
+suite from an interactive shell", which is what they were doing.
+
+So there are two refusals now, because they need two different actions. No device to reach:
+`noTerminal()`, unchanged. A device that reaches a terminal which will not stop echoing:
+`noHiddenInput()`, naming that cause and the terminals that do implement console modes, with
+`winpty` for the MSYS/mintty window where this is expected. Raw mode is still entered by
+`openTerminal` rather than by the read, because being readable without echo is what that function
+promises and opening the device does not establish it.
 
 Releasing them is `releaseTerminal`, and it encodes the one rule that cleanup has to get right: the
 descriptor a `ReadStream` is CONSTRUCTED with belongs to the stream, so `input.destroy()` is that
@@ -28,12 +38,9 @@ instant a typed password was accepted, leaving the promise unsettled and hanging
 already succeeded. Echo is now restored by the same function, guarded on the stream's own `isRaw`, so
 a prompt that could not be WRITTEN no longer returns the operator to a shell that echoes nothing.
 
-The trigger is not exotic: CI, a daemon, `nohup`, and an agent's detached background shell all reach
-it, and it was found by running the suite from one. Nothing about the interactive path changes, so
-this is a message, not a behaviour change. The README now states the invocation together with what
-makes it work under vitest at all, which is the part that reads like it cannot: a worker is forked
-with piped stdio, so the prompt goes to the console devices directly rather than through the stdio
-the reporter owns.
+The README now states the invocation together with what makes it work under vitest at all, which is
+the part that reads like it cannot: a worker is forked with piped stdio, so the prompt goes to the
+console devices directly rather than through the stdio the reporter owns.
 
 **Every command this suite prints with a variable in it is now rendered for the shell that will
 receive it.** The same session found the second half of the same problem: `VAR=value command` and

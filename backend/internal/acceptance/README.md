@@ -298,10 +298,18 @@ person's subscription, and only their personal password opens it. Two consequenc
   stderr; a process with neither refuses.
 - **A pass with no console REFUSES at that first dispatch**, naming the two ways out (run it
   interactively, or pin a preset whose model resolves to a provider API key). That covers CI, a
-  daemon, `nohup`, and an agent's detached background shell. Windows opens `CONIN$` even with no
-  console attached, so the refusal comes from the raw-mode switch rather than from the open; before
-  it was translated, that arrived as a bare `Error: setRawMode EPERM` (errno -4048), which named
-  neither the password nor either remedy.
+  daemon, `nohup`, and an agent's detached background shell, all of which cannot open the console
+  device at all.
+- **On Windows the console input buffer is opened READ-WRITE**, and that is not a detail: turning
+  echo off is `SetConsoleMode`, which WRITES to that buffer, so a read-only handle reads perfectly
+  well and then answers `EPERM`. Opened read-only, the prompt therefore failed on every Windows
+  machine, console or no console, and it arrived as a bare `Error: setRawMode EPERM` (errno -4048)
+  naming neither the password nor a remedy.
+- **A terminal that will not stop echoing gets its own refusal**, separate from the no-console one,
+  because nothing about the invocation is wrong and both of that one's remedies are dead ends. Expect
+  it from an MSYS/mintty window (Git Bash launched by its own shortcut), where `winpty` in front of
+  the command is the fix; Windows Terminal, PowerShell, `cmd.exe` and the JetBrains terminal all
+  implement console modes.
 
 **The repositories**
 

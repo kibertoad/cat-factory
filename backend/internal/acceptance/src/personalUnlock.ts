@@ -145,18 +145,23 @@ function stillLocked(what: string, error: CatFactoryCredentialRequiredError): Er
  * "nothing persisted" property is now structural instead of a check.
  *
  * THROWS when there is no terminal to reach at all (CI, a daemon), or one that cannot be switched
- * to raw mode, naming what to do instead. A nullable return would only move that same refusal to
- * the one call site. Raw mode is entered HERE rather than at the read, because being readable
- * without echo is what this function promises and opening the device does not establish it. And
- * `close` is therefore the symmetric undo, putting echo back before releasing the device it belongs
- * to. See {@link releaseTerminal} for the one rule that cleanup has to get right.
+ * to raw mode, naming what to do instead, and those are two different refusals because they need
+ * two different actions. A nullable return would only move the same refusals to the one call site.
+ * Raw mode is entered HERE rather than at the read, because being readable without echo is what this
+ * function promises and opening the device does not establish it. And `close` is therefore the
+ * symmetric undo, putting echo back before releasing the device it belongs to. See
+ * {@link releaseTerminal} for the one rule that cleanup has to get right.
  */
 function openTerminal(): { input: ReadStream; write: (text: string) => void; close: () => void } {
-  const path = process.platform === 'win32' ? '\\\\.\\CONIN$' : '/dev/tty'
-  const fd = tryOpen(path, 'r')
+  const device = consoleDevice()
+  const fd = tryOpen(device.path, device.flags)
   if (fd === null) {
-    // No controlling terminal. `process.stdin` is still worth trying, because a standalone CLI run
-    // straight from a shell (`pnpm status`) has one even where `/dev/tty` is unavailable.
+    // No controlling terminal. THIS is where a console-less process (CI, a daemon, `nohup`, an
+    // agent's detached background shell) lands: Windows answers `EBADF` for `CONIN$` when the
+    // process has no console at all, exactly as POSIX answers `ENXIO` for `/dev/tty`.
+    //
+    // `process.stdin` is still worth trying, because a standalone CLI run straight from a shell
+    // (`pnpm status`) has one even where `/dev/tty` is unavailable.
     if (!process.stdin.isTTY) throw noTerminal()
     const input = process.stdin as unknown as ReadStream
     // The process's OWN stdin: nothing here closes it, so releasing it is putting echo back and
@@ -171,7 +176,8 @@ function openTerminal(): { input: ReadStream; write: (text: string) => void; clo
   // Prompt down the same terminal where possible, so it cannot be swallowed by the test reporter
   // that owns this worker's stdout. Windows reads and writes the console through two different
   // devices; POSIX can write back down the one it read from.
-  const outFd = process.platform === 'win32' ? tryOpen('\\\\.\\CONOUT$', 'w') : tryOpen(path, 'w')
+  const outFd =
+    process.platform === 'win32' ? tryOpen('\\\\.\\CONOUT$', 'w') : tryOpen(device.path, 'w')
   const input = new ReadStream(fd)
   const close = () => releaseTerminal(input, outFd)
   enterRawMode(input, close)
@@ -183,6 +189,25 @@ function openTerminal(): { input: ReadStream; write: (text: string) => void; clo
     },
     close,
   }
+}
+
+/**
+ * The device to read the password from, and the ACCESS to open it with.
+ *
+ * The flags are the whole point of this function existing. `SetConsoleMode` writes to the console
+ * INPUT BUFFER, so it needs a handle carrying `GENERIC_WRITE`: opened read-only, `CONIN$` reads
+ * perfectly well and refuses raw mode with `EPERM` on a machine that has a console right there.
+ * That is the `setRawMode EPERM` this whole file was written around, and it was never evidence of a
+ * missing console: it was this open. A console-less process cannot open `CONIN$` at all (`EBADF`),
+ * which is why the no-terminal refusal belongs on the OPEN and never needed to move.
+ *
+ * POSIX stays read-only: `tcsetattr` needs no write access, and `/dev/tty` opened `r+` is a second
+ * writable handle on a terminal this prompt already opens a separate one for.
+ */
+function consoleDevice(): { path: string; flags: string } {
+  return process.platform === 'win32'
+    ? { path: '\\\\.\\CONIN$', flags: 'r+' }
+    : { path: '/dev/tty', flags: 'r' }
 }
 
 /**
@@ -233,29 +258,32 @@ function tryOpen(path: string, flags: string): number | null {
 /**
  * Switch a terminal to raw mode, or refuse the way {@link openTerminal} promises to.
  *
- * Opening the device is not proof anything can be read from it. A process with NO CONSOLE attached
- * opens `CONIN$` on Windows perfectly happily, so the missing-terminal guard above passes and the
- * refusal lands here instead, as `EPERM`. Left bare that reached the operator as
- * `Error: setRawMode EPERM` (errno -4048), which names neither the password it was trying to ask
- * for nor either way out, in the one situation where a person has to change how they invoked the
- * pass: CI, a daemon, `nohup`, or an agent's detached background shell. The cause stays attached,
- * because an `EPERM` is the interesting half when the failure is something else entirely.
+ * Opening the device is not proof a password can be read from it WITHOUT ECHOING IT, and echoing it
+ * is not an option: the point of the prompt is that the password reaches this process and no
+ * scrollback. So a device that will not switch is refused rather than read from.
+ *
+ * NOT the missing-console refusal, and that distinction is the correction this function carries. It
+ * used to throw `noTerminal()`, on the belief that a console-less Windows process opens `CONIN$`
+ * happily and lands here; it does not, it cannot open the device at all. What actually produced the
+ * `setRawMode EPERM` operators saw was {@link consoleDevice} opening the console read-only, from a
+ * WebStorm terminal with a console right there, so "run the suite from an interactive shell" told
+ * someone already sitting in one to do what they had done. A refusal that names the wrong cause is
+ * worse than the errno it replaced, because it is believed.
  *
  * Exported for the test: a terminal that opens and then refuses raw mode cannot be produced from a
- * unit test on either platform, and the property worth pinning is that the operator is told which
- * two things fix it.
+ * unit test on either platform, and the property worth pinning is that the refusal names THIS cause.
  */
 export function enterRawMode(input: ReadStream, cleanup: () => void): void {
   try {
     input.setRawMode(true)
   } catch (error) {
     cleanup()
-    throw noTerminal({ cause: error })
+    throw noHiddenInput(error)
   }
 }
 
 /** The refusal when there is no usable terminal: what to do instead, and why not an env var. */
-function noTerminal(options?: { cause?: unknown }): Error {
+function noTerminal(): Error {
   return new Error(
     'This pass needs your personal password to unlock the subscription its model runs on, but ' +
       'this process has no terminal to ask on.\n' +
@@ -263,7 +291,28 @@ function noTerminal(options?: { cause?: unknown }): Error {
       'from a variable or a file: it is the second factor protecting the stored credential, ' +
       'and a copy on disk would defeat it.\n' +
       '  To run unattended instead, pin a preset whose model resolves to a provider API key.',
-    options,
+  )
+}
+
+/**
+ * The refusal when the terminal IS there and will not stop echoing.
+ *
+ * Its own wording because its own action: nothing about how the pass was invoked is wrong, so the
+ * two remedies `noTerminal` offers are both dead ends here. What is left is a terminal that emulates
+ * a console without implementing its modes (an MSYS/mintty pty is the one to expect), and the way
+ * out is a terminal that does, or the unattended route.
+ */
+function noHiddenInput(cause: unknown): Error {
+  return new Error(
+    'This pass needs your personal password to unlock the subscription its model runs on. It ' +
+      'reached your terminal, but that terminal will not turn OFF echo, and the password is ' +
+      'never typed where it can be read back.\n' +
+      '  Run the pass from a terminal that implements console modes: Windows Terminal, ' +
+      'PowerShell, cmd.exe or a JetBrains terminal all do; an MSYS/mintty window (Git Bash ' +
+      'launched by its own shortcut) does not, and `winpty` in front of the command is that ' +
+      'window’s fix.\n' +
+      '  To run unattended instead, pin a preset whose model resolves to a provider API key.',
+    { cause },
   )
 }
 

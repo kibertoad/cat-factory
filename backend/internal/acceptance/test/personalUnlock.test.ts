@@ -148,7 +148,7 @@ describe('withPersonalUnlock', () => {
 
 /**
  * A terminal that records what was asked of it, tracking `isRaw` the way the real stream does (the
- * cleanup reads it), and able to refuse raw mode the way a console-less process does.
+ * cleanup reads it), and able to refuse raw mode the way an MSYS pty does.
  */
 function fakeTerminal(options: { refuseRawMode?: unknown } = {}) {
   const calls: string[] = []
@@ -182,10 +182,11 @@ describe('enterRawMode', () => {
     expect(cleanup).not.toHaveBeenCalled()
   })
 
-  // A console-less process opens `CONIN$` and fails HERE, so this is the refusal an operator running
-  // the pass from CI, a daemon or a detached shell actually receives. Bare, it reached them as
-  // `setRawMode EPERM`, which names neither the password nor either way out.
-  it('refuses a device that opens and then cannot be read without echo, naming both ways out', () => {
+  // A device that opens and still will not stop echoing is a terminal that emulates a console
+  // without implementing its modes, and it is NOT a missing console: a console-less process cannot
+  // open `CONIN$` at all. The refusal has to name that cause, because the missing-console remedies
+  // ("run it from an interactive shell") are both dead ends for someone already in one.
+  it('refuses a terminal that will not stop echoing, naming THAT cause and its way out', () => {
     const cleanup = vi.fn()
 
     let thrown: unknown
@@ -197,25 +198,29 @@ describe('enterRawMode', () => {
 
     expect(thrown).toBeInstanceOf(Error)
     const message = (thrown as Error).message
-    expect(message).toContain('no terminal to ask on')
-    expect(message).toContain('interactive shell')
+    expect(message).toContain('will not turn OFF echo')
+    expect(message).toContain('winpty')
     expect(message).toContain('provider API key')
-    // The errno is the only part worth reading when the failure is NOT a missing console.
+    // Not the other refusal: this operator's shell is interactive, and saying otherwise sends them
+    // to redo the one thing they already did.
+    expect(message).not.toContain('no terminal to ask on')
+    expect(message).not.toContain('interactive shell')
+    // The errno is the only part worth reading when the failure is something else entirely.
     expect((thrown as Error).cause).toBe(RAW_MODE_EPERM)
     // The fds it opened are released, so a refused prompt does not leak the console handle.
     expect(cleanup).toHaveBeenCalledTimes(1)
   })
 
-  it('reports the missing terminal rather than a failure of its own cleanup', () => {
+  it('reports that refusal rather than a failure of its own cleanup', () => {
     // Driven through the REAL cleanup, which is the half a stand-in `vi.fn()` cannot grade: it
     // cannot fail, and the shipped one did. It closed the descriptor the stream had already closed,
     // so `EBADF: bad file descriptor, close` came out of the catch below and REPLACED the only
-    // message that names the password and both ways out.
+    // message that names the password and a way out.
     const { input, calls } = fakeTerminal({ refuseRawMode: RAW_MODE_EPERM })
     const closeFd = vi.fn()
 
     expect(() => enterRawMode(input, () => releaseTerminal(input, 7, closeFd))).toThrow(
-      /no terminal to ask on/,
+      /will not turn OFF echo/,
     )
     // Echo is NOT put back on a device that never came off it, and the console handle is released.
     expect(calls).toEqual(['setRawMode(true)', 'destroy'])
