@@ -16,6 +16,8 @@ type Script = {
   secrets?: string[]
   confirms?: Record<string, boolean>
   selects?: Record<string, string>
+  /** The reporter token pasted at the `ACCEPTANCE_VCS_TOKEN` prompt. Defaults to a fixed value. */
+  reporterToken?: string
 }
 
 /**
@@ -56,6 +58,11 @@ function fakeIo(script: Script = {}) {
       },
       secret: async (prompt: string) => {
         guard(prompt)
+        // The reporter token is answered by PROMPT rather than by position, and defaulted. It is
+        // asked between the API key and the cluster token, so a positional script would have to
+        // restate it in every case that answers the one after it, and a case about the CLUSTER
+        // would silently be answering this instead.
+        if (prompt.includes('Reporter token')) return script.reporterToken ?? REPORTER_TOKEN
         return secrets.shift() ?? ''
       },
       confirm: async (prompt: string, defaultValue: boolean) => {
@@ -75,6 +82,8 @@ function fakeIo(script: Script = {}) {
     },
   }
 }
+
+const REPORTER_TOKEN = 'ghp_reporter_value'
 
 /** A `HostShell` answering the two kubeconfig reads, and nothing else. */
 function fakeShell(results: Record<string, { code: number; stdout: string }> = {}) {
@@ -229,7 +238,9 @@ describe('configure: adopting the repositories', () => {
           return adopted(name)
         },
       }),
-      script: { secrets: [TOKEN] },
+      // The token page is declined so `opened` below stays a claim about the REPOSITORY: whether
+      // this command offers the reporter-token page is its own case further down.
+      script: { secrets: [TOKEN], confirms: { 'Open the token page': false } },
     })
     expect(linked).toEqual(['cf-acc-catalog-api', 'cf-acc-catalog-web'])
     const printed = io.output.join('\n')
@@ -245,7 +256,7 @@ describe('configure: adopting the repositories', () => {
       link: async (_owner, name) =>
         name === 'cf-acc-catalog-api' && !created ? { status: 'unreachable' } : adopted(name),
     })
-    const io = fakeIo({ secrets: [TOKEN] })
+    const io = fakeIo({ secrets: [TOKEN], confirms: { 'Open the token page': false } })
     // The operator creates it between the offer and the re-check, which is exactly the sequence the
     // loop exists for: the alternative is discovering the miss at the start of an afternoon.
     const original = io.io.confirm
@@ -295,7 +306,10 @@ describe('configure: adopting the repositories', () => {
     // A second failed attempt is a different message from the first: "still not reachable" is the
     // answer to what the operator just did. And the creation page stops being the DEFAULT action,
     // because past one re-check the repository usually exists and re-opening the form cannot help.
-    const io = fakeIo({ secrets: [TOKEN], confirms: { 'Re-check': true } })
+    const io = fakeIo({
+      secrets: [TOKEN],
+      confirms: { 'Re-check': true, 'Open the token page': false },
+    })
     let attempts = 0
     const client = fakeClient({
       link: async (_owner, name) => {
@@ -639,6 +653,58 @@ describe('configure: the model preset', () => {
   })
 })
 
+// The reporter token, which is the one credential this command can neither resolve nor mint, and the
+// one whose page it CAN prefill.
+describe('configure: the reporter token', () => {
+  it('opens a prefilled minting page and names the narrower credential it cannot prefill', async () => {
+    const { written, io } = await run({ script: { secrets: [TOKEN] } })
+    expect(io.opened).toContain(
+      'https://github.com/settings/tokens/new?description=cat-factory+acceptance+%28acme%2Fcf-acc-catalog-api%29&scopes=repo',
+    )
+    const printed = io.output.join('\n')
+    // Both halves: the classic form is what can be prefilled, and a fine-grained token is the better
+    // thing to hold, so the operator is told which is which rather than having one chosen for them.
+    expect(printed).toContain('Issues: Read and write')
+    expect(printed).toContain('prefilled')
+    expect(written).toContain('ACCEPTANCE_VCS_TOKEN=ghp_reporter_value')
+  })
+
+  it('says why the workspace’s own connection cannot be reused for it', async () => {
+    // The reason is the whole design of spec 04, and an operator who does not know it will paste the
+    // API token or the App's credential here and get a test that proves nothing.
+    const { io } = await run({ script: { secrets: [TOKEN] } })
+    expect(io.output.join('\n')).toContain('circular')
+  })
+
+  it('never prints the token back, and keeps a stored one without asking again', async () => {
+    const { written, io } = await run({
+      existing: 'ACCEPTANCE_VCS_TOKEN=already-minted\n',
+      script: { secrets: [TOKEN], confirms: { 'Replace the stored reporter token': false } },
+    })
+    expect(written).toContain('ACCEPTANCE_VCS_TOKEN=already-minted')
+    const printed = io.output.join('\n')
+    expect(printed).toContain('ACCEPTANCE_VCS_TOKEN=(set, not shown)')
+    expect(printed).not.toContain('already-minted')
+  })
+
+  it('asks for a paste with instructions when no minting page can be built', async () => {
+    // A provider whose instance is unknowable gets the same treatment its repository link gets: the
+    // affordance is withheld and the steps stand on their own.
+    const { io } = await run({
+      client: fakeClient({
+        connection: async () => ({
+          accountLogin: 'acme',
+          provider: 'gitlab' as const,
+          method: 'pat' as const,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.opened.join('\n')).not.toContain('tokens/new')
+    expect(io.output.join('\n')).toContain('ACCEPTANCE_VCS_API_BASE')
+  })
+})
+
 // The cluster pair, whose rule is the opposite of every other value here: the STORED one wins over
 // what the kubeconfig currently says.
 describe('configure: the cluster', () => {
@@ -830,6 +896,10 @@ describe('SECRET_KEYS', () => {
   it('lists every managed variable that carries a credential', () => {
     // Listed rather than pattern-matched, so a new secret whose name does not say `TOKEN` cannot
     // slip into a printed summary. Derived from the same set the writer uses.
-    expect([...SECRET_KEYS].sort()).toEqual(['ACCEPTANCE_K3S_TOKEN', 'CAT_FACTORY_API_KEY'])
+    expect([...SECRET_KEYS].sort()).toEqual([
+      'ACCEPTANCE_K3S_TOKEN',
+      'ACCEPTANCE_VCS_TOKEN',
+      'CAT_FACTORY_API_KEY',
+    ])
   })
 })

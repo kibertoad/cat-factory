@@ -873,6 +873,50 @@ returns the ticket to the recurring intake sweep's candidate pool.
 The linkage is not projected onto the task resource: a `201` already means the ticket is attached,
 and `409` already names the task for one that was.
 
+#### Closing the ticket when the work lands
+
+A ticket-linked task writes back to its issue, and `GET /api/v1/tracker/writeback` is that
+disposition:
+
+```http
+GET /api/v1/tracker/writeback
+{ "writeback": { "commentOnPrOpen": true, "resolveOnMerge": true, "questionsOnPark": true },
+  "updatedAt": null }
+```
+
+Three independent actions, because they are answerable separately:
+
+- `commentOnPrOpen` comments on the issue when the task's pull request opens.
+- `resolveOnMerge` comments and CLOSES the issue when that pull request merges (GitHub and GitLab
+  close natively; Jira transitions to its Done category).
+- `questionsOnPark` posts a headless run's parked requirements-review findings on the issue, each
+  with its finding id, so the reporter can answer from where they filed. Only consulted for runs
+  started through this API or dispatched from a ticket.
+
+**All three are ON for a workspace that has never chosen**, and `updatedAt: null` is how you tell:
+the values you are reading are this deployment's defaults rather than anyone's decision. They default
+on because the actions only ever touch an issue a task is LINKED to, and nothing links one by
+accident: a link arrives because somebody imported the issue, the intake sweep picked it up, or a
+caller filed with `ticket`. Every one of those is a request to work the issue where it was filed, and
+the half-closed loop is what nobody wants: a merged pull request beside an issue still open with
+nothing on it saying so.
+
+Changing it is a MERGE, so one decision moves one action:
+
+```http
+PATCH /api/v1/tracker/writeback
+{ "writeback": { "resolveOnMerge": false } }
+```
+
+Two things to know before calling it. It is workspace-WIDE, so it changes what happens to every other
+task's ticket on that board too, which is why the read reports `updatedAt`: a non-null value means you
+are about to overwrite somebody's choice. And an empty patch is a no-op that deliberately does not
+stamp `updatedAt`, so probing with one cannot make the defaults look chosen.
+
+Per-TASK exceptions are not on this surface. A task that must leave its ticket open carries an
+override on the board (set in the app) and it wins over whatever is here; this endpoint is the default
+that override departs from.
+
 #### Attaching requirements documents
 
 A task's `description` is capped at 2,000 characters because it is the task's own framing, echoed
@@ -1003,8 +1047,10 @@ deployment actually has.
 | `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                              |
 | `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the workspace default. Pin one as `riskPolicyId`.                                      |
 | `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                                     |
+| `GET /api/v1/tracker/writeback`              | `admin` | What a task's linked tracker issue hears as its pull request opens, merges, or parks a review.                               |
+| `PATCH /api/v1/tracker/writeback`            | `admin` | Turn those actions on or off. MERGES: an action you omit keeps its stored value.                                             |
 
-**The five reads are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
+**The reads here are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
 is what they name: those name board CONTENT, where these name what the DEPLOYMENT has wired,
 including the permissions its source-control credential holds. A caller that can read them is
 already at the rung that could change them. (A scope can be relaxed later and never tightened, so

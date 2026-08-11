@@ -12,7 +12,7 @@
 // runs this.
 
 import type { JournalEvent } from './journal.ts'
-import type { RunRecord, ServiceRecord, World } from './world.ts'
+import type { IssueRecord, RunRecord, ServiceRecord, World } from './world.ts'
 
 export type PhaseStatus = {
   phase: string
@@ -32,6 +32,14 @@ export type PassStatus = {
   phases: readonly PhaseStatus[]
   services: readonly { role: string; record: ServiceRecord }[]
   runs: readonly { role: string; record: RunRecord }[]
+  /**
+   * The issue spec 04 filed on the provider, or null.
+   *
+   * Reported beside what the pass created ON the deployment because it is the one artifact this
+   * suite leaves OUTSIDE it: a failed pass leaves an open issue on somebody's repository, and the
+   * person tidying up after it needs the URL from here rather than from a dead terminal.
+   */
+  issue: IssueRecord | null
   /** Since the last journal line. Null when the journal is empty. */
   idleMs: number | null
 }
@@ -57,7 +65,9 @@ export function summarisePass(input: {
       'featureBackend',
       'featureFrontend',
       'bugfix',
+      'issueDelivery',
     ] as const),
+    issue: world.intakeIssue,
     idleMs: last ? Math.max(0, now - last.at) : null,
   }
 }
@@ -151,6 +161,14 @@ export function formatPassStatus(
       const pr = record.pullRequestUrl ? ` ${record.pullRequestUrl}` : ''
       lines.push(`  ${role}: task ${record.taskId}, ${run}${pr}`)
     }
+  }
+
+  if (status.issue) {
+    lines.push(
+      '',
+      'Reported issue (on the provider, not on the deployment)',
+      `  ${status.issue.owner}/${status.issue.repo}#${status.issue.number}: ${status.issue.url}`,
+    )
   }
 
   if (status.idleMs !== null) {

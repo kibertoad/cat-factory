@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.46.0'
+const API_VERSION = '1.47.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -310,6 +310,18 @@ const OPERATION_DOCS = {
     summary: 'Read the workspace’s source-control connection and what it may do',
     description:
       'The connected account, how the workspace authenticates to it, and the two permissions that decide whether an automated flow can complete: whether the platform may create repositories, and whether it may write workflow files. Both are enforced by the provider at push time, so a caller that cannot read them discovers a missing workflow permission as a repository that bootstrapped and then failed to gain its CI workflow. Provider-neutral: a GitLab-connected workspace answers here too. `connection` is null when nothing is connected, which is a state rather than an error.',
+  },
+  getPublicTrackerWriteback: {
+    tag: 'Tracker',
+    summary: 'Read the workspace’s tracker writeback disposition',
+    description:
+      'What this workspace does to a task’s LINKED tracker issue as its pull request progresses: comment when the pull request opens, comment and close the issue when it merges, and post a headless run’s parked requirements-review findings so the reporter can answer where they filed. Worth reading before filing a ticket-linked task, since it decides whether the issue the work came from ever hears the outcome. `updatedAt` is null when nobody has chosen a disposition, in which case the values are this deployment’s defaults (all three ON). Requires an `admin` key.',
+  },
+  updatePublicTrackerWriteback: {
+    tag: 'Tracker',
+    summary: 'Change the workspace’s tracker writeback disposition',
+    description:
+      'Turn one or more writeback actions on or off. A MERGE: an action you omit keeps its stored value, so a caller acting on one decision cannot silently move the other two. This is workspace-wide configuration, so it changes what happens to every task’s ticket on the board; the read beside it reports `updatedAt` so a caller can see whether it is about to overwrite somebody’s choice. An empty patch is a no-op and does not stamp `updatedAt`. Requires an `admin` key.',
   },
   listPublicRiskPolicies: {
     tag: 'Risk policies',

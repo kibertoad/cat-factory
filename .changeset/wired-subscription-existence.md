@@ -9,7 +9,7 @@
 ---
 
 `GET /api/v1/models` now says whether a model's subscription is actually CONNECTED for the person a
-key belongs to, and stops calling the commonest one unwired. Surface version 1.46.0, additive.
+key belongs to, and stops calling the commonest one unwired. Surface version 1.47.0, additive.
 
 **The bug.** `userScoped` was added so a caller could tell "your credential was never consulted" from
 "no provider is wired", and it was derived from the route IN FORCE. A model with more than one route

@@ -133,6 +133,34 @@ describe('summarisePass', () => {
     expect(status.runs.map((entry) => entry.role)).toEqual(['bugfix'])
   })
 
+  it('carries the reported ISSUE, the one artifact a failed pass leaves outside the deployment', () => {
+    // Every other record names something on the board, which a person can find by opening it. An
+    // issue sits on somebody's repository with the platform's comments on it, and this report is
+    // where the URL is recovered once the terminal that printed it is gone.
+    const world: World = {
+      ...emptyWorld('run-1'),
+      intakeIssue: {
+        provider: 'github',
+        owner: 'acme',
+        repo: 'catalog-api',
+        number: 7,
+        url: 'https://github.com/acme/catalog-api/issues/7',
+      },
+      issueDelivery: { taskId: 'tsk_4', runId: 'run_4', pullRequestUrl: null, answeredKinds: [] },
+    }
+    const status = summarise({ world })
+    expect(status.issue?.number).toBe(7)
+    expect(status.runs.map((entry) => entry.role)).toEqual(['issueDelivery'])
+    const rendered = formatPassStatus(status, formatDuration)
+    expect(rendered).toContain('acme/catalog-api#7')
+    expect(rendered).toContain('https://github.com/acme/catalog-api/issues/7')
+  })
+
+  it('says nothing about an issue when no pass has filed one', () => {
+    expect(summarise({}).issue).toBeNull()
+    expect(formatPassStatus(summarise({}), formatDuration)).not.toContain('Reported issue')
+  })
+
   it("reports a scaffold run, since spec 01's work is now a run like any other", () => {
     // The ledger slot spec 01 gained when it stopped bootstrapping: a pass that died mid-scaffold is
     // exactly the one someone runs `status` on, and a report that listed only the feature runs would

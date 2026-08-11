@@ -39,7 +39,7 @@ import (
 )
 
 // Version is the SDK version, stamped into User-Agent. Kept in step by `pnpm check:sdk`.
-const Version = "0.35.0"
+const Version = "0.36.0"
 
 // Options configures a Client.
 type Options struct {
@@ -107,6 +107,8 @@ type Client struct {
 	RiskPolicies *RiskPoliciesService
 	// The model presets a task can pin, and which is the default.
 	ModelPresets *ModelPresetsService
+	// What a merged pull request does to the tracker issue its task was filed from.
+	Tracker *TrackerService
 	// The workspace's human-actionable inbox.
 	Notifications *NotificationsService
 	// The workspace's one outbound endpoint for pushed notifications, run events and alerts.
@@ -179,6 +181,7 @@ func New(options Options) (*Client, error) {
 	client.Vcs = &VcsService{client: client}
 	client.RiskPolicies = &RiskPoliciesService{client: client}
 	client.ModelPresets = &ModelPresetsService{client: client}
+	client.Tracker = &TrackerService{client: client}
 	client.Notifications = &NotificationsService{client: client}
 	client.Webhook = &WebhookService{client: client}
 	client.Usage = &UsageService{client: client}

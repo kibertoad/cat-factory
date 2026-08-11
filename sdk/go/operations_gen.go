@@ -1298,6 +1298,60 @@ func (s *VcsService) GetConnection(ctx context.Context) (*GetPublicVcsConnection
 	return &out, nil
 }
 
+// TrackerService what this workspace does to a task's LINKED tracker issue as its pull request progresses:
+// comment when it opens, comment and close the issue when it merges, and post a headless run's
+// parked review findings so the reporter can answer where they filed. The write MERGES, so
+// turning one action on leaves the other two as they were. It is the writeback half of the
+// workspace's tracker configuration; the filing selection (which tracker a tech-debt ticket is
+// raised on) is not published yet.
+type TrackerService struct {
+	client *Client
+}
+
+// GetWriteback read the workspace’s tracker writeback disposition
+// What this workspace does to a task’s LINKED tracker issue as its pull request progresses:
+// comment when the pull request opens, comment and close the issue when it merges, and post a
+// headless run’s parked requirements-review findings so the reporter can answer where they filed.
+// Worth reading before filing a ticket-linked task, since it decides whether the issue the work
+// came from ever hears the outcome. `updatedAt` is null when nobody has chosen a disposition, in
+// which case the values are this deployment’s defaults (all three ON). Requires an `admin` key.
+// GET /api/v1/tracker/writeback (operation getPublicTrackerWriteback).
+func (s *TrackerService) GetWriteback(ctx context.Context) (*GetPublicTrackerWritebackResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/tracker/writeback",
+	}
+	var out GetPublicTrackerWritebackResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UpdateWriteback change the workspace’s tracker writeback disposition
+// Turn one or more writeback actions on or off. A MERGE: an action you omit keeps its stored
+// value, so a caller acting on one decision cannot silently move the other two. This is
+// workspace-wide configuration, so it changes what happens to every task’s ticket on the board;
+// the read beside it reports `updatedAt` so a caller can see whether it is about to overwrite
+// somebody’s choice. An empty patch is a no-op and does not stamp `updatedAt`. Requires an
+// `admin` key.
+// PATCH /api/v1/tracker/writeback (operation updatePublicTrackerWriteback).
+func (s *TrackerService) UpdateWriteback(ctx context.Context, body *UpdatePublicTrackerWritebackRequest) (*GetPublicTrackerWritebackResponse, error) {
+	if body == nil {
+		body = &UpdatePublicTrackerWritebackRequest{}
+	}
+	req := requestSpec{
+		Method: "PATCH",
+		Path:   "/api/v1/tracker/writeback",
+		Body:   body,
+	}
+	var out GetPublicTrackerWritebackResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // RiskPoliciesService the risk policies a task can pin, including which is the workspace default: what decides
 // whether a run can land its pull request without a person, and how many attempts its CI fixer,
 // requirement rounds and release watch are given. Broader than merging, which is why it is not

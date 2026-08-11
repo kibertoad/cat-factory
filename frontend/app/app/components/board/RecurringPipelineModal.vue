@@ -355,7 +355,8 @@ async function add() {
   saving.value = true
   try {
     // Persist the tracker selection first when the tech-debt pipeline needs it, so
-    // the very first run can file its ticket.
+    // the very first run can file its ticket. This dialog decides WHERE a ticket is filed and
+    // nothing about the writeback, so it names no writeback action and the stored ones stand.
     if (filesTicket.value && trackerKind.value) {
       await tracker.save({
         tracker: trackerKind.value,

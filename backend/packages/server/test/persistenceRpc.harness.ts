@@ -398,7 +398,7 @@ function buildBoardConfigRepos() {
     },
     trackerSettingsRepository: {
       get: async (ws: string) => ({ ws }),
-      put: async () => undefined,
+      merge: async (ws: string) => ({ ws }),
     },
     notificationRepository: {
       listOpen: async (ws: string) => [{ ws }],

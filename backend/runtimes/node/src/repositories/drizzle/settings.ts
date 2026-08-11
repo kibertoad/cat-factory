@@ -32,6 +32,7 @@ import type {
   TrackerCommentIngestRepository,
   TrackerCommentIngestStatus,
   TrackerSettings,
+  TrackerSettingsPatch,
   TrackerSettingsRepository,
   TutorialDecision,
   TutorialProgress,
@@ -307,6 +308,49 @@ export class DrizzleModelPresetRepository implements ModelPresetRepository {
  * D1 `D1ServiceFragmentDefaultsRepository`). `set` upserts the whole list.
  */
 
+/**
+ * Every settable field and the column it lands in.
+ *
+ * A `Record` over the patch's own key union, so a field added to `TrackerSettings` fails to COMPILE
+ * here rather than being silently dropped by a merge that never names its column. The sibling D1
+ * repository carries the same table for the same reason.
+ */
+const TRACKER_COLUMNS: Record<
+  keyof Required<TrackerSettingsPatch>,
+  keyof typeof trackerSettings.$inferInsert
+> = {
+  tracker: 'tracker',
+  jiraProjectKey: 'jira_project_key',
+  linearTeamId: 'linear_team_id',
+  writebackCommentOnPrOpen: 'writeback_comment_on_pr_open',
+  writebackResolveOnMerge: 'writeback_resolve_on_merge',
+  writebackQuestionsOnPark: 'writeback_questions_on_park',
+}
+
+const TRACKER_FIELDS = Object.keys(TRACKER_COLUMNS) as (keyof Required<TrackerSettingsPatch>)[]
+
+type TrackerRow = {
+  tracker: string | null
+  jira_project_key: string | null
+  linear_team_id: string | null
+  writeback_comment_on_pr_open: number
+  writeback_resolve_on_merge: number
+  writeback_questions_on_park: number
+  updated_at: number
+}
+
+function toTrackerSettings(row: TrackerRow): TrackerSettings {
+  return {
+    tracker: (row.tracker as TrackerSettings['tracker']) ?? null,
+    jiraProjectKey: row.jira_project_key,
+    linearTeamId: row.linear_team_id,
+    writebackCommentOnPrOpen: row.writeback_comment_on_pr_open === 1,
+    writebackResolveOnMerge: row.writeback_resolve_on_merge === 1,
+    writebackQuestionsOnPark: row.writeback_questions_on_park === 1,
+    updatedAt: row.updated_at,
+  }
+}
+
 export class DrizzleTrackerSettingsRepository implements TrackerSettingsRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -315,43 +359,51 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
       .select()
       .from(trackerSettings)
       .where(eq(trackerSettings.workspace_id, workspaceId))
-    if (!row) return null
-    return {
-      tracker: (row.tracker as TrackerSettings['tracker']) ?? null,
-      jiraProjectKey: row.jira_project_key,
-      linearTeamId: row.linear_team_id,
-      writebackCommentOnPrOpen: row.writeback_comment_on_pr_open === 1,
-      writebackResolveOnMerge: row.writeback_resolve_on_merge === 1,
-      writebackQuestionsOnPark: row.writeback_questions_on_park === 1,
-      updatedAt: row.updated_at,
-    }
+    return row ? toTrackerSettings(row) : null
   }
 
-  async put(workspaceId: string, settings: TrackerSettings): Promise<void> {
-    await this.db
+  async merge(
+    workspaceId: string,
+    patch: TrackerSettingsPatch,
+    defaults: Omit<TrackerSettings, 'updatedAt'>,
+    updatedAt: number,
+  ): Promise<TrackerSettings> {
+    // The INSERT carries a complete row (the defaults, overlaid with whatever the patch names) and
+    // the conflict branch touches ONLY the named columns. That is what makes the merge atomic: an
+    // unnamed column is never read up into this process and written back, so a concurrent writer
+    // naming a different one cannot be clobbered by a value that was stale before it was written.
+    const inserted = { ...defaults, ...patch }
+    // Spelled out rather than assembled from the column table, so the row the INSERT branch writes
+    // is checked against the real table: a column added without a default fails to compile here
+    // instead of failing at runtime behind a cast.
+    const values: typeof trackerSettings.$inferInsert = {
+      workspace_id: workspaceId,
+      tracker: inserted.tracker,
+      jira_project_key: inserted.jiraProjectKey,
+      linear_team_id: inserted.linearTeamId,
+      writeback_comment_on_pr_open: inserted.writebackCommentOnPrOpen ? 1 : 0,
+      writeback_resolve_on_merge: inserted.writebackResolveOnMerge ? 1 : 0,
+      writeback_questions_on_park: inserted.writebackQuestionsOnPark ? 1 : 0,
+      updated_at: updatedAt,
+    }
+    // The conflict branch touches only what the patch NAMED, reading each value back off the row
+    // above so the encoding is stated once.
+    const set: Record<string, unknown> = { updated_at: updatedAt }
+    for (const field of TRACKER_FIELDS) {
+      if (patch[field] !== undefined) set[TRACKER_COLUMNS[field]] = values[TRACKER_COLUMNS[field]]
+    }
+    const [row] = await this.db
       .insert(trackerSettings)
-      .values({
-        workspace_id: workspaceId,
-        tracker: settings.tracker,
-        jira_project_key: settings.jiraProjectKey,
-        linear_team_id: settings.linearTeamId,
-        writeback_comment_on_pr_open: settings.writebackCommentOnPrOpen ? 1 : 0,
-        writeback_resolve_on_merge: settings.writebackResolveOnMerge ? 1 : 0,
-        writeback_questions_on_park: settings.writebackQuestionsOnPark ? 1 : 0,
-        updated_at: settings.updatedAt,
-      })
-      .onConflictDoUpdate({
-        target: trackerSettings.workspace_id,
-        set: {
-          tracker: settings.tracker,
-          jira_project_key: settings.jiraProjectKey,
-          linear_team_id: settings.linearTeamId,
-          writeback_comment_on_pr_open: settings.writebackCommentOnPrOpen ? 1 : 0,
-          writeback_resolve_on_merge: settings.writebackResolveOnMerge ? 1 : 0,
-          writeback_questions_on_park: settings.writebackQuestionsOnPark ? 1 : 0,
-          updated_at: settings.updatedAt,
-        },
-      })
+      .values(values)
+      .onConflictDoUpdate({ target: trackerSettings.workspace_id, set })
+      .returning()
+    if (!row) {
+      throw new Error(
+        `Writing tracker settings for workspace ${workspaceId} returned no row, so what the ` +
+          `store now holds cannot be reported.`,
+      )
+    }
+    return toTrackerSettings(row)
   }
 }
 
