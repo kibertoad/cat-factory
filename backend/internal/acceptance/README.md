@@ -1,10 +1,11 @@
 # `@cat-factory/acceptance`
 
 **Acceptance tests against a LIVE local deployment.** Real agents, real model spend, real
-repositories, real pull requests, and a real k3s cluster. They adopt two empty repositories you
-created, scaffold a working service into each, ship a feature across both onto an ephemeral
-Kubernetes environment, then file the defect that feature leaves behind and let the platform
-investigate and fix it.
+repositories, real pull requests, real issues, and a real k3s cluster. They adopt two empty
+repositories you created, scaffold a working service into each, ship a feature across both onto an
+ephemeral Kubernetes environment, file the defect that feature leaves behind and let the platform
+investigate and fix it, and then file an issue as an OUTSIDE reporter and watch the platform deliver
+it and close it.
 
 **Never run in CI**, and structurally cannot be: `test:run` (the task CI runs) points at
 `vitest.config.ts`, which collects only this package's own unit tests. The acceptance specs live
@@ -29,14 +30,15 @@ deterministic. That is why it is a hand-run acceptance pass rather than a lane.
 
 ## The scenarios
 
-Four spec files, run in order. Each spec's output is the next one's input.
+Five spec files, run in order. Each spec's output is the next one's input.
 
-| Spec                     | What it does                                                                                                                                                       |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `00-preflight`           | Reports every prerequisite as its own named test. Creates nothing. The GATE runs in each spec, so a resumed pass cannot skip it.                                   |
-| `01-adopt-and-scaffold`  | Connects the k3s engine, backs a service with each of your two repositories, declares each one's manifest source, then scaffolds both through `pl_build`.          |
-| `02-feature-with-defect` | Ships a paginated catalog across both services on `pl_build`. Asserts the environment came up on the cluster, CI gated it, the merge resolved, the namespace went. |
-| `03-investigate-and-fix` | Files the resulting bug as a report, runs `pl_bugfix`, answers its `clarity-review` human gate over `/api/v1`, and asserts a red-then-green reproduction proof.    |
+| Spec                       | What it does                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `00-preflight`             | Reports every prerequisite as its own named test. Creates nothing. The GATE runs in each spec, so a resumed pass cannot skip it.                                   |
+| `01-adopt-and-scaffold`    | Connects the k3s engine, backs a service with each of your two repositories, declares each one's manifest source, then scaffolds both through `pl_build`.          |
+| `02-feature-with-defect`   | Ships a paginated catalog across both services on `pl_build`. Asserts the environment came up on the cluster, CI gated it, the merge resolved, the namespace went. |
+| `03-investigate-and-fix`   | Files the resulting bug as a report, runs `pl_bugfix`, answers its `clarity-review` human gate over `/api/v1`, and asserts a red-then-green reproduction proof.    |
+| `04-issue-intake-to-close` | Files an issue on the backend repository as an outside reporter, files a task FROM it, delivers it on `pl_build`, and asserts the platform CLOSED the issue.       |
 
 ### You create the two repositories; the suite adopts them
 
@@ -91,6 +93,37 @@ machinery worked, never that the product is defect-free.** By construction it is
 that the product is right is spec 03's, and it is settled by fixing the bug rather than by
 asserting it away.
 
+### The reporter in spec 04 is a stranger, and holds its own credential
+
+Spec 04's premise is that somebody who has never heard of cat-factory opens an issue on a repository,
+and the platform picks it up, delivers it and closes it. That is the loop a headless deployment runs
+on, and every part of it is invisible to a task filed with a `description`: the ticket import, the
+linked issue every agent step re-reads as context, and the writeback.
+
+So the issue is filed through the PROVIDER's own API with a credential of its own
+(`ACCEPTANCE_VCS_TOKEN`), and read back the same way. Using the workspace's connection instead would
+make the test circular: an issue the platform's credential created, closed by the platform's
+credential, proves that the credential works and nothing else. There is no `/api/v1` operation for
+either half, and there should not be, since filing an issue is not something this product does for
+you.
+
+**What it asserts is a PAIR**, and the second half is what makes the first mean anything:
+
+1. The issue is CLOSED, by nobody.
+2. The platform wrote two distinct comments on it naming the run's pull request, one when it opened
+   and one when it merged.
+
+A provider closes an issue by itself when a merged pull request's text carries a closing keyword
+(`Closes #12`), and that path posts no comment at all, so a closed issue on its own cannot tell the
+writeback from the host noticing a word an agent wrote. The two comments are a fingerprint no keyword
+can leave. Both edges are on by default and the `tracker-writeback` prerequisite refuses a pass whose
+workspace turned either off, so the count is deterministic rather than hopeful.
+
+**What the issue asks for is deliberately small and orthogonal**: tighter validation of one query
+parameter on the catalog API, which changes nothing about a valid request. The claim of the spec is
+the LOOP, not the feature, and a change that moved the paging contract spec 03 has just settled would
+make a spec 04 failure unreadable. `src/instructions.ts` carries the issue text and that reasoning.
+
 ## Prerequisites
 
 A local cat-factory that can really do the work, and a cluster to deploy onto.
@@ -127,6 +160,8 @@ of it, one release behind.
 | `model-preset`       | yes     | `ACCEPTANCE_MODEL_PRESET` exists here AND its base model can be dispatched to (see below).                                                                                                                                      |
 | `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                                                                                                                                              |
 | `target-repos`       | yes     | Both named repositories are REACHABLE (linked already, or point-read through `/repos/available`) AND adoptable: no monorepo, nothing homed on another board, and any existing service link is one this pass's own ledger names. |
+| `issue-credential`   | yes     | `ACCEPTANCE_VCS_TOKEN` can reach the backend repository and open an issue on it (which needs its Issues feature switched on).                                                                                                   |
+| `tracker-writeback`  | yes     | The workspace comments on a linked tracker issue when a pull request opens AND closes it when the pull request merges: spec 04's whole claim.                                                                                   |
 | `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                                                                                                                                             |
 | `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                                                                                        |
 | `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                                                                             |
@@ -238,7 +273,11 @@ cluster (a public package, or an `imagePullSecret` you have already installed).
 pnpm --filter @cat-factory/acceptance run configure
 ```
 
-**Start here.** `configure` writes the `.env` below by asking as little as it can. Most of these
+**Start here.** `configure` writes the `.env` below by asking as little as it can. Both tokens it
+cannot resolve arrive with the page that mints them: the API token's screen, and the provider's
+classic-token form carrying the description and the `repo` scope already filled in (it names the
+fine-grained alternative too, which is the better credential and the one GitHub's form cannot
+prefill). Most of these
 are not questions: the deployment knows its own workspace and connected account, the kubeconfig
 knows the cluster, and the preset library knows what a pass can run on, so all of those are
 RESOLVED and reported rather than prompted for. What it does ask is the API token (nothing can mint
@@ -263,6 +302,8 @@ summary names every key it replaced, and anything in the file it does not manage
 | `ACCEPTANCE_REPO_OWNER`                | yes      | The owner both repositories live under. `GET /api/v1/vcs/connection` reports it.                                                                                                  |
 | `ACCEPTANCE_BACKEND_REPO`              | yes      | Name of the empty repository the backend service adopts. **You create it; the suite adopts it.**                                                                                  |
 | `ACCEPTANCE_FRONTEND_REPO`             | yes      | Name of the empty repository the frontend adopts. Must differ from the backend's.                                                                                                 |
+| `ACCEPTANCE_VCS_TOKEN`                 | yes      | Provider token spec 04 files its issue with, as an outside reporter. Classic GitHub: `repo`. Fine-grained: "Issues: Read and write" on the backend repository. Never the API key. |
+| `ACCEPTANCE_VCS_API_BASE`              | no       | The provider's REST base, default `https://api.github.com`. GitHub Enterprise Server is `https://<host>/api/v3`, which no `/api/v1` read publishes.                               |
 | `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                                                                                                     |
 | `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                                                                                                  |
 | `ACCEPTANCE_K3S_CA_PEM`                | one of   | The cluster CA in PEM. Wins over the insecure flag when both are set.                                                                                                             |
@@ -333,6 +374,7 @@ What a resumed pass does with each thing it finds:
 | A run still working               | Re-attach and keep driving it. Nothing is re-filed.                             |
 | A run that already reached `done` | Adopt it.                                                                       |
 | A task the board no longer has    | File it again, saying so.                                                       |
+| An issue the ledger names         | Re-read it from the provider: adopt it if it is there, file a fresh one if not. |
 
 Every one of those states is recorded the moment it is entered rather than when it completes, so
 the window a crash can land in is as small as the ledger write. The one thing recorded that is not
@@ -383,6 +425,11 @@ for the same reason a `fork` is: the choice belongs to a person.
 **3. A wait that expires must say what it last saw.** The vitest timeout is disabled on purpose so
 that `src/deadline.ts` fires first: "timed out after 5400000ms" is true and useless, where "step 3
 `coder` was still working, 4/9 subtasks" separates a parked run from a wedged one from a slow one.
+A wait whose last observation is itself GRADED may hand it back instead of throwing, and
+`waitForIssueSettled` is the one that does: the checks render each claim with its own detail, which
+is more than the single line an expiry message carries. What is banned is ending a wait with
+neither, and a wait must poll for everything its grade asserts or it hands the grader a half-written
+observation and fails what was working.
 
 **4. Every failing claim is reported, not just the first.** A run that both skipped its environment
 and failed CI is one story, and learning the second half on tomorrow's re-run wastes a day per bug.
@@ -409,7 +456,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 
 | Path                         | What                                                                                                                                                                                            |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `acceptance/*.acceptance.ts` | The four specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                 |
+| `acceptance/*.acceptance.ts` | The five specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                 |
 | `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.                                                                                                                       |
 | `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                             |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                          |
@@ -427,7 +474,9 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.                                                                                                                       |
 | `src/decisions.ts`           | The two kinds this suite answers, what is answerable NOW, and the refusals.                                                                                                                     |
 | `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                                                                                                                                   |
-| `src/instructions.ts`        | The briefs, and the reasoning behind the planted defect.                                                                                                                                        |
+| `src/instructions.ts`        | The briefs, the reporter's issue, and the reasoning behind the planted defect.                                                                                                                  |
+| `src/vcsIssues.ts`           | The reporter's own client: filing an issue on the provider and reading it back, provider-keyed. The one thing here that is not the platform.                                                    |
+| `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                          |
 | `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                      |
 | `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`).                                                                                                                      |
 | `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                                                                                                                                 |

@@ -174,3 +174,28 @@ describe('coerceWorld', () => {
 function emptyService() {
   return { blockId: 'blk_x', serviceId: 'blk_x', repoName: 'acme/repo' }
 }
+
+describe('coerceWorld: the reported issue', () => {
+  it('reads back a complete issue record', () => {
+    const issue = {
+      provider: 'github',
+      owner: 'acme',
+      repo: 'catalog-api',
+      number: 7,
+      url: 'https://github.com/acme/catalog-api/issues/7',
+    }
+    expect(coerceWorld({ runId: 'r', intakeIssue: issue })?.intakeIssue).toEqual(issue)
+  })
+
+  it('drops a record missing any part of the address rather than half-reading it', () => {
+    // The number is the part that matters: a record whose issue cannot be addressed would send the
+    // resume path to read `undefined` from the provider, and the honest outcome is a fresh filing.
+    for (const broken of [
+      { provider: 'github', owner: 'acme', repo: 'catalog-api', url: 'https://x/1' },
+      { provider: 'github', owner: 'acme', number: 7, url: 'https://x/1' },
+      { provider: 'github', owner: 'acme', repo: 'catalog-api', number: '7', url: 'https://x/1' },
+    ]) {
+      expect(coerceWorld({ runId: 'r', intakeIssue: broken })?.intakeIssue).toBeNull()
+    }
+  })
+})

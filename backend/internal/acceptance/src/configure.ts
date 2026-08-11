@@ -44,6 +44,7 @@ import {
   mergeEnvFile,
   readAssignments,
   REPO_CREATION_URL,
+  REPORTER_TOKEN_URL,
 } from './configureEnv.ts'
 import { formatRemedy } from './preflight.ts'
 import { presetAvailability, type PresetAvailability } from './presets.ts'
@@ -231,6 +232,11 @@ export async function configure(deps: ConfigureDeps): Promise<ConfigureOutcome> 
   )
   const repos = await resolveRepos(deps, client, { owner, prefix, previous })
   const presetId = await resolvePreset(deps, client, previous.ACCEPTANCE_MODEL_PRESET)
+  const reporterToken = await resolveReporterToken(deps, {
+    owner,
+    repo: repos.backend,
+    stored: previous.ACCEPTANCE_VCS_TOKEN,
+  })
   const cluster = await resolveCluster(deps, previous)
 
   const entries = buildEntries({
@@ -241,6 +247,7 @@ export async function configure(deps: ConfigureDeps): Promise<ConfigureOutcome> 
     prefix,
     repos,
     presetId,
+    reporterToken,
     cluster,
   })
   const merge = mergeEnvFile(existingText, entries)
@@ -561,6 +568,60 @@ async function resolvePreset(
 }
 
 /**
+ * The REPORTER token: kept without being shown, or minted through a prefilled page and pasted.
+ *
+ * Asked for like the API token, and for the same reason (nothing can mint one), with the same rule
+ * that a stored secret is never re-displayed and replacing it is an explicit choice. What this one
+ * adds is the LINK: the page is prefilled with a description and the scope, so the operator's part is
+ * a click and a paste rather than reading the README to learn which boxes to tick.
+ *
+ * It names the narrower credential in the same breath as offering the broader one. A fine-grained
+ * token scoped to Issues on the target repository is the better thing to hold, and GitHub's
+ * fine-grained form takes no query parameters at all, so it cannot be prefilled: saying which is
+ * better and which is prefillable lets the operator choose, where offering one silently would be this
+ * command choosing for them.
+ */
+async function resolveReporterToken(
+  deps: ConfigureDeps,
+  input: { owner: ResolvedOwner; repo: string; stored: string | undefined },
+): Promise<string> {
+  const { io } = deps
+  const slug = `${input.owner.owner}/${input.repo}`
+  if (input.stored) {
+    const replace = await io.confirm(
+      'Replace the stored reporter token (ACCEPTANCE_VCS_TOKEN)?',
+      false,
+    )
+    if (!replace) return input.stored
+  }
+  io.info(
+    `Spec 04 files an issue on ${slug} as an OUTSIDE reporter would, then checks that the platform ` +
+      "delivered it and closed it. That needs a provider token of its own: the workspace's own " +
+      'connection is the credential under test, so using it would make the test circular.',
+  )
+  const url = input.owner.provider
+    ? REPORTER_TOKEN_URL[input.owner.provider](`cat-factory acceptance (${slug})`)
+    : null
+  if (url) {
+    // Printed before it is opened, like the repository link: the github.com host is an assumption
+    // `/api/v1` cannot confirm, and an Enterprise Server operator needs to see that and go elsewhere.
+    io.info(
+      `Mint one here (the description and the \`repo\` scope are prefilled):\n  ${url}\n` +
+        `  A fine-grained token is the better choice if you would rather scope it tightly: ` +
+        `"Issues: Read and write" on ${slug} alone. GitHub's fine-grained form takes no ` +
+        `prefill, so that one is a few more clicks.`,
+    )
+    if (await io.confirm('Open the token page?', true)) await io.openBrowser(url)
+  } else {
+    io.info(
+      `Mint a token on your provider that may read ${slug} and open an issue on it, then paste it ` +
+        'below. Set ACCEPTANCE_VCS_API_BASE too if its API is not at https://api.github.com.',
+    )
+  }
+  return io.secret("Reporter token (files spec 04's issue)")
+}
+
+/**
  * The cluster values, read from the kubeconfig the same way `cat-factory k3s` reads them.
  *
  * Two rules this path owes that the others do not:
@@ -645,6 +706,7 @@ function buildEntries(input: {
   prefix: string
   repos: { backend: string; frontend: string }
   presetId: string
+  reporterToken: string
   cluster: { apiServerUrl: string; token: string }
 }): readonly ManagedEntry[] {
   return [
@@ -693,6 +755,17 @@ function buildEntries(input: {
       comment: ['Prefix for the board frames and tasks; per-person when a board is shared.'],
       key: 'ACCEPTANCE_NAME_PREFIX',
       value: input.prefix,
+    },
+    {
+      comment: [
+        'Provider token spec 04 files its issue with, as an OUTSIDE reporter: the',
+        'workspace connection is what that spec tests, so it cannot be the same',
+        'credential. Needs Issues read+write on the backend repository.',
+        'Set ACCEPTANCE_VCS_API_BASE as well on GitHub Enterprise Server',
+        '(https://<host>/api/v3).',
+      ],
+      key: 'ACCEPTANCE_VCS_TOKEN',
+      value: input.reporterToken,
     },
     {
       comment: ['The k3s cluster the deployer stands per-PR environments up on.'],

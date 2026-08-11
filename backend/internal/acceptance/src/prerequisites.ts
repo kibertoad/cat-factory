@@ -35,6 +35,7 @@ import type {
   ListPublicModelPresetsResponsePreset,
   ListPublicReposResponseRepo,
   ListPublicWiredModelsResponseModel,
+  PrReportRunProvider,
 } from '@cat-factory/sdk'
 import {
   blockedRepoMessage,
@@ -50,6 +51,7 @@ import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3
 import type { Prerequisite, PrerequisiteVerdict, Remedy, RemedyCommand } from './preflight.ts'
 import { usablePresets } from './presets.ts'
 import { describeKeyProblem, type KeyProblem, type PublicIdentity } from './publicApi.ts'
+import { type IssueApi, issueTarget, slug, UNSUPPORTED_PROVIDER_REASON } from './vcsIssues.ts'
 
 export type PreflightContext = {
   config: AcceptanceConfig
@@ -67,6 +69,16 @@ export type PreflightContext = {
    * with a colleague's.
    */
   adoptedServiceIds: readonly string[]
+  /**
+   * The reporter's issue client for a provider, or null when this suite cannot address that
+   * provider's API (`vcsIssues.ts` owns which, and why).
+   *
+   * Supplied rather than built here, for the reason every other collaborator is: `fixtures.ts` holds
+   * the credential, and a unit test drives the gate with no network. Required rather than optional
+   * so a facade that forgot to wire it fails to typecheck instead of reporting a satisfied
+   * prerequisite it never checked.
+   */
+  issueApiFor: (provider: PrReportRunProvider) => IssueApi | null
 }
 
 const satisfied = (detail: string): PrerequisiteVerdict => ({ status: 'satisfied', detail })
@@ -90,6 +102,30 @@ const K3S_DOC = 'backend/docs/local-k3s-environments.md'
 function publicApiRead(config: AcceptanceConfig, path: string, purpose: string): RemedyCommand {
   return {
     run: `curl -sS -H "Authorization: Bearer $CAT_FACTORY_API_KEY" '${config.baseUrl}/api/v1${path}'`,
+    purpose,
+  }
+}
+
+/**
+ * A `curl` that CHANGES something through `/api/v1`, for the remedies whose fix this suite's own key
+ * can carry out.
+ *
+ * Offered only where the alternative is a screen: a workspace setting the public API can now write
+ * is one an operator running a headless pass should not have to open a browser for, and the whole
+ * point of the `tracker-writeback` gate below is that the loop it grades is meant to work with
+ * nobody in the app.
+ */
+function publicApiWrite(
+  config: AcceptanceConfig,
+  method: string,
+  path: string,
+  body: string,
+  purpose: string,
+): RemedyCommand {
+  return {
+    run:
+      `curl -sS -X ${method} -H "Authorization: Bearer $CAT_FACTORY_API_KEY" ` +
+      `-H 'content-type: application/json' -d '${body}' '${config.baseUrl}/api/v1${path}'`,
     purpose,
   }
 }
@@ -167,6 +203,49 @@ const KEY_REMEDIES: Record<
     ],
     commands: [publicApiRead(config, '/me', 'confirm the new key is admin on this workspace')],
   }),
+}
+
+/**
+ * The three ways the reporter credential is unusable, and what each one is.
+ *
+ * `Record`s over the closed verdict vocabulary rather than a `switch`, exactly as `KEY_REMEDIES`
+ * above: a fourth verdict added to `IssueCredentialVerdict` then fails to compile here instead of
+ * quietly inheriting a message written for a different fault. `ready` and `unreadable` are handled
+ * at the call site (one is not a problem, the other is not a verdict), which is why they are absent.
+ */
+type IssueCredentialFault = 'unauthenticated' | 'unreachable' | 'issues-disabled'
+
+const ISSUE_CREDENTIAL_PROBLEMS: Record<IssueCredentialFault, (repo: string) => string> = {
+  unauthenticated: () =>
+    'the provider rejected ACCEPTANCE_VCS_TOKEN outright (401), so it is expired, revoked, or not ' +
+    'a token for this host',
+  unreachable: (repo) =>
+    `the reporter credential cannot see ${repo} (404). A repository that does not exist answers ` +
+    'exactly as one the token is not granted, so this names both',
+  'issues-disabled': (repo) =>
+    `${repo} has its Issues feature switched off, so no credential can open an issue on it`,
+}
+
+const ISSUE_CREDENTIAL_STEPS: Record<IssueCredentialFault, (repo: string) => readonly string[]> = {
+  unauthenticated: () => [
+    'Mint a new token and export it as ACCEPTANCE_VCS_TOKEN. A token scope cannot be widened in ' +
+      'place, and an expired one cannot be renewed.',
+    'GitHub classic: the `repo` scope. Fine-grained: "Issues: Read and write" on the target ' +
+      'repository, which is the narrower and better choice.',
+    '`pnpm --filter @cat-factory/acceptance run configure` opens the minting page with the ' +
+      'description and scopes prefilled.',
+  ],
+  unreachable: (repo) => [
+    `Check that ${repo} exists under ACCEPTANCE_REPO_OWNER: it is the repository the backend ` +
+      'service adopts, and the reporter files against the same one.',
+    'Grant this token access to it. A fine-grained token lists repositories explicitly, so one ' +
+      'minted for the other repository answers exactly like a repository that is not there.',
+    'A classic token needs `repo` to see a private repository at all.',
+  ],
+  'issues-disabled': (repo) => [
+    `Turn Issues on for ${repo}: its Settings, "Features", tick "Issues".`,
+    'Nothing else about the pass needs it, so this is a one-click fix rather than a re-mint.',
+  ],
 }
 
 export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
@@ -751,6 +830,131 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       return satisfied(
         `${[linkedNote, pendingNote].filter((note) => note !== '').join('; ')} (whether either is ` +
           `EMPTY is not readable over /api/v1; a repository with content is scaffolded on top of)`,
+      )
+    },
+  },
+  {
+    id: 'issue-credential',
+    what: "ACCEPTANCE_VCS_TOKEN can open an issue on the repository spec 04's reporter files against",
+    disposition: 'required',
+    check: async ({ client, config, issueApiFor }) => {
+      // Spec 04's premise is an issue filed by somebody OUTSIDE this deployment, so the credential
+      // that files it is not the workspace's connection and nothing checked so far says anything
+      // about it. Checked here rather than discovered at the top of spec 04, because by then the
+      // pass has already scaffolded two repositories and shipped two features.
+      const target = issueTarget(config)
+      const { connection } = await client.vcs.getConnection()
+      if (!connection) {
+        // `vcs-connection` above has already refused this, with the remedy. Repeating its
+        // instructions would be a second, staler copy of them; what this one owes is not to claim a
+        // verdict it cannot reach.
+        return {
+          status: 'unknown',
+          probeFailure:
+            'the workspace has no VCS connection, so which provider the reporter should file on ' +
+            'is unknown (see vcs-connection above)',
+          remedy: {
+            steps: [
+              'Fix vcs-connection first: the provider decides which API this credential is even ' +
+                'checked against.',
+            ],
+          },
+        }
+      }
+      const api = issueApiFor(connection.provider)
+      if (!api) {
+        return unsatisfied(
+          `this suite cannot file an issue on '${connection.provider}', which is what this ` +
+            `workspace is connected to, so spec 04 has no way to act as the reporter`,
+          {
+            steps: [...UNSUPPORTED_PROVIDER_REASON[connection.provider]],
+            docs: 'backend/internal/acceptance/README.md',
+          },
+        )
+      }
+      const verdict = await api.probe(target)
+      if (verdict.status === 'ready') {
+        return satisfied(
+          `the reporter credential reaches ${slug(target)} and it accepts issues ` +
+            `(via ${config.vcs.apiBaseUrl})`,
+        )
+      }
+      if (verdict.status === 'unreadable') {
+        return {
+          status: 'unknown',
+          probeFailure:
+            `${config.vcs.apiBaseUrl} could not be read (${verdict.detail}), so whether the ` +
+            `reporter credential works is unknown rather than answered no`,
+          remedy: {
+            steps: [
+              `Check that ${config.vcs.apiBaseUrl} is reachable from here (a proxy, a VPN, or an ` +
+                'Enterprise Server host that is down).',
+              'ACCEPTANCE_VCS_API_BASE overrides the base: an Enterprise Server API lives at ' +
+                'https://<host>/api/v3, which nothing in /api/v1 publishes.',
+            ],
+          },
+        }
+      }
+      return unsatisfied(ISSUE_CREDENTIAL_PROBLEMS[verdict.status](slug(target)), {
+        steps: ISSUE_CREDENTIAL_STEPS[verdict.status](slug(target)),
+        commands: [
+          {
+            run: `curl -sS -o /dev/null -w '%{http_code}\\n' -H "Authorization: Bearer $ACCEPTANCE_VCS_TOKEN" '${config.vcs.apiBaseUrl}/repos/${target.owner}/${target.repo}'`,
+            purpose:
+              'read the target repository with the reporter credential: 200 is ready, 401 is the ' +
+              'token, 404 is the repository or its access',
+          },
+        ],
+      })
+    },
+  },
+  {
+    id: 'tracker-writeback',
+    what: 'the workspace writes back to a linked tracker issue when its pull request opens and merges',
+    disposition: 'required',
+    check: async ({ client, config }) => {
+      // The two actions spec 04's final claim is made of. Both are ON for a workspace that has never
+      // configured them (`DEFAULT_TRACKER_WRITEBACK`), so this gate fires only where somebody
+      // deliberately turned one off, and it then refuses BEFORE the pass spends an afternoon
+      // delivering an issue nobody will close.
+      const { writeback, updatedAt } = await client.tracker.getWriteback()
+      const chosen = updatedAt === null ? 'the deployment defaults' : "this workspace's own setting"
+      const off = [
+        ...(writeback.resolveOnMerge ? [] : ['resolveOnMerge']),
+        ...(writeback.commentOnPrOpen ? [] : ['commentOnPrOpen']),
+      ]
+      if (off.length === 0) {
+        return satisfied(
+          `comment-on-open and resolve-on-merge are both on, from ${chosen}` +
+            (writeback.questionsOnPark
+              ? ''
+              : ' (questionsOnPark is off, which spec 04 does not use)'),
+        )
+      }
+      return unsatisfied(
+        `${off.join(' and ')} ${off.length === 1 ? 'is' : 'are'} off for this workspace, from ` +
+          `${chosen}. Spec 04 asserts the platform CLOSED the issue it delivered and commented on ` +
+          `it at both edges of the pull request's life, and neither happens with these off.`,
+        {
+          steps: [
+            'Turn both on for this workspace. The command below does it over the same API the ' +
+              'suite uses; the SPA equivalent is Workspace settings, "Issue tracker".',
+            'It is a MERGE, so it moves only the two actions it names and leaves the filing ' +
+              'selection and questionsOnPark as they are.',
+            'Both are on by default, so a workspace reporting them off had them turned off ' +
+              'deliberately: prefer a board of your own over re-pointing one somebody relies on.',
+          ],
+          commands: [
+            publicApiWrite(
+              config,
+              'PATCH',
+              '/tracker/writeback',
+              '{"writeback":{"commentOnPrOpen":true,"resolveOnMerge":true}}',
+              'turn both writeback actions on for this workspace',
+            ),
+            publicApiRead(config, '/tracker/writeback', 'read the disposition back'),
+          ],
+        },
       )
     },
   },
