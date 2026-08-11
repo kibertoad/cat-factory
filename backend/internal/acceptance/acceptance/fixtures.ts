@@ -5,6 +5,11 @@
 // to each other live in the on-disk ledger (`src/world.ts`) and this only memoises what is cheap
 // to rebuild, and it is also why each file re-reads the ledger on construction rather than
 // trusting an object a previous file left behind.
+//
+// Which is exactly why the pass's RUN ID is injected rather than resolved here. It is the ledger's
+// key, so nothing per-file may decide it: minted here, each spec opened a ledger of its own and the
+// chain between them silently became five one-spec passes. `globalSetup` settles it once in the main
+// process; `requirePassRunId` refuses the absence rather than quietly minting one back.
 
 import type { CatFactoryClient, PrReportRunProvider } from '@cat-factory/sdk'
 import { inject } from 'vitest'
@@ -22,7 +27,7 @@ import {
 import { PREREQUISITES } from '../src/prerequisites.ts'
 import { createClient } from '../src/publicApi.ts'
 import { type IssueApi, ISSUE_APIS } from '../src/vcsIssues.ts'
-import { resolveRunId, WorldStore } from '../src/world.ts'
+import { findPassesNaming, requirePassRunId, WorldStore } from '../src/world.ts'
 
 export type Harness = {
   config: AcceptanceConfig
@@ -54,7 +59,7 @@ let cached: Harness | null = null
 function currentHarness(): Harness {
   if (cached) return cached
   const config = requireConfig(process.env)
-  const runId = resolveRunId(process.env, config.stateDir)
+  const runId = requirePassRunId(inject('acceptanceRunId'))
   const world = new WorldStore(config.stateDir, runId)
   // Seeded from the ONE ask in `globalSetup`, which runs in the main process: this module graph is
   // per spec FILE, so a password collected here could never be reached by the next spec, and asking
@@ -123,6 +128,12 @@ export function preflightReport(): Promise<PreflightReport> {
       adoptedServiceIds: [world.value.backend, world.value.frontend].flatMap((record) =>
         record ? [record.serviceId] : [],
       ),
+      // The other half of that comparison: when a leftover frame is NOT this pass's, the remedy is
+      // the run id of the pass it does belong to, and the ledgers on disk are the only place that
+      // mapping exists. Read at refusal time rather than up front, so a satisfied pass reads no
+      // ledger but its own.
+      passesNaming: (serviceIds) =>
+        findPassesNaming(config.stateDir, serviceIds, world.value.runId),
       issueApiFor: (provider) => issueApiFor(config, provider),
     },
     {

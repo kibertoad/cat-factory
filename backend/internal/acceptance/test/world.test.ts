@@ -2,7 +2,15 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { coerceWorld, readLatestRunId, readWorld, resolveRunId, WorldStore } from '../src/world.ts'
+import {
+  coerceWorld,
+  findPassesNaming,
+  readLatestRunId,
+  readWorld,
+  requirePassRunId,
+  resolveRunId,
+  WorldStore,
+} from '../src/world.ts'
 
 // The ledger is what makes a re-run resume instead of re-scaffolding two repositories, so the
 // properties tested here are the ones whose failure costs an afternoon of real model spend:
@@ -28,7 +36,7 @@ describe('resolveRunId', () => {
 
   it("resolves 'latest' through the pointer the previous pass wrote", () => {
     const dir = scratch()
-    new WorldStore(dir, 'run-7')
+    new WorldStore(dir, 'run-7').patch({ backend: emptyService() })
     expect(resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, dir)).toBe('run-7')
   })
 
@@ -39,13 +47,43 @@ describe('resolveRunId', () => {
   })
 })
 
+describe('requirePassRunId', () => {
+  it('takes the id the pass was given', () => {
+    expect(requirePassRunId('20260811151012')).toBe('20260811151012')
+  })
+
+  it('refuses an absent one rather than minting a ledger no other spec can read', () => {
+    // The regression this guards: resolved per spec FILE, five specs opened five ledgers and the
+    // chain between them became five one-spec passes, which surfaces four specs later as "the
+    // ledger has no 'backend'". A fallback here is what made that silent.
+    for (const missing of [undefined, '', '   ']) {
+      expect(() => requirePassRunId(missing)).toThrow(/globalSetup/)
+    }
+  })
+})
+
 describe('readLatestRunId', () => {
-  it('is written when a pass OPENS, so an interrupted one is still resumable', () => {
-    // Written on open rather than on completion for exactly this case: the pass an operator needs
-    // to resume is by definition one that did not finish.
+  it('names the pass as soon as it has recorded a FACT, so an interrupted one is resumable', () => {
+    // Not on completion (the pass worth resuming is one that did not finish) and not on OPEN: see
+    // the next case for what opening used to cost.
     const dir = scratch()
-    new WorldStore(dir, 'run-9')
+    const store = new WorldStore(dir, 'run-9')
+    expect(readLatestRunId(dir)).toBeNull()
+    store.patch({
+      scaffoldBackend: { taskId: 'tsk_1', runId: null, pullRequestUrl: null, answeredKinds: [] },
+    })
     expect(readLatestRunId(dir)).toBe('run-9')
+  })
+
+  it('is left alone by a pass that creates nothing, which is the refused-at-preflight case', () => {
+    // The bug this pins: a fresh attempt refused by a prerequisite pointed `latest` at its own empty
+    // ledger, so the half-built pass whose leftovers caused the refusal became reachable only by an
+    // id nobody had written down, and the `ACCEPTANCE_RUN_ID=latest` the refusal prints was a dead end.
+    const dir = scratch()
+    new WorldStore(dir, 'run-with-work').patch({ backend: emptyService() })
+    new WorldStore(dir, 'run-refused-at-preflight')
+    expect(readLatestRunId(dir)).toBe('run-with-work')
+    expect(resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, dir)).toBe('run-with-work')
   })
 
   it('treats an absent or malformed pointer as no pass', () => {
@@ -53,6 +91,39 @@ describe('readLatestRunId', () => {
     expect(readLatestRunId(dir)).toBeNull()
     writeFileSync(join(dir, 'latest.json'), 'not json', 'utf8')
     expect(readLatestRunId(dir)).toBeNull()
+  })
+})
+
+describe('findPassesNaming', () => {
+  it('names the pass whose ledger holds a leftover service, which `latest` cannot', () => {
+    // What turns "a frame is in the way" into an instruction. The refused attempt afterwards is the
+    // pass `latest` would have offered, and it owns nothing.
+    const dir = scratch()
+    new WorldStore(dir, 'owner-pass').patch({
+      backend: { blockId: 'blk_api', serviceId: 'blk_api', repoName: 'acme/api' },
+      frontend: { blockId: 'blk_web', serviceId: 'blk_web', repoName: 'acme/web' },
+    })
+    new WorldStore(dir, 'later-pass').patch({
+      backend: { blockId: 'blk_other', serviceId: 'blk_other', repoName: 'acme/other' },
+    })
+    expect(findPassesNaming(dir, ['blk_web'], 'this-pass')).toEqual(['owner-pass'])
+    expect(findPassesNaming(dir, ['blk_api', 'blk_other'], 'this-pass')).toEqual([
+      'later-pass',
+      'owner-pass',
+    ])
+  })
+
+  it('never names the asking pass, and answers empty when nothing on disk owns it', () => {
+    const dir = scratch()
+    new WorldStore(dir, 'mine').patch({ backend: emptyService() })
+    expect(findPassesNaming(dir, ['blk_x'], 'mine')).toEqual([])
+    expect(findPassesNaming(dir, ['blk_nobody'], 'this-pass')).toEqual([])
+    // Asking about nothing reads no ledger at all, so a satisfied pass costs no directory scan.
+    expect(findPassesNaming(dir, [], 'this-pass')).toEqual([])
+  })
+
+  it('reads a state directory that does not exist as no passes', () => {
+    expect(findPassesNaming(join(scratch(), 'never-created'), ['blk_x'], 'mine')).toEqual([])
   })
 })
 

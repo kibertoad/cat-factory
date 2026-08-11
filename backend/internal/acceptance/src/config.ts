@@ -241,13 +241,25 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
           trimmed(env.ACCEPTANCE_VCS_API_BASE) ?? 'https://api.github.com',
         ),
       },
-      stateDir: trimmed(env.ACCEPTANCE_STATE_DIR) ?? '.acceptance',
+      stateDir: stateDirFrom(env),
       // 90 minutes. A `pl_build` run with a design pass, a container coder, two testers and a
       // real CI gate routinely takes 30–45; the budget is generous because the thing it is
       // guarding against is a run that has STOPPED, not one that is slow.
       runBudgetMs: runBudget ?? 90 * 60 * 1000,
     },
   }
+}
+
+/**
+ * Where a pass keeps its ledger and journal, from the environment alone.
+ *
+ * Separate from `resolveConfig` because two callers need it WITHOUT the rest: the status CLI, which
+ * takes no API key and no cluster, and `globalSetup`, which resolves the pass's run id before the
+ * preflight exists to report a half-configured deployment. Both had the default spelled out again;
+ * a third spelling of `.acceptance` is a state directory an operator cannot find.
+ */
+export function stateDirFrom(env: EnvRecord): string {
+  return trimmed(env.ACCEPTANCE_STATE_DIR) ?? '.acceptance'
 }
 
 /** Resolve or throw, with every problem in one message. */

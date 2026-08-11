@@ -458,9 +458,13 @@ are asked from somewhere else. So every observation is appended to a journal bes
 and a second command reduces the two into an answer:
 
 ```sh
-pnpm --filter @cat-factory/acceptance run status          # the most recent pass
+pnpm --filter @cat-factory/acceptance run status          # the most recent pass that created something
 pnpm --filter @cat-factory/acceptance run status 20260809175530
 ```
+
+Named with no run id it follows the same pointer `ACCEPTANCE_RUN_ID=latest` does, so it names the
+most recent pass that recorded a FACT rather than the most recent process started. A pass still in
+its preflight has created nothing to report; the run id in its own banner is what asks about it.
 
 A phase re-entered by a later attempt at the same run id is re-opened and re-timed from that
 entry, so what the report shows is the CURRENT pass rather than a phase that reads `done` under
@@ -494,10 +498,22 @@ $env:ACCEPTANCE_RUN_ID = 'latest'; try { pnpm --filter @cat-factory/acceptance r
 Or the `ACCEPTANCE_RUN_ID` line in the `.env`, which needs no dialect at all; see
 [Configuration](#configuration) for what each form costs.
 
-`latest` resolves through a pointer written when a pass OPENS, not when it finishes: the pass
-worth resuming is by definition one that did not finish. Asking for `latest` when no pass exists
-is refused rather than quietly starting a new one, because those are opposite intents and the
-wrong one spends an afternoon.
+The run id is settled ONCE per pass, in `acceptance/globalSetup.ts`, and handed to every spec.
+It cannot be resolved per spec: vitest gives each spec file its own module graph, so an id minted
+there is an id per FILE, and the id is the ledger's key. That is the shape this replaced, and it
+made a fresh pass structurally unable to finish: five specs opened five ledgers a second apart,
+spec 02 could not read the two services spec 01 had just adopted, and `status` had five journals to
+choose between.
+
+`latest` resolves through a pointer written when a pass records its first FACT, not when it opens
+and not when it finishes. Not on finishing, because the pass worth resuming is by definition one
+that did not finish; not on opening, because the pass that opens a ledger and creates nothing is
+the common one (a fresh attempt refused by a prerequisite), and pointing `latest` at it is how the
+half-built pass whose leftovers caused the refusal became reachable only by an id nobody had
+written down. A refusal over leftover state therefore names the run id of the pass whose ledger
+holds it, rather than offering `latest`. Asking for `latest` when no pass exists is refused rather
+than quietly starting a new one, because those are opposite intents and the wrong one spends an
+afternoon.
 
 What a resumed pass does with each thing it finds:
 
@@ -592,7 +608,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | Path                         | What                                                                                                                                                                                                                             |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `acceptance/*.acceptance.ts` | The five specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                                                  |
-| `acceptance/globalSetup.ts`  | Wiring for the ONE personal-password ask: the real config, client and terminal, in the main process before any worker exists.                                                                                                    |
+| `acceptance/globalSetup.ts`  | The two facts settled once for the whole pass, in the main process before any worker exists: the RUN ID, and the personal-password ask (the real config, client and terminal).                                                   |
 | `src/personalPasswordAsk.ts` | What that ask decides, and what it does when it cannot: degrade and continue, except for a person declining. Unit-tested.                                                                                                        |
 | `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.                                                                                                                                                        |
 | `src/envFile.ts`             | The `.env` beside the vitest config, read the same way by the config and by `globalSetup`. Pure.                                                                                                                                 |

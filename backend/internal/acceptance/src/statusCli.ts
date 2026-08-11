@@ -9,12 +9,13 @@
 // honours, so an operator can ask where a pass got to without holding an API key.
 
 import { readJournal } from './journal.ts'
+import { stateDirFrom } from './config.ts'
 import { formatDuration } from './deadline.ts'
 import { formatPassStatus, summarisePass } from './status.ts'
 import { emptyWorld, readLatestRunId, readWorld, resolveStateDir } from './world.ts'
 import { join } from 'node:path'
 
-const stateDir = resolveStateDir(process.env.ACCEPTANCE_STATE_DIR?.trim() || '.acceptance')
+const stateDir = resolveStateDir(stateDirFrom(process.env))
 const requested = process.argv[2]?.trim() || process.env.ACCEPTANCE_RUN_ID?.trim()
 const runId = requested && requested !== 'latest' ? requested : readLatestRunId(stateDir)
 

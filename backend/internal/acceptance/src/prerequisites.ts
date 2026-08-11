@@ -77,6 +77,16 @@ export type PreflightContext = {
    */
   adoptedServiceIds: readonly string[]
   /**
+   * The run ids of OTHER passes on disk whose ledgers name any of these services.
+   *
+   * What makes "resume that pass instead" an instruction rather than a suggestion. Both checks that
+   * refuse over leftover state used to offer `latest`, and `latest` is the wrong pass the moment
+   * anything ran after the one holding the work: typically the operator's own refused attempt from
+   * a minute ago. A lookup rather than a value because it costs a directory read, and a satisfied
+   * pass should read no ledger but its own.
+   */
+  passesNaming: (serviceIds: readonly string[]) => readonly string[]
+  /**
    * The reporter's issue client for a provider, or null when this suite cannot address that
    * provider's API (`vcsIssues.ts` owns which, and why).
    *
@@ -137,6 +147,56 @@ function publicApiWrite(
       `-H 'content-type: application/json' -d '${body}' ` +
       shellQuoted(`${config.baseUrl}/api/v1${path}`),
     purpose,
+  }
+}
+
+/** Read a pass without touching the deployment: the first thing to run when leftovers are in the way. */
+const statusRead: RemedyCommand = {
+  run: 'pnpm --filter @cat-factory/acceptance run status',
+  purpose: 'show the most recent pass and its run id, without touching the deployment',
+}
+
+/**
+ * "Resume the pass that owns this instead", as a step plus the command that does it.
+ *
+ * Shared by the two checks that refuse over another pass's leftover state, so both name the SAME
+ * pass: one reasons about repository links and the other about frame titles, and an operator handed
+ * two different remedies for one board has to work out which is true.
+ *
+ * A NAMED pass rather than `latest`, which is what this replaced. `latest` follows the pointer to
+ * whichever pass last recorded a fact, and by the time anyone reads a refusal that is routinely not
+ * the pass holding the work; the id is the one thing the operator cannot recover from the board.
+ * Naming no pass is stated rather than hidden: it means the state was built somewhere else (another
+ * machine, another operator, another `ACCEPTANCE_STATE_DIR`), and resuming is not on the table.
+ */
+function resumeTheOwningPass(passes: readonly string[]): {
+  step: string
+  commands: readonly RemedyCommand[]
+} {
+  // The LAST id, which for a minted one (a timestamp) is the most recent attempt. Every match is
+  // named in the step, so a hand-named id that sorts oddly still puts the choice in front of a
+  // reader rather than resolving it silently.
+  const owner = passes.at(-1)
+  if (!owner) {
+    return {
+      step:
+        'No ledger under ACCEPTANCE_STATE_DIR names it, so it was built by another operator, ' +
+        'another machine, or a pass whose state directory has since been cleared. Nothing here can ' +
+        'be resumed onto it.',
+      commands: [statusRead],
+    }
+  }
+  return {
+    step:
+      passes.length === 1
+        ? `Pass ${owner} is the one whose ledger names it: RESUME that pass rather than starting ` +
+          `over, and the leftover state becomes the state it continues from.`
+        : `Passes ${passes.join(' and ')} name it. RESUME one of them rather than starting over ` +
+          `(${owner} is the most recent), and the leftover state becomes what it continues from.`,
+    commands: [
+      { run: resumeInvocation(owner), purpose: `resume pass ${owner}, which owns that service` },
+      statusRead,
+    ],
   }
 }
 
@@ -713,7 +773,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'target-repos',
     what: 'both repositories this pass adopts are reachable, and neither is already in use',
     disposition: 'required',
-    check: async ({ client, config, adoptedServiceIds }) => {
+    check: async ({ client, config, adoptedServiceIds, passesNaming }) => {
       const repoRead = publicApiRead(
         config,
         '/repos',
@@ -864,6 +924,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           : [],
       )
       if (taken.length > 0) {
+        const owning = resumeTheOwningPass(passesNaming(taken.map((entry) => entry.serviceId)))
         return unsatisfied(
           `${taken.map((entry) => `'${entry.slug}' already backs service ${entry.serviceId}`).join(', ')}` +
             `, which this pass's ledger does not name` +
@@ -875,18 +936,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
                 `its scaffold run would open a pull request against a tree that is already built.`),
           {
             steps: [
-              'If that service is from an earlier pass of yours, RESUME it rather than starting ' +
-                'over: the ledger it left behind is what makes the two tellable apart.',
+              owning.step,
               'Otherwise point ACCEPTANCE_BACKEND_REPO / ACCEPTANCE_FRONTEND_REPO at two fresh ' +
                 'empty repositories, or delete the service frame that holds this one.',
             ],
-            commands: [
-              {
-                run: resumeInvocation('latest'),
-                purpose: 'resume the most recent pass instead of starting a second one',
-              },
-              repoRead,
-            ],
+            commands: [...owning.commands, repoRead],
           },
         )
       }
@@ -1112,7 +1166,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     id: 'board-titles',
     what: 'this pass will not adopt or collide with another pass’s service frames',
     disposition: 'required',
-    check: async ({ client, config, serviceTitles, adoptedServiceIds }) => {
+    check: async ({ client, config, serviceTitles, adoptedServiceIds, passesNaming }) => {
       const { services } = await client.services.list()
       const taken = serviceTitles.filter((title) =>
         services.some((service) => service.title === title),
@@ -1131,14 +1185,20 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
             : `neither '${serviceTitles.join("' nor '")}' exists on this board yet`,
         )
       }
+      // The frames' own ids, which is how a TITLE reaches a ledger: the ledger records service ids
+      // and never titles, so the pass to resume is found through what the board just answered.
+      const owning = resumeTheOwningPass(
+        passesNaming(
+          services.flatMap((service) => (taken.includes(service.title) ? [service.serviceId] : [])),
+        ),
+      )
       return unsatisfied(
         `this board already has ${taken.map((title) => `'${title}'`).join(' and ')}, but this ` +
           `pass’s ledger names no services. A fresh pass would raise a SECOND frame under the ` +
           `same title, and a later resume would have no way to tell the two apart.`,
         {
           steps: [
-            'If those frames belong to an earlier pass of yours, RESUME it rather than starting ' +
-              'over: the ledger it left behind is what makes the two tellable apart.',
+            owning.step,
             `If they belong to someone else, take a prefix of your own (today's is ` +
               `'${config.namePrefix}'), which renames every service frame and task this pass ` +
               'creates. The repository names are ACCEPTANCE_BACKEND_REPO / ' +
@@ -1146,14 +1206,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
             'Otherwise delete the leftover frames from the board and re-run.',
           ],
           commands: [
-            {
-              run: 'pnpm --filter @cat-factory/acceptance run status',
-              purpose: 'show the most recent pass and its run id, without touching the deployment',
-            },
-            {
-              run: resumeInvocation('latest'),
-              purpose: 'resume the most recent pass instead of starting a second one',
-            },
+            ...owning.commands,
             {
               run: perPersonPrefixInvocation(config.namePrefix),
               purpose: 'take a per-person prefix, so two people share one board without colliding',

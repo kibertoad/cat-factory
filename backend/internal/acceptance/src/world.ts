@@ -11,7 +11,7 @@
 // is the deployment, and every spec re-reads it (the ledger holds ids, never statuses); the
 // ledger's only job is to remember which ids to re-read.
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -23,13 +23,20 @@ export function resolveStateDir(stateDir: string): string {
 }
 
 /**
- * The pointer to the most recent pass, so `ACCEPTANCE_RUN_ID=latest` and the status script have
- * something to resolve. Rewritten whenever a pass opens its ledger.
+ * The pointer to the most recent pass that CREATED something, so `ACCEPTANCE_RUN_ID=latest` and
+ * the status script have something to resolve. Rewritten on every ledger patch.
  *
  * A pointer rather than a default: resuming stays an EXPLICIT act. A suite that silently picked
  * up the previous pass would turn "run the acceptance suite" into "continue whatever half-built
  * thing is lying around", and the ledger's whole value is that a resume is something an operator
  * chose after reading why the last one stopped.
+ *
+ * Written on the first FACT rather than when a pass opens its ledger. The two differ for exactly
+ * the pass that creates nothing, and that pass is the common one: a fresh attempt refused by a
+ * prerequisite. Pointed at on OPEN, it overwrote the pointer to the half-built pass whose leftover
+ * services are why the refusal fired, so the `ACCEPTANCE_RUN_ID=latest` the refusal itself prints
+ * resolved to an empty ledger and the pass holding the work became reachable only by an id nobody
+ * had written down. A pass that died mid-run is unaffected: it recorded its task before starting it.
  */
 const LATEST_POINTER = 'latest.json'
 
@@ -137,6 +144,12 @@ export function emptyWorld(runId: string): World {
 /**
  * The run id for this pass: `ACCEPTANCE_RUN_ID` when set, else a fresh one.
  *
+ * **Resolved ONCE per pass, in the main process** (`acceptance/globalSetup.ts`), and handed to the
+ * workers. Never called from a spec: vitest gives every spec FILE its own module graph, so a minted
+ * id is per file, and the id is the KEY to the ledger the files pass facts through. Called there,
+ * five specs opened five ledgers a second apart, spec 02 could not read the services spec 01 had
+ * just adopted, and the pass left five journals for `status` to pick one of.
+ *
  * Setting it is how a re-run RESUMES rather than starting a second pass. The literal `latest`
  * resolves through the pointer the previous pass wrote, because the id an operator needs is
  * otherwise recoverable only from the stdout of the run that just died: `latest` is what makes
@@ -164,6 +177,64 @@ export function resolveRunId(
   // Seconds granularity, no separators: it names this pass's ledger and journal files, so it has
   // to be safe in a filename on every platform an operator runs this from.
   return new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
+}
+
+/**
+ * The run id a worker was handed, or a refusal naming who was supposed to hand it over.
+ *
+ * A spec may not resolve one for itself (see `resolveRunId`), and the failure of doing so is
+ * invisible: every file works, each against a ledger of its own, and the pass fails four specs later
+ * with "the ledger has no 'backend'". So the absence is a REFUSAL rather than a fallback to minting
+ * one, which is exactly the shape that regressed.
+ */
+export function requirePassRunId(injected: string | undefined): string {
+  const runId = injected?.trim()
+  if (runId) return runId
+  throw new Error(
+    `This spec was not handed the pass's run id. It comes from acceptance/globalSetup.ts, which ` +
+      `resolves it once in the main process and provides it to every worker: check that ` +
+      `vitest.acceptance.config.ts still names that hook in 'globalSetup'. It is deliberately not ` +
+      `minted here, because vitest gives each spec file its own module graph and a per-file run id ` +
+      `is a per-file ledger, which no other spec can read.`,
+  )
+}
+
+/**
+ * The run ids of OTHER passes whose ledgers name any of these services.
+ *
+ * What turns "a leftover frame is in the way" into an instruction: the pass to resume is a run id,
+ * and the only place that mapping exists is the ledgers on disk. Without it a refusal can only offer
+ * `latest`, which is the wrong pass as soon as anything ran after the one holding the work.
+ *
+ * Sorted, which orders them chronologically for a minted id (a timestamp) and arbitrarily for a
+ * hand-named one; a caller names every match rather than picking one, so the order is presentation.
+ */
+export function findPassesNaming(
+  stateDir: string,
+  serviceIds: readonly string[],
+  exclude: string,
+): readonly string[] {
+  const wanted = new Set(serviceIds)
+  if (wanted.size === 0) return []
+  const dir = resolveStateDir(stateDir)
+  let entries: readonly string[]
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    // silent-catch-ok: no state directory is the normal state before any pass has recorded a fact.
+    return []
+  }
+  return entries
+    .filter((name) => name !== LATEST_POINTER && name.endsWith('.json'))
+    .flatMap((name) => {
+      const world = readWorld(join(dir, name))
+      return world && world.runId !== exclude ? [world] : []
+    })
+    .filter((world) =>
+      [world.backend, world.frontend].some((service) => service && wanted.has(service.serviceId)),
+    )
+    .map((world) => world.runId)
+    .sort()
 }
 
 /** The run id the most recent pass recorded, or null. Total: an unreadable pointer is "none". */
@@ -195,13 +266,6 @@ export class WorldStore {
     this.#path = join(this.#dir, `${runId}.json`)
     mkdirSync(this.#dir, { recursive: true })
     this.#world = readWorld(this.#path) ?? emptyWorld(runId)
-    // Written on OPEN rather than on completion: the pass an operator most needs to resume is
-    // the one that died, and a pointer written at the end would name only passes that finished.
-    writeFileSync(
-      join(this.#dir, LATEST_POINTER),
-      `${JSON.stringify({ runId, ledger: this.#path }, null, 2)}\n`,
-      'utf8',
-    )
   }
 
   get path(): string {
@@ -226,6 +290,14 @@ export class WorldStore {
   patch(patch: Partial<World>): World {
     this.#world = { ...this.#world, ...patch }
     writeFileSync(this.#path, `${JSON.stringify(this.#world, null, 2)}\n`, 'utf8')
+    // The pointer rides every patch rather than the first one: there is no first-write flag to keep
+    // right across the several processes that open one pass's ledger, and re-stating a pointer to
+    // the pass that is writing anyway costs one small synchronous write per fact recorded.
+    writeFileSync(
+      join(this.#dir, LATEST_POINTER),
+      `${JSON.stringify({ runId: this.#world.runId, ledger: this.#path }, null, 2)}\n`,
+      'utf8',
+    )
     return this.#world
   }
 

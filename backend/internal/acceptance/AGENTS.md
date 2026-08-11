@@ -56,7 +56,8 @@ process and nothing else writes it down, and the header rides EVERY request thro
 `fetch` seam rather than being attached at the call that first needed it: answering a park re-mints
 the run's activation server-side, so a pass needs it for hours after the start.
 
-**Asked ONCE per pass, in `acceptance/globalSetup.ts`.** Vitest isolates every spec file in its own
+**Asked ONCE per pass, in `acceptance/globalSetup.ts`, which is also where the pass's run id is
+settled** (see the resume section below for why the two share a hook). Vitest isolates every spec file in its own
 module graph and its own worker process, so a holder built in `fixtures.ts` cannot outlive the file
 that built it: asked lazily on the first `428`, a pass is asked once per FILE that starts or answers a
 run, four times, each prompt drawn over a live reporter. `globalSetup` runs in the main process before
@@ -102,6 +103,17 @@ grades the workspace default, and a pin would make that gate a check on a policy
 journal into where a pass got to, opening no connection to the deployment.
 `ACCEPTANCE_RUN_ID=<id|latest>` resumes, adopting or re-attaching to whatever the previous attempt
 left rather than re-filing it. The README tables both.
+
+Two traps, both learned from the same broken pass. **The RUN ID is settled in `globalSetup` and
+injected**, never resolved in a spec: it is the KEY to the ledger the specs pass facts through, and
+per module graph means per FILE, so five specs opened five ledgers a second apart and every fact
+spec 01 recorded was invisible to spec 02. `requirePassRunId` refuses an absent one rather than
+minting a replacement, because minting one is exactly the shape that made this silent. **The
+`latest` pointer is written on the first FACT**, not when a ledger opens: a fresh attempt refused by
+a prerequisite creates nothing, and pointing `latest` at it overwrites the pointer to the half-built
+pass whose leftovers caused the refusal, leaving it reachable only by an id nobody wrote down. Which
+is also why the two checks that refuse over leftover state name the OWNING pass's run id
+(`findPassesNaming`) instead of offering `latest`.
 
 **It is NOT in CI and must never become so.** `test:run` points at `vitest.config.ts`, which
 collects `test/**/*.test.ts` only: this package's own unit tests. The acceptance specs are behind
