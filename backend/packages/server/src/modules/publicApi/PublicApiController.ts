@@ -38,7 +38,12 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { personalGateForBlock, personalGateForRun } from '../providers/personalCredentialGate.js'
+import {
+  personalGateForBlock,
+  personalGateForRun,
+  type PersonalCredentialGate,
+} from '../providers/personalCredentialGate.js'
+import { personalUnlockFor, unlockIsUnavailable } from './personalUnlock.js'
 import { headlessActRefusal, notificationActEffect } from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
@@ -448,8 +453,12 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
       title: title?.trim() || input.slice(0, 80),
       description: input,
     })
-    // Headless / system-initiated: no `usr_*` initiator (an inline public run never leases a
-    // personal credential), so pass null rather than a synthetic user id. If start fails, roll the
+    // The bound user, or `null` for an unbound key (headless / system-initiated, as before). No
+    // personal-credential gate here, and that is a property of the pipeline rather than an
+    // omission: a public pipeline is inline-only, and an inline step never leases a subscription
+    // token — where a deployment can run one inline at all it does so on its own ambient CLI,
+    // which needs no unlock. So the binding decides ATTRIBUTION here and nothing else.
+    // If start fails, roll the
     // whole run back: `ExecutionService.start` persists the execution + live-run row and flips the
     // block to `in_progress` BEFORE its throwing dispatch (`workRunner.startRun`), so deleting only
     // the anchor block would orphan a `running` execution the stale-run sweeper then re-drives
@@ -459,9 +468,10 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     let execution: ExecutionInstance
     try {
       execution = await container.executionService.start(auth.workspaceId, block.id, pipelineId, {
-        initiatedBy: null,
-        // No `usr_*` initiator, but the KEY may still name who it acts for. Pinned on the run so
-        // a caller minting one key per person can map this job back to that person later.
+        initiatedBy: personalUnlockFor(c, auth).user?.id ?? null,
+        // Beside the initiator, never instead of it: the KEY may still name who it acts for on
+        // its provisioner's side. Pinned on the run so a caller minting one key per person can
+        // map this job back to that person later, whether or not the platform knows them.
         initiatedByExternalIdentity: auth.externalIdentity,
         intakeOrigin: 'public-api',
       })
@@ -873,44 +883,53 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
         403,
       )
     }
-    // A headless key has no user/password to unlock a personal (individual-usage)
-    // subscription, so refuse a task whose model resolves to such a vendor (Claude / Codex)
-    // up front. The gate throws `CredentialRequiredError` (→ 428) for exactly that case; it
-    // is a no-op for an ordinary poolable model. Passing no user means only subscription-ONLY
-    // vendors gate (a dual-mode GLM task still runs on the poolable Cloudflare base).
+    // A task whose model resolves to an individual-usage vendor (Claude / Codex) needs that
+    // person's own subscription unlocked. An UNBOUND key has nobody to unlock for, so the gate
+    // throws and the refusal below states the unsupported case; a key its holder bound to
+    // themselves supplies both halves and the gate mints the run's activation like any other
+    // start. A no-op either way for an ordinary poolable model, and passing no user means only
+    // subscription-ONLY vendors gate (a dual-mode GLM task still runs on the poolable base).
+    const unlock = personalUnlockFor(c, auth)
+    let personal: PersonalCredentialGate
     try {
-      await personalGateForBlock(
+      personal = await personalGateForBlock(
         container,
         auth.workspaceId,
         taskId,
         pipelineId,
-        undefined,
-        undefined,
+        unlock.user,
+        unlock.password,
       )
     } catch (err) {
-      if (err instanceof CredentialRequiredError) {
+      if (err instanceof CredentialRequiredError && unlockIsUnavailable(unlock)) {
         return c.json(
           {
             error: {
               code: 'individual_model_unsupported',
               message:
-                'This task runs on an individual-usage model that needs an interactive personal-credential unlock; it cannot be started through the API',
+                'This task runs on an individual-usage model that needs a personal-credential unlock; start it from the app, or use a key bound to the subscription owner and send the X-Personal-Password header',
             },
           },
           409,
         )
       }
+      // A bound key CAN answer this: let the 428 through with its vendor + reason so the caller
+      // knows to prompt for (or correct) the password rather than treating it as unsupported.
       throw err
     }
-    // Headless / system-initiated: no `usr_*` initiator. The engine's own start-time gates
-    // (per-service running-task cap, dependency gate, runnability) apply as for any board start;
-    // their `DomainError`s map to the right HTTP status via the shared error handler. This is the
-    // abuse backstop for board starts — the analogue of the jobs surface's active-run cap.
+    // The engine's own start-time gates (per-service running-task cap, dependency gate,
+    // runnability) apply as for any board start; their `DomainError`s map to the right HTTP status
+    // via the shared error handler. This is the abuse backstop for board starts — the analogue of
+    // the jobs surface's active-run cap.
     await container.executionService.start(auth.workspaceId, taskId, pipelineId, {
-      initiatedBy: null,
-      // As on the jobs surface: no user, but the key can still name who it started this for.
+      // The bound user, or `null` for an unbound key (headless / system-initiated, as before).
+      initiatedBy: personal.initiatedBy,
+      // As on the jobs surface: the key can still name who it started this for, and it does so
+      // whether or not a user is bound — the two answer different questions (a `usr_*` account
+      // here, an identity only the caller's own side can resolve there).
       initiatedByExternalIdentity: auth.externalIdentity,
       intakeOrigin: 'public-api',
+      activate: personal.activate,
     })
     // Re-read the task so the caller gets its AUTHORITATIVE post-start projection (status,
     // executionId, progress) rather than an optimistic guess — a run may park/block at its first
@@ -1031,16 +1050,24 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
     if (!run) {
       return c.json({ error: { code: 'no_run', message: 'Task has no run to retry' } }, 409)
     }
+    const unlock = personalUnlockFor(c, auth)
+    let personal: PersonalCredentialGate
     try {
-      await personalGateForRun(container, auth.workspaceId, run.id, undefined, undefined)
+      personal = await personalGateForRun(
+        container,
+        auth.workspaceId,
+        run.id,
+        unlock.user,
+        unlock.password,
+      )
     } catch (err) {
-      if (err instanceof CredentialRequiredError) {
+      if (err instanceof CredentialRequiredError && unlockIsUnavailable(unlock)) {
         return c.json(
           {
             error: {
               code: 'individual_model_unsupported',
               message:
-                'This task runs on an individual-usage model that needs an interactive personal-credential unlock; it cannot be retried through the API',
+                'This task runs on an individual-usage model that needs a personal-credential unlock; retry it from the app, or use a key bound to the subscription owner and send the X-Personal-Password header',
             },
           },
           409,
@@ -1048,10 +1075,15 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
       }
       throw err
     }
-    // Headless / system-initiated: no `usr_*` initiator and no personal-credential activation
-    // (the gate above already refused the only case that would need one). A non-failed run is
-    // rejected inside `retry` with `run_not_retryable` → 409 via the shared error handler.
-    await container.executionService.retry(auth.workspaceId, run.id, null, undefined)
+    // A non-failed run is rejected inside `retry` with `run_not_retryable` → 409 via the shared
+    // error handler. The retry re-drives the STORED steps, so the activation the gate minted (if
+    // any) is the one those steps will lease.
+    await container.executionService.retry(
+      auth.workspaceId,
+      run.id,
+      personal.initiatedBy,
+      personal.activate,
+    )
     const after = await container.boardService.getServiceTask(auth.workspaceId, taskId)
     const projected = after ?? found
     return c.json(toPublicTask(projected.block, projected.service.id), 202)
@@ -1319,6 +1351,12 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
     // run resolves to an individual-usage model (the same `personalGateForRun` primitive the
     // retry route uses). A no-op for a poolable model, and skipped entirely for a card whose
     // side-effect is a merge (no personal credential needed) or that is already resolved.
+    //
+    // Probed with NO unlock even when the key carries one, unlike the start and retry routes.
+    // `notificationActEffect` is a shared side-effect whose retry arm mints no activation (the
+    // SPA's card path has the same shape), so admitting a bound key here would trade a refusal
+    // the caller can act on for a run that fails at its first dispatch with nothing to lease.
+    // Lifting it means threading the gate through that effect, for both surfaces at once.
     if (
       existing.status === 'open' &&
       (existing.type === 'ci_failed' || existing.type === 'test_failed') &&

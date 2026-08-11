@@ -793,7 +793,8 @@
         "createdBy": "erstellt von {user}",
         "createdByYou": "Ihnen",
         "createdByKey": "API-Schlüssel {id}",
-        "revoke": "Token widerrufen"
+        "revoke": "Token widerrufen",
+        "boundToUser": "Ihr Abonnement"
       },
       "add": {
         "heading": "Token erstellen",
@@ -802,7 +803,12 @@
         "labelPlaceholder": "z. B. CI-Pipeline",
         "scope": "Berechtigung",
         "scopeHelp": "Was dieses Token darf: nur Lesen, Lesen und Schreiben oder Vollzugriff (der auch das Löschen erlaubt).",
-        "create": "Token erstellen"
+        "create": "Token erstellen",
+        "identity": "Läuft als",
+        "identitySystem": "Dieser Arbeitsbereich (System-Token)",
+        "identitySelf": "Ich (persönliches Token)",
+        "identitySystemHelp": "Mit diesem Token gestartete Läufe gehören dem Arbeitsbereich und werden keiner Person zugeordnet. Es kann kein persönliches Claude-/Codex-/GLM-Abonnement nutzen: Eine Aufgabe mit einem solchen Modell wird abgelehnt, statt jemandem in Abwesenheit berechnet zu werden. Für CI und gemeinsam genutzte Integrationen.",
+        "identitySelfHelp": "Mit diesem Token gestartete Läufe gelten als Ihre und können Ihr persönliches Claude-/Codex-/GLM-Abonnement nutzen. Jeder solche Aufruf muss zusätzlich Ihr persönliches Passwort im Header X-Personal-Password senden; es wird nie gespeichert. Für Ihre eigenen Headless-Läufe."
       },
       "scopes": {
         "read": "Nur Lesen",

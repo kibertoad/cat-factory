@@ -14,6 +14,7 @@ function key(over: Partial<PublicApiKey> = {}): PublicApiKey {
     createdByUserId: null,
     createdByKeyId: null,
     externalIdentity: null,
+    actsAsUserId: null,
     createdAt: 1,
     lastUsedAt: null,
     revokedAt: null,
@@ -92,6 +93,21 @@ describe('publicApiKeys store', () => {
     expect(result.secret).toBe('cf_live_pak_new.abc')
     expect(store.keys.map((k) => k.id)).toEqual(['pak_new', 'pak_old'])
     expect(store.available).toBe(true)
+  })
+
+  it('mints a SYSTEM token unless the caller asks to be bound', async () => {
+    // The default decides whose subscription an unattended run may spend, so it is worth an
+    // assertion rather than a reading of the signature: a key that silently acted as its minter
+    // would put one person's Claude quota behind every integration the workspace hands a token to.
+    const body = vi.fn((_body: unknown) => Promise.resolve({ key: key(), secret: 's' }))
+    vi.stubGlobal('useApi', () => ({ createPublicApiKey: (_ws: string, b: unknown) => body(b) }))
+
+    const store = usePublicApiKeysStore()
+    await store.create('ci', 'write')
+    expect(body).toHaveBeenCalledWith({ label: 'ci', scope: 'write', actsAsSelf: false })
+
+    await store.create('mine', 'write', true)
+    expect(body).toHaveBeenCalledWith({ label: 'mine', scope: 'write', actsAsSelf: true })
   })
 
   it('revoke drops the key from the list', async () => {

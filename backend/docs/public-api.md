@@ -69,8 +69,31 @@ Over REST (session-authed, workspace-scoped; this is the one management surface 
 
 Create body: `{ "label": "CI pipeline", "scope": "read" }`. `label` is 1–120 chars; `scope` is
 optional and **defaults to `write`**. A workspace holds at most **50** keys (409 past that; revoke
-one first). Key metadata carries `createdByUserId`, `createdByKeyId`, `createdAt`, `lastUsedAt`
-(updated at most once a minute) and `revokedAt`.
+one first). Key metadata carries `createdByUserId`, `createdByKeyId`, `actsAsUserId`, `createdAt`,
+`lastUsedAt` (updated at most once a minute) and `revokedAt`.
+
+The create body also takes `actsAsSelf` (optional, default `false`), which picks between the two
+IDENTITIES a key can have. This is a different question from `scope`: scope is what the key may DO,
+identity is WHOSE credentials, spend and merge-policy role its runs answer to.
+
+|                                                            | **System token** (`actsAsSelf: false`, the default)              | **Personal token** (`actsAsSelf: true`) |
+| ---------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------- |
+| `actsAsUserId`                                             | `null`                                                           | the minter's own `usr_*`                |
+| Runs it starts are attributed to                           | nobody                                                           | the person who minted it                |
+| A task on an individual-usage model (Claude / Codex / GLM) | refused, `409 individual_model_unsupported`                      | runs, once unlocked per call            |
+| `GET /api/v1/models`                                       | omits user-scoped models; says so via `excludesUserScopedModels` | resolves under that user                |
+
+**Prefer a system token**: it is the narrower credential, and a leak cannot spend one person's
+subscription because no person is attached. Mint a personal token only where the runs genuinely are
+that person's. Such a token must send the operator's personal password in the `X-Personal-Password`
+header on **every** call that advances a run on an individual-usage model (start, retry, and each
+answered decision, since answering wakes the run's next dispatch); the server never stores it, and a
+call missing it gets `428 credential_required` carrying `{ vendor, reason }`. Full model:
+[`individual-subscription-usage.md` §7](./individual-subscription-usage.md).
+
+A key can only ever be bound to the person minting it — the field is a boolean, and the server reads
+the id from the session — so there is no way to mint a key onto someone else's subscription. A mint
+with no signed-in user is refused, and headless provisioning (`POST /api/v1/keys`) never binds.
 
 An operator with no browser can do the same over `/api/v1` itself: see
 [Key provisioning](#key-provisioning-apiv1keys). The two surfaces share one store, so a key minted
@@ -162,20 +185,20 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   validation failure carries `issues: [{ path, message }]`.
 - **Surface-specific codes**, unique to `/api/v1` (branch on these, not on the message):
 
-  | Code                             | Status  | Where                                                                                                         |
-  | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
-  | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                          |
-  | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                   |
-  | `pipeline_not_public`            | 400     | `POST /jobs`: unknown or non-public pipeline                                                                  |
-  | `pipeline_not_inline`            | 400     | `POST /jobs`: pipeline has container/GitHub steps                                                             |
-  | `pipeline_requires_decide_scope` | 403     | `POST /jobs` and `POST /tasks/:id/start`: pipeline can park on a human, key is below `decide`                 |
-  | `too_many_active_runs`           | 429     | `POST /jobs`: the workspace already has 5 headless jobs in flight                                             |
-  | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no pinned pipeline and no `pipelineId` passed                                        |
-  | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                    |
-  | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly  |
-  | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                   |
-  | `no_review`                      | 404     | an iterative-review decision route (requirements / clarity / brainstorm): the run carries no such live entity |
-  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act`: `details.reason` is `no_automated_action` or `review_effort_required`          |
+  | Code                             | Status  | Where                                                                                                                                                                                          |
+  | -------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                                                                                                           |
+  | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                                                                                                    |
+  | `pipeline_not_public`            | 400     | `POST /jobs`: unknown or non-public pipeline                                                                                                                                                   |
+  | `pipeline_not_inline`            | 400     | `POST /jobs`: pipeline has container/GitHub steps                                                                                                                                              |
+  | `pipeline_requires_decide_scope` | 403     | `POST /jobs` and `POST /tasks/:id/start`: pipeline can park on a human, key is below `decide`                                                                                                  |
+  | `too_many_active_runs`           | 429     | `POST /jobs`: the workspace already has 5 headless jobs in flight                                                                                                                              |
+  | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no pinned pipeline and no `pipelineId` passed                                                                                                                         |
+  | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                                                                                                     |
+  | `individual_model_unsupported`   | 409     | a SYSTEM token starting / retrying / `act`ing on a run that would use an individual-usage model. A [personal token](#1-mint-a-key) gets `428 credential_required` instead, which it can answer |
+  | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                                                                                                    |
+  | `no_review`                      | 404     | an iterative-review decision route (requirements / clarity / brainstorm): the run carries no such live entity                                                                                  |
+  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act`: `details.reason` is `no_automated_action` or `review_effort_required`                                                                                           |
 
 ### Pagination
 
@@ -1147,10 +1170,17 @@ adding a key changes nothing and the fix is the policy. Collapsing the two is wh
 available" so often sends someone to change a setting that was already correct.
 
 There is a third state, and it is on the RESPONSE rather than on a model: `excludesUserScopedModels`
-reports that this deployment serves per-user locally-run endpoints, which this read cannot
-enumerate. They belong to one signed-in developer's machine and an API key has no developer, so they
-are absent from `models` entirely. On a deployment wired that way alone, every catalog row reads
-`available: false` and the honest remedy is a run started by that user, not a provider key.
+reports that this answer left out every model belonging to a PERSON — a per-user locally-run
+endpoint, or a personal Claude / Codex / GLM subscription. A system token has no person, so those are
+absent from `models` entirely. On a deployment wired that way alone, every catalog row reads
+`available: false`, and the honest remedy is not a provider key: for a personal subscription, mint a
+[personal token](#1-mint-a-key) and the same read resolves under its user (and the flag goes false,
+because nothing was withheld); for a locally-run endpoint, which no token can reach, it is a run
+started by that user in the app.
+
+Treat `available: false` as unanswerable while this flag is true. It says "not visible to you", and
+reading it as "no provider is wired" is what sends an operator to configure a model their workspace
+already runs on every day.
 
 `GET /api/v1/vcs/connection` exists for `canCreateRepos` and `canManageWorkflows`. Both are enforced
 by the provider at PUSH time, so a caller that does not check them discovers a missing workflow

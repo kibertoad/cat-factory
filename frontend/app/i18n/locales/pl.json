@@ -3248,7 +3248,8 @@
         "createdBy": "utworzone przez {user}",
         "createdByYou": "Ciebie",
         "createdByKey": "klucz API {id}",
-        "revoke": "Unieważnij token"
+        "revoke": "Unieważnij token",
+        "boundToUser": "Twoja subskrypcja"
       },
       "add": {
         "heading": "Utwórz token",
@@ -3257,7 +3258,12 @@
         "labelPlaceholder": "np. potok CI",
         "scope": "Zakres",
         "scopeHelp": "Co może ten token: tylko odczyt, odczyt i zapis lub pełny dostęp (który pozwala także na usuwanie).",
-        "create": "Utwórz token"
+        "create": "Utwórz token",
+        "identity": "Działa jako",
+        "identitySystem": "Ten obszar roboczy (token systemowy)",
+        "identitySelf": "Ja (token osobisty)",
+        "identitySystemHelp": "Uruchomienia rozpoczęte tym tokenem należą do obszaru roboczego i nie są przypisywane do żadnej osoby. Token nie może korzystać z niczyjej osobistej subskrypcji Claude / Codex / GLM, więc zadanie przypięte do takiego modelu zostanie odrzucone, zamiast obciążyć kogoś nieobecnego. Użyj go do CI i wspólnych integracji.",
+        "identitySelfHelp": "Uruchomienia rozpoczęte tym tokenem są przypisywane Tobie i mogą korzystać z Twojej osobistej subskrypcji Claude / Codex / GLM. Każde takie wywołanie musi dodatkowo przesłać Twoje hasło osobiste w nagłówku X-Personal-Password; nie jest ono nigdzie zapisywane. Użyj go do własnych uruchomień headless."
       },
       "scopes": {
         "read": "Tylko odczyt",

@@ -10,6 +10,18 @@ import type { AppEnv, ServerContainer } from '../../http/env.js'
 import type { SessionPayload } from '../../auth/signing.js'
 
 /**
+ * WHOSE personal credential a run may unlock — the user id and nothing else.
+ *
+ * Narrower than `SessionPayload` on purpose. A browser session is one way to establish this, and
+ * a public-API key its holder BOUND to themselves (`PublicApiKeyRecord.actsAsUserId`) is the
+ * other; asking for a whole session would have forced the second caller to fabricate the login,
+ * avatar and expiry of a person who is not signed in, and a fabricated session is a thing later
+ * code reads as one. The gate never needed more than the id: ownership of the credential is what
+ * it is deciding, and the PASSWORD, not this, is what proves the holder consented.
+ */
+export type PersonalCredentialOwner = Pick<SessionPayload, 'id'>
+
+/**
  * Read the ambient personal password from the request header (see
  * `PERSONAL_PASSWORD_HEADER`). The client attaches it on the gated run calls the way it
  * attaches the bearer token, so it never lives in a request body. Absent ⇒ undefined.
@@ -27,7 +39,7 @@ export function readPersonalPassword<E extends AppEnv>(c: Context<E>): string | 
  */
 async function resolvePersonalVendorPredicate(
   container: ServerContainer,
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
 ): Promise<(vendor: SubscriptionVendor) => boolean> {
   const personal = container.personalSubscriptions
   if (!personal || !user) return () => false
@@ -88,7 +100,7 @@ export interface PersonalCredentialGate {
 function gate(
   container: ServerContainer,
   vendors: SubscriptionVendor[],
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
   password: string | undefined,
 ): PersonalCredentialGate {
   if (vendors.length === 0) return { initiatedBy: user?.id ?? null }
@@ -143,7 +155,7 @@ export async function personalGateForBlock(
   workspaceId: string,
   blockId: string,
   pipelineId: string,
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
   const vendors = await container.executionService.individualVendorsForBlock(
@@ -170,7 +182,7 @@ export async function personalGateForAgentKind(
   workspaceId: string,
   blockId: string,
   agentKind: string,
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
   const vendors = await container.executionService.individualVendorsForAgentKind(
@@ -194,7 +206,7 @@ export async function personalGateForRun(
   container: ServerContainer,
   workspaceId: string,
   executionId: string,
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
   const vendors = await container.executionService.individualVendorsForRun(

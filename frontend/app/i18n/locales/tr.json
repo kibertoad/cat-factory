@@ -3390,7 +3390,8 @@
         "createdBy": "oluşturan: {user}",
         "createdByYou": "siz",
         "createdByKey": "{id} API anahtarı",
-        "revoke": "Belirteci iptal et"
+        "revoke": "Belirteci iptal et",
+        "boundToUser": "Aboneliğiniz"
       },
       "add": {
         "heading": "Belirteç oluştur",
@@ -3399,7 +3400,12 @@
         "labelPlaceholder": "örn. CI hattı",
         "scope": "Kapsam",
         "scopeHelp": "Bu belirtecin yapabilecekleri: yalnızca okuma, okuma ve yazma ya da tam erişim (silmeye de izin verir).",
-        "create": "Belirteç oluştur"
+        "create": "Belirteç oluştur",
+        "identity": "Şu kimlikle çalışır",
+        "identitySystem": "Bu çalışma alanı (sistem belirteci)",
+        "identitySelf": "Ben (kişisel belirteç)",
+        "identitySystemHelp": "Bu belirteçle başlatılan çalıştırmalar çalışma alanına aittir ve hiçbir kişiye atfedilmez. Kimsenin kişisel Claude / Codex / GLM aboneliğini kullanamaz; bu nedenle böyle bir modele sabitlenmiş görev, orada olmayan birine fatura edilmek yerine reddedilir. CI ve paylaşılan entegrasyonlar için bunu kullanın.",
+        "identitySelfHelp": "Bu belirteçle başlatılan çalıştırmalar size ait sayılır ve kişisel Claude / Codex / GLM aboneliğinizi kullanabilir. Bu tür her çağrının ayrıca kişisel parolanızı X-Personal-Password başlığında göndermesi gerekir; parola hiçbir zaman saklanmaz. Kendi headless çalıştırmalarınız için bunu kullanın."
       },
       "scopes": {
         "read": "Yalnızca okuma",

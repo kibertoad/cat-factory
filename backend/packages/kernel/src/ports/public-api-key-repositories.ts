@@ -52,6 +52,28 @@ export interface PublicApiKeyRecord {
    * admission precisely so the answer stays the one that was true then.
    */
   externalIdentity: string | null
+  /**
+   * The user whose PERSONAL (individual-usage) subscriptions this key may unlock — always the
+   * user who minted it, and `null` for every key that did not opt in.
+   *
+   * The ONE authorization input on this row, and deliberately the narrowest one that makes a
+   * headless run on an individual-usage model possible at all. It admits exactly one thing: the
+   * per-run credential activation `personalGateForBlock` mints, and only on a request that ALSO
+   * carries that user's personal password, which the platform never stores. So the bind alone
+   * spends nothing, a leaked key alone spends nothing, and what a key may DO on `/api/v1`
+   * remains its own `scope` and nothing else.
+   *
+   * Distinct from {@link PublicApiKeyRecord.createdByUserId}, which stays pure provenance: an
+   * ordinary key records who minted it and can still act for nobody. Binding is an explicit
+   * choice made in the app by the person being bound, which is also why it can only ever hold
+   * the minter's OWN id — there is no way to spell "act as someone else", so a workspace admin
+   * cannot mint a key onto a colleague's subscription.
+   *
+   * Written once and never updated, for the reason {@link PublicApiKeyRecord.externalIdentity}
+   * is: the runs it started pinned their initiator at admission, and a value that could move
+   * would leave those runs naming a user this key no longer acts for.
+   */
+  actsAsUserId: string | null
   createdAt: number
   /** When the key last authenticated a call (null = never used). */
   lastUsedAt: number | null

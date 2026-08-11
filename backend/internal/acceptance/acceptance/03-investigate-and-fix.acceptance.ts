@@ -52,7 +52,7 @@ const STEER =
   'should show the next 10 items with no repeats.'
 
 describe('bug lifecycle: investigate the shipped defect and fix it', () => {
-  const { config, client, world, journal } = harness('03-investigate-and-fix')
+  const { config, client, world, journal, unlock } = harness('03-investigate-and-fix')
 
   beforeAll(assertPrerequisites)
 
@@ -61,6 +61,7 @@ describe('bug lifecycle: investigate the shipped defect and fix it', () => {
     const { run, answeredKinds } = await fileAndDrive({
       client,
       journal,
+      unlock,
       existing: world.value.bugfix,
       label: 'the paging bug report',
       // The report names an environment only when the platform says one OUTLIVED its run. Under

@@ -327,6 +327,10 @@ function selectWorkerProviderCapabilities(
         cloudflareModelsEnabled: deps.cloudflareModelsEnabled,
         ...(deps.bedrockModels ? { bedrockModels: deps.bedrockModels } : {}),
         baseUrlFor: (provider) => baseUrlFor(provider, env),
+        // No `nativeAmbientAuth`, and the absence is a fact about workerd rather than a gap the
+        // Node/local sibling has filled in: an ambient vendor is one the HOST's own installed CLI
+        // serves as a subprocess, which an isolate has no way to spawn. So there is nothing here
+        // to wire, not a wiring left for later.
         localModelEndpoints: deps.localModelEndpoints,
         openRouterCatalog: deps.openRouterCatalog,
         accountSettings: deps.accountSettings,

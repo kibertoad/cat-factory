@@ -15,6 +15,7 @@ import type { CatFactoryClient, PublicRun } from '@cat-factory/sdk'
 import { type AnsweredDecision, answerDecisions } from './decisions.ts'
 import { formatDuration } from './deadline.ts'
 import type { Journal } from './journal.ts'
+import { type PersonalUnlock, withPersonalUnlock } from './personalUnlock.ts'
 import {
   describeDecisions,
   describeRun,
@@ -30,6 +31,13 @@ export type DriveOptions = {
   /** The steer handed to any question the run raises. See `AnswerOptions.steer`. */
   steer: string
   budgetMs: number
+  /**
+   * The pass's personal-subscription unlock. Needed HERE and not only at the start, because
+   * answering a park wakes the durable driver and the deployment re-mints the run's credential
+   * activation on that call: a resumed pass that only ever re-attaches to a live run and answers
+   * its gates never touches `start`, so this is the only place it would be asked.
+   */
+  unlock: PersonalUnlock
 }
 
 export type DriveResult = {
@@ -46,7 +54,7 @@ export type DriveResult = {
  * an interrupted pass re-ship the same feature.
  */
 export async function driveRun(options: DriveOptions & { runId: string }): Promise<DriveResult> {
-  const { client, journal, taskId, runId, steer, budgetMs } = options
+  const { client, journal, taskId, runId, steer, budgetMs, unlock } = options
   const startedAt = Date.now()
   const answered: AnsweredDecision[] = []
 
@@ -74,7 +82,9 @@ export async function driveRun(options: DriveOptions & { runId: string }): Promi
     // `isActionable`, so a decision the driver still owns leaves this loop sleeping rather than
     // pushing writes at it. `answerDecisions` throws on any kind this suite is not designed for,
     // which is what stops the loop from driving a run past a decision a person was meant to make.
-    const justAnswered = await answerDecisions({ client, runId, steer }, decisions)
+    const justAnswered = await withPersonalUnlock(unlock, `Answering run ${runId}`, () =>
+      answerDecisions({ client, runId, steer }, decisions),
+    )
     for (const entry of justAnswered) {
       journal.say(
         'milestone',

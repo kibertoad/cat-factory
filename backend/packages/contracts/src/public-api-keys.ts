@@ -141,6 +141,16 @@ export const publicApiKeySchema = v.object({
    * value that could move would retro-attribute every run it already started.
    */
   externalIdentity: v.nullable(v.string()),
+  /**
+   * The user (`usr_*`) whose PERSONAL subscriptions this key may unlock, or `null` for a key that
+   * did not opt in (the default, and every headlessly-minted key).
+   *
+   * Always equal to {@link publicApiKeySchema.entries.createdByUserId} when set: a person binds
+   * their OWN key, and there is no way to name anyone else. Reading it as "this key can act as
+   * this user" overstates it — it admits the per-run personal-credential unlock and nothing more,
+   * and only on a call that also carries that user's personal password.
+   */
+  actsAsUserId: v.nullable(v.string()),
   createdAt: v.number(),
   lastUsedAt: v.nullable(v.number()),
   /** Set when the key was revoked (tombstone); a revoked key never authenticates. */
@@ -161,6 +171,25 @@ export type PublicApiKeyListResult = v.InferOutput<typeof publicApiKeyListResult
 export const createPublicApiKeySchema = v.object({
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
   scope: v.optional(publicApiScopeSchema, 'write'),
+  /**
+   * Which of the two IDENTITIES this key runs as. The default, `false`, is a SYSTEM key: its runs
+   * are attributed to nobody and it can reach no personal (individual-usage) subscription at all,
+   * so a task pinned to such a model is refused rather than charged to a person who is not there.
+   * `true` binds the key to the person minting it, so a run it starts is theirs and may unlock
+   * THEIR subscription with the password supplied on that same call.
+   *
+   * Both are first-class, and an integration should hold the narrower one unless it specifically
+   * needs the other: a shared CI credential wants system, and a developer driving their own
+   * headless runs wants self. That is also why the field is not merely a capability toggle — it
+   * decides whose credentials, spend and merge-policy role a run answers to.
+   *
+   * A boolean rather than a user id, and that is the safety property rather than an ergonomic
+   * one: the only value the server will write is the caller's own id, so the wire shape cannot
+   * express minting a key onto someone else's subscription. Refused outright when there is no
+   * signed-in user to bind (a dev-open mint), because a key bound to nobody would silently behave
+   * like a system one at the moment a run needed the credential.
+   */
+  actsAsSelf: v.optional(v.boolean(), false),
 })
 export type CreatePublicApiKeyInput = v.InferOutput<typeof createPublicApiKeySchema>
 

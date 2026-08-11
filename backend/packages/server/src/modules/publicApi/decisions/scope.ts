@@ -17,6 +17,7 @@ import type {
   RequirementsModule,
 } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../../http/env.js'
+import { personalGateForRun, readPersonalPassword } from '../../providers/personalCredentialGate.js'
 import { authorize } from '../publicApiAuth.js'
 
 // Resolution + authorization for the public parked-decision surface: the preamble every route in
@@ -143,7 +144,40 @@ export async function gateDecisionAction<E extends AppEnv>(
   if (!scoped) {
     return { fail: { status: 404, code: 'not_found', message: 'Run not found' } }
   }
+  await reactivatePersonalCredential(c, workspaceId, scoped.execution.id, gate.auth)
   return { workspaceId, scoped, auth: gate.auth }
+}
+
+/**
+ * Re-mint the run's individual-usage activation(s) before a bound key's answer advances it — the
+ * key-authenticated twin of the SPA's `activateForInteraction`, and mounted in the shared preamble
+ * so every mutating decision route gets it without a per-route decision to forget.
+ *
+ * Answering a park WAKES the durable driver, which dispatches the next step, which leases the
+ * credential the activation holds. That activation has a bounded TTL, so a long pass that answers
+ * several gates is exactly the shape that outlives one: the SPA re-mints for the same reason, and
+ * hard-gates rather than refreshing best-effort so the caller is told to supply the password while
+ * it is still holding one, instead of discovering the lapse as a step that failed hours later.
+ *
+ * A no-op for an UNBOUND key, and that is load-bearing rather than an optimisation: such a key can
+ * unlock nothing, so probing the gate could only ever produce a 428 on a route that answers parks
+ * for ordinary poolable runs today. The binding is what makes the question meaningful.
+ */
+async function reactivatePersonalCredential<E extends AppEnv>(
+  c: Context<E>,
+  workspaceId: string,
+  executionId: string,
+  auth: PublicApiKeyAuth,
+): Promise<void> {
+  if (!auth.actsAsUserId) return
+  const { activate } = await personalGateForRun(
+    c.get('container'),
+    workspaceId,
+    executionId,
+    { id: auth.actsAsUserId },
+    readPersonalPassword(c),
+  )
+  await activate?.(executionId)
 }
 
 /**

@@ -186,6 +186,24 @@ caveat rather than graded, which is the honest disposition for an answer the pro
 - `ENCRYPTION_KEY` set, or `/api/v1` answers `503` on every call.
 - A **container runtime** for the agent jobs.
 
+**The model, when it is your own subscription**
+
+A pinned preset whose model is an individual-usage vendor (Claude / Codex / GLM) runs on ONE
+person's subscription, and only their personal password opens it. Two consequences for a pass:
+
+- **Mint the key as a PERSONAL token** (Integrations → API access tokens, "Runs as" → yourself).
+  A system token cannot see such a model at all: `GET /api/v1/models` reports it `available: false`
+  and sets `excludesUserScopedModels`, which `configure` and the `model-preset` gate now render as
+  "not visible to this system token" rather than the "no provider wired for it" that used to send
+  operators off to configure a deployment that was already correct.
+- **The pass asks for your personal password at the terminal**, once, at the first call that needs
+  it — not at `configure` time, and never for a workspace running on a provider API key. It is held
+  in the process's memory and written NOWHERE: not the `.env`, not the ledger, not the journal. That
+  is deliberate rather than an omission, since a copy beside `CAT_FACTORY_API_KEY` would put both
+  halves of a two-factor credential in one file. A resumed pass asks again, and stdin must be a
+  terminal (a piped password is one that came from a file). See
+  [`individual-subscription-usage.md` §7](../../docs/individual-subscription-usage.md).
+
 **The repositories**
 
 Two, created by you under the connected account, each empty except for a README, and each reachable by

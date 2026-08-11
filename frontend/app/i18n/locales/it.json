@@ -793,7 +793,8 @@
         "createdBy": "creato da {user}",
         "createdByYou": "te",
         "createdByKey": "la chiave API {id}",
-        "revoke": "Revoca token"
+        "revoke": "Revoca token",
+        "boundToUser": "Il tuo abbonamento"
       },
       "add": {
         "heading": "Crea un token",
@@ -802,7 +803,12 @@
         "labelPlaceholder": "es. pipeline CI",
         "scope": "Ambito",
         "scopeHelp": "Cosa può fare questo token: sola lettura, lettura e scrittura o accesso completo (che consente anche l'eliminazione).",
-        "create": "Crea token"
+        "create": "Crea token",
+        "identity": "Viene eseguito come",
+        "identitySystem": "Questo spazio di lavoro (token di sistema)",
+        "identitySelf": "Io (token personale)",
+        "identitySystemHelp": "Le esecuzioni avviate con questo token appartengono allo spazio di lavoro e non sono attribuite a nessuna persona. Non può usare l'abbonamento personale Claude / Codex / GLM di nessuno: un'attività fissata su uno di quei modelli viene rifiutata anziché addebitata a chi non c'è. Usalo per la CI e le integrazioni condivise.",
+        "identitySelfHelp": "Le esecuzioni avviate con questo token sono attribuite a te e possono usare il tuo abbonamento personale Claude / Codex / GLM. Ogni chiamata deve inviare anche la tua password personale nell'intestazione X-Personal-Password; non viene mai memorizzata. Usalo per le tue esecuzioni headless."
       },
       "scopes": {
         "read": "Sola lettura",

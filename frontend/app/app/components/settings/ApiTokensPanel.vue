@@ -70,6 +70,35 @@ const back = useIntegrationBack(open)
 const label = ref('')
 // The scope the next minted key will carry; defaults to the safe middle of the ladder.
 const scope = ref<PublicApiScope>('write')
+// WHO the next key runs as. Two named options rather than an unchecked box, because they are two
+// different credentials with two different blast radii and neither is a mere setting on the other:
+//
+//  - `system` (the default): the token belongs to the workspace. Its runs are attributed to nobody
+//    and it can reach no personal subscription, so a leaked shared credential can never spend one
+//    person's Claude quota. This is what a CI job or a shared integration should hold.
+//  - `self`: the token belongs to the person minting it. Its runs are theirs and may unlock their
+//    personal Claude / Codex / GLM subscription, with the password sent on each such call.
+//
+// NOT gated on the interface mode, unlike an override field. This whole panel is the Integrations
+// hub's Development surface, reached only by someone already minting an API key, and `scope` next
+// to it is ungated for the same reason. Hiding it in basic mode would leave that person a key that
+// silently cannot run their own models, with nothing on screen to say why.
+type TokenIdentity = 'system' | 'self'
+const identity = ref<TokenIdentity>('system')
+// Nobody to bind on a board with no signed-in user (a dev-open deployment): the server refuses
+// such a mint outright, so the choice is withheld and every key is a system key, which is what
+// that deployment can honestly offer.
+const canBindSelf = computed(() => auth.user !== null && auth.user !== undefined)
+const identityItems = computed(() => [
+  { value: 'system' as const, label: t('settings.apiTokens.add.identitySystem') },
+  { value: 'self' as const, label: t('settings.apiTokens.add.identitySelf') },
+])
+/** The help text under the picker, so each option explains ITSELF rather than only its opposite. */
+const identityHelp = computed(() =>
+  identity.value === 'self'
+    ? t('settings.apiTokens.add.identitySelfHelp')
+    : t('settings.apiTokens.add.identitySystemHelp'),
+)
 const busy = ref(false)
 // The full raw secret from the most recent create — surfaced once, then dismissed. Never
 // re-fetchable, so it lives only in this transient ref (not the store).
@@ -97,10 +126,15 @@ async function createToken() {
   if (!trimmed) return
   busy.value = true
   try {
-    const created = await store.create(trimmed, scope.value)
+    const created = await store.create(
+      trimmed,
+      scope.value,
+      canBindSelf.value && identity.value === 'self',
+    )
     newSecret.value = created.secret
     label.value = ''
     scope.value = 'write'
+    identity.value = 'system'
     toast.add({
       title: t('settings.apiTokens.toast.created'),
       icon: 'i-lucide-check',
@@ -195,6 +229,18 @@ async function revokeToken(key: PublicApiKey) {
                 >
                   {{ scopeLabel(key.scope) }}
                 </UBadge>
+                <!-- Always shown, never mode-gated: an existing key can already carry the
+                     binding, and this is the only place its holder can see that a token they
+                     are about to hand out reaches a personal subscription. -->
+                <UBadge
+                  v-if="key.actsAsUserId"
+                  color="warning"
+                  variant="subtle"
+                  size="sm"
+                  :data-testid="`api-token-bound-${key.id}`"
+                >
+                  {{ t('settings.apiTokens.list.boundToUser') }}
+                </UBadge>
               </div>
               <div class="text-[11px] text-slate-500">
                 {{
@@ -253,6 +299,18 @@ async function revokeToken(key: PublicApiKey) {
               :items="scopeItems"
               class="w-full"
               data-testid="api-token-scope"
+            />
+          </UFormField>
+          <UFormField
+            v-if="canBindSelf"
+            :label="t('settings.apiTokens.add.identity')"
+            :help="identityHelp"
+          >
+            <USelect
+              v-model="identity"
+              :items="identityItems"
+              class="w-full"
+              data-testid="api-token-identity"
             />
           </UFormField>
           <UButton

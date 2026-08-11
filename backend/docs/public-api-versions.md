@@ -491,3 +491,35 @@ What a consumer NOTICES, beyond the two new methods:
 - **The link's `owner` accepts a namespace PATH.** A GitLab project can live under nested groups, so
   its owner reads `group/subgroup`, which is what the available read publishes; the adopt takes back
   exactly what it was given.
+
+1.45.0: one new request field and one new response field, both optional, and no change to anything
+already published. A consumer built against 1.44.0 mints exactly the key it minted before and reads
+exactly what it read before, because the new identity's default IS the old behaviour.
+
+`POST /workspaces/:ws/public-api-keys` (the session-authed mint, not `/api/v1` itself) takes
+`actsAsSelf`, and every key resource now carries `actsAsUserId`. A key was always a workspace
+credential belonging to nobody, which made one class of run impossible to start over this API at
+all: a task pinned to an individual-usage model (Claude / Codex / GLM) runs on ONE person's
+subscription, and there was no way for a headless caller to be that person. It was refused with
+`409 individual_model_unsupported`, and the refusal was correct for the credential it was refusing.
+
+The new identity is not a permission and is deliberately not spelled as one. A key minted with
+`actsAsSelf` records its MINTER, and the only value the server will write is the id it reads off the
+session, so the wire shape cannot express minting a key onto someone else's subscription. The
+password is the other half and is never stored: such a key must send `X-Personal-Password` on each
+call that advances such a run (start, retry, and each answered decision, because answering wakes the
+next dispatch), and one that does not gets `428 credential_required` carrying `{ vendor, reason }` —
+the same refusal, on the same header, that the app has always used. So the binding alone spends
+nothing, and a leaked personal token cannot open a subscription.
+
+`409 individual_model_unsupported` is unchanged for a system token and now means what it says: no
+password would help. A personal token reaches the answerable `428` instead. The one operation that
+still refuses both is `POST /api/v1/notifications/:id/act`, whose retry arm mints no activation.
+
+`excludesUserScopedModels` on `GET /api/v1/models` gained the case it most needed to cover. It
+reported per-user locally-run endpoints only, so a personal SUBSCRIPTION — the commonest user-scoped
+credential — was withheld from the catalog with nothing on the response saying so, and `available:
+false` read as "no provider is wired" for a model the workspace ran every day. It now covers both,
+and is `false` for a personal token, which had nothing withheld from it. The flag was always the
+field that separates "not visible to you" from "not configured"; it now separates them for the case
+that actually arises.

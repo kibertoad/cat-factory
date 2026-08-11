@@ -322,16 +322,22 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
                   'for at least one model.',
                 'An entry becomes selectable as soon as its provider is wired, with no restart.',
                 // The THIRD cause, and the only one this read cannot see for itself: a deployment
-                // whose models are one developer's local endpoints answers exactly like a
-                // deployment with nothing wired, because a key has no developer to attribute them
-                // to. Naming it here keeps the remedy from being "add a key" when a key is not
-                // what is missing.
+                // whose models belong to a PERSON (a locally-run endpoint, a personal Claude /
+                // Codex subscription) answers a SYSTEM token exactly like a deployment with
+                // nothing wired, because such a token has no person to attribute them to. Naming
+                // it here keeps the remedy from being "add a key" when a key is not what is
+                // missing — and the remedy differs per kind, so both are stated.
                 ...(excludesUserScopedModels
                   ? [
-                      'This deployment also serves per-user locally-run endpoints, which an API ' +
-                        'key cannot see or dispatch to. If those are the only models wired, the ' +
-                        'suite needs a provider key or a subscription of its own rather than one ' +
-                        'more local endpoint.',
+                      'This token is a SYSTEM token, and the catalog above leaves out every model ' +
+                        'that belongs to a person: a personal Claude / Codex / GLM subscription, ' +
+                        'and any locally-run endpoint. If one of those is what this workspace ' +
+                        'actually runs on, nothing is missing from the deployment.',
+                      'For a personal SUBSCRIPTION: mint the token again under Integrations → API ' +
+                        'access tokens with "Runs as" set to yourself, and the pass will ask for ' +
+                        'your personal password once, when a run needs it.',
+                      'For a locally-run ENDPOINT: those are per-user and never reachable by a ' +
+                        'token, so the suite needs a provider key or a subscription of its own.',
                     ]
                   : []),
               ],
@@ -374,7 +380,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         )
       }
 
-      const { models } = await client.models.list()
+      const { models, excludesUserScopedModels } = await client.models.list()
       const base = models.find((model) => model.modelId === preset.baseModelId)
       // Three states, not two: a preset whose base model the catalog does not name at all is a
       // different fault from one the deployment refuses, and both differ from a preset that is
@@ -406,6 +412,18 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
                     'the policy already permits.',
                 ]
               : [
+                  // Stated FIRST when it applies, because it is the one cause whose fix is not
+                  // "wire something": the provider may already be wired, as a credential that
+                  // belongs to a person and that a system token is not allowed to see.
+                  ...(excludesUserScopedModels
+                    ? [
+                        `'${base.modelId}' may already be wired as a PERSONAL subscription, which ` +
+                          'this system token cannot see. If it is yours, mint the token again ' +
+                          'under Integrations → API access tokens with "Runs as" set to yourself; ' +
+                          'the pass then asks for your personal password once, when a run needs ' +
+                          'it, and stores it nowhere.',
+                      ]
+                    : []),
                   `In the SPA: Model providers, and wire a provider for '${base.modelId}' (a ` +
                     'provider API key, or a connected subscription).',
                   'Or pin a preset whose base model is already selectable: ' +

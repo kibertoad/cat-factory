@@ -42,6 +42,17 @@ workspace-scoped surface can return, so it answers null WITH `linkedElsewhere: t
 link is compared against the LEDGER's service ids, never against "is this a resume", since a ledger
 holding one of the two services cannot vouch for the other.
 
+**A pass on the operator's OWN subscription needs a PERSONAL token and a prompt, never a stored
+password.** An individual-usage model (Claude / Codex / GLM) is a per-user credential, so a SYSTEM
+token cannot even see it: the catalog answers `available: false` with `excludesUserScopedModels`,
+which `configure` and the `model-preset` gate render as "not visible to this system token" rather
+than as a missing provider. `src/personalUnlock.ts` holds the password for the process and nothing
+else writes it down, which is why it is asked for LAZILY (on the first `428`, so a provider-key
+workspace is never prompted) and why the header rides EVERY request through the client's `fetch`
+seam rather than being attached at the call that first needed it: answering a park re-mints the
+run's activation server-side, so a pass needs it for hours after the start. Trap: writing it beside
+`CAT_FACTORY_API_KEY` would collapse a two-factor credential into one file.
+
 **Every task the suite files pins `ACCEPTANCE_MODEL_PRESET`**, through the one door
 (`filePinnedTask`), so a pass runs on the model it says it ran on rather than on whatever the
 workspace default happens to be. The risk policy is deliberately NOT pinned: `auto-merge-policy`

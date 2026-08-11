@@ -146,15 +146,25 @@ export async function readVcsConnection(
 }
 
 /**
- * Whether this deployment serves per-user locally-run model endpoints.
+ * Whether this deployment serves models that belong to a PERSON rather than to the workspace, and
+ * that a read resolving no user therefore cannot see: per-user locally-run endpoints, and the
+ * per-user personal subscriptions an individual-usage vendor (Claude / Codex / GLM) is stored as.
  *
  * A named predicate over a TYPED container rather than an `!== undefined` in the route, because
  * this is the one optional-capability read on this surface whose answer is DATA rather than a
  * refusal: it is reported to the caller, so it has to be as legible as the `require*` accessors
- * next to it, and the field it names has to fail to compile if it is ever renamed.
+ * next to it, and the fields it names have to fail to compile if they are ever renamed.
+ *
+ * The personal-subscription half was missing, and its absence was the misreport this flag exists
+ * to prevent. A workspace whose Claude runs come from a stored personal subscription got a catalog
+ * where that model was `available: false` and a flag saying nothing had been withheld, which reads
+ * as "no provider is wired for Claude" — sending an operator to add a key the deployment already
+ * has, for a model it was already running every day in the app.
  */
 function servesUserScopedModels(container: ServerContainer): boolean {
-  return container.localModelEndpoints !== undefined
+  return (
+    container.localModelEndpoints !== undefined || container.personalSubscriptions !== undefined
+  )
 }
 
 /**
@@ -722,23 +732,31 @@ function toPublicRiskPolicy(policy: RiskPolicy): PublicRiskPolicy {
 }
 
 function registerWiringRoutes(app: Hono<AppEnv>): void {
-  // No user id is passed, and that absence is load-bearing rather than an omission: locally-run
-  // models are one developer's own endpoints, and a key-authenticated call has no developer. See
-  // `resolveWorkspaceModelCatalog`.
+  // Resolved for the user the key is BOUND to, and for nobody when it is not — which is most keys.
+  // A user-scoped model (a locally-run endpoint, a personal subscription) belongs to a person, so
+  // an unbound key must not inherit one: it has no developer, and attributing someone else's
+  // endpoints to it would report a catalog its runs cannot dispatch to. A bound key does name a
+  // person, and it is the SAME person whose credential its runs unlock, so resolving under them is
+  // not a widening — it is the only answer that matches what those runs will actually be able to
+  // do. See `resolveWorkspaceModelCatalog`.
   //
-  // Which is exactly why the omission is REPORTED. Those endpoints do not appear in this catalog at
-  // all, so on a deployment whose only wired models are local ones the answer is a list where
-  // nothing is available, which reads as "add a provider key" and would send an operator to change
-  // a setting that is already correct. The flag says whether this deployment has that capability
-  // wired at all, which is the most a key-authenticated read can honestly know.
+  // Which is exactly why the remaining omission is REPORTED. Those models do not appear in an
+  // unbound key's catalog at all, so on a deployment whose models are user-scoped the answer is a
+  // list where nothing is available, which reads as "add a provider key" and would send an
+  // operator to change a setting that is already correct. The flag says whether anything was
+  // withheld from THIS answer, so a bound key — which withheld nothing — sees it false.
   buildHonoRoute(app, listPublicWiredModelsContract, async (c) => {
     const auth = await authorizeOrThrow(c, listPublicWiredModelsContract.minScope)
     const container = c.get('container')
-    const catalog = await resolveWorkspaceModelCatalog(container, auth.workspaceId)
+    const catalog = await resolveWorkspaceModelCatalog(
+      container,
+      auth.workspaceId,
+      auth.actsAsUserId ?? undefined,
+    )
     return c.json(
       {
         models: catalog.map(toPublicWiredModel),
-        excludesUserScopedModels: servesUserScopedModels(container),
+        excludesUserScopedModels: auth.actsAsUserId === null && servesUserScopedModels(container),
       },
       200,
     )

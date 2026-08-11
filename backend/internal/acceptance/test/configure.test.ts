@@ -120,7 +120,10 @@ function fakeClient(overrides: Partial<ConfigureClient> = {}): ConfigureClient {
         isDefault: true,
       },
     ],
-    models: async () => [{ modelId: 'claude-opus', available: true }],
+    models: async () => ({
+      models: [{ modelId: 'claude-opus', available: true }],
+      excludesUserScopedModels: false,
+    }),
     ...overrides,
   }
 }
@@ -390,12 +393,39 @@ describe('configure: adopting the repositories', () => {
 
     // The same preset, with a catalog that ANSWERED: now the marking is a fact and is shown.
     const answered = await run({
-      client: fakeClient({ models: async () => [{ modelId: 'claude-opus', available: false }] }),
+      client: fakeClient({
+        models: async () => ({
+          models: [{ modelId: 'claude-opus', available: false }],
+          excludesUserScopedModels: false,
+        }),
+      }),
       script: { secrets: [TOKEN] },
     })
     expect(answered.io.offered).toEqual([
       'Claude Opus 5 (claude-opus) (no provider wired for it) [workspace default]',
     ])
+  })
+
+  it('says a model is INVISIBLE, not unwired, when the token cannot see user-scoped models', async () => {
+    // The misreport this flag exists to prevent, and the one that sent an operator here: a
+    // workspace whose Claude runs come from a stored personal subscription got "no provider wired
+    // for it" against the model it uses every day, and the fix it named (add a provider key) was
+    // for a deployment that was already configured correctly.
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [{ modelId: 'claude-opus', available: false }],
+          excludesUserScopedModels: true,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (not visible to this system token) [workspace default]',
+    ])
+    // And the remedy is stated once, in full, rather than left for the operator to infer from a
+    // parenthetical: it is a different token, not a different deployment setting.
+    expect(io.output.join('\n')).toContain('"Runs as" set to yourself')
   })
 
   it('withholds a creation link on GitLab rather than linking gitlab.com', async () => {
@@ -435,10 +465,13 @@ describe('configure: adopting the repositories', () => {
           { presetId: 'mdp_claude', name: 'Claude', baseModelId: 'claude-opus', isDefault: true },
           { presetId: 'mdp_kimi', name: 'Kimi', baseModelId: 'kimi', isDefault: false },
         ],
-        models: async () => [
-          { modelId: 'claude-opus', available: false },
-          { modelId: 'kimi', available: true },
-        ],
+        models: async () => ({
+          models: [
+            { modelId: 'claude-opus', available: false },
+            { modelId: 'kimi', available: true },
+          ],
+          excludesUserScopedModels: false,
+        }),
       }),
       script: { secrets: [TOKEN] },
     })

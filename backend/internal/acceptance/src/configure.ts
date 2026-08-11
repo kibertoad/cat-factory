@@ -111,7 +111,19 @@ export type ConfigureClient = {
   presets(): Promise<
     readonly { presetId: string; name: string; baseModelId: string; isDefault: boolean }[]
   >
-  models(): Promise<readonly { modelId: string; available: boolean }[]>
+  /**
+   * The catalog, WITH the deployment's own statement about what it could not show this token.
+   *
+   * The flag is not decoration on the list: a model reachable only through a per-user credential (a
+   * personal Claude / Codex subscription, a locally-run endpoint) is absent from a SYSTEM token's
+   * catalog entirely, so `available: false` there means "not visible to you" and not "nothing is
+   * wired". Reading the list alone told an operator whose workspace runs Claude every day that no
+   * provider was configured for it.
+   */
+  models(): Promise<{
+    models: readonly { modelId: string; available: boolean }[]
+    excludesUserScopedModels: boolean
+  }>
 }
 
 export type ConfigureDeps = {
@@ -486,16 +498,34 @@ async function resolvePreset(
         'without saying which can be dispatched to.',
     )
   }
+  // Whether the deployment says this TOKEN could not see part of the catalog. A system token cannot
+  // see a per-user credential, so an unavailable entry has two very different causes and only one
+  // of them is "add a provider key" — saying the wrong one sends an operator to configure something
+  // that is already configured, which is exactly what happened before the flag was read here.
+  const withheld = catalog.ok && catalog.value.excludesUserScopedModels
+  if (withheld) {
+    io.warn(
+      'This token is a SYSTEM token, so the catalog below leaves out every model that belongs to a ' +
+        'person: a personal Claude / Codex / GLM subscription, and any locally-run endpoint. Such ' +
+        'a model is marked below as invisible rather than unwired.\n' +
+        '  To run the pass on your own subscription, mint the token again in the app under ' +
+        'Integrations → API access tokens with "Runs as" set to yourself. The pass then asks for ' +
+        'your personal password once, at the moment a run needs it, and never stores it.',
+    )
+  }
   // The same join `model-preset`'s remedy is built from (`presets.ts`), so this menu never offers
   // what that gate will refuse.
   const selectable = new Set(
-    usablePresets(presets, catalog.ok ? catalog.value : []).map((preset) => preset.baseModelId),
+    usablePresets(presets, catalog.ok ? catalog.value.models : []).map(
+      (preset) => preset.baseModelId,
+    ),
   )
+  const unusable = withheld ? ' (not visible to this system token)' : ' (no provider wired for it)'
   const options = presets.map((preset) => ({
     value: preset.presetId,
     label:
       `${preset.name} (${preset.baseModelId})` +
-      (catalog.ok && !selectable.has(preset.baseModelId) ? ' (no provider wired for it)' : '') +
+      (catalog.ok && !selectable.has(preset.baseModelId) ? unusable : '') +
       (preset.isDefault ? ' [workspace default]' : ''),
   }))
   // A selectable preset is preselected over the workspace default when the two differ, because the
@@ -738,8 +768,8 @@ export function connectDeployment(baseUrl: string, apiKey: string): ConfigureCli
       return presets
     },
     async models() {
-      const { models } = await client.models.list()
-      return models
+      const { models, excludesUserScopedModels } = await client.models.list()
+      return { models, excludesUserScopedModels }
     },
   }
 }
