@@ -16,13 +16,20 @@
 A run nobody is watching now finishes instead of waiting on a person who is not coming, and a
 workspace states that posture per intake rather than once for everything.
 
-Three parks stopped an otherwise-autonomous run, and none of them is a checkpoint anybody asked for:
-a companion at its automatic rework cap, an iterative review at its reviewer-pass cap, and the
-Coder's follow-up companion holding the run while any item is undecided. Each is the automation
-reporting that it gave up, and each already offered a person a documented "proceed anyway". A run
-started over `/api/v1`, dispatched from a ticket or fired by a schedule had nobody to offer it to,
-so it waited indefinitely. The headless acceptance suite found this on `pl_build`, stopping on an
-`approval-gate` raised by `architect-companion`.
+Four parks stopped an otherwise-autonomous run, and none of them is a checkpoint anybody asked for:
+a companion at its automatic rework cap, a JUDGE at its bounce cap, an iterative review at its
+reviewer-pass cap, and the Coder's follow-up companion holding the run while any item is undecided.
+Each is the automation reporting that it gave up, and each already offered a person a documented
+"proceed anyway". A run started over `/api/v1`, dispatched from a ticket or fired by a schedule had
+nobody to offer it to, so it waited indefinitely. The headless acceptance suite found this on
+`pl_build`, stopping on an `approval-gate` raised by `architect-companion`.
+
+A judge's other two parks are deliberately NOT in that set — `onFail: 'park'` is a registration
+asking for a person, and a verdict with no producing step to bounce to never got to try — so
+`disposeJudgeVerdict` now returns a machine-readable `JudgeParkReason` instead of leaving the engine
+to tell them apart by their prose. A review still ASKING questions parks under either posture too:
+the answers are a product judgement, and inventing them is the one thing an unattended policy may
+never do.
 
 - **`RiskPolicy.autonomy`** (`attended` | `unattended`) decides which way those three go. `attended`
   is byte-for-byte the previous behaviour and is what every existing policy, every custom one, and
@@ -44,15 +51,31 @@ so it waited indefinitely. The headless acceptance suite found this on `pl_build
   `Balanced` with one field changed, deliberately: a seed may decide that an unwatched run should
   not wait forever on an automation budget, and may not decide that it gets to land a change an
   operator's own thresholds would have held.
+- **Pinning a task to it is a permission**, not a preference. `refuseRiskPolicySelection` gained a
+  `relaxes_run_oversight` arm: `mp_unattended`'s role layer is empty, identical to `Balanced`'s, so
+  without it any member could re-point a task onto the seeded policy and remove the human
+  checkpoints their workspace's own default raises.
+- **Every grading loop now remembers its own rounds.** `step.companion.verdicts` recorded one verdict
+  per cycle and no prompt read it, so a companion re-graded a revised document with no idea what it
+  had asked for last time — the loop resampled instead of converging, and a rework budget bought
+  nothing. Both sides of the loop now receive the rounds so far (`AgentRunContext.priorReview`,
+  folded once in `userPromptFor`, so an inline companion, a container-backed one, a
+  deployment-registered one and the producer being reworked all get it), and the 0..1 scale is
+  anchored and SHARED with the judge bucket, which had carried its previous verdict all along.
 
 **Migration, and the one thing to check.** Both facades' migrations materialise `mp_unattended` in
-every existing workspace and then name the unattended default _unless configured differently_: a
-workspace still sitting on the shipped `mp_balanced` gets the new policy, and one whose operator had
-already moved the default onto a policy of their own keeps THAT for unattended runs too. So landing
-authority does not move underneath anyone; what changes is that such runs stop parking on the three
-caps. A deployment that WANTS its API-started runs to keep parking re-points `isUnattendedDefault`
-at a policy whose `autonomy` is `attended` (the shipped `Balanced` or `Manual review only` both
-qualify).
+every existing workspace as a CLONE of that workspace's own default row, with `autonomy` the only
+field changed. Cloning, not seeding stock values: a built-in is editable in place, so a workspace
+that tightened its `Balanced` still holds `id = 'mp_balanced'`, and writing catalog ceilings beside
+it would hand every API-started run there a wider licence to land than its operator granted. Every
+ceiling, budget and per-role restriction is inherited (`dryRunRoles` and `submissionClassesByRole`
+above all). Landing authority does not move underneath anyone; what changes is that such runs stop
+parking on the caps. A deployment that WANTS its API-started runs to keep parking re-points
+`isUnattendedDefault` at a policy whose `autonomy` is `attended`.
+
+`Balanced` and `Manual review only` are NOT version-bumped. Both new fields land on them as the
+migration's column defaults, so a stored row and a freshly seeded one are identical — advising every
+existing workspace to reseed for a zero-delta change would invite them to overwrite their own edits.
 
 **Public API (additive, OpenAPI 1.49.0).** `GET /api/v1/risk-policies` gains `isUnattendedDefault`
 and `autonomy`. `isDefault` keeps its exact former meaning, so nothing an existing client was told

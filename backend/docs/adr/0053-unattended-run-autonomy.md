@@ -109,13 +109,27 @@ that genuinely wants its API-started work to stop for a person would have had no
 **Why the migration backfills rather than letting existing boards adopt it through the reseed
 advisory.** A scope with no default resolves `FALLBACK_RISK_POLICY`, which auto-merges nothing.
 Shipping the column empty would have silently stopped every API-started task in every existing
-workspace from landing, which is a regression dressed as a new feature. So both migrations
-materialise `mp_unattended` in every workspace that already has a library and then name the
-unattended default "unless configured differently": a workspace still sitting on the shipped
-`mp_balanced` gets the new policy, and one whose operator had already moved the default onto a policy
-of their own keeps THAT for unattended runs too. Landing authority never moves underneath somebody
-who has already stated theirs; all they gain is a run that stops waiting on a person who is not
-there, and they opt into more by re-pointing the flag.
+workspace from landing, which is a regression dressed as a new feature.
+
+**And why it CLONES that workspace's own default rather than writing the catalog's values.** A
+built-in is editable in place, so a row's id says nothing about whether its ceilings are still the
+ones we shipped: a workspace that tightened its `Balanced` down to `maxRisk: 0.1` with auto-merge off
+keeps `id = 'mp_balanced'`. Seeding stock values beside it — which the first cut of this migration
+did, gated on exactly that id — would have handed every API-started run in that workspace a wider
+licence to land than its operator's own default grants. So `mp_unattended` is materialised as a copy
+of whatever the workspace's `is_default` row holds, with `autonomy` as the only field changed: every
+ceiling, budget and per-role restriction is inherited, `dry_run_roles` and
+`submission_classes_by_role` above all, being the role-scoped landing authority itself. Landing
+authority never moves underneath somebody who has already stated theirs; all they gain is a run that
+stops waiting on a person who is not there, and they widen it themselves by editing the row.
+
+**Why `Balanced` and `Manual review only` do NOT get a version bump.** A bump is an advisory that a
+workspace should reseed, and accepting one restores a row's canonical name, ceilings, auto-merge
+posture and per-role rules, wiping whatever an operator edited into a built-in they are explicitly
+allowed to edit. That price is worth paying when a seed's CONTENT moved. Here it did not: both new
+fields land on those rows as the migration's own column defaults, so a stored v6 row and a freshly
+seeded one are byte-for-byte identical, and every existing deployment would have been told to adopt
+a zero-delta change.
 
 **Why `proceed` and not the other two cap choices.** `extra-round` spends model calls on a loop that
 has already demonstrated it does not converge; `stop-reset` throws away the run. Both are defensible
@@ -132,6 +146,14 @@ per scope. Judging only the interactive one would admit a move that is safe for 
 runs and hands the same task's API-started runs a wider landing authority. The library is already
 read whole, so the second scope costs no query.
 
+**Why that guard also gained an OVERSIGHT arm.** Every workspace now seeds a policy whose role layer
+is empty — `mp_unattended` carries no `dryRunRoles`, no allowlist and no per-role class rule, exactly
+like `mp_balanced` — so all three of the guard's existing arms pass it, and pinning a task to it was
+a member-tier board write away. What it changes is not landing authority but whether a run stops for
+a person at all, which is the same kind of capability the guard exists to compare. `relaxes_run_oversight`
+is tested ahead of the merge-ladder arms, because the parks it drops are raised while the run is
+still working, before there is a pull request to weigh.
+
 ## Consequences
 
 - An unattended run that would previously have parked on one of the three caps now finishes, and says
@@ -145,7 +167,24 @@ read whole, so the second scope costs no query.
 - `RiskPolicyRepository.getDefault` takes the scope, and `upsert` enforces the single-default
   invariant PER scope (the two flags are independent, so one row may hold both). Neither scope's
   default can be deleted.
-- The three parks this covers are the ones the engine raises when its own automation gives up. A
-  FOURTH such park added later has to decide whether it belongs to that set, and the honest test is
+- The parks this covers are the ones the engine raises when its own automation gives up. The JUDGE's
+  rework cap is the fourth, decided by that test and answered the same way; its two OTHER parks are
+  not (`onFail: 'park'` is a registration asking for a person, and a verdict with no producing step
+  to bounce to never got to try), which is why `disposeJudgeVerdict` returns a machine-readable
+  `JudgeParkReason` rather than leaving the engine to tell them apart by their prose.
+- The iterative review's cap is covered too, and stays RARE by construction: a review still ASKING
+  questions parks under either posture, because the answers are a product judgement and inventing
+  them is the one thing an unattended policy may never do. An unattended run therefore meets that
+  park first. The answer is not to settle the questions but to keep an attended-heavy step out of
+  the pipeline unwatched runs resolve, which per-scope pipeline defaults will address separately.
+- A FIFTH such park added later has to decide whether it belongs to that set, and the honest test is
   the one this ADR opens with: does a person's answer here settle a judgement, or does it only
   confirm that the automation should stop trying?
+- **A budget only buys convergence if the loop remembers.** `step.companion.verdicts` accumulated a
+  verdict per grading cycle and no prompt ever read it, so a companion re-graded a revised document
+  knowing nothing of what it had asked for last round: independent draws, a fresh subset of problems
+  each pass, and a rating that wandered (72% → 77% → 72% → 78% on a real run) while the work
+  improved. The JUDGE bucket had carried its previous verdict from the start; the companion bucket
+  now does too, both sides of the loop, through one `AgentRunContext.priorReview` slice and one fold
+  in `userPromptFor`. The anchored 0..1 scale is shared with the judge for the same reason a
+  threshold has to mean one thing: an operator sets a single number per policy.

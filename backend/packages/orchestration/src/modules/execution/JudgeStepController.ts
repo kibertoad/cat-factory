@@ -11,10 +11,12 @@ import type {
   JudgeModelPin,
   JudgeStepState,
   JudgeVerdict,
+  Logger,
   PipelineStep,
   ResolveJudgeInput,
   RaiseNotificationInput,
   RiskPolicy,
+  RunAutonomy,
   RunCredentialScope,
   RunInitiatorScope,
   WorkRunner,
@@ -29,7 +31,7 @@ import { parseJudgeVerdict } from '@cat-factory/contracts'
 import type { AdvanceResult } from './advance.js'
 import type { FragmentBodyResolver } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
-import type { RunPolicyScope } from './policy-types.js'
+import { resolvesOwnCaps, type RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
 
 // ---------------------------------------------------------------------------
@@ -79,13 +81,15 @@ export interface JudgeStepControllerDeps {
     workspaceId: string,
     block: Block,
     run: RunPolicyScope,
-  ) => Promise<Pick<RiskPolicy, 'judgeMinScore' | 'judgeMaxBounces'>>
+  ) => Promise<Pick<RiskPolicy, 'judgeMinScore' | 'judgeMaxBounces'> & { autonomy?: RunAutonomy }>
   /**
    * The prompt-fragment library, used for ONE thing: resolving a rubric's per-workspace
    * override body. Absent (no library configured) ⇒ the registration's default rubric, which
    * is exactly the behaviour a stock deployment gets.
    */
   fragmentResolver?: FragmentBodyResolver
+  /** Facade logger; absent in tests, where the cap decision is asserted off the step instead. */
+  logger?: Logger
   /** The engine's completion spine, so a passing judge finishes + advances like any step. */
   recordStepResult: (
     workspaceId: string,
@@ -302,8 +306,65 @@ export class JudgeStepController {
           stepIndex,
         })
       default:
+        // The REWORK CAP with nobody coming to answer it. Structurally the companion's, and the
+        // fourth park ADR 0053's closing test asks about: the judge spent its whole bounce budget
+        // and the three choices the card offers ("proceed anyway, send it back, stop the run")
+        // only confirm that it should stop trying. Routed through the SAME pass branch a cleared
+        // verdict takes, which is what "accept the work as it stands" means everywhere else.
+        if (
+          decision.parkReason === 'budget_spent' &&
+          (await this.settleCapUnattended(workspaceId, instance, block, step, judgeState, judge))
+        ) {
+          return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, {
+            output: renderCapSettledOutput(judge, verdict, judgeState),
+          })
+        }
         return this.park(workspaceId, instance, step, block, judge, verdict)
     }
+  }
+
+  /**
+   * Whether the run's policy answers this judge's REWORK CAP for itself.
+   *
+   * Reads the policy at the moment the cap is REACHED rather than at run start, matching the
+   * companion's cap and every other policy read in the engine: an operator who moves a task onto
+   * an attended policy while it is working gets the park back.
+   *
+   * The caller has already narrowed to `parkReason === 'budget_spent'`, and that narrowing is the
+   * whole safety property — the two OTHER ways a verdict parks are not the automation giving up
+   * (see kernel's `JudgeParkReason`) and must keep waiting for a person under any policy.
+   *
+   * It REWRITES the note as well as stamping `capSettledByPolicy`, because `disposeJudgeVerdict`
+   * wrote "asking a human" and nobody was asked. A record that names the wrong actor is worse
+   * than none: it is the sentence a reviewer would quote.
+   */
+  private async settleCapUnattended(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    step: PipelineStep,
+    judgeState: JudgeStepState,
+    judge: JudgeDefinition,
+  ): Promise<boolean> {
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
+    if (!resolvesOwnCaps(preset)) return false
+    judgeState.status = 'passed'
+    judgeState.capSettledByPolicy = true
+    judgeState.note =
+      `Rework budget spent (${judgeState.bounces ?? 0}/${judgeState.maxBounces ?? 0} bounce ` +
+      `round(s)) with the verdict still below the bar, and this run's risk policy answered the ` +
+      `cap rather than waiting for a person. The work proceeded as it stands.`
+    this.deps.logger?.info('judge rework cap settled by policy', {
+      workspaceId,
+      runId: instance.id,
+      blockId: block.id,
+      agentKind: step.agentKind,
+      rubricName: judge.rubric.name,
+      bounces: judgeState.bounces ?? 0,
+      threshold: judgeState.threshold ?? 0,
+      score: judgeState.verdict?.score ?? null,
+    })
+    return true
   }
 
   /**
@@ -577,6 +638,27 @@ function priorOutputsFor(
     .slice(0, Math.max(stepIndex, 0))
     .filter((s) => !!s.output?.trim())
     .map((s) => ({ agentKind: s.agentKind, output: s.output! }))
+}
+
+/**
+ * The step output for a cap the POLICY settled. Deliberately not {@link renderPassOutput}: that
+ * one says the review "passed", and this verdict did not — it was below the bar and the run went
+ * on anyway. The step's own text is what a reader meets first, so it has to say which of the two
+ * happened.
+ */
+function renderCapSettledOutput(
+  judge: JudgeDefinition,
+  verdict: JudgeVerdict,
+  state: JudgeStepState,
+): string {
+  const threshold = state.threshold ?? 0
+  return (
+    `The "${judge.rubric.name}" review did not clear the bar ` +
+    `(${verdict.score.toFixed(2)} < ${threshold.toFixed(2)}) and its rework budget ` +
+    `(${state.bounces ?? 0}/${state.maxBounces ?? 0} round(s)) is spent. This run's risk policy ` +
+    `answered the cap instead of stopping for a person, so the work proceeded as it stands. ` +
+    `${verdict.summary}`.trim()
+  )
 }
 
 /** The step output a PASSING judge records (what it scored, and what it still noted). */

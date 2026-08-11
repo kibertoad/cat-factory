@@ -157,7 +157,29 @@ watch(
   { immediate: true, deep: false },
 )
 
+/**
+ * Which single control is mid-request, keyed `<policyId>[:<action>]`.
+ *
+ * Per ACTION and not merely per policy, because a row now carries two independent promote
+ * buttons: keyed by policy alone, promoting the in-app default spun the unattended button too and
+ * told the operator a change they had not asked for was in flight.
+ */
 const busy = ref<string | null>(null)
+
+/**
+ * Why the delete button is disabled, naming the flag that actually blocks it.
+ *
+ * The two are promoted by DIFFERENT buttons, so collapsing them into one "promote another preset
+ * first" message sends an operator to re-point the in-app default and come back to a delete that
+ * is still refused, with nothing on screen saying why.
+ */
+function deleteBlockedReason(p: RiskPolicy): string {
+  if (p.isDefault && p.isUnattendedDefault)
+    return t('settings.riskPolicy.deleteBothDefaultsBlocked')
+  if (p.isDefault) return t('settings.riskPolicy.deleteDefaultBlocked')
+  if (p.isUnattendedDefault) return t('settings.riskPolicy.deleteUnattendedDefaultBlocked')
+  return t('settings.riskPolicy.deletePreset')
+}
 
 async function save(p: RiskPolicy) {
   const d = drafts[p.id]
@@ -193,7 +215,7 @@ async function save(p: RiskPolicy) {
 }
 
 async function makeDefault(p: RiskPolicy) {
-  busy.value = p.id
+  busy.value = `${p.id}:default`
   try {
     await store.update(p.id, { isDefault: true })
   } catch (e) {
@@ -212,7 +234,7 @@ async function makeDefault(p: RiskPolicy) {
  * flagging one policy both ways is a deliberate choice rather than the only option.
  */
 async function makeUnattendedDefault(p: RiskPolicy) {
-  busy.value = p.id
+  busy.value = `${p.id}:unattended`
   try {
     await store.update(p.id, { isUnattendedDefault: true })
   } catch (e) {
@@ -333,16 +355,27 @@ async function create() {
         <UBadge v-if="p.isUnattendedDefault" color="info" variant="subtle" size="sm">
           {{ t('settings.riskPolicy.unattendedDefault') }}
         </UBadge>
+        <!--
+          Visibly labelled, like its `makeDefault` sibling below. `title` is a tooltip, NOT an
+          accessible name: icon-only, this was announced as an unlabelled button, and a sighted
+          user had to hover a bare glyph to discover it re-points which policy governs every
+          unwatched run. The short text is the accessible name (so it is not one of those buttons
+          whose spoken name and printed label disagree) and the longer `title` still explains
+          which runs those are. `busy` is compared to a per-BUTTON key so promoting one default
+          does not spin the other's button too.
+        -->
         <UButton
           v-else
           color="neutral"
           variant="ghost"
           size="xs"
           icon="i-lucide-bot"
-          :loading="busy === p.id"
+          :loading="busy === `${p.id}:unattended`"
           :title="t('settings.riskPolicy.makeUnattendedDefault')"
           @click="makeUnattendedDefault(p)"
-        />
+        >
+          {{ t('settings.riskPolicy.makeUnattendedDefaultShort') }}
+        </UButton>
         <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="sm">
           {{ t('settings.riskPolicy.default') }}
         </UBadge>
@@ -352,7 +385,7 @@ async function create() {
           variant="ghost"
           size="xs"
           icon="i-lucide-star"
-          :loading="busy === p.id"
+          :loading="busy === `${p.id}:default`"
           @click="makeDefault(p)"
         >
           {{ t('settings.riskPolicy.makeDefault') }}
@@ -362,12 +395,8 @@ async function create() {
           variant="ghost"
           size="xs"
           icon="i-lucide-trash-2"
-          :disabled="p.isDefault || p.isUnattendedDefault || busy === p.id"
-          :title="
-            p.isDefault || p.isUnattendedDefault
-              ? t('settings.riskPolicy.deleteDefaultBlocked')
-              : t('settings.riskPolicy.deletePreset')
-          "
+          :disabled="p.isDefault || p.isUnattendedDefault || busy?.startsWith(p.id)"
+          :title="deleteBlockedReason(p)"
           @click="remove(p)"
         />
       </div>

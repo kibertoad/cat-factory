@@ -404,11 +404,17 @@ export class CompanionController {
     const passed = firstBatch && hasComments ? false : rating >= companion.threshold
     // Append this cycle's standardized verdict (the same shape the requirements-rework
     // gate stores) so the whole correction sequence is visible, not just the latest.
+    //
+    // The anchored COMMENTS ride along, and that is what makes the list usable as MEMORY rather
+    // than only as a display record: the next round shows this back to the companion, and "was
+    // what I asked for done" is unanswerable against a summary that named none of the asks (see
+    // `companion-review-context.ts`). Empty is left absent rather than stored as `[]`.
     companion.verdicts.push({
       rating,
       threshold: companion.threshold,
       passed,
       feedback,
+      ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
     })
     step.companion = companion
     step.output = feedback || result.output || ''

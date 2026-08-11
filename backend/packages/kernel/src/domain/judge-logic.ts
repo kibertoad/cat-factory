@@ -37,11 +37,34 @@ export interface JudgeDispositionInput {
   hasBounceTarget: boolean
 }
 
+/**
+ * WHY a verdict parked, as a closed vocabulary rather than prose.
+ *
+ * The three are not interchangeable, and only one of them is the automation reporting that it
+ * GAVE UP:
+ *  - `budget_spent` — the rework rounds are exhausted and the judge stopped trying. A person's
+ *    answer here only confirms that, which is what makes it the one an unattended risk policy
+ *    may answer on their behalf (ADR 0053).
+ *  - `no_bounce_target` — the verdict is below the bar and there is no producing step to send it
+ *    back to. The automation never got to try, so accepting the work anyway is a JUDGEMENT, and
+ *    a policy that took it would be waving through work nothing reviewed.
+ *  - `registration` — the judge declared `onFail: 'park'`, i.e. its author asked for a human.
+ *    That is a park somebody REQUESTED, in the same class as a pipeline's approval gate, and
+ *    autonomy never touches those.
+ *
+ * It exists so the engine branches on a value rather than matching {@link
+ * JudgeDispositionResult.note}, which is display prose one wording change away from re-pointing
+ * the decision silently.
+ */
+export type JudgeParkReason = 'budget_spent' | 'no_bounce_target' | 'registration'
+
 /** The decision plus the reason to record on the step (surfaced in the window + PR report). */
 export interface JudgeDispositionResult {
   disposition: JudgeDisposition
   /** Human-readable reason, recorded on `step.judge.note` for a non-obvious outcome. */
   note?: string
+  /** Set exactly when `disposition` is `park`; see {@link JudgeParkReason}. */
+  parkReason?: JudgeParkReason
 }
 
 /**
@@ -66,17 +89,19 @@ export function disposeJudgeVerdict(input: JudgeDispositionInput): JudgeDisposit
       return {
         disposition: 'park',
         note: 'No preceding producing step to bounce to, so the verdict needs a human decision.',
+        parkReason: 'no_bounce_target',
       }
     }
     if (bounces >= maxBounces) {
       return {
         disposition: 'park',
         note: `Rework budget spent (${bounces}/${maxBounces} bounce round(s)); asking a human.`,
+        parkReason: 'budget_spent',
       }
     }
     return { disposition: 'bounce' }
   }
-  return { disposition: 'park' }
+  return { disposition: 'park', parkReason: 'registration' }
 }
 
 /**

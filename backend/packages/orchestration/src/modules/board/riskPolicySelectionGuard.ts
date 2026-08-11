@@ -81,8 +81,27 @@ export interface RiskPolicySelectionGuard {
   }): Promise<void>
 }
 
+/**
+ * The scopes a pair of selections has to be judged under.
+ *
+ * `resolveRiskPolicy` consults the scope for ONE thing: which default a side that pinned nothing
+ * falls back to. So when both sides name a policy outright, every scope resolves the identical
+ * pair and judging them one per scope is a second resolution of the same rows reaching the same
+ * verdict. The moment either side falls back to a default the two scopes can disagree, and that
+ * disagreement is exactly what the second scope was added to catch, so then both are judged.
+ */
+const scopesFor = (...ids: (string | null | undefined)[]): readonly RiskPolicyDefaultScope[] =>
+  ids.every((id) => id) ? SCOPE_INDEPENDENT : RISK_POLICY_DEFAULT_SCOPES
+
+/** One arbitrary scope, for the pinned case above where they all resolve alike. */
+const SCOPE_INDEPENDENT: readonly RiskPolicyDefaultScope[] = [RISK_POLICY_DEFAULT_SCOPES[0]!]
+
 /** Why the swap was refused, in copy the person holding the picker can act on. */
 const REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
+  relaxes_run_oversight:
+    'The merge policy you picked lets a run of this task answer its own review checkpoints ' +
+    'instead of stopping for a person. Ask a workspace admin to change the policy or to run ' +
+    'this task themselves.',
   relaxes_role_sandbox:
     'This task runs sandboxed for your role, and the merge policy you picked does not. Ask a ' +
     'workspace admin to change the policy or to run this task themselves.',
@@ -95,7 +114,7 @@ const REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
 }
 
 /**
- * The same three refusals, said about the DESTINATION rather than about a picked preset. Separate
+ * The same four refusals, said about the DESTINATION rather than about a picked preset. Separate
  * copy rather than a shared string with the noun swapped, because the person who dragged a task
  * between two services picked no policy at all: told "the merge policy you picked", they would go
  * looking for a picker they never touched.
@@ -104,6 +123,10 @@ const REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
  * to its own copy (CLAUDE.md: the backend does not localize prose).
  */
 const MOVE_REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
+  relaxes_run_oversight:
+    'The merge policy where you are moving this task lets a run answer its own review ' +
+    'checkpoints instead of stopping for a person, and the one governing it here does not. Ask ' +
+    'a workspace admin to move it.',
   relaxes_role_sandbox:
     'This task runs sandboxed for your role where it is now, and the merge policy governing it ' +
     'where you are moving it does not. Ask a workspace admin to move it.',
@@ -167,7 +190,7 @@ export function createRiskPolicySelectionGuard(deps: {
       // Both sides are in force in the SAME workspace here, so one actor answers for both.
       if (!couldRefuse(actor, actor)) return
       const policy = await openLibrary(homeWorkspaceId)
-      for (const scope of RISK_POLICY_DEFAULT_SCOPES) {
+      for (const scope of scopesFor(currentId, nextId)) {
         const [from, to] = await Promise.all([policy(currentId, scope), policy(nextId, scope)])
         const refusal = refuseRiskPolicySelection({
           from: { policy: from, actor },
@@ -198,7 +221,8 @@ export function createRiskPolicySelectionGuard(deps: {
       ])
       for (const pick of picks) {
         const id = pick || null
-        for (const scope of RISK_POLICY_DEFAULT_SCOPES) {
+        // One id, resolved on both sides — so it is pinned for both or falls back on both.
+        for (const scope of scopesFor(id, id)) {
           const [held, next] = await Promise.all([fromPolicy(id, scope), toPolicy(id, scope)])
           const refusal = refuseRiskPolicySelection({
             from: { policy: held, actor: fromActor },

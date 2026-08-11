@@ -254,7 +254,14 @@ export class ReviewGateController {
       if (review.status === 'incorporated') {
         return this.completeStep(workspaceId, instance, step, isFinalStep)
       }
-      const settled = await this.settleCapUnattended(kind, workspaceId, instance, block, review)
+      const settled = await this.settleCapUnattended(
+        kind,
+        workspaceId,
+        instance,
+        block,
+        review,
+        step,
+      )
       if (settled) return this.completeStep(workspaceId, instance, step, isFinalStep)
       // `ready`/`exceeded`: re-park (a fresh decision id) and wait for the human again.
       // At the cap, raise a notification so the three-choice decision is discoverable.
@@ -274,7 +281,7 @@ export class ReviewGateController {
     // At the cap with nobody to ask: settle on the last clarified report and advance (see
     // `settleCapUnattended`). Checked before the auto-recommendation pass below, which exists to
     // hand a HUMAN a mostly-filled review and buys an unattended run nothing.
-    if (await this.settleCapUnattended(kind, workspaceId, instance, block, review)) {
+    if (await this.settleCapUnattended(kind, workspaceId, instance, block, review, step)) {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
     // Pre-answer the findings the reviewer judged answerable without a product owner, so the
@@ -302,7 +309,17 @@ export class ReviewGateController {
    *
    * Returns whether it settled, so the caller advances instead of parking. Only `exceeded`
    * qualifies: a `ready` review is a reviewer asking QUESTIONS, which is the consultation an
-   * unattended policy never answers on a person's behalf.
+   * unattended policy never answers on a person's behalf. Settling one would mean building from
+   * requirements nobody agreed to, and the step is worth nothing if it does that.
+   *
+   * **So this branch is RARE by construction, and that is correct rather than a bug to fix.**
+   * `disposeReview` reaches `exceeded` only at `iteration >= maxIterations`, the initial pass is
+   * iteration 1, and the counter advances only through human answer → incorporate → re-review
+   * cycles. An unattended run therefore meets `ready` first and parks there, and reaches this at
+   * all only when a run that HAD a person is later governed by an unattended policy, or when the
+   * preset allows a single pass. The answer to "an unattended run should not sit on an
+   * attended-heavy step" is not to settle the questions here: it is not to put the step in the
+   * pipeline that unwatched runs resolve.
    */
   private async settleCapUnattended<TReview extends ReviewCommon>(
     kind: ReviewKind<TReview>,
@@ -310,17 +327,23 @@ export class ReviewGateController {
     instance: ExecutionInstance,
     block: Block,
     review: TReview,
+    step: PipelineStep,
   ): Promise<boolean> {
     if (review.status !== 'exceeded') return false
     const preset = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
     if (!resolvesOwnCaps(preset)) return false
     const settled = await kind.markIncorporated(workspaceId, review.id)
+    // Stamped BEFORE the caller advances, so the record lands with the step that carries it. The
+    // review row itself says only `incorporated`, which is also what a person's own "proceed"
+    // writes; this is the one thing that tells those apart afterwards.
+    step.reviewCapSettledByPolicy = true
     await kind.emit(workspaceId, settled)
     this.deps.logger?.info('review iteration cap settled by policy', {
       workspaceId,
       runId: instance.id,
       blockId: block.id,
       reviewId: review.id,
+      agentKind: step.agentKind,
       iterations: preset.maxRequirementIterations,
     })
     return true

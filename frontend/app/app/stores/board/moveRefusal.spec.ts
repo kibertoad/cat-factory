@@ -8,11 +8,17 @@ const refused = (reason: string) => ({
   body: { error: { code: 'forbidden', details: { reason } } },
 })
 
-const REASONS: RiskPolicySelectionRefusal[] = [
-  'relaxes_role_sandbox',
-  'relaxes_role_submission_allowlist',
-  'relaxes_role_class_rule',
-]
+/**
+ * Exhaustive BY CONSTRUCTION. A bare `RiskPolicySelectionRefusal[]` literal type-checks while
+ * being SHORT, so a reason added to the contracts union would reach the user as the backend's
+ * untranslated English with nothing failing; `satisfies Record<…>` fails to compile instead.
+ */
+const REASONS = Object.keys({
+  relaxes_run_oversight: true,
+  relaxes_role_sandbox: true,
+  relaxes_role_submission_allowlist: true,
+  relaxes_role_class_rule: true,
+} satisfies Record<RiskPolicySelectionRefusal, true>) as RiskPolicySelectionRefusal[]
 
 describe('moveRefusalKey', () => {
   it('maps every refusal reason to a key the catalog actually holds', () => {

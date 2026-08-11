@@ -21,6 +21,7 @@ import { apiErrorReason } from '~/composables/api/errors'
  * falls back to the backend's own message, which is the honest last resort.
  */
 const MOVE_REFUSAL_KEY: Record<RiskPolicySelectionRefusal, string> = {
+  relaxes_run_oversight: 'board.toast.moveRefused.relaxes_run_oversight',
   relaxes_role_sandbox: 'board.toast.moveRefused.relaxes_role_sandbox',
   relaxes_role_submission_allowlist: 'board.toast.moveRefused.relaxes_role_submission_allowlist',
   relaxes_role_class_rule: 'board.toast.moveRefused.relaxes_role_class_rule',

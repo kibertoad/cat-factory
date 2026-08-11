@@ -159,6 +159,13 @@ export class FollowUpGateController {
    *
    * Returns whether it dismissed anything, so the caller falls through to the ordinary
    * loop/advance instead of parking. `false` leaves the park exactly as it was.
+   *
+   * It reads the block to resolve the policy, which is a repository call the ATTENDED case does
+   * not need. That is affordable here and nowhere near a hot path: the caller reaches this only
+   * when a Coder completion left an item undecided, so it is at most once per Coder step, and the
+   * policy read itself is served from the `riskPolicy` cache slice. Threading the block down from
+   * `recordStepResult` (which does not carry one, on either the inline or the job-poll path)
+   * would widen a shared settle signature to save that one read.
    */
   private async dismissPendingUnattended(
     workspaceId: string,
@@ -166,7 +173,18 @@ export class FollowUpGateController {
     state: FollowUpsStepState,
   ): Promise<boolean> {
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return false
+    if (!block) {
+      // Falling through to the park is the right disposition — with no block there is no policy
+      // to consult, and waiting for a person is what every policy did before this existed. But it
+      // must not be SILENT: the two branches below log their decision, and an unattended run that
+      // parked anyway is a support question whose answer is otherwise invisible.
+      this.logger?.warn('follow-up policy check skipped: the run’s block could not be read', {
+        workspaceId,
+        runId: instance.id,
+        blockId: instance.blockId,
+      })
+      return false
+    }
     const policy = await this.resolveRiskPolicy(workspaceId, block, instance)
     if (!resolvesOwnCaps(policy)) return false
     const now = this.clock.now()

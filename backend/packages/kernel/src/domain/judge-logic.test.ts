@@ -57,6 +57,35 @@ describe('disposeJudgeVerdict', () => {
     expect(result.note).toContain('No preceding producing step')
   })
 
+  it('distinguishes the three parks by REASON, not by their prose', () => {
+    // The engine branches on this: only `budget_spent` is the automation giving up, so only that
+    // one may be answered by an unattended risk policy. Reading the distinction back out of
+    // `note` would re-point the decision the next time somebody rewords a sentence.
+    const below = { ...base, verdict: verdict(0.5) } as const
+    expect(disposeJudgeVerdict({ ...below, onFail: 'park' }).parkReason).toBe('registration')
+    expect(
+      disposeJudgeVerdict({ ...below, onFail: 'bounce', hasBounceTarget: false }).parkReason,
+    ).toBe('no_bounce_target')
+    expect(
+      disposeJudgeVerdict({ ...below, onFail: 'bounce', bounces: 1, maxBounces: 1 }).parkReason,
+    ).toBe('budget_spent')
+    // A ZERO budget reads as spent too, and deliberately so: `bounces >= maxBounces` is the same
+    // question either way. The composition to be aware of is a preset that sets both
+    // `judgeMaxBounces: 0` and `autonomy: 'unattended'` — such a run proceeds past a failing
+    // verdict having spent no rework at all. That is what its operator asked for on both knobs,
+    // and the step records that policy decided it; the shipped `Manual review only` cannot reach
+    // it, being `attended`.
+    expect(disposeJudgeVerdict({ ...below, onFail: 'bounce', maxBounces: 0 }).parkReason).toBe(
+      'budget_spent',
+    )
+    // Nothing that is not a park carries one.
+    expect(
+      disposeJudgeVerdict({ ...base, verdict: verdict(0.9), onFail: 'park' }).parkReason,
+    ).toBeUndefined()
+    expect(disposeJudgeVerdict({ ...below, onFail: 'fail' }).parkReason).toBeUndefined()
+    expect(disposeJudgeVerdict({ ...below, onFail: 'bounce' }).parkReason).toBeUndefined()
+  })
+
   it('treats a zero bounce budget as "never bounce"', () => {
     // `judgeMaxBounces: 0` is the "Manual review only" preset's setting: it routes everything to
     // the human it already asks, rather than spending a rework round on its own.

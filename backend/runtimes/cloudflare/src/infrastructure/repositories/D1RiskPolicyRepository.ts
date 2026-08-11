@@ -137,27 +137,39 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
 
   async upsert(workspaceId: string, preset: RiskPolicy): Promise<void> {
     // Promoting this preset to a default demotes any other holder of THAT flag first, so the
-    // single-default invariant holds per scope. Two statements rather than one, because the flags
-    // are independent: promoting the unattended default must leave the in-app one alone.
-    if (preset.isDefault) {
-      await this.db
-        .prepare(
-          `UPDATE merge_threshold_presets SET is_default = 0
-             WHERE workspace_id = ? AND id <> ?`,
-        )
-        .bind(workspaceId, preset.id)
-        .run()
-    }
-    if (preset.isUnattendedDefault) {
-      await this.db
-        .prepare(
-          `UPDATE merge_threshold_presets SET is_unattended_default = 0
-             WHERE workspace_id = ? AND id <> ?`,
-        )
-        .bind(workspaceId, preset.id)
-        .run()
-    }
-    await this.db
+    // single-default invariant holds per scope. Separate statements rather than one, because the
+    // flags are independent: promoting the unattended default must leave the in-app one alone.
+    //
+    // ONE `batch`, which D1 runs as a single implicit transaction, mirroring the Drizzle
+    // repository's explicit `db.transaction`. Run loose, a demote that committed before a failed
+    // INSERT (a D1 error, an isolate eviction between the two awaits) would leave the workspace
+    // with NO row holding that flag — `getDefault` then returns null and every run of that scope
+    // silently falls to `FALLBACK_RISK_POLICY`, which auto-merges nothing. The two facades claim
+    // to be behaviourally identical, and a partial-failure state only one of them can reach is
+    // exactly the drift that claim exists to prevent.
+    const demotions = [
+      ...(preset.isDefault
+        ? [
+            this.db
+              .prepare(
+                `UPDATE merge_threshold_presets SET is_default = 0
+                   WHERE workspace_id = ? AND id <> ?`,
+              )
+              .bind(workspaceId, preset.id),
+          ]
+        : []),
+      ...(preset.isUnattendedDefault
+        ? [
+            this.db
+              .prepare(
+                `UPDATE merge_threshold_presets SET is_unattended_default = 0
+                   WHERE workspace_id = ? AND id <> ?`,
+              )
+              .bind(workspaceId, preset.id),
+          ]
+        : []),
+    ]
+    const write = this.db
       .prepare(
         `INSERT INTO merge_threshold_presets
            (workspace_id, id, name, max_complexity, max_risk, max_impact, ci_max_attempts,
@@ -222,7 +234,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         preset.isUnattendedDefault ? 1 : 0,
         preset.createdAt,
       )
-      .run()
+    await this.db.batch([...demotions, write])
   }
 
   async remove(workspaceId: string, id: string): Promise<void> {

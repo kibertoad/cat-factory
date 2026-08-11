@@ -173,6 +173,7 @@
       "archiveFailed": "Couldn't archive the service",
       "restoreFailed": "Couldn't restore the service",
       "moveRefused": {
+        "relaxes_run_oversight": "Where you are moving this task, a run answers its own review checkpoints instead of stopping for a person, and the merge policy governing it here does not. Ask a workspace admin to move it.",
         "relaxes_role_sandbox": "This task’s runs are sandboxed for your role where it is now, and the merge policy governing it where you are moving it is not. Ask a workspace admin to move it.",
         "relaxes_role_submission_allowlist": "The merge policy where you are moving this task would let you land kinds of change it holds you back from here. Ask a workspace admin to move it.",
         "relaxes_role_class_rule": "The merge policy where you are moving this task auto-merges changes you are held to review on it here. Ask a workspace admin to move it."
@@ -3253,6 +3254,8 @@
       "default": "Default",
       "makeDefault": "Make default",
       "deleteDefaultBlocked": "The default policy cannot be deleted",
+      "deleteUnattendedDefaultBlocked": "The unattended default policy cannot be deleted",
+      "deleteBothDefaultsBlocked": "This policy is both the in-app and the unattended default, so it cannot be deleted",
       "deletePreset": "Delete policy",
       "field": {
         "maxComplexity": "Max complexity %",
@@ -3339,6 +3342,7 @@
       },
       "unattendedDefault": "Unattended default",
       "makeUnattendedDefault": "Make the default for unattended runs (API, tracker, schedule)",
+      "makeUnattendedDefaultShort": "Unattended default",
       "autonomy": {
         "label": "Finish unattended runs without waiting for a person",
         "unattendedHint": "When an automatic loop gives up (a companion at its rework cap, a review at its pass cap, untriaged follow-ups), the run proceeds on the record instead of parking. Gates the pipeline asks for, such as human testing, review and approval, still stop the run.",
@@ -5307,6 +5311,7 @@
       "workspaceDefaultCaption": "Applied because this task picks no policy of its own.",
       "noneHint": "No risk policy configured. Every pull request waits for a human review.",
       "refused": {
+        "relaxes_run_oversight": "Not available for your role: this policy lets a run answer its own review checkpoints instead of stopping for a person. A workspace admin can change it.",
         "relaxes_role_sandbox": "Not available for your role: this task’s runs are sandboxed, and this policy would let them merge. A workspace admin can change it.",
         "relaxes_role_submission_allowlist": "Not available for your role: this policy would let you land kinds of change this task holds you back from. A workspace admin can change it.",
         "relaxes_role_class_rule": "Not available for your role: this policy auto-merges changes you are held to review on this task. A workspace admin can change it."

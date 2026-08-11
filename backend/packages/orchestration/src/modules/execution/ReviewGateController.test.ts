@@ -100,8 +100,8 @@ function fakeDeps(over: Partial<ReviewGateControllerDeps> = {}) {
     // the workspace's two default risk policies governs the review's iteration budget. Null here
     // degrades to the interactive scope, which is what an inspector call on a task with no live
     // run means; the gate path never reaches this, it passes the run it already holds.
-    getByBlock: vi.fn(async (_ws: string, _blockId: string): Promise<ExecutionInstance | null> =>
-      null,
+    getByBlock: vi.fn(
+      async (_ws: string, _blockId: string): Promise<ExecutionInstance | null> => null,
     ),
     upsert: vi.fn(async () => {}),
   }

@@ -272,7 +272,15 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     autonomy: DEFAULT_RISK_POLICY.autonomy,
     isDefault: true,
     isUnattendedDefault: false,
-    version: 7,
+    // NOT bumped for the two fields above. A version bump is an ADVISORY that a workspace should
+    // reseed, and accepting one restores this row's canonical name, ceilings, auto-merge posture
+    // and per-role rules — wiping whatever an operator had edited into a built-in they are
+    // explicitly allowed to edit. That price is only worth paying when the seed's CONTENT moved,
+    // and here it did not: the migration backfills `autonomy` and `is_unattended_default` with
+    // exactly these values as column defaults, so a stored v6 row and a freshly seeded v7 one are
+    // byte-for-byte identical. Bump this when `Balanced` itself changes, never to announce a
+    // column that arrived beside it.
+    version: 6,
   },
   // The UNATTENDED default: `Balanced` with one thing changed, and the fact that it is one thing
   // is the design. A run started over the API, dispatched from a ticket or fired by a schedule has
@@ -352,7 +360,9 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     autonomy: 'attended',
     isDefault: false,
     isUnattendedDefault: false,
-    version: 7,
+    // Unbumped, for the reason given on `mp_balanced`: both new fields land on this row as the
+    // migration's own column defaults, so there is no content change to advise anyone to adopt.
+    version: 6,
   },
 ]
 

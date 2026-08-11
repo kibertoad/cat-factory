@@ -79,6 +79,7 @@ import {
   priorOutputsFor,
   priorPrReviewContextFor,
 } from './builder-context-files.js'
+import { buildReworkContext } from './companion-review-context.js'
 import { type FoundationalServiceResolver } from './run-foundational-services.js'
 import { CatalogRunContext } from './run-catalog-context.js'
 import { resolveRunImages } from './run-images.js'
@@ -91,49 +92,6 @@ import {
   resolveLinkedContext as resolveLinkedContextFor,
 } from './linked-context.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
-
-/**
- * The `revision` slice of an agent context when a step is being re-run with feedback
- * — either a human's "request changes" on its approval gate, or a downstream
- * companion's automatic rework (`step.rework`). The companion path wins when both are
- * present. Empty object when neither applies (no revision context).
- */
-function buildRevisionContext(step: PipelineStep): {
-  revision?: {
-    previousProposal: string
-    feedback: string
-    comments?: { quotedSource?: string; body: string }[]
-  }
-} {
-  const source = step.rework
-    ? {
-        previousProposal: step.rework.previousProposal,
-        feedback: step.rework.feedback,
-        comments: step.rework.comments,
-      }
-    : step.approval?.status === 'changes_requested'
-      ? {
-          previousProposal: step.approval.proposal,
-          feedback: step.approval.feedback ?? '',
-          comments: step.approval.comments,
-        }
-      : undefined
-  if (!source) return {}
-  return {
-    revision: {
-      previousProposal: source.previousProposal,
-      feedback: source.feedback,
-      ...(source.comments?.length
-        ? {
-            comments: source.comments.map((c) => ({
-              ...(c.quotedSource ? { quotedSource: c.quotedSource } : {}),
-              body: c.body,
-            })),
-          }
-        : {}),
-    },
-  }
-}
 
 /**
  * The step's per-round dispatch epoch (see {@link AgentRunContext.dispatchEpoch}). A
@@ -673,13 +631,10 @@ export class AgentContextBuilder {
       resolvedDecision: step.decision?.chosen
         ? { question: step.decision.question, chosen: step.decision.chosen }
         : null,
-      // A re-run triggered either by a human "Request changes" on this step's
-      // approval gate OR by a downstream companion looping it back for rework: hand
-      // the agent its previous proposal plus the feedback so it revises rather than
-      // starting over. The companion's automatic rework (`step.rework`) and the
-      // human's gate feedback share one revision shape; the companion path takes
-      // precedence when both are present.
-      ...buildRevisionContext(step),
+      // A re-run triggered by a human "Request changes" on this step's approval gate, by a
+      // downstream companion looping it back, or by a companion re-grading: the current round's
+      // feedback plus the rounds before it. See {@link buildReworkContext}.
+      ...buildReworkContext(instance, step, this.deps.agentKindRegistry),
     }
   }
 

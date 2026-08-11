@@ -16,8 +16,20 @@ ALTER TABLE merge_threshold_presets ADD COLUMN is_unattended_default INTEGER NOT
 CREATE INDEX IF NOT EXISTS idx_merge_presets_unattended_default
   ON merge_threshold_presets (workspace_id, is_unattended_default);
 
--- 1. Materialise `mp_unattended` in every workspace that already has a library, from the same
---    catalog definition `RISK_POLICY_SEEDS` ships (Balanced's ceilings, `autonomy: 'unattended'`).
+-- 1. Materialise `mp_unattended` in every workspace that already has a library, CLONED FROM THAT
+--    WORKSPACE'S OWN DEFAULT with the single field this feature is about flipped.
+--
+--    Cloning, rather than writing the catalog's stock values, is what keeps the promise that
+--    landing authority never moves underneath an operator who has already stated theirs. A
+--    built-in is editable IN PLACE, so a row's id says nothing about whether its ceilings are
+--    still the ones we shipped: a workspace that tightened its `Balanced` down to
+--    `maxRisk: 0.1, autoMergeEnabled: 0` keeps `id = 'mp_balanced'`, and seeding stock ceilings
+--    beside it would hand every API-started run a wider licence to land than the operator's own
+--    default grants. Every ceiling, budget and per-role restriction is inherited here
+--    (`dry_run_roles` and `submission_classes_by_role` above all, being the role-scoped landing
+--    authority itself); the ONLY difference from the row it clones is `autonomy`, so all the
+--    workspace gains is a run that stops waiting on a person who is not there.
+--
 --    `INSERT OR IGNORE` rather than an upsert: a workspace that somehow already holds the id keeps
 --    whatever an operator put there.
 INSERT OR IGNORE INTO merge_threshold_presets (
@@ -29,33 +41,22 @@ INSERT OR IGNORE INTO merge_threshold_presets (
   is_default, is_unattended_default, created_at
 )
 SELECT
-  d.workspace_id, 'mp_unattended', 'Unattended delivery', 0.5, 0.4, 0.5, 10,
-  6, 'none', 3,
-  30, 1, 10,
-  0.7, 1, 1,
-  '{"enabled":false,"minComplexity":0.5,"minRisk":0.4,"minImpact":0.4,"onMissingEstimate":"run"}',
-  '{}',
-  '{}', '[]', '{}', 1, 'unattended',
-  0, 0, d.created_at + 1
+  d.workspace_id, 'mp_unattended', 'Unattended delivery',
+  d.max_complexity, d.max_risk, d.max_impact, d.ci_max_attempts,
+  d.max_requirement_iterations, d.max_requirement_concern_allowed, d.max_tester_quality_iterations,
+  d.release_watch_window_minutes, d.release_max_attempts, d.human_review_grace_minutes,
+  d.judge_min_score, d.judge_max_bounces, d.auto_merge_enabled, d.fork_decision, d.class_rules,
+  d.class_rules_by_role, d.dry_run_roles, d.submission_classes_by_role, 1, 'unattended',
+  0, 1, d.created_at + 1
 FROM merge_threshold_presets d
 WHERE d.is_default = 1;
 
--- 2. Name the unattended default, "unless configured differently": a workspace still sitting on
---    the shipped `mp_balanced` gets the new policy, and one whose operator moved the default onto
---    a policy of their own keeps THAT for unattended runs too. Landing authority never moves
---    underneath somebody who already stated theirs; all they gain is a run that no longer waits
---    on a person who is not there, which they opt into by re-pointing this flag.
+-- 2. A workspace that ALREADY held `mp_unattended` kept its own row above and so never took the
+--    flag with it. Name that row the unattended default, but only where the workspace still has
+--    none, so this can never demote a flag step 1 just set.
 UPDATE merge_threshold_presets
    SET is_unattended_default = 1
  WHERE id = 'mp_unattended'
-   AND workspace_id IN (
-     SELECT workspace_id FROM merge_threshold_presets WHERE is_default = 1 AND id = 'mp_balanced'
-   );
-
-UPDATE merge_threshold_presets
-   SET is_unattended_default = 1
- WHERE is_default = 1
-   AND id <> 'mp_balanced'
    AND workspace_id NOT IN (
      SELECT workspace_id FROM merge_threshold_presets WHERE is_unattended_default = 1
    );
