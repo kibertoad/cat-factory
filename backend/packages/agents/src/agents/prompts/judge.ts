@@ -1,5 +1,5 @@
 import type { JudgeSubject } from '@cat-factory/kernel'
-import { FINAL_ANSWER_IN_REPLY, REVIEW_SUMMARY_LAYOUT } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 
 // ---------------------------------------------------------------------------
 // The JUDGE assessment prompt — the inline LLM call behind the fourth step-taxonomy bucket
@@ -31,9 +31,13 @@ import { FINAL_ANSWER_IN_REPLY, REVIEW_SUMMARY_LAYOUT } from './shared.js'
  * thing that makes thresholds meaningless across rubrics: two judges must mean the same thing
  * by `0.7` or a workspace cannot set one number in its merge preset.
  *
- * The summary carries {@link REVIEW_SUMMARY_LAYOUT} for the same reason: a rubric that raises
- * six points has a human reading them off one string, and the judge window renders that string
- * as markdown. `findings` stays the machine-readable half; the summary is the readable one.
+ * It deliberately does NOT carry `REVIEW_SUMMARY_LAYOUT`, which asks a reviewer to lay its
+ * `summary` out as grouped bullets. A judge already returns its points as `findings`, and
+ * `JudgeResultView` renders that array as its own list directly below the summary — so the layout
+ * would have every point written twice, in two orderings that can disagree. The same reasoning
+ * excludes the `pr-reviewer` and the tester; the fragment is for a reviewer whose one string IS
+ * the whole review (the companions). What the judge needs is the RENDER half, which it has: the
+ * summary goes through the same markdown reader, so a short verdict paragraph reads properly.
  */
 export const JUDGE_SYSTEM_PROMPT =
   'You are an impartial reviewer scoring a piece of work against a RUBRIC you are given. You ' +
@@ -50,9 +54,10 @@ export const JUDGE_SYSTEM_PROMPT =
   'the shape {"score": number 0..1, "summary": string, "findings": [{"title": string, ' +
   '"detail": string, "severity": "low"|"medium"|"high"|"critical", "where": string}]} — no ' +
   'prose around it, no code fences. Report `findings` for everything that pulled the score ' +
-  'below 1.0, worst first; return an empty array when the work is clean. ' +
-  REVIEW_SUMMARY_LAYOUT +
-  ' ' +
+  'below 1.0, worst first; return an empty array when the work is clean. Keep `summary` to a ' +
+  'few sentences on the verdict as a whole — what the work is, what holds it back, what would ' +
+  'raise the score — and do NOT restate the findings there: they are shown to the reader as ' +
+  'their own list beside it. ' +
   FINAL_ANSWER_IN_REPLY
 
 /** Trim + cap one prior step's output so a long transcript can't blow the assessment prompt. */

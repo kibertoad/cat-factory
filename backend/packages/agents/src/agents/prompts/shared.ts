@@ -28,9 +28,8 @@ export const FINAL_ANSWER_IN_REPLY =
   'contains the answer.'
 
 /**
- * Appended wherever a reviewer's `summary` field IS the review a human reads: the companions
- * (see ./companion) and every registered judge. Those two are the reviewers with no other
- * outlet, so everything they found lands in one string.
+ * Appended wherever a reviewer's `summary` field IS the review a human reads: the COMPANIONS (see
+ * ./companion), the reviewers with no other outlet, so everything they found lands in one string.
  *
  * Unshaped, a model writes that string as one dense paragraph that numbers its points inline
  * ("(1) … (2) …"), and the reader cannot see what blocks the work without reading all of it.
@@ -38,9 +37,16 @@ export const FINAL_ANSWER_IN_REPLY =
  * ordered by disposition, through the same markdown reader the other agent prose goes through.
  * A fixed skeleton also makes two reviews of the same work comparable, which a free shape is not.
  *
- * The escaping sentence is not decoration: the summary travels as a JSON string, and a raw line
- * break inside one is invalid JSON. Kernel's `extractJson` repairs that case, but a reviewer that
- * escapes correctly never spends a repair retry on it.
+ * NOT for a reviewer that already reports its points as STRUCTURED findings beside a short summary
+ * (every judge, the `pr-reviewer`, the tester): the view renders that array as its own list, so
+ * asking for the same points as bullets in the summary means writing the whole review twice, in two
+ * orderings that can disagree. Those surfaces need only the render half.
+ *
+ * Two sentences here are load-bearing rather than editorial, both about the summary being a JSON
+ * STRING the platform parses. A raw line break inside one is invalid JSON (kernel's `extractJson`
+ * repairs it, but a reviewer that escapes correctly never costs a repair retry), and a FENCED block
+ * inside it puts a ``` pair ahead of the object in a reply whose JSON is not itself fenced, which is
+ * what `extractJson` reads first. Inline backticks carry code in a verdict perfectly well.
  */
 export const REVIEW_SUMMARY_LAYOUT =
   'LAY THE SUMMARY OUT AS BLOCKS, NEVER AS ONE PARAGRAPH. It is read in a narrow panel, so a ' +
@@ -53,9 +59,10 @@ export const REVIEW_SUMMARY_LAYOUT =
   'worst first. Each bullet starts with a bolded short title, then one or two sentences saying ' +
   'what is wrong and the concrete change to make. Nothing else: no preamble, no closing ' +
   'paragraph, no group for what is already fine. Keep every paragraph under four sentences, ' +
-  'leave a blank line between blocks, and put code, paths, identifiers and commands in ' +
-  'backticks. The summary is a JSON string value, so write its line breaks as \\n escapes and ' +
-  'never as raw line breaks inside the JSON.'
+  'leave a blank line between blocks, and put code, paths, identifiers and commands in INLINE ' +
+  'backticks — never open a fenced code block (```) inside the summary. The summary is a JSON ' +
+  'string value, so write its line breaks as \\n escapes and never as raw line breaks inside ' +
+  'the JSON.'
 
 /**
  * Appended to every agent that reasons about a work item WITHOUT a checkout to orient itself in —

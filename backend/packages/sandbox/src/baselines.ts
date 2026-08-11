@@ -57,12 +57,17 @@ export const SANDBOX_AGENT_KINDS: readonly SandboxAgentKindMeta[] = [
     basePromptId: 'clarity-review',
   },
   {
+    // The code `reviewer` is the coder's COMPANION, and a companion's prompt wins over every
+    // built-in track (`baseSystemPromptFor`), so its baseline is NOT the numbered `review`
+    // phase prompt — naming that id here showed a candidate the wrong text to fork from and
+    // graded it against a baseline production never sends. No numbered baseline prompt: the
+    // text is read live from the companion track, exactly like `architect-companion` below.
     agentKind: 'reviewer',
     label: 'Code reviewer',
     bucket: 'inline',
     rubric: 'code-review',
     fixtureKinds: ['code-review'],
-    basePromptId: 'review',
+    basePromptId: null,
   },
   {
     // Reviews an `architect`'s design proposal (the architect-companion grades it). A

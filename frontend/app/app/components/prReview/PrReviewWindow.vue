@@ -532,7 +532,7 @@ async function onDismiss(id: string): Promise<void> {
             v-if="state?.summary"
             class="mb-3 max-w-3xl rounded-md bg-slate-800/50 px-3 py-2 text-[12px] text-slate-300"
           >
-            <span class="text-slate-500">{{ t('prReview.summaryLabel') }}</span>
+            <span class="mb-1 block text-slate-500">{{ t('prReview.summaryLabel') }}</span>
             <MarkdownProse :text="state.summary" />
           </div>
 
@@ -682,17 +682,23 @@ async function onDismiss(id: string): Promise<void> {
                          otherwise have stretched furthest; the path/line row, the badges and the
                          per-finding actions are what it is actually for. -->
                     <MarkdownProse
+                      v-if="f.detail"
                       :text="f.detail"
                       class="mt-1 max-w-3xl text-[12px] text-slate-300"
                       :class="isRetracted(f) ? 'line-through' : ''"
                     />
-                    <div
+                    <!-- The suggested fix is a VALUE a human copies (a patch line, a command, a
+                         path), not prose, so it stays preformatted: markdown would emphasise the
+                         `__dunder__` in an identifier, curl the quotes in a command, and drop the
+                         indentation of anything longer than a line. Same reason the CI gate's
+                         failure summary is left alone. -->
+                    <p
                       v-if="f.suggestedFix"
-                      class="mt-1 max-w-3xl rounded-md bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300"
+                      class="mt-1 max-w-3xl whitespace-pre-wrap rounded-md bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300"
                     >
                       <span class="text-slate-500">{{ t('prReview.suggestedFix') }}</span>
-                      <MarkdownProse :text="f.suggestedFix" />
-                    </div>
+                      {{ f.suggestedFix }}
+                    </p>
 
                     <!-- The investigator's justification (why the finding holds up / was retracted),
                        or the reason the challenge investigation failed. -->
@@ -708,7 +714,10 @@ async function onDismiss(id: string): Promise<void> {
                             : 'bg-sky-500/10 text-sky-200'
                       "
                     >
-                      <span class="font-medium">{{
+                      <!-- A label that used to prefix its value inline now heads the block the
+                           rendered prose became, so it needs to READ as a heading line rather than
+                           as a stray word above a paragraph. -->
+                      <span class="mb-1 block font-medium">{{
                         isChallengeFailed(f)
                           ? t('prReview.challenge.failedLabel')
                           : t('prReview.challenge.verdictLabel')
