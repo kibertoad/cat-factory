@@ -29,6 +29,7 @@ import type {
   GetPublicMergeRecordResponse,
   GetPublicRunOutcomeResponse,
   GetPublicVcsConnectionResponse,
+  LinkPublicRepoRequest,
   ListDebugAgentContextResponse,
   ListDebugLlmCallsOrder,
   ListDebugLlmCallsResponse,
@@ -38,10 +39,12 @@ import type {
   ListDebugToolCallsOrder,
   ListDebugToolCallsOutcome,
   ListDebugToolCallsResponse,
+  ListPublicAvailableReposResponse,
   ListPublicJobsResponse,
   ListPublicMergeClassRollupsResponse,
   ListPublicModelPresetsResponse,
   ListPublicReposResponse,
+  ListPublicReposResponseRepo,
   ListPublicRiskPoliciesResponse,
   ListPublicTaskDocumentsResponse,
   ListPublicTaskDocumentsResponseDocument,
@@ -175,6 +178,11 @@ export type DebugListToolCallsQuery = {
   jobId?: string
   order?: ListDebugToolCallsOrder
   outcome?: ListDebugToolCallsOutcome
+}
+
+/** Query parameters for `client.repos.listAvailable()`. */
+export type ReposListAvailableQuery = {
+  q?: string
 }
 
 /** Query parameters for `client.jobs.list()`. */
@@ -369,7 +377,7 @@ export class SpecResource {
   }
 }
 
-/** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the repository with an agent and reports the board service it materialises. */
+/** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation); the ones its connection could reach but has not adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes the repository with an agent and reports the board service it materialises. */
 export class ReposResource {
   readonly #transport: Transport
 
@@ -405,14 +413,42 @@ export class ReposResource {
   }
 
   /**
+   * Adopt an existing repository into this workspace
+   * Link a repository the connection can reach, by `owner` and `name`, so a service can be created against it. The act that had no headless counterpart: nothing links a repository for you (the provider webhook for an added repository does not project one, and a resync refreshes what is already linked), so a repository created by any means stayed invisible to the repos list and unusable by service creation until a person opened the app. Takes a NAME rather than the numeric `repoId` its sibling reads report, because a caller setting a workspace up from configuration knows the name and cannot know a provider id for a repository no public read lists; the response carries the `repoId` for the service-creation call that follows. Idempotent: a repository this workspace already links returns its row rather than refusing, so a setup script re-running itself needs no special case. A repository the connection cannot reach is a 404 with `details.reason: repo_not_reachable`, which covers both "it does not exist" and "your credential is not granted it": a provider answers those identically, and inventing a split would be a guess.
+   * `POST /api/v1/repos/link` — operation `linkPublicRepo`.
+   */
+  link(body: LinkPublicRepoRequest, options: RequestOptions = {}): Promise<ListPublicReposResponseRepo> {
+    return this.#transport.request<ListPublicReposResponseRepo>({
+      method: 'POST',
+      path: `/api/v1/repos/link`,
+      body,
+      options,
+    })
+  }
+
+  /**
    * List the repositories a service can be created against
-   * List the repositories the key’s workspace has connected, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from.
+   * List the repositories the key’s workspace has LINKED, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from. A repository the connection can reach but nobody has adopted yet is NOT here; list those with the available-repos endpoint and adopt one with the link endpoint.
    * `GET /api/v1/repos` — operation `listPublicRepos`.
    */
   list(options: RequestOptions = {}): Promise<ListPublicReposResponse> {
     return this.#transport.request<ListPublicReposResponse>({
       method: 'GET',
       path: `/api/v1/repos`,
+      options,
+    })
+  }
+
+  /**
+   * List the repositories this workspace could adopt
+   * The repositories the workspace’s source-control connection can REACH, whether or not this workspace links them, with `linked` as the join onto the repos list. It exists because those two populations differ and the difference is invisible otherwise: linking is explicit per workspace, so a repository that exists and is perfectly reachable is absent from the repos list in exactly the way one that was never created is, and those need opposite fixes. Pass `q` as an exact `owner/name` for an authoritative point-read, as a substring to search, or omit it to browse what is accessible. Each call reaches the provider, so it is a setup-time read rather than one to poll.
+   * `GET /api/v1/repos/available` — operation `listPublicAvailableRepos`.
+   */
+  listAvailable(query: ReposListAvailableQuery = {}, options: RequestOptions = {}): Promise<ListPublicAvailableReposResponse> {
+    return this.#transport.request<ListPublicAvailableReposResponse>({
+      method: 'GET',
+      path: `/api/v1/repos/available`,
+      query,
       options,
     })
   }
@@ -2023,7 +2059,7 @@ export abstract class CatFactoryResources {
   readonly services: ServicesResource
   /** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
   readonly spec: SpecResource
-  /** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the repository with an agent and reports the board service it materialises. */
+  /** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation); the ones its connection could reach but has not adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes the repository with an agent and reports the board service it materialises. */
   readonly repos: ReposResource
   /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against. */
   readonly tasks: TasksResource

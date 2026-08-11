@@ -1,5 +1,6 @@
 import type { CatFactoryClient } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
+import { unreachableRepoSteps } from '../src/adopt.ts'
 import type { AcceptanceConfig } from '../src/config.ts'
 import type { PrerequisiteVerdict, Remedy } from '../src/preflight.ts'
 import { type PreflightContext, PREREQUISITES } from '../src/prerequisites.ts'
@@ -284,8 +285,26 @@ describe('vcs-connection', () => {
 })
 
 describe('target-repos', () => {
-  const client = (repos: Record<string, unknown>[]) =>
-    ({ repos: { list: async () => ({ repos }) } }) as unknown as CatFactoryClient
+  /**
+   * A deployment holding `linked` repositories, and (optionally) `reachable` ones it has not adopted.
+   *
+   * Two populations rather than one, because that split is what this gate now reads: `GET /api/v1/repos`
+   * answers what the workspace links, and `GET /api/v1/repos/available` what its connection can reach.
+   * The available read FILTERS on the query, as the deployment's does (`owner/name` is point-read and
+   * a shorter string is searched), so a fake cannot pass a test the real endpoint would fail by
+   * answering with everything: the gate's slug query must not surface a look-alike under another owner,
+   * and its name query must.
+   */
+  const client = (linked: Record<string, unknown>[], reachable: Record<string, unknown>[] = []) =>
+    ({
+      repos: {
+        list: async () => ({ repos: linked }),
+        listAvailable: async ({ q }: { q?: string }) => ({
+          repos: reachable.filter((row) => !q || `${row.owner}/${row.name}`.includes(q)),
+          truncated: false,
+        }),
+      },
+    }) as unknown as CatFactoryClient
 
   const repo = (name: string, overrides: Record<string, unknown> = {}) => ({
     owner: 'intended-org',
@@ -302,20 +321,54 @@ describe('target-repos', () => {
 
   const both = () => [repo('cf-acc-catalog-api'), repo('cf-acc-catalog-web')]
 
-  it('names BOTH missing repositories, not just the first', async () => {
+  it('names BOTH unreachable repositories, not just the first', async () => {
     const verdict = await refusal('target-repos', { client: client([]) })
     expect(verdict.problem).toContain('cf-acc-catalog-api')
     expect(verdict.problem).toContain('cf-acc-catalog-web')
     expect(commandsOf(verdict.remedy)[0]).toContain('run configure')
   })
 
-  it('shows what the workspace CAN see, since invisible and absent answer identically', async () => {
-    // The distinction the read cannot make and the operator has to: a repository outside a GitHub
-    // App's installation is missing from this list exactly as one that was never created is.
-    const verdict = await refusal('target-repos', {
-      client: client([repo('cf-acc-catalog-api', { owner: 'someone-else' })]),
+  it('passes a repository the connection can reach but nobody has adopted', async () => {
+    // The state a hand-written `.env` starts in, and it is not a refusal: spec 01 adopts a reachable
+    // repository itself through `POST /api/v1/repos/link`. Gating on the LINKED list alone would
+    // refuse a setup that is complete, and would make `configure` the only supported way in.
+    const detail = await satisfied('target-repos', { client: client([], both()) })
+    expect(detail).toContain('reachable but not adopted yet')
+    expect(detail).toContain('spec 01')
+  })
+
+  it('reports the two populations separately, since only the adopted one has been checked', async () => {
+    const detail = await satisfied('target-repos', {
+      client: client([repo('cf-acc-catalog-api')], [repo('cf-acc-catalog-web')]),
     })
-    expect(verdict.remedy.steps.join('\n')).toContain('someone-else/cf-acc-catalog-api')
+    expect(detail).toContain('intended-org/cf-acc-catalog-api are adopted')
+    expect(detail).toContain('intended-org/cf-acc-catalog-web is reachable but not adopted')
+  })
+
+  it('searches the NAME when the slug misses, since a look-alike is what tells the two apart', async () => {
+    // The distinction neither read can make and the operator has to: a repository outside a GitHub
+    // App's installation is missing exactly as one that was never created is. What separates them in
+    // practice is a same-named repository under another owner, and only a name search can surface one
+    // (a search for `intended-org/foo` does not match `someone-else/foo`).
+    const verdict = await refusal('target-repos', {
+      client: client([], [repo('cf-acc-catalog-api', { owner: 'someone-else' })]),
+    })
+    expect(verdict.problem).toContain('someone-else/cf-acc-catalog-api')
+    expect(verdict.remedy.steps.join('\n')).toContain("'cf-acc-catalog-api' under 'someone-else'")
+  })
+
+  it('asks for creation and access, never for linking, since the pass links for itself', async () => {
+    // The steps cover only what no API can do on an operator's behalf. A remedy telling someone to
+    // open the app's repository picker would be asking for a step the suite performs itself.
+    const verdict = await refusal('target-repos', { client: client([]) })
+    const steps = verdict.remedy.steps.join('\n')
+    expect(steps).toContain('create them EMPTY except for a README')
+    expect(steps).toContain('POST /api/v1/repos/link')
+    expect(steps).not.toContain('Manage repos')
+    // And it is the same wording `adopt.ts` throws and `configure` prints, not a third copy.
+    expect(steps).toContain(
+      unreachableRepoSteps([], [{ owner: 'acme', name: 'cf-acc-catalog-api' }])[1],
+    )
   })
 
   it('matches a repository name case-insensitively, as both providers do', async () => {
@@ -375,6 +428,31 @@ describe('target-repos', () => {
     })
     expect(verdict.problem).toContain('ANOTHER board')
     expect(verdict.remedy.steps.join('\n')).toContain('repo_service_homed_elsewhere')
+  })
+
+  it('refuses a reachable-but-unadopted repository whose service is homed elsewhere', async () => {
+    // The hole that opened when "unlinked" started meaning "spec 01 will link it": `linkedElsewhere`
+    // is an ACCOUNT-scoped judgement, so it is true for a repository this board has not adopted, and
+    // `POST /api/v1/services` refuses it either way. Judging only the LINKED rows green-lit exactly
+    // this case, and the pass then died on the adopt, after the gate that exists to precede it.
+    const verdict = await refusal('target-repos', {
+      client: client(
+        [repo('cf-acc-catalog-web')],
+        [repo('cf-acc-catalog-api', { linkedElsewhere: true })],
+      ),
+    })
+    expect(verdict.problem).toContain('ANOTHER board')
+    expect(verdict.problem).toContain('cf-acc-catalog-api')
+  })
+
+  it('refuses a reachable-but-unadopted repository already backing a service on THIS board', async () => {
+    const verdict = await refusal('target-repos', {
+      client: client(
+        [repo('cf-acc-catalog-web')],
+        [repo('cf-acc-catalog-api', { serviceId: 'blk_9' })],
+      ),
+    })
+    expect(verdict.problem).toContain('blk_9')
   })
 
   it('refuses a monorepo, which backs a service only with a subdirectory', async () => {

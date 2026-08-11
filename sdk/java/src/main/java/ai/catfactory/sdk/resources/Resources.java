@@ -75,7 +75,7 @@ public abstract class Resources {
         return spec;
     }
 
-    /** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the repository with an agent and reports the board service it materialises. */
+    /** The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation); the ones its connection could reach but has not adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes the repository with an agent and reports the board service it materialises. */
     public ReposClient repos() {
         return repos;
     }

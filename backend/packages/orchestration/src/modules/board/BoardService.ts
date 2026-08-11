@@ -64,7 +64,11 @@ import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 import type { NewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { nextFrameSlot, resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { createInternalAnchors } from './internalAnchors.js'
-import { PublicBoardReads, type PublicRepoOption } from './publicBoardReads.js'
+import {
+  PublicBoardReads,
+  type PublicRepoOption,
+  type RepoUseByRepoId,
+} from './publicBoardReads.js'
 import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
 import type { BlockPatchNarrowing } from './blockPatchNarrowing.js'
 import { createBlockPatchNarrowing } from './blockPatchNarrowing.js'
@@ -966,6 +970,16 @@ export class BoardService {
   /** Public-API: the repositories a service can be created against, and what already backs each. */
   listRepoOptions(workspaceId: string): Promise<PublicRepoOption[]> {
     return this.publicReads.listRepoOptions(workspaceId)
+  }
+
+  /**
+   * Public-API: whether each of these repositories is already spoken for, linked here or not.
+   *
+   * The judgement {@link listRepoOptions} makes about the projection, asked of ids instead, so the
+   * adoption discovery read answers the same question the create decides on.
+   */
+  describeRepoUse(workspaceId: string, repoIds: readonly number[]): Promise<RepoUseByRepoId> {
+    return this.publicReads.describeRepoUse(workspaceId, repoIds)
   }
 
   /** Public-API: create a task under a visible service frame the workspace owns. */

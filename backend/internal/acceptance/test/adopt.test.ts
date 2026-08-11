@@ -1,6 +1,6 @@
-import type { CatFactoryClient } from '@cat-factory/sdk'
+import { CatFactoryNotFoundError, type CatFactoryClient } from '@cat-factory/sdk'
 import { describe, expect, it, vi } from 'vitest'
-import { adoptRepoAsService, findRepo, repoBlocker } from '../src/adopt.ts'
+import { adoptRepoAsService, findRepo, isRepoUnreachable, repoBlocker } from '../src/adopt.ts'
 import type { Journal } from '../src/journal.ts'
 
 // The join between a configured repository name and a board service, and every way it can refuse.
@@ -28,19 +28,41 @@ function journal(): Journal {
   return { say: vi.fn(), record: vi.fn() } as unknown as Journal
 }
 
+/**
+ * A deployment whose `repos.list` holds `repos`, and whose ADOPT answers with `link`.
+ *
+ * The adopt is its own knob because it is the module's first call for a repository the workspace has
+ * not linked: `undefined` means "reachable, and here is the row" (the ordinary case), and a test that
+ * wants the refusal passes the 404 the surface documents.
+ */
 function client(input: {
   repos: Record<string, unknown>[]
   services?: Record<string, unknown>[]
   create?: (body: unknown) => unknown
+  link?: () => unknown
 }) {
   const create = vi.fn(async (body: unknown) => input.create?.(body) ?? { serviceId: 'blk_new' })
+  const link = vi.fn(async () => input.link?.() ?? repo('cf-acc-catalog-api'))
   return {
     client: {
-      repos: { list: async () => ({ repos: input.repos }) },
+      repos: { list: async () => ({ repos: input.repos }), link },
       services: { list: async () => ({ services: input.services ?? [] }), create },
     } as unknown as CatFactoryClient,
     create,
+    link,
   }
+}
+
+/** The 404 the adopt turns into instructions, as the SDK raises it. */
+function notReachable(): CatFactoryNotFoundError {
+  return new CatFactoryNotFoundError({
+    status: 404,
+    code: 'not_found',
+    message: "repository 'acme/cf-acc-catalog-api' not found",
+    details: { reason: 'repo_not_reachable' },
+    requestId: 'req_1',
+    body: {},
+  })
 }
 
 const options = (over: Record<string, unknown> = {}) => ({
@@ -118,23 +140,48 @@ describe('adoptRepoAsService', () => {
     expect(record.serviceId).toBe('blk_old')
   })
 
-  it('names what the workspace CAN see, since invisible and absent answer identically', async () => {
-    // A repository outside a GitHub App's installation is missing from this list exactly as one that
-    // was never created is, and the two need opposite fixes.
-    const { client: sdk } = client({ repos: [repo('something-else')] })
+  it('ADOPTS a repository the workspace has not linked, rather than refusing', async () => {
+    // The state a hand-written `.env` starts in, and the reason this module calls the link endpoint:
+    // `GET /api/v1/repos` lists what is LINKED, so a reachable repository nobody has adopted is absent
+    // from it, and refusing there would make `configure` the only supported way in.
+    const { client: sdk, link, create } = client({ repos: [] })
+    const record = await adoptRepoAsService({ ...options(), client: sdk })
+    expect(link).toHaveBeenCalledWith({ owner: 'acme', name: 'cf-acc-catalog-api' })
+    expect(create).toHaveBeenCalled()
+    expect(record.repoName).toBe('acme/cf-acc-catalog-api')
+  })
+
+  it('asks for creation and access, never for linking, when the adopt cannot reach it', async () => {
+    // The one refusal left, and the steps cover only what no API can do for an operator. A remedy
+    // telling someone to open the app's repository picker would ask for the step this module performs.
+    const { client: sdk } = client({
+      repos: [],
+      link: () => {
+        throw notReachable()
+      },
+    })
     await expect(adoptRepoAsService({ ...options(), client: sdk })).rejects.toThrow(
-      /Visible to this workspace right now: acme\/something-else/,
+      /could not reach 'acme\/cf-acc-catalog-api' \(404 repo_not_reachable\)/,
+    )
+    await expect(adoptRepoAsService({ ...options(), client: sdk })).rejects.toThrow(
+      /does not exist yet, create it EMPTY except for a README/,
+    )
+    await expect(adoptRepoAsService({ ...options(), client: sdk })).rejects.not.toThrow(
+      /Manage repos/,
     )
   })
 
-  it('points at the wrong-owner case when the name IS visible elsewhere', async () => {
-    // The module's stated reason to exist: `ACCEPTANCE_REPO_OWNER` naming the wrong account and the
-    // repository having been created under the wrong one are the same symptom.
+  it('lets a failure that is NOT the documented 404 propagate untouched', async () => {
+    // A 503 from an unwired module and a 500 from a provider outage are facts about the deployment,
+    // and dressing either as "create the repository" sends an operator to fix what is not broken.
     const { client: sdk } = client({
-      repos: [repo('cf-acc-catalog-api', { owner: 'someone-else' })],
+      repos: [],
+      link: () => {
+        throw new Error('503 unavailable: repo_linking_unwired')
+      },
     })
     await expect(adoptRepoAsService({ ...options(), client: sdk })).rejects.toThrow(
-      /A repository called 'cf-acc-catalog-api' IS visible under 'someone-else'/,
+      /repo_linking_unwired/,
     )
   })
 
@@ -169,5 +216,30 @@ describe('adoptRepoAsService', () => {
       /linked to service blk_gone, which GET \/api\/v1\/services no longer lists/,
     )
     expect(create).not.toHaveBeenCalled()
+  })
+})
+
+describe('isRepoUnreachable', () => {
+  it('recognises the documented reason, which is what the remedy is written for', () => {
+    expect(isRepoUnreachable(notReachable())).toBe(true)
+  })
+
+  it('does NOT read a bare 404 as a missing repository', () => {
+    // The failure this test pins: a deployment older than the endpoint has no route mounted at
+    // `/api/v1/repos/link`, and Hono's unmatched-route 404 reaches the SDK as the same class with no
+    // reason at all. Classified on status alone it read as "create the repository", which sent an
+    // operator to create one they already had, in a loop this module exists to end.
+    const unmounted = new CatFactoryNotFoundError({
+      status: 404,
+      code: 'unknown',
+      message: '404 Not Found',
+      requestId: 'req_2',
+      body: {},
+    })
+    expect(isRepoUnreachable(unmounted)).toBe(false)
+  })
+
+  it('does not claim anything about a failure of another class', () => {
+    expect(isRepoUnreachable(new Error('socket hang up'))).toBe(false)
   })
 })

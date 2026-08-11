@@ -2,6 +2,7 @@ import type {
   Clock,
   GitHubRepo,
   GroupCacheHandle,
+  Paged,
   ResolveUserGitHubToken,
 } from '@cat-factory/kernel'
 import {
@@ -195,7 +196,7 @@ export function buildUserSecretService(
   // The per-user viewer-repos cache (`AppCaches.viewerRepos`). A `github_pat` write/removal drops
   // the user's cached PAT repo enumeration. Pass-through on the Worker's isolate-safe profile, so
   // this invalidation is a no-op there — wired for parity with Node, where it caches.
-  viewerReposCache?: GroupCacheHandle<GitHubRepo[]>,
+  viewerReposCache?: GroupCacheHandle<Paged<GitHubRepo>>,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined

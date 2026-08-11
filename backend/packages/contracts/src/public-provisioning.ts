@@ -11,10 +11,10 @@ import { workspaceRoleSchema } from './workspace-members.js'
 // DEPLOYMENT PROVISIONING on `/api/v1`: what a headless caller needs to bring a workspace from
 // "connected" to "able to run a pipeline", which until now had no public counterpart at all.
 //
-// Four groups, and they are four because each answers a different question a caller asks BEFORE it
-// has anything to file work against: make me a repository; connect me to the infrastructure a run
-// deploys onto; tell one service where its manifests live; and tell me what this deployment has
-// actually wired.
+// Five groups, and they are five because each answers a different question a caller asks BEFORE it
+// has anything to file work against: make me a repository; ADOPT one that already exists; connect me
+// to the infrastructure a run deploys onto; tell one service where its manifests live; and tell me
+// what this deployment has actually wired.
 //
 // **Every STRUCTURAL shape here is a PROJECTION, never a re-export of the internal one**, and that
 // is the load-bearing decision in this file. The internal shapes it projects from
@@ -50,6 +50,31 @@ const slugField = v.pipe(
   v.regex(/^[A-Za-z0-9_.-]+$/, "Only letters, digits, '.', '_' and '-' are allowed"),
   v.minLength(1),
   v.maxLength(100),
+)
+/**
+ * A repository OWNER, which is a slug on GitHub and a `/`-separated namespace PATH on GitLab.
+ *
+ * Separate from {@link slugField} because a GitLab project can live under nested groups, and its
+ * owner is then `group/subgroup`: the value the available-repos read publishes and the one a caller
+ * feeds straight back into the adopt. Refusing the slash there made a nested-group project
+ * unadoptable through this surface at all, with no id-taking alternative to fall back on.
+ *
+ * Still segment-by-segment the same character set, and no empty segment, so it stays a name rather
+ * than a path expression: no `.` or `..` segment, no leading, trailing or doubled separator.
+ */
+const repoOwnerField = v.pipe(
+  v.string(),
+  v.trim(),
+  v.regex(
+    /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/,
+    "Only letters, digits, '.', '_', '-' and '/' between segments are allowed",
+  ),
+  v.check(
+    (value) => !value.split('/').some((segment) => segment === '.' || segment === '..'),
+    "No path segment may be '.' or '..'",
+  ),
+  v.minLength(1),
+  v.maxLength(255),
 )
 const descriptionField = v.pipe(v.string(), v.maxLength(2000))
 const instructionsField = v.pipe(v.string(), v.maxLength(8000))
@@ -152,7 +177,127 @@ export const publicBootstrapJobSchema = v.object({
 })
 export type PublicBootstrapJob = v.InferOutput<typeof publicBootstrapJobSchema>
 
-// ---- 2. The environment connection (the ENGINE half) ------------------------
+// ---- 2. Adopting a repository that already exists ---------------------------
+//
+// The other half of "give me something to file work against", and the half that was missing: a
+// caller could make a NEW repository here (section 1) but could not adopt one it already had.
+//
+// The gap is not obvious from `GET /api/v1/repos`, and that is the point. That read serves the
+// repositories this workspace has LINKED, which is a set someone assembles in the app: repositories
+// are linked explicitly per workspace, the provider webhook for an added repository does not project
+// one, and a resync refreshes what is already linked rather than rediscovering the installation. So a
+// repository the connection can reach perfectly well is absent from every public read until a human
+// opens the picker, and `POST /api/v1/services` answers 404 for its `repoId`, which is
+// indistinguishable from a repository that does not exist. These two operations close that:
+// {@link publicAvailableRepoSchema} is what the connection can REACH, and
+// {@link linkPublicRepoSchema} adopts one by name.
+
+/**
+ * A repository the workspace's connection can reach, whether or not this workspace links it yet.
+ *
+ * The discovery read for adoption, and a superset of {@link publicRepoSchema}'s population by
+ * design: that one lists what is linked (so every row carries a `repoId` a service can be created
+ * against), this one lists what COULD be. `linked` is the join between them.
+ *
+ * A small projection, like every other shape here: enough to recognise a repository, decide whether
+ * to adopt it, and name it in the adopt call. It carries `serviceId` and `linkedElsewhere` for the
+ * same reason `GET /api/v1/repos` does, and derived by the same account-scoped judgement: whether a
+ * repository is SPOKEN FOR is the question a caller asks immediately after "can I reach it", and the
+ * answer does not depend on this workspace having linked it. A repository already backing a service
+ * on another board of the account is unusable here, so a discovery read that could not say so would
+ * green-light an adopt whose next call fails.
+ */
+export const publicAvailableRepoSchema = v.object({
+  /** The provider's id for the repo, as `GET /api/v1/repos` reports it once linked. */
+  repoId: v.number(),
+  provider: vcsProviderSchema,
+  owner: v.string(),
+  name: v.string(),
+  /** The branch a run would base its work on. Empty when the provider reports none. */
+  defaultBranch: v.string(),
+  private: v.boolean(),
+  /** Whether THIS workspace already links it, i.e. whether it appears in `GET /api/v1/repos`. */
+  linked: v.boolean(),
+  /**
+   * Whether it is flagged as hosting several services.
+   *
+   * A board-owned flag carried on the linked projection, so an unlinked repository answers false
+   * because nobody has flagged it, not because it was examined. `linked` is what says which of the
+   * two this is.
+   */
+  monorepo: v.boolean(),
+  /**
+   * The service on THIS board that the repository already backs, or null.
+   *
+   * Null means "no service here holds it", which is not the same as free: read it with
+   * `linkedElsewhere`, exactly as on `GET /api/v1/repos`.
+   */
+  serviceId: v.nullable(v.string()),
+  /**
+   * True when a service homed on ANOTHER board of this account already backs it, so
+   * `POST /api/v1/services` will refuse it here.
+   *
+   * That service's id is withheld rather than reported, because it names a block this key cannot
+   * read. The flag is what stops the withholding reading as availability.
+   */
+  linkedElsewhere: v.boolean(),
+  /**
+   * True when it is reachable only through the SIGNED-IN USER's own token rather than the
+   * workspace's connection.
+   *
+   * Always false on this surface, and published rather than omitted because it is the one field that
+   * says why a repository a person can see in the app may be missing here: an API key authenticates
+   * as the workspace, so a repository only somebody's personal token reaches is not reachable by a
+   * key at all. A caller comparing this list against what a colleague sees needs that stated.
+   */
+  personal: v.boolean(),
+})
+export type PublicAvailableRepo = v.InferOutput<typeof publicAvailableRepoSchema>
+
+export const publicAvailableRepoListSchema = v.object({
+  repos: v.array(publicAvailableRepoSchema),
+  /**
+   * True when a provider read behind this list stopped at a cap, so repositories the connection can
+   * reach are missing from `repos`.
+   *
+   * Published because an absent row is the one observation this read exists to make actionable, and
+   * a capped browse produces an absent row for a repository that exists, is reachable, and would
+   * link fine. Without this flag those two are the same answer, and a caller told "one that does not
+   * exist appears in neither read" would conclude the wrong one.
+   *
+   * A point-read (`q=owner/name`) is never truncated: it resolves the exact slug directly, which is
+   * why it is the authoritative way to ask about ONE repository, and why a truncated browse is a
+   * reason to narrow the query rather than to give up.
+   */
+  truncated: v.boolean(),
+})
+export type PublicAvailableRepoList = v.InferOutput<typeof publicAvailableRepoListSchema>
+
+/**
+ * Adopt a repository into this workspace, by name.
+ *
+ * By NAME rather than by the `repoId` its sibling reads report, and that asymmetry is deliberate: a
+ * caller setting a workspace up from configuration knows `owner/name` (a person typed it, or a
+ * template holds it) and cannot know a provider's numeric id for a repository no public read lists.
+ * Taking the name makes this one call sufficient, so a headless setup never has to search first, and
+ * the response carries the `repoId` for the `POST /api/v1/services` call that follows.
+ *
+ * The owner is required rather than defaulted to the connected account, because an installation can
+ * reach several owners and a request that guessed one would silently adopt a look-alike.
+ */
+export const linkPublicRepoSchema = v.object({
+  /**
+   * The account the repository lives under, exactly as `GET /api/v1/repos/available` reports it:
+   * a user or organisation on GitHub, and on GitLab a namespace PATH, which may name a group and
+   * its subgroups (`group/subgroup`).
+   */
+  owner: repoOwnerField,
+  /** The repository's name, matched case-insensitively as both providers treat it. */
+  name: slugField,
+})
+export type LinkPublicRepoInput = v.InferOutput<typeof linkPublicRepoSchema>
+
+// ---- 3. The environment connection (the ENGINE half) ------------------------
 
 /**
  * How the manifests at `path` are rendered. `raw` (the default) treats the path as a manifest file
@@ -350,7 +495,7 @@ export type PublicEnvironmentConnectionView = v.InferOutput<
   typeof publicEnvironmentConnectionViewSchema
 >
 
-// ---- 3. A service's provisioning (the SOURCE half) --------------------------
+// ---- 4. A service's provisioning (the SOURCE half) --------------------------
 
 /**
  * Where ONE service's per-run manifests live: the half the engine connection does not carry.
@@ -390,7 +535,7 @@ export const updatePublicServiceSchema = v.pipe(
 )
 export type UpdatePublicServiceInput = v.InferOutput<typeof updatePublicServiceSchema>
 
-// ---- 4. What this deployment has WIRED --------------------------------------
+// ---- 5. What this deployment has WIRED --------------------------------------
 
 /**
  * One model in the workspace's catalog, reduced to the question a caller actually has: can a run

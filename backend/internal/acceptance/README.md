@@ -56,6 +56,19 @@ interrupted feature run does. Decision record:
 default branch to target, and a repository with no commits has none. Content beyond that is not
 refused (no `/api/v1` read can see it) and is scaffolded on top of.
 
+**You do NOT have to link them: the suite adopts each one itself** through
+`POST /api/v1/repos/link`, so a `.env` written by hand gets the same pass as one `configure` wrote.
+Linking is a per-workspace act that nothing on the platform performs on its own (the provider webhook
+for an added repository does not project one, and a resync refreshes what is already linked), which is
+why `GET /api/v1/repos` can be empty for a repository that plainly exists; adopting one is a public
+operation, so the suite makes the call rather than sending you to the app.
+
+**What you do owe is REACHABILITY**, which no API can arrange for you: the repository has to exist
+under `ACCEPTANCE_REPO_OWNER`, and this workspace's connection has to be granted it (a GitHub App
+installation must include it; a classic PAT needs `repo` to see a private one). A repository the
+connection cannot reach is absent exactly as a non-existent one is, so both `run configure` and the
+`target-repos` gate report the pair rather than guessing which it was.
+
 ### The defect is planted in the SPECIFICATION, not in the code
 
 Spec 03 can only investigate a bug spec 02 actually shipped, so something has to put one there.
@@ -105,20 +118,20 @@ diagnosis, `deployment-health` relays it verbatim, doc link included: the backen
 remedy already names the exact `openssl`/`npx` line, and a paraphrase here would be a second copy
 of it, one release behind.
 
-| Prerequisite         | Checked | What it means                                                                                                                                                      |
-| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.                                                               |
-| `api-key`            | yes     | `CAT_FACTORY_API_KEY` names `ACCEPTANCE_WORKSPACE_ID` and is scoped `admin`.                                                                                       |
-| `spend-budget`       | yes     | The workspace is not over budget, which pauses every run.                                                                                                          |
-| `agent-model`        | yes     | At least one catalog model is selectable. Distinguishes "unconfigured" from "blocked by account policy".                                                           |
-| `model-preset`       | yes     | `ACCEPTANCE_MODEL_PRESET` exists here AND its base model can be dispatched to (see below).                                                                         |
-| `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                                                                                 |
-| `target-repos`       | yes     | Both named repositories are visible AND adoptable: no monorepo, nothing homed on another board, and any existing service link is one this pass's own ledger names. |
-| `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                                                                                |
-| `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                           |
-| `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                |
-| `ingress-template`   | yes     | An environment URL renders from the configured host template.                                                                                                      |
-| `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal.                                                          |
+| Prerequisite         | Checked | What it means                                                                                                                                                                                                                   |
+| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.                                                                                                                            |
+| `api-key`            | yes     | `CAT_FACTORY_API_KEY` names `ACCEPTANCE_WORKSPACE_ID` and is scoped `admin`.                                                                                                                                                    |
+| `spend-budget`       | yes     | The workspace is not over budget, which pauses every run.                                                                                                                                                                       |
+| `agent-model`        | yes     | At least one catalog model is selectable. Distinguishes "unconfigured" from "blocked by account policy".                                                                                                                        |
+| `model-preset`       | yes     | `ACCEPTANCE_MODEL_PRESET` exists here AND its base model can be dispatched to (see below).                                                                                                                                      |
+| `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                                                                                                                                              |
+| `target-repos`       | yes     | Both named repositories are REACHABLE (linked already, or point-read through `/repos/available`) AND adoptable: no monorepo, nothing homed on another board, and any existing service link is one this pass's own ledger names. |
+| `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                                                                                                                                             |
+| `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                                                                                        |
+| `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                                                                             |
+| `ingress-template`   | yes     | An environment URL renders from the configured host template.                                                                                                                                                                   |
+| `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal.                                                                                                                       |
 
 Three things it deliberately does NOT check, because none is knowable from where it stands:
 
@@ -126,6 +139,8 @@ Three things it deliberately does NOT check, because none is knowable from where
   content: the bootstrapper used to answer it inside its container pre-flight, and putting it on the
   repository LIST would cost one provider round-trip per row on every call. `target-repos` says so
   in its own verdict rather than implying it checked.
+- **Whether an unreachable repository was never created, or exists and is not granted.** A provider
+  answers those identically, so the refusal names both rather than picking one.
 - **Whether the wired model can actually build a small service.** A model that cannot scaffold a
   Fastify app fails spec 01 for reasons that are not the platform's. This suite is not a model
   benchmark and does not grade one.
@@ -173,9 +188,10 @@ caveat rather than graded, which is the honest disposition for an answer the pro
 
 **The repositories**
 
-Two, created by you under the connected account, each empty except for a README. `run configure`
-opens the creation page for each one prefilled and re-reads `GET /api/v1/repos` until it can see
-them, which is the same read the gate refuses on.
+Two, created by you under the connected account, each empty except for a README, and each reachable by
+its connection. Adopting them is the suite's job. `run configure` opens each creation page prefilled
+and then ADOPTS each repository, reporting what that answered, so an unreachable one arrives as an
+answer carrying the remaining steps rather than as a prompt that repeats itself.
 
 **The cluster**
 
@@ -208,6 +224,12 @@ RESOLVED and reported rather than prompted for. What it does ask is the API toke
 one) and the two repository names, and having asked it opens each repository's creation page
 prefilled and re-reads the repository list until it can see them.
 
+**Each attempt states its outcome.** An adopt that succeeds says so; one that cannot reach the
+repository names what only a person can fix (create it empty-with-a-README, grant the credential
+access, check the owner) and offers the creation page again. Those steps are one source, shared with
+the `target-repos` prerequisite and the adopt itself, so the three cannot come to disagree about the
+fix.
+
 It never overwrites a value without saying so: an existing value becomes the prompt's default, the
 summary names every key it replaced, and anything in the file it does not manage (a pasted
 `ACCEPTANCE_K3S_CA_PEM`, say) is carried over byte for byte. Neither token is ever printed back.
@@ -218,7 +240,7 @@ summary names every key it replaced, and anything in the file it does not manage
 | `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (spec 03 also needs the `decide` rung it includes).                                                                                           |
 | `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                                                                                                   |
 | `ACCEPTANCE_REPO_OWNER`                | yes      | The owner both repositories live under. `GET /api/v1/vcs/connection` reports it.                                                                                                  |
-| `ACCEPTANCE_BACKEND_REPO`              | yes      | Name of the empty repository the backend service adopts. **You create it.**                                                                                                       |
+| `ACCEPTANCE_BACKEND_REPO`              | yes      | Name of the empty repository the backend service adopts. **You create it; the suite adopts it.**                                                                                  |
 | `ACCEPTANCE_FRONTEND_REPO`             | yes      | Name of the empty repository the frontend adopts. Must differ from the backend's.                                                                                                 |
 | `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                                                                                                     |
 | `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                                                                                                  |
@@ -364,31 +386,30 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 
 ## Where things live
 
-| Path                         | What                                                                              |
-| ---------------------------- | --------------------------------------------------------------------------------- |
-| `acceptance/*.acceptance.ts` | The four specs, in order. `fixtures.ts` builds the harness and mounts the gate.   |
-| `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.         |
-| `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.               |
-| `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.            |
-| `src/adopt.ts`               | Repository → board service, and every way that join refuses. Unit-tested.         |
-| `src/presets.ts`             | The one preset-to-catalog join `configure` and `model-preset` share. Pure.        |
-| `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                   |
-| `src/journal.ts`             | The append-only progress record a pass can be watched through.                    |
-| `src/status.ts`              | Ledger + journal → "where is this pass". Pure; unit-tested.                       |
-| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                          |
-| `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested. |
-| `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                         |
-| `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.        |
-| `src/publicApi.ts`           | SDK client, the one task-creation door, run observation, the polling wait.        |
-| `src/adopt.ts`               | Backing a board service with an operator-created repository.                      |
-| `src/resume.ts`              | File a task, or adopt / re-attach to what a previous pass left.                   |
-| `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.         |
-| `src/decisions.ts`           | The two kinds this suite answers, what is answerable NOW, and the refusals.       |
-| `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                     |
-| `src/instructions.ts`        | The briefs, and the reasoning behind the planted defect.                          |
-| `src/k3s.ts`                 | The engine connection and the per-service manifest source.                        |
-| `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`).        |
-| `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                   |
+| Path                         | What                                                                                                                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `acceptance/*.acceptance.ts` | The four specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                 |
+| `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.                                                                                                                       |
+| `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                             |
+| `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                          |
+| `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested. |
+| `src/presets.ts`             | The one preset-to-catalog join `configure` and `model-preset` share. Pure.                                                                                                                      |
+| `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                                                                                                                                 |
+| `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                  |
+| `src/status.ts`              | Ledger + journal → "where is this pass". Pure; unit-tested.                                                                                                                                     |
+| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                                                                                                                                        |
+| `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested.                                                                                                               |
+| `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                                                                                                                                       |
+| `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.                                                                                                                      |
+| `src/publicApi.ts`           | SDK client, the one task-creation door, run observation, the polling wait.                                                                                                                      |
+| `src/resume.ts`              | File a task, or adopt / re-attach to what a previous pass left.                                                                                                                                 |
+| `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.                                                                                                                       |
+| `src/decisions.ts`           | The two kinds this suite answers, what is answerable NOW, and the refusals.                                                                                                                     |
+| `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                                                                                                                                   |
+| `src/instructions.ts`        | The briefs, and the reasoning behind the planted defect.                                                                                                                                        |
+| `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                      |
+| `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`).                                                                                                                      |
+| `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                                                                                                                                 |
 
 **See also:** [`backend/internal/e2e`](../e2e) (the faked-externals product suite),
 [`backend/internal/sdk-smoketest`](../sdk-smoketest) (the same SDK against a booted backend),

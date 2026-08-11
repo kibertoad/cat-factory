@@ -19,6 +19,7 @@ import type {
   GitHubRepo,
   GroupCacheHandle,
   LocalModelEndpointRepository,
+  Paged,
   PersonalSubscriptionRepository,
   ProviderApiKeyRepository,
   ProviderSubscriptionTokenRepository,
@@ -179,7 +180,7 @@ export function buildNodeUserSecretService(
   // The per-user viewer-repos cache (`AppCaches.viewerRepos`). When wired, a `github_pat`
   // write/removal drops the user's cached PAT repo enumeration so the picker re-reads with the
   // new token. Absent (no cache configured) ⇒ the enumeration self-heals on the TTL.
-  viewerReposCache?: GroupCacheHandle<GitHubRepo[]>,
+  viewerReposCache?: GroupCacheHandle<Paged<GitHubRepo>>,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   // No Postgres (mothership mode): the per-user secret store is not yet a local-sqlite

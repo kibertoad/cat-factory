@@ -1,6 +1,9 @@
+import * as v from 'valibot'
 import { defineApiContract } from '@toad-contracts/valibot'
 import {
   connectPublicEnvironmentSchema,
+  linkPublicRepoSchema,
+  publicAvailableRepoListSchema,
   publicBootstrapJobSchema,
   publicBootstrapRepoSchema,
   publicEnvironmentConnectionTestSchema,
@@ -13,6 +16,7 @@ import {
   updatePublicServiceSchema,
 } from '../public-provisioning.js'
 import { publicServiceSchema } from '../public-api.js'
+import { publicRepoSchema } from '../public-board.js'
 import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -56,6 +60,60 @@ export const startPublicRepoBootstrapContract = withMinScope(
     pathResolver: () => '/api/v1/repos/bootstrap',
     requestBodySchema: publicBootstrapRepoSchema,
     responsesByStatusCode: { 201: publicBootstrapJobSchema, ...errorResponses },
+  }),
+)
+
+// ---- adopting a repository that already exists -------------------------------
+
+/**
+ * The repositories the workspace's connection can REACH, linked or not.
+ *
+ * The discovery half of {@link linkPublicRepoContract}, and the read that makes an absent repository
+ * diagnosable: `GET /api/v1/repos` lists what this workspace has LINKED, so a repository that exists
+ * and is reachable is missing from it in exactly the way one that was never created is, and those
+ * need opposite fixes. Here, the first appears with `linked: false` and the second does not appear.
+ *
+ * `q` filters server-side, as the app's own picker does, because a wide installation can reach
+ * thousands of repositories: pass `owner/name` for an exact point-read (authoritative for
+ * reachability, where a name search can miss an exact slug), a substring to search, or nothing to
+ * browse what is accessible. Each call reaches the provider, so it is a setup-time read rather than
+ * one to poll.
+ */
+export const listPublicAvailableReposContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/repos/available',
+    requestQuerySchema: v.object({ q: v.optional(v.string()) }),
+    responsesByStatusCode: { 200: publicAvailableRepoListSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * Adopt a reachable repository into this workspace, so a service can be created against it.
+ *
+ * The act a headless caller could not perform: linking is explicit per workspace and nothing does it
+ * for you (the provider webhook for an added repository does not project one, and a resync refreshes
+ * what is already linked), so a repository created by any means at all stayed invisible to
+ * `GET /api/v1/repos` and unusable by `POST /api/v1/services` until a person opened the app's picker.
+ *
+ * **Idempotent, and answers 200 either way.** Adopting a repository this workspace already links
+ * returns the same row rather than refusing, because the caller that most needs this endpoint is a
+ * setup script re-running itself, and a 409 there would make every re-run a special case. What the
+ * row does report is whether the repository is spoken for (`serviceId`, `linkedElsewhere`), which is
+ * the question the caller asks next.
+ *
+ * A repository the connection cannot reach is a `404` with `details.reason: 'repo_not_reachable'`,
+ * never a link to nothing: the two states this endpoint must not blur are "your credential cannot see
+ * it" and "it does not exist", and neither is fixed by retrying.
+ */
+export const linkPublicRepoContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'post',
+    pathResolver: () => '/api/v1/repos/link',
+    requestBodySchema: linkPublicRepoSchema,
+    responsesByStatusCode: { 200: publicRepoSchema, ...errorResponses },
   }),
 )
 

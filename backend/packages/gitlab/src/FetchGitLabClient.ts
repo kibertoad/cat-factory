@@ -29,7 +29,7 @@ import type {
   VcsConnectionRef,
   VcsRepoRef,
 } from '@cat-factory/kernel'
-import { describeVcsApiError, noopLogger } from '@cat-factory/kernel'
+import { VcsApiError, describeVcsApiError, noopLogger } from '@cat-factory/kernel'
 import type {
   CommitFilesInput,
   MergePullRequestInput,
@@ -117,12 +117,13 @@ export class FetchGitLabClient implements VcsClient {
   async listRepos(connection: VcsConnectionRef): Promise<Paged<GitHubRepo>> {
     const syncedAt = this.deps.clock.now()
     const numericId = connectionNumericId(connection)
-    const items = await this.paginate<GitHubRepo>(
+    // Paged rather than flattened: this listing is served to a caller that publishes it, and a
+    // project missing because the walk hit its cap must not read as one the token cannot reach.
+    return this.paginatePage<GitHubRepo>(
       `/projects?membership=true&per_page=${PER_PAGE}`,
       { connection },
       (json) => (json as GlProjectPayload[]).map((p) => toRepoProjection(p, numericId, syncedAt)),
     )
-    return { items }
   }
 
   async getRepo(connection: VcsConnectionRef, ref: VcsRepoRef): Promise<GitHubRepo> {
@@ -1202,6 +1203,22 @@ export class FetchGitLabClient implements VcsClient {
     opts: Omit<RequestOptions, 'method' | 'body'>,
     map: (json: unknown) => T[],
   ): Promise<T[]> {
+    const { items } = await this.paginatePage(path, opts, map)
+    return items
+  }
+
+  /**
+   * The walk itself, reporting whether it stopped at the cap.
+   *
+   * Split from {@link paginate} rather than replacing it because a caller that PUBLISHES its listing
+   * has to say the list is a prefix, and one that consumes it internally has nothing to do with the
+   * fact. The log line below is a record for an operator; only a returned flag can reach a caller.
+   */
+  private async paginatePage<T>(
+    path: string,
+    opts: Omit<RequestOptions, 'method' | 'body'>,
+    map: (json: unknown) => T[],
+  ): Promise<{ items: T[]; truncated: boolean }> {
     const all: T[] = []
     let url: string | undefined = path
     let page = 0
@@ -1211,7 +1228,8 @@ export class FetchGitLabClient implements VcsClient {
       url = response.next
     }
     // A `next` link still set at the cap means GitLab had more pages we did not fetch.
-    if (url) {
+    const truncated = Boolean(url)
+    if (truncated) {
       this.log.warn('GitLab listing truncated at the page cap; remaining results were dropped', {
         path,
         maxPages: MAX_PAGES,
@@ -1219,7 +1237,7 @@ export class FetchGitLabClient implements VcsClient {
         fetched: all.length,
       })
     }
-    return all
+    return { items: all, truncated }
   }
 
   private async request(pathOrUrl: string, opts: RequestOptions): Promise<GitLabResponse> {
@@ -1258,13 +1276,17 @@ export class FetchGitLabClient implements VcsClient {
   }
 }
 
-/** Carries the HTTP status so callers can decide whether to retry. */
-export class GitLabApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message)
+/**
+ * Carries the HTTP status so callers can decide whether to retry.
+ *
+ * A subclass of kernel's `VcsApiError`, the identity a consumer above the adapters branches on:
+ * a caller classifying "the provider refused this credential" must reach the same verdict on a
+ * GitLab deployment as on a GitHub one, and only the shared base gives it one check to write.
+ * GitLab reports an exhausted quota as a plain 429, so it carries no separate rate-limit flag.
+ */
+export class GitLabApiError extends VcsApiError {
+  constructor(status: number, message: string) {
+    super('gitlab', status, message)
     this.name = 'GitLabApiError'
   }
 }

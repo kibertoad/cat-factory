@@ -307,6 +307,23 @@ func (q *DebugListToolCallsQuery) values() map[string]string {
 	return out
 }
 
+// ReposListAvailableQuery holds the query parameters for ReposService.ListAvailable.
+type ReposListAvailableQuery struct {
+	// Q zero value means "not sent".
+	Q *string
+}
+
+func (q *ReposListAvailableQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Q != nil {
+		out["q"] = fmt.Sprintf("%v", *q.Q)
+	}
+	return out
+}
+
 // JobsListQuery holds the query parameters for JobsService.List.
 type JobsListQuery struct {
 	// Limit zero value means "not sent".
@@ -655,8 +672,9 @@ func (s *SpecService) GetForRun(ctx context.Context, runID string) (*PublicRunSp
 }
 
 // ReposService the repositories this workspace can back a service with, and which service each already backs
-// (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the
-// repository with an agent and reports the board service it materialises.
+// (the discovery half of service creation); the ones its connection could reach but has not
+// adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes
+// the repository with an agent and reports the board service it materialises.
 type ReposService struct {
 	client *Client
 }
@@ -700,11 +718,40 @@ func (s *ReposService) GetBootstrap(ctx context.Context, jobID string) (*StartPu
 	return &out, nil
 }
 
+// Link adopt an existing repository into this workspace
+// Link a repository the connection can reach, by `owner` and `name`, so a service can be created
+// against it. The act that had no headless counterpart: nothing links a repository for you (the
+// provider webhook for an added repository does not project one, and a resync refreshes what is
+// already linked), so a repository created by any means stayed invisible to the repos list and
+// unusable by service creation until a person opened the app. Takes a NAME rather than the
+// numeric `repoId` its sibling reads report, because a caller setting a workspace up from
+// configuration knows the name and cannot know a provider id for a repository no public read
+// lists; the response carries the `repoId` for the service-creation call that follows.
+// Idempotent: a repository this workspace already links returns its row rather than refusing, so
+// a setup script re-running itself needs no special case. A repository the connection cannot
+// reach is a 404 with `details.reason: repo_not_reachable`, which covers both "it does not exist"
+// and "your credential is not granted it": a provider answers those identically, and inventing a
+// split would be a guess.
+// POST /api/v1/repos/link (operation linkPublicRepo).
+func (s *ReposService) Link(ctx context.Context, body LinkPublicRepoRequest) (*ListPublicReposResponseRepo, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/repos/link",
+		Body:   body,
+	}
+	var out ListPublicReposResponseRepo
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // List list the repositories a service can be created against
-// List the repositories the key’s workspace has connected, each with the service that already
-// backs it (null when nothing does, and always null for a monorepo, which can back several). The
+// List the repositories the key’s workspace has LINKED, each with the service that already backs
+// it (null when nothing does, and always null for a monorepo, which can back several). The
 // discovery half of service creation: the create takes a repoId, and this is where one comes
-// from.
+// from. A repository the connection can reach but nobody has adopted yet is NOT here; list those
+// with the available-repos endpoint and adopt one with the link endpoint.
 // GET /api/v1/repos (operation listPublicRepos).
 func (s *ReposService) List(ctx context.Context) (*ListPublicReposResponse, error) {
 	req := requestSpec{
@@ -712,6 +759,29 @@ func (s *ReposService) List(ctx context.Context) (*ListPublicReposResponse, erro
 		Path:   "/api/v1/repos",
 	}
 	var out ListPublicReposResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListAvailable list the repositories this workspace could adopt
+// The repositories the workspace’s source-control connection can REACH, whether or not this
+// workspace links them, with `linked` as the join onto the repos list. It exists because those
+// two populations differ and the difference is invisible otherwise: linking is explicit per
+// workspace, so a repository that exists and is perfectly reachable is absent from the repos list
+// in exactly the way one that was never created is, and those need opposite fixes. Pass `q` as an
+// exact `owner/name` for an authoritative point-read, as a substring to search, or omit it to
+// browse what is accessible. Each call reaches the provider, so it is a setup-time read rather
+// than one to poll.
+// GET /api/v1/repos/available (operation listPublicAvailableRepos).
+func (s *ReposService) ListAvailable(ctx context.Context, query *ReposListAvailableQuery) (*ListPublicAvailableReposResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/repos/available",
+		Query:  query.values(),
+	}
+	var out ListPublicAvailableReposResponse
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

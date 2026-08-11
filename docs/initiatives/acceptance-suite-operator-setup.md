@@ -57,6 +57,7 @@ Ordered by what unblocks a live pass soonest. A is independent and can land at a
 | C   | Suite adopts operator-created repos, and pins the configured preset          | [#1943](https://github.com/kibertoad/cat-factory/pull/1943) |
 | D   | `configure` command: defaults, the token, the repo names, the creation pages | [#1943](https://github.com/kibertoad/cat-factory/pull/1943) |
 | A   | OpenAI catalog entry and a `chatgpt` built-in preset                         |                                                             |
+| E   | Public repo ADOPTION (`/repos/available` + `/repos/link`), used by the suite | [#1945](https://github.com/kibertoad/cat-factory/pull/1945) |
 
 ### B. Public preset surface
 
@@ -190,6 +191,35 @@ Three details the plan did not anticipate:
   says the gate will refuse until the repository exists, because nine correct answers are worth
   keeping and the prerequisite names the tenth again with its own remedy.
 
+### E. Public repository adoption
+
+The gap slice C left: the suite could name two repositories and could not make the workspace hold
+them, because linking was an app-only act. Two additive operations on `/api/v1` (surface 1.44.0),
+both `admin` like the rest of the provisioning group:
+
+- `GET /api/v1/repos/available[?q=]` lists what the connection can REACH, `linked` joining onto
+  `GET /api/v1/repos`. It is what makes an absent repository diagnosable at all: reachable-but-
+  unadopted appears here with `linked: false`, and one that does not exist appears in neither read.
+- `POST /api/v1/repos/link` adopts one by `owner`/`name`, idempotent, answering the same row shape
+  `/repos` serves (projected from the same `listRepoOptions`, so the two cannot disagree about
+  whether a repository is free).
+
+**By NAME rather than by `repoId`**, unlike every other repository operation: a caller setting a
+workspace up from configuration knows the name and cannot know a provider's numeric id for a
+repository no public read lists, so taking the name makes one call sufficient. `GitHubSyncService`
+resolves it through `listAvailableRepos` (the exact-slug point-read plus the search) rather than a
+bare `getRepo`, so everything the app's own picker can reach is adoptable, and the OWNER is part of
+the match: a slug search can surface a look-alike, and linking that one would file work in someone
+else's account while answering 200.
+
+**A 404 `repo_not_reachable` covers two causes on purpose.** A repository that does not exist and one
+the credential is not granted are the same answer from a provider, so the surface states both rather
+than guessing; that is also why the suite's remedy names creation AND access.
+
+In the suite: `adopt.ts` links a repository the workspace does not hold before backing a service with
+it, `target-repos` gates on reachability (point-reading `/repos/available` for anything unlinked) and
+reports "reachable but not adopted yet" as a PASS, and `configure` adopts instead of instructing.
+
 ### A. OpenAI catalog entry and `chatgpt` preset
 
 A catalog entry with a `direct` route (`provider: 'openai'`, `keyEnv: 'OPENAI_API_KEY'`), an
@@ -218,3 +248,20 @@ OpenAI's current model list rather than being written from memory.
   on the repository list) would be a provider round-trip per row on a listing endpoint. Slice C
   therefore states the gap in the verdict instead of grading it, and the `defaultBranch` field is no
   substitute: GitHub reports `main` for a repository with no commits at all.
+- **"Operator creates the repositories" was TWO acts, and the second one is now the platform's.**
+  `GET /api/v1/repos` reads the workspace's LINKED-repository projection (`listRepoOptions` →
+  `repoProjectionRepository.list`), and nothing linked a repository on its own: the
+  `installation_repositories` webhook does not project an added repository (linking is explicit per
+  workspace) and `backfillInstallation` refreshes what is linked rather than rediscovering the
+  installation. So a created repository was absent from that read until someone opened the app's
+  picker, and `POST /api/v1/services` answered a 404 for its `repoId`. Slice E adds the two public
+  operations that close it (`GET /api/v1/repos/available`, `POST /api/v1/repos/link`) and the suite
+  adopts what it needs, so a hand-written `.env` is a supported way in rather than a setup that only
+  `configure` could complete. **Generalises past this suite: when a gate's remedy ends in "go and do
+  it in the app", the question is whether the API is missing an operation, not whether the message
+  needs rewording.**
+- **What is left for a person is EXISTENCE and ACCESS**, and a remedy should ask for nothing else. A
+  step naming a screen the platform can now drive itself is worse than no step: it reads as required.
+- **A loop that re-reads on a human's behalf reports every attempt.** "What did you just see" is owed
+  on each pass, not only on the pass that finds what it was waiting for: a silent negative is
+  indistinguishable from a no-op, and the operator concludes the tool is stuck.

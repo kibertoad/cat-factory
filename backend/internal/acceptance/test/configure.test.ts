@@ -1,6 +1,6 @@
 import { parseEnv } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import { configure, type ConfigureClient } from '../src/configure.ts'
+import { configure, type ConfigureClient, type LinkOutcome } from '../src/configure.ts'
 import { mergeEnvFile, REPO_CREATION_URL, SECRET_KEYS } from '../src/configureEnv.ts'
 
 // What is worth pinning about a setup command is what it PROMISES, because each promise fails
@@ -87,29 +87,31 @@ function fakeShell(results: Record<string, { code: number; stdout: string }> = {
   }
 }
 
-/** One row of `GET /api/v1/repos`, as `ConfigureClient` narrows it. */
-function repoRow(name: string, overrides: Record<string, unknown> = {}) {
+/** What `POST /api/v1/repos/link` answered, as `ConfigureClient` narrows the adopted row. */
+function adopted(name: string, overrides: Record<string, unknown> = {}): LinkOutcome {
   return {
-    owner: 'acme',
-    name,
-    serviceId: null,
-    linkedElsewhere: false,
-    monorepo: false,
+    status: 'adopted',
+    repo: { owner: 'acme', name, serviceId: null, linkedElsewhere: false, monorepo: false },
     ...overrides,
-  } as {
-    owner: string
-    name: string
-    serviceId: string | null
-    linkedElsewhere: boolean
-    monorepo: boolean
-  }
+  } as LinkOutcome
 }
 
+/**
+ * A client whose adopt SUCCEEDS for the two repositories the flow asks about.
+ *
+ * The default is the ordinary path: the operator names two repositories the connection can reach, and
+ * the command adopts both. A test that wants the other outcome overrides `link`.
+ */
 function fakeClient(overrides: Partial<ConfigureClient> = {}): ConfigureClient {
   return {
     identity: async () => ({ workspaceId: 'ws_live', scope: 'admin', label: 'acceptance' }),
-    connection: async () => ({ accountLogin: 'acme', provider: 'github' as const }),
-    repos: async () => [repoRow('cf-acc-catalog-api'), repoRow('cf-acc-catalog-web')],
+    connection: async () => ({
+      accountLogin: 'acme',
+      provider: 'github' as const,
+      method: 'pat' as const,
+    }),
+    link: async (_owner: string, name: string) => adopted(name),
+    available: async () => [],
     presets: async () => [
       {
         presetId: 'mdp_claude',
@@ -207,21 +209,45 @@ describe('configure', () => {
     expect(printed).toContain('replaced: CAT_FACTORY_BASE_URL')
     expect(printed).toContain('left alone (not managed here): ACCEPTANCE_K3S_CA_PEM')
   })
+})
 
-  it('opens the creation page for a repository the workspace cannot see, then re-checks', async () => {
-    let listed = false
+// The repository half, which is where this command does its one WRITE. Its own block because the
+// adopt is a different question from the file: whether the workspace ends up holding what the
+// operator named, and what it says when it cannot.
+describe('configure: adopting the repositories', () => {
+  it('ADOPTS each repository itself rather than asking anyone to link it', async () => {
+    // The point of the whole flow: linking is a call, so the command makes it. An operator who names
+    // two reachable repositories is asked for nothing and told what happened.
+    const linked: string[] = []
+    const { io } = await run({
+      client: fakeClient({
+        link: async (_owner, name) => {
+          linked.push(name)
+          return adopted(name)
+        },
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(linked).toEqual(['cf-acc-catalog-api', 'cf-acc-catalog-web'])
+    const printed = io.output.join('\n')
+    expect(printed).toContain('acme/cf-acc-catalog-api is adopted by this workspace')
+    expect(io.opened).toEqual([])
+    // And nothing sends the operator to the app for a step the platform performs.
+    expect(printed).not.toContain('Manage repos')
+  })
+
+  it('opens the creation page for a repository the connection cannot reach, then re-checks', async () => {
+    let created = false
     const client = fakeClient({
-      repos: async () =>
-        listed
-          ? [repoRow('cf-acc-catalog-api'), repoRow('cf-acc-catalog-web')]
-          : [repoRow('cf-acc-catalog-web')],
+      link: async (_owner, name) =>
+        name === 'cf-acc-catalog-api' && !created ? { status: 'unreachable' } : adopted(name),
     })
     const io = fakeIo({ secrets: [TOKEN] })
     // The operator creates it between the offer and the re-check, which is exactly the sequence the
     // loop exists for: the alternative is discovering the miss at the start of an afternoon.
     const original = io.io.confirm
     io.io.confirm = async (prompt: string, defaultValue: boolean) => {
-      if (prompt.includes('Re-check')) listed = true
+      if (prompt.includes('Re-check')) created = true
       return original(prompt, defaultValue)
     }
     await configure({
@@ -235,7 +261,80 @@ describe('configure', () => {
     expect(io.opened).toEqual([
       'https://github.com/new?name=cf-acc-catalog-api&owner=acme&visibility=private',
     ])
-    expect(io.output.join('\n')).toContain('cf-acc-catalog-api is visible')
+    expect(io.output.join('\n')).toContain('cf-acc-catalog-api is adopted')
+  })
+
+  it('states the outcome of every attempt, and what to do about a negative one', async () => {
+    // Two properties, and each fails silently: the attempt's OUTCOME is printed whether or not it
+    // succeeded (a silent negative is indistinguishable from a command that did nothing), and a
+    // negative one carries what only a person can fix.
+    const { io } = await run({
+      client: fakeClient({
+        link: async () => ({ status: 'unreachable' }),
+        // The same NAME under another owner, which is the one thing that separates a typo in
+        // ACCEPTANCE_REPO_OWNER from a credential that reaches nothing.
+        available: async () => [{ owner: 'someone-else', name: 'cf-acc-catalog-api' }],
+      }),
+      script: { secrets: [TOKEN], confirms: { 'Re-check': false } },
+    })
+    const printed = io.output.join('\n')
+    expect(printed).toContain("acme/cf-acc-catalog-api is not reachable by this workspace's")
+    expect(printed).toContain('Either it does not exist, or this credential is not granted it')
+    // The remedy, rendered through the gate's own formatter so both surfaces read alike.
+    expect(printed).toContain("1. If 'cf-acc-catalog-api' does not exist yet, create it EMPTY")
+    expect(printed).toContain("'cf-acc-catalog-api' under 'someone-else'")
+    // And the connection's METHOD narrows the access step rather than naming both cases.
+    expect(printed).toContain('a GitHub classic PAT needs `repo`')
+    expect(printed).not.toContain('If this workspace connects with an app installation')
+  })
+
+  it('says a re-check that failed is a re-check, and stops pushing the creation page', async () => {
+    // A second failed attempt is a different message from the first: "still not reachable" is the
+    // answer to what the operator just did. And the creation page stops being the DEFAULT action,
+    // because past one re-check the repository usually exists and re-opening the form cannot help.
+    const io = fakeIo({ secrets: [TOKEN], confirms: { 'Re-check': true } })
+    let attempts = 0
+    const client = fakeClient({
+      link: async (_owner, name) => {
+        attempts += 1
+        // Unreachable twice, then reachable, so the loop runs exactly one re-check before settling.
+        return attempts > 2 ? adopted(name) : { status: 'unreachable' }
+      },
+    })
+    await configure({
+      io: io.io,
+      shell: fakeShell({ 'config view': { code: 0, stdout: 'https://k8s:6443' } }),
+      envPath: '/tmp/.env',
+      readFile: () => null,
+      writeFile: () => {},
+      connect: () => client,
+    })
+    const printed = io.output.join('\n')
+    expect(printed).toContain('Re-checked, and acme/cf-acc-catalog-api is STILL not reachable')
+    // Offered both times, defaulted to only the first: the fake answers a confirm with its default
+    // unless scripted, so exactly one open is the evidence.
+    expect(io.opened).toEqual([
+      'https://github.com/new?name=cf-acc-catalog-api&owner=acme&visibility=private',
+    ])
+  })
+
+  it('reports a deployment fault as one, rather than as a repository to go and create', async () => {
+    // The three-state rule on the one call that would otherwise blame the operator: an unwired module
+    // and a provider outage are both 5xx, and neither is fixed by creating a repository.
+    const { outcome, io } = await run({
+      client: fakeClient({
+        link: async () => {
+          throw new Error('503 unavailable: repo_linking_unwired')
+        },
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    const printed = io.output.join('\n')
+    expect(printed).toContain('could not be completed for acme/cf-acc-catalog-api')
+    expect(printed).toContain('unknown rather than answered no')
+    expect(printed).not.toContain('does not exist yet, create it')
+    // And the `.env` is still written: the nine other answers are worth keeping.
+    expect(outcome.ok).toBe(true)
   })
 
   it('never reports a failed read as a negative answer', async () => {
@@ -251,19 +350,28 @@ describe('configure', () => {
         presets: async () => {
           throw new Error('503 unavailable')
         },
-        repos: async () => {
+        available: async () => {
           throw new Error('500 boom')
         },
+        link: async () => ({ status: 'unreachable' }),
       }),
       // The owner has to be answered for the flow to reach the reads below it: an unresolvable and
-      // unanswered owner is now a refusal in its own right (see the test above).
-      script: { secrets: [TOKEN], answers: { 'Repository owner': 'acme' } },
+      // unanswered owner is now a refusal in its own right (see the test above). Declining the
+      // re-check settles each unreachable repository rather than looping.
+      script: {
+        secrets: [TOKEN],
+        answers: { 'Repository owner': 'acme' },
+        confirms: { 'Re-check': false },
+      },
     })
     const printed = io.output.join('\n')
     expect(printed).toContain('NOT a verdict that nothing is connected')
-    expect(printed).toContain('unknown rather than answered no')
     expect(printed).toContain('could not be read (503 unavailable)')
     expect(printed).not.toContain('has no source-control connection')
+    // The available read is the one whose failure would otherwise become a claim: "this connection
+    // reaches nothing" is what an empty list on a failed read would state.
+    expect(printed).toContain('could not be read (500 boom)')
+    expect(printed).toContain('what this connection CAN reach is unknown')
   })
 
   it('lists presets unmarked when the catalog is unreadable, rather than marked unavailable', async () => {
@@ -295,8 +403,12 @@ describe('configure', () => {
     // build for a self-hosted GitLab is a stranger's server.
     const { io } = await run({
       client: fakeClient({
-        connection: async () => ({ accountLogin: 'acme', provider: 'gitlab' as const }),
-        repos: async () => [],
+        connection: async () => ({
+          accountLogin: 'acme',
+          provider: 'gitlab' as const,
+          method: 'pat' as const,
+        }),
+        link: async () => ({ status: 'unreachable' }),
       }),
       script: { secrets: [TOKEN], confirms: { 'Re-check': false } },
     })
@@ -304,11 +416,11 @@ describe('configure', () => {
     expect(io.output.join('\n')).toContain('on your provider')
   })
 
-  it('writes the .env even with a repository still missing, and says the gate will refuse', async () => {
+  it('writes the .env even with a repository still unreachable, and says the gate will refuse', async () => {
     // Nine correct answers are worth keeping. The prerequisite gate names the tenth again with its
     // own remedy, so refusing here would only make the operator retype the rest.
     const { outcome, written, io } = await run({
-      client: fakeClient({ repos: async () => [] }),
+      client: fakeClient({ link: async () => ({ status: 'unreachable' }) }),
       script: { secrets: [TOKEN], confirms: { 'Re-check': false } },
     })
     expect(outcome.ok).toBe(true)
@@ -353,18 +465,30 @@ describe('configure', () => {
     // the pass.
     const { io } = await run({
       client: fakeClient({
-        repos: async () => [
-          repoRow('cf-acc-catalog-api', { linkedElsewhere: true }),
-          repoRow('cf-acc-catalog-web'),
-        ],
+        link: async (_owner, name) =>
+          name === 'cf-acc-catalog-api'
+            ? adopted(name, {
+                repo: {
+                  owner: 'acme',
+                  name,
+                  serviceId: null,
+                  linkedElsewhere: true,
+                  monorepo: false,
+                },
+              })
+            : adopted(name),
       }),
       script: { secrets: [TOKEN] },
     })
     const printed = io.output.join('\n')
     expect(printed).toContain('repo_service_homed_elsewhere')
-    expect(printed).not.toContain('cf-acc-catalog-api is visible to this workspace')
+    expect(printed).not.toContain('cf-acc-catalog-api is adopted by this workspace')
   })
+})
 
+// The cluster pair, whose rule is the opposite of every other value here: the STORED one wins over
+// what the kubeconfig currently says.
+describe('configure: the cluster', () => {
   it('normalizes the wildcard bind address k3d writes into the kubeconfig', async () => {
     // `cat-factory k3s` pipes the same read through `normalizeApiServerUrl` because `0.0.0.0` is not
     // dialable; writing it unchanged fails `cluster-connection` against an address nothing listens on.

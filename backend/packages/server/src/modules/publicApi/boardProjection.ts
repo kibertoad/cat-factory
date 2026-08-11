@@ -3,9 +3,11 @@ import {
   type Block,
   type KubernetesManifestSource,
   type PublicKubernetesManifestSource,
+  type PublicRepo,
   type PublicService,
   type PublicTask,
 } from '@cat-factory/contracts'
+import type { PublicRepoOption } from '@cat-factory/orchestration'
 
 // The `Block` → public-resource projections, shared by every controller that answers with one.
 //
@@ -99,3 +101,33 @@ function toPublicManifestSource(
  * adding one there is all it takes for a stored value to start being reported.
  */
 const PUBLIC_RENDERERS: ReadonlySet<string> = new Set(publicKubernetesRendererSchema.options)
+
+/**
+ * Project one repo option onto the wire, dropping the installation/sync bookkeeping.
+ *
+ * Here rather than beside `GET /api/v1/repos` because two routes now answer with this shape: that
+ * list, and `POST /api/v1/repos/link`, which reports the row it adopted so a caller can chain
+ * straight into service creation. The link route re-reads the same `listRepoOptions` to build it
+ * instead of deriving `serviceId` / `linkedElsewhere` for itself: those two are one judgement about
+ * where a service is homed (account-scoped, and deliberately withholding an id this key could not
+ * address), and a second derivation is how the adopt call and the list come to disagree about
+ * whether a repository is free.
+ */
+export function toPublicRepo(option: PublicRepoOption): PublicRepo {
+  const { repo, serviceBlockId, linkedElsewhere } = option
+  return {
+    repoId: repo.githubId,
+    // Absent on rows written before the column existed, which the platform reads as `github`
+    // everywhere else; stating that here keeps the wire field non-null for every row.
+    provider: repo.provider ?? 'github',
+    owner: repo.owner,
+    name: repo.name,
+    // A repo whose default branch has not been projected yet answers with the empty string rather
+    // than null: a caller reads it to name a base, and there is nothing here that could invent one.
+    defaultBranch: repo.defaultBranch ?? '',
+    private: repo.private,
+    monorepo: repo.isMonorepo === true,
+    serviceId: serviceBlockId,
+    linkedElsewhere,
+  }
+}

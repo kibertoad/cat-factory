@@ -506,6 +506,8 @@ export {
   describeVcsApiError,
   VCS_DOC_URLS,
   GITHUB_SETTINGS_URLS,
+  VcsApiError,
+  isVcsRateLimited,
   VcsCapabilityUnsupportedError,
 } from './domain/vcs-errors.js'
 export {

@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 import { mintPublicApiKey } from './shared.js'
 
-// Cross-runtime conformance for the public BOARD-PROVISIONING surface (`GET /api/v1/repos`,
+// Cross-runtime conformance for the public BOARD-PROVISIONING surface (`GET /api/v1/repos`, the
+// adopt pair `GET /api/v1/repos/available` + `POST /api/v1/repos/link`, and
 // `POST /api/v1/services`) and for the two task relationships that outlive a create call
 // (dependency edges, attached requirements documents).
 //
@@ -92,6 +93,23 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       expect(refused.status).toBe(403)
       // The discovery read is the floor, so the same key still sees what it could create against.
       expect((await app.call('GET', '/api/v1/repos', undefined, write)).status).toBe(200)
+      // The ADOPT pair (`/repos/available` + `/repos/link`, what makes headless setup finishable
+      // now that linking is no longer app-only) sits at `admin` on BOTH halves, including the read:
+      // it names what the deployment's own credential can reach, which is operator-facing, and a key
+      // that can enumerate it is at the rung that could adopt one.
+      //
+      // These two `403`s are also this lane's MOUNT check, and deliberately the whole of it. The
+      // scope gate runs inside the route, so an unregistered path answers `404` instead and this
+      // fails; and it runs BEFORE the module lookup, so it is the only assertion here that cannot
+      // reach the provider. An `admin` call would: on a facade whose connect path is a personal
+      // token, the picker enumerates the provider LIVE, so asserting the happy path would put a
+      // network call (and someone else's rate limit) inside a conformance run. What that call
+      // ANSWERS is covered where it belongs, in `GitHubSyncService.linkRepoBySlug`'s own tests and in
+      // the acceptance suite against a live deployment.
+      expect((await app.call('GET', '/api/v1/repos/available', undefined, write)).status).toBe(403)
+      expect(
+        (await app.call('POST', '/api/v1/repos/link', { owner: 'a', name: 'b' }, write)).status,
+      ).toBe(403)
     })
   })
 

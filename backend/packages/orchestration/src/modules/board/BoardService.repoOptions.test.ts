@@ -157,4 +157,45 @@ describe('BoardService — repository options for service creation', () => {
     } as unknown as BoardServiceDependencies
     expect(await new BoardService(deps).listRepoOptions(WS)).toEqual([])
   })
+
+  // `describeRepoUse`: the same judgement asked of ids instead of the projection, for the
+  // repositories the ADOPTION discovery read (`GET /api/v1/repos/available`) can reach but this
+  // workspace has not linked. Those have no projection row to carry the answer, and the answer is
+  // the same one, which is why it is one derivation rather than two.
+  it('judges a repository this workspace has NOT linked, which has no projection row', async () => {
+    // The case that made this necessary: a repository nobody here links, already backing a service
+    // on another board of the account. Nothing in the projection mentions it, so a read over the
+    // projection alone reports it as free, and `POST /api/v1/services` then refuses it.
+    const service = build({
+      repos: [],
+      blocks: [frame('f_here')],
+      services: [{ frameBlockId: 'f_elsewhere', repoGithubId: 77, directory: null }],
+    })
+    const use = await service.describeRepoUse(WS, [77])
+    expect(use.get(77)).toEqual({ serviceBlockId: null, linkedElsewhere: true })
+  })
+
+  it('answers the two reads identically for one repository, which is the point of sharing it', async () => {
+    const service = build({
+      repos: [repo(1)],
+      blocks: [frame('f1')],
+      services: [{ frameBlockId: 'f1', repoGithubId: 1, directory: null }],
+    })
+    const [option] = await service.listRepoOptions(WS)
+    const use = await service.describeRepoUse(WS, [1])
+    expect(use.get(1)).toEqual({
+      serviceBlockId: option?.serviceBlockId ?? null,
+      linkedElsewhere: option?.linkedElsewhere === true,
+    })
+    expect(use.get(1)?.serviceBlockId).toBe('f1')
+  })
+
+  it('reports an unclaimed id as free, and asks nothing at all for an empty batch', async () => {
+    const service = build({ repos: [], blocks: [], services: [] })
+    expect((await service.describeRepoUse(WS, [42])).get(42)).toEqual({
+      serviceBlockId: null,
+      linkedElsewhere: false,
+    })
+    expect((await service.describeRepoUse(WS, [])).size).toBe(0)
+  })
 })

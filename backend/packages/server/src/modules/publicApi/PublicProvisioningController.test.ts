@@ -2,14 +2,19 @@ import { describe, expect, it } from 'vitest'
 import type {
   Block,
   BootstrapJob,
+  GitHubAvailableRepo,
   GitHubConnection,
   ServiceProvisioning,
 } from '@cat-factory/contracts'
-import { UnavailableError } from '@cat-factory/kernel'
+import { RateLimitedError, UnavailableError, VcsApiError } from '@cat-factory/kernel'
+import { GitHubApiError } from '../../github/githubHttpHelpers.js'
+import type { RepoUseByRepoId } from '@cat-factory/orchestration'
 import type { ServerContainer } from '../../http/env.js'
 import {
+  asVcsRefusal,
   readVcsConnection,
   toBlockPatch,
+  toPublicAvailableRepo,
   toPublicBootstrapJob,
 } from './PublicProvisioningController.js'
 import { toPublicService } from './boardProjection.js'
@@ -256,5 +261,135 @@ describe('toPublicBootstrapJob', () => {
       }),
     )
     expect(projected.failureKind).toBe('stalled')
+  })
+})
+
+describe('toPublicAvailableRepo', () => {
+  const reachable = (overrides: Record<string, unknown> = {}) =>
+    ({
+      githubId: 101,
+      owner: 'acme',
+      name: 'web',
+      defaultBranch: 'main',
+      private: true,
+      linked: false,
+      ...overrides,
+    }) as GitHubAvailableRepo
+
+  /** No service in the account holds anything: the default the reads below are not about. */
+  const unclaimed: RepoUseByRepoId = new Map()
+
+  it('renames the provider id to the neutral field a service create takes', () => {
+    // The whole point of the read: what comes back has to be passable to `POST /api/v1/services`,
+    // which takes `repo.repoId`. An internal `githubId` reaching the wire would also re-hardcode a
+    // provider into a surface that is frozen forever.
+    expect(toPublicAvailableRepo(reachable(), unclaimed).repoId).toBe(101)
+  })
+
+  it('states the two booleans the internal shape spells as absent-means-false', () => {
+    // The silent bug this exists for: `isMonorepo` and `personal` are optional internally, so
+    // passing the row through would publish a field that is missing on most rows and false on some.
+    // A caller distinguishing "absent" from "false" would be distinguishing nothing.
+    const projected = toPublicAvailableRepo(reachable(), unclaimed)
+    expect(projected.monorepo).toBe(false)
+    expect(projected.personal).toBe(false)
+    expect(toPublicAvailableRepo(reachable({ isMonorepo: true }), unclaimed).monorepo).toBe(true)
+  })
+
+  it('answers the empty string for an unrecorded default branch, as the repos list does', () => {
+    // Null would make a caller reading it to name a base decide between "unknown" and "main", and
+    // there is nothing here that could invent the second.
+    expect(toPublicAvailableRepo(reachable({ defaultBranch: null }), unclaimed).defaultBranch).toBe(
+      '',
+    )
+  })
+
+  it('falls back to `github` for a row with no provider, as every other read does', () => {
+    expect(toPublicAvailableRepo(reachable(), unclaimed).provider).toBe('github')
+    expect(toPublicAvailableRepo(reachable({ provider: 'gitlab' }), unclaimed).provider).toBe(
+      'gitlab',
+    )
+  })
+
+  it('reports a repository already backing a service on ANOTHER board as spoken for', () => {
+    // The refusal `POST /api/v1/services` will raise, said at discovery time instead. The service's
+    // own id is withheld (it names a block this key cannot read), so `serviceId: null` is the only
+    // answer available and `linkedElsewhere` is what stops it reading as availability. A caller
+    // that trusted the id alone would adopt a repository whose create then fails.
+    const projected = toPublicAvailableRepo(
+      reachable(),
+      new Map([[101, { serviceBlockId: null, linkedElsewhere: true }]]),
+    )
+    expect(projected.serviceId).toBeNull()
+    expect(projected.linkedElsewhere).toBe(true)
+  })
+
+  it('names the service on THIS board that already holds it', () => {
+    const projected = toPublicAvailableRepo(
+      reachable({ linked: true }),
+      new Map([[101, { serviceBlockId: 'blk_1', linkedElsewhere: false }]]),
+    )
+    expect(projected.serviceId).toBe('blk_1')
+    expect(projected.linkedElsewhere).toBe(false)
+  })
+
+  it('reads an absent verdict as free, because the map is built from these very ids', () => {
+    const projected = toPublicAvailableRepo(reachable(), unclaimed)
+    expect(projected.serviceId).toBeNull()
+    expect(projected.linkedElsewhere).toBe(false)
+  })
+})
+
+describe('asVcsRefusal', () => {
+  // The adopt pair is the only place on this surface that reaches the provider on the request path,
+  // so it is the only place a failure can be neither the caller's fault nor the platform's. Each
+  // branch here is a wrong answer that would otherwise look right: a revoked token reported as an
+  // internal fault sends a headless caller to file a platform bug about a credential only they can
+  // replace, and a rate limit reported as anything but retryable stops a setup script for good.
+
+  it('re-raises a rejected credential as a 503 naming the connection, not an internal fault', () => {
+    for (const status of [401, 403]) {
+      const refusal = asVcsRefusal(new GitHubApiError(status, 'Bad credentials'))
+      expect(refusal).toBeInstanceOf(UnavailableError)
+      expect((refusal as UnavailableError).details).toMatchObject({
+        reason: 'vcs_credential_rejected',
+      })
+    }
+  })
+
+  it('reads the rate-limit FLAG rather than the status, which GitHub reports as 403', () => {
+    // A primary rate-limit exhaustion and a permission denial are the same number, so status alone
+    // would tell a caller to re-mint a token that is working perfectly and will work again shortly.
+    const refusal = asVcsRefusal(new GitHubApiError(403, 'rate limit exceeded', true))
+    expect(refusal).toBeInstanceOf(RateLimitedError)
+    expect((refusal as RateLimitedError).details).toMatchObject({ reason: 'vcs_rate_limited' })
+  })
+
+  it("classifies ANOTHER provider's refusal identically, since a workspace may connect either", () => {
+    // Keyed on the shared `VcsApiError` rather than the GitHub class: a GitLab-connected workspace
+    // reaches the same routes through the same service and throws `GitLabApiError`, and a
+    // GitHub-only check answered its revoked token with the 500 this function exists to prevent.
+    // Raised as the BASE class here because this package cannot see `@cat-factory/gitlab` (nor
+    // should it); that the GitLab client's error IS one is pinned in that package's own suite.
+    const rejected = asVcsRefusal(new VcsApiError('gitlab', 401, '401 Unauthorized'))
+    expect(rejected).toBeInstanceOf(UnavailableError)
+    expect((rejected as UnavailableError).details).toMatchObject({
+      reason: 'vcs_credential_rejected',
+    })
+    // GitLab reports an exhausted quota as a plain 429 and carries no flag to read, so the status
+    // has to be enough on its own.
+    const limited = asVcsRefusal(new VcsApiError('gitlab', 429, 'Too Many Requests'))
+    expect(limited).toBeInstanceOf(RateLimitedError)
+    expect((limited as RateLimitedError).details).toMatchObject({ reason: 'vcs_rate_limited' })
+  })
+
+  it('propagates everything else, so a provider outage stays a 500', () => {
+    // The refusals above are claims about the workspace's credential. A 500 from the provider, or a
+    // bug in this platform, is not one, and dressing either as a connection problem would send an
+    // operator to replace a credential that is fine.
+    const outage = new GitHubApiError(502, 'Bad gateway')
+    expect(asVcsRefusal(outage)).toBe(outage)
+    const bug = new TypeError('undefined is not a function')
+    expect(asVcsRefusal(bug)).toBe(bug)
   })
 })

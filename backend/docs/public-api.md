@@ -546,6 +546,15 @@ service that repository already backs **on this board**, so a caller re-running 
 finds what it created last time rather than discovering it through a `409`. A monorepo answers
 `null` there even when its subdirectories back services, since it can back more.
 
+**It lists what your workspace has LINKED, which is not everything your account owns.** Linking is a
+per-workspace act, so a repository that exists and is perfectly reachable does not appear here until
+someone adopts it, and `POST /api/v1/services` answers `404` for its `repoId` exactly as it would for
+a repository that does not exist. The pair under
+[Deployment provisioning](#deployment-provisioning) closes that: `GET /api/v1/repos/available` lists
+what your connection can REACH (with `linked` as the join onto this list) and
+`POST /api/v1/repos/link` adopts one by name. A setup script that owns its repository names needs
+only the second.
+
 `linkedElsewhere` is the third state the pair cannot express: the repository already backs a service
 homed on ANOTHER board of the account, so the choice is spent and there is no id here that would
 address it (every read on this API is scoped to your key's workspace, so a frame homed elsewhere
@@ -945,21 +954,24 @@ knowable, so they do not gate the start; see
 ### Deployment provisioning
 
 Everything above assumes a workspace that already has a repository, a cluster and a wired model. This
-group is how a caller gets there without a browser: create the repository, connect the cluster, tell
-a service where its manifests live, and read back what the deployment actually has.
+group is how a caller gets there without a browser: create the repository or ADOPT one that already
+exists, connect the cluster, tell a service where its manifests live, and read back what the
+deployment actually has.
 
-| Method / path                                | Scope   | Behaviour                                                                                                       |
-| -------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/repos/bootstrap`               | `admin` | Create a repository and adapt it with the bootstrapper agent. `201` with a job to poll.                         |
-| `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                             |
-| `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`. |
-| `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                 |
-| `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                  |
-| `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                 |
-| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the workspace default. Pin one as `riskPolicyId`.                         |
-| `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                        |
+| Method / path                                | Scope   | Behaviour                                                                                                                    |
+| -------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/repos/bootstrap`               | `admin` | Create a repository and adapt it with the bootstrapper agent. `201` with a job to poll.                                      |
+| `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                                          |
+| `GET /api/v1/repos/available`                | `admin` | The repositories your connection can REACH, linked or not. `?q=owner/name` point-reads one; `truncated` marks a capped list. |
+| `POST /api/v1/repos/link`                    | `admin` | Adopt a reachable repository by `owner`/`name`. Idempotent `200`; `404 repo_not_reachable` otherwise.                        |
+| `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`.              |
+| `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                              |
+| `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                               |
+| `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                              |
+| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the workspace default. Pin one as `riskPolicyId`.                                      |
+| `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                                     |
 
-**The four reads are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
+**The five reads are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
 is what they name: those name board CONTENT, where these name what the DEPLOYMENT has wired,
 including the permissions its source-control credential holds. A caller that can read them is
 already at the rung that could change them. (A scope can be relaxed later and never tightened, so
@@ -969,6 +981,89 @@ That does leave the two preset reads at a higher rung than the `write` needed to
 the gap the public pipeline list was added to close, so relaxing them to `read` is the likely next
 step. Until then a refused pin names the id that MISSED and never what the workspace holds: a `422`
 listing the library would hand a `write` key, by typo, exactly what `admin` gates.
+
+#### Adopting a repository that already exists
+
+```http
+GET /api/v1/repos/available?q=acme/payments-api
+{ "repos": [ { "repoId": 40123, "provider": "github", "owner": "acme", "name": "payments-api",
+               "defaultBranch": "main", "private": true, "linked": false,
+               "monorepo": false, "serviceId": null, "linkedElsewhere": false,
+               "personal": false } ],
+  "truncated": false }
+
+POST /api/v1/repos/link
+{ "owner": "acme", "name": "payments-api" }
+
+200 { "repoId": 40123, "provider": "github", "owner": "acme", "name": "payments-api",
+      "defaultBranch": "main", "private": true, "monorepo": false,
+      "serviceId": null, "linkedElsewhere": false }
+```
+
+**Why this exists at all**, given `GET /api/v1/repos`: that read lists what your workspace has
+LINKED, and linking is an explicit per-workspace act that nothing performs on your behalf (the
+provider webhook for an added repository does not project one, and a resync refreshes what is already
+linked). So a repository you have just created, or one that has always been reachable, is absent from
+every other read on this surface until it is adopted, and `POST /api/v1/services` answers `404` for
+its `repoId`. The two populations differ, `linked` is the join between them, and an absent repository
+is now diagnosable: reachable-but-unadopted appears in `/repos/available` with `linked: false`, and
+one that does not exist appears in neither.
+
+**The link takes a NAME, unlike everything else here, which takes a `repoId`.** A caller setting a
+workspace up from configuration knows `owner/name` (a person typed it, a template holds it) and cannot
+know a provider's numeric id for a repository no public read lists. So this one call is sufficient, no
+search is needed first, and the response carries the `repoId` for the `POST /api/v1/services` that
+follows. The owner is required rather than defaulted to the connected account: an installation can
+reach several owners, and a request that guessed would silently adopt a look-alike.
+
+**Idempotent, answering `200` either way.** Adopting a repository your workspace already links returns
+the same row rather than refusing, because the caller that needs this most is a setup script re-running
+itself. That holds even for a repository your connection can no longer reach (a personal repository
+adopted through someone's own token, or an App grant since narrowed): it is resolved from what your
+workspace links before the provider is consulted at all, so a re-run never answers `404` for a
+repository `GET /api/v1/repos` still lists.
+
+**Both rows answer whether the repository is SPOKEN FOR**, from one account-scoped judgement:
+`serviceId` names the service holding it on your board, and `linkedElsewhere` says a service on
+another board of the account holds it, in which case `POST /api/v1/services` refuses it. The
+available read publishes both for the same reason the repos list does, and a repository you have not
+linked is not free by construction: read the pair before adopting, not after.
+
+**`truncated` on the available read says the list is a PREFIX.** A wide connection exceeds the page
+and search caps behind it, so a reachable repository can be missing from `repos` simply because the
+walk stopped. Without that flag it would be indistinguishable from a repository that does not exist,
+which is the very confusion this read exists to remove. A point-read (`?q=owner/name`) resolves the
+exact slug directly and is therefore authoritative about that one repository either way: it is the
+right follow-up to a truncated browse.
+
+**The owner may be a namespace PATH.** GitLab projects live under nested groups, so a row's `owner`
+can read `group/subgroup`, and the link accepts exactly what the available read published.
+
+`404` with `details.reason: repo_not_reachable` covers two causes deliberately: a repository that does
+not exist under that owner, and one your credential is not granted (an app installation must include
+it; a token must carry the scope that reads a private one). A provider answers those identically, so a
+split here would be a guess in the one place a caller acts on it. Neither is fixed by retrying.
+
+`?q` on the read is matched server-side, as the app's own picker does, because a wide installation can
+reach thousands of repositories: pass `owner/name` for an exact point-read (authoritative for
+reachability, where a name search can miss an exact slug), a substring to search, or nothing to browse.
+Each call reaches the provider, so it is a setup-time read rather than one to poll. `personal` is
+always `false` here: a key authenticates as the WORKSPACE, so a repository only somebody's personal
+token reaches is not reachable by a key at all.
+
+**These two are the only operations on this surface that reach the provider while you wait**, so they
+are the only ones that can fail for a reason that is neither yours nor the platform's, and each has its
+own answer rather than a `500`:
+
+- `503` `details.reason: vcs_credential_rejected` — the provider refused the workspace's credential
+  (an installation removed, a token revoked or expired). Re-connect the workspace; retrying will not
+  help, and it is emphatically not "your repository does not exist".
+- `429` `details.reason: vcs_rate_limited` — the provider is rate-limiting the credential. This is the
+  one failure here worth retrying. It is read off the rate-limit flag rather than the status, because
+  GitHub reports a primary limit as a `403`, which is also what a permission denial looks like.
+
+A provider outage, or a fault in the platform, stays a `500`: dressing either as a connection problem
+would send an operator to replace a credential that is working.
 
 #### Bootstrapping a repository
 

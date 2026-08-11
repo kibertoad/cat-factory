@@ -127,13 +127,14 @@ export function githubController(): Hono<AppEnv> {
   buildHonoRoute(app, listGitHubAvailableReposContract, async (c) => {
     const github = requireGitHub(c)
     const viewer = await resolveViewerPat(c)
-    return c.json(
-      await github.syncService.listAvailableRepos(param(c, 'workspaceId'), {
-        q: c.req.valid('query').q,
-        ...viewer,
-      }),
-      200,
-    )
+    // The rows only. This picker searches as you type, so a listing that stopped at a provider cap
+    // is answered by narrowing the query, which is what the typeahead already invites; the public
+    // adoption read publishes the flag because its caller has no such next move.
+    const { repos } = await github.syncService.listAvailableRepos(param(c, 'workspaceId'), {
+      q: c.req.valid('query').q,
+      ...viewer,
+    })
+    return c.json(repos, 200)
   })
 
   // Set the exact set of repos this workspace links. Projects the selection,

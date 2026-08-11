@@ -13,7 +13,11 @@ export {
 } from './validation/validateRegistrations.js'
 
 export { BoardService, type BoardServiceDependencies } from './modules/board/BoardService.js'
-export type { PublicRepoOption } from './modules/board/publicBoardReads.js'
+export type {
+  PublicRepoOption,
+  RepoUse,
+  RepoUseByRepoId,
+} from './modules/board/publicBoardReads.js'
 export * as boardLogic from './modules/board/board.logic.js'
 export { sweepBinaryArtifactRetention } from './modules/artifacts/artifactRetention.js'
 

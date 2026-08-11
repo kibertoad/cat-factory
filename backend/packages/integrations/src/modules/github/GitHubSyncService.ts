@@ -43,6 +43,20 @@ const WORKSPACE_BACKFILL_CONCURRENCY = 3
 // resync, the queue consumer, the backfill Workflow and the cron reconciler.
 // ---------------------------------------------------------------------------
 
+/**
+ * What a workspace's connection can reach right now, and whether that is all of it.
+ *
+ * A result object rather than a bare array because the caps behind the read are real: the App
+ * enumeration stops at a page cap and a name search at a result cap, so on a wide installation the
+ * rows are a PREFIX. The two facts have to travel together, or the caller that publishes them
+ * reports an absent repository as unreachable when the truth is that the walk stopped first.
+ */
+export interface AvailableRepoListing {
+  repos: GitHubAvailableRepo[]
+  /** True when a provider leg stopped at its cap, so reachable repositories are missing. */
+  truncated: boolean
+}
+
 export interface GitHubSyncServiceDependencies {
   githubClient: GitHubClient
   githubInstallationRepository: GitHubInstallationRepository
@@ -84,7 +98,7 @@ export interface GitHubSyncServiceDependencies {
    * stored PAT changes; the short TTL backstops repos created straight on GitHub. Absent (tests /
    * the Worker's pass-through profile) ⇒ the enumeration runs live per request.
    */
-  viewerReposCache?: GroupCacheHandle<GitHubRepo[]>
+  viewerReposCache?: GroupCacheHandle<Paged<GitHubRepo>>
 }
 
 export class GitHubSyncService {
@@ -106,13 +120,19 @@ export class GitHubSyncService {
    * filtering in memory both truncates at the enumeration cap (dropping matches beyond it)
    * and re-fetches every page on each keystroke. A blank/whitespace query returns every
    * accessible repo (the repo-link panel's browse-all), so existing callers are unchanged.
+   *
+   * Answers an {@link AvailableRepoListing} rather than an array because every leg here has a cap
+   * and a caller that renders the result owes its reader the difference between "not reachable" and
+   * "not listed".
    */
   async listAvailableRepos(
     workspaceId: string,
     opts: { q?: string; userId?: string; userToken?: string } = {},
-  ): Promise<GitHubAvailableRepo[]> {
+  ): Promise<AvailableRepoListing> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
-    if (!installation || installation.deletedAt) return []
+    // No connection reaches nothing, and reaches nothing COMPLETELY: there is no cap involved, so
+    // the empty answer is the whole answer.
+    if (!installation || installation.deletedAt) return { repos: [], truncated: false }
     // A pasted repository URL must never depend on the provider's name search (which
     // tokenizes names — a full URL matches nothing): collapse it to its `owner/name` slug
     // BEFORE searching, and point-read that slug directly alongside the search below.
@@ -131,16 +151,14 @@ export class GitHubSyncService {
     // App's grant — even on the hosted facades. The App repos win on a github-id collision
     // (they're shared, so a repo reachable both ways is NOT personal). Personal-only repos are
     // badged so the user knows linking one makes a frame others may not see.
-    const [trackedRows, searchedRepos, directRepo, personalRepos] = await Promise.all([
+    const [trackedRows, searched, directRepo, personal] = await Promise.all([
       this.deps.repoProjectionRepository.list(workspaceId),
       query
         ? this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
             owner: installation.accountLogin || undefined,
             ownerType: installation.targetType,
           })
-        : this.deps.githubClient
-            .listInstallationRepos(installation.installationId)
-            .then((page) => page.items),
+        : this.deps.githubClient.listInstallationRepos(installation.installationId),
       // An exact `owner/name` query (typed, or collapsed from a pasted URL) is ALSO resolved
       // by a direct point-read, because the search leg alone is not sufficient: the GitHub-App
       // adapter delegates to GitHub's tokenized name search, which can miss an exact slug
@@ -151,7 +169,7 @@ export class GitHubSyncService {
     // The direct hit leads so an exact match is first in the picker; search rows dedup onto it.
     const appRepos = [
       ...(directRepo ? [directRepo] : []),
-      ...searchedRepos.filter((r) => r.githubId !== directRepo?.githubId),
+      ...searched.items.filter((r) => r.githubId !== directRepo?.githubId),
     ]
     const tracked = new Map(trackedRows.map((r) => [r.githubId, r]))
     const appIds = new Set(appRepos.map((r) => r.githubId))
@@ -168,7 +186,7 @@ export class GitHubSyncService {
       // that connection's provider.
       provider: installation.provider,
     }))
-    for (const r of personalRepos) {
+    for (const r of personal.repos) {
       if (appIds.has(r.githubId)) continue
       merged.push({
         githubId: r.githubId,
@@ -182,7 +200,11 @@ export class GitHubSyncService {
         provider: installation.provider,
       })
     }
-    return merged
+    // A fact about the LIST, not about the query: either provider leg can stop at a cap, and a
+    // caller reading a row's absence has to know which of "not reachable" and "not listed" it is
+    // looking at. It says nothing about the point-read leg, which resolves an exact `owner/name`
+    // directly and so answers about THAT slug completely either way.
+    return { repos: merged, truncated: searched.truncated === true || personal.truncated }
   }
 
   /**
@@ -212,10 +234,12 @@ export class GitHubSyncService {
     workspaceId: string,
     opts: { q?: string; userId?: string; userToken?: string },
     query: string | undefined,
-  ): Promise<GitHubRepo[]> {
+  ): Promise<{ repos: GitHubRepo[]; truncated: boolean }> {
     const { userToken, userId } = opts
     const listReposForToken = this.deps.githubClient.listReposForToken
-    if (!userToken || !listReposForToken) return []
+    // No token supplied, or a client that cannot enumerate by one: this leg contributes nothing and
+    // omitted nothing, which is not the same as an enumeration that stopped early.
+    if (!userToken || !listReposForToken) return { repos: [], truncated: false }
 
     // Hot path — the add-service picker's typeahead (a query is always present). Serve the token's
     // repo enumeration from the per-user cache and filter it in memory, so a keystroke costs a
@@ -225,16 +249,23 @@ export class GitHubSyncService {
     // stays uncached: it also refreshes the fail-closed access projection and wants fresh data.
     if (query && userId && this.deps.viewerReposCache) {
       const q = query.toLowerCase()
-      let items: GitHubRepo[]
+      let cached: Paged<GitHubRepo>
       try {
-        items = await this.deps.viewerReposCache.get(userId, userId, async () => {
-          const fresh = await listReposForToken(userToken)
-          return fresh.items
-        })
+        // The whole page is cached, not its items: an enumeration that stopped at the cap is an
+        // incomplete prefix, and a cache that kept only the rows would serve that prefix to every
+        // later keystroke as though it were the complete set.
+        cached = await this.deps.viewerReposCache.get(userId, userId, () =>
+          listReposForToken(userToken),
+        )
       } catch {
-        return []
+        // A personal-token failure degrades to App-only, and the App legs are complete on their own
+        // terms: nothing was dropped from a listing this leg never produced.
+        return { repos: [], truncated: false }
       }
-      return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+      return {
+        repos: cached.items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)),
+        truncated: cached.truncated === true,
+      }
     }
 
     // A stored PAT can be expired/revoked while still decrypting fine (or GitHub can be
@@ -245,7 +276,7 @@ export class GitHubSyncService {
     try {
       page = await listReposForToken(userToken)
     } catch {
-      return []
+      return { repos: [], truncated: false }
     }
     const { items, truncated } = page
     // Refresh the fail-closed access cache only on a blank browse-all (the picker's initial
@@ -259,9 +290,13 @@ export class GitHubSyncService {
       if (truncated) await this.deps.userRepoAccessRepository.recordAccessible(userId, records)
       else await this.deps.userRepoAccessRepository.replaceForUser(userId, records)
     }
-    if (!query) return items
+    const capped = truncated === true
+    if (!query) return { repos: items, truncated: capped }
     const q = query.toLowerCase()
-    return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+    return {
+      repos: items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)),
+      truncated: capped,
+    }
   }
 
   private toAccessRecord(userId: string, repo: GitHubRepo): UserRepoAccessRecord {
@@ -361,6 +396,49 @@ export class GitHubSyncService {
       .filter((e) => e.type === 'file')
       .map((e) => ({ path: e.path, name: e.name, type: e.type }))
       .sort((a, b) => a.path.localeCompare(b.path))
+  }
+
+  /**
+   * Link a repo named as `owner/name`, resolving the provider id here rather than in the caller.
+   *
+   * The door a HEADLESS caller comes through (`POST /api/v1/repos/link`): a browser-driven flow
+   * picks a repo out of {@link listAvailableRepos} and already holds a provider id, but a setup
+   * script holds the name a person typed and cannot know an id for a repo no public read lists.
+   *
+   * Resolution goes through `listAvailableRepos` with an exact-slug query rather than a bare
+   * `getRepo`, so it reaches everything the picker can reach: the App/PAT point-read, the provider
+   * search, and the viewer expansion when a token is supplied. Null means UNREACHABLE, which is the
+   * one thing the caller must not report as "linked": there is nothing here that could tell an
+   * unreachable repo from one that does not exist, so the refusal names both.
+   *
+   * **A repository this workspace ALREADY links resolves off the projection, before any of that.**
+   * Reachability and linkage are different facts and the second does not imply the first: a
+   * personal repository linked through somebody's own token, or one an App grant has since been
+   * narrowed away from, is listed by `GET /api/v1/repos` and reached by nothing this method could
+   * ask. Resolving only through the provider made re-running an idempotent adopt answer `404` for a
+   * repository the platform is already using, which is the one answer a setup script acts on by
+   * telling its operator to go create it. That mirrors {@link linkRepo}, which short-circuits on the
+   * same row by id; this is the same short-circuit keyed by the name a caller holds.
+   */
+  async linkRepoBySlug(
+    workspaceId: string,
+    owner: string,
+    name: string,
+    opts: { userId?: string; userToken?: string } = {},
+  ): Promise<GitHubRepo | null> {
+    const linked = await this.deps.repoProjectionRepository.list(workspaceId)
+    const already = linked.find((repo) => sameSlug(repo, owner, name))
+    if (already) return already
+    const { repos: available } = await this.listAvailableRepos(workspaceId, {
+      ...opts,
+      q: `${owner}/${name}`,
+    })
+    // Matched case-insensitively, as both providers treat a repository name, and against the OWNER
+    // too: a slug search can surface a same-named repository under another account, and linking that
+    // one would be a silent substitution rather than the miss it is.
+    const match = available.find((repo) => sameSlug(repo, owner, name))
+    if (!match) return null
+    return this.linkRepo(workspaceId, match.githubId, opts)
   }
 
   /**
@@ -678,4 +756,19 @@ export class GitHubSyncService {
       concurrency: WORKSPACE_BACKFILL_CONCURRENCY,
     })
   }
+}
+
+/**
+ * Whether a row IS the named repository, folding case on both halves.
+ *
+ * One rule for the two populations `linkRepoBySlug` consults (the workspace's own projection and
+ * what the connection reaches), because both providers treat a repository name case-insensitively:
+ * an operator who created `Catalog-Api` and typed `catalog-api` named one repository, and a second
+ * copy of that judgement is where one of the two comparisons quietly becomes exact.
+ */
+function sameSlug(repo: { owner: string; name: string }, owner: string, name: string): boolean {
+  return (
+    repo.owner.toLowerCase() === owner.toLowerCase() &&
+    repo.name.toLowerCase() === name.toLowerCase()
+  )
 }

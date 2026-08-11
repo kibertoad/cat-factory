@@ -473,12 +473,18 @@ export interface GitHubClient {
    * the exact case-insensitive substring match over their bounded listing. When no
    * `opts.owner` scope is available the GitHub-App adapter also falls back to that
    * substring match rather than an unscoped global search.
+   *
+   * `Paged` for the `truncated` flag alone: EVERY adapter here caps something (the result
+   * count, or the bounded listing it filters), so a caller publishing these rows has to be
+   * able to say the answer is a prefix. Returning a bare array put that judgement on the
+   * consumer, which can only guess it from the row count and so cannot see a listing that
+   * truncated before the filter ran.
    */
   searchInstallationRepos(
     installationId: number,
     query: string,
     opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number },
-  ): Promise<GitHubRepo[]>
+  ): Promise<Paged<GitHubRepo>>
 
   // ---- reads --------------------------------------------------------------
   getRepo(installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo>

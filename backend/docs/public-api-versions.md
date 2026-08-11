@@ -432,3 +432,62 @@ could always move the workspace default, which aims the same power at every othe
 the actual control is an admission rule over which policies a caller may pin:
 `docs/initiatives/role-scoped-risk-policy-admission.md`. Until that lands, an `admin` key may pin
 any policy its workspace holds, which is the authority it already had by editing one.
+
+1.44.0: two new operations, no change to anything already published, so a consumer built against
+1.43.0 reads and writes exactly what it did before. `GET /api/v1/repos/available` lists the
+repositories the workspace's connection can REACH, and `POST /api/v1/repos/link` adopts one by
+`owner`/`name`.
+
+They close a hole that made headless setup impossible to finish rather than merely awkward, and the
+hole was invisible from the surface. `GET /api/v1/repos` serves the repositories a workspace has
+LINKED, which is a set someone assembles in the app: linking is explicit per workspace, the provider
+webhook for an added repository does not project one, and a resync refreshes what is already linked
+rather than rediscovering the installation. So a repository that exists and is perfectly reachable is
+absent from every public read until a human opens the picker, and `POST /api/v1/services` answers 404
+for its `repoId`, which is byte-for-byte what a caller gets for a repository that does not exist. A
+deployment could create a repository through this API (1.41.0's bootstrap) and could not adopt one it
+already had.
+
+What a consumer NOTICES, beyond the two new methods:
+
+- **The two reads are a population pair, not a duplicate.** `/repos` lists what is linked (every row
+  carries a `repoId` a service can be created against); `/repos/available` lists what could be, with
+  `linked` as the join. An absent repository is now diagnosable: reachable-but-unlinked appears in the
+  second with `linked: false`, and one that does not exist appears in neither.
+- **The adopt is IDEMPOTENT and answers 200 either way**, because the caller that needs it most is a
+  setup script re-running itself. It answers with the same row shape `/repos` serves, projected from
+  the same read, so `serviceId` and `linkedElsewhere` cannot come to mean something else here. The
+  idempotency is resolved from what the workspace LINKS before the provider is consulted, so it holds
+  for a repository the credential can no longer see (a personal repository, or a narrowed App grant):
+  the alternative was a 404 for a repository `/repos` still lists, which reads to a setup script as
+  "go and create it".
+- **Both rows report whether the repository is spoken for**, from one account-scoped judgement.
+  `/repos/available` publishes `serviceId` and `linkedElsewhere` as `/repos` does, because a
+  repository nobody here has linked can still back a service on another board of the account, and the
+  create refuses it either way. A discovery read that could not say so would hand a caller a
+  repository whose very next call fails.
+- **`truncated` on the available read marks a capped list.** The provider legs behind it stop at a
+  page cap and a search cap, so on a wide connection the rows are a prefix and a reachable repository
+  can be missing from them. That is the one absence this read exists to make actionable, so it is
+  stated rather than left to look like non-existence. A point-read (`?q=owner/name`) resolves the
+  exact slug directly and stays authoritative about that repository regardless.
+- **`404` with `details.reason: 'repo_not_reachable'` covers two causes deliberately**: a repository
+  that does not exist and one the workspace's credential is not granted are the same answer from a
+  provider, and inventing a split would be a guess in the one place a caller acts on it.
+- **Both take `admin`**, like every other operation in the provisioning group: the read names what the
+  deployment's credential can reach, which is operator-facing, and the write changes what the
+  workspace can run against.
+- **`personal` is published on the available-repo row and is always false**, because an API key
+  authenticates as the WORKSPACE: a repository only somebody's personal token reaches is not reachable
+  by a key at all. It is stated rather than omitted so a caller comparing this list against what a
+  colleague sees in the app knows why the two can differ.
+- **Two new `details.reason` values ride along**, on these operations only: `vcs_credential_rejected`
+  (503, the provider refused the workspace's credential) and `vcs_rate_limited` (429, worth retrying).
+  These are the first two operations on the surface that reach the provider while a caller waits, so
+  they are the first that could fail for a reason that is neither the caller's nor the platform's;
+  without them both arrived as a `500 internal`, which tells a headless caller to report a platform
+  fault about a credential only they can replace. Both operations answer them, and on whichever
+  provider the workspace connected.
+- **The link's `owner` accepts a namespace PATH.** A GitLab project can live under nested groups, so
+  its owner reads `group/subgroup`, which is what the available read publishes; the adopt takes back
+  exactly what it was given.

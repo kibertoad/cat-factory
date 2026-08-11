@@ -15,7 +15,7 @@ import type { AccountSkillRecord } from './skill-repositories.js'
 import type { ResolvedFoundationalService } from '@cat-factory/contracts'
 export type { ResolvedFoundationalService }
 import type { SsoDiscoveryDocument } from './sso.js'
-import type { RepoContentEntry, RepoFileContent } from './github-client.js'
+import type { Paged, RepoContentEntry, RepoFileContent } from './github-client.js'
 import type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 import type { WorkspaceAccess } from '../domain/workspace-access.js'
 
@@ -265,7 +265,7 @@ export interface AppCaches {
    * bus, so the Worker enumerates live (caching only on the Node/local facades, where the PAT
    * picker is the primary flow).
    */
-  viewerRepos: GroupCacheHandle<GitHubRepo[]>
+  viewerRepos: GroupCacheHandle<Paged<GitHubRepo>>
   /**
    * The local facade's workspace-wide PAT repo enumeration (`GET /user/repos` with the
    * deployment's `GITHUB_PAT`), grouped AND keyed by installation id — the workspace-credential
@@ -280,7 +280,7 @@ export interface AppCaches {
    * the Worker's isolate-safe profile for the same reasons as `viewerRepos` (the Worker never
    * builds a PAT-backed client anyway).
    */
-  patInstallationRepos: GroupCacheHandle<GitHubRepo[]>
+  patInstallationRepos: GroupCacheHandle<Paged<GitHubRepo>>
   /**
    * A task's resolved merge-threshold preset (`riskPolicyRepository.get(id)` for a task's
    * picked preset, else `getDefault`), grouped by workspace id and keyed by the resolved id
