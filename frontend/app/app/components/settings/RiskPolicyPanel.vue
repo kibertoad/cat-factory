@@ -84,6 +84,10 @@ interface Draft {
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
   autoMergeEnabled: boolean
+  // Whether a run under this policy answers the parks its own automatic loops raise when they give
+  // up, rather than stopping for a person. Edited as a switch because the vocabulary is two-valued
+  // and the OFF state is the historical behaviour.
+  unattended: boolean
   // Per-change-class auto-merge rules. An OMITTED class means "use the score ceilings above",
   // so `{}` is the identity — the editor stores `thresholds` as an omission for that reason.
   classRules: MergeClassRules
@@ -131,6 +135,7 @@ function toDraft(p: RiskPolicy): Draft {
     maxRequirementIterations: p.maxRequirementIterations,
     maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
     autoMergeEnabled: p.autoMergeEnabled,
+    unattended: p.autonomy === 'unattended',
     classRules: { ...p.classRules },
     classRulesByRole: { ...p.classRulesByRole },
     dryRunRoles: [...p.dryRunRoles],
@@ -152,7 +157,29 @@ watch(
   { immediate: true, deep: false },
 )
 
+/**
+ * Which single control is mid-request, keyed `<policyId>[:<action>]`.
+ *
+ * Per ACTION and not merely per policy, because a row now carries two independent promote
+ * buttons: keyed by policy alone, promoting the in-app default spun the unattended button too and
+ * told the operator a change they had not asked for was in flight.
+ */
 const busy = ref<string | null>(null)
+
+/**
+ * Why the delete button is disabled, naming the flag that actually blocks it.
+ *
+ * The two are promoted by DIFFERENT buttons, so collapsing them into one "promote another preset
+ * first" message sends an operator to re-point the in-app default and come back to a delete that
+ * is still refused, with nothing on screen saying why.
+ */
+function deleteBlockedReason(p: RiskPolicy): string {
+  if (p.isDefault && p.isUnattendedDefault)
+    return t('settings.riskPolicy.deleteBothDefaultsBlocked')
+  if (p.isDefault) return t('settings.riskPolicy.deleteDefaultBlocked')
+  if (p.isUnattendedDefault) return t('settings.riskPolicy.deleteUnattendedDefaultBlocked')
+  return t('settings.riskPolicy.deletePreset')
+}
 
 async function save(p: RiskPolicy) {
   const d = drafts[p.id]
@@ -168,6 +195,7 @@ async function save(p: RiskPolicy) {
       maxRequirementIterations: d.maxRequirementIterations,
       maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
       autoMergeEnabled: d.autoMergeEnabled,
+      autonomy: d.unattended ? 'unattended' : 'attended',
       classRules: d.classRules,
       classRulesByRole: d.classRulesByRole,
       dryRunRoles: d.dryRunRoles,
@@ -187,9 +215,28 @@ async function save(p: RiskPolicy) {
 }
 
 async function makeDefault(p: RiskPolicy) {
-  busy.value = p.id
+  busy.value = `${p.id}:default`
   try {
     await store.update(p.id, { isDefault: true })
+  } catch (e) {
+    present(e, 'settings.riskPolicy.toast.defaultFailed')
+  } finally {
+    busy.value = null
+  }
+}
+
+/**
+ * Promote this policy to the UNATTENDED default: the one a task that pins none resolves when
+ * nothing is watching the run (a start over the public API, a tracker dispatch, a schedule fire).
+ *
+ * Its own action rather than a second meaning for the button above, because the two defaults are
+ * independent: a board can run one posture in the app and another for the work it never sees, and
+ * flagging one policy both ways is a deliberate choice rather than the only option.
+ */
+async function makeUnattendedDefault(p: RiskPolicy) {
+  busy.value = `${p.id}:unattended`
+  try {
+    await store.update(p.id, { isUnattendedDefault: true })
   } catch (e) {
     present(e, 'settings.riskPolicy.toast.defaultFailed')
   } finally {
@@ -227,6 +274,9 @@ const draft = reactive<Draft>({
   maxRequirementIterations: 6,
   maxRequirementConcernAllowed: 'none',
   autoMergeEnabled: true,
+  // A new policy parks on its own caps, matching every built-in but the unattended default: a
+  // licence to answer them is a posture somebody grants, never one a blank form assumes.
+  unattended: false,
   // The create row authors the numbers only. Class and role rules start at their identity and
   // are edited on the saved preset, where each rule can be shown beside the base rule (and the
   // track record) it narrows — neither reads as anything on a policy that does not exist yet.
@@ -254,11 +304,13 @@ async function create() {
       maxRequirementIterations: draft.maxRequirementIterations,
       maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
       autoMergeEnabled: draft.autoMergeEnabled,
+      autonomy: draft.unattended ? 'unattended' : 'attended',
       classRules: draft.classRules,
       forkDecision: forkGating(draft),
     })
     draft.name = ''
     draft.autoMergeEnabled = true
+    draft.unattended = false
     draft.classRules = {}
     toast.add({
       title: t('settings.riskPolicy.toast.created'),
@@ -300,6 +352,30 @@ async function create() {
           class="flex-1"
           :placeholder="t('settings.riskPolicy.presetNamePlaceholder')"
         />
+        <UBadge v-if="p.isUnattendedDefault" color="info" variant="subtle" size="sm">
+          {{ t('settings.riskPolicy.unattendedDefault') }}
+        </UBadge>
+        <!--
+          Visibly labelled, like its `makeDefault` sibling below. `title` is a tooltip, NOT an
+          accessible name: icon-only, this was announced as an unlabelled button, and a sighted
+          user had to hover a bare glyph to discover it re-points which policy governs every
+          unwatched run. The short text is the accessible name (so it is not one of those buttons
+          whose spoken name and printed label disagree) and the longer `title` still explains
+          which runs those are. `busy` is compared to a per-BUTTON key so promoting one default
+          does not spin the other's button too.
+        -->
+        <UButton
+          v-else
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          icon="i-lucide-bot"
+          :loading="busy === `${p.id}:unattended`"
+          :title="t('settings.riskPolicy.makeUnattendedDefault')"
+          @click="makeUnattendedDefault(p)"
+        >
+          {{ t('settings.riskPolicy.makeUnattendedDefaultShort') }}
+        </UButton>
         <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="sm">
           {{ t('settings.riskPolicy.default') }}
         </UBadge>
@@ -309,7 +385,7 @@ async function create() {
           variant="ghost"
           size="xs"
           icon="i-lucide-star"
-          :loading="busy === p.id"
+          :loading="busy === `${p.id}:default`"
           @click="makeDefault(p)"
         >
           {{ t('settings.riskPolicy.makeDefault') }}
@@ -319,12 +395,8 @@ async function create() {
           variant="ghost"
           size="xs"
           icon="i-lucide-trash-2"
-          :disabled="p.isDefault || busy === p.id"
-          :title="
-            p.isDefault
-              ? t('settings.riskPolicy.deleteDefaultBlocked')
-              : t('settings.riskPolicy.deletePreset')
-          "
+          :disabled="p.isDefault || p.isUnattendedDefault || busy?.startsWith(p.id)"
+          :title="deleteBlockedReason(p)"
           @click="remove(p)"
         />
       </div>
@@ -432,6 +504,22 @@ async function create() {
             <USelect v-model="drafts[p.id]!.forkOnMissing" :items="ON_MISSING_OPTIONS" size="sm" />
           </label>
         </div>
+      </div>
+
+      <!-- The autonomy posture: whether the parks the engine's own quality loops raise when they
+           give up wait for a person, or are answered on the record so the run finishes. Never
+           touches a gate the PIPELINE asked for. -->
+      <div class="mt-3 rounded-md border border-slate-800 bg-slate-900/40 p-3">
+        <USwitch
+          v-model="drafts[p.id]!.unattended"
+          size="sm"
+          :label="t('settings.riskPolicy.autonomy.label')"
+          :description="
+            drafts[p.id]!.unattended
+              ? t('settings.riskPolicy.autonomy.unattendedHint')
+              : t('settings.riskPolicy.autonomy.attendedHint')
+          "
+        />
       </div>
 
       <div class="mt-3 flex items-center justify-between gap-3">

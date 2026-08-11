@@ -83,6 +83,7 @@ import {
 import type { InterviewGateController } from './InterviewGateController.js'
 import { recordJobFacts } from './job-facts.js'
 import { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import { StepGraph } from './StepGraph.js'
 import { TesterController } from './TesterController.js'
 import { RalphController } from './RalphController.js'
@@ -174,6 +175,7 @@ export class RunDispatcher {
   private readonly resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
+    run: RunPolicyScope,
   ) => Promise<ResolvedRiskPolicy>
   // `resolveRunRepoContext` / `resolveProviderCapabilities` / `modelIdIsMetered` are NOT held
   // here: their only readers moved to {@link AgentDispatchController}, which takes them straight
@@ -315,6 +317,8 @@ export class RunDispatcher {
       clock: deps.clock,
       notificationService: deps.notificationService,
       ticketTrackerProvider: deps.ticketTrackerProvider,
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
+      logger: deps.logger,
     })
     this.repoOps = new RunRepoOpsController({
       blockRepository: deps.blockRepository,
@@ -398,7 +402,7 @@ export class RunDispatcher {
         clock: deps.clock,
         runStateMachine: deps.runStateMachine,
         runInitiatorScope: this.runInitiatorScope,
-        resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+        resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
         declaredGateFields: (kind) => this.gateRegistry.configFields(kind),
         ...gateOutcomeRecorder,
         recordStepResult: (ws, instance, step, isFinalStep, result) =>
@@ -422,7 +426,7 @@ export class RunDispatcher {
       raiseNotification: async (ws, input) => {
         await this.notificationService?.raise(ws, input)
       },
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
       fragmentResolver: deps.fragmentResolver,
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
         this.recordStepResult(ws, instance, step, isFinalStep, result),
@@ -1278,7 +1282,7 @@ export class RunDispatcher {
       const tri = resolveForkTriState(block.agentConfig)
       let propose = tri === 'always'
       if (tri === 'auto') {
-        const policy = await this.resolveRiskPolicy(workspaceId, block)
+        const policy = await this.resolveRiskPolicy(workspaceId, block, instance)
         propose = shouldProposeForkAuto(policy.forkDecision, block.estimate)
       }
       if (!propose) {

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import type { RiskPolicyDefaultScope } from './merge.js'
 
 // A run's PROVENANCE: how it entered the system, whether it may land its work, and where it
 // actually executed. Three small vocabularies that answer questions about the run rather than
@@ -68,6 +69,43 @@ const HEADLESS_INTAKE: Record<IntakeOrigin, boolean> = {
  */
 export function isHeadlessIntake(origin: IntakeOrigin | undefined): boolean {
   return origin != null && HEADLESS_INTAKE[origin] === true
+}
+
+/**
+ * Which of the workspace's two default risk policies a run of this intake resolves when its task
+ * pinned none (see `riskPolicyDefaultScopeSchema`).
+ *
+ * A SECOND `Record` over the same picklist, deliberately not derived from {@link HEADLESS_INTAKE},
+ * because the two answer different questions and disagree on `schedule`. That one is not headless
+ * (its reused block has no stable place to hold a clarification conversation) and yet nobody is
+ * watching it run, so it takes the unattended policy: a cadence fire that parks on a companion cap
+ * waits until somebody happens to open the board, which is the failure this scope exists to stop.
+ *
+ * Only `ui` is `interactive`, and it is the same positive claim the default `ui` intake makes: a
+ * human is in the app. A new intake surface fails to compile until it says which it is.
+ */
+const DEFAULT_POLICY_SCOPE: Record<IntakeOrigin, RiskPolicyDefaultScope> = {
+  ui: 'interactive',
+  'public-api': 'unattended',
+  tracker: 'unattended',
+  schedule: 'unattended',
+}
+
+/**
+ * The default-policy scope for a run's intake. `undefined` is every run persisted before
+ * `intakeOrigin` existed and degrades to `interactive`, matching how such a run already degrades
+ * to `ui` everywhere else: a run that cannot be PROVEN unattended is not granted the unattended
+ * policy's licence to answer its own caps.
+ *
+ * The lookup is guarded rather than bare for the reason {@link isHeadlessIntake}'s is: the
+ * picklist is a CLOSED vocabulary whose members outlive their retirement in stored rows, and a
+ * run written under a member later dropped indexes to `undefined` at runtime while the declared
+ * type says otherwise.
+ */
+export function riskPolicyDefaultScopeFor(
+  origin: IntakeOrigin | undefined,
+): RiskPolicyDefaultScope {
+  return (origin != null ? DEFAULT_POLICY_SCOPE[origin] : undefined) ?? 'interactive'
 }
 
 /**

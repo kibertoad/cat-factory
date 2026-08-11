@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { intakeOriginSchema, isHeadlessIntake, type IntakeOrigin } from './run-provenance.js'
+import type { RiskPolicyDefaultScope } from './merge.js'
+import {
+  intakeOriginSchema,
+  isHeadlessIntake,
+  riskPolicyDefaultScopeFor,
+  type IntakeOrigin,
+} from './run-provenance.js'
 
 // `isHeadlessIntake` decides whether a parked review's questions are pushed OUT to where the work
 // came from. Getting it wrong is silent in both directions: too narrow and a requester is never
@@ -46,5 +52,44 @@ describe('isHeadlessIntake', () => {
     // writeback needs is a stable place to hold a conversation, not merely an absent human.
     expect(isHeadlessIntake('schedule')).toBe(false)
     expect(isHeadlessIntake('tracker')).toBe(true)
+  })
+})
+
+// The SECOND classification over the same vocabulary: which of a workspace's two default risk
+// policies a run resolves. It exists apart from `isHeadlessIntake` because the two disagree, and
+// the disagreement is the whole reason a shared predicate would have been wrong.
+
+const EXPECTED_SCOPE: Record<IntakeOrigin, RiskPolicyDefaultScope> = {
+  ui: 'interactive',
+  'public-api': 'unattended',
+  tracker: 'unattended',
+  schedule: 'unattended',
+}
+
+describe('riskPolicyDefaultScopeFor', () => {
+  it('classifies every member of the vocabulary, and no more', () => {
+    expect([...intakeOriginSchema.options].sort()).toEqual(Object.keys(EXPECTED_SCOPE).sort())
+  })
+
+  it.each(Object.entries(EXPECTED_SCOPE))('classifies %s', (origin, scope) => {
+    expect(riskPolicyDefaultScopeFor(origin as IntakeOrigin)).toBe(scope)
+  })
+
+  it('DISAGREES with isHeadlessIntake about a schedule fire, which is why it is its own table', () => {
+    // A cadence fire is not headless (no stable place to hold a clarification conversation) and
+    // is nonetheless unwatched, so it takes the unattended policy. Deriving this scope from
+    // `isHeadlessIntake` would leave a scheduled run parked on a companion cap until somebody
+    // happened to open the board — the exact failure the scope exists to stop.
+    expect(isHeadlessIntake('schedule')).toBe(false)
+    expect(riskPolicyDefaultScopeFor('schedule')).toBe('unattended')
+  })
+
+  it('treats an absent or retired origin as interactive, never as unattended', () => {
+    // Same reasoning as `isHeadlessIntake`'s guarded lookup, pointed the other way: a run that
+    // cannot be PROVEN unwatched is not granted the unattended policy's licence to answer its own
+    // caps. Absent is every run predating the field; the unknown value is a member later retired
+    // from the picklist that a stored row still carries.
+    expect(riskPolicyDefaultScopeFor(undefined)).toBe('interactive')
+    expect(riskPolicyDefaultScopeFor('mailbox' as IntakeOrigin)).toBe('interactive')
   })
 })

@@ -10,6 +10,7 @@ import type {
   RequirementConcernLevel,
   ResolveRequirementsExceededChoice,
   ReviewQuestionSubject,
+  RunAutonomy,
   WorkRunner,
 } from '@cat-factory/kernel'
 import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
@@ -21,6 +22,7 @@ import {
   shouldPostReviewQuestions,
 } from './reviewQuestionWriteback.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import { resolvesOwnCaps, type RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
 
 /**
@@ -32,6 +34,12 @@ import type { StepGraph } from './StepGraph.js'
 export interface ReviewPreset {
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
+  /**
+   * Whether the run may proceed on its own when the loop exhausts `maxRequirementIterations`.
+   * Optional for the reason it is optional on `ResolvedRunRiskPolicy`: a test preset that gates on
+   * nothing else should not have to state a posture, and absent reads as `attended`.
+   */
+  autonomy?: RunAutonomy
 }
 
 /**
@@ -140,7 +148,11 @@ export interface ReviewGateControllerDeps {
   issueWriteback?: IssueWritebackProvider
   /** Structured logger for the best-effort writeback above. Absent → failures are silent. */
   logger?: Logger
-  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ReviewPreset>
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<ReviewPreset>
   dispatchIterationCap: (
     workspaceId: string,
     blockId: string,
@@ -163,6 +175,29 @@ export interface ReviewGateControllerDeps {
  */
 export class ReviewGateController {
   constructor(private readonly deps: ReviewGateControllerDeps) {}
+
+  /**
+   * The run scope a policy resolution here runs under.
+   *
+   * Every entry point on this controller is reachable two ways: from the pipeline gate, which
+   * already holds the run, and from the off-path inspector surfaces, which are handed a BLOCK id
+   * by an HTTP request. `known` is the first case and costs nothing; the second reads the block's
+   * live run, because the review's iteration budget must come from the same policy the run itself
+   * is governed by, and an off-path "run review" on an API-started task is still that task's run.
+   *
+   * A block with no live run at all degrades to `undefined`, which
+   * {@link riskPolicyDefaultScopeFor} reads as interactive: there is no unattended run to speak
+   * for, and somebody is making this request right now.
+   */
+  private async runScope(
+    workspaceId: string,
+    blockId: string,
+    known?: RunPolicyScope,
+  ): Promise<RunPolicyScope> {
+    if (known) return known
+    const run = await this.deps.executionRepository.getByBlock(workspaceId, blockId)
+    return { intakeOrigin: run?.intakeOrigin }
+  }
 
   /**
    * Run a review gate step. When the reviewer isn't wired the step passes through (pipelines
@@ -214,10 +249,20 @@ export class ReviewGateController {
         block.id,
         pending.feedback,
         autoRecommendEnabled,
+        instance,
       )
       if (review.status === 'incorporated') {
         return this.completeStep(workspaceId, instance, step, isFinalStep)
       }
+      const settled = await this.settleCapUnattended(
+        kind,
+        workspaceId,
+        instance,
+        block,
+        review,
+        step,
+      )
+      if (settled) return this.completeStep(workspaceId, instance, step, isFinalStep)
       // `ready`/`exceeded`: re-park (a fresh decision id) and wait for the human again.
       // At the cap, raise a notification so the three-choice decision is discoverable.
       if (review.status === 'exceeded')
@@ -229,8 +274,14 @@ export class ReviewGateController {
     // the off-path inspector surface). Auto-pass (status `incorporated`) → advance; the
     // findings stay recorded on the review for transparency. `ready`/`exceeded` → park for
     // the dedicated window.
-    const review = await this.review(kind, workspaceId, block.id)
+    const review = await this.review(kind, workspaceId, block.id, instance)
     if (review.status === 'incorporated') {
+      return this.completeStep(workspaceId, instance, step, isFinalStep)
+    }
+    // At the cap with nobody to ask: settle on the last clarified report and advance (see
+    // `settleCapUnattended`). Checked before the auto-recommendation pass below, which exists to
+    // hand a HUMAN a mostly-filled review and buys an unattended run nothing.
+    if (await this.settleCapUnattended(kind, workspaceId, instance, block, review, step)) {
       return this.completeStep(workspaceId, instance, step, isFinalStep)
     }
     // Pre-answer the findings the reviewer judged answerable without a product owner, so the
@@ -243,6 +294,59 @@ export class ReviewGateController {
     if (review.status === 'exceeded')
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
     return this.park(kind, workspaceId, instance, step, block, review)
+  }
+
+  /**
+   * The ITERATION CAP under an unattended policy: the reviewer loop spent its whole pass budget
+   * without converging, and there is nobody to pick among the three choices the cap offers.
+   *
+   * Takes `proceed`, the same disposition a person picks when they accept the last clarified
+   * report as good enough, through the SAME `markIncorporated` the human path runs: this is not a
+   * second way to settle a review, it is the human's own answer given by policy. The other two
+   * choices are deliberately unavailable to it — "one more round" spends model calls on a loop
+   * that has already demonstrated it does not converge, and "stop and reset" throws away the work
+   * on a run whose whole point was to finish without supervision.
+   *
+   * Returns whether it settled, so the caller advances instead of parking. Only `exceeded`
+   * qualifies: a `ready` review is a reviewer asking QUESTIONS, which is the consultation an
+   * unattended policy never answers on a person's behalf. Settling one would mean building from
+   * requirements nobody agreed to, and the step is worth nothing if it does that.
+   *
+   * **So this branch is RARE by construction, and that is correct rather than a bug to fix.**
+   * `disposeReview` reaches `exceeded` only at `iteration >= maxIterations`, the initial pass is
+   * iteration 1, and the counter advances only through human answer → incorporate → re-review
+   * cycles. An unattended run therefore meets `ready` first and parks there, and reaches this at
+   * all only when a run that HAD a person is later governed by an unattended policy, or when the
+   * preset allows a single pass. The answer to "an unattended run should not sit on an
+   * attended-heavy step" is not to settle the questions here: it is not to put the step in the
+   * pipeline that unwatched runs resolve.
+   */
+  private async settleCapUnattended<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    review: TReview,
+    step: PipelineStep,
+  ): Promise<boolean> {
+    if (review.status !== 'exceeded') return false
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
+    if (!resolvesOwnCaps(preset)) return false
+    const settled = await kind.markIncorporated(workspaceId, review.id)
+    // Stamped BEFORE the caller advances, so the record lands with the step that carries it. The
+    // review row itself says only `incorporated`, which is also what a person's own "proceed"
+    // writes; this is the one thing that tells those apart afterwards.
+    step.reviewCapSettledByPolicy = true
+    await kind.emit(workspaceId, settled)
+    this.deps.logger?.info('review iteration cap settled by policy', {
+      workspaceId,
+      runId: instance.id,
+      blockId: block.id,
+      reviewId: review.id,
+      agentKind: step.agentKind,
+      iterations: preset.maxRequirementIterations,
+    })
+    return true
   }
 
   /**
@@ -337,6 +441,7 @@ export class ReviewGateController {
     blockId: string,
     feedback?: string,
     autoRecommendEnabled = true,
+    run?: RunPolicyScope,
   ): Promise<TReview> {
     const review = await this.currentReview(kind, workspaceId, blockId)
     // Nothing to fold in (every finding dismissed, no answered replies, no redo
@@ -355,7 +460,11 @@ export class ReviewGateController {
       'Block',
       blockId,
     )
-    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(
+      workspaceId,
+      block,
+      await this.runScope(workspaceId, blockId, run),
+    )
     await kind.incorporate(workspaceId, blockId, review.id, feedback)
     // The fold is done; flag the SECOND stage (`reviewing`) so the board/window can show
     // "re-reviewing" distinctly from "incorporating" — either of the two LLM calls can be
@@ -424,13 +533,18 @@ export class ReviewGateController {
     kind: ReviewKind<TReview>,
     workspaceId: string,
     blockId: string,
+    run?: RunPolicyScope,
   ): Promise<TReview> {
     const block = assertFound(
       await this.deps.blockRepository.get(workspaceId, blockId),
       'Block',
       blockId,
     )
-    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(
+      workspaceId,
+      block,
+      await this.runScope(workspaceId, blockId, run),
+    )
     return kind.review(workspaceId, block, preset)
   }
 
@@ -656,7 +770,11 @@ export class ReviewGateController {
       'Block',
       blockId,
     )
-    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(
+      workspaceId,
+      block,
+      await this.runScope(workspaceId, blockId),
+    )
     const updated = await kind.reReview(workspaceId, review.id, preset)
     if (updated.status === 'incorporated') {
       await this.resumeRun(kind, workspaceId, blockId)

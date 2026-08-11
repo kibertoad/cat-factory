@@ -1,20 +1,31 @@
-import type { RiskPolicy } from '../domain/types.js'
+import type { RiskPolicy, RiskPolicyDefaultScope } from '../domain/types.js'
 
 // Persistence port for per-workspace merge threshold presets. The worker
-// implements it against D1; tests supply an in-memory fake. Exactly one preset
-// per workspace is the default (`isDefault`), resolved for any task that hasn't
-// picked one. Enforcing the single-default invariant is the repository's job
-// (promoting a new default demotes the previous one).
+// implements it against D1; tests supply an in-memory fake. A workspace carries TWO
+// defaults, one per `RiskPolicyDefaultScope`: `isDefault` for a run somebody started in the app
+// and `isUnattendedDefault` for one nothing is watching, each resolved for any task that hasn't
+// picked a policy. Enforcing the single-default invariant PER SCOPE is the repository's job
+// (promoting a new default demotes the previous one, and only on the scope being promoted: the
+// two flags are independent, so one row may hold both).
 
 export interface RiskPolicyRepository {
   /** A preset by id, or null if it does not exist. */
   get(workspaceId: string, id: string): Promise<RiskPolicy | null>
   /** All presets for a workspace (for the snapshot + settings UI). */
   list(workspaceId: string): Promise<RiskPolicy[]>
-  /** The workspace's default preset, or null if none is seeded yet. */
-  getDefault(workspaceId: string): Promise<RiskPolicy | null>
-  /** Create or replace a preset (keyed by id). Promoting `isDefault` demotes the prior default. */
+  /**
+   * The workspace's default preset for one scope, or null if none is seeded yet.
+   *
+   * The scope is REQUIRED rather than defaulted, so a caller that has not decided which kind of
+   * run it is resolving for fails to compile. The alternative reads as correct and silently hands
+   * an unwatched run the in-app policy, which is the exact behaviour this parameter exists to fix.
+   */
+  getDefault(workspaceId: string, scope: RiskPolicyDefaultScope): Promise<RiskPolicy | null>
+  /**
+   * Create or replace a preset (keyed by id). Promoting `isDefault` / `isUnattendedDefault`
+   * demotes the prior holder of THAT flag, leaving the other scope's default alone.
+   */
   upsert(workspaceId: string, preset: RiskPolicy): Promise<void>
-  /** Remove a preset by id (no-op if absent). The default preset cannot be removed. */
+  /** Remove a preset by id (no-op if absent). Neither scope's default preset can be removed. */
   remove(workspaceId: string, id: string): Promise<void>
 }

@@ -715,9 +715,37 @@ export const pipelineStepSchema = v.object({
          * an extra round (the loop resumes). Absent until/unless the cap is hit.
          */
         exceeded: v.optional(v.boolean()),
+        /**
+         * Set true when the run's risk policy ANSWERED that cap instead of parking on it
+         * (`autonomy: 'unattended'`), taking the "proceed anyway" choice a person would have been
+         * offered. Mutually exclusive with `exceeded` in practice: one records a cap waiting on a
+         * human, the other a cap already settled without one.
+         *
+         * It exists so the two are never confused by a reader. The last `verdicts` entry says the
+         * producer was below the bar either way, and without this flag a run that advanced anyway
+         * is indistinguishable from one whose companion quietly stopped grading. Rendered on the
+         * step and read by whoever reviews the resulting pull request.
+         */
+        capSettledByPolicy: v.optional(v.boolean()),
       }),
     ),
   ),
+  /**
+   * The REVIEW-GATE sibling of `companion.capSettledByPolicy`: set on a `requirements-review` /
+   * clarity step whose iterative review spent its whole reviewer-pass budget and whose risk
+   * policy (`autonomy: 'unattended'`) then took the "proceed on the last clarified report"
+   * answer a person would have been offered.
+   *
+   * It lives on the STEP rather than on the review row for the same reason the companion's does:
+   * this is a fact about ONE run, the step is where whoever reviews the resulting pull request
+   * looks, and a review row outlives the run that settled it. Without it, a review whose findings
+   * were never answered reads exactly like one a product owner signed off.
+   *
+   * Absent on every other step and on every attended run. Note this records the ITERATION CAP
+   * only: a review still ASKING questions parks under either posture, because the answers are a
+   * product judgement and inventing them is the one thing an unattended policy may never do.
+   */
+  reviewCapSettledByPolicy: v.optional(v.boolean()),
   /**
    * Live Follow-up companion state while a `coder` step runs/parks: the items the Coder
    * streamed (loose ends / side-tasks / questions), whether the companion is enabled, and

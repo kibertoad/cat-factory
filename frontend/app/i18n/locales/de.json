@@ -527,6 +527,8 @@
       "default": "Standard",
       "makeDefault": "Als Standard festlegen",
       "deleteDefaultBlocked": "Die Standardrichtlinie kann nicht gelöscht werden",
+      "deleteUnattendedDefaultBlocked": "Die Standardrichtlinie für unbeaufsichtigte Läufe kann nicht gelöscht werden",
+      "deleteBothDefaultsBlocked": "Diese Richtlinie ist sowohl der In-App- als auch der unbeaufsichtigte Standard und kann daher nicht gelöscht werden",
       "deletePreset": "Richtlinie löschen",
       "field": {
         "maxComplexity": "Max. Komplexität %",
@@ -601,6 +603,14 @@
         "redundant": "Ohne Wirkung: Diese Richtlinie ist bereits mindestens so streng.",
         "alreadyStrictest": "Wird ohnehin immer geprüft",
         "baseHint": "Diese Richtlinie vergleicht in jeder Kategorie die Bewertungen, eine Rolle kann eine Kategorie daher nur auf \"immer Review\" verschärfen."
+      },
+      "unattendedDefault": "Standard ohne Aufsicht",
+      "makeUnattendedDefault": "Zum Standard für unbeaufsichtigte Läufe machen (API, Tracker, Zeitplan)",
+      "makeUnattendedDefaultShort": "Unbeaufsichtigter Standard",
+      "autonomy": {
+        "label": "Unbeaufsichtigte Läufe ohne Wartezeit auf eine Person abschließen",
+        "unattendedHint": "Wenn eine automatische Schleife aufgibt (ein Companion an seinem Überarbeitungslimit, eine Prüfung an ihrem Durchlauflimit, unbearbeitete Folgepunkte), läuft der Durchlauf nachvollziehbar weiter statt anzuhalten. Von der Pipeline angeforderte Gates wie manuelles Testen, Review und Freigabe halten den Durchlauf weiterhin an.",
+        "attendedHint": "Wenn eine automatische Schleife aufgibt, hält der Durchlauf an und wartet auf eine Entscheidung. Richtig für ein Board, das jemand beobachtet; ein über die API gestarteter Durchlauf wartet unbegrenzt."
       }
     },
     "observabilityConnection": {
@@ -2852,6 +2862,7 @@
       "archiveFailed": "Dienst konnte nicht archiviert werden",
       "restoreFailed": "Dienst konnte nicht wiederhergestellt werden",
       "moveRefused": {
+        "relaxes_run_oversight": "Dort, wohin du diese Aufgabe verschiebst, beantwortet ein Lauf seine eigenen Prüfpunkte selbst, statt auf eine Person zu warten; die hier geltende Merge-Richtlinie tut das nicht. Bitte eine Administration des Arbeitsbereichs, sie zu verschieben.",
         "relaxes_role_sandbox": "Die Ausführungen dieser Aufgabe laufen an ihrem jetzigen Ort für deine Rolle isoliert, die Merge-Richtlinie am Zielort jedoch nicht. Bitte eine Workspace-Administration, sie zu verschieben.",
         "relaxes_role_submission_allowlist": "Die Merge-Richtlinie am Zielort würde dich Änderungsarten mergen lassen, die dir hier verwehrt sind. Bitte eine Workspace-Administration, sie zu verschieben.",
         "relaxes_role_class_rule": "Die Merge-Richtlinie am Zielort merged Änderungen automatisch, die du hier prüfen musst. Bitte eine Workspace-Administration, sie zu verschieben."
@@ -6837,6 +6848,7 @@
       "workspaceDefaultCaption": "Gilt, weil diese Aufgabe keine eigene Richtlinie wählt.",
       "noneHint": "Keine Risikorichtlinie konfiguriert. Jeder Pull Request wartet auf eine menschliche Prüfung.",
       "refused": {
+        "relaxes_run_oversight": "Für deine Rolle nicht verfügbar: Mit dieser Richtlinie beantwortet ein Lauf seine eigenen Prüfpunkte selbst, statt auf eine Person zu warten. Eine Administration des Arbeitsbereichs kann das ändern.",
         "relaxes_role_sandbox": "Für deine Rolle nicht verfügbar: Läufe dieser Aufgabe laufen in der Sandbox, und diese Richtlinie würde sie mergen lassen. Eine Workspace-Administration kann das ändern.",
         "relaxes_role_submission_allowlist": "Für deine Rolle nicht verfügbar: Diese Richtlinie würde dich Änderungsarten mergen lassen, die dir bei dieser Aufgabe verwehrt sind. Eine Workspace-Administration kann das ändern.",
         "relaxes_role_class_rule": "Für deine Rolle nicht verfügbar: Diese Richtlinie merged Änderungen automatisch, die du bei dieser Aufgabe prüfen musst. Eine Workspace-Administration kann das ändern."
