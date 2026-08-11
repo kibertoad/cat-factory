@@ -383,55 +383,91 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // the account's model-family policy is CONFIGURED, so telling its operator to add a key
       // sends them to change a setting that is already correct.
       const blocked = models.filter((model) => model.policyBlocked)
+      // Models the deployment CONFIRMED are wired to this key's owner as a personal subscription
+      // AND that the policy does not refuse. A third cause with a third fix, and the only one that
+      // says the deployment is already correct: what is missing is the token's identity, not a
+      // credential. Policy-refused rows are excluded rather than merely ranked below, because a
+      // catalog that mixes the two causes still owes the policy answer for its blocked half: a
+      // re-minted token cannot spend what the policy refuses.
+      const connected = models.filter(
+        (model) => model.subscriptionConfigured === true && !model.policyBlocked,
+      )
       const catalogRead = publicApiRead(
         config,
         '/models',
-        "list the catalog with each entry's `available` and `policyBlocked` flags",
+        "list the catalog with each entry's `available`, `policyBlocked`, `personalSubscription` " +
+          'and `subscriptionConfigured` flags',
       )
-      return blocked.length === models.length && models.length > 0
-        ? unsatisfied(
-            `all ${models.length} catalog models are blocked by the account's model-family policy`,
-            {
-              steps: [
-                'Every entry is CONFIGURED and refused, so adding another provider key changes nothing.',
-                "Permit a family on the account's model policy (account settings), or point the " +
-                  'suite at a workspace whose policy already does.',
-              ],
-              commands: [catalogRead],
-            },
-          )
-        : unsatisfied(
-            `no model in the ${models.length}-entry catalog is selectable, so every agent step ` +
-              `would fail at dispatch`,
-            {
-              steps: [
-                'In the SPA: Model providers, and add a provider API key or connect a subscription ' +
-                  'for at least one model.',
-                'An entry becomes selectable as soon as its provider is wired, with no restart.',
-                // The THIRD cause, and the only one this read cannot see for itself: a deployment
-                // whose models belong to a PERSON (a locally-run endpoint, a personal Claude /
-                // Codex subscription) answers a SYSTEM token exactly like a deployment with
-                // nothing wired, because such a token has no person to attribute them to. Naming
-                // it here keeps the remedy from being "add a key" when a key is not what is
-                // missing — and the remedy differs per kind, so both are stated.
-                ...(excludesUserScopedModels
-                  ? [
-                      'This token is a SYSTEM token, and the catalog above leaves out every model ' +
-                        'that belongs to a person: a personal Claude / Codex / GLM subscription, ' +
-                        'and any locally-run endpoint. If one of those is what this workspace ' +
-                        'actually runs on, nothing is missing from the deployment.',
-                      'For a personal SUBSCRIPTION: mint the token again under Integrations → API ' +
-                        'access tokens with "Runs as" set to yourself, and the pass will ask for ' +
-                        'your personal password once, when a run needs it.',
-                      'For a locally-run ENDPOINT: those are per-user and never reachable by a ' +
-                        'token, so the suite needs a provider key or a subscription of its own.',
-                    ]
-                  : []),
-              ],
-              commands: [catalogRead],
-              docs: 'backend/docs/model-support.md',
-            },
-          )
+      // The policy answer FIRST, because it is the one cause no remedy below can undo. A catalog
+      // refused end to end is refused for every identity, so reaching the identity answer first
+      // told an operator "nothing is missing from the deployment" about a deployment whose policy
+      // was the entire problem.
+      if (blocked.length === models.length && models.length > 0) {
+        return unsatisfied(
+          `all ${models.length} catalog models are blocked by the account's model-family policy`,
+          {
+            steps: [
+              'Every entry is CONFIGURED and refused, so adding another provider key changes nothing.',
+              "Permit a family on the account's model policy (account settings), or point the " +
+                'suite at a workspace whose policy already does.',
+            ],
+            commands: [catalogRead],
+          },
+        )
+      }
+      if (connected.length > 0) {
+        return unsatisfied(
+          `no model in the ${models.length}-entry catalog is selectable by THIS token, but ` +
+            `${connected.map((model) => `'${model.modelId}'`).join(', ')} ` +
+            `${connected.length === 1 ? 'runs' : 'run'} on a subscription that is connected for ` +
+            `this token’s owner. Nothing is missing from the deployment: a system token may not ` +
+            `spend a credential that belongs to a person.`,
+          {
+            steps: [
+              'Mint the token again in the app under Integrations → API access tokens with ' +
+                '"Runs as" set to yourself, and export it as CAT_FACTORY_API_KEY.',
+              'The pass then asks for your personal password once, at the moment a run needs it, ' +
+                'and stores it nowhere: not in .env, not in the ledger, not in a log line.',
+              'Adding a provider key would also work and is the wrong fix here: it would pay per ' +
+                'token for a model your subscription already covers.',
+            ],
+            commands: [catalogRead],
+            docs: 'backend/docs/individual-subscription-usage.md',
+          },
+        )
+      }
+      return unsatisfied(
+        `no model in the ${models.length}-entry catalog is selectable, so every agent step ` +
+          `would fail at dispatch`,
+        {
+          steps: [
+            'In the SPA: Model providers, and add a provider API key or connect a subscription ' +
+              'for at least one model.',
+            'An entry becomes selectable as soon as its provider is wired, with no restart.',
+            // The THIRD cause, and the only one this read cannot see for itself: a deployment
+            // whose models belong to a PERSON (a locally-run endpoint, a personal Claude /
+            // Codex subscription) answers a SYSTEM token exactly like a deployment with
+            // nothing wired, because such a token has no person to attribute them to. Naming
+            // it here keeps the remedy from being "add a key" when a key is not what is
+            // missing, and the remedy differs per kind, so both are stated.
+            ...(excludesUserScopedModels
+              ? [
+                  'This token is a SYSTEM token, and the catalog above leaves out every model ' +
+                    'that belongs to a person: a personal Claude / Codex / GLM subscription, ' +
+                    'and any locally-run endpoint. If one of those is what this workspace ' +
+                    'actually runs on, nothing is missing from the deployment.',
+                  'For a personal SUBSCRIPTION: mint the token again under Integrations → API ' +
+                    'access tokens with "Runs as" set to yourself, and the pass will ask for ' +
+                    'your personal password once, when a run needs it.',
+                  'For a locally-run ENDPOINT: those are per-user and never reachable by a ' +
+                    'token, so the suite needs a provider key or a subscription of its own.',
+                ]
+              : []),
+          ],
+          commands: [catalogRead],
+          docs: 'backend/docs/model-support.md',
+        },
+      )
     },
   },
   {
@@ -489,17 +525,30 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       }
       if (!base.available) {
         // WHY it is not selectable, in the HEADLINE and not only three bullets down. The first line
-        // is what an operator reads and acts on, so a model that may already be wired as somebody's
+        // is what an operator reads and acts on, so a model that is already wired as somebody's
         // personal subscription must not be announced as having no provider: that is the misreport
         // this whole path exists to remove, and burying the correction in `steps` leaves it intact
-        // where it is read. `userScoped` is the row's own answer, so it names THIS model rather
-        // than inferring from a flag about the whole response.
+        // where it is read. Every signal below is the ROW's own answer, so it names THIS model
+        // rather than inferring from a flag about the whole response.
+        //
+        // Four causes, ordered so a later one cannot undo an earlier one, and the three
+        // `subscriptionConfigured` states stay APART because the deployment answered a different
+        // question in each: it found the subscription, it found the owner and there was none, or it
+        // found no owner to ask about. Folding the middle one into the last reported an ANSWERED
+        // question as unanswerable, and sent an operator to re-mint a token that would resolve the
+        // same person and the same absent subscription.
         const cause = base.policyBlocked
           ? ' (refused by the account model-family policy)'
-          : base.userScoped
-            ? ' (its credential belongs to a person, and this system token resolved none, so ' +
-              'whether it is wired is unknown here)'
-            : ' (no provider wired for it)'
+          : base.subscriptionConfigured === true
+            ? ' (it runs on a subscription that IS connected for this token’s owner, and this ' +
+              'token is not bound to spend it)'
+            : base.subscriptionConfigured === false
+              ? ' (it runs on a personal subscription, and this token’s owner holds none for that ' +
+                'vendor)'
+              : base.personalSubscription
+                ? ' (its credential belongs to a person, and this token resolved none, so whether ' +
+                  'it is wired is unknown here)'
+                : ' (no provider wired for it)'
         return unsatisfied(
           `preset '${preset.name}' runs on '${base.label}' (${base.modelId}), which is in the ` +
             `catalog but not selectable${cause}`,
@@ -510,26 +559,52 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
                     "permit its family on the account's model policy, or pin a preset whose model " +
                     'the policy already permits.',
                 ]
-              : [
-                  // Stated FIRST when it applies, because it is the one cause whose fix is not
-                  // "wire something": the provider may already be wired, as a credential that
-                  // belongs to a person and that a system token is not allowed to see. Either
-                  // signal can say so — the row for a personal subscription that IS listed, the
-                  // response flag for a locally-run endpoint that is not.
-                  ...(base.userScoped || excludesUserScopedModels
-                    ? [
-                        `'${base.modelId}' may already be wired as a PERSONAL subscription, which ` +
-                          'this system token cannot see. If it is yours, mint the token again ' +
-                          'under Integrations → API access tokens with "Runs as" set to yourself; ' +
-                          'the pass then asks for your personal password once, when a run needs ' +
-                          'it, and stores it nowhere.',
-                      ]
-                    : []),
-                  `In the SPA: Model providers, and wire a provider for '${base.modelId}' (a ` +
-                    'provider API key, or a connected subscription).',
-                  'Or pin a preset whose base model is already selectable: ' +
-                    `${describeAvailablePresets(presets, models)}.`,
-                ],
+              : // The one cause whose fix is not "wire something", and the deployment has CONFIRMED
+                // it: the subscription is stored for this key's owner and only the key's identity
+                // is in the way. Nothing else is worth offering underneath that, because nothing
+                // else is wrong: an alternative preset here would talk an operator out of the
+                // model they deliberately chose.
+                base.subscriptionConfigured === true
+                ? [
+                    `'${base.modelId}' is already wired, as a PERSONAL subscription belonging to ` +
+                      'the person this key was minted by. A system token may not spend one, which ' +
+                      'is the whole of the problem: the deployment needs no change.',
+                    'Mint the token again under Integrations → API access tokens with "Runs as" ' +
+                      'set to yourself, and export it as CAT_FACTORY_API_KEY. The pass then asks ' +
+                      'for your personal password once, when a run needs it, and stores it nowhere.',
+                  ]
+                : [
+                    // Stated FIRST when it applies: the provider MAY already be wired, as a
+                    // credential belonging to a person this read could not resolve. Two signals can
+                    // say so, and only when the question was left OPEN: the row for a personal
+                    // subscription that IS listed but unjudged, the response flag for a locally-run
+                    // endpoint that is not listed at all. A row already answered `false` is
+                    // excluded, because re-minting resolves the same person and the same absence.
+                    ...((base.personalSubscription && base.subscriptionConfigured !== false) ||
+                    excludesUserScopedModels
+                      ? [
+                          `'${base.modelId}' may be wired as a PERSONAL subscription this token ` +
+                            'cannot see. Mint the token IN THE APP (Integrations → API access ' +
+                            'tokens) with "Runs as" set to yourself; the pass then asks for your ' +
+                            'personal password once, when a run needs it, and stores it nowhere.',
+                        ]
+                      : []),
+                    // The answered-and-absent case, which reads as the opposite instruction: this
+                    // deployment DID resolve the owner, so the missing thing is the subscription
+                    // itself and re-minting the token would change nothing.
+                    ...(base.subscriptionConfigured === false
+                      ? [
+                          `'${base.modelId}' runs on a personal subscription and this key's owner ` +
+                            'holds none, so re-minting the token changes nothing: connect one in ' +
+                            'the app (Model providers, "Personal subscriptions"), or pin a preset ' +
+                            'whose model this workspace already has a provider for.',
+                        ]
+                      : []),
+                    `In the SPA: Model providers, and wire a provider for '${base.modelId}' (a ` +
+                      'provider API key, or a connected subscription).',
+                    'Or pin a preset whose base model is already selectable: ' +
+                      `${describeAvailablePresets(presets, models)}.`,
+                  ],
             commands: [publicApiRead(config, '/models', "read each entry's available flag back")],
             docs: 'backend/docs/model-support.md',
           },

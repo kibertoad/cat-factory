@@ -44,7 +44,7 @@ resumed, no batch enqueue happened, tick after tick, while the sweeper reported 
   recorded success would reset `sweep_degraded` on precisely the wedged sweeper it watches for. A
   run whose probe threw keeps its per-process orphan clock, so the hard-stall backstop can still
   reach it.
-- **A new failure kind, `state_unreadable`** (surface version 1.47.0, additive), so these runs are
+- **A new failure kind, `state_unreadable`** (surface version 1.48.0, additive), so these runs are
   distinguishable in the operator's failure-kind breakdown rather than filed under `stalled`, whose
   advice is "retry" and whose retry would re-read the same row.
 - **A write-side guard.** Composing the stored `detail` for a run that `rowToExecution` would refuse

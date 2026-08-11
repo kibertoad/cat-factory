@@ -195,7 +195,10 @@ export const updatePublicServiceContract = withMinScope(
 // ---- what this deployment has WIRED -----------------------------------------
 
 /**
- * The workspace's model catalog, with the two flags that decide whether a run can dispatch.
+ * The workspace's model catalog, with the flags that decide whether a run can dispatch and which of
+ * four unrelated fixes an unrunnable model needs: `available`, `policyBlocked`,
+ * `personalSubscription` and `subscriptionConfigured`. Each is documented on
+ * `publicWiredModelSchema`, which is where a caller reading the field learns what `null` means.
  *
  * The alternative to serving this is not a different call, it is a caller discovering an unwired
  * model forty minutes into a run it has already paid for.

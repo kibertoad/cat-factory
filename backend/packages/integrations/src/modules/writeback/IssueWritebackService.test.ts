@@ -50,7 +50,7 @@ function settings(overrides: Partial<TrackerSettings> = {}): TrackerSettings {
 function fakeTrackerSettings(value: TrackerSettings): TrackerSettingsRepository {
   return {
     get: async () => value,
-    put: async () => {},
+    merge: async () => value,
   }
 }
 
@@ -302,7 +302,10 @@ describe('IssueWritebackService: merge writeback', () => {
     // symptom was a merged pull request beside an issue still sitting open with no explanation on
     // it. Read from the shared constant, so a change of stance moves this test rather than being
     // silently contradicted by it.
-    const absent: TrackerSettingsRepository = { get: async () => null, put: async () => {} }
+    const absent: TrackerSettingsRepository = {
+      get: async () => null,
+      merge: async () => settings(),
+    }
     const { svc, recorded } = serviceWith({
       trackerSettingsRepository: absent,
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
@@ -316,7 +319,10 @@ describe('IssueWritebackService: merge writeback', () => {
   it('still honours a per-task override that turns the default OFF', async () => {
     // The override is the escape hatch the flipped default makes matter: a task whose ticket must
     // stay open says so on the block, and the workspace default no longer answers for it.
-    const absent: TrackerSettingsRepository = { get: async () => null, put: async () => {} }
+    const absent: TrackerSettingsRepository = {
+      get: async () => null,
+      merge: async () => settings(),
+    }
     const { svc, recorded } = serviceWith({
       trackerSettingsRepository: absent,
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),

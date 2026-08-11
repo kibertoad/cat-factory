@@ -95,10 +95,10 @@ describe('resolveWorkspaceCapabilities — model policy', () => {
 describe('resolveWorkspaceCapabilities — ambient native vendors', () => {
   const stores = {
     subscriptions: {
-      hasToken: async () => false,
+      liveVendors: async () => new Set(),
     } as unknown as CapabilityServices['subscriptions'],
     personalSubscriptions: {
-      has: async () => false,
+      liveVendors: async () => new Set(),
       list: async () => [],
     } as unknown as CapabilityServices['personalSubscriptions'],
   }
@@ -112,12 +112,16 @@ describe('resolveWorkspaceCapabilities — ambient native vendors', () => {
   })
 
   it('does not consult either credential store for one', async () => {
-    const hasToken = vi.fn(async () => false)
-    const has = vi.fn(async () => false)
+    const pooled = vi.fn(async () => new Set<never>())
+    const personal = vi.fn(async () => new Set<never>())
     const caps = await resolveWorkspaceCapabilities(
       {
-        subscriptions: { hasToken } as unknown as CapabilityServices['subscriptions'],
-        personalSubscriptions: { has } as unknown as CapabilityServices['personalSubscriptions'],
+        subscriptions: {
+          liveVendors: pooled,
+        } as unknown as CapabilityServices['subscriptions'],
+        personalSubscriptions: {
+          liveVendors: personal,
+        } as unknown as CapabilityServices['personalSubscriptions'],
         nativeAmbientAuth: ['claude-code', 'codex'],
       },
       'ws-1',
@@ -125,12 +129,55 @@ describe('resolveWorkspaceCapabilities — ambient native vendors', () => {
     )
     expect(caps.subscriptionVendors.has('claude')).toBe(true)
     expect(caps.subscriptionVendors.has('codex')).toBe(true)
-    // Both were asked about the vendors the allow-list does NOT serve, and about neither of the
-    // two it does: an ambient vendor is usable whatever the stores answer.
-    for (const vendor of ['claude', 'codex']) {
-      expect(hasToken).not.toHaveBeenCalledWith('ws-1', vendor)
-      expect(has).not.toHaveBeenCalledWith('usr-1', vendor)
-    }
+    // Both stores now answer every vendor in ONE read, so "was it consulted for THIS one" is not a
+    // question either call log can answer. What is still assertable, and is the property that
+    // matters, is that each is read at most once per resolution rather than once per vendor. The
+    // ambient short-circuit is still visible here: the two allow-listed vendors are admitted
+    // whatever the stores hold.
+    expect(pooled.mock.calls.length).toBeLessThanOrEqual(1)
+    expect(personal.mock.calls.length).toBeLessThanOrEqual(1)
+  })
+
+  it('reads each credential store once for the whole vendor sweep, not once per vendor', async () => {
+    const pooled = vi.fn(async () => new Set<never>())
+    const personal = vi.fn(async () => new Set<never>())
+    await resolveWorkspaceCapabilities(
+      {
+        subscriptions: {
+          liveVendors: pooled,
+        } as unknown as CapabilityServices['subscriptions'],
+        personalSubscriptions: {
+          liveVendors: personal,
+        } as unknown as CapabilityServices['personalSubscriptions'],
+      },
+      'ws-1',
+      'usr-1',
+    )
+    expect(personal).toHaveBeenCalledTimes(1)
+    expect(personal).toHaveBeenCalledWith('usr-1')
+    // The pooled store is keyed by WORKSPACE, not by the resolving user: its tokens belong to the
+    // board, which is exactly why a system token can see them and why they are not `personalSubscription`.
+    expect(pooled).toHaveBeenCalledTimes(1)
+    expect(pooled).toHaveBeenCalledWith('ws-1')
+  })
+
+  it('does not read the personal store at all for a resolution with no user', async () => {
+    // The case a public-API SYSTEM token takes, and the reason `available` stays false for it: a
+    // personal credential belongs to a person, and there is none here to attribute one to.
+    const liveVendors = vi.fn(async () => new Set<never>())
+    const caps = await resolveWorkspaceCapabilities(
+      {
+        subscriptions: {
+          liveVendors: async () => new Set(),
+        } as unknown as CapabilityServices['subscriptions'],
+        personalSubscriptions: {
+          liveVendors,
+        } as unknown as CapabilityServices['personalSubscriptions'],
+      },
+      'ws-1',
+    )
+    expect(liveVendors).not.toHaveBeenCalled()
+    expect([...caps.subscriptionVendors]).toEqual([])
   })
 
   it('leaves a vendor that merely REUSES the claude-code harness to its own credential', async () => {

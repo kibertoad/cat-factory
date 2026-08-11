@@ -59,6 +59,20 @@ export class DrizzleProviderSubscriptionTokenRepository implements ProviderSubsc
     return rows.map(rowToRecord)
   }
 
+  async listByWorkspace(workspaceId: string): Promise<ProviderSubscriptionTokenRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(providerSubscriptionTokens)
+      .where(
+        and(
+          eq(providerSubscriptionTokens.workspace_id, workspaceId),
+          isNull(providerSubscriptionTokens.deleted_at),
+        ),
+      )
+      .orderBy(asc(providerSubscriptionTokens.created_at))
+    return rows.map(rowToRecord)
+  }
+
   async getById(workspaceId: string, id: string): Promise<ProviderSubscriptionTokenRecord | null> {
     const rows = await this.db
       .select()

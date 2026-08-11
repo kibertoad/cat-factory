@@ -43,11 +43,13 @@ import type {
   RepoUseByRepoId,
   RiskPoliciesModule,
 } from '@cat-factory/orchestration'
+import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import {
   NotFoundError,
   RateLimitedError,
   UnavailableError,
   VcsApiError,
+  individualVendorForModelId,
   isVcsRateLimited,
 } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -164,6 +166,39 @@ export async function readVcsConnection(
  */
 function servesUserScopedModels(container: ServerContainer): boolean {
   return container.localModelEndpoints !== undefined
+}
+
+/**
+ * The subscription vendors the person behind this key holds a live personal credential for, or
+ * `undefined` when there is no person to ask about.
+ *
+ * Two things make this answerable at all, and both are worth stating because the last attempt at
+ * this question concluded it was not. Whether a credential EXISTS is a row lookup: the token is
+ * sealed under the owner's personal password, which opens it and which nothing here holds or wants,
+ * so reporting existence costs no unlock and reveals no secret. And an unbound key does have a
+ * person: its MINTER, which is exactly who the remedy names ("mint the token again with Runs as set
+ * to yourself"). Reading it is provenance used to DESCRIBE, never to authorize: `available` is
+ * still resolved under `actsAsUserId` alone, so an unbound key is told its subscription is there and
+ * still cannot spend it. What that trades, and what contains it, is stated on `subscriptionConfigured`.
+ *
+ * That closes the gap this surface actually shipped with. A system token was told a model on a
+ * subscription it owns is unavailable, with no way to tell that from a model nobody configured, and
+ * the only route to the fix was guessing it.
+ *
+ * Deliberately NOT shared with the set the capability resolver builds for the same request, even
+ * though a BOUND key makes the two identical. They are questions about potentially DIFFERENT people
+ * (this one falls back to the minter, that one never does), and handing this answer to the resolver
+ * would let an unbound key's availability resolve off somebody else's credential, which is the one
+ * thing separating a description from an authorization here. The two run concurrently instead, so
+ * the overlap costs a query rather than a round trip.
+ */
+async function personalSubscriptionVendors(
+  container: ServerContainer,
+  auth: PublicApiKeyAuth,
+): Promise<ReadonlySet<string> | undefined> {
+  const owner = auth.actsAsUserId ?? auth.createdByUserId
+  if (!owner || !container.personalSubscriptions) return undefined
+  return container.personalSubscriptions.liveVendors(owner)
 }
 
 /**
@@ -660,25 +695,48 @@ function mergeProvisioning(
 // ---- what this deployment has WIRED -----------------------------------------
 
 /**
- * Project one catalog model onto the two flags that decide whether a run can dispatch.
+ * Project one catalog model onto the flags that decide whether a run can dispatch, and, for one it
+ * cannot, which of the four unrelated fixes applies.
  *
- * Both are optional internally (an older catalog omitted them) and REQUIRED here, defaulted at this
- * one seam. That is the honest direction: a caller cannot branch on a field it may not receive, and
- * "absent" for either of these means the same thing as false (not selectable; not policy-blocked).
+ * `available` / `policyBlocked` are optional internally (an older catalog omitted them) and REQUIRED
+ * here, defaulted at this one seam. That is the honest direction: a caller cannot branch on a field
+ * it may not receive, and "absent" for either of these means the same thing as false (not
+ * selectable; not policy-blocked).
+ *
+ * `userScoped` answers off the flavour IN FORCE, which is what it has always answered and what a
+ * caller on the published surface is already branching on. It is superseded rather than corrected,
+ * because correcting it would move a stable field's meaning under those callers in both directions
+ * at once: it is true today for a poolable vendor and false today for `claude-opus` with nothing
+ * wired. `personalSubscription` is the answer both of those want, served beside it.
+ *
+ * `personalSubscription` is the kernel's own individual-usage predicate, read off the model
+ * DECLARATION (so a subscription attached beside a metered gateway still counts) and gated on the
+ * vendor being individual-only (so a workspace-pooled vendor does not). Same helper the run path
+ * gates a personal credential on, so what this reports and what a dispatch actually needs cannot
+ * drift.
+ *
+ * `personalVendors` is the set of vendors the person this key belongs to holds a live subscription
+ * for, or `undefined` when there is no such person to have asked about. That distinction survives
+ * onto the wire as `null` vs `false`, because "we looked and there is none" and "there was nobody to
+ * look for" send an operator to two different screens.
  */
-function toPublicWiredModel(model: ModelCatalog[number]): PublicWiredModel {
+function toPublicWiredModel(
+  model: ModelCatalog[number],
+  personalVendors: ReadonlySet<string> | undefined,
+): PublicWiredModel {
+  const personalVendor = individualVendorForModelId(model.id)
   return {
     modelId: model.id,
     label: model.label,
     provider: model.providerLabel,
     available: model.available === true,
     policyBlocked: model.policyBlocked === true,
-    // Read off the ACTIVE flavour, which is the same fact the capability resolver decided
-    // availability from: a `subscription` route is satisfied by a pooled workspace token OR by the
-    // resolving user's own personal subscription, and only the first of those exists for a read
-    // with no user. Every subscription vendor qualifies, not just the individual-only ones — a
-    // dual-mode vendor's model is equally unjudgeable when nobody's personal store was consulted.
     userScoped: model.flavor === 'subscription',
+    personalSubscription: personalVendor !== null,
+    subscriptionConfigured:
+      personalVendor === null || personalVendors === undefined
+        ? null
+        : personalVendors.has(personalVendor),
   }
 }
 
@@ -737,13 +795,13 @@ function toPublicRiskPolicy(policy: RiskPolicy): PublicRiskPolicy {
 }
 
 function registerWiringRoutes(app: Hono<AppEnv>): void {
-  // Resolved for the user the key is BOUND to, and for nobody when it is not — which is most keys.
-  // A user-scoped model (a locally-run endpoint, a personal subscription) belongs to a person, so
-  // an unbound key must not inherit one: it has no developer, and attributing someone else's
-  // endpoints to it would report a catalog its runs cannot dispatch to. A bound key does name a
-  // person, and it is the SAME person whose credential its runs unlock, so resolving under them is
-  // not a widening — it is the only answer that matches what those runs will actually be able to
-  // do. See `resolveWorkspaceModelCatalog`.
+  // Resolved for the user the key is BOUND to, and for nobody when it is not, which is most keys.
+  // A model that belongs to a person (a locally-run endpoint, a personal subscription) must not be
+  // inherited by an unbound key: it has no developer, and attributing someone else's endpoints to
+  // it would report a catalog its runs cannot dispatch to. A bound key does name a person, and it
+  // is the SAME person whose credential its runs unlock, so resolving under them is not a widening:
+  // it is the only answer that matches what those runs will actually be able to do. See
+  // `resolveWorkspaceModelCatalog`.
   //
   // Which is exactly why the omission is REPORTED, and reported at the level it happens at. A
   // locally-run endpoint is ABSENT from an unbound key's catalog entirely, so the answer is a list
@@ -751,19 +809,28 @@ function registerWiringRoutes(app: Hono<AppEnv>): void {
   // change a setting that is already correct: that is a fact about the whole answer, and
   // `excludesUserScopedModels` states it (false for a bound key, whose endpoints did resolve). A
   // personal subscription's model is PRESENT but unjudged, which is a fact about that row, and
-  // `userScoped` states it there. Reporting the second as the first would claim something is
-  // missing while naming nothing, on a deployment where nothing is.
+  // `personalSubscription` states it there. Reporting the second as the first would claim something
+  // is missing while naming nothing, on a deployment where nothing is.
+  //
+  // "Unjudged" was as far as this got, and it was one step short of useful: an operator told a model
+  // could not be judged still has to find out whether their subscription is the thing that would
+  // have judged it, and the only route to that answer was re-minting the token to see. So the row
+  // also carries whether the credential EXISTS for the person this key belongs to
+  // (`subscriptionConfigured`), which is a lookup rather than an unlock and therefore costs no
+  // password. Existence and admission stay separate: the catalog is still resolved under
+  // `actsAsUserId` alone, so an unbound key reads `available: false` beside
+  // `subscriptionConfigured: true`, meaning the model is wired, this credential may not spend it,
+  // and the fix is a personal token rather than a provider key.
   buildHonoRoute(app, listPublicWiredModelsContract, async (c) => {
     const auth = await authorizeOrThrow(c, listPublicWiredModelsContract.minScope)
     const container = c.get('container')
-    const catalog = await resolveWorkspaceModelCatalog(
-      container,
-      auth.workspaceId,
-      auth.actsAsUserId ?? undefined,
-    )
+    const [catalog, personalVendors] = await Promise.all([
+      resolveWorkspaceModelCatalog(container, auth.workspaceId, auth.actsAsUserId ?? undefined),
+      personalSubscriptionVendors(container, auth),
+    ])
     return c.json(
       {
-        models: catalog.map(toPublicWiredModel),
+        models: catalog.map((model) => toPublicWiredModel(model, personalVendors)),
         excludesUserScopedModels: auth.actsAsUserId === null && servesUserScopedModels(container),
       },
       200,

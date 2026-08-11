@@ -43,7 +43,10 @@ class FakeSubs implements PersonalSubscriptionRepository {
   async getByUserVendor(userId: string, vendor: SubscriptionVendor) {
     return this.live().find((r) => r.userId === userId && r.vendor === vendor) ?? null
   }
+  /** Counted, so "one read for the whole vendor sweep" is assertable rather than assumed. */
+  listByUserCalls = 0
   async listByUser(userId: string) {
+    this.listByUserCalls += 1
     return this.live().filter((r) => r.userId === userId)
   }
   async upsert(record: PersonalSubscriptionRecord) {
@@ -187,6 +190,26 @@ describe('PersonalSubscriptionService', () => {
     ).rejects.toMatchObject({
       details: { reason: 'subscription_expired' },
     })
+    // And it is not reported as CONFIGURED either, by either question. A lapsed credential that
+    // still answered "wired" put the model in the catalog as selectable and had the run refused at
+    // its first dispatch, naming the model where the subscription is what needs renewing.
+    expect(await svc.has('usr_7', 'claude')).toBe(false)
+    expect([...(await svc.liveVendors('usr_7'))]).toEqual([])
+  })
+
+  it('answers every vendor in one read, and only for the user asked about', async () => {
+    // The whole vendor sweep is one question with one answer: the capability resolver and
+    // `GET /api/v1/models` both want the SET, and five single-row lookups is five round trips on a
+    // read the catalog and every run start take.
+    const { svc, subs } = makeService()
+    for (const vendor of ['claude', 'codex'] as const) {
+      await svc.store('usr_7', { vendor, label: 'm', token: 'T', password: 'longpassword' })
+    }
+    await svc.store('usr_8', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
+    const reads = subs.listByUserCalls
+    expect([...(await svc.liveVendors('usr_7'))].sort()).toEqual(['claude', 'codex'])
+    expect(subs.listByUserCalls - reads).toBe(1)
+    expect([...(await svc.liveVendors('usr_9'))]).toEqual([])
   })
 
   it('clears a run and sweeps expired activations', async () => {

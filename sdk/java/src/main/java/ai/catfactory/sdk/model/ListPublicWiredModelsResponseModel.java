@@ -12,8 +12,10 @@ import org.jspecify.annotations.Nullable;
  * @param available the {@code available} field.
  * @param label the {@code label} field.
  * @param modelId the {@code modelId} field.
+ * @param personalSubscription the {@code personalSubscription} field.
  * @param policyBlocked the {@code policyBlocked} field.
  * @param provider the {@code provider} field.
+ * @param subscriptionConfigured Always present; {@code null} when the server has no value for it.
  * @param userScoped the {@code userScoped} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -24,9 +26,14 @@ public record ListPublicWiredModelsResponseModel(
 
     @JsonProperty("modelId") String modelId,
 
+    @JsonProperty("personalSubscription") Boolean personalSubscription,
+
     @JsonProperty("policyBlocked") Boolean policyBlocked,
 
     @JsonProperty("provider") String provider,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("subscriptionConfigured") @Nullable Boolean subscriptionConfigured,
 
     @JsonProperty("userScoped") Boolean userScoped
 ) {
@@ -46,8 +53,10 @@ public record ListPublicWiredModelsResponseModel(
         private @Nullable Boolean available;
         private @Nullable String label;
         private @Nullable String modelId;
+        private @Nullable Boolean personalSubscription;
         private @Nullable Boolean policyBlocked;
         private @Nullable String provider;
+        private @Nullable Boolean subscriptionConfigured;
         private @Nullable Boolean userScoped;
 
         /** Set {@code available}. */
@@ -68,6 +77,12 @@ public record ListPublicWiredModelsResponseModel(
             return this;
         }
 
+        /** Set {@code personalSubscription}. */
+        public Builder personalSubscription(@Nullable Boolean personalSubscription) {
+            this.personalSubscription = personalSubscription;
+            return this;
+        }
+
         /** Set {@code policyBlocked}. */
         public Builder policyBlocked(@Nullable Boolean policyBlocked) {
             this.policyBlocked = policyBlocked;
@@ -80,6 +95,12 @@ public record ListPublicWiredModelsResponseModel(
             return this;
         }
 
+        /** Set {@code subscriptionConfigured}. */
+        public Builder subscriptionConfigured(@Nullable Boolean subscriptionConfigured) {
+            this.subscriptionConfigured = subscriptionConfigured;
+            return this;
+        }
+
         /** Set {@code userScoped}. */
         public Builder userScoped(@Nullable Boolean userScoped) {
             this.userScoped = userScoped;
@@ -88,7 +109,7 @@ public record ListPublicWiredModelsResponseModel(
 
         /** Build the {@link ListPublicWiredModelsResponseModel}. */
         public ListPublicWiredModelsResponseModel build() {
-            return new ListPublicWiredModelsResponseModel(available, label, modelId, policyBlocked, provider, userScoped);
+            return new ListPublicWiredModelsResponseModel(available, label, modelId, personalSubscription, policyBlocked, provider, subscriptionConfigured, userScoped);
         }
     }
 }

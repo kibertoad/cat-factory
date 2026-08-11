@@ -62,6 +62,15 @@ export interface ProviderSubscriptionTokenRepository {
     workspaceId: string,
     vendor: SubscriptionVendor,
   ): Promise<ProviderSubscriptionTokenRecord[]>
+  /**
+   * Every live token the workspace holds, across all vendors, oldest first.
+   *
+   * The batch shape for "which vendors does this workspace have a pool for", which the model
+   * catalog and every run start ask. Walking {@link listByVendor} per vendor for that answer is one
+   * round trip per member of a closed vocabulary on a hot read, which is the banned N+1 class even
+   * though the vocabulary bounds it: the same data arrives in one statement.
+   */
+  listByWorkspace(workspaceId: string): Promise<ProviderSubscriptionTokenRecord[]>
   /** Fetch one live token by id (scoped to the workspace). */
   getById(workspaceId: string, id: string): Promise<ProviderSubscriptionTokenRecord | null>
   /** Insert a new pool token. */

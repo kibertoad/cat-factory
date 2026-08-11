@@ -155,9 +155,32 @@ export class PersonalSubscriptionService {
     return rows.map((r) => this.toStatus(r, now))
   }
 
+  /**
+   * Every vendor the user holds a LIVE personal credential for, in ONE read.
+   *
+   * The set rather than a per-vendor question, because both callers ask about the whole vendor
+   * vocabulary at once: the capability resolver folds it into a workspace's catalog, and the public
+   * `GET /api/v1/models` reports it per row. Asking {@link has} five times in a loop is five round
+   * trips on a hot read for an answer one `listByUser` already carries.
+   *
+   * LIVE excludes an expired credential, which is the same rule {@link unlock} refuses on. A lapsed
+   * subscription that still reported as configured made the catalog promise a dispatch the run
+   * would then be refused for, naming the model rather than the subscription as the problem.
+   */
+  async liveVendors(userId: string): Promise<Set<SubscriptionVendor>> {
+    const now = this.deps.clock.now()
+    const rows = await this.deps.personalSubscriptionRepository.listByUser(userId)
+    return new Set(
+      rows.filter((r) => r.expiresAt === null || r.expiresAt > now).map((r) => r.vendor),
+    )
+  }
+
   /** Whether the user has a live personal credential for the vendor. */
   async has(userId: string, vendor: SubscriptionVendor): Promise<boolean> {
-    return (await this.deps.personalSubscriptionRepository.getByUserVendor(userId, vendor)) !== null
+    const record = await this.deps.personalSubscriptionRepository.getByUserVendor(userId, vendor)
+    return (
+      record !== null && (record.expiresAt === null || record.expiresAt > this.deps.clock.now())
+    )
   }
 
   /** Remove the user's personal credential for a vendor. */

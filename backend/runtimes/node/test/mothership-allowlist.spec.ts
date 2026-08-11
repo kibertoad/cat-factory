@@ -777,6 +777,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   providerSubscriptionTokenRepository: {
     listByVendor: 'local',
+    listByWorkspace: 'local',
     getById: 'local',
     add: 'local',
     markLeased: 'local',

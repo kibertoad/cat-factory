@@ -73,6 +73,17 @@ export interface PublicApiKeyAuth {
    * credential the supplied personal password unlocks. Never a substitute for `scope`.
    */
   actsAsUserId: string | null
+  /**
+   * Who MINTED the key, or `null` for one provisioned headlessly (and for rows predating the
+   * column). Pure provenance, exactly as on the record: it is never an authorization input, and in
+   * particular an unbound key does NOT inherit this person's credentials.
+   *
+   * Carried here for one reader, and only ever to DESCRIBE: `GET /api/v1/models` resolves whether a
+   * personal subscription exists for this person so an unbound key can be told that the model it
+   * cannot dispatch to is nonetheless configured, and that binding is the fix. That is a lookup, not
+   * an unlock; see `subscriptionConfigured` on the wire row.
+   */
+  createdByUserId: string | null
   createdAt: number
 }
 
@@ -217,6 +228,7 @@ export class PublicApiKeyService {
       label: record.label,
       externalIdentity: record.externalIdentity,
       actsAsUserId: record.actsAsUserId,
+      createdByUserId: record.createdByUserId,
       createdAt: record.createdAt,
     }
   }

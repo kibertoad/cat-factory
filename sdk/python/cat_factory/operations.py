@@ -890,11 +890,18 @@ class ModelsResource:
 
     def list(self, *, timeout: float | None = None) -> ListPublicWiredModelsResponse:
         """List the models a run in this workspace could dispatch to
-        The workspace’s model catalog with the two flags that decide whether an agent step
-        can run at all: `available`, and `policyBlocked` for a model that is configured but
-        refused by the account’s model-family policy. Those two need OPPOSITE fixes, which
-        is why they are separate: everything blocked by policy is already configured, so
-        adding another provider key changes nothing.
+        The workspace’s model catalog with the flags that decide whether an agent step can
+        run at all, and which of four unrelated fixes an unrunnable one needs. `available`
+        says a run can dispatch to it now. `policyBlocked` says it is configured and refused
+        by the account’s model-family policy, so adding another provider key changes
+        nothing. `personalSubscription` says it runs on a credential belonging to a PERSON
+        (an individual-usage subscription vendor), which a key resolving no user can never
+        see. `subscriptionConfigured` then says whether that person actually holds one:
+        `true` means the model is wired and only the key’s identity is in the way, `false`
+        means the owner is known and holds none, and `null` means there was nobody to ask
+        about, so it must not be read as `false`. `userScoped` is SUPERSEDED by
+        `personalSubscription` and still answers its original narrower question (whether a
+        subscription is the route in force); prefer the newer field.
         `GET /api/v1/models` (operation `listPublicWiredModels`).
         """
         raw = self._transport.request(

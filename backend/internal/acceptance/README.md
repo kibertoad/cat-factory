@@ -230,7 +230,8 @@ entries reported unavailable because the models that deployment ran on were per-
 key can see neither of. `model-preset` answers the narrower question a pinning pass actually
 depends on, and keeps three outcomes apart, because they have three different fixes: no such
 preset, a preset naming a model the catalog has since dropped, and a preset whose model is listed
-but has no provider wired (or is refused by the account's model-family policy).
+but has no provider wired (or is refused by the account's model-family policy, or runs on a
+subscription this token is not bound to spend).
 
 **Why the pass PINS a preset rather than taking the workspace default.** The default is whatever
 someone last chose on that board, so a pass that adopted it silently would report a result nobody
@@ -260,11 +261,23 @@ A pinned preset whose model is an individual-usage vendor (Claude / Codex / GLM)
 person's subscription, and only their personal password opens it. Two consequences for a pass:
 
 - **Mint the key as a PERSONAL token** (Integrations → API access tokens, "Runs as" → yourself).
-  A system token cannot judge such a model at all: `GET /api/v1/models` reports it `available: false`
-  with `userScoped: true`, which `configure` and the `model-preset` gate now render as "not visible
-  to this system token" rather than the "no provider wired for it" that used to send operators off to
-  configure a deployment that was already correct. A model that genuinely has no provider still reads
-  as unwired, because that verdict comes from the row rather than from a flag about the whole answer.
+  A system token may not spend a credential that belongs to a person, so `GET /api/v1/models`
+  reports such a model `available: false`, and the row says which of three unrelated things that
+  means. `subscriptionConfigured: true` is the one worth knowing: the deployment RESOLVED your
+  subscription (existence is a row lookup, so no password is involved) and only the token's identity
+  is in the way, which `configure` and the `model-preset` gate render as "your subscription is
+  connected; this token is not bound to spend it". `false` means the owner is known and holds none;
+  `null` means there was nobody to ask about, which is a token minted through `POST /api/v1/keys`
+  rather than in the app. Those three are gated on `personalSubscription`, so a model with no
+  individual-usage subscription route at all keeps reading as unwired and a workspace-POOLED
+  subscription (Kimi, DeepSeek) is never mistaken for one: its token belongs to the workspace, which
+  every key can already see.
+
+  What the row cannot tell you apart, and the suite therefore does not claim to: a model that
+  declares a personal subscription NOBODY has connected reads the same as one whose owner this token
+  could not resolve, until `subscriptionConfigured` answers. That is the whole reason the three
+  states are kept separate rather than collapsed into "user-scoped".
+
 - **The pass asks for your personal password at the terminal**, once, at the first call that needs
   it — not at `configure` time, and never for a workspace running on a provider API key. It is held
   in the process's memory and written NOWHERE: not the `.env`, not the ledger, not the journal. That
