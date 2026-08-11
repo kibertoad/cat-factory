@@ -329,16 +329,6 @@ const TRACKER_COLUMNS: Record<
 
 const TRACKER_FIELDS = Object.keys(TRACKER_COLUMNS) as (keyof Required<TrackerSettingsPatch>)[]
 
-/**
- * One field's value as Postgres stores it.
- *
- * Total over what a settable field can hold today, which is how a field of a new SHAPE is caught:
- * it fails to compile here rather than being written in a form the reader below cannot decode.
- */
-function encodeTrackerValue(value: string | boolean | null): string | number | null {
-  return typeof value === 'boolean' ? (value ? 1 : 0) : value
-}
-
 type TrackerRow = {
   tracker: string | null
   jira_project_key: string | null
@@ -383,18 +373,28 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
     // unnamed column is never read up into this process and written back, so a concurrent writer
     // naming a different one cannot be clobbered by a value that was stale before it was written.
     const inserted = { ...defaults, ...patch }
-    const values: Record<string, string | number | null> = { workspace_id: workspaceId }
-    const set: Record<string, string | number | null> = { updated_at: updatedAt }
-    for (const field of TRACKER_FIELDS) {
-      values[TRACKER_COLUMNS[field]] = encodeTrackerValue(inserted[field])
-      if (patch[field] !== undefined) {
-        set[TRACKER_COLUMNS[field]] = encodeTrackerValue(patch[field])
-      }
+    // Spelled out rather than assembled from the column table, so the row the INSERT branch writes
+    // is checked against the real table: a column added without a default fails to compile here
+    // instead of failing at runtime behind a cast.
+    const values: typeof trackerSettings.$inferInsert = {
+      workspace_id: workspaceId,
+      tracker: inserted.tracker,
+      jira_project_key: inserted.jiraProjectKey,
+      linear_team_id: inserted.linearTeamId,
+      writeback_comment_on_pr_open: inserted.writebackCommentOnPrOpen ? 1 : 0,
+      writeback_resolve_on_merge: inserted.writebackResolveOnMerge ? 1 : 0,
+      writeback_questions_on_park: inserted.writebackQuestionsOnPark ? 1 : 0,
+      updated_at: updatedAt,
     }
-    values.updated_at = updatedAt
+    // The conflict branch touches only what the patch NAMED, reading each value back off the row
+    // above so the encoding is stated once.
+    const set: Record<string, unknown> = { updated_at: updatedAt }
+    for (const field of TRACKER_FIELDS) {
+      if (patch[field] !== undefined) set[TRACKER_COLUMNS[field]] = values[TRACKER_COLUMNS[field]]
+    }
     const [row] = await this.db
       .insert(trackerSettings)
-      .values(values as typeof trackerSettings.$inferInsert)
+      .values(values)
       .onConflictDoUpdate({ target: trackerSettings.workspace_id, set })
       .returning()
     if (!row) {
