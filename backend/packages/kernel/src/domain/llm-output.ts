@@ -16,6 +16,9 @@
  * preferred when it contains a JSON value, but if the first fence holds no JSON (e.g. a
  * model fenced its reasoning before emitting the real object) we fall back to scanning the
  * whole reply, so the JSON that follows the fence is still found.
+ *
+ * A span that is valid JSON except for RAW control characters inside a string literal is
+ * repaired rather than refused (see {@link escapeControlCharsInStrings}).
  */
 export function extractJson(text: string): unknown {
   const trimmed = text.trim()
@@ -62,14 +65,77 @@ function parseBalancedFrom(candidate: string, start: number): unknown {
     else if (ch === open) depth++
     else if (ch === close) {
       depth--
-      if (depth === 0) {
-        try {
-          return JSON.parse(candidate.slice(start, i + 1))
-        } catch {
-          return null
-        }
-      }
+      if (depth === 0) return parseOrRepair(candidate.slice(start, i + 1))
     }
   }
   return null
+}
+
+/**
+ * Parse one balanced span, giving it a second chance with its string literals re-escaped (see
+ * {@link escapeControlCharsInStrings}). Null when neither attempt parses, which sends the caller
+ * on to the next bracket rather than claiming a value nobody wrote.
+ */
+function parseOrRepair(span: string): unknown {
+  try {
+    return JSON.parse(span)
+  } catch {
+    // Not JSON as written. One malformation is worth a second attempt.
+  }
+  try {
+    return JSON.parse(escapeControlCharsInStrings(span))
+  } catch {
+    return null
+  }
+}
+
+/** The control characters JSON gives a short escape; the rest go to `\uXXXX`. */
+const CONTROL_ESCAPES: Record<string, string> = {
+  '\n': '\\n',
+  '\r': '\\r',
+  '\t': '\\t',
+  '\b': '\\b',
+  '\f': '\\f',
+}
+
+/**
+ * Re-escape raw control characters that sit INSIDE a JSON string literal.
+ *
+ * `JSON.parse` rejects a literal newline in a string, and that is the malformation a model
+ * reliably produces once a field is asked for as several lines (a review verdict laid out as
+ * blocks, a rationale with a bullet list): it writes the layout it was told to write and drops
+ * the `\n` escape. The reply is otherwise the verdict, so refusing it loses a whole review to a
+ * quoting slip. Only characters inside a string are rewritten, so the structural whitespace
+ * between tokens keeps its meaning and a genuinely broken reply still fails to parse.
+ */
+function escapeControlCharsInStrings(json: string): string {
+  let out = ''
+  let inString = false
+  let escaped = false
+  for (const ch of json) {
+    if (!inString) {
+      if (ch === '"') inString = true
+      out += ch
+      continue
+    }
+    if (escaped) {
+      escaped = false
+      out += ch
+      continue
+    }
+    if (ch === '\\') {
+      escaped = true
+      out += ch
+      continue
+    }
+    if (ch === '"') {
+      inString = false
+      out += ch
+      continue
+    }
+    out +=
+      CONTROL_ESCAPES[ch] ??
+      (ch < ' ' ? `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}` : ch)
+  }
+  return out
 }

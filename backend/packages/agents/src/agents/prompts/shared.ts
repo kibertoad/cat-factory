@@ -28,6 +28,36 @@ export const FINAL_ANSWER_IN_REPLY =
   'contains the answer.'
 
 /**
+ * Appended wherever a reviewer's `summary` field IS the review a human reads: the companions
+ * (see ./companion) and every registered judge. Those two are the reviewers with no other
+ * outlet, so everything they found lands in one string.
+ *
+ * Unshaped, a model writes that string as one dense paragraph that numbers its points inline
+ * ("(1) … (2) …"), and the reader cannot see what blocks the work without reading all of it.
+ * The skeleton asked for here is what the SPA renders: a verdict line, then bullet groups
+ * ordered by disposition, through the same markdown reader the other agent prose goes through.
+ * A fixed skeleton also makes two reviews of the same work comparable, which a free shape is not.
+ *
+ * The escaping sentence is not decoration: the summary travels as a JSON string, and a raw line
+ * break inside one is invalid JSON. Kernel's `extractJson` repairs that case, but a reviewer that
+ * escapes correctly never spends a repair retry on it.
+ */
+export const REVIEW_SUMMARY_LAYOUT =
+  'LAY THE SUMMARY OUT AS BLOCKS, NEVER AS ONE PARAGRAPH. It is read in a narrow panel, so a ' +
+  'dense block of prose that numbers its points inline ("(1) … (2) …") cannot be skimmed: the ' +
+  'reader cannot tell what blocks the work from what is a nit without reading all of it. Write ' +
+  'it as Markdown, in this order. FIRST one short verdict sentence on its own line: what the ' +
+  'work is, what is genuinely good about it, and what holds it back. THEN, for each group of ' +
+  'points you actually have, a bold label line (`**Must fix**`, then `**Should fix**`, then ' +
+  '`**Minor**`; skip a label you have no points for) followed by one `- ` bullet per point, ' +
+  'worst first. Each bullet starts with a bolded short title, then one or two sentences saying ' +
+  'what is wrong and the concrete change to make. Nothing else: no preamble, no closing ' +
+  'paragraph, no group for what is already fine. Keep every paragraph under four sentences, ' +
+  'leave a blank line between blocks, and put code, paths, identifiers and commands in ' +
+  'backticks. The summary is a JSON string value, so write its line breaks as \\n escapes and ' +
+  'never as raw line breaks inside the JSON.'
+
+/**
  * Appended to every agent that reasons about a work item WITHOUT a checkout to orient itself in —
  * the inline reviewers and structured-dialogue agents (requirements review + rework, the Writer,
  * clarity triage, both brainstorm stages).

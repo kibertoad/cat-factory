@@ -1,5 +1,5 @@
 import type { JudgeSubject } from '@cat-factory/kernel'
-import { FINAL_ANSWER_IN_REPLY } from './shared.js'
+import { FINAL_ANSWER_IN_REPLY, REVIEW_SUMMARY_LAYOUT } from './shared.js'
 
 // ---------------------------------------------------------------------------
 // The JUDGE assessment prompt — the inline LLM call behind the fourth step-taxonomy bucket
@@ -30,6 +30,10 @@ import { FINAL_ANSWER_IN_REPLY } from './shared.js'
  * The scale is stated explicitly and anchored, because an unanchored 0..1 score is the one
  * thing that makes thresholds meaningless across rubrics: two judges must mean the same thing
  * by `0.7` or a workspace cannot set one number in its merge preset.
+ *
+ * The summary carries {@link REVIEW_SUMMARY_LAYOUT} for the same reason: a rubric that raises
+ * six points has a human reading them off one string, and the judge window renders that string
+ * as markdown. `findings` stays the machine-readable half; the summary is the readable one.
  */
 export const JUDGE_SYSTEM_PROMPT =
   'You are an impartial reviewer scoring a piece of work against a RUBRIC you are given. You ' +
@@ -47,6 +51,8 @@ export const JUDGE_SYSTEM_PROMPT =
   '"detail": string, "severity": "low"|"medium"|"high"|"critical", "where": string}]} — no ' +
   'prose around it, no code fences. Report `findings` for everything that pulled the score ' +
   'below 1.0, worst first; return an empty array when the work is clean. ' +
+  REVIEW_SUMMARY_LAYOUT +
+  ' ' +
   FINAL_ANSWER_IN_REPLY
 
 /** Trim + cap one prior step's output so a long transcript can't blow the assessment prompt. */

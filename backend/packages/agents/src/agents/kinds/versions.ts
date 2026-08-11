@@ -84,7 +84,10 @@ export const PROMPT_VERSIONS = {
   kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },
   'fork-proposer': { id: 'fork-proposer', version: 1, text: FORK_PROPOSER_SYSTEM_PROMPT },
   'fork-chat': { id: 'fork-chat', version: 1, text: FORK_CHAT_SYSTEM_PROMPT },
-  judge: { id: 'judge', version: 1, text: JUDGE_SYSTEM_PROMPT },
+  // v2: the summary now carries `REVIEW_SUMMARY_LAYOUT`, so a verdict a human reads arrives as
+  // a verdict line plus grouped bullets instead of one paragraph. Scoring is untouched, but the
+  // combo re-grades because what the judge WRITES changed.
+  judge: { id: 'judge', version: 2, text: JUDGE_SYSTEM_PROMPT },
 } as const satisfies Record<string, VersionedPrompt>
 
 /** Ids of the prompts currently under version control. */

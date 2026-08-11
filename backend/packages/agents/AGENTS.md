@@ -9,7 +9,10 @@
   (`systemPromptFor`/`userPromptFor`; the shared fragments in `prompts/shared.ts`, incl.
   `FINAL_ANSWER_IN_REPLY` and the sentinel-file guidances `EFFORT_REPORT_GUIDANCE`,
   `FOLLOW_UP_GUIDANCE`, and `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding
-  agent writes to `.cat-pr-description.md`, which the harness lifts onto the PR it opens)),
+  agent writes to `.cat-pr-description.md`, which the harness lifts onto the PR it opens), plus
+  `REVIEW_SUMMARY_LAYOUT`, carried by every reviewer whose `summary` IS the review a human reads
+  (the companions, every judge) so that verdict arrives as a verdict line plus grouped bullets
+  rather than one paragraph),
   `runtime/` (`runRepoOps`, the custom-agent pre/post-op runner).
   `kinds/built-in-container.ts` registers every BUILT-IN CONTAINER kind (`coder`, the testers,
   the in-place fixers, the conflict-resolver, `merger`, `on-call`, the read-only explorers) as an

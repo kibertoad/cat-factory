@@ -56,6 +56,24 @@ describe('extractJson', () => {
     })
   })
 
+  it('repairs raw control characters inside a string value', () => {
+    // A reviewer asked for a multi-line summary writes the layout and forgets the `\n` escape.
+    // The reply IS the verdict, so it is repaired rather than lost to a quoting slip.
+    expect(
+      extractJson('{"summary":"Verdict line.\n\n**Must fix**\n- a thing","rating":0.7}'),
+    ).toEqual({ summary: 'Verdict line.\n\n**Must fix**\n- a thing', rating: 0.7 })
+    expect(extractJson('{"a":"tab\there"}')).toEqual({ a: 'tab\there' })
+  })
+
+  it('leaves structural whitespace and already-escaped text alone while repairing', () => {
+    // The newline between the two members is structure, not content: repairing must not
+    // smuggle it into a value. The escaped `\n` in the first value stays one escape, not two.
+    expect(extractJson('{\n  "a": "line\\nbreak",\n  "b": "raw\nbreak"\n}')).toEqual({
+      a: 'line\nbreak',
+      b: 'raw\nbreak',
+    })
+  })
+
   it('reports no JSON rather than half of one', () => {
     expect(extractJson('')).toBeNull()
     expect(extractJson('no json here at all')).toBeNull()

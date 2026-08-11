@@ -382,7 +382,11 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   the `whitespace-pre-wrap` dumps in `GenericStructuredResultView.vue` (prose summary),
   `MergerResultView.vue` (rationale + pre-structured raw output), and
   `ConsensusSessionWindow.vue` (synthesis + round contributions), so agent prose renders as
-  formatted markdown consistent with `AgentStepDetail`'s reader.
+  formatted markdown consistent with `AgentStepDetail`'s reader. A later pass carried it to the
+  REVIEW surfaces the first sweep missed (companion verdicts in `StepMetadataCard.vue`, the judge
+  summary + findings, best-practice adherence, the PR-review summary/findings, the tester report),
+  paired with the prompt half so those verdicts arrive as blocks in the first place: see the
+  review-verdict convention below.
 - **UX-44: Result-view polish. PARTIAL (copy affordances done).** Copy buttons
   (`common/CopyButton.vue`) now sit on the pretty-printed JSON block
   (`GenericStructuredResultView.vue`) and on the consensus synthesis + each round contribution
@@ -635,7 +639,18 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   `utils/agentOutput.ts`: secure markdown-it, `html:false`, links opened safely), not a
   plain-text `<pre>`/`<p whitespace-pre-wrap>`. It's the inline counterpart to the full
   segmented reader (`parseOutputOutline`) used by `AgentStepDetail`. Pair copy-able output
-  (JSON, prose) with the shared `common/CopyButton.vue`.
+  (JSON, prose) with the shared `common/CopyButton.vue`. A prose value that trails a label or a
+  score inside the SAME line (`{{ score }} — {{ feedback }}`) is the same defect one step
+  earlier: give it its own block, or a multi-point review renders as one run of text.
+- **A review VERDICT needs the prompt half too: rendering markdown cannot invent structure the
+  model never wrote.** A reviewer whose `summary` is the whole review (the companions, every
+  judge) carries `REVIEW_SUMMARY_LAYOUT` (`@cat-factory/agents`, `prompts/shared.ts`), which asks
+  for a verdict line then `**Must fix**` / `**Should fix**` / `**Minor**` bullet groups instead of
+  one paragraph numbering its points inline. Adding a reviewer of that kind means appending that
+  fragment (pinned by `prompts/review-summary.test.ts`); a reviewer that already reports
+  structured findings beside a short summary (`pr-reviewer`, the tester) needs only the render
+  half. Kernel's `extractJson` repairs the raw line breaks a multi-line summary invites, so the
+  layout cannot cost a verdict to a quoting slip.
 - **Content-heavy `UModal`s guard against discarding typed input via `useUnsavedGuard`
   (never a bare store-close on dismiss).** A controlled `UModal` whose `open` is a
   store-backed writable computed routes its dismiss paths (the setter's `if (!v) …`, and any
