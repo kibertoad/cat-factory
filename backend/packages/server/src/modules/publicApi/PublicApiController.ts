@@ -220,7 +220,8 @@ function toPublicRun(
  * workspace's default for a run NOTHING IS WATCHING (`runDefaultScopeFor('public-api')`). `null`
  * when the workspace declares none of the three, which is this surface's documented
  * `pipeline_required` refusal — a caller here has no run-time picker, so inventing a rung for it
- * would run work nobody chose.
+ * would run work nobody chose — and `null` for a `write` key whatever the workspace declares (see
+ * the scope check below).
  *
  * The scope rung is what makes the headless door land on a headless-shaped pipeline rather than on
  * whatever an in-app board happens to default to: the seeded `pl_unattended` holds no requirements
@@ -229,13 +230,19 @@ function toPublicRun(
  */
 async function startPipelineIdFor(
   container: ServerContainer,
-  workspaceId: string,
+  auth: { workspaceId: string; scope: PublicApiScope },
   named: { requested?: string | undefined; pinned?: string | undefined },
 ): Promise<string | null> {
   if (named.requested) return named.requested
   if (named.pinned) return named.pinned
+  // A default the CALLER could not answer is not a usable default for that caller. The seeded rung
+  // reaches a human test and a human PR review on a risky task, which `unanswerableParkRefusal`
+  // rightly withholds from a plain `write` key — so resolving it here would trade this surface's
+  // actionable "pass a pipelineId" for a 403 about a pipeline the caller never picked. A `write`
+  // key therefore keeps exactly its previous behaviour, and only a `decide` key gains the fallback.
+  if (!scopeSatisfies(auth.scope, 'decide')) return null
   return container.pipelineService.defaultPipelineIdForScope(
-    workspaceId,
+    auth.workspaceId,
     runDefaultScopeFor('public-api'),
   )
 }
@@ -888,7 +895,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
         409,
       )
     }
-    const pipelineId = await startPipelineIdFor(container, auth.workspaceId, {
+    const pipelineId = await startPipelineIdFor(container, auth, {
       requested: c.req.valid('json').pipelineId,
       pinned: found.block.pipelineId,
     })

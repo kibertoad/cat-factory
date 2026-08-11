@@ -66,6 +66,8 @@ about to read, so grading it changes nothing about who decides.
 
 Two `/api/v1` additions (`pipelineId` on task creation, `unattendedDefault` on `GET /pipelines`),
 OpenAPI `1.50.0`, plus one behaviour change worth reading before upgrading: `POST
-/tasks/:taskId/start` with an empty body now STARTS a run where it used to answer `400
-pipeline_required`, which a caller using that refusal as a "is this task startable" probe will notice.
-The refusal survives for a workspace that declares no unattended default.
+/tasks/:taskId/start` with an empty body now STARTS a run for a key that satisfies `decide`, where it
+used to answer `400 pipeline_required`. A `write` key sees no change, deliberately — the seeded rung
+reaches a human test and a human PR review, so offering it to a caller that cannot answer a park
+would trade an actionable "pass a pipelineId" for a 403 about a pipeline it never picked. The refusal
+survives wherever no default resolves.

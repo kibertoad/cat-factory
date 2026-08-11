@@ -106,6 +106,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // Same reasoning as `executionRepository.countActiveByWorkspace` below.
     insertIfAbsent: { scope: { kind: 'workspace', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
+    // The per-scope DEFAULT claim (ADR 0054). Remote for the reason every other write here is —
+    // the pipeline library is org state — and it earns its own entry rather than riding `update`
+    // because it touches a SECOND row (the incumbent it demotes) inside one store transaction,
+    // which is exactly the part a node with no `db` cannot do for itself.
+    setDefault: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
   executionRepository: {

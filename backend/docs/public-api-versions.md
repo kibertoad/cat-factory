@@ -686,11 +686,17 @@ parsing and keeps behaving unchanged.
 
 One BEHAVIOUR change rides with them, and it turns a refusal into a run rather than the reverse:
 `POST /api/v1/tasks/:taskId/start` with no `pipelineId`, against a task that pinned none, used to
-answer `400 pipeline_required`. It now resolves the workspace's default pipeline for a run nothing
-is watching and starts it. The refusal survives for the case where the workspace declares no such
-default, so the error code is not retired and a client branching on it still needs to.
+answer `400 pipeline_required`. For a key that satisfies `decide` it now resolves the workspace's
+default pipeline for a run nothing is watching and starts it. The refusal survives whenever no such
+default resolves, so the error code is not retired and a client branching on it still needs to.
 
-That is worth stating as a change rather than filing under "it works now", because a caller
+**A `write` key sees no change at all**, and that is a decision rather than an oversight. The seeded
+default rung reaches a human test and a human PR review on a risky task, which
+`pipeline_requires_decide_scope` rightly withholds from a caller that cannot answer a park — so
+offering it there would trade an actionable "pass a pipelineId" for a 403 about a pipeline the caller
+never picked. The scope that gains the fallback is the one that can answer what it starts.
+
+That is worth stating as a change rather than filing under "it works now", because a `decide` caller
 depending on the 400 as a validation signal (checking that a task is startable by trying it) will
 now start work. The check that does not start anything is `GET /api/v1/tasks/:taskId`, which reports
 the task's own pinned pipeline, plus `GET /api/v1/pipelines` for what an empty body would resolve.

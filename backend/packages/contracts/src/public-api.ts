@@ -537,9 +537,15 @@ export const createPublicTaskSchema = v.object({
 export type CreatePublicTaskInput = v.InferOutput<typeof createPublicTaskSchema>
 
 /**
- * Start (run) a task. `pipelineId` is optional — it falls back to the task's pinned pipeline, then
- * to the workspace's default pipeline for a run nothing is watching (`Pipeline.isUnattendedDefault`,
- * the seeded `pl_unattended`); a task with none of the three is rejected with `pipeline_required`.
+ * Start (run) a task. `pipelineId` is optional — it falls back to the task's pinned pipeline, then,
+ * for a key that satisfies `decide`, to the workspace's default pipeline for a run nothing is
+ * watching (`Pipeline.isUnattendedDefault`, the seeded `pl_unattended`). A task with none of those
+ * is rejected with `pipeline_required`.
+ *
+ * The scope condition on that last rung is deliberate rather than incidental: the seeded rung
+ * reaches a human test and a human PR review on a risky task, and a key that cannot answer a park
+ * would be handed a `pipeline_requires_decide_scope` refusal about a pipeline it never picked. A
+ * `write` key therefore keeps exactly its former behaviour and is told the thing it can act on.
  */
 export const startPublicTaskSchema = v.object({
   pipelineId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),

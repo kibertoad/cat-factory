@@ -245,6 +245,22 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     })
     expect(pipeline.status).toBe(201)
 
+    // Promote it as the board's in-app default (`pipelineRepository.setDefault` over the RPC). The
+    // round-trip is the point: this is the one pipeline write that touches a SECOND row — the
+    // incumbent it demotes — inside a store transaction a node with no `db` cannot run for itself,
+    // so an un-routed method here would throw the moment an operator named a default.
+    const promoted = await local.call<Pipeline>(
+      'PATCH',
+      `/workspaces/${workspaceId}/pipelines/${pipeline.body.id}/organize`,
+      { isDefault: true },
+    )
+    expect(promoted.status).toBe(200)
+    expect(promoted.body.isDefault).toBe(true)
+    const library = await local.call<Pipeline[]>('GET', `/workspaces/${workspaceId}/pipelines`)
+    expect(library.body.filter((row) => row.isDefault).map((row) => row.id)).toEqual([
+      pipeline.body.id,
+    ])
+
     // Start a run on a seeded task (executionRepository.upsert + blockRepository.update over RPC).
     // In mothership mode the durable SqliteWorkRunner drives it immediately, in-process, reading
     // and writing every execution rev back through the RPC's optimistic-concurrency contract.

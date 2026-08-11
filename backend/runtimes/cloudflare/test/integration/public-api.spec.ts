@@ -110,11 +110,15 @@ interface Task {
   pullRequestUrl: string | null
 }
 
-async function mintKey(app: ReturnType<typeof makeApp>, workspaceId: string) {
+async function mintKey(
+  app: ReturnType<typeof makeApp>,
+  workspaceId: string,
+  scope?: 'read' | 'write' | 'decide',
+) {
   const created = await app.call<{ key: { id: string }; secret: string }>(
     'POST',
     `/workspaces/${workspaceId}/public-api-keys`,
-    { label: 'external system' },
+    { label: 'external system', ...(scope ? { scope } : {}) },
   )
   expect(created.status).toBe(201)
   return { authorization: `Bearer ${created.body.secret}` }
@@ -212,7 +216,11 @@ describe('public API — basic board workloads (services + tasks)', () => {
     expect(done.status).toBe(200)
     expect(done.body.status).toBe('done')
 
-    // A task with no pipeline (none pinned, none supplied) can't be started.
+    // A task with no pipeline (none pinned, none supplied) can't be started BY THIS KEY. The
+    // workspace's unattended default would answer, but it reaches a human test and a human PR
+    // review on a risky task, which a key with no `decide` scope cannot resolve — so the fallback is
+    // withheld and this surface keeps its actionable "pass a pipelineId" refusal rather than a 403
+    // about a pipeline the caller never picked. The `decide` case is asserted below.
     const frame = await app.call<{ id: string }>('POST', `/workspaces/${workspaceId}/blocks`, {
       type: 'service',
       position: { x: 700, y: 700 },
@@ -232,6 +240,29 @@ describe('public API — basic board workloads (services + tasks)', () => {
     expect(
       (await app.call('POST', `/api/v1/tasks/${task.body.taskId}/start`, {}, auth)).status,
     ).toBe(400)
+
+    // The same empty body on a `decide` key DOES resolve the workspace's unattended default, which
+    // is the whole point of the scope: that caller can answer the parks the rung reaches for. On its
+    // OWN task, because starting one leaves it `in_progress` and the model-pin refusal below needs a
+    // task nothing has started yet.
+    const decider = await mintKey(app, workspaceId, 'decide')
+    const forDecider = await app.call<Task>(
+      'POST',
+      `/api/v1/services/${frame.body.id}/tasks`,
+      {
+        title: 'Start me on the workspace default',
+        description: 'A task with no pinned pipeline, started with an empty body.',
+      },
+      decider,
+    )
+    const decided = await app.call<Task>(
+      'POST',
+      `/api/v1/tasks/${forDecider.body.taskId}/start`,
+      {},
+      decider,
+    )
+    expect(decided.status).toBe(202)
+    expect(decided.body.runId).toBeTruthy()
 
     // Pin a subscription-only individual-usage model (no poolable base) → start is refused (no
     // headless personal-credential unlock). A base-backed model like claude-opus would instead

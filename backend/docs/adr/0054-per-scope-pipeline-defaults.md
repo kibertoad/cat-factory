@@ -145,6 +145,14 @@ for every field, so announcing three narrower budgets would hand such a workspac
 alongside them: a widening of landing authority, delivered as an advisory to adopt a tightening. New
 workspaces seed the narrower budgets; an existing one adopts them by editing the row.
 
+**Why only a `decide` key gets the fallback.** Found by the worker's own public-API integration
+test, which is the useful part: the seeded rung reaches a human test and a human PR review, so
+`unanswerableParkRefusal` withholds it from a plain `write` key — and resolving it anyway turned this
+surface's actionable `400 pipeline_required` into a `403 pipeline_requires_decide_scope` about a
+pipeline the caller never picked. The rule that falls out is worth stating generally: a default the
+caller could not answer is not a usable default for that caller, so it is not offered, and the caller
+is told the thing it can act on. A `write` key therefore keeps byte-for-byte its former behaviour.
+
 **Why a dangling `pipelineId` at creation is not refused, unlike a dangling preset pin.** A dangling
 `modelPresetId` / `riskPolicyId` falls back to a workspace default and RUNS, which is why
 `presetPinGuard` has to catch it at the write: nothing afterwards distinguishes the task that ran on
@@ -153,10 +161,11 @@ the door that has a picker.
 
 ## Consequences
 
-- `POST /api/v1/tasks/:taskId/start` with an empty body now STARTS a run where it used to answer
-  `400 pipeline_required`. The refusal survives for a workspace that declares no unattended default,
-  so a client branching on it still needs to. OpenAPI `1.50.0`; see `public-api-versions.md` for what
-  a caller that used the 400 as a validation probe should read instead.
+- `POST /api/v1/tasks/:taskId/start` with an empty body now STARTS a run FOR A `decide` KEY where it
+  used to answer `400 pipeline_required`. A `write` key sees no change (see the rationale above). The
+  refusal survives wherever no default resolves, so a client branching on it still needs to. OpenAPI
+  `1.50.0`; see `public-api-versions.md` for what a caller that used the 400 as a validation probe
+  should read instead.
 - `PipelineRepository` gains `setDefault`, mirrored D1 ⇄ Drizzle with a partial unique index on each
   facade and a run-level conformance assertion: one holder per scope, the scopes independent, and a
   release leaving the scope genuinely empty (which, unlike the risk-policy library, is a legal state).
