@@ -77,6 +77,10 @@ export type ProbeFailure = {
  * the target and the action ("Nothing is listening at http://127.0.0.1:8787 … Start it") and a
  * paraphrase here would be a second, staler copy of it. It is the same rule `deployment-health`
  * follows for the backend's per-variable config problems.
+ *
+ * Kernel's hints close with "then test again", written for the connect forms they were built for,
+ * and the last step here is what names this suite's equivalent of that button. Rewriting the clause
+ * would mean string surgery on another module's prose, which is how a relay becomes a copy.
  */
 export function describeProbeFailure(
   error: unknown,

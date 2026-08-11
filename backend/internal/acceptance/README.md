@@ -139,6 +139,16 @@ every merge for a person looks like a run that stalled on its last step.
 Three states, not two: a probe that cannot READ an answer reports that, and never as evidence
 that the prerequisite is unmet.
 
+**And such a probe names its CAUSE.** Every check here reaches the deployment over HTTP, where a
+transport failure is a bare `TypeError: fetch failed` with the informative link (`connect
+ECONNREFUSED 127.0.0.1:8787`, a DNS miss, an untrusted certificate) one `.cause` down. Read as
+`error.message`, all of those rendered as those same two words under a remedy listing the causes it
+had not told apart, so a deployment that was simply not started reported three candidate fixes, two
+of them about a credential no refused connection had sent. `src/probeFailure.ts` classifies the chain
+through kernel's `describeConnectionFailure` (the same producer behind every "Test connection" button
+in the product) and relays its per-cause remedy, keeping the credential guesses for the `unknown`
+class, where the throw is as likely to be a request that WAS answered and then refused.
+
 **A refusal is INSTRUCTIONS, not a diagnosis.** Every unmet prerequisite comes back with numbered
 steps and the commands that carry them out, rendered with what the probe just read rather than
 with a placeholder to go and resolve: the workspace id the key is actually bound to, the account
