@@ -95,9 +95,11 @@ particular file exists):
 0. **Refuse before spending, with the fix attached.** `src/prerequisites.ts` runs in EVERY spec's
    `beforeAll`, not just spec 00: a resumed pass starts where it stopped, so a gate only the first
    file mounts is one the resume path skips. An unreadable probe is its own verdict, never read as
-   "unmet", and it NAMES its cause: `src/probeFailure.ts` classifies the thrown chain through
+   "unmet", and it NAMES its cause: `src/probeFailure.ts` splits "never answered" (classified through
    kernel's `describeConnectionFailure`, because `error.message` renders every transport failure this
-   gate can hit as undici's contentless `fetch failed`.
+   gate can hit as undici's contentless `fetch failed`) from "answered with a refusal" (the SDK's
+   typed status, `code` and request id, where an ENVELOPE-LESS 404 means an unmatched route: a
+   deployment older than the suite, or a base URL naming the SPA).
    Every negative verdict carries a `Remedy` (numbered steps, pasteable commands, a doc),
    built by the check from what it just READ, so the command holds the real workspace id or account
    rather than a hole. A fix with no CLI names the screen and offers the read that confirms it:
