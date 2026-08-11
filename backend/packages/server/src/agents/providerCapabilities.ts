@@ -152,6 +152,29 @@ export async function resolveWorkspaceCapabilities(
     baseUrlFor ? configured.filter((p) => BASE_URL_OPTIONAL.has(p) || !!baseUrlFor(p)) : configured,
   )
   const subscriptionVendors = new Set<SubscriptionVendor>()
+  // BOTH credential stores answered for the whole vocabulary in ONE read each, rather than a
+  // question per vendor. Each store carries the full answer in a single statement, and this path is
+  // taken by the catalog render AND every run start, so a per-vendor sweep was one round trip per
+  // member of a closed vocabulary on the hottest read the model layer has.
+  //
+  // Lazy rather than hoisted, so a deployment whose vendors are all served by an ambient host CLI
+  // still touches neither store, and an unbound resolution (no `userId`) still never touches the
+  // personal one. Memoised on the promise, so the concurrent callers of one resolution share the
+  // single in-flight read rather than racing two.
+  let pooledVendors: Promise<ReadonlySet<SubscriptionVendor>> | undefined
+  const pooledHolds = async (vendor: SubscriptionVendor): Promise<boolean> => {
+    const pool = services.subscriptions
+    if (!pool) return false
+    pooledVendors ??= pool.liveVendors(workspaceId)
+    return (await pooledVendors).has(vendor)
+  }
+  let personalVendors: Promise<ReadonlySet<SubscriptionVendor>> | undefined
+  const personalHolds = async (vendor: SubscriptionVendor): Promise<boolean> => {
+    const personal = services.personalSubscriptions
+    if (!userId || !personal) return false
+    personalVendors ??= personal.liveVendors(userId)
+    return (await personalVendors).has(vendor)
+  }
   for (const vendor of ALL_SUBSCRIPTION_VENDORS) {
     // Ambient FIRST, and it short-circuits both credential reads rather than joining them: a
     // vendor the host CLI serves is usable for every initiator of this deployment, including one
@@ -162,14 +185,9 @@ export async function resolveWorkspaceCapabilities(
       subscriptionVendors.add(vendor)
       continue
     }
-    const pooled = services.subscriptions
-      ? await services.subscriptions.hasToken(workspaceId, vendor)
-      : false
-    const personal =
-      !pooled && userId && services.personalSubscriptions
-        ? await services.personalSubscriptions.has(userId, vendor)
-        : false
-    if (pooled || personal) subscriptionVendors.add(vendor)
+    if ((await pooledHolds(vendor)) || (await personalHolds(vendor))) {
+      subscriptionVendors.add(vendor)
+    }
   }
   // Local runners are per-user: a model is usable when the resolving user has enabled it.
   // Keyed by the dynamic model id (`"<provider>:<model>"`) so usability is model-granular

@@ -391,105 +391,6 @@ describe('configure: adopting the repositories', () => {
     expect(printed).toContain('what this connection CAN reach is unknown')
   })
 
-  it('lists presets unmarked when the catalog is unreadable, rather than marked unavailable', async () => {
-    // "We could not check" and "no provider is wired" are opposite facts, and only the second would
-    // stop an operator picking the preset that actually works.
-    const unreadable = await run({
-      client: fakeClient({
-        models: async () => {
-          throw new Error('catalog down')
-        },
-      }),
-      script: { secrets: [TOKEN] },
-    })
-    expect(unreadable.io.output.join('\n')).toContain('without saying which can be dispatched to')
-    expect(unreadable.io.offered).toEqual(['Claude Opus 5 (claude-opus) [workspace default]'])
-
-    // The same preset, with a catalog that ANSWERED: now the marking is a fact and is shown.
-    const answered = await run({
-      client: fakeClient({
-        models: async () => ({
-          models: [{ modelId: 'claude-opus', available: false }],
-          excludesUserScopedModels: false,
-        }),
-      }),
-      script: { secrets: [TOKEN] },
-    })
-    expect(answered.io.offered).toEqual([
-      'Claude Opus 5 (claude-opus) (no provider wired for it) [workspace default]',
-    ])
-  })
-
-  it('says a model is INVISIBLE, not unwired, when the ROW says its credential is a person’s', async () => {
-    // The misreport this path exists to prevent, and the one that sent an operator here: a
-    // workspace whose Claude runs come from a stored personal subscription got "no provider wired
-    // for it" against the model it uses every day, and the fix it named (add a provider key) was
-    // for a deployment that was already configured correctly.
-    const { io } = await run({
-      client: fakeClient({
-        models: async () => ({
-          models: [{ modelId: 'claude-opus', available: false, userScoped: true }],
-          excludesUserScopedModels: false,
-        }),
-      }),
-      script: { secrets: [TOKEN] },
-    })
-    expect(io.offered).toEqual([
-      'Claude Opus 5 (claude-opus) (not visible to this system token) [workspace default]',
-    ])
-    // And the remedy is stated once, in full, rather than left for the operator to infer from a
-    // parenthetical: it is a different token, not a different deployment setting.
-    expect(io.output.join('\n')).toContain('"Runs as" set to yourself')
-  })
-
-  it('still calls a genuinely unwired model unwired, on a deployment that withholds others', async () => {
-    // The opposite misreport, and the reason the label is read off the ROW: a per-RESPONSE flag is
-    // true of any deployment that COULD hold a personal subscription, so deriving the label from it
-    // told an operator to re-mint their token for a model whose provider key was simply never
-    // added. Re-minting would change nothing.
-    const { io } = await run({
-      client: fakeClient({
-        models: async () => ({
-          models: [{ modelId: 'claude-opus', available: false, userScoped: false }],
-          excludesUserScopedModels: true,
-        }),
-      }),
-      script: { secrets: [TOKEN] },
-    })
-    expect(io.offered).toEqual([
-      'Claude Opus 5 (claude-opus) (no provider wired for it) [workspace default]',
-    ])
-  })
-
-  it('keeps an invisible workspace default selected rather than steering to another model', async () => {
-    // Preselecting the "selectable" one would run the whole pass on a model nobody chose, in
-    // exactly the case the warning above has just told the operator to expect. An invisible default
-    // costs at worst one refusal at start, which names the token as the problem and can be fixed by
-    // re-minting it; a silent switch to Kimi is a green pass that proved the wrong thing.
-    const { written } = await run({
-      client: fakeClient({
-        models: async () => ({
-          models: [
-            { modelId: 'claude-opus', available: false, userScoped: true },
-            { modelId: 'kimi-k2', available: true, userScoped: false },
-          ],
-          excludesUserScopedModels: false,
-        }),
-        presets: async () => [
-          {
-            presetId: 'mdp_claude',
-            name: 'Claude Opus 5',
-            baseModelId: 'claude-opus',
-            isDefault: true,
-          },
-          { presetId: 'mdp_kimi', name: 'Kimi', baseModelId: 'kimi-k2', isDefault: false },
-        ],
-      }),
-      script: { secrets: [TOKEN] },
-    })
-    expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_claude')
-  })
-
   it('withholds a creation link on GitLab rather than linking gitlab.com', async () => {
     // `GET /api/v1/vcs/connection` publishes no instance URL, so the only link this code could
     // build for a self-hosted GitLab is a stranger's server.
@@ -518,27 +419,6 @@ describe('configure: adopting the repositories', () => {
     expect(outcome.ok).toBe(true)
     expect(written).toContain('ACCEPTANCE_BACKEND_REPO=cf-acc-catalog-api')
     expect(io.output.join('\n')).toContain("'target-repos' prerequisite will refuse")
-  })
-
-  it('preselects a preset whose model is wired over the workspace default that is not', async () => {
-    const { written, io } = await run({
-      client: fakeClient({
-        presets: async () => [
-          { presetId: 'mdp_claude', name: 'Claude', baseModelId: 'claude-opus', isDefault: true },
-          { presetId: 'mdp_kimi', name: 'Kimi', baseModelId: 'kimi', isDefault: false },
-        ],
-        models: async () => ({
-          models: [
-            { modelId: 'claude-opus', available: false },
-            { modelId: 'kimi', available: true },
-          ],
-          excludesUserScopedModels: false,
-        }),
-      }),
-      script: { secrets: [TOKEN] },
-    })
-    expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_kimi')
-    expect(io.prompted.join('\n')).toContain('Model preset')
   })
 
   it('refuses to write a file with no repository owner in it', async () => {
@@ -578,6 +458,308 @@ describe('configure: adopting the repositories', () => {
     const printed = io.output.join('\n')
     expect(printed).toContain('repo_service_homed_elsewhere')
     expect(printed).not.toContain('cf-acc-catalog-api is adopted by this workspace')
+  })
+})
+
+// Its own block, and not only for the line budget: every test here is about ONE join (the preset
+// library against the model catalog), where the repository tests above are about a write. The
+// question they all answer is what a menu may claim about a model nobody can dispatch to, which is
+// where every misreport in this command's history has lived.
+describe('configure: the model preset', () => {
+  it('lists presets unmarked when the catalog is unreadable, rather than marked unavailable', async () => {
+    // "We could not check" and "no provider is wired" are opposite facts, and only the second would
+    // stop an operator picking the preset that actually works.
+    const unreadable = await run({
+      client: fakeClient({
+        models: async () => {
+          throw new Error('catalog down')
+        },
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(unreadable.io.output.join('\n')).toContain('without saying which can be dispatched to')
+    expect(unreadable.io.offered).toEqual(['Claude Opus 5 (claude-opus) [workspace default]'])
+
+    // The same preset, with a catalog that ANSWERED: now the marking is a fact and is shown.
+    const answered = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [{ modelId: 'claude-opus', available: false }],
+          excludesUserScopedModels: false,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(answered.io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (no provider wired for it) [workspace default]',
+    ])
+  })
+
+  it('says a model is INVISIBLE, not unwired, when the ROW says its credential is a person’s', async () => {
+    // The misreport this path exists to prevent, and the one that sent an operator here: a
+    // workspace whose Claude runs come from a stored personal subscription got "no provider wired
+    // for it" against the model it uses every day, and the fix it named (add a provider key) was
+    // for a deployment that was already configured correctly.
+    //
+    // `subscriptionConfigured: null` is the deployment saying it had NOBODY to ask about, which is
+    // as far as it can go for a key nobody minted in the app.
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: true,
+              subscriptionConfigured: null,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (not visible to this token) [workspace default]',
+    ])
+    // And the remedy is stated once, in full, rather than left for the operator to infer from a
+    // parenthetical: it is a different token, not a different deployment setting.
+    expect(io.output.join('\n')).toContain('"Runs as" set to yourself')
+  })
+
+  it('says the subscription IS connected when the deployment resolved one for this key’s owner', async () => {
+    // The state the whole read exists to reach, and the one an operator previously arrived at only
+    // by re-minting the token to see what happened. Whether the credential EXISTS is a row lookup,
+    // so the deployment can answer it without the personal password that would OPEN it, and the
+    // answer turns a diagnosis ("this cannot be judged") into an instruction ("mint it bound").
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: true,
+              subscriptionConfigured: true,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (your subscription is connected; this token is not bound to ' +
+        'spend it) [workspace default]',
+    ])
+    const said = io.output.join('\n')
+    expect(said).toContain('Nothing is missing from the deployment')
+    expect(said).toContain('"Runs as" set to yourself')
+  })
+
+  it('does not claim a subscription that the deployment looked for and did not find', async () => {
+    // `false` is an ANSWER, not the absence of one: the owner is known and holds nothing for this
+    // vendor, so re-minting the token bound would change nothing and the remedy is a credential.
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: true,
+              subscriptionConfigured: false,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (runs on a personal subscription; this token’s owner has none) ' +
+        '[workspace default]',
+    ])
+    expect(io.output.join('\n')).not.toContain('Nothing is missing from the deployment')
+  })
+
+  it('still calls a genuinely unwired model unwired, on a deployment that withholds others', async () => {
+    // The opposite misreport, and the reason the label is read off the ROW: a per-RESPONSE flag is
+    // true of any deployment that COULD hold a personal subscription, so deriving the label from it
+    // told an operator to re-mint their token for a model whose provider key was simply never
+    // added. Re-minting would change nothing.
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
+          ],
+          excludesUserScopedModels: true,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (no provider wired for it) [workspace default]',
+    ])
+  })
+
+  it('keeps an UNJUDGED workspace default selected rather than steering to another model', async () => {
+    // Preselecting the "selectable" one would run the whole pass on a model nobody chose, in
+    // exactly the case the warning above has just told the operator to expect. An unjudged default
+    // costs at worst one refusal at start, which names the token as the problem and can be fixed by
+    // re-minting it; a silent switch to Kimi is a green pass that proved the wrong thing.
+    //
+    // UNJUDGED specifically: the deployment resolved nobody, so the subscription may well be there.
+    // The sibling below pins the opposite disposition for the case it answered.
+    const { written } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: true,
+              subscriptionConfigured: null,
+            },
+            {
+              modelId: 'kimi-k2',
+              available: true,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+        presets: async () => [
+          {
+            presetId: 'mdp_claude',
+            name: 'Claude Opus 5',
+            baseModelId: 'claude-opus',
+            isDefault: true,
+          },
+          { presetId: 'mdp_kimi', name: 'Kimi', baseModelId: 'kimi-k2', isDefault: false },
+        ],
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_claude')
+  })
+
+  it('steers off a default the deployment ANSWERED has no subscription behind it', async () => {
+    // The line between the two dispositions. `null` is worth waiting on, because re-minting the
+    // token might resolve a person who holds one. `false` is the deployment saying it resolved the
+    // person and they hold none, so keeping the default selected buys a CERTAIN refusal at the
+    // first dispatch over a preset that runs. Identical fixture to the sibling above but for that
+    // one field, which is the whole point: the two states must not share a disposition.
+    const { written } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: true,
+              subscriptionConfigured: false,
+            },
+            {
+              modelId: 'kimi-k2',
+              available: true,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+        presets: async () => [
+          {
+            presetId: 'mdp_claude',
+            name: 'Claude Opus 5',
+            baseModelId: 'claude-opus',
+            isDefault: true,
+          },
+          { presetId: 'mdp_kimi', name: 'Kimi', baseModelId: 'kimi-k2', isDefault: false },
+        ],
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_kimi')
+  })
+
+  it('marks a POLICY-refused model as refused, not as one belonging to a person', async () => {
+    // The cause no credential can undo, and the one the join used to miss entirely: a row the
+    // account's model-family policy refuses was ranked by its subscription fields, so a model with
+    // a live subscription behind it read as "your subscription is connected; this token is not
+    // bound to spend it" and told the operator nothing was missing from the deployment. Both
+    // claims are false, and the policy is what has to change.
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: true,
+              personalSubscription: true,
+              subscriptionConfigured: true,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (configured, and refused by the account’s model-family policy) ' +
+        '[workspace default]',
+    ])
+    expect(io.output.join('\n')).not.toContain('Nothing is missing from the deployment')
+  })
+
+  it('preselects a preset whose model is wired over the workspace default that is not', async () => {
+    const { written, io } = await run({
+      client: fakeClient({
+        presets: async () => [
+          { presetId: 'mdp_claude', name: 'Claude', baseModelId: 'claude-opus', isDefault: true },
+          { presetId: 'mdp_kimi', name: 'Kimi', baseModelId: 'kimi', isDefault: false },
+        ],
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
+            {
+              modelId: 'kimi',
+              available: true,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_kimi')
+    expect(io.prompted.join('\n')).toContain('Model preset')
   })
 })
 

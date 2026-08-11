@@ -39,6 +39,11 @@ class FakeRepo implements ProviderSubscriptionTokenRepository {
   async listByVendor(workspaceId: string, vendor: SubscriptionVendor) {
     return this.live(workspaceId, vendor).sort((a, b) => a.createdAt - b.createdAt)
   }
+  async listByWorkspace(workspaceId: string) {
+    return this.rows
+      .filter((r) => r.workspaceId === workspaceId && r.deletedAt === null)
+      .sort((a, b) => a.createdAt - b.createdAt)
+  }
   async getById(workspaceId: string, id: string) {
     return (
       this.rows.find((r) => r.id === id && r.workspaceId === workspaceId && !r.deletedAt) ?? null
@@ -221,6 +226,63 @@ describe('ProviderSubscriptionService', () => {
       expect(listed.map((c) => c.vendor)).not.toContain('glm')
       expect(listed.map((c) => c.vendor)).not.toContain('codex')
       expect(listed.map((c) => c.vendor)).toContain('kimi')
+    })
+  })
+
+  // The batch read the capability resolver folds a workspace's whole pool through, replacing one
+  // `hasToken` question per vendor on the path both the catalog render and every run start take.
+  describe('liveVendors', () => {
+    it('answers every pooled vendor in one read, and agrees with hasToken on each', async () => {
+      const repo = new FakeRepo()
+      const svc = makeService(repo, () => 0)
+      await svc.addToken('ws', { vendor: 'kimi', label: 'moonshot', token: 'k' })
+      await svc.addToken('ws', { vendor: 'deepseek', label: 'ds', token: 'd' })
+      // A neighbouring workspace's pool must not leak in.
+      await svc.addToken('other', { vendor: 'kimi', label: 'theirs', token: 'x' })
+
+      const vendors = await svc.liveVendors('ws')
+      expect([...vendors].sort()).toEqual(['deepseek', 'kimi'])
+      // The relation that keeps the batch and the point read from drifting: whatever the set says
+      // about a vendor is what `hasToken` says about it, which is what the resolver used to ask.
+      for (const vendor of ['kimi', 'deepseek', 'claude', 'glm', 'codex'] as const) {
+        expect(vendors.has(vendor)).toBe(await svc.hasToken('ws', vendor))
+      }
+      expect(await svc.liveVendors('unknown-ws')).toEqual(new Set())
+    })
+
+    it('drops a vendor whose whole pool is disabled', async () => {
+      // Same rule `hasToken` enforces: an all-disabled pool fails the lease, so reporting the
+      // vendor as configured would offer the executor a credential it cannot get.
+      const repo = new FakeRepo()
+      const svc = makeService(repo, () => 0)
+      const { id } = await svc.addToken('ws', { vendor: 'kimi', label: 'only', token: 'k' })
+      expect(await svc.liveVendors('ws')).toEqual(new Set(['kimi']))
+      await svc.updateToken('ws', id, { enabled: false })
+      expect(await svc.liveVendors('ws')).toEqual(new Set())
+    })
+
+    it('never reports an individual-usage vendor, even from a stale row', async () => {
+      // `addToken` refuses one, so the only way such a row exists is data predating the rule.
+      // Reporting it would hand the executor a pooled credential the personal store owns.
+      const repo = new FakeRepo()
+      const svc = makeService(repo, () => 0)
+      repo.rows.push({
+        id: 'stale',
+        workspaceId: 'ws',
+        vendor: 'claude',
+        label: 'stale',
+        tokenCipher: 'cipher',
+        createdAt: 0,
+        lastUsedAt: null,
+        windowStartedAt: null,
+        inputTokens: 0,
+        outputTokens: 0,
+        requestCount: 0,
+        enabled: true,
+        isDefault: false,
+        deletedAt: null,
+      })
+      expect(await svc.liveVendors('ws')).toEqual(new Set())
     })
   })
 })

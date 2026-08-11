@@ -30,6 +30,10 @@ const auth = (actsAsUserId: string | null): PublicApiKeyAuth => ({
   label: 'operator',
   externalIdentity: null,
   actsAsUserId,
+  // Provenance, never an authorization input: an unbound key names its minter here and still may
+  // not unlock that person's subscription, which is what the `individual_model_unsupported` case
+  // below pins.
+  createdByUserId: BOUND_USER,
   createdAt: 1_700_000_000_000,
 })
 

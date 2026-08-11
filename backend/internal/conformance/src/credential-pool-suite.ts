@@ -187,5 +187,45 @@ export function defineCredentialPoolSuite(name: string, repos: CredentialPoolRep
       rows = await repo.listByVendor(ws, vendor)
       expect(chooseToken(rows, 2000, WINDOW)).toBeNull()
     })
+
+    it('subscription pool: listByWorkspace spans vendors and agrees with listByVendor', async () => {
+      // The batch read the capability resolver folds a workspace's whole pool through, so a facade
+      // whose cross-vendor filter or tombstone predicate diverges fails here rather than reporting
+      // a vendor as unconfigured on one runtime only. Asserted as a RELATION against the per-vendor
+      // read this suite already pins, so neither can drift from the other: the union of the parts
+      // is the whole, and each part is what the whole says it is.
+      const repo = repos.makeSubscriptionRepo()
+      const ws = uid('ws')
+      const other = uid('other-ws')
+      const kimiLive = uid('kimi-live')
+      const kimiOff = uid('kimi-off')
+      const kimiGone = uid('kimi-gone')
+      const deepseek = uid('deepseek')
+      await repo.add(subRecord({ id: kimiLive, workspaceId: ws, vendor: 'kimi', createdAt: 1 }))
+      await repo.add(subRecord({ id: kimiOff, workspaceId: ws, vendor: 'kimi', createdAt: 2 }))
+      await repo.add(subRecord({ id: kimiGone, workspaceId: ws, vendor: 'kimi', createdAt: 3 }))
+      await repo.add(subRecord({ id: deepseek, workspaceId: ws, vendor: 'deepseek', createdAt: 4 }))
+      // A neighbouring workspace's pool must never leak into the answer.
+      await repo.add(subRecord({ id: uid('theirs'), workspaceId: other, vendor: 'kimi' }))
+      // Disabled stays LISTED (the caller filters on `enabled`); deleted is a tombstone and does not.
+      await repo.setEnabled(ws, kimiOff, false)
+      await repo.softDelete(ws, kimiGone, 5000)
+
+      const all = await repo.listByWorkspace(ws)
+      expect(all.map((r) => r.id).sort()).toEqual([deepseek, kimiLive, kimiOff].sort())
+      expect(all.map((r) => r.id)).toEqual(
+        [...all].sort((a, b) => a.createdAt - b.createdAt).map((r) => r.id),
+      )
+      for (const v of ['kimi', 'deepseek'] as const) {
+        const perVendor = await repo.listByVendor(ws, v)
+        expect(all.filter((r) => r.vendor === v).map((r) => r.id)).toEqual(
+          perVendor.map((r) => r.id),
+        )
+      }
+      // The enabled subset is what a "which vendors are pooled here" read reduces to.
+      expect(new Set(all.filter((r) => r.enabled).map((r) => r.vendor))).toEqual(
+        new Set(['kimi', 'deepseek']),
+      )
+    })
   })
 }

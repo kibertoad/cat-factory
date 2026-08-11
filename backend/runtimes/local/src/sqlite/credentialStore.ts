@@ -557,6 +557,17 @@ class SqliteProviderSubscriptionTokenRepository implements ProviderSubscriptionT
     return rows.map(subscriptionTokenRowToRecord)
   }
 
+  async listByWorkspace(workspaceId: string): Promise<ProviderSubscriptionTokenRecord[]> {
+    const rows = queryAll<SubscriptionTokenRow>(
+      this.db,
+      `SELECT ${SUBSCRIPTION_TOKEN_COLUMNS} FROM provider_subscription_tokens
+         WHERE workspace_id = ? AND deleted_at IS NULL
+         ORDER BY created_at ASC`,
+      workspaceId,
+    )
+    return rows.map(subscriptionTokenRowToRecord)
+  }
+
   async getById(workspaceId: string, id: string): Promise<ProviderSubscriptionTokenRecord | null> {
     const row = queryOne<SubscriptionTokenRow>(
       this.db,

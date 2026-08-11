@@ -48,7 +48,11 @@ import {
 } from './configureEnv.ts'
 import { describeThrown } from './operatorText.ts'
 import { formatRemedy } from './preflight.ts'
-import { presetAvailability, type PresetAvailability } from './presets.ts'
+import {
+  isPersonalCredentialState,
+  presetAvailability,
+  type PresetAvailability,
+} from './presets.ts'
 
 /**
  * What one adopt attempt answered.
@@ -116,14 +120,32 @@ export type ConfigureClient = {
   /**
    * The catalog, WITH the deployment's own statement about what it could not show this token.
    *
-   * The flag is not decoration on the list: a model reachable only through a per-user credential (a
-   * personal Claude / Codex subscription, a locally-run endpoint) is absent from a SYSTEM token's
-   * catalog entirely, so `available: false` there means "not visible to you" and not "nothing is
-   * wired". Reading the list alone told an operator whose workspace runs Claude every day that no
-   * provider was configured for it.
+   * No extra field here is decoration on the list, and each one names a cause with its own remedy.
+   * A model reachable only through a per-user credential (a personal Claude / Codex subscription, a
+   * locally-run endpoint) is unavailable to a SYSTEM token whatever the deployment has wired, so
+   * `available: false` alone told an operator whose workspace runs Claude every day that no
+   * provider was configured for it. `policyBlocked` says the account's model-family policy refuses
+   * it, which no credential can undo; `personalSubscription` says the row runs on a person's
+   * credential; `subscriptionConfigured` says whether that person's subscription is actually there
+   * (`null` = the deployment had no one to ask about).
+   *
+   * `userScoped` is deliberately absent: it is the superseded flag, true of a workspace-POOLED
+   * vendor that every token can already see, so reading it here invented a token problem where the
+   * fix was a pooled token or a key.
+   *
+   * Declared here rather than left to the SDK's row type because this port is what the tests drive:
+   * a field the fake may omit is a field the flow must not silently read as `false`. Which is also
+   * why the fakes carry the shape the real server produces rather than the subset a case needs: an
+   * omitted field passed a test whose production answer is the opposite.
    */
   models(): Promise<{
-    models: readonly { modelId: string; available: boolean }[]
+    models: readonly {
+      modelId: string
+      available: boolean
+      policyBlocked?: boolean
+      personalSubscription?: boolean
+      subscriptionConfigured?: boolean | null
+    }[]
     excludesUserScopedModels: boolean
   }>
 }
@@ -512,33 +534,62 @@ async function resolvePreset(
     )
   }
   // The same join `model-preset`'s remedy is built from (`presets.ts`), so this menu never offers
-  // what that gate will refuse — and, per ROW, never confuses "nothing is wired for this" with
+  // what that gate will refuse, and, per ROW, never confuses "nothing is wired for this" with
   // "this token was not allowed to look".
   const availability = presetAvailability(catalog.ok ? catalog.value.models : [])
-  // Whether this TOKEN could not see part of the catalog, from the two places that can say so: a
-  // model OMITTED from the answer (a locally-run endpoint belongs to one developer's machine, which
-  // is what `excludesUserScopedModels` reports) and a model LISTED but unjudged (a personal
-  // subscription, which the rows report themselves). Either way an unavailable entry has two very
-  // different causes and only one of them is "add a provider key"; saying the wrong one sends an
-  // operator to configure something already configured. Asking BOTH is what keeps the warning off
-  // deployments where nothing was withheld at all — the flag alone is true of any deployment that
-  // merely COULD hold a personal subscription.
-  const withheld =
-    catalog.ok &&
-    (catalog.value.excludesUserScopedModels ||
-      presets.some((preset) => availability(preset) === 'unjudged'))
-  if (withheld) {
+  // The strongest thing the catalog can say, first: a preset whose subscription the deployment
+  // CONFIRMED is configured for this key's owner. That is an instruction rather than a diagnosis:
+  // the pass is one re-mint away from running, and nothing about the deployment needs changing.
+  // Stated on its own because it is the case the old wording got most wrong: such a preset was
+  // labelled "no provider wired for it", which is the opposite of true.
+  //
+  // A policy-refused model can never reach this state, because `blocked` outranks it in the join.
+  // That ordering is what makes the claim below safe to state flatly: with the policy excluded, a
+  // stored subscription that did not make the model available means the catalog resolved no user,
+  // which is a system token by construction.
+  const bindable = catalog.ok && presets.some((preset) => availability(preset) === 'bindable')
+  if (bindable) {
     io.warn(
-      'This token is a SYSTEM token, so the catalog below cannot account for a model that belongs ' +
-        'to a person: a personal Claude / Codex / GLM subscription, or a locally-run endpoint. ' +
-        'Such a model is marked below as invisible rather than unwired.\n' +
-        '  To run the pass on your own subscription, mint the token again in the app under ' +
-        'Integrations → API access tokens with "Runs as" set to yourself. The pass then asks for ' +
-        'your personal password once, at the moment a run needs it, and never stores it.',
+      'A preset below runs on a subscription that IS connected for this token’s owner, and this ' +
+        'token is a SYSTEM token, which may not spend it. Nothing is missing from the deployment.\n' +
+        '  Mint the token again in the app under Integrations → API access tokens with "Runs as" ' +
+        'set to yourself, and export it as CAT_FACTORY_API_KEY. The pass then asks for your ' +
+        'personal password once, at the moment a run needs it, and never stores it.',
+    )
+  }
+  // Whether this TOKEN could not see part of the catalog. Two places can say so, they say DIFFERENT
+  // things, and each is warned about in its own words: collapsing them produced a message that
+  // asserted the deployment could resolve nobody on a deployment where it plainly could.
+  //
+  // A model OMITTED from the answer is what `excludesUserScopedModels` reports, and it says nothing
+  // about whether this token has an owner: it is true of any SYSTEM token on a deployment serving
+  // locally-run endpoints, minted in the app or not.
+  if (catalog.ok && catalog.value.excludesUserScopedModels) {
+    io.warn(
+      'This token is a SYSTEM token, so the catalog below leaves out every locally-run model ' +
+        "endpoint: those belong to one developer's machine and no token can reach them. If a " +
+        'locally-run model is what this workspace runs on, the suite needs a provider key or a ' +
+        'subscription of its own.',
+    )
+  }
+  // A model LISTED but UNJUDGED is the narrower fact, and the only one that does license the
+  // stronger claim: the deployment resolved no person for this key at all, so a personal
+  // subscription it may well hold could not even be asked about.
+  if (catalog.ok && presets.some((preset) => availability(preset) === 'unjudged')) {
+    io.warn(
+      'This token belongs to nobody the deployment could resolve, so a preset running on a ' +
+        'personal Claude / Codex / GLM subscription could not be judged at all: it is marked below ' +
+        'as invisible rather than unwired.\n' +
+        '  To run the pass on your own subscription, mint the token IN THE APP (Integrations → API ' +
+        'access tokens) with "Runs as" set to yourself; a token provisioned headlessly through ' +
+        'POST /api/v1/keys can never be bound to a person.',
     )
   }
   const suffix: Record<Exclude<PresetAvailability, 'selectable'>, string> = {
-    unjudged: ' (not visible to this system token)',
+    blocked: ' (configured, and refused by the account’s model-family policy)',
+    bindable: ' (your subscription is connected; this token is not bound to spend it)',
+    unsubscribed: ' (runs on a personal subscription; this token’s owner has none)',
+    unjudged: ' (not visible to this token)',
     unwired: ' (no provider wired for it)',
   }
   const options = presets.map((preset) => {
@@ -554,15 +605,24 @@ async function resolvePreset(
   // A selectable preset is preselected over the workspace default when the two differ, because the
   // default is whatever the board was seeded with and the pass has to actually be able to run.
   //
-  // An `unjudged` default is NOT skipped, though, and that exception is the point of tracking the
-  // third state. Such a preset is very likely the right one (it is what this workspace runs in the
-  // app, on a subscription this token cannot see), and quietly preselecting some other model would
-  // run the whole pass on a model nobody chose, in the one case the warning above has just told the
-  // operator to expect. Leaving it selected costs at worst one refusal at start, which names the
-  // token as the problem and can be fixed by re-minting it.
-  const preferred: readonly PresetAvailability[] = ['selectable', 'unjudged']
+  // A default that runs on a personal credential this token might yet REACH is NOT skipped, though,
+  // and that exception is the point of tracking the extra states. Such a preset is very likely the
+  // right one (it is what this workspace runs in the app, on a subscription this token cannot
+  // spend), and quietly preselecting some other model would run the whole pass on a model nobody
+  // chose, in the one case the warning above has just told the operator to expect. Leaving it
+  // selected costs at worst one refusal at start, which names the token as the problem and is fixed
+  // by re-minting it.
+  //
+  // `unsubscribed` is NOT such a case, which is why `isPersonalCredentialState` excludes it: there
+  // the deployment has already answered that the owner holds no subscription for the vendor, so
+  // re-minting fixes nothing and keeping the default selected buys a certain refusal instead of a
+  // possible one.
   const fallback =
-    presets.find((preset) => preset.isDefault && preferred.includes(availability(preset))) ??
+    presets.find(
+      (preset) =>
+        preset.isDefault &&
+        (availability(preset) === 'selectable' || isPersonalCredentialState(availability(preset))),
+    ) ??
     presets.find((preset) => availability(preset) === 'selectable') ??
     first
   const stillOffered = stored && presets.some((preset) => preset.presetId === stored)
