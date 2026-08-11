@@ -98,7 +98,7 @@ describe('resolveWorkspaceCapabilities — ambient native vendors', () => {
       hasToken: async () => false,
     } as unknown as CapabilityServices['subscriptions'],
     personalSubscriptions: {
-      has: async () => false,
+      liveVendors: async () => new Set(),
       list: async () => [],
     } as unknown as CapabilityServices['personalSubscriptions'],
   }
@@ -113,11 +113,13 @@ describe('resolveWorkspaceCapabilities — ambient native vendors', () => {
 
   it('does not consult either credential store for one', async () => {
     const hasToken = vi.fn(async () => false)
-    const has = vi.fn(async () => false)
+    const liveVendors = vi.fn(async () => new Set<never>())
     const caps = await resolveWorkspaceCapabilities(
       {
         subscriptions: { hasToken } as unknown as CapabilityServices['subscriptions'],
-        personalSubscriptions: { has } as unknown as CapabilityServices['personalSubscriptions'],
+        personalSubscriptions: {
+          liveVendors,
+        } as unknown as CapabilityServices['personalSubscriptions'],
         nativeAmbientAuth: ['claude-code', 'codex'],
       },
       'ws-1',
@@ -125,12 +127,52 @@ describe('resolveWorkspaceCapabilities — ambient native vendors', () => {
     )
     expect(caps.subscriptionVendors.has('claude')).toBe(true)
     expect(caps.subscriptionVendors.has('codex')).toBe(true)
-    // Both were asked about the vendors the allow-list does NOT serve, and about neither of the
+    // The pool was asked about the vendors the allow-list does NOT serve, and about neither of the
     // two it does: an ambient vendor is usable whatever the stores answer.
     for (const vendor of ['claude', 'codex']) {
       expect(hasToken).not.toHaveBeenCalledWith('ws-1', vendor)
-      expect(has).not.toHaveBeenCalledWith('usr-1', vendor)
     }
+    // The personal store answers every vendor in one read, so "was it consulted for THIS one" is
+    // not a question its call log can answer. What is still assertable, and is the property that
+    // matters, is that it is read at most once per resolution rather than once per vendor.
+    expect(liveVendors.mock.calls.length).toBeLessThanOrEqual(1)
+  })
+
+  it('reads the personal store once for the whole vendor sweep, not once per vendor', async () => {
+    const liveVendors = vi.fn(async () => new Set<never>())
+    await resolveWorkspaceCapabilities(
+      {
+        subscriptions: {
+          hasToken: async () => false,
+        } as unknown as CapabilityServices['subscriptions'],
+        personalSubscriptions: {
+          liveVendors,
+        } as unknown as CapabilityServices['personalSubscriptions'],
+      },
+      'ws-1',
+      'usr-1',
+    )
+    expect(liveVendors).toHaveBeenCalledTimes(1)
+    expect(liveVendors).toHaveBeenCalledWith('usr-1')
+  })
+
+  it('does not read the personal store at all for a resolution with no user', async () => {
+    // The case a public-API SYSTEM token takes, and the reason `available` stays false for it: a
+    // personal credential belongs to a person, and there is none here to attribute one to.
+    const liveVendors = vi.fn(async () => new Set<never>())
+    const caps = await resolveWorkspaceCapabilities(
+      {
+        subscriptions: {
+          hasToken: async () => false,
+        } as unknown as CapabilityServices['subscriptions'],
+        personalSubscriptions: {
+          liveVendors,
+        } as unknown as CapabilityServices['personalSubscriptions'],
+      },
+      'ws-1',
+    )
+    expect(liveVendors).not.toHaveBeenCalled()
+    expect([...caps.subscriptionVendors]).toEqual([])
   })
 
   it('leaves a vendor that merely REUSES the claude-code harness to its own credential', async () => {

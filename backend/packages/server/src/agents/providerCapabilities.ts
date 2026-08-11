@@ -152,6 +152,18 @@ export async function resolveWorkspaceCapabilities(
     baseUrlFor ? configured.filter((p) => BASE_URL_OPTIONAL.has(p) || !!baseUrlFor(p)) : configured,
   )
   const subscriptionVendors = new Set<SubscriptionVendor>()
+  // The user's own subscriptions, resolved AT MOST ONCE for the whole vendor sweep and only when a
+  // vendor actually reaches the question. One read rather than one per vendor, because it is five
+  // single-row lookups for an answer `listByUser` already carries whole, on a path both the catalog
+  // render and every run start take; memoised rather than hoisted, so a deployment whose vendors are
+  // all ambient or all pooled still touches the store exactly as little as it did before.
+  let personalVendors: Promise<ReadonlySet<SubscriptionVendor>> | undefined
+  const personalHolds = async (vendor: SubscriptionVendor): Promise<boolean> => {
+    const personal = services.personalSubscriptions
+    if (!userId || !personal) return false
+    personalVendors ??= personal.liveVendors(userId)
+    return (await personalVendors).has(vendor)
+  }
   for (const vendor of ALL_SUBSCRIPTION_VENDORS) {
     // Ambient FIRST, and it short-circuits both credential reads rather than joining them: a
     // vendor the host CLI serves is usable for every initiator of this deployment, including one
@@ -165,11 +177,7 @@ export async function resolveWorkspaceCapabilities(
     const pooled = services.subscriptions
       ? await services.subscriptions.hasToken(workspaceId, vendor)
       : false
-    const personal =
-      !pooled && userId && services.personalSubscriptions
-        ? await services.personalSubscriptions.has(userId, vendor)
-        : false
-    if (pooled || personal) subscriptionVendors.add(vendor)
+    if (pooled || (await personalHolds(vendor))) subscriptionVendors.add(vendor)
   }
   // Local runners are per-user: a model is usable when the resolving user has enabled it.
   // Keyed by the dynamic model id (`"<provider>:<model>"`) so usability is model-granular

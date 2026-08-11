@@ -80,8 +80,23 @@ describe('PublicApiKeyService', () => {
       label: 'external system',
       externalIdentity: null,
       actsAsUserId: null,
+      createdByUserId: null,
       createdAt: record.createdAt,
     })
+  })
+
+  it('carries the MINTER through authentication too, for a key bound to nobody', async () => {
+    const { service } = makeService()
+    const { secret } = await service.issue(
+      { accountId: 'acc_1', workspaceId: 'ws_1', createdByUserId: 'usr_7' },
+      'system token',
+    )
+    const auth = await service.authenticate(secret)
+    // Provenance, and it stays provenance: the key acts for nobody, so nothing it does may reach
+    // that person's credentials. What the minter buys is DESCRIPTION — `GET /api/v1/models` can
+    // say a model this key cannot dispatch to is nonetheless wired, as their own subscription.
+    expect(auth?.createdByUserId).toBe('usr_7')
+    expect(auth?.actsAsUserId).toBeNull()
   })
 
   it('carries the bound user through authentication, so a run can pin it at admission', async () => {

@@ -536,3 +536,32 @@ and each decision mutation), so it appears in `docs/openapi.json` and the genera
 it. Each official client also gained a way to supply it after construction
 (`setPersonalPassword` / `set_personal_password` / `SetPersonalPassword`), because a caller learns it
 is needed from a `428` and rebuilding a configured client to send one header is not a workflow.
+
+1.46.0: one new response field on `GET /api/v1/models`, additive, and a bug fix to the field 1.45.0
+added — which never fired for the model every report of the bug was about.
+
+`userScoped` was derived from the route IN FORCE (`flavor === 'subscription'`), and a model with more
+than one route resolves, when nothing is configured, to the most-preferred route it merely DECLARES.
+`subscription` is last in that order, so `claude-opus` — the built-in Claude preset's own model, which
+also declares OpenRouter — answered `userScoped: false` and read as "no provider is wired". The
+version that shipped the flag to remove that misreport left it in place for the commonest personal
+credential in the product; `claude-sonnet` (subscription-only) was the case it did cover. It is now
+read off what a model DECLARES, so every subscription-reachable row answers true. A consumer that
+branched on it sees more rows flagged, which is the direction the field was for.
+
+`subscriptionConfigured` is the new field: whether a personal subscription for that row's vendor is
+stored for the person the key belongs to (`actsAsUserId` when bound, else its MINTER), `null` when
+there was nobody to ask about. `userScoped` alone tells a caller its answer is unreliable and stops
+there; the operator's next move was to re-mint the token and see what happened, which is what the
+first person to hit this actually did. Existence is a row lookup, so the deployment can answer it
+without the personal password that OPENS the credential — which is precisely what 1.45.0's rejected
+alternative got wrong. That entry concluded "the server cannot know whether one exists without a
+user"; the correction is that an unbound key does have a user for DESCRIPTION purposes, its minter,
+and reading it changes nothing about admission. `available` is still resolved under `actsAsUserId`
+alone, so a system token reads `available: false` beside `subscriptionConfigured: true` and the two
+statements are both true: the model is wired, and this credential may not spend it.
+
+`null` is a third state and not a shy `false`, for the same reason `excludesUserScopedModels` exists:
+"asked, and there is none" is a subscription to connect, where "there was nobody to ask" is a token to
+mint in the app instead of through `POST /api/v1/keys`. A client that collapses them is back to
+sending an operator to a screen that was already correct.

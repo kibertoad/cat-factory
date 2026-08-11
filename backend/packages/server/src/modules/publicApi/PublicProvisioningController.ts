@@ -43,6 +43,7 @@ import type {
   RepoUseByRepoId,
   RiskPoliciesModule,
 } from '@cat-factory/orchestration'
+import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import {
   NotFoundError,
   RateLimitedError,
@@ -164,6 +165,32 @@ export async function readVcsConnection(
  */
 function servesUserScopedModels(container: ServerContainer): boolean {
   return container.localModelEndpoints !== undefined
+}
+
+/**
+ * The subscription vendors the person behind this key holds a live personal credential for, or
+ * `undefined` when there is no person to ask about.
+ *
+ * Two things make this answerable at all, and both are worth stating because the last attempt at
+ * this question concluded it was not. Whether a credential EXISTS is a row lookup: the token is
+ * sealed under the owner's personal password, which opens it and which nothing here holds or wants,
+ * so reporting existence costs no unlock and reveals no secret. And an unbound key does have a
+ * person: its MINTER, which is exactly who the remedy names ("mint the token again with Runs as set
+ * to yourself"). Reading it is provenance used to DESCRIBE, never to authorize — `available` is
+ * still resolved under `actsAsUserId` alone, so an unbound key is told its subscription is there and
+ * still cannot spend it.
+ *
+ * That closes the gap this surface actually shipped with. A system token was told a model on a
+ * subscription it owns is unavailable, with no way to tell that from a model nobody configured, and
+ * the only route to the fix was guessing it.
+ */
+async function personalSubscriptionVendors(
+  container: ServerContainer,
+  auth: PublicApiKeyAuth,
+): Promise<ReadonlySet<string> | undefined> {
+  const owner = auth.actsAsUserId ?? auth.createdByUserId
+  if (!owner || !container.personalSubscriptions) return undefined
+  return container.personalSubscriptions.liveVendors(owner)
 }
 
 /**
@@ -660,25 +687,55 @@ function mergeProvisioning(
 // ---- what this deployment has WIRED -----------------------------------------
 
 /**
- * Project one catalog model onto the two flags that decide whether a run can dispatch.
+ * The subscription vendor a catalog model can be authenticated by, or undefined for one with no
+ * subscription route at all.
  *
- * Both are optional internally (an older catalog omitted them) and REQUIRED here, defaulted at this
- * one seam. That is the honest direction: a caller cannot branch on a field it may not receive, and
- * "absent" for either of these means the same thing as false (not selectable; not policy-blocked).
+ * Read off what the model DECLARES rather than off the flavour in force, and that distinction is
+ * the whole bug this exists to close. `effectiveVariant` falls back to the most-preferred DECLARED
+ * route when nothing is usable, and `subscription` is last in that order — so `claude-opus`, which
+ * also declares OpenRouter, resolves to `openrouter` on a deployment with neither wired. Keying off
+ * the flavour therefore reported the single commonest personal credential in the product as a model
+ * with no provider, which is the misreport `userScoped` was added to remove and did not, for the
+ * default Claude preset's own model.
+ *
+ * The two fields are the catalog's own halves of one fact: `vendor` is set when the subscription
+ * route IS the one in force, `subscription` when it is the alternative attached beside another. One
+ * or the other, never both, so the `??` is a join rather than a preference.
  */
-function toPublicWiredModel(model: ModelCatalog[number]): PublicWiredModel {
+function subscriptionVendorOf(model: ModelCatalog[number]) {
+  return model.vendor ?? model.subscription?.vendor
+}
+
+/**
+ * Project one catalog model onto the flags that decide whether a run can dispatch, and — for one it
+ * cannot — which of the three unrelated fixes applies.
+ *
+ * `available` / `policyBlocked` are optional internally (an older catalog omitted them) and REQUIRED
+ * here, defaulted at this one seam. That is the honest direction: a caller cannot branch on a field
+ * it may not receive, and "absent" for either of these means the same thing as false (not
+ * selectable; not policy-blocked).
+ *
+ * `personalVendors` is the set of vendors the person this key belongs to holds a live subscription
+ * for, or `undefined` when there is no such person to have asked about. That distinction survives
+ * onto the wire as `null` vs `false`, because "we looked and there is none" and "there was nobody to
+ * look for" send an operator to two different screens.
+ */
+function toPublicWiredModel(
+  model: ModelCatalog[number],
+  personalVendors: ReadonlySet<string> | undefined,
+): PublicWiredModel {
+  const vendor = subscriptionVendorOf(model)
   return {
     modelId: model.id,
     label: model.label,
     provider: model.providerLabel,
     available: model.available === true,
     policyBlocked: model.policyBlocked === true,
-    // Read off the ACTIVE flavour, which is the same fact the capability resolver decided
-    // availability from: a `subscription` route is satisfied by a pooled workspace token OR by the
-    // resolving user's own personal subscription, and only the first of those exists for a read
-    // with no user. Every subscription vendor qualifies, not just the individual-only ones — a
-    // dual-mode vendor's model is equally unjudgeable when nobody's personal store was consulted.
-    userScoped: model.flavor === 'subscription',
+    // Every subscription vendor qualifies, not just the individual-only ones: a dual-mode vendor's
+    // model is equally unjudgeable when nobody's personal store was consulted.
+    userScoped: vendor !== undefined,
+    subscriptionConfigured:
+      vendor === undefined || personalVendors === undefined ? null : personalVendors.has(vendor),
   }
 }
 
@@ -753,6 +810,16 @@ function registerWiringRoutes(app: Hono<AppEnv>): void {
   // personal subscription's model is PRESENT but unjudged, which is a fact about that row, and
   // `userScoped` states it there. Reporting the second as the first would claim something is
   // missing while naming nothing, on a deployment where nothing is.
+  //
+  // "Unjudged" was as far as this got, and it was one step short of useful: an operator told a model
+  // could not be judged still has to find out whether their subscription is the thing that would
+  // have judged it, and the only route to that answer was re-minting the token to see. So the row
+  // also carries whether the credential EXISTS for the person this key belongs to
+  // (`subscriptionConfigured`), which is a lookup rather than an unlock and therefore costs no
+  // password. Existence and admission stay separate: the catalog is still resolved under
+  // `actsAsUserId` alone, so an unbound key reads `available: false` beside
+  // `subscriptionConfigured: true` — the model is wired, this credential may not spend it, and the
+  // fix is a personal token rather than a provider key.
   buildHonoRoute(app, listPublicWiredModelsContract, async (c) => {
     const auth = await authorizeOrThrow(c, listPublicWiredModelsContract.minScope)
     const container = c.get('container')
@@ -761,9 +828,10 @@ function registerWiringRoutes(app: Hono<AppEnv>): void {
       auth.workspaceId,
       auth.actsAsUserId ?? undefined,
     )
+    const personalVendors = await personalSubscriptionVendors(container, auth)
     return c.json(
       {
-        models: catalog.map(toPublicWiredModel),
+        models: catalog.map((model) => toPublicWiredModel(model, personalVendors)),
         excludesUserScopedModels: auth.actsAsUserId === null && servesUserScopedModels(container),
       },
       200,

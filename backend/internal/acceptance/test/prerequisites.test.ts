@@ -206,6 +206,30 @@ describe('model-preset', () => {
     expect(unwired.remedy.steps.join('\n')).toContain('Model providers')
   })
 
+  it('names a CONNECTED subscription in the headline rather than calling it unwired', async () => {
+    // The first line is what an operator reads and acts on, so a model the deployment has just
+    // confirmed is wired must not be announced as having no provider. The remedy is a token, and
+    // there is deliberately nothing about wiring a provider underneath it: nothing is unwired.
+    const verdict = await refusal('model-preset', {
+      client: client(
+        [preset()],
+        [
+          {
+            modelId: 'claude-opus',
+            label: 'Claude',
+            available: false,
+            userScoped: true,
+            subscriptionConfigured: true,
+          },
+        ],
+      ),
+    })
+    expect(verdict.problem).toContain('IS connected for this token’s owner')
+    const steps = verdict.remedy.steps.join('\n')
+    expect(steps).toContain('"Runs as" set to yourself')
+    expect(steps).not.toContain('Model providers')
+  })
+
   it('sends a policy-refused model to the policy rather than to a provider key', async () => {
     const verdict = await refusal('model-preset', {
       client: client(

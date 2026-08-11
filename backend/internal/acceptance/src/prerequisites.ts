@@ -296,11 +296,36 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // the account's model-family policy is CONFIGURED, so telling its operator to add a key
       // sends them to change a setting that is already correct.
       const blocked = models.filter((model) => model.policyBlocked)
+      // Models the deployment CONFIRMED are wired to this key's owner as a personal subscription.
+      // A third cause with a third fix, and the only one that says the deployment is already
+      // correct: what is missing is the token's identity, not a credential.
+      const connected = models.filter((model) => model.subscriptionConfigured === true)
       const catalogRead = publicApiRead(
         config,
         '/models',
         "list the catalog with each entry's `available` and `policyBlocked` flags",
       )
+      if (connected.length > 0) {
+        return unsatisfied(
+          `no model in the ${models.length}-entry catalog is selectable by THIS token, but ` +
+            `${connected.map((model) => `'${model.modelId}'`).join(', ')} ` +
+            `${connected.length === 1 ? 'runs' : 'run'} on a subscription that is connected for ` +
+            `this token’s owner. Nothing is missing from the deployment: a system token may not ` +
+            `spend a credential that belongs to a person.`,
+          {
+            steps: [
+              'Mint the token again in the app under Integrations → API access tokens with ' +
+                '"Runs as" set to yourself, and export it as CAT_FACTORY_API_KEY.',
+              'The pass then asks for your personal password once, at the moment a run needs it, ' +
+                'and stores it nowhere: not in .env, not in the ledger, not in a log line.',
+              'Adding a provider key would also work and is the wrong fix here — it would pay per ' +
+                'token for a model your subscription already covers.',
+            ],
+            commands: [catalogRead],
+            docs: 'backend/docs/individual-subscription-usage.md',
+          },
+        )
+      }
       return blocked.length === models.length && models.length > 0
         ? unsatisfied(
             `all ${models.length} catalog models are blocked by the account's model-family policy`,
@@ -402,17 +427,20 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       }
       if (!base.available) {
         // WHY it is not selectable, in the HEADLINE and not only three bullets down. The first line
-        // is what an operator reads and acts on, so a model that may already be wired as somebody's
+        // is what an operator reads and acts on, so a model that is already wired as somebody's
         // personal subscription must not be announced as having no provider: that is the misreport
         // this whole path exists to remove, and burying the correction in `steps` leaves it intact
-        // where it is read. `userScoped` is the row's own answer, so it names THIS model rather
+        // where it is read. Both signals are the ROW's own answers, so they name THIS model rather
         // than inferring from a flag about the whole response.
         const cause = base.policyBlocked
           ? ' (refused by the account model-family policy)'
-          : base.userScoped
-            ? ' (its credential belongs to a person, and this system token resolved none, so ' +
-              'whether it is wired is unknown here)'
-            : ' (no provider wired for it)'
+          : base.subscriptionConfigured === true
+            ? ' (it runs on a subscription that IS connected for this token’s owner, and this ' +
+              'token is not bound to spend it)'
+            : base.userScoped
+              ? ' (its credential belongs to a person, and this token resolved none, so whether ' +
+                'it is wired is unknown here)'
+              : ' (no provider wired for it)'
         return unsatisfied(
           `preset '${preset.name}' runs on '${base.label}' (${base.modelId}), which is in the ` +
             `catalog but not selectable${cause}`,
@@ -423,26 +451,38 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
                     "permit its family on the account's model policy, or pin a preset whose model " +
                     'the policy already permits.',
                 ]
-              : [
-                  // Stated FIRST when it applies, because it is the one cause whose fix is not
-                  // "wire something": the provider may already be wired, as a credential that
-                  // belongs to a person and that a system token is not allowed to see. Either
-                  // signal can say so — the row for a personal subscription that IS listed, the
-                  // response flag for a locally-run endpoint that is not.
-                  ...(base.userScoped || excludesUserScopedModels
-                    ? [
-                        `'${base.modelId}' may already be wired as a PERSONAL subscription, which ` +
-                          'this system token cannot see. If it is yours, mint the token again ' +
-                          'under Integrations → API access tokens with "Runs as" set to yourself; ' +
-                          'the pass then asks for your personal password once, when a run needs ' +
-                          'it, and stores it nowhere.',
-                      ]
-                    : []),
-                  `In the SPA: Model providers, and wire a provider for '${base.modelId}' (a ` +
-                    'provider API key, or a connected subscription).',
-                  'Or pin a preset whose base model is already selectable: ' +
-                    `${describeAvailablePresets(presets, models)}.`,
-                ],
+              : // The one cause whose fix is not "wire something", and the deployment has CONFIRMED
+                // it: the subscription is stored for this key's owner and only the key's identity
+                // is in the way. Nothing else is worth offering underneath that, because nothing
+                // else is wrong — an alternative preset here would talk an operator out of the
+                // model they deliberately chose.
+                base.subscriptionConfigured === true
+                ? [
+                    `'${base.modelId}' is already wired, as a PERSONAL subscription belonging to ` +
+                      'the person this key was minted by. A system token may not spend one, which ' +
+                      'is the whole of the problem: the deployment needs no change.',
+                    'Mint the token again under Integrations → API access tokens with "Runs as" ' +
+                      'set to yourself, and export it as CAT_FACTORY_API_KEY. The pass then asks ' +
+                      'for your personal password once, when a run needs it, and stores it nowhere.',
+                  ]
+                : [
+                    // Stated FIRST when it applies: the provider MAY already be wired, as a
+                    // credential belonging to a person this read could not resolve. Either signal
+                    // can say so — the row for a personal subscription that IS listed, the
+                    // response flag for a locally-run endpoint that is not.
+                    ...(base.userScoped || excludesUserScopedModels
+                      ? [
+                          `'${base.modelId}' may be wired as a PERSONAL subscription this token ` +
+                            'cannot see. Mint the token IN THE APP (Integrations → API access ' +
+                            'tokens) with "Runs as" set to yourself; the pass then asks for your ' +
+                            'personal password once, when a run needs it, and stores it nowhere.',
+                        ]
+                      : []),
+                    `In the SPA: Model providers, and wire a provider for '${base.modelId}' (a ` +
+                      'provider API key, or a connected subscription).',
+                    'Or pin a preset whose base model is already selectable: ' +
+                      `${describeAvailablePresets(presets, models)}.`,
+                  ],
             commands: [publicApiRead(config, '/models', "read each entry's available flag back")],
             docs: 'backend/docs/model-support.md',
           },

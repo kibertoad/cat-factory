@@ -566,8 +566,29 @@ export const publicWiredModelSchema = v.object({
    * provider is wired" and takes the opposite remedy: bind a key to the subscription owner (or
    * start the run from the app) rather than add a provider key. A caller cannot derive this from
    * the rest of the row, which is why it is stated rather than left to be inferred from a label.
+   *
+   * True where the model DECLARES a subscription route, not merely where one is the route in
+   * force. A model reachable both by subscription and by a metered gateway resolves, with nothing
+   * configured, to the gateway — so reading the route in force would report the commonest personal
+   * credential of all (`claude-opus` on a Claude subscription) as plainly unwired, which is the
+   * exact misreport this field was added to remove.
    */
   userScoped: v.boolean(),
+  /**
+   * Whether a personal subscription for this model's vendor IS stored for the person this key
+   * belongs to: its `actsAsUserId` when bound, else its minter. `null` when the question was not
+   * answered at all — there is no such person (a key provisioned headlessly through
+   * `POST /api/v1/keys`), the deployment stores no personal subscriptions, or the row is not
+   * `userScoped` and so has no vendor to ask about. `null` is NOT `false` and must not be read as
+   * one: "nobody was asked" and "asked, and there is none" send an operator to different screens.
+   *
+   * Only ever a statement about EXISTENCE, which is a row lookup: opening the credential needs the
+   * owner's personal password, and nothing here holds or wants one. That is what lets a system
+   * token be told the truth about a model it cannot run — `available: false` with
+   * `subscriptionConfigured: true` means the subscription is there and this token is not bound to
+   * it, so the remedy is to mint a personal key rather than to wire a provider.
+   */
+  subscriptionConfigured: v.nullable(v.boolean()),
 })
 export type PublicWiredModel = v.InferOutput<typeof publicWiredModelSchema>
 
@@ -583,11 +604,12 @@ export type PublicWiredModel = v.InferOutput<typeof publicWiredModelSchema>
  * conflation `policyBlocked` exists to prevent, one level up: a third state, stated rather than
  * collapsed into a false.
  *
- * It answers for the models this read OMITS. The ones it lists but cannot judge are the row-level
- * `userScoped` flag's job, and the split is deliberate: a personal subscription's model IS in this
- * catalog (as unavailable), so reporting it here would say "something is missing" about an entry
- * the caller can see, while saying nothing about WHICH. A caller diagnosing one model wants the
- * row; a caller deciding whether the whole answer is complete wants the flag.
+ * It answers for the models this read OMITS. The ones it lists but could not run are the row-level
+ * `userScoped` / `subscriptionConfigured` pair's job, and the split is deliberate: a personal
+ * subscription's model IS in this catalog (as unavailable), so reporting it here would say
+ * "something is missing" about an entry the caller can see, while saying nothing about WHICH. A
+ * caller diagnosing one model wants the row; a caller deciding whether the whole answer is complete
+ * wants the flag.
  */
 export const publicWiredModelListSchema = v.object({
   models: v.array(publicWiredModelSchema),

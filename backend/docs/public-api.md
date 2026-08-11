@@ -76,13 +76,13 @@ The create body also takes `actsAsSelf` (optional, default `false`), which picks
 IDENTITIES a key can have. This is a different question from `scope`: scope is what the key may DO,
 identity is WHOSE credentials, spend and merge-policy role its runs answer to.
 
-|                                                            | **System token** (`actsAsSelf: false`, the default)          | **Personal token** (`actsAsSelf: true`) |
-| ---------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------- |
-| `actsAsUserId`                                             | `null`                                                       | the minter's own `usr_*`                |
-| Runs it starts are attributed to                           | nobody                                                       | the person who minted it                |
-| Its runs are admitted under the merge policy of            | no role (the preset's base rules)                            | that person's workspace role            |
-| A task on an individual-usage model (Claude / Codex / GLM) | refused, `409 individual_model_unsupported`                  | runs, once unlocked per call            |
-| `GET /api/v1/models`                                       | cannot judge a `userScoped` row; omits locally-run endpoints | resolves under that user                |
+|                                                            | **System token** (`actsAsSelf: false`, the default)                                                               | **Personal token** (`actsAsSelf: true`) |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `actsAsUserId`                                             | `null`                                                                                                            | the minter's own `usr_*`                |
+| Runs it starts are attributed to                           | nobody                                                                                                            | the person who minted it                |
+| Its runs are admitted under the merge policy of            | no role (the preset's base rules)                                                                                 | that person's workspace role            |
+| A task on an individual-usage model (Claude / Codex / GLM) | refused, `409 individual_model_unsupported`                                                                       | runs, once unlocked per call            |
+| `GET /api/v1/models`                                       | cannot RUN a `userScoped` row (but reports whether the minter's subscription exists); omits locally-run endpoints | resolves under that user                |
 
 **Prefer a system token**: it is the narrower credential, and a leak cannot spend one person's
 subscription because no person is attached. Mint a personal token only where the runs genuinely are
@@ -1184,16 +1184,32 @@ missing from this answer in two different ways.
 
 `userScoped: true` on a ROW says that model runs on a subscription vendor, which any member may hold
 their own personal subscription for. A token bound to nobody consults nobody's personal store, so
-`available: false` on such a row means "nobody's credential was consulted", not "no provider is
-wired". Treat it as unanswerable: the remedy is to mint a [personal token](#1-mint-a-key) bound to
-the subscription's owner, and the same read then resolves under that user.
+`available: false` on such a row is never "no provider is wired". It is true wherever the model
+DECLARES a subscription route, not merely where that route is the one in force: a model reachable
+both by subscription and by a metered gateway resolves to the gateway with nothing configured, so
+reading the route in force would report the commonest personal credential of all (`claude-opus` on a
+Claude subscription) as plainly unwired.
+
+`subscriptionConfigured` then says whether the credential is actually THERE, for the person the key
+belongs to — its `actsAsUserId` when bound, else its minter. `true` is the case worth acting on: the
+subscription is connected and this token simply may not spend it, so the remedy is a
+[personal token](#1-mint-a-key) and nothing about the deployment needs changing. `false` means that
+person holds none, and a bound token would fare no better. `null` means the question was not answered
+at all: no such person (a key provisioned headlessly through `POST /api/v1/keys`), no personal-
+subscription store on the deployment, or a row with no vendor to ask about. Read `null` as `false`
+and you are back to telling an operator to configure something that may already be correct.
+
+Existence is a row lookup, which is why the answer costs nothing: the credential is sealed under its
+owner's personal password, that password opens it, and this read neither holds nor wants one. So a
+system token can be told the truth about a model it cannot run, and `available` stays resolved under
+`actsAsUserId` alone — the two facts are reported separately because they are separate.
 
 `excludesUserScopedModels: true` on the RESPONSE says this answer OMITTED models it could not
 enumerate at all: per-user locally-run endpoints, which live on one developer's machine. Those never
 appear as rows, so on a deployment wired that way alone the catalog looks empty rather than
 unavailable, and no token can reach them — the fix is a run started by that user in the app.
 
-The split is deliberate: a listed-but-unjudged model is named by its own row, while a model that is
+The split is deliberate: a listed-but-unrunnable model is named by its own row, while a model that is
 not there at all can only be reported once for the whole answer. Reading either as "no provider is
 wired" is what sends an operator to configure a model their workspace already runs every day; reading
 the response flag as if it applied to every unavailable row is the same mistake with the sign

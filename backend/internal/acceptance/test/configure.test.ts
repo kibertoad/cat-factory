@@ -377,6 +377,81 @@ describe('configure: adopting the repositories', () => {
     expect(printed).toContain('what this connection CAN reach is unknown')
   })
 
+  it('withholds a creation link on GitLab rather than linking gitlab.com', async () => {
+    // `GET /api/v1/vcs/connection` publishes no instance URL, so the only link this code could
+    // build for a self-hosted GitLab is a stranger's server.
+    const { io } = await run({
+      client: fakeClient({
+        connection: async () => ({
+          accountLogin: 'acme',
+          provider: 'gitlab' as const,
+          method: 'pat' as const,
+        }),
+        link: async () => ({ status: 'unreachable' }),
+      }),
+      script: { secrets: [TOKEN], confirms: { 'Re-check': false } },
+    })
+    expect(io.opened).toEqual([])
+    expect(io.output.join('\n')).toContain('on your provider')
+  })
+
+  it('writes the .env even with a repository still unreachable, and says the gate will refuse', async () => {
+    // Nine correct answers are worth keeping. The prerequisite gate names the tenth again with its
+    // own remedy, so refusing here would only make the operator retype the rest.
+    const { outcome, written, io } = await run({
+      client: fakeClient({ link: async () => ({ status: 'unreachable' }) }),
+      script: { secrets: [TOKEN], confirms: { 'Re-check': false } },
+    })
+    expect(outcome.ok).toBe(true)
+    expect(written).toContain('ACCEPTANCE_BACKEND_REPO=cf-acc-catalog-api')
+    expect(io.output.join('\n')).toContain("'target-repos' prerequisite will refuse")
+  })
+
+  it('refuses to write a file with no repository owner in it', async () => {
+    // `Io.question` ends with `defaultValue ?? ''`, so an unanswered prompt with nothing stored is an
+    // EMPTY owner. Written, that is a `.env` whose repository matches are against `''` and which
+    // `resolveConfig` then refuses as unset: the command's whole job, reported as done.
+    const { outcome, written, io } = await run({
+      client: fakeClient({ connection: async () => null }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(outcome.ok).toBe(false)
+    expect(written).toBeNull()
+    expect(io.output.join('\n')).toContain('Nothing was written')
+  })
+
+  it('reports a repository whose service is homed on ANOTHER board as unusable, not as ready', async () => {
+    // `serviceId: null` with `linkedElsewhere: true` is the contract's honest answer for a frame this
+    // key cannot address. Reporting only the id would call it visible-and-free and leave the 409 for
+    // the pass.
+    const { io } = await run({
+      client: fakeClient({
+        link: async (_owner, name) =>
+          name === 'cf-acc-catalog-api'
+            ? adopted(name, {
+                repo: {
+                  owner: 'acme',
+                  name,
+                  serviceId: null,
+                  linkedElsewhere: true,
+                  monorepo: false,
+                },
+              })
+            : adopted(name),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    const printed = io.output.join('\n')
+    expect(printed).toContain('repo_service_homed_elsewhere')
+    expect(printed).not.toContain('cf-acc-catalog-api is adopted by this workspace')
+  })
+})
+
+// Its own block, and not only for the line budget: every test here is about ONE join — the preset
+// library against the model catalog — where the repository tests above are about a write. The
+// question they all answer is what a menu may claim about a model nobody can dispatch to, which is
+// where every misreport in this command's history has lived.
+describe('configure: the model preset', () => {
   it('lists presets unmarked when the catalog is unreadable, rather than marked unavailable', async () => {
     // "We could not check" and "no provider is wired" are opposite facts, and only the second would
     // stop an operator picking the preset that actually works.
@@ -411,21 +486,87 @@ describe('configure: adopting the repositories', () => {
     // workspace whose Claude runs come from a stored personal subscription got "no provider wired
     // for it" against the model it uses every day, and the fix it named (add a provider key) was
     // for a deployment that was already configured correctly.
+    //
+    // `subscriptionConfigured: null` is the deployment saying it had NOBODY to ask about, which is
+    // as far as it can go for a key nobody minted in the app.
     const { io } = await run({
       client: fakeClient({
         models: async () => ({
-          models: [{ modelId: 'claude-opus', available: false, userScoped: true }],
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              userScoped: true,
+              subscriptionConfigured: null,
+            },
+          ],
           excludesUserScopedModels: false,
         }),
       }),
       script: { secrets: [TOKEN] },
     })
     expect(io.offered).toEqual([
-      'Claude Opus 5 (claude-opus) (not visible to this system token) [workspace default]',
+      'Claude Opus 5 (claude-opus) (not visible to this token) [workspace default]',
     ])
     // And the remedy is stated once, in full, rather than left for the operator to infer from a
     // parenthetical: it is a different token, not a different deployment setting.
     expect(io.output.join('\n')).toContain('"Runs as" set to yourself')
+  })
+
+  it('says the subscription IS connected when the deployment resolved one for this key’s owner', async () => {
+    // The state the whole read exists to reach, and the one an operator previously arrived at only
+    // by re-minting the token to see what happened. Whether the credential EXISTS is a row lookup,
+    // so the deployment can answer it without the personal password that would OPEN it — and the
+    // answer turns a diagnosis ("this cannot be judged") into an instruction ("mint it bound").
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              userScoped: true,
+              subscriptionConfigured: true,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (your subscription is connected; this token is not bound to ' +
+        'spend it) [workspace default]',
+    ])
+    const said = io.output.join('\n')
+    expect(said).toContain('Nothing is missing from the deployment')
+    expect(said).toContain('"Runs as" set to yourself')
+  })
+
+  it('does not claim a subscription that the deployment looked for and did not find', async () => {
+    // `false` is an ANSWER, not the absence of one: the owner is known and holds nothing for this
+    // vendor, so re-minting the token bound would change nothing and the remedy is a credential.
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              userScoped: true,
+              subscriptionConfigured: false,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (runs on a personal subscription; this token’s owner has none) ' +
+        '[workspace default]',
+    ])
+    expect(io.output.join('\n')).not.toContain('Nothing is missing from the deployment')
   })
 
   it('still calls a genuinely unwired model unwired, on a deployment that withholds others', async () => {
@@ -476,36 +617,6 @@ describe('configure: adopting the repositories', () => {
     expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_claude')
   })
 
-  it('withholds a creation link on GitLab rather than linking gitlab.com', async () => {
-    // `GET /api/v1/vcs/connection` publishes no instance URL, so the only link this code could
-    // build for a self-hosted GitLab is a stranger's server.
-    const { io } = await run({
-      client: fakeClient({
-        connection: async () => ({
-          accountLogin: 'acme',
-          provider: 'gitlab' as const,
-          method: 'pat' as const,
-        }),
-        link: async () => ({ status: 'unreachable' }),
-      }),
-      script: { secrets: [TOKEN], confirms: { 'Re-check': false } },
-    })
-    expect(io.opened).toEqual([])
-    expect(io.output.join('\n')).toContain('on your provider')
-  })
-
-  it('writes the .env even with a repository still unreachable, and says the gate will refuse', async () => {
-    // Nine correct answers are worth keeping. The prerequisite gate names the tenth again with its
-    // own remedy, so refusing here would only make the operator retype the rest.
-    const { outcome, written, io } = await run({
-      client: fakeClient({ link: async () => ({ status: 'unreachable' }) }),
-      script: { secrets: [TOKEN], confirms: { 'Re-check': false } },
-    })
-    expect(outcome.ok).toBe(true)
-    expect(written).toContain('ACCEPTANCE_BACKEND_REPO=cf-acc-catalog-api')
-    expect(io.output.join('\n')).toContain("'target-repos' prerequisite will refuse")
-  })
-
   it('preselects a preset whose model is wired over the workspace default that is not', async () => {
     const { written, io } = await run({
       client: fakeClient({
@@ -525,45 +636,6 @@ describe('configure: adopting the repositories', () => {
     })
     expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_kimi')
     expect(io.prompted.join('\n')).toContain('Model preset')
-  })
-
-  it('refuses to write a file with no repository owner in it', async () => {
-    // `Io.question` ends with `defaultValue ?? ''`, so an unanswered prompt with nothing stored is an
-    // EMPTY owner. Written, that is a `.env` whose repository matches are against `''` and which
-    // `resolveConfig` then refuses as unset: the command's whole job, reported as done.
-    const { outcome, written, io } = await run({
-      client: fakeClient({ connection: async () => null }),
-      script: { secrets: [TOKEN] },
-    })
-    expect(outcome.ok).toBe(false)
-    expect(written).toBeNull()
-    expect(io.output.join('\n')).toContain('Nothing was written')
-  })
-
-  it('reports a repository whose service is homed on ANOTHER board as unusable, not as ready', async () => {
-    // `serviceId: null` with `linkedElsewhere: true` is the contract's honest answer for a frame this
-    // key cannot address. Reporting only the id would call it visible-and-free and leave the 409 for
-    // the pass.
-    const { io } = await run({
-      client: fakeClient({
-        link: async (_owner, name) =>
-          name === 'cf-acc-catalog-api'
-            ? adopted(name, {
-                repo: {
-                  owner: 'acme',
-                  name,
-                  serviceId: null,
-                  linkedElsewhere: true,
-                  monorepo: false,
-                },
-              })
-            : adopted(name),
-      }),
-      script: { secrets: [TOKEN] },
-    })
-    const printed = io.output.join('\n')
-    expect(printed).toContain('repo_service_homed_elsewhere')
-    expect(printed).not.toContain('cf-acc-catalog-api is adopted by this workspace')
   })
 })
 
