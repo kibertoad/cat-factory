@@ -425,6 +425,11 @@ for the same reason a `fork` is: the choice belongs to a person.
 **3. A wait that expires must say what it last saw.** The vitest timeout is disabled on purpose so
 that `src/deadline.ts` fires first: "timed out after 5400000ms" is true and useless, where "step 3
 `coder` was still working, 4/9 subtasks" separates a parked run from a wedged one from a slow one.
+A wait whose last observation is itself GRADED may hand it back instead of throwing, and
+`waitForIssueSettled` is the one that does: the checks render each claim with its own detail, which
+is more than the single line an expiry message carries. What is banned is ending a wait with
+neither, and a wait must poll for everything its grade asserts or it hands the grader a half-written
+observation and fails what was working.
 
 **4. Every failing claim is reported, not just the first.** A run that both skipped its environment
 and failed CI is one story, and learning the second half on tomorrow's re-run wastes a day per bug.
