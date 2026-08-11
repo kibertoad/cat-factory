@@ -20,8 +20,10 @@
 // self-hosted deployment is a stranger's server to file an issue on. What is missing is one
 // configured URL, not a client, and the prerequisite says so.
 
+import { describeConnectionFailure } from '@cat-factory/kernel'
 import type { PrReportRunProvider } from '@cat-factory/sdk'
 import type { AcceptanceConfig } from './config.ts'
+import { describeThrown } from './operatorText.ts'
 
 /** One repository, as both the provider's API and `GET /api/v1/repos` name it. */
 export type IssueTarget = { owner: string; repo: string }
@@ -57,7 +59,17 @@ export type IssueCredentialVerdict =
   | { status: 'unauthenticated' }
   | { status: 'unreachable' }
   | { status: 'issues-disabled' }
-  | { status: 'unreadable'; detail: string }
+  | {
+      status: 'unreadable'
+      /** What happened, read from the whole cause chain rather than the outermost link. */
+      detail: string
+      /**
+       * What to do about it, when the cause is one kernel recognises: relayed rather than
+       * paraphrased, for the reason `probeFailure.ts` relays the same sentences. Absent for an
+       * unrecognised failure, because a guessed remedy sends the reader somewhere wrong.
+       */
+      hint?: string
+    }
 
 /** The reporter's four calls against one provider. */
 export type IssueApi = {
@@ -160,14 +172,43 @@ function createGitHubIssueApi(options: IssueApiOptions): IssueApi {
       } catch (error) {
         // A transport failure says nothing about the credential OR the repository, and reporting it
         // as either would send someone to re-mint a token because their proxy was down.
-        return { status: 'unreadable', detail: describe(error) }
+        //
+        // Described HERE rather than left to escape, and that placement is the point: this is the
+        // one prerequisite whose calls leave the deployment, so the gate's own probe context (the
+        // backend) cannot name this address. Through kernel, for the reason `probeFailure.ts` uses
+        // it: `error.message` on this is undici's contentless `fetch failed`, identical for a DNS
+        // typo, a refused connection, an untrusted certificate and an Enterprise Server that is down.
+        const { detail, hint } = describeConnectionFailure(error, {
+          subject: "the provider's REST API",
+          target: options.apiBaseUrl,
+        })
+        return { status: 'unreadable', detail, ...(hint ? { hint } : {}) }
       }
       if (response.status === 401) return { status: 'unauthenticated' }
       if (response.status === 404) return { status: 'unreachable' }
       if (!response.ok) {
         return { status: 'unreadable', detail: `HTTP ${response.status} reading the repository` }
       }
-      const body = (await response.json()) as { has_issues?: boolean }
+      let body: { has_issues?: boolean }
+      try {
+        body = (await response.json()) as { has_issues?: boolean }
+      } catch (error) {
+        // A 2xx whose body is not JSON is not evidence about the credential either, and it used to
+        // sit OUTSIDE the try above and escape the check: the gate then described a failure at the
+        // provider against the DEPLOYMENT's address, curl command included. An intercepting proxy or
+        // a captive portal answering in the API's place is the usual cause.
+        return {
+          status: 'unreadable',
+          // The address is not repeated: the verdict that renders this already opens with it, as it
+          // does for its `HTTP <status> reading the repository` sibling above.
+          detail:
+            `HTTP ${response.status} with a body that is not the JSON this API documents: ` +
+            describeThrown(error),
+          hint:
+            'Something other than the provider API answered: an intercepting proxy, a captive ' +
+            'portal, or ACCEPTANCE_VCS_API_BASE naming a web UI rather than a REST base.',
+        }
+      }
       // A repository with Issues switched off accepts no issue at all, and the refusal that arrives
       // at file time (a 410) reads like a permission problem. It is knowable here for free.
       return body.has_issues === false ? { status: 'issues-disabled' } : { status: 'ready' }
@@ -224,8 +265,4 @@ export function slug(target: IssueTarget): string {
 async function failure(response: Response, what: string): Promise<Error> {
   const body = await response.text().catch(() => '(unreadable body)')
   return new Error(`The provider answered HTTP ${response.status} ${what}: ${body.slice(0, 500)}`)
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

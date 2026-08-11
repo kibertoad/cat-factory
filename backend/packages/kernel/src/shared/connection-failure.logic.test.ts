@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { connectionFailureResult, describeConnectionFailure } from './connection-failure.logic.js'
+import {
+  connectionFailureHint,
+  connectionFailureResult,
+  describeConnectionFailure,
+} from './connection-failure.logic.js'
 
 /**
  * Build the shape Node/undici actually throws from `fetch`: a generic `TypeError` wrapper whose
@@ -264,5 +268,31 @@ describe('connectionFailureResult', () => {
       message: 'Environment base URL is not permitted',
       failureCause: 'unknown',
     })
+  })
+})
+
+describe('connectionFailureHint', () => {
+  it('is the same remedy the walk would have produced, for a cause the caller classified', () => {
+    // The seam a client with its OWN deadline needs: it knows the class, and a second copy of the
+    // sentence written at that call site would be the drift this module exists to prevent.
+    const hinted = connectionFailureHint('timeout', { subject: 'the cat-factory backend' })
+    const walked = describeConnectionFailure(
+      Object.assign(new Error('read timed out'), { code: 'ETIMEDOUT' }),
+      { subject: 'the cat-factory backend' },
+    )
+    expect(hinted).toBe(walked.hint)
+    expect(hinted).toContain('firewall')
+  })
+
+  it('answers undefined for `unknown`, so a guessed remedy stays unrepresentable', () => {
+    expect(
+      connectionFailureHint('unknown', { target: 'https://backend.example.com' }),
+    ).toBeUndefined()
+  })
+
+  it('scrubs the target it names, exactly as the walked hint does', () => {
+    expect(
+      connectionFailureHint('dns', { target: 'https://svc:hunter2@backend.example.com' }),
+    ).toContain('https://svc:[REDACTED]@backend.example.com')
   })
 })

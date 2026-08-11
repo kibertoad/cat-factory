@@ -18,7 +18,7 @@
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { getErrorMessage } from '@cat-factory/kernel'
+import { describeThrown } from './operatorText.ts'
 
 /** What kind of thing happened. Bounded, because `status.ts` reduces on it. */
 export type JournalEventKind =
@@ -101,8 +101,7 @@ export class Journal {
       this.#broken = true
       console.warn(
         `  warning: the progress journal at ${this.#path} could not be written, so this pass ` +
-          `will not be watchable with 'pnpm run status': ` +
-          `${getErrorMessage(error) || 'no reason reported'}`,
+          `will not be watchable with 'pnpm run status': ${describeThrown(error)}`,
       )
     }
   }

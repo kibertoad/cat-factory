@@ -576,11 +576,29 @@ describe('issue-credential', () => {
   it('reports an unreadable probe as UNKNOWN rather than as a bad credential', async () => {
     const verdict = await unreadable('issue-credential', {
       client: client('github'),
-      issueApiFor: issueApiFor({ status: 'unreadable', detail: 'fetch failed' }),
+      issueApiFor: issueApiFor({
+        status: 'unreadable',
+        detail: 'connect ECONNREFUSED 140.82.121.6:443',
+      }),
     })
-    expect(verdict.probeFailure).toContain('fetch failed')
+    expect(verdict.probeFailure).toContain('connect ECONNREFUSED')
     // The one override that turns this into a fix rather than a shrug.
     expect(verdict.remedy.steps.join('\n')).toContain('ACCEPTANCE_VCS_API_BASE')
+  })
+
+  it('leads with the probe’s own hint, which is the remedy for what actually happened', async () => {
+    // The probe describes its provider-facing failure through kernel (it is the one check that
+    // leaves the deployment, so the gate's probe context cannot), and its per-cause sentence is
+    // strictly more than the candidates this remedy lists. Relayed, never paraphrased.
+    const verdict = await unreadable('issue-credential', {
+      client: client('github'),
+      issueApiFor: issueApiFor({
+        status: 'unreadable',
+        detail: 'self-signed certificate',
+        hint: 'The provider presented a TLS certificate this deployment does not trust.',
+      }),
+    })
+    expect(verdict.remedy.steps[0]).toContain('TLS certificate')
   })
 
   it('does not claim a verdict when nothing is connected, since the provider decides the API', async () => {

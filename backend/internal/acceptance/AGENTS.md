@@ -79,15 +79,15 @@ every CI lane.
 
 **Where things live**
 
-| File                           | What                                                                                               |
-| ------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `acceptance/00-preflight`      | Reports each prerequisite as its own test. Creates nothing.                                        |
-| `acceptance/01-adopt-…`        | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.   |
-| `acceptance/02-feature-…`      | `pl_build` across both services; environment / CI / merge evidence.                                |
-| `acceptance/03-investigate-…`  | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                   |
-| `acceptance/04-issue-intake-…` | An issue filed as the REPORTER, delivered from its `ticket` link, and closed by the writeback.     |
-| `src/`                         | The harness, plus `configure`. Per-file roles are tabled in the README.                            |
-| `test/`                        | Unit tests for the pure logic (config, gate, ledger, journal, status, evidence, waits, configure). |
+| File                           | What                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `acceptance/00-preflight`      | Reports each prerequisite as its own test. Creates nothing.                                                        |
+| `acceptance/01-adopt-…`        | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.                   |
+| `acceptance/02-feature-…`      | `pl_build` across both services; environment / CI / merge evidence.                                                |
+| `acceptance/03-investigate-…`  | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                                   |
+| `acceptance/04-issue-intake-…` | An issue filed as the REPORTER, delivered from its `ticket` link, and closed by the writeback.                     |
+| `src/`                         | The harness, plus `configure`. Per-file roles are tabled in the README.                                            |
+| `test/`                        | Unit tests for the pure logic (config, gate, probe failures, ledger, journal, status, evidence, waits, configure). |
 
 **The rules the specs are written to** (each expanded in the README, and each the reason a
 particular file exists):
@@ -95,11 +95,19 @@ particular file exists):
 0. **Refuse before spending, with the fix attached.** `src/prerequisites.ts` runs in EVERY spec's
    `beforeAll`, not just spec 00: a resumed pass starts where it stopped, so a gate only the first
    file mounts is one the resume path skips. An unreadable probe is its own verdict, never read as
-   "unmet", and it NAMES its cause: `src/probeFailure.ts` splits "never answered" (classified through
-   kernel's `describeConnectionFailure`, because `error.message` renders every transport failure this
-   gate can hit as undici's contentless `fetch failed`) from "answered with a refusal" (the SDK's
-   typed status, `code` and request id, where an ENVELOPE-LESS 404 means an unmatched route: a
-   deployment older than the suite, or a base URL naming the SPA).
+   "unmet", and it NAMES its cause: `src/probeFailure.ts` is a discriminated verdict over three
+   states. "Never answered" is classified through kernel's `describeConnectionFailure` (because
+   `error.message` renders every transport failure this gate can hit as undici's contentless `fetch
+failed`), with the SDK's own deadline corrected to `timeout` since its abort marker is NAMED
+   `AbortError`. "Answered with a refusal" carries the SDK's typed status, `code` and request id
+   (an ENVELOPE-LESS 404 means an unmatched route: a deployment older than the suite, or a base URL
+   naming the SPA), and the two unauthenticated root reads answer here too, through
+   `DeploymentAnswerError`, which is why a status must not be flattened into a message. "Answered by
+   something that is not the deployment" is a 2xx whose body is not JSON at all, which is the SPA or
+   a gateway and the one answered failure that reopens the ADDRESS.
+   A prerequisite that reaches a DIFFERENT host describes its own failures where it calls
+   (`issue-credential`, through the same kernel describer): the runner's one probe context names the
+   deployment, and a value cannot be true for two hosts.
    Every negative verdict carries a `Remedy` (numbered steps, pasteable commands, a doc),
    built by the check from what it just READ, so the command holds the real workspace id or account
    rather than a hole. A fix with no CLI names the screen and offers the read that confirms it:

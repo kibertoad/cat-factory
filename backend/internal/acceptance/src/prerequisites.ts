@@ -48,7 +48,9 @@ import {
 import type { DeploymentApi } from './deploymentApi.ts'
 import type { AcceptanceConfig } from './config.ts'
 import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3s.ts'
+import { shellQuoted } from './operatorText.ts'
 import type { Prerequisite, PrerequisiteVerdict, Remedy, RemedyCommand } from './preflight.ts'
+import { baseUrlStep } from './probeFailure.ts'
 import { usablePresets } from './presets.ts'
 import { describeKeyProblem, type KeyProblem, type PublicIdentity } from './publicApi.ts'
 import { type IssueApi, issueTarget, slug, UNSUPPORTED_PROVIDER_REASON } from './vcsIssues.ts'
@@ -101,7 +103,9 @@ const K3S_DOC = 'backend/docs/local-k3s-environments.md'
  */
 function publicApiRead(config: AcceptanceConfig, path: string, purpose: string): RemedyCommand {
   return {
-    run: `curl -sS -H "Authorization: Bearer $CAT_FACTORY_API_KEY" '${config.baseUrl}/api/v1${path}'`,
+    run:
+      `curl -sS -H "Authorization: Bearer $CAT_FACTORY_API_KEY" ` +
+      shellQuoted(`${config.baseUrl}/api/v1${path}`),
     purpose,
   }
 }
@@ -125,7 +129,8 @@ function publicApiWrite(
   return {
     run:
       `curl -sS -X ${method} -H "Authorization: Bearer $CAT_FACTORY_API_KEY" ` +
-      `-H 'content-type: application/json' -d '${body}' '${config.baseUrl}/api/v1${path}'`,
+      `-H 'content-type: application/json' -d '${body}' ` +
+      shellQuoted(`${config.baseUrl}/api/v1${path}`),
     purpose,
   }
 }
@@ -260,13 +265,16 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         return unsatisfied(`GET /health answered '${health.status}' rather than 'ok'`, {
           steps: [
             'Read the deployment log. Nothing downstream of a backend in this state is diagnosable.',
-            `Check that CAT_FACTORY_BASE_URL (${config.baseUrl}) names the BACKEND rather than ` +
-              'the SPA: the SPA serves a /health of its own, and a base URL pointing at it ' +
-              'produces exactly this verdict against a backend that is perfectly healthy.',
+            // What is specific to THIS verdict, then the shared re-read step. The instruction itself
+            // is `probeFailure.ts`'s and is relayed rather than restated: three near-copies of one
+            // sentence lived in this package, each worded slightly differently.
+            'The SPA serves a /health of its own, and a base URL pointing at it produces exactly ' +
+              'this verdict against a backend that is perfectly healthy.',
+            baseUrlStep(config.baseUrl),
           ],
           commands: [
             {
-              run: `curl -sS '${config.baseUrl}/health'`,
+              run: `curl -sS ${shellQuoted(`${config.baseUrl}/health`)}`,
               purpose: "re-read the deployment's own verdict once it has restarted",
             },
           ],
@@ -300,7 +308,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           ],
           commands: [
             {
-              run: `curl -sS '${config.baseUrl}/auth/config'`,
+              run: `curl -sS ${shellQuoted(`${config.baseUrl}/auth/config`)}`,
               purpose:
                 'read the same problem list back after the restart; an empty one means fixed',
             },
@@ -887,6 +895,10 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
             `reporter credential works is unknown rather than answered no`,
           remedy: {
             steps: [
+              // The probe's own hint FIRST when it has one: it is kernel's per-cause remedy for the
+              // failure that actually happened (nothing listening, a name that does not resolve, an
+              // untrusted certificate), which is strictly more than the three candidates below.
+              ...(verdict.hint ? [verdict.hint] : []),
               `Check that ${config.vcs.apiBaseUrl} is reachable from here (a proxy, a VPN, or an ` +
                 'Enterprise Server host that is down).',
               'ACCEPTANCE_VCS_API_BASE overrides the base: an Enterprise Server API lives at ' +
@@ -899,7 +911,10 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         steps: ISSUE_CREDENTIAL_STEPS[verdict.status](slug(target)),
         commands: [
           {
-            run: `curl -sS -o /dev/null -w '%{http_code}\\n' -H "Authorization: Bearer $ACCEPTANCE_VCS_TOKEN" '${config.vcs.apiBaseUrl}/repos/${target.owner}/${target.repo}'`,
+            run:
+              `curl -sS -o /dev/null -w '%{http_code}\\n' ` +
+              `-H "Authorization: Bearer $ACCEPTANCE_VCS_TOKEN" ` +
+              shellQuoted(`${config.vcs.apiBaseUrl}/repos/${target.owner}/${target.repo}`),
             purpose:
               'read the target repository with the reporter credential: 200 is ready, 401 is the ' +
               'token, 404 is the repository or its access',

@@ -195,6 +195,25 @@ function hintFor(cause: ConnectionFailureCause, ctx: ConnectionFailureContext): 
 }
 
 /**
+ * The remedy for a cause the CALLER classified, for the one thing the walk below cannot see: a
+ * client that already turned its own deadline into a typed error of its own.
+ *
+ * The SDK's `CatFactoryTimeoutError` is the worked example and the reason this is exported. Its
+ * transport aborts the fetch with a marker deliberately NAMED `AbortError`, which is how it tells
+ * its own deadline from a caller's cancellation (the one thing it must never retry), so the
+ * classification below reads that name and answers `aborted`: "run the test again", where a
+ * client-side deadline is the shape a firewall silently dropping packets and a saturated host both
+ * take. The caller is the only party that knows which class such an error is; what it must not do
+ * is write its own copy of the sentence, which would be one release behind this one.
+ */
+export function connectionFailureHint(
+  cause: ConnectionFailureCause,
+  ctx: ConnectionFailureContext = {},
+): string | undefined {
+  return hintFor(cause, ctx)
+}
+
+/**
  * Describe a thrown connection failure: the exact cause chain, plus the remedy when the cause is
  * one we recognise. Never throws, and never invents a cause. An unmatched chain is reported as
  * itself with no hint.

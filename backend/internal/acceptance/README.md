@@ -139,8 +139,9 @@ every merge for a person looks like a run that stalled on its last step.
 Three states, not two: a probe that cannot READ an answer reports that, and never as evidence
 that the prerequisite is unmet.
 
-**And such a probe names its CAUSE**, because there are two ways to fail and they are opposites.
-`src/probeFailure.ts` owns the distinction.
+**And such a probe names its CAUSE**, because there are three ways to fail and they need opposite
+fixes. `src/probeFailure.ts` owns the distinction, as a discriminated verdict rather than one shape
+with optional fields.
 
 _It never got an answer._ A transport failure on Node is a bare `TypeError: fetch failed` with the
 informative link (`connect ECONNREFUSED 127.0.0.1:8787`, a DNS miss, an untrusted certificate) one
@@ -148,7 +149,10 @@ informative link (`connect ECONNREFUSED 127.0.0.1:8787`, a DNS miss, an untruste
 listing the causes it had not told apart: a deployment that was simply not started offered three
 candidate fixes, two of them about a credential no refused connection had sent. The chain is
 classified through kernel's `describeConnectionFailure`, the same producer behind every "Test
-connection" button in the product, and its per-cause remedy is relayed rather than paraphrased.
+connection" button in the product, and its per-cause remedy is relayed rather than paraphrased. One
+class the chain cannot see is corrected here: the SDK's own deadline aborts with a marker NAMED
+`AbortError`, which reads as a cancelled request, so a hung or firewalled deployment was told to run
+the test again instead of being pointed at dropped packets.
 
 _It got an answer, and the answer was a refusal._ The SDK throws a typed `CatFactoryApiError` carrying
 the status, the machine-readable `code` and the `X-Request-Id`, so the remedy is about the request
@@ -156,7 +160,17 @@ rather than the address, and the request id travels with it. One case earns its 
 carrying no error envelope is an UNMATCHED ROUTE, which is what a deployment older than this suite
 looks like (`pnpm build`, then restart) and equally what a base URL naming the SPA answers. That reads
 nothing like a `not_found` naming a resource, and telling them apart is the difference between
-rebuilding and hunting a workspace id.
+rebuilding and hunting a workspace id. The two unauthenticated root reads answer here too, through
+`DeploymentAnswerError`, and their remedy is a different accusation from the same status on
+`/api/v1`: neither route takes a credential, so nothing about the API key is implicated, and what a
+status narrows is which LAYER answered (a 401 is something in front demanding what the route never
+requires, a 5xx is a boot failure or a gateway).
+
+_Something answered, and it was not this deployment._ A 2xx whose body is not the JSON the route
+documents is neither a refusal nor a transport fault: every refusal a backend states comes back in
+its own error envelope, so this is a fact about the ORIGIN. It is the SPA (which serves a `/health`
+of its own), a login portal, or a gateway intercepting the path, and it is the answered failure that
+puts the address back in question rather than settling it.
 
 **A refusal is INSTRUCTIONS, not a diagnosis.** Every unmet prerequisite comes back with numbered
 steps and the commands that carry them out, rendered with what the probe just read rather than
@@ -479,6 +493,8 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.                                                                                                                       |
 | `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                             |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                          |
+| `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                     |
+| `src/operatorText.ts`        | The three ways a value is rendered for an operator: a thrown chain, a scrubbed address, a pasteable command. Pure; unit-tested.                                                                 |
 | `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested. |
 | `src/presets.ts`             | The one preset-to-catalog join `configure` and `model-preset` share. Pure.                                                                                                                      |
 | `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                                                                                                                                 |
@@ -497,7 +513,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/vcsIssues.ts`           | The reporter's own client: filing an issue on the provider and reading it back, provider-keyed. The one thing here that is not the platform.                                                    |
 | `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                          |
 | `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                      |
-| `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`).                                                                                                                      |
+| `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`), and the typed answer a non-2xx or non-JSON reply becomes. Unit-tested.                                               |
 | `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                                                                                                                                 |
 
 **See also:** [`backend/internal/e2e`](../e2e) (the faked-externals product suite),

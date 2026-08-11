@@ -101,14 +101,20 @@ export type PreflightReport = {
 
 export type PreflightOptions = {
   /**
-   * What the probes REACH, so a thrown one can be described against it.
+   * What a thrown probe REACHED, so it can be described against an address.
    *
    * Supplied as data rather than derived, because the runner is generic over `Context` and has no
-   * business knowing that this suite's checks speak HTTP. One context covers every prerequisite:
-   * they all go through the SDK or the two deployment root reads, so even `cluster-connection`
-   * (which probes k3s) reaches the k3s apiserver THROUGH the backend, and a transport failure there
-   * is still a failure to reach the backend. Omitting it costs the target-naming half of the
-   * remedy, never the cause.
+   * business knowing that this suite's checks speak HTTP. Omitting it costs the target-naming half
+   * of the remedy, never the cause.
+   *
+   * **It names ONE host, and that host is the deployment.** Most checks go through the SDK or the two
+   * deployment root reads, and `cluster-connection` qualifies too because it probes k3s THROUGH the
+   * backend. `issue-credential` is the one that does not: it reads the workspace's VCS connection
+   * from the deployment and then reads a repository from the PROVIDER's own API, so no single context
+   * is true for both halves of it. A check like that describes its provider-facing failures where it
+   * MAKES the call (`vcsIssues.ts` does, through the same kernel describer, and answers an
+   * `unreadable` verdict rather than throwing), because a value here would have described them
+   * against the wrong address, which is the misattribution `probeFailure.ts` exists to remove.
    */
   probe?: ConnectionFailureContext
   /** Called as each result lands, so a slow probe is not a silent one. */
