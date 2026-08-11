@@ -69,6 +69,15 @@ export type ShellFlavour = 'posix' | 'powershell'
  * second pass instead. Those shells all export `SHELL` or `MSYSTEM`; PowerShell and `cmd.exe` export
  * neither. `PSModulePath` is deliberately not consulted in the other direction: Windows sets it
  * machine-wide, so it is present inside Git Bash too and would prove nothing.
+ *
+ * **So `cmd.exe` reads as `powershell` here, and that is a limit rather than a decision.** Nothing
+ * in the environment separates the two: `PSModulePath` and `ComSpec` are set in both, and `PROMPT`
+ * (cmd's own) is INHERITED by a PowerShell started from a cmd window, so keying on it would hand
+ * `&&` to Windows PowerShell 5.1, which cannot parse it at all. Guessing wrong in that direction is
+ * the worse failure of the two, because the PowerShell form pasted into cmd fails loudly and
+ * immediately at the first token. What follows from the limit is that nothing may SEND an operator
+ * to cmd.exe: `personalUnlock.ts`'s echo refusal used to list it among the terminals to switch to,
+ * which would have fixed one prompt and broken every command printed after it.
  */
 export function shellFlavour(
   platform: NodeJS.Platform = process.platform,
@@ -122,7 +131,15 @@ const DIALECTS: Record<ShellFlavour, Dialect> = {
     assign: (name, rendered) => `$env:${name} = ${rendered}`,
     // `;` and not `&&`: Windows PowerShell 5.1 has no pipeline chain operators at all, and a pasted
     // `&&` fails to PARSE, which is a worse answer than running the second half unconditionally.
-    assignFor: (name, rendered, command) => `$env:${name} = ${rendered}; ${command}`,
+    //
+    // The `finally` is what makes this an assignment FOR ONE COMMAND rather than one that merely
+    // reads like it. `$env:` is the process environment, so it is not scoped by a block, a function
+    // or a child scope: set and left, it silently resumes the finished pass on every later
+    // invocation in that window, which is the exact cost this renderer's own contract exists to
+    // avoid and which the POSIX prefix does not have. `try` rather than a trailing `;`, so the
+    // variable is cleared when the pass is interrupted too, which is when a resume is most likely.
+    assignFor: (name, rendered, command) =>
+      `$env:${name} = ${rendered}; try { ${command} } finally { Remove-Item Env:${name} }`,
   },
 }
 

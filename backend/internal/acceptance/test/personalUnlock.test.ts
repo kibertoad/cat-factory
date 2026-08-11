@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createPersonalUnlock,
   enterRawMode,
+  PersonalPasswordDeclined,
+  readWithoutEcho,
   releaseTerminal,
   withPersonalUnlock,
 } from '../src/personalUnlock.ts'
@@ -148,15 +150,41 @@ describe('withPersonalUnlock', () => {
 
 /**
  * A terminal that records what was asked of it, tracking `isRaw` the way the real stream does (the
- * cleanup reads it), and able to refuse raw mode the way an MSYS pty does.
+ * cleanup reads it), and able to refuse raw mode BOTH ways a real one does.
+ *
+ * The two refusals are the point of this fake. Node's `setRawMode` reports a failure by EMITTING
+ * `'error'`; that reaches a caller as a throw only because an `'error'` with no listener is what
+ * Node turns into one. So a stream someone else is already listening to fails by returning normally
+ * with `isRaw` still false, and modelling only the throw is what let that path go unnoticed.
  */
-function fakeTerminal(options: { refuseRawMode?: unknown } = {}) {
+function fakeTerminal(options: { refuseRawMode?: unknown; refuseBy?: 'throw' | 'emit' } = {}) {
   const calls: string[] = []
+  const listeners = new Map<string, ((value: unknown) => void)[]>()
   const input = {
     isRaw: false,
+    destroyed: false,
+    on(event: string, listener: (value: unknown) => void) {
+      listeners.set(event, [...(listeners.get(event) ?? []), listener])
+      return this
+    },
+    off(event: string, listener: (value: unknown) => void) {
+      listeners.set(
+        event,
+        (listeners.get(event) ?? []).filter((entry) => entry !== listener),
+      )
+      return this
+    },
     setRawMode(raw: boolean) {
       calls.push(`setRawMode(${raw})`)
-      if (raw && options.refuseRawMode !== undefined) throw options.refuseRawMode
+      if (raw && options.refuseRawMode !== undefined) {
+        const listening = listeners.get('error') ?? []
+        // Exactly Node's own shape: emit, and leave `isRaw` where it was.
+        if (options.refuseBy === 'emit' && listening.length > 0) {
+          for (const listener of listening) listener(options.refuseRawMode)
+          return this
+        }
+        throw options.refuseRawMode
+      }
       this.isRaw = raw
       return this
     },
@@ -191,7 +219,7 @@ describe('enterRawMode', () => {
 
     let thrown: unknown
     try {
-      enterRawMode(fakeTerminal({ refuseRawMode: RAW_MODE_EPERM }).input, cleanup)
+      enterRawMode(fakeTerminal({ refuseRawMode: RAW_MODE_EPERM }).input, cleanup, 'win32')
     } catch (error) {
       thrown = error
     }
@@ -201,6 +229,10 @@ describe('enterRawMode', () => {
     expect(message).toContain('will not turn OFF echo')
     expect(message).toContain('winpty')
     expect(message).toContain('provider API key')
+    // NOT cmd.exe, though it implements console modes perfectly well: `operatorText.ts` cannot tell
+    // it from PowerShell and prints PowerShell, so sending an operator there would fix this one
+    // prompt and break every command printed to them afterwards.
+    expect(message).not.toContain('cmd.exe')
     // Not the other refusal: this operator's shell is interactive, and saying otherwise sends them
     // to redo the one thing they already did.
     expect(message).not.toContain('no terminal to ask on')
@@ -209,6 +241,57 @@ describe('enterRawMode', () => {
     expect((thrown as Error).cause).toBe(RAW_MODE_EPERM)
     // The fds it opened are released, so a refused prompt does not leak the console handle.
     expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  // The failure that a try/catch alone cannot see, and the one with the worst consequence: Node
+  // reports a refused mode switch by EMITTING, so anything else already listening on the stream (a
+  // `readline` interface, vitest's own watch-mode key handling) turns the refusal into a normal
+  // return. Read as success, the prompt then takes the operator's password with echo ON, into the
+  // scrollback, which is the single thing this whole file exists to prevent.
+  it('refuses a terminal that reported its failure by EMITTING rather than throwing', () => {
+    const { input } = fakeTerminal({ refuseBy: 'emit', refuseRawMode: RAW_MODE_EPERM })
+    // Something ELSE in the process is already listening, which is the ordinary state of
+    // `process.stdin` (a `readline` interface, vitest's own watch-mode keys) and the fallback path
+    // this prompt takes when `/dev/tty` cannot be opened. Node's `setRawMode` then reports its
+    // failure by emitting to that listener and returning normally, so a try/catch sees success.
+    input.on('error', () => {})
+    const cleanup = vi.fn()
+
+    expect(() => enterRawMode(input, cleanup)).toThrow(/will not turn OFF echo/)
+    expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a switch that reported nothing and applied nothing either', () => {
+    // A stream whose handle has gone assigns `isRaw` from a call that reached no device, so the flag
+    // alone reports success. `isRaw` is the verdict, and it is only a verdict beside a live stream.
+    const { input } = fakeTerminal()
+    Object.assign(input, { destroyed: true })
+    const cleanup = vi.fn()
+
+    expect(() => enterRawMode(input, cleanup)).toThrow(/will not turn OFF echo/)
+    expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the POSIX way out on POSIX, where this refusal is just as reachable', () => {
+    // `/dev/tty` opens and `tcsetattr` fails in ordinary places: a `docker exec` with no `-t`, a
+    // detached `screen`/`tmux`. Told to install `winpty` and switch to a Windows terminal, that
+    // operator gets a confident refusal naming the wrong cause, which is the defect this file was
+    // written to fix, reintroduced on the other platform.
+    const { input } = fakeTerminal({ refuseRawMode: RAW_MODE_EPERM })
+
+    let thrown: unknown
+    try {
+      enterRawMode(input, () => {}, 'linux')
+    } catch (error) {
+      thrown = error
+    }
+
+    const message = (thrown as Error).message
+    expect(message).toContain('will not turn OFF echo')
+    expect(message).toContain('docker exec -t')
+    expect(message).not.toContain('winpty')
+    expect(message).not.toContain('Windows Terminal')
+    expect(message).toContain('provider API key')
   })
 
   it('reports that refusal rather than a failure of its own cleanup', () => {
@@ -262,5 +345,67 @@ describe('releaseTerminal', () => {
 
     releaseTerminal(input, null, (fd) => calls.push(`close(${fd})`))
     expect(calls).toEqual(['destroy'])
+  })
+})
+
+/** A readable that hands over one chunk, the way the console does once a key is pressed. */
+function typing(chunk: string) {
+  const handlers: ((chunk: string) => void)[] = []
+  const input = {
+    isRaw: true,
+    resume() {},
+    setEncoding(_encoding: string) {},
+    on(_event: string, handler: (chunk: string) => void) {
+      handlers.push(handler)
+      queueMicrotask(() => handler(chunk))
+      return this
+    },
+    off() {
+      return this
+    },
+  }
+  return input as unknown as ReadStream
+}
+
+describe('readWithoutEcho', () => {
+  it('answers what was typed, up to the Enter that ends it', async () => {
+    const written: string[] = []
+    const value = await readWithoutEcho(
+      { input: typing('hunter2\r'), write: (text) => written.push(text) },
+      'Personal password: ',
+    )
+
+    expect(value).toBe('hunter2')
+    // The prompt, then the newline the suppressed echo did not print.
+    expect(written).toEqual(['Personal password: ', '\n'])
+  })
+
+  it('settles even when the console handle dies between the password and the newline', async () => {
+    // The newline is cosmetic and runs inside the `data` handler, so written BEFORE the settle its
+    // failure escapes through `emit` and the promise never resolves at all: `readSecretFromTty`'s
+    // `finally` never runs, echo is never put back, and a prompt that had ALREADY SUCCEEDED hangs
+    // the pass and leaves the operator in a shell they can type into and not see.
+    const value = await readWithoutEcho(
+      {
+        input: typing('hunter2\r'),
+        write: (text) => {
+          if (text === '\n')
+            throw Object.assign(new Error('EBADF: bad file descriptor, write'), {
+              code: 'EBADF',
+            })
+        },
+      },
+      'Personal password: ',
+    )
+
+    expect(value).toBe('hunter2')
+  })
+
+  it('reports the operator declining as its own type, not as an empty password', async () => {
+    // Ctrl-C. Its own class because the up-front ask treats it oppositely to every other failure it
+    // can meet: those degrade to asking later, this one stops the pass.
+    await expect(
+      readWithoutEcho({ input: typing('\u0003'), write: () => {} }, 'Personal password: '),
+    ).rejects.toBeInstanceOf(PersonalPasswordDeclined)
   })
 })

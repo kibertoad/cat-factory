@@ -20,6 +20,7 @@ import { waitFor } from './deadline.ts'
 import { isActionable } from './decisions.ts'
 import type { Journal } from './journal.ts'
 import type { PersonalUnlock } from './personalUnlock.ts'
+import { type PinnedPreset, pinnedModel } from './presets.ts'
 
 export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
 
@@ -50,6 +51,32 @@ export function createClient(config: AcceptanceConfig, unlock?: PersonalUnlock):
         }
       : {}),
   })
+}
+
+/**
+ * The pinned preset with the catalog row its base model resolves to, or `null` when either is gone.
+ *
+ * The two list reads that answer "what does this pass actually run on", in ONE place, because the
+ * question is asked from two processes that cannot share an answer: the up-front unlock asks it in
+ * the main process before any worker exists, and the `model-preset` prerequisite asks a WIDER
+ * version of it inside a worker (it needs the whole library to name the alternatives in its
+ * refusal). The round trips are therefore not duplication to remove; the join is, and it lives here
+ * beside the client rather than in `presets.ts`, which stays pure.
+ *
+ * Deliberately not `ConfigureClient`'s pair of reads: that port narrows the catalog row to the
+ * fields its menu branches on, and the fields the unlock prompt NAMES to an operator (`label`,
+ * `provider`) are exactly the ones it drops. Widening a documented port for a second consumer's
+ * prose is the wrong direction; both read the same endpoint through the same SDK.
+ */
+export async function readPinnedPreset(
+  client: CatFactoryClient,
+  presetId: string,
+): Promise<PinnedPreset | null> {
+  const [{ presets }, { models }] = await Promise.all([
+    client.modelPresets.list(),
+    client.models.list(),
+  ])
+  return pinnedModel(presets, models, presetId)
 }
 
 /**

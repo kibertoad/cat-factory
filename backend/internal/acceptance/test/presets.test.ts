@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { personalPasswordNeed, pinnedModel } from '../src/presets.ts'
+import { needsPersonalPassword, pinnedModel } from '../src/presets.ts'
 
 // The join `configure`, the `model-preset` gate and now the up-front unlock all read. What is pinned
 // here is only the part the unlock depends on: whether a pass on the pinned preset is going to be
@@ -45,37 +45,32 @@ describe('pinnedModel', () => {
   })
 })
 
-describe('personalPasswordNeed', () => {
+describe('needsPersonalPassword', () => {
   it('reads `personalSubscription`, NOT `available`', () => {
     // The case that produced the up-front ask: the catalog reports the model dispatchable for this
     // token AND the dispatch answers 428, because what opens the credential is the password. Keyed
     // on `available` this would ask for nothing in exactly the pass that needs it.
-    const pinned = pinnedModel(
-      [preset('mdp_1', 'claude-opus-5')],
-      [model('claude-opus-5', { available: true, personalSubscription: true })],
-      'mdp_1',
-    )
-    expect(personalPasswordNeed(pinned)).toBe('needed')
+    expect(
+      needsPersonalPassword(
+        model('claude-opus-5', { available: true, personalSubscription: true }),
+      ),
+    ).toBe(true)
   })
 
   it('needs one for a personal-subscription model this token cannot yet select', () => {
-    const pinned = pinnedModel(
-      [preset('mdp_1', 'm')],
-      [model('m', { available: false, personalSubscription: true, subscriptionConfigured: true })],
-      'mdp_1',
-    )
-    expect(personalPasswordNeed(pinned)).toBe('needed')
+    expect(
+      needsPersonalPassword(
+        model('m', { available: false, personalSubscription: true, subscriptionConfigured: true }),
+      ),
+    ).toBe(true)
   })
 
   it('needs none for a model wired to a provider key', () => {
-    const pinned = pinnedModel([preset('mdp_1', 'm')], [model('m')], 'mdp_1')
-    expect(personalPasswordNeed(pinned)).toBe('not-needed')
+    expect(needsPersonalPassword(model('m'))).toBe(false)
   })
 
-  it('answers `unknown` rather than `not-needed` when there was nothing to read', () => {
-    // Opposite facts: one says this pass will never be asked, the other says ask LATER, which is the
-    // behaviour that existed before anything asked early. Collapsing them would turn an unreachable
-    // deployment into a pass that skips the prompt and then fails at its first dispatch.
-    expect(personalPasswordNeed(null)).toBe('unknown')
-  })
+  // "Nothing to read" is deliberately NOT a third answer here: a catalog that could not be read and
+  // a model that needs no password are opposite facts, and the one that carries the distinction is
+  // the absence of a row at all (`pinnedModel` → null, above), decided where it is produced. Stated
+  // as a third value it was decided twice, and the second decision was an unreachable guard.
 })

@@ -109,8 +109,22 @@ describe('resumeInvocation', () => {
     // as the WHOLE string, because "does not contain `&&`" is equally true of a command that sets
     // the variable and never runs the pass.
     expect(resumeInvocation('latest', 'powershell')).toBe(
-      `$env:ACCEPTANCE_RUN_ID = 'latest'; pnpm --filter @cat-factory/acceptance run acceptance`,
+      `$env:ACCEPTANCE_RUN_ID = 'latest'; try { pnpm --filter @cat-factory/acceptance run ` +
+        `acceptance } finally { Remove-Item Env:ACCEPTANCE_RUN_ID }`,
     )
+  })
+
+  it('clears the variable afterwards, so a RESUME does not outlive the pass it resumed', () => {
+    // The half that makes this a scoped assignment rather than one that merely reads like the POSIX
+    // prefix it replaces. `$env:` is the PROCESS environment: no block, function or child scope
+    // narrows it, so set and left it silently resumes a finished pass on every later invocation in
+    // that window, which is the failure `resumeInvocation` refuses to print a `.env` line for.
+    // `finally` rather than a trailing `;`, because an interrupted pass is when a resume is likeliest.
+    expect(resumeInvocation('latest', 'powershell')).toContain(
+      'finally { Remove-Item Env:ACCEPTANCE_RUN_ID }',
+    )
+    // The POSIX prefix has that lifetime built in, so it gains nothing and stays one command.
+    expect(resumeInvocation('latest', 'posix')).not.toContain('unset')
   })
 
   it('quotes each shell the way that shell escapes, for an id holding a quote', () => {

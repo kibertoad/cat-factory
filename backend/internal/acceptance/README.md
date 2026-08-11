@@ -293,6 +293,12 @@ person's subscription, and only their personal password opens it. Two consequenc
   RPC channel. It only asks when the pinned preset's base model reports `personalSubscription`, so a
   provider-key workspace sees no prompt; when the catalog cannot be read, it says so and leaves the
   ask at the first dispatch that needs it, exactly as before.
+- **That hook can only ever DELAY the ask, never end the pass**, and the one exception is a person.
+  It runs before the first prerequisite is evaluated and before a journal line exists, so anything it
+  threw would be the operator's whole output: no "your key names another workspace", no "the pinned
+  preset's model is unwired", no ledger. A terminal it cannot ask on is therefore printed and
+  continued from, and the preflight keeps ownership of diagnosing what is actually wrong. Pressing
+  Ctrl-C at the prompt is the opposite fact, and stops the pass: it is a decision, not a limit.
 - **So run the pass from an INTERACTIVE terminal**, with the ordinary invocation above: nothing
   about the command changes, and there is no separate mode for this. Under the hood the prompt opens
   the CONTROLLING TERMINAL for reading (`/dev/tty`, `CONIN$` on Windows) and writes the prompt back
@@ -307,17 +313,29 @@ person's subscription, and only their personal password opens it. Two consequenc
 - **A pass with no console REFUSES at that first dispatch**, naming the two ways out (run it
   interactively, or pin a preset whose model resolves to a provider API key). That covers CI, a
   daemon, `nohup`, and an agent's detached background shell, all of which cannot open the console
-  device at all.
+  device at all. The up-front hook meets the same refusal earlier and prints it rather than throwing
+  it, so what stops such a pass is the dispatch, with everything the preflight found already on
+  screen.
 - **On Windows the console input buffer is opened READ-WRITE**, and that is not a detail: turning
   echo off is `SetConsoleMode`, which WRITES to that buffer, so a read-only handle reads perfectly
   well and then answers `EPERM`. Opened read-only, the prompt therefore failed on every Windows
   machine, console or no console, and it arrived as a bare `Error: setRawMode EPERM` (errno -4048)
   naming neither the password nor a remedy.
 - **A terminal that will not stop echoing gets its own refusal**, separate from the no-console one,
-  because nothing about the invocation is wrong and both of that one's remedies are dead ends. Expect
-  it from an MSYS/mintty window (Git Bash launched by its own shortcut), where `winpty` in front of
-  the command is the fix; Windows Terminal, PowerShell, `cmd.exe` and the JetBrains terminal all
-  implement console modes.
+  because nothing about the invocation is wrong and both of that one's remedies are dead ends. Its
+  remedies follow the PLATFORM, since the state is reachable on both. On Windows, expect it from an
+  MSYS/mintty window (Git Bash launched by its own shortcut), where `winpty` in front of the command
+  is the fix; Windows Terminal, PowerShell and the JetBrains terminal all implement console modes.
+  `cmd.exe` does too and is deliberately not offered, because the commands this suite prints for
+  Windows are PowerShell's. On POSIX the same refusal means a process with a `/dev/tty` it cannot put
+  into raw mode, which is a `docker exec` without `-t`, an `ssh` without one, or a detached
+  `screen`/`tmux`.
+- **The verdict on turning echo off is the stream's own `isRaw`**, never "the call did not throw".
+  Node reports a refused mode switch by EMITTING `error`, and that reaches a caller as a throw only
+  because an unhandled `error` is what Node turns into one; on the `process.stdin` fallback path,
+  where something else in the process is usually already listening, the same failure arrives as a
+  quiet return. Read as success, the prompt would take the password with echo ON, into the
+  scrollback, which is the one thing it exists to prevent.
 
 **The repositories**
 
@@ -405,20 +423,27 @@ ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance   
 ```
 
 ```powershell
-$env:ACCEPTANCE_RUN_ID = 'latest'; pnpm --filter @cat-factory/acceptance run acceptance
+$env:ACCEPTANCE_RUN_ID = 'latest'; try { pnpm --filter @cat-factory/acceptance run acceptance } finally { Remove-Item Env:ACCEPTANCE_RUN_ID }
 ```
 
 **PowerShell has no inline environment prefix**, so the POSIX form is not merely unidiomatic there,
 it reads the assignment as the command NAME and fails with `CommandNotFoundException`. Every command
-this suite PRINTS with a variable in it is rendered for the shell that will RECEIVE it (the resume in
-two prerequisite remedies, the line the status report ends with, the per-person prefix, and the three
-remedies whose whole fix is one value), so a pasted remedy runs where it was read. The shell, not the
-platform: on Windows that is PowerShell unless `SHELL` or `MSYSTEM` is set, which is how a Git Bash or
-MSYS operator gets the POSIX form. The `curl` remedies are the remaining exception and are still
-POSIX-only: they interpolate `$CAT_FACTORY_API_KEY`, which PowerShell expands as one of its own
-variables and sends as an empty bearer token. `$env:` also persists for the whole session rather than
-the one command, which is what makes it a resume that outlives the pass you meant it for:
-`Remove-Item Env:ACCEPTANCE_RUN_ID` clears it.
+this suite PRINTS with a variable in it is rendered for the shell that will RECEIVE it (the banner
+every spec file opens with, the resume in two prerequisite remedies, the line the status report ends
+with, the per-person prefix, and the three remedies whose whole fix is one value), so a pasted remedy
+runs where it was read. The shell, not the platform: on Windows that is PowerShell unless `SHELL` or
+`MSYSTEM` is set, which is how a Git Bash or MSYS operator gets the POSIX form. `cmd.exe` reads as
+PowerShell and is a known limit rather than a decision: nothing in the environment separates the two
+(`PSModulePath` and `ComSpec` are in both, and cmd's `PROMPT` is inherited by a PowerShell started
+from it), and guessing the other way would hand `&&` to Windows PowerShell 5.1, which cannot parse it
+at all. The `curl` remedies are the remaining exception and are still POSIX-only: they interpolate
+`$CAT_FACTORY_API_KEY`, which PowerShell expands as one of its own variables and sends as an empty
+bearer token.
+
+**The `try`/`finally` is what makes the printed PowerShell resume a one-off**, which the POSIX prefix
+is for free. `$env:` is the process environment, and no block, function or child scope narrows it, so
+an assignment left behind silently resumes that finished pass on every later invocation in the same
+window. Typed by hand without the clear, `Remove-Item Env:ACCEPTANCE_RUN_ID` is the undo.
 
 Putting the id in the `.env` works everywhere and survives closing the terminal, with the same trap
 inverted: it resumes that pass until the line is removed.
@@ -462,8 +487,8 @@ ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance
 ```
 
 ```powershell
-$env:ACCEPTANCE_RUN_ID = '20260809175530'; pnpm --filter @cat-factory/acceptance run acceptance
-$env:ACCEPTANCE_RUN_ID = 'latest'; pnpm --filter @cat-factory/acceptance run acceptance
+$env:ACCEPTANCE_RUN_ID = '20260809175530'; try { pnpm --filter @cat-factory/acceptance run acceptance } finally { Remove-Item Env:ACCEPTANCE_RUN_ID }
+$env:ACCEPTANCE_RUN_ID = 'latest'; try { pnpm --filter @cat-factory/acceptance run acceptance } finally { Remove-Item Env:ACCEPTANCE_RUN_ID }
 ```
 
 Or the `ACCEPTANCE_RUN_ID` line in the `.env`, which needs no dialect at all; see
@@ -564,36 +589,37 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 
 ## Where things live
 
-| Path                         | What                                                                                                                                                                                            |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `acceptance/*.acceptance.ts` | The five specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                 |
-| `acceptance/globalSetup.ts`  | The ONE personal-password ask, in the main process before any worker exists. Decides from the pinned preset; degrades to asking later.                                                          |
-| `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.                                                                                                                       |
-| `src/envFile.ts`             | The `.env` beside the vitest config, read the same way by the config and by `globalSetup`. Pure.                                                                                                |
-| `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                             |
-| `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                          |
-| `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                     |
-| `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Pure; unit-tested.              |
-| `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested. |
-| `src/presets.ts`             | The one preset-to-catalog join `configure`, `model-preset` and the up-front unlock share. Pure; unit-tested.                                                                                    |
-| `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                                                                                                                                 |
-| `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                  |
-| `src/status.ts`              | Ledger + journal → "where is this pass". Pure; unit-tested.                                                                                                                                     |
-| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                                                                                                                                        |
-| `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested.                                                                                                               |
-| `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                                                                                                                                       |
-| `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.                                                                                                                      |
-| `src/publicApi.ts`           | SDK client, the one task-creation door, run observation, the polling wait.                                                                                                                      |
-| `src/resume.ts`              | File a task, or adopt / re-attach to what a previous pass left.                                                                                                                                 |
-| `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.                                                                                                                       |
-| `src/decisions.ts`           | The two kinds this suite answers, what is answerable NOW, and the refusals.                                                                                                                     |
-| `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                                                                                                                                   |
-| `src/instructions.ts`        | The briefs, the reporter's issue, and the reasoning behind the planted defect.                                                                                                                  |
-| `src/vcsIssues.ts`           | The reporter's own client: filing an issue on the provider and reading it back, provider-keyed. The one thing here that is not the platform.                                                    |
-| `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                          |
-| `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                      |
-| `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`), and the typed answer a non-2xx or non-JSON reply becomes. Unit-tested.                                               |
-| `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                                                                                                                                 |
+| Path                         | What                                                                                                                                                                                                                             |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `acceptance/*.acceptance.ts` | The five specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                                                  |
+| `acceptance/globalSetup.ts`  | Wiring for the ONE personal-password ask: the real config, client and terminal, in the main process before any worker exists.                                                                                                    |
+| `src/personalPasswordAsk.ts` | What that ask decides, and what it does when it cannot: degrade and continue, except for a person declining. Unit-tested.                                                                                                        |
+| `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.                                                                                                                                                        |
+| `src/envFile.ts`             | The `.env` beside the vitest config, read the same way by the config and by `globalSetup`. Pure.                                                                                                                                 |
+| `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                                                              |
+| `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                                                           |
+| `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                                                      |
+| `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Unit-tested; reads the ambient shell unless a dialect is passed. |
+| `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested.                                  |
+| `src/presets.ts`             | The one preset-to-catalog join `configure`, `model-preset` and the up-front unlock share. Pure; unit-tested.                                                                                                                     |
+| `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                                                                                                                                                                  |
+| `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                                                   |
+| `src/status.ts`              | Ledger + journal → "where is this pass". Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.                                                                                                    |
+| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                                                                                                                                                                         |
+| `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested.                                                                                                                                                |
+| `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                                                                                                                                                                        |
+| `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.                                                                                                                                                       |
+| `src/publicApi.ts`           | SDK client, the one task-creation door, run observation, the polling wait.                                                                                                                                                       |
+| `src/resume.ts`              | File a task, or adopt / re-attach to what a previous pass left.                                                                                                                                                                  |
+| `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.                                                                                                                                                        |
+| `src/decisions.ts`           | The two kinds this suite answers, what is answerable NOW, and the refusals.                                                                                                                                                      |
+| `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                                                                                                                                                                    |
+| `src/instructions.ts`        | The briefs, the reporter's issue, and the reasoning behind the planted defect.                                                                                                                                                   |
+| `src/vcsIssues.ts`           | The reporter's own client: filing an issue on the provider and reading it back, provider-keyed. The one thing here that is not the platform.                                                                                     |
+| `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                                                           |
+| `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                                                       |
+| `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`), and the typed answer a non-2xx or non-JSON reply becomes. Unit-tested.                                                                                |
+| `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                                                                                                                                                                  |
 
 **See also:** [`backend/internal/e2e`](../e2e) (the faked-externals product suite),
 [`backend/internal/sdk-smoketest`](../sdk-smoketest) (the same SDK against a booted backend),

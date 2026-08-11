@@ -110,25 +110,34 @@ export function pinnedModel<P extends PresetRow, M extends ModelRow>(
   return preset && model ? { preset, model } : null
 }
 
-/** Whether a pass on the pinned preset will be asked for the operator's PERSONAL password. */
-export type PersonalPasswordNeed = 'needed' | 'not-needed' | 'unknown'
+/**
+ * The pinned pair as the surfaces that NAME it to an operator read it.
+ *
+ * Two fields beyond the join's own: the up-front unlock prompt states which preset and which model
+ * it is about to spend the operator's personal subscription on, and a prompt that named neither
+ * would be asking for a password on behalf of nothing.
+ */
+export type PinnedPreset = {
+  preset: { name: string }
+  model: ModelRow & { label: string; provider: string }
+}
 
 /**
- * That question, answered from the catalog row alone.
+ * Whether a pass on the pinned model will be asked for the operator's PERSONAL password.
  *
- * THREE answers, and `unknown` is the one worth having: a catalog that could not be read and a model
- * that needs no password are opposite facts, the same distinction {@link selectableModelIds} keeps
- * for the same reason. `unknown` means ASK LATER, which is exactly the behaviour that existed before
- * anything asked early, so a deployment this cannot reach loses nothing.
+ * A BOOLEAN over a model, and the third state a caller needs ("we could not tell") is the absence of
+ * a model to ask about, which is where it is produced and where it is therefore decided:
+ * `readPinnedPreset` answering `null`. Stated as a three-valued answer here instead, it was decided
+ * twice, once in this function and once in a `|| !pinned` guard at the one call site, and the second
+ * of those was unreachable.
  *
  * The signal is `personalSubscription` ALONE, never `available`. A selectable personal-subscription
  * model is the case that produced this: the catalog reports the model dispatchable for this token and
  * the dispatch still answers `428`, because what opens the credential is the password. Reading
  * `available` here would ask for nothing in precisely the pass that needs it.
  */
-export function personalPasswordNeed(pinned: { model: ModelRow } | null): PersonalPasswordNeed {
-  if (!pinned) return 'unknown'
-  return pinned.model.personalSubscription === true ? 'needed' : 'not-needed'
+export function needsPersonalPassword(model: ModelRow): boolean {
+  return model.personalSubscription === true
 }
 
 /**

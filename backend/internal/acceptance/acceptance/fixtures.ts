@@ -11,6 +11,7 @@ import { inject } from 'vitest'
 import { DeploymentApi } from '../src/deploymentApi.ts'
 import { type AcceptanceConfig, requireConfig } from '../src/config.ts'
 import { Journal } from '../src/journal.ts'
+import { resumeInvocation } from '../src/operatorText.ts'
 import { createPersonalUnlock, type PersonalUnlock } from '../src/personalUnlock.ts'
 import {
   formatPreflightFailure,
@@ -72,13 +73,15 @@ function currentHarness(): Harness {
     journal: new Journal(world.dir, runId),
   }
   // Printed on every spec file's first use because an operator whose run dies in spec 03 needs
-  // this value to resume and has no other way to recover it.
+  // this value to resume and has no other way to recover it. Which makes it the MOST printed
+  // command this suite has, and therefore the one that may least be spelled for a shell the
+  // operator is not holding: `resumeInvocation` renders it for the one that will receive it.
   console.log(
     `\nacceptance run ${runId} against ${config.baseUrl}\n` +
       `  ledger:  ${world.path}\n` +
       `  journal: ${cached.journal.path}\n` +
       `  watch:   pnpm --filter @cat-factory/acceptance run status ${runId}\n` +
-      `  resume:  ACCEPTANCE_RUN_ID=${runId}\n`,
+      `  resume:  ${resumeInvocation(runId)}\n`,
   )
   return cached
 }
