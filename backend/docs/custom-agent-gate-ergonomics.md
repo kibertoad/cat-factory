@@ -96,6 +96,13 @@ of its own. Three things bite:
 - **The free lookups take the registry OPTIONALLY** and fall back to the built-ins (the shape
   `isGatableKind` uses), so a call site that omits it silently sees built-in pairs only. That is a
   wrong ANSWER rather than a missing argument, which is why it survives a typecheck.
+- **The PROMPT is the platform's**, not the registration's: every companion runs the shared
+  companion prompt (`companionSystemPrompt`), which weaves in the pairing's `reviews` label, the
+  JSON verdict shape, and `REVIEW_SUMMARY_LAYOUT` (the block layout the `summary` is rendered as,
+  since that one string IS the review a human reads). So a registration contributes the label and
+  the threshold, and a deployment companion cannot drift into a verdict the run panel renders as a
+  wall of text — not even through a per-workspace prompt override, which
+  `OVERRIDE_PRESERVED_FRAGMENTS` puts the layout back over.
 - **Adjacency is an invariant**, enforced by `assertValidCompanionPlacement`: the engine grades the
   immediate predecessor, so a companion separated from its producer would grade whatever happens to
   sit in front of it. The same reasoning drives the cascade-skip rule in

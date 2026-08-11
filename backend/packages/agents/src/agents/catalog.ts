@@ -16,7 +16,11 @@ import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing
 import type { AgentKindRegistry } from './kinds/registry.js'
 import { traitGuidanceFor } from './kinds/traits.js'
 import { roleSystemPrompt } from './prompts/roles.js'
-import { FINAL_ANSWER_IN_REPLY, PLATFORM_IS_NOT_THE_PRODUCT } from './prompts/shared.js'
+import {
+  FINAL_ANSWER_IN_REPLY,
+  PLATFORM_IS_NOT_THE_PRODUCT,
+  REVIEW_SUMMARY_LAYOUT,
+} from './prompts/shared.js'
 import { PRIOR_ROUNDS_DIRECTIVE, renderPriorReviewRounds } from './prompts/review-rounds.js'
 import {
   customTaskTypeSection,
@@ -46,8 +50,19 @@ import {
  * track prompt. That difference is invisible from the outside and is exactly the trap: an
  * override replaces the track prompt, so for a built-in kind it silently takes the inline copy
  * with it. See {@link restoreShippedInvariants}.
+ *
+ * {@link REVIEW_SUMMARY_LAYOUT} belongs here for the same reason the final-answer rule does: it is
+ * a fact about how the platform READS a reviewer's reply, not editorial content. The `summary` it
+ * shapes is rendered as markdown blocks in the run panel, and the escaping sentence it carries is
+ * what keeps a multi-line verdict from arriving as invalid JSON. A workspace that edits its
+ * reviewer prompt for an unrelated reason would otherwise send every later verdict back to one
+ * unskimmable paragraph, with nothing in the editor saying why.
  */
-const OVERRIDE_PRESERVED_FRAGMENTS = [READ_ONLY_GUARDRAIL, FINAL_ANSWER_IN_REPLY] as const
+const OVERRIDE_PRESERVED_FRAGMENTS = [
+  READ_ONLY_GUARDRAIL,
+  FINAL_ANSWER_IN_REPLY,
+  REVIEW_SUMMARY_LAYOUT,
+] as const
 
 /**
  * Re-append any invariant the SHIPPED prompt for this kind guaranteed and the overridden

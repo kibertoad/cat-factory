@@ -50,6 +50,7 @@ import {
   diagnosticsSuffix,
   resolveStructuredOutput,
 } from './structured-output.js'
+import { extractJsonObject } from './json-reply.js'
 import type { RunOptions } from './runner.js'
 import { log, type Logger } from './logger.js'
 
@@ -261,23 +262,6 @@ async function resolveReplyCustom(
     },
   )
   return { value: resolved.value, diagnostics: resolved.diagnostics }
-}
-
-/** Extract the first JSON object from an agent's final message (tolerating fences/prose). */
-function extractJsonObject(text: string): unknown {
-  const trimmed = text.trim()
-  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed)
-  const body = fenced ? (fenced[1] ?? '') : trimmed
-  try {
-    return JSON.parse(body)
-  } catch {
-    const start = body.indexOf('{')
-    const end = body.lastIndexOf('}')
-    if (start === -1 || end === -1 || end <= start) {
-      throw new Error('agent did not return a JSON object')
-    }
-    return JSON.parse(body.slice(start, end + 1))
-  }
 }
 
 /**

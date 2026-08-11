@@ -439,10 +439,17 @@ export class FakeAgentExecutor implements AgentExecutor {
       // when configured, so the engine's `technical`-label inference can be exercised.
       const corroborated =
         context.agentKind === 'spec-companion' ? this.options.technicalCorroborated : undefined
+      // The summary carries the LAYOUT the shipped companion prompt asks for (a verdict line, then
+      // a bolded group with one bullet per point), because that string is what the run panel
+      // renders as markdown: a fake that answers in one flat line cannot tell a panel that renders
+      // it from one that dumps it. See `REVIEW_SUMMARY_LAYOUT`.
+      const summary =
+        `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%\n\n` +
+        (rating < 1 ? '**Must fix**\n- **The gap**: address this gap in the next pass.' : '')
       return {
         output: JSON.stringify({
           rating,
-          summary: `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%`,
+          summary: summary.trimEnd(),
           ...(comments ? { comments } : {}),
           ...(corroborated !== undefined ? { technicalCorroborated: corroborated } : {}),
         }),
