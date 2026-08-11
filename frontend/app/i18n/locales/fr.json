@@ -3588,6 +3588,15 @@
       "reachable": "Joignable · aucun modèle | Joignable · {count} modèle | Joignable · {count} modèles",
       "noModels": "Aucun modèle signalé.",
       "enableModels": "Activer les modèles",
+      "imageInputHint": "Certains modèles locaux lisent les captures d'écran et les rendus de design. Les familles connues sont reconnues automatiquement, et l'option Non défini de chaque modèle indique ce qui s'appliquera ; définissez-la vous-même pour une version que la plateforme ne peut pas connaître, comme une quantification texte seulement ou un modèle affiné.",
+      "imageInputLabel": "Prise en charge des images pour {model}",
+      "imageInput": {
+        "autoYes": "Non défini : {family} lit les images",
+        "autoNo": "Non défini : {family} est texte seulement",
+        "unknown": "Images : non défini",
+        "yes": "Lit les images",
+        "no": "Texte seulement"
+      },
       "toast": {
         "saved": "{name} enregistré",
         "saveFailed": "Impossible d'enregistrer le runner",
@@ -3599,6 +3608,7 @@
         "body": "\"{name}\" sera supprimé. Cette action est irréversible."
       },
       "blocked": "L'URL de ce runner n'est pas autorisée sur ce déploiement, ses modèles sont donc masqués dans le sélecteur.",
+      "modelsDiscarded": "Certains modèles activés de ce runner n'ont pas pu être lus et ont été supprimés. Sélectionnez à nouveau ceux que vous voulez, puis enregistrez.",
       "urlReason": {
         "invalid_url": "Cette URL n'est pas valide.",
         "scheme_not_allowed": "L'URL d'un runner doit commencer par http:// ou https://.",

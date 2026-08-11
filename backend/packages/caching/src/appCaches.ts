@@ -8,6 +8,7 @@ import type {
   GitHubRepo,
   GroupCacheHandle,
   LinkedDocumentRefreshOutcome,
+  LocalModelDeclarationsCacheValue,
   Logger,
   ModelPresetCacheValue,
   Paged,
@@ -129,6 +130,7 @@ export interface AppCachesProfile {
   patInstallationRepos: GroupCacheProfile
   riskPolicy: GroupCacheProfile
   modelPreset: GroupCacheProfile
+  localModelDeclarations: GroupCacheProfile
   workspaceAccess: GroupCacheProfile
   userSessionGeneration: GroupCacheProfile
   ssoDiscovery: GroupCacheProfile
@@ -265,6 +267,16 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // admin-changed source. Read harder than the merge preset, though — every dispatch and every
   // inline call resolves both the step's model and the preset's route order through it.
   modelPreset: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 1000, maxItemsPerGroup: 32 },
+  // One entry per USER (group == key), holding the runners they enabled a model on. Same profile
+  // as the two presets above and for the same reason: hand-edited config that every dispatch
+  // re-reads, invalidation-driven, no version probe. One item per group because the whole answer
+  // for a user IS one entry, so the per-group bound only has to be non-zero.
+  localModelDeclarations: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 5000,
+    maxItemsPerGroup: 1,
+  },
   // One resolved access decision per (workspace, user) — grouped by workspace, keyed by user, so a
   // large board keeps a member entry each. Slow-moving (roster/access-mode are admin actions);
   // invalidation-driven, no version probe. A SHORT 60s TTL: it's the freshness backstop only (the
@@ -398,6 +410,13 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // mutable D1 state, and a TTL'd entry would keep dispatching on a re-pointed model or a
   // re-ordered route list that a peer isolate has already rewritten.
   modelPreset: { ...DEFAULT_APP_CACHES_PROFILE.modelPreset, enabled: false },
+  // Pass-through for the same reason again: the endpoint rows are our own mutable D1 state, and a
+  // TTL'd entry would keep dispatching on a modality the user has since re-declared, or on a model
+  // they un-enabled, in an isolate that never saw the write.
+  localModelDeclarations: {
+    ...DEFAULT_APP_CACHES_PROFILE.localModelDeclarations,
+    enabled: false,
+  },
   // Pass-through: the resolved workspace-access decision reads our own mutable D1 state (the roster
   // + access-mode + account memberships) with no cross-isolate invalidation bus on the Worker, so a
   // TTL'd entry would keep granting access after a peer isolate revoked a member. The isolate
@@ -857,6 +876,12 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     options,
     tracker,
   )
+  const localModelDeclarations = buildGroupCache<LocalModelDeclarationsCacheValue>(
+    'local-model-declarations',
+    profile.localModelDeclarations,
+    options,
+    tracker,
+  )
   const workspaceAccess = buildGroupCache<WorkspaceAccessCacheValue>(
     'workspace-access',
     profile.workspaceAccess,
@@ -892,6 +917,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     patInstallationRepos,
     riskPolicy,
     modelPreset,
+    localModelDeclarations,
     workspaceAccess,
     userSessionGeneration,
     ssoDiscovery,
@@ -913,6 +939,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         patInstallationRepos.close(),
         riskPolicy.close(),
         modelPreset.close(),
+        localModelDeclarations.close(),
         workspaceAccess.close(),
         userSessionGeneration.close(),
         ssoDiscovery.close(),

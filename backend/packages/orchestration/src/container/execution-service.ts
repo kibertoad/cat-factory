@@ -93,6 +93,9 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // Its sibling one row over: the block's MODEL preset, resolved on every dispatch for the
     // step's model AND the route order. Invalidated by `ModelPresetService` on every write.
     modelPresetCache: caches.modelPreset,
+    // And the per-USER one: what the run's initiator declared about their locally-run models, also
+    // resolved on every dispatch. Invalidated by the local-runner controller's two write routes.
+    localModelDeclarationsCache: caches.localModelDeclarations,
     // The per-class change classification the merge policy's rules key off, plus the best-effort
     // record of every merge decision. Absent ⇒ `unknown` class, no rule matches, nothing stored.
     mergeTrackRecord: mergeTrackRecords?.service,

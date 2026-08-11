@@ -6,6 +6,8 @@ import type {
   WorkspaceSettings,
 } from '../domain/types.js'
 import type { ResolvedAccountSettings } from './account-settings-repositories.js'
+import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
+import type { LocalModelEndpointRepository } from './local-model-repositories.js'
 import type { DocumentContent, LinkedDocumentRefreshOutcome } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
 import type { AccountSkillRecord } from './skill-repositories.js'
@@ -314,6 +316,25 @@ export interface AppCaches {
    */
   modelPreset: GroupCacheHandle<ModelPresetCacheValue>
   /**
+   * What the resolving USER declared about the locally-run models they enabled, grouped AND keyed
+   * by user id (one entry per group) and projected to what a reader needs
+   * ({@link LocalModelDeclarationsCacheValue}), so no sealed bearer key ever enters the bag.
+   *
+   * Its profile is `modelPreset`'s and its reason is the same: a per-dispatch read of a slow-moving
+   * row that a person edits by hand, from a settings panel, a handful of times ever. EVERY dispatch
+   * resolves it (the winning model is not known until `resolveStepModelRef` has walked its sources,
+   * so the read cannot be deferred to a local pin), which is a query per step on every deployment
+   * including the vast majority that have wired no runner at all, and one extra
+   * `/internal/persistence` round trip per step in mothership mode.
+   *
+   * Coherence is invalidation-driven: the two write paths (the endpoint upsert and remove, both
+   * behind one per-user controller) drop the user's entry after the write commits, so enabling a
+   * model or re-declaring its modality is visible on the very next dispatch. Pass-through on the
+   * Worker's isolate-safe profile (our own mutable D1 state, no cross-isolate bus), so it caches
+   * only on the Node/local facades.
+   */
+  localModelDeclarations: GroupCacheHandle<LocalModelDeclarationsCacheValue>
+  /**
    * The signed-in caller's resolved workspace-RBAC access to one board (workspace-rbac
    * initiative), grouped by workspace id and keyed by user id — the three-read resolution
    * (`accessRowOf` + account roles + the member row) the shared auth gate runs on EVERY
@@ -404,6 +425,44 @@ export interface RiskPolicyCacheValue {
  */
 export interface ModelPresetCacheValue {
   preset: ModelPreset | null
+}
+
+/**
+ * Cache-friendly wrapper for one user's local-model declarations: only the runners that have a
+ * model enabled, each with the declarations for them.
+ *
+ * Wrapped rather than cached bare so the common "this user runs no local models" case caches as a
+ * VALUE (layered-loader treats a bare `null` as unresolved, and an empty array would be a second
+ * shape to reason about), and PROJECTED rather than holding the endpoint records because those
+ * carry the sealed bearer key, which has no business in a cache serving the run path.
+ */
+export interface LocalModelDeclarationsCacheValue {
+  runners: LocalModelDeclarations[]
+}
+
+/**
+ * Read a user's local-model declarations through the {@link AppCaches.localModelDeclarations}
+ * slice (or straight from the repository when no cache is wired, as in tests and standalone
+ * services). Shared by every reader so the key/group and the projection cannot drift, the same
+ * reasoning as {@link readCachedWorkspaceSettings}. Group == key == user id.
+ *
+ * The result is the SHARED cached instance on a hit, so callers must treat it as immutable.
+ */
+export async function readCachedLocalModelDeclarations(
+  cache: GroupCacheHandle<LocalModelDeclarationsCacheValue> | undefined,
+  repository: LocalModelEndpointRepository,
+  userId: string,
+): Promise<readonly LocalModelDeclarations[]> {
+  const load = async (): Promise<LocalModelDeclarationsCacheValue> => {
+    const endpoints = await repository.listByUser(userId)
+    return {
+      runners: endpoints
+        .filter((e) => e.models.length > 0)
+        .map((e) => ({ provider: e.provider, models: e.models })),
+    }
+  }
+  const { runners } = cache ? await cache.get(userId, userId, load) : await load()
+  return runners
 }
 
 /**

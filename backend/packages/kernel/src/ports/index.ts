@@ -447,6 +447,7 @@ export type {
   BudgetLimitCacheValue,
   CachedRepoRead,
   GroupCacheHandle,
+  LocalModelDeclarationsCacheValue,
   ModelPresetCacheValue,
   ResolvedFoundationalService,
   RiskPolicyCacheValue,
@@ -454,7 +455,11 @@ export type {
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
 } from './caching.js'
-export { readCachedWorkspaceSettings, repoFilesCacheGroup } from './caching.js'
+export {
+  readCachedLocalModelDeclarations,
+  readCachedWorkspaceSettings,
+  repoFilesCacheGroup,
+} from './caching.js'
 export type {
   SelectableFragment,
   FragmentSelectionContext,

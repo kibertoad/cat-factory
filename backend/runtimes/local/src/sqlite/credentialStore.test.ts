@@ -258,7 +258,8 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Ollama',
       baseUrl: 'http://localhost:11434/v1',
       apiKeyCipher: null,
-      models: ['llama3', 'qwen'],
+      models: [{ id: 'llama3' }, { id: 'qwen', acceptsImages: true }],
+      unreadableModels: false,
       createdAt: 100,
       updatedAt: 100,
     })
@@ -269,7 +270,8 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Ollama',
       baseUrl: 'http://localhost:11434/v1',
       apiKeyCipher: null,
-      models: ['llama3', 'qwen'],
+      models: [{ id: 'llama3' }, { id: 'qwen', acceptsImages: true }],
+      unreadableModels: false,
       createdAt: 100,
       updatedAt: 100,
     })
@@ -284,7 +286,8 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'First',
       baseUrl: 'http://a/v1',
       apiKeyCipher: null,
-      models: ['a'],
+      models: [{ id: 'a' }],
+      unreadableModels: false,
       createdAt: 100,
       updatedAt: 100,
     })
@@ -294,7 +297,8 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Second',
       baseUrl: 'http://b/v1',
       apiKeyCipher: 'sealed:key',
-      models: ['b', 'c'],
+      models: [{ id: 'b' }, { id: 'c' }],
+      unreadableModels: false,
       createdAt: 999, // must be ignored
       updatedAt: 200,
     })
@@ -303,7 +307,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Second',
       baseUrl: 'http://b/v1',
       apiKeyCipher: 'sealed:key',
-      models: ['b', 'c'],
+      models: [{ id: 'b' }, { id: 'c' }],
       createdAt: 100,
       updatedAt: 200,
     })
@@ -327,6 +331,7 @@ function endpoint(provider: 'ollama' | 'lmstudio', createdAt: number) {
     baseUrl: `http://localhost/${provider}/v1`,
     apiKeyCipher: null,
     models: [],
+    unreadableModels: false,
     createdAt,
     updatedAt: createdAt,
   }

@@ -11,6 +11,10 @@ import {
 } from '@cat-factory/contracts'
 import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
 import { providerCachesPrompts } from './cache-policy.js'
+import {
+  type LocalModelDeclarations,
+  resolveLocalModelModality,
+} from './local-model-declarations.js'
 
 /**
  * Every route a catalog model can resolve to, as an ordered tuple. `satisfies` pins the
@@ -1328,31 +1332,38 @@ export function effectiveCatalogWith(
   return [...MODEL_CATALOG, ...extra].map((model) => toOption(model, caps, costFor))
 }
 
-/** A user's enabled models for one local runner endpoint. */
-export interface LocalEndpointModels {
-  /** The runner provider id (e.g. `ollama`), also the `ModelRef.provider`. */
-  provider: string
+/** A user's enabled models for one local runner endpoint, with what they declared about each. */
+export interface LocalEndpointModels extends LocalModelDeclarations {
   /** The provider label shown in the picker (e.g. `Ollama`). */
   label: string
-  /** Enabled model ids on this endpoint. */
-  models: string[]
 }
 
 /**
  * Build the dynamic, per-user catalog entries for a set of configured local endpoints.
  * Each enabled model becomes a `direct`-flavour {@link SelectableModel} with a stable id
  * `"<provider>:<model>"` and no key requirement (gated by `localModels`).
+ *
+ * The model's modality rides the ref, so the picker states what a local model can be given exactly
+ * as it does for a catalog entry. Resolved through the shared two-tier rule (the user's declaration,
+ * else the recognised-family table), so the picker cannot show one answer while the run takes
+ * another; a model neither tier knows leaves `acceptsImages` absent rather than defaulting it (see
+ * `localModelDeclarationSchema` for why that third state matters).
  */
 export function localSelectableModels(endpoints: LocalEndpointModels[]): SelectableModel[] {
   const out: SelectableModel[] = []
   for (const ep of endpoints) {
-    for (const model of ep.models) {
+    for (const declared of ep.models) {
+      const acceptsImages = resolveLocalModelModality(declared.id, declared)
       out.push({
-        id: `${ep.provider}:${model}`,
-        label: model,
+        id: `${ep.provider}:${declared.id}`,
+        label: declared.id,
         description: `Local model served by ${ep.label}.`,
         direct: {
-          ref: { provider: ep.provider, model },
+          ref: {
+            provider: ep.provider,
+            model: declared.id,
+            ...(acceptsImages === undefined ? {} : { acceptsImages }),
+          },
           keyEnv: '',
           providerLabel: ep.label,
         },

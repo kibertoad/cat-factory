@@ -1133,6 +1133,15 @@
       "reachable": "Erreichbar · keine Modelle | Erreichbar · {count} Modell | Erreichbar · {count} Modelle",
       "noModels": "Keine Modelle gemeldet.",
       "enableModels": "Modelle aktivieren",
+      "imageInputHint": "Manche lokalen Modelle lesen Screenshots und Design-Renderings. Bekannte Modellfamilien werden automatisch erkannt, und die Option Nicht gesetzt zeigt pro Modell, wie es behandelt wird; setzen Sie den Wert selbst für einen Build, den die Plattform nicht kennen kann, etwa eine reine Text-Quantisierung oder ein Fine-Tuning.",
+      "imageInputLabel": "Bildunterstützung für {model}",
+      "imageInput": {
+        "autoYes": "Nicht gesetzt: {family} liest Bilder",
+        "autoNo": "Nicht gesetzt: {family} ist nur Text",
+        "unknown": "Bilder: nicht gesetzt",
+        "yes": "Liest Bilder",
+        "no": "Nur Text"
+      },
       "toast": {
         "saved": "{name} gespeichert",
         "saveFailed": "Runner konnte nicht gespeichert werden",
@@ -1144,6 +1153,7 @@
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
       },
       "blocked": "Die URL dieses Runners ist auf dieser Installation nicht erlaubt, daher sind seine Modelle in der Auswahl ausgeblendet.",
+      "modelsDiscarded": "Einige der aktivierten Modelle dieses Runners konnten nicht gelesen werden und wurden verworfen. Wählen Sie die gewünschten erneut aus und speichern Sie.",
       "urlReason": {
         "invalid_url": "Das ist keine gültige URL.",
         "scheme_not_allowed": "Eine Runner-URL muss mit http:// oder https:// beginnen.",

@@ -236,6 +236,12 @@ export class AiAgentExecutor implements AgentExecutor {
         // The preset's route order, resolved once per dispatch by the engine. Read off the
         // CONTEXT so this inline path and the container/consensus paths agree on the provider.
         ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
+        // And what the initiator declared about their own local models, for the same reason: this
+        // path attaches design images as message parts, so it is one of the two readers of the
+        // modality the fold puts on the ref.
+        ...(context.localModelDeclarations
+          ? { localModelDeclarations: context.localModelDeclarations }
+          : {}),
       },
     )
   }

@@ -3870,6 +3870,15 @@
       "reachable": "Reachable · no models | Reachable · {count} model | Reachable · {count} models",
       "noModels": "No models reported.",
       "enableModels": "Enable models",
+      "imageInputHint": "Some local models read screenshots and design renders. Well-known families are recognised automatically, and the not-set option on each model says which way it falls; set it yourself for a build the platform cannot know about, such as a text-only quant or a fine-tune.",
+      "imageInputLabel": "Image support for {model}",
+      "imageInput": {
+        "autoYes": "Not set: {family} reads images",
+        "autoNo": "Not set: {family} is text only",
+        "unknown": "Images: not set",
+        "yes": "Reads images",
+        "no": "Text only"
+      },
       "toast": {
         "saved": "{name} saved",
         "saveFailed": "Could not save runner",
@@ -3881,6 +3890,7 @@
         "body": "\"{name}\" will be removed. This can't be undone."
       },
       "blocked": "This runner's URL is not allowed on this deployment, so its models are hidden from the picker.",
+      "modelsDiscarded": "Some of this runner's enabled models could not be read and were discarded. Re-select the ones you want and save.",
       "urlReason": {
         "invalid_url": "That is not a valid URL.",
         "scheme_not_allowed": "A runner URL must start with http:// or https://.",

@@ -3588,6 +3588,15 @@
       "reachable": "Osiągalny · {count} model | Osiągalny · {count} modele | Osiągalny · {count} modeli",
       "noModels": "Nie zgłoszono żadnych modeli.",
       "enableModels": "Włącz modele",
+      "imageInputHint": "Część modeli lokalnych czyta zrzuty ekranu i rendery projektów. Znane rodziny modeli są rozpoznawane automatycznie, a opcja Nie ustawiono przy każdym modelu mówi, jak zostanie potraktowany; ustaw ją samodzielnie dla wersji, której platforma nie może znać, na przykład kwantyzacji tylko tekstowej lub własnego dostrojenia.",
+      "imageInputLabel": "Obsługa obrazów dla {model}",
+      "imageInput": {
+        "autoYes": "Nie ustawiono: {family} czyta obrazy",
+        "autoNo": "Nie ustawiono: {family} obsługuje tylko tekst",
+        "unknown": "Obrazy: nie ustawiono",
+        "yes": "Czyta obrazy",
+        "no": "Tylko tekst"
+      },
       "toast": {
         "saved": "Zapisano {name}",
         "saveFailed": "Nie udało się zapisać runnera",
@@ -3599,6 +3608,7 @@
         "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
       },
       "blocked": "Adres URL tego runnera nie jest dozwolony w tym wdrożeniu, dlatego jego modele są ukryte w selektorze.",
+      "modelsDiscarded": "Części włączonych modeli tego runnera nie udało się odczytać i zostały odrzucone. Wybierz ponownie te, których chcesz, i zapisz.",
       "urlReason": {
         "invalid_url": "To nie jest prawidłowy adres URL.",
         "scheme_not_allowed": "Adres URL runnera musi zaczynać się od http:// lub https://.",

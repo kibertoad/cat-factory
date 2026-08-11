@@ -182,6 +182,14 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         // CONTEXT so a panel's participants run on the same providers the single-actor path
         // would have used for the same step.
         ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
+        // The initiator's local-model declarations, threaded for consistency with the other two
+        // paths. A panel withholds design images for its OWN reason (`consensus_panel`: one
+        // composed prompt across models that need not agree), so nothing here reads the modality
+        // today, but a base ref that answered differently per executor is exactly the drift the
+        // per-dispatch resolution exists to prevent.
+        ...(context.localModelDeclarations
+          ? { localModelDeclarations: context.localModelDeclarations }
+          : {}),
       },
     )
   }

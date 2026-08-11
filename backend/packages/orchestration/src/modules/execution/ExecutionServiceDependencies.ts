@@ -25,6 +25,8 @@ import type {
   IssueWritebackProvider,
   JudgeAssessor,
   JudgeRegistry,
+  LocalModelDeclarationsCacheValue,
+  LocalModelEndpointRepository,
   Logger,
   ModelPresetCacheValue,
   ModelPresetRepository,
@@ -195,6 +197,13 @@ export interface ExecutionServiceDependencies {
    * default route order (the feature is simply off).
    */
   modelPresetRepository?: ModelPresetRepository
+  /**
+   * Optional: the per-USER locally-run model endpoints, threaded into the context builder so each
+   * dispatch resolves what the RUN INITIATOR declared about the local models they enabled (today:
+   * whether one reads images) and every executor reads it off the resolved ref. Absent ⇒ a local
+   * ref stays undeclared, which reads as unknown rather than as a model refusing images.
+   */
+  localModelEndpointRepository?: LocalModelEndpointRepository
   /**
    * Optional: the workspace's consensus-GROUP library, threaded into the context builder so a
    * consensus step naming a tier set resolves the group its task's estimate earned. Absent ⇒ a
@@ -511,6 +520,14 @@ export interface ExecutionServiceDependencies {
    * `ModelPresetService` on every preset write.
    */
   modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
+  /**
+   * Optional: the {@link AppCaches.localModelDeclarations} slice, read-through for what the run
+   * INITIATOR declared about the locally-run models they enabled. Same profile as the preset slice
+   * above, keyed on the user rather than the workspace, and read by every dispatch for the same
+   * reason: the winning model is not known until the shared resolver has walked its sources. Absent
+   * → every dispatch hits the repository. Invalidated by the endpoint write paths.
+   */
+  localModelDeclarationsCache?: GroupCacheHandle<LocalModelDeclarationsCacheValue>
   /**
    * Optional: the merge track record — the per-class change classification the merge policy's
    * per-class rules key off, plus the best-effort record of every merge decision (and the

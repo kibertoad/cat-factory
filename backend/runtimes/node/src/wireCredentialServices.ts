@@ -136,6 +136,20 @@ export function buildNodePublicApiKeyService(
 }
 
 /**
+ * Which store backs a user's locally-run endpoints on this facade: the injected local-sqlite
+ * credential seam (mothership mode, where the row must stay on the laptop) else Drizzle over the
+ * main database. Its own function because TWO callers need the same answer (the credential service
+ * below, and the ENGINE's per-dispatch read of what a user declared about a local model), and a
+ * second copy of this rule would send one of them to the wrong database in mothership mode.
+ */
+export function selectNodeLocalModelEndpointRepository(
+  db: DrizzleDb | undefined,
+  repositoryOverride?: LocalModelEndpointRepository,
+): LocalModelEndpointRepository | undefined {
+  return repositoryOverride ?? (db ? new DrizzleLocalModelEndpointRepository(db) : undefined)
+}
+
+/**
  * The per-USER locally-run model endpoints store (Ollama / LM Studio / …) for the
  * Node/local facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is
  * absent (the optional bearer key is sealed with the single system cipher). Mirror of
@@ -150,8 +164,10 @@ export function buildNodeLocalModelEndpointService(
 ): LocalModelEndpointService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined
-  const localModelEndpointRepository =
-    repositoryOverride ?? (db ? new DrizzleLocalModelEndpointRepository(db) : undefined)
+  const localModelEndpointRepository = selectNodeLocalModelEndpointRepository(
+    db,
+    repositoryOverride,
+  )
   if (!localModelEndpointRepository) return undefined
   return new LocalModelEndpointService({
     localModelEndpointRepository,
