@@ -21,6 +21,7 @@ export {
   type CredentialRequiredReason,
   type ConflictReason,
 } from './domain/errors.js'
+export { DataIntegrityError, isDataIntegrityError } from './domain/data-integrity.js'
 export { sameSubtasks, sameSubtaskItems, parseSubtasks } from './domain/subtasks.logic.js'
 export {
   type CachePolicy,

@@ -189,9 +189,15 @@ per-hop fetch.
 the terminal message is `"<label> status was unreadable (3 polls)"` with the actual cause (DNS,
 TLS, 502) existing nowhere. The Cloudflare twin logs each attempt and appends
 `(last error: …)` (`ExecutionWorkflow.ts:110-122`): a one-line asymmetry causing total
-cause-loss on Node/local. Both sweepers also run their whole pass in one `try`: a single throwing
-`instanceState`/`redrive` aborts every later stale run that tick (`sweeper.ts:130-162`,
-`pgBossRunner.ts:312-381`), logged as "sweep failed" with no run id.
+cause-loss on Node/local.
+
+_(The SWEEP half is FIXED in Phase 6.2; the `drive.ts` cause-loss above is what B7 still owns.)_
+Both sweepers used to run their whole pass in one `try`, so a single throwing
+`instanceState`/`redrive` aborted every later stale run that tick, logged as "sweep failed" with no
+run id. Each pass now recovers one run at a time inside a per-run boundary that names the run it
+skipped and counts it (`sweep.run_recovery_failed`). The case that forced it: a run whose stored row
+cannot be decoded throws on every read, and `listStale` is ordered oldest first, so it sorted to the
+front of every pass and the sweeper recovered nothing at all while reporting itself as running.
 
 **B8: `MergeTrackRecordService` drops the repo identity its own comment promises to keep. (P2)**
 _(FIXED in Phase 1.2: `repo` is now bound outside the `try` and re-attached in the catch. 2.3 is
@@ -1275,12 +1281,12 @@ causes, both of which record a call the store then cannot be asked for.
   killed-CLI case from #1521 and the scope fallback). Conformance cannot reach either: it bypasses
   the model provider via the fake executor.
 
-### Phase 6: Hardening & polish
+### Phase 6: Hardening & polish **6.2 LANDED**
 
 | #   | Step                                                                                                                                                                                                                                               | Fixes           | Sev |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | --- |
 | 6.1 | Default timeouts on the VCS clients (an `AbortSignal.timeout` per request, generous, e.g. 60s) and honour `Retry-After`/`resetAt` with one bounded retry on rate-limited GETs; give `safeFetch` a default per-hop deadline overridable by callers. | B6              | P2  |
-| 6.2 | Per-item isolation in both stale-run sweepers (per-run try/catch, log the run id, continue the pass).                                                                                                                                              | B7 (sweep half) | P2  |
+| 6.2 | **LANDED.** Per-item isolation in both stale-run sweepers (per-run try/catch, log the run id, continue the pass), plus the `sweep.run_recovery_failed` counter and the Worker `SweepResult.failed` tally.                                          | B7 (sweep half) | P2  |
 | 6.3 | Unify `redactSecrets`: kernel copy as source of truth, harness/deploy-harness copies conformity-pinned byte-for-byte (the `host-markdown.ts` pattern).                                                                                             | A5              | P3  |
 | 6.4 | Local adapter fidelity: distinguish "no logs" from "logs unreadable" and "inspect failed" from "still running"; warn once on Apple's reduced fidelity; count swallowed `remove()` failures.                                                        | D8              | P3  |
 | 6.5 | Minimal client-side error reporting: a Nuxt global error handler posting to a backend endpoint (workspace-scoped, rate-limited, scrubbed).                                                                                                         | C8              | P3  |

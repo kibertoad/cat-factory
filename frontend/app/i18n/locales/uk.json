@@ -1784,6 +1784,7 @@
       "rejected": "Відхилено",
       "companion_rejected": "Компаньйона відхилено",
       "stalled": "Зупинено",
+      "state_unreadable": "Стан не читається",
       "cancelled": "Скасовано",
       "unknown": "Невідомо"
     },

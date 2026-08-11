@@ -583,3 +583,18 @@ What a consumer NOTICES, beyond the two new methods:
   the way. The actions only ever touch an issue a task is LINKED to, and nothing links one by
   accident, which is the reasoning behind the flip; a deployment that wants the old behaviour turns
   it off with one call to the new operation.
+
+1.47.0: one additive enum member, `state_unreadable`, on the failure kind the run-debugging reads
+report. A consumer built against 1.46.0 keeps parsing (the SDKs tolerate an unknown member by
+design), and no existing value changes meaning.
+
+What a consumer NOTICES is a kind that could not previously be produced at all, because the runs it
+describes could not previously be settled: a run whose stored row violates its own contract. Every
+richer settle path begins by READING the run, so such a row used to stay `running` forever while
+each recovery attempt threw on the load. It is now closed through the one write that decodes
+nothing, and the kind says which runs those were rather than filing them under `stalled`, whose
+whole advice is "retry" and whose retry would re-read the same row.
+
+The kind is deliberately NOT reachable from the ordinary run reads: a row nothing can decode is
+dropped from the board snapshot, so it surfaces in the operator's failure-kind breakdown and in
+this debug report, which are the two places someone who can act on it is looking.

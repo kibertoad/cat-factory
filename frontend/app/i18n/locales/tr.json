@@ -1784,6 +1784,7 @@
       "rejected": "Reddedildi",
       "companion_rejected": "Yardımcı reddedildi",
       "stalled": "Takıldı",
+      "state_unreadable": "Durum okunamıyor",
       "cancelled": "İptal edildi",
       "unknown": "Bilinmiyor"
     },

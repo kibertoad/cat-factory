@@ -32,6 +32,7 @@ export const FAILURE_KIND_KEYS: Record<AgentFailureKind, string> = {
   rejected: 'platformObservability.failureKind.rejected',
   companion_rejected: 'platformObservability.failureKind.companion_rejected',
   stalled: 'platformObservability.failureKind.stalled',
+  state_unreadable: 'platformObservability.failureKind.state_unreadable',
   cancelled: 'platformObservability.failureKind.cancelled',
   unknown: 'platformObservability.failureKind.unknown',
 }

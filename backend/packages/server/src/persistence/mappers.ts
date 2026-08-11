@@ -1102,7 +1102,32 @@ export function adoptCreatedAt(instance: ExecutionInstance, now: number): number
   return (instance.createdAt ??= now)
 }
 
+/**
+ * Refuse to persist a run that carries no owning block, the WRITE-side twin of the read guard in
+ * {@link rowToExecution}.
+ *
+ * A blockless run row is unusable in both directions and, worse, un-disposable: the board load
+ * drops it, `get` throws, and so every path that could settle it (retry, stop, the stale-run
+ * sweeper's hard-stall backstop) throws on the way in. Left to the read guard alone, the write
+ * that produced it is long gone by the time anything notices, which is exactly the trail that
+ * cannot be followed backwards. `blockId` is typed `string`, so a violation here is an instance
+ * assembled outside `ExecutionService.start` (a JSON round-trip that dropped the field, a hand-
+ * built object): impossible per the types, which is why it is asserted rather than handled.
+ */
+function assertPersistableExecution(instance: ExecutionInstance): void {
+  if (!instance.blockId) {
+    throw new DataIntegrityError('Execution has no blockId and cannot be persisted', {
+      table: 'agent_runs',
+      column: 'block_id',
+      id: instance.id,
+    })
+  }
+}
+
 export function executionToDetail(instance: ExecutionInstance): string {
+  // Every write path (both facades' `upsert` / `insertLive` / `compareAndSwap`) composes its
+  // detail JSON here, which is what makes this the one place a new writer cannot forget to pass.
+  assertPersistableExecution(instance)
   return JSON.stringify({
     pipelineId: instance.pipelineId,
     pipelineName: instance.pipelineName,

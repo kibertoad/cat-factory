@@ -276,6 +276,12 @@ export interface SweepResult {
    * BLIND, which reads in every other number as a fleet that suddenly went quiet.
    */
   unknown: number
+  /**
+   * Runs whose recovery THREW, so the sweep moved on to the next one. Not a disposition either:
+   * the run got neither re-driven nor settled, and the pass continued only because it is
+   * isolated per run (see {@link recoverStaleRun}).
+   */
+  failed: number
 }
 
 /**
@@ -308,19 +314,45 @@ export async function sweepStuckRuns({
 }: SweepDeps): Promise<SweepResult> {
   const now = clock.now()
   const stale = await agentRunRepository.listStale(now - leaseMs)
-  let redriven = 0
-  let finalized = 0
-  let stalled = 0
-  let unknown = 0
+  const tally: SweepResult = { redriven: 0, finalized: 0, stalled: 0, unknown: 0, failed: 0 }
   // Which runs were observed still-orphaned (`missing`) THIS tick — used to prune the
   // per-process clock of any run that recovered or went terminal so its deadline restarts
   // if it ever stalls again.
   const stillOrphaned = new Set<string>()
   for (const ref of stale) {
+    // ISOLATED PER RUN, the same rule as the Node sweeper's `reenqueueStaleRuns`. Recovering a
+    // run probes a durable instance and can settle the run itself, so any one of them can throw
+    // for reasons entirely its own; `listStale` is ordered OLDEST FIRST, so an unrecoverable run
+    // sorts to the front of every future pass. Left to propagate, one such run ends the pass and
+    // takes every stale run behind it down with it, tick after tick, while the cron keeps
+    // reporting that it ran.
+    try {
+      await recoverStaleRun(ref)
+    } catch (error) {
+      tally.failed++
+      logger.error('stale-run recovery failed for one run; continuing the sweep', {
+        workspaceId: ref.workspaceId,
+        runId: ref.id,
+        kind: ref.kind,
+        ...describeError(error),
+      })
+      metrics.increment('sweep.run_recovery_failed', { kind: ref.kind })
+    }
+  }
+  // Forget runs that recovered (bumped their lease → left the stale set) or went terminal, so
+  // their per-process orphaned clock restarts if they ever stall again.
+  for (const id of orphanedSince.keys()) {
+    if (!stillOrphaned.has(id)) orphanedSince.delete(id)
+  }
+  return tally
+
+  /** Recover ONE stale run, tallying its disposition. Hoisted so the loop above stays the
+   *  isolation boundary and nothing else. */
+  async function recoverStaleRun(ref: AgentRunRef): Promise<void> {
     const { state, detail } = await instanceState(ref)
     if (state === 'alive') {
       orphanedSince.delete(ref.id)
-      continue
+      return
     }
     if (state === 'unknown') {
       // Forget the orphan clock rather than carrying it: the run was NOT observed orphaned
@@ -329,18 +361,18 @@ export async function sweepStuckRuns({
       // deadline restarts from the next observation that actually saw something, which also
       // guarantees the run is re-driven at least once before it can be given up on.
       orphanedSince.delete(ref.id)
-      unknown++
+      tally.unknown++
       metrics.increment('sweep.run_state_unknown', { kind: ref.kind })
-      continue
+      return
     }
     if (state === 'terminal') {
       orphanedSince.delete(ref.id)
       await finalizeOrphan(ref, detail)
-      finalized++
+      tally.finalized++
       // The run KIND is a bounded enum and the split that matters: bootstrap runs and
       // execution runs are lost for different reasons and fixed in different places.
       metrics.increment('sweep.run_finalized', { kind: ref.kind })
-      continue
+      return
     }
     // `missing`: the instance was lost (eviction, a missed event) and can be re-created.
     // Start (or carry forward) this run's per-process orphaned clock so the hard-stall
@@ -355,14 +387,14 @@ export async function sweepStuckRuns({
     // banner + retry.
     if (ref.kind === 'execution' && now - firstSeenOrphaned > hardStallMs) {
       await failStalled(ref)
-      stalled++
+      tally.stalled++
       metrics.increment('sweep.run_stalled', { kind: ref.kind })
       orphanedSince.delete(ref.id)
       stillOrphaned.delete(ref.id)
-      continue
+      return
     }
     await redrive(ref)
-    redriven++
+    tally.redriven++
     metrics.increment('sweep.run_redriven', { kind: ref.kind })
     // Persist the per-run count AFTER the re-drive and best-effort: this is bookkeeping about
     // the recovery, so it must never be able to fail one. Ordered after for the same reason —
@@ -371,12 +403,6 @@ export async function sweepStuckRuns({
       agentRunRepository.recordRedrive(ref.workspaceId, ref.id),
     )
   }
-  // Forget runs that recovered (bumped their lease → left the stale set) or went terminal, so
-  // their per-process orphaned clock restarts if they ever stall again.
-  for (const id of orphanedSince.keys()) {
-    if (!stillOrphaned.has(id)) orphanedSince.delete(id)
-  }
-  return { redriven, finalized, stalled, unknown }
 }
 
 export interface EnvTestSweepDeps {

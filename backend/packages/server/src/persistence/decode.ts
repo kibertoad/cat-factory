@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { describeError } from '@cat-factory/kernel'
+import { DataIntegrityError, describeError } from '@cat-factory/kernel'
 import { logger } from '../observability/logger.js'
 
 // Validate-on-read guards for the persistence boundary.
@@ -18,21 +18,11 @@ import { logger } from '../observability/logger.js'
 //   - degrade (`decodeEnumOr` / `tryDecodeRow`) — for snapshot-facing reads where one bad
 //     row must not down a whole board load: log loudly + fall back / drop the single row.
 
-/**
- * A persisted row violated its own contract (an unknown enum value, malformed JSON, a
- * column that should never be null). A plain `Error` (not a {@link DomainError}) so the
- * HTTP error handler maps it to a logged 500 — this is internal data corruption, never a
- * client input fault.
- */
-export class DataIntegrityError extends Error {
-  constructor(
-    message: string,
-    readonly context: Record<string, unknown>,
-  ) {
-    super(message)
-    this.name = 'DataIntegrityError'
-  }
-}
+// The error these guards throw lives in kernel (`domain/data-integrity.ts`) and is re-exported
+// here, where every thrower and most catchers already look for it. It has to be visible to the
+// ENGINE as well as to this boundary: a run row that cannot be decoded is disposed of by the
+// execution service rather than re-driven forever, and orchestration cannot import this package.
+export { DataIntegrityError, isDataIntegrityError } from '@cat-factory/kernel'
 
 /** Truncate a stored value for safe inclusion in a log/error message. */
 function preview(value: unknown): string {

@@ -44,6 +44,11 @@ supposed to catch it:
    `paused` run is _deliberately invisible_ to the sweepers: its only recovery is a human
    acting on a signal (an inbox notification card, escalated yellow → red by the periodic
    sweep). This makes the notification the load-bearing recovery path for every park.
+   Two properties of the pass itself were added later and are worth measuring a finding
+   against: each run is recovered inside a PER-RUN boundary (one that throws is logged, counted
+   as `sweep.run_recovery_failed` and skipped, never ending the pass), and a run whose stored
+   row cannot be DECODED is settled `state_unreadable` through the SQL-only terminal write
+   rather than re-listed forever, since every richer settle path begins by reading it.
 2. **In-drive poll budgets**: `jobMaxPolls` (~70 min) / `ciMaxPolls` +
    `jobPollFailureTolerance` (6) bound every `awaiting_job` / `awaiting_gate` wait, ending in
    `failRun('timeout')` or `resolveGatePollExhaustion`.

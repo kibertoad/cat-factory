@@ -1784,6 +1784,7 @@
       "rejected": "却下",
       "companion_rejected": "コンパニオン却下",
       "stalled": "停滞",
+      "state_unreadable": "状態の読み取り不可",
       "cancelled": "キャンセル",
       "unknown": "不明"
     },

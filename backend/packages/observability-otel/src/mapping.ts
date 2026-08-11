@@ -728,6 +728,7 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'sweep.run_finalized': 'cat_factory.platform.sweep_runs_finalized',
   'sweep.run_stalled': 'cat_factory.platform.sweep_runs_stalled',
   'sweep.run_state_unknown': 'cat_factory.platform.sweep_runs_state_unknown',
+  'sweep.run_recovery_failed': 'cat_factory.platform.sweep_run_recovery_failures',
   'sweep.failed': 'cat_factory.platform.sweep_failures',
   'container.dispatch_failed': 'cat_factory.platform.container_dispatch_failures',
   'container.evicted': 'cat_factory.platform.container_evictions',
@@ -768,6 +769,9 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'sweep.run_finalized': RUN_UNIT,
   'sweep.run_stalled': RUN_UNIT,
   'sweep.run_state_unknown': RUN_UNIT,
+  // One RUN the pass could not recover, not one failed pass: the pass itself survived, which is
+  // the whole difference between this and `sweep.failed` below.
+  'sweep.run_recovery_failed': RUN_UNIT,
   'sweep.failed': '{failure}',
   'container.dispatch_failed': '{failure}',
   'container.evicted': '{eviction}',

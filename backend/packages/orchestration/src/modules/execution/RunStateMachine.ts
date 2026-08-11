@@ -20,9 +20,12 @@ import type {
 import {
   assertFound,
   ConflictError,
+  describeError,
   foldRollupTotals,
   foldRollupsByPhase,
+  getErrorMessage,
   isAsyncAgentExecutor,
+  isDataIntegrityError,
   isInitiativeAgentKind,
   noopLogger,
   redactSecrets,
@@ -72,6 +75,8 @@ const EXECUTION_FAILURE_HINTS: Record<AgentFailureKind, string> = {
     'A companion agent could not return a usable quality assessment (its reply was truncated or malformed) even after a repair retry. Review the companion’s raw output on the run, then retry.',
   stalled:
     'This run stopped making progress — its durable driver was lost (most often a crashed or restarted orchestrator) and automatic recovery could not resume it in time, so it was flagged rather than left spinning. Retry to start a fresh run.',
+  state_unreadable:
+    'This run’s stored state could not be read, so nothing can resume it: retrying would re-read the same row. The run has been closed so it stops being re-driven; start the work again as a new run, and report the run id to whoever operates this deployment (the underlying row needs looking at).',
   cancelled: 'You stopped this run; its container was killed. Retry to start it again.',
   dispatch:
     'The agent’s container could not be started — the run never began executing. The provider/runtime’s verbatim response is shown below. Most often this is transient (a capacity blip or a new-version rollout); retrying spins a fresh container. If it persists it points at a misconfigured container binding/image or runner pool. Retry to try again.',
@@ -826,6 +831,66 @@ export class RunStateMachine {
   }
 
   /**
+   * Load a run for a DRIVER or a settle path, DISPOSING of one whose stored row cannot be decoded
+   * (`null`, so the caller stops) instead of propagating the decode throw.
+   *
+   * Without this, a run row that violates its own contract is not merely unreadable, it is
+   * IMMORTAL: `listStale` keeps returning it (it stays `running`), every re-drive throws on the
+   * load, and the hard-stall backstop that exists to settle exactly such a run throws here, on
+   * its first line. The failure is recognised BY TYPE rather than by "the load threw", because a
+   * transient database outage must still propagate and leave the run alone.
+   *
+   * Both entry points that read a run they intend to MOVE go through this one method:
+   * {@link failRun} below and `ExecutionService.advanceInstance`. Disposing at the driver is what
+   * settles the row on its first re-drive rather than after the hard-stall deadline; having the
+   * settle path share it is what stops the backstop throwing on the runs it exists for.
+   */
+  async loadOrDispose(workspaceId: string, executionId: string): Promise<ExecutionInstance | null> {
+    try {
+      return await this.executionRepository.get(workspaceId, executionId)
+    } catch (error) {
+      if (!isDataIntegrityError(error)) throw error
+      await this.failUnreadableRun(workspaceId, executionId, error)
+      return null
+    }
+  }
+
+  /**
+   * Settle a run whose stored row cannot be decoded, through the ONE write that does not read it
+   * first: `markFailed` is pure SQL on both facades, so it lands where every richer path
+   * (container reclaim, block projection, the lifecycle emit) cannot even begin, having no
+   * instance to work from. Those omissions are the honest outcome and not a degradation to paper
+   * over: an undecodable row names no block to update and no step to attribute, and a run nothing
+   * can read is a run nothing can show a human anyway.
+   *
+   * What this buys is disposal. The row leaves `running`, so the sweeper stops re-driving it
+   * forever and the deployment's failure-kind breakdown gains a `state_unreadable` count, which
+   * is the signal an operator can actually act on (the board silently drops the row).
+   */
+  private async failUnreadableRun(
+    workspaceId: string,
+    executionId: string,
+    cause: unknown,
+  ): Promise<void> {
+    this.log.error('run row could not be decoded; failing it instead of re-driving', {
+      workspaceId,
+      executionId,
+      ...describeError(cause),
+    })
+    await this.executionRepository.markFailed(workspaceId, executionId, {
+      kind: 'state_unreadable',
+      message: 'This run’s stored state could not be read, so it could not be resumed.',
+      detail: getErrorMessage(cause),
+      hint: EXECUTION_FAILURE_HINTS.state_unreadable,
+      reason: 'run_state_unreadable',
+      occurredAt: this.clock.now(),
+      lastSubtasks: null,
+      // No `stepIndex`: the cursor lives in the row that could not be read, and the field is
+      // optional precisely so a producer that does not know it says nothing rather than "0".
+    })
+  }
+
+  /**
    * Record a terminal failure on a run: reclaim its container, mark it `failed` with the
    * richest failure record (first write wins), drop the block to `blocked` with the
    * progress it reached, and emit. The single funnel for every failure kind.
@@ -840,7 +905,7 @@ export class RunStateMachine {
      *  the SPA can render precise guidance without string-matching the prose. */
     reason: string | null = null,
   ): Promise<void> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
+    const instance = await this.loadOrDispose(workspaceId, executionId)
     if (!instance) return
     // Reclaim the per-run container on the failure path too: a failed run otherwise
     // leaves its container to idle out sleepAfter. This is the single funnel for

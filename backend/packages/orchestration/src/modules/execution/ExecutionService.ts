@@ -828,8 +828,14 @@ export class ExecutionService {
     executionId: string,
     options: AdvanceOptions = {},
   ): Promise<AdvanceResult> {
+    // The run-row load sits OUTSIDE the step's try/catch, and reads through `loadOrDispose`: a
+    // row that cannot be decoded is poison (no driver will ever get past this line), so it is
+    // settled terminally there rather than re-driven on every sweep until the end of time, and
+    // arrives here as a plain `null`. Keeping it out of the block below is what keeps the
+    // disposition honest: a `DataIntegrityError` raised deeper in the step (about some OTHER row)
+    // must never be read as this run being unreadable.
+    const instance = await this.runStateMachine.loadOrDispose(workspaceId, executionId)
     try {
-      const instance = await this.executionRepository.get(workspaceId, executionId)
       // A paused run is still drivable: the spend gate in stepInstance resumes it
       // once the budget frees up (or re-pauses it otherwise).
       if (!instance || (instance.status !== 'running' && instance.status !== 'paused')) {

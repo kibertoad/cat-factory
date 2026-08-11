@@ -698,8 +698,8 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
       })
         // Surface what the sweep did — the key signal for "are runs getting stuck?"
         // Only log when it actually acted.
-        .then(({ redriven, finalized, stalled, unknown }) => {
-          if (redriven > 0 || finalized > 0 || stalled > 0 || unknown > 0) {
+        .then(({ redriven, finalized, stalled, unknown, failed }) => {
+          if (redriven > 0 || finalized > 0 || stalled > 0 || unknown > 0 || failed > 0) {
             logger.warn('swept stuck runs', {
               cron: 'stale-run',
               redriven,
@@ -708,6 +708,9 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
               // Reported even when nothing else happened: a pass that classified nothing is
               // the one shape of sweep failure that produces no other evidence at all.
               unknown,
+              // Likewise for runs whose recovery threw: the pass no longer dies with them, so
+              // this line is where a pass that skipped everything it touched still says so.
+              failed,
             })
           }
         }),
