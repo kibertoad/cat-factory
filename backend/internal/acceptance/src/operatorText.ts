@@ -1,10 +1,14 @@
-// How this suite renders a value INTO text an operator reads: a thrown value, an address, and a
-// command they are expected to paste.
+// How this suite renders a value INTO text an operator reads: a thrown value, an address, and the
+// commands they are expected to paste.
 //
-// Three one-liners, and each is here because it was written more than once. The suite's whole
-// premise is that a refusal is worth more than a failure, which makes every one of these strings a
-// deliverable rather than a log line, and the three mistakes below are the ones that quietly take
-// the value back out of them.
+// Every helper here is here because it was written more than once. The suite's whole premise is that
+// a refusal is worth more than a failure, which makes each of these strings a deliverable rather than
+// a log line, and the mistakes below are the ones that quietly take the value back out of them: a
+// chain with nothing to say, a credential printed beside the steps, a value that breaks the command
+// it was interpolated into, and a command spelled for a shell the operator is not holding.
+//
+// The last of those is owned here COMPLETELY: every shell dialect this suite prints is decided in the
+// one `DIALECTS` table, and a call site says what it needs rather than which shell is in play.
 
 import { getErrorMessage, redactSecrets } from '@cat-factory/kernel'
 
@@ -49,9 +53,77 @@ export function shellQuoted(value: string): string {
   return `'${scrubbed(value).replaceAll("'", `'\\''`)}'`
 }
 
-/** The same job for PowerShell, whose single-quoted string DOUBLES a literal quote rather than escaping it. */
-function powerShellQuoted(value: string): string {
-  return `'${scrubbed(value).replaceAll("'", "''")}'`
+/** The command that runs a pass, in one place, so a printed remedy cannot drift from the README. */
+const ACCEPTANCE_INVOCATION = 'pnpm --filter @cat-factory/acceptance run acceptance'
+
+/** Which shell will RECEIVE the text. It decides every spelling in the table below. */
+export type ShellFlavour = 'posix' | 'powershell'
+
+/**
+ * The shell the operator is HOLDING, which the platform only approximates.
+ *
+ * Git Bash, MSYS and Cygwin are ordinary places to drive this suite from on Windows (this
+ * repository's own tooling documents the first), and in one of those the PowerShell form is worse
+ * than the POSIX form it would replace: bash expands `$env:ACCEPTANCE_RUN_ID` to nothing, answers
+ * `=: command not found`, and never reaches the command, so a printed RESUME silently starts a
+ * second pass instead. Those shells all export `SHELL` or `MSYSTEM`; PowerShell and `cmd.exe` export
+ * neither. `PSModulePath` is deliberately not consulted in the other direction: Windows sets it
+ * machine-wide, so it is present inside Git Bash too and would prove nothing.
+ */
+export function shellFlavour(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): ShellFlavour {
+  if (platform !== 'win32') return 'posix'
+  return env.SHELL || env.MSYSTEM ? 'posix' : 'powershell'
+}
+
+/** A literal for a POSIX `"…"`, where `$`, `` ` `` and `\` all still act unless escaped. */
+function posixInDoubleQuotes(value: string): string {
+  return scrubbed(value).replaceAll(/([\\"$`])/g, '\\$1')
+}
+
+/** The same for PowerShell's `"…"`, whose escape character is the BACKTICK rather than `\`. */
+function powerShellInDoubleQuotes(value: string): string {
+  return scrubbed(value).replaceAll(/([`"$])/g, '`$1')
+}
+
+/**
+ * Everything the two shells spell differently, in ONE table.
+ *
+ * A renderer below states WHAT it needs (a literal, a username substitution, an assignment that
+ * outlives the command or one that does not) and never which shell is in play. That is not tidying:
+ * `VAR=value command` was hard-coded at five sites, and the three that were missed on the first pass
+ * were missed because converting one cost a new function carrying its own copy of the same two
+ * decisions. Adding a sixth site now costs a call.
+ */
+type Dialect = {
+  /** A value as ONE word, with nothing inside it left expandable. */
+  literal: (value: string) => string
+  /** A value followed by the operator's username, which is a SUBSTITUTION and must stay live. */
+  withUsername: (value: string) => string
+  /** An assignment that PERSISTS for the rest of the shell session. */
+  assign: (name: string, rendered: string) => string
+  /** An assignment scoped to ONE command, for a value that must not outlive it. */
+  assignFor: (name: string, rendered: string, command: string) => string
+}
+
+const DIALECTS: Record<ShellFlavour, Dialect> = {
+  posix: {
+    literal: shellQuoted,
+    withUsername: (value) => `"${posixInDoubleQuotes(value)}-$(whoami)"`,
+    assign: (name, rendered) => `export ${name}=${rendered}`,
+    assignFor: (name, rendered, command) => `${name}=${rendered} ${command}`,
+  },
+  powershell: {
+    // PowerShell's single-quoted string DOUBLES a literal quote rather than escaping it.
+    literal: (value) => `'${scrubbed(value).replaceAll("'", "''")}'`,
+    withUsername: (value) => `"${powerShellInDoubleQuotes(value)}-$env:USERNAME"`,
+    assign: (name, rendered) => `$env:${name} = ${rendered}`,
+    // `;` and not `&&`: Windows PowerShell 5.1 has no pipeline chain operators at all, and a pasted
+    // `&&` fails to PARSE, which is a worse answer than running the second half unconditionally.
+    assignFor: (name, rendered, command) => `$env:${name} = ${rendered}; ${command}`,
+  },
 }
 
 /**
@@ -74,30 +146,42 @@ function powerShellQuoted(value: string): string {
  *   - **Not `cmd.exe`'s `set VAR=… && …`.** One Windows dialect, chosen because it is the shell the
  *     repository's own tooling assumes; a third form would be two more strings to keep true.
  */
-export function resumeInvocation(runId: string, platform: string = process.platform): string {
-  const run = 'pnpm --filter @cat-factory/acceptance run acceptance'
-  // `;` and not `&&`: Windows PowerShell 5.1 has no pipeline chain operators, and a pasted `&&`
-  // fails to PARSE, which is a worse answer than running the second half unconditionally.
-  return platform === 'win32'
-    ? `$env:ACCEPTANCE_RUN_ID = ${powerShellQuoted(runId)}; ${run}`
-    : `ACCEPTANCE_RUN_ID=${shellQuoted(runId)} ${run}`
+export function resumeInvocation(runId: string, flavour: ShellFlavour = shellFlavour()): string {
+  const shell = DIALECTS[flavour]
+  return shell.assignFor('ACCEPTANCE_RUN_ID', shell.literal(runId), ACCEPTANCE_INVOCATION)
+}
+
+/**
+ * A variable an operator sets and KEEPS, for a remedy whose whole fix is one value.
+ *
+ * The persistent twin of {@link resumeInvocation}, and the reason both live here: `export NAME=value`
+ * is as POSIX-only as the inline prefix is, so the remedies that pointed a pass at a different
+ * workspace, owner or ingress template were three more commands a PowerShell operator could not
+ * paste. Quoted rather than bare, because the value comes from a deployment's own answer.
+ */
+export function envAssignment(
+  name: string,
+  value: string,
+  flavour: ShellFlavour = shellFlavour(),
+): string {
+  const shell = DIALECTS[flavour]
+  return shell.assign(name, shell.literal(value))
 }
 
 /**
  * Taking a per-person name prefix, so two operators share one board without colliding.
  *
- * Here for the same reason as {@link resumeInvocation}, and here rather than at its call site
- * because that keeps every shell dialect this suite prints in one module. The whole command differs
- * rather than only the assignment: the username is a SUBSTITUTION, so it cannot be quoted as a
- * value, and each shell spells both halves its own way (`export` versus `$env:`, `$(whoami)` versus
- * `$env:USERNAME`).
+ * The one command whose VALUE is not a literal: the username is a substitution, so it cannot ride
+ * {@link envAssignment}'s single-quoted word, and the double-quoted string that keeps it live is also
+ * the one place a shell still expands what came from the environment. `ACCEPTANCE_NAME_PREFIX` is
+ * read verbatim from the operator's own `.env`, so the literal half is escaped for the dialect it
+ * lands in: unescaped, a prefix holding `$(…)` (or a backtick, in either shell) is not a broken
+ * command but a command that RUNS something else the moment it is pasted.
  */
 export function perPersonPrefixInvocation(
   prefix: string,
-  platform: string = process.platform,
+  flavour: ShellFlavour = shellFlavour(),
 ): string {
-  const name = 'ACCEPTANCE_NAME_PREFIX'
-  return platform === 'win32'
-    ? `$env:${name} = "${scrubbed(prefix)}-$env:USERNAME"`
-    : `export ${name}="${scrubbed(prefix)}-$(whoami)"`
+  const shell = DIALECTS[flavour]
+  return shell.assign('ACCEPTANCE_NAME_PREFIX', shell.withUsername(prefix))
 }

@@ -2,7 +2,7 @@ import type { CatFactoryClient } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
 import { unreachableRepoSteps } from '../src/adopt.ts'
 import type { AcceptanceConfig } from '../src/config.ts'
-import { perPersonPrefixInvocation, resumeInvocation } from '../src/operatorText.ts'
+import { envAssignment, perPersonPrefixInvocation, resumeInvocation } from '../src/operatorText.ts'
 import type { PrerequisiteVerdict, Remedy } from '../src/preflight.ts'
 import { type PreflightContext, PREREQUISITES } from '../src/prerequisites.ts'
 import type { IssueApi, IssueCredentialVerdict } from '../src/vcsIssues.ts'
@@ -195,7 +195,9 @@ describe('api-key', () => {
     const verdict = await refusal('api-key', {
       client: client({ workspaceId: 'ws_other', scope: 'admin', keyId: 'k1', label: 'mine' }),
     })
-    expect(commandsOf(verdict.remedy)).toContain('export ACCEPTANCE_WORKSPACE_ID=ws_other')
+    expect(commandsOf(verdict.remedy)).toContain(
+      envAssignment('ACCEPTANCE_WORKSPACE_ID', 'ws_other'),
+    )
   })
 
   it('sends an under-scoped key to be re-minted, since a scope cannot be raised in place', async () => {
@@ -430,7 +432,9 @@ describe('vcs-connection', () => {
     const verdict = await refusal('vcs-connection', {
       client: client(connected({ accountLogin: 'someone-else' })),
     })
-    expect(commandsOf(verdict.remedy)).toContain('export ACCEPTANCE_REPO_OWNER=someone-else')
+    expect(commandsOf(verdict.remedy)).toContain(
+      envAssignment('ACCEPTANCE_REPO_OWNER', 'someone-else'),
+    )
   })
 
   it('passes a connection that cannot create repositories, which the operator now does', async () => {

@@ -1,7 +1,12 @@
 import type { ReadStream } from 'node:tty'
 import { CatFactoryCredentialRequiredError, CatFactoryConflictError } from '@cat-factory/sdk'
 import { describe, expect, it, vi } from 'vitest'
-import { createPersonalUnlock, enterRawMode, withPersonalUnlock } from '../src/personalUnlock.ts'
+import {
+  createPersonalUnlock,
+  enterRawMode,
+  releaseTerminal,
+  withPersonalUnlock,
+} from '../src/personalUnlock.ts'
 
 // The unlock exists so a pass can run on the operator's OWN subscription without the password
 // living anywhere but this process. What is worth pinning is therefore not the prompt's cosmetics
@@ -141,19 +146,39 @@ describe('withPersonalUnlock', () => {
   })
 })
 
-describe('enterRawMode', () => {
-  const fakeTerminal = (setRawMode: (raw: boolean) => void) =>
-    ({ setRawMode }) as unknown as ReadStream
+/**
+ * A terminal that records what was asked of it, tracking `isRaw` the way the real stream does (the
+ * cleanup reads it), and able to refuse raw mode the way a console-less process does.
+ */
+function fakeTerminal(options: { refuseRawMode?: unknown } = {}) {
+  const calls: string[] = []
+  const input = {
+    isRaw: false,
+    setRawMode(raw: boolean) {
+      calls.push(`setRawMode(${raw})`)
+      if (raw && options.refuseRawMode !== undefined) throw options.refuseRawMode
+      this.isRaw = raw
+      return this
+    },
+    destroy() {
+      calls.push('destroy')
+    },
+  }
+  return { input: input as unknown as ReadStream, calls }
+}
 
+const RAW_MODE_EPERM = Object.assign(new Error('setRawMode EPERM'), {
+  code: 'EPERM',
+  errno: -4048,
+})
+
+describe('enterRawMode', () => {
   it('leaves a real terminal in raw mode', () => {
-    const calls: boolean[] = []
+    const { input, calls } = fakeTerminal()
     const cleanup = vi.fn()
 
-    enterRawMode(
-      fakeTerminal((raw) => calls.push(raw)),
-      cleanup,
-    )
-    expect(calls).toEqual([true])
+    enterRawMode(input, cleanup)
+    expect(calls).toEqual(['setRawMode(true)'])
     expect(cleanup).not.toHaveBeenCalled()
   })
 
@@ -161,17 +186,11 @@ describe('enterRawMode', () => {
   // the pass from CI, a daemon or a detached shell actually receives. Bare, it reached them as
   // `setRawMode EPERM`, which names neither the password nor either way out.
   it('refuses a device that opens and then cannot be read without echo, naming both ways out', () => {
-    const eperm = Object.assign(new Error('setRawMode EPERM'), { code: 'EPERM', errno: -4048 })
     const cleanup = vi.fn()
 
     let thrown: unknown
     try {
-      enterRawMode(
-        fakeTerminal(() => {
-          throw eperm
-        }),
-        cleanup,
-      )
+      enterRawMode(fakeTerminal({ refuseRawMode: RAW_MODE_EPERM }).input, cleanup)
     } catch (error) {
       thrown = error
     }
@@ -182,8 +201,61 @@ describe('enterRawMode', () => {
     expect(message).toContain('interactive shell')
     expect(message).toContain('provider API key')
     // The errno is the only part worth reading when the failure is NOT a missing console.
-    expect((thrown as Error).cause).toBe(eperm)
+    expect((thrown as Error).cause).toBe(RAW_MODE_EPERM)
     // The fds it opened are released, so a refused prompt does not leak the console handle.
     expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the missing terminal rather than a failure of its own cleanup', () => {
+    // Driven through the REAL cleanup, which is the half a stand-in `vi.fn()` cannot grade: it
+    // cannot fail, and the shipped one did. It closed the descriptor the stream had already closed,
+    // so `EBADF: bad file descriptor, close` came out of the catch below and REPLACED the only
+    // message that names the password and both ways out.
+    const { input, calls } = fakeTerminal({ refuseRawMode: RAW_MODE_EPERM })
+    const closeFd = vi.fn()
+
+    expect(() => enterRawMode(input, () => releaseTerminal(input, 7, closeFd))).toThrow(
+      /no terminal to ask on/,
+    )
+    // Echo is NOT put back on a device that never came off it, and the console handle is released.
+    expect(calls).toEqual(['setRawMode(true)', 'destroy'])
+    expect(closeFd).toHaveBeenCalledTimes(1)
+    expect(closeFd).toHaveBeenCalledWith(7)
+  })
+})
+
+// The cleanup runs on every exit path, including the refusal above and the instant a typed password
+// is ACCEPTED, so the one thing it may not do is throw. It threw on both: the descriptor a
+// `ReadStream` is constructed with is closed by DESTROYING the stream, and the `closeSync(fd)` beside
+// that was an `EBADF` which replaced the refusal on one path and left the promise unsettled on the
+// other, hanging a prompt that had already succeeded.
+describe('releaseTerminal', () => {
+  it('closes the descriptor it OWNS, and leaves the stream to close its own', () => {
+    const { input, calls } = fakeTerminal()
+    input.setRawMode(true)
+    const closeFd = vi.fn((fd: number) => calls.push(`close(${fd})`))
+
+    releaseTerminal(input, 7, closeFd)
+
+    // Echo back on while the device is still there, then exactly one close: the OUTPUT descriptor.
+    expect(calls).toEqual(['setRawMode(true)', 'setRawMode(false)', 'destroy', 'close(7)'])
+  })
+
+  it('closes nothing when the prompt never got an output device to write to', () => {
+    const { input, calls } = fakeTerminal()
+    input.setRawMode(true)
+
+    releaseTerminal(input, null, (fd) => calls.push(`close(${fd})`))
+    expect(calls).toEqual(['setRawMode(true)', 'setRawMode(false)', 'destroy'])
+  })
+
+  it('does not take a device out of a mode this prompt never put it in', () => {
+    // `setRawMode` reports its failure by EMITTING on the stream, which a stream with no `error`
+    // listener throws, so asking a device that never entered raw mode to leave it would stack a
+    // second failure on top of the one being reported.
+    const { input, calls } = fakeTerminal()
+
+    releaseTerminal(input, null, (fd) => calls.push(`close(${fd})`))
+    expect(calls).toEqual(['destroy'])
   })
 })

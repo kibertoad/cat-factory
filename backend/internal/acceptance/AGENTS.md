@@ -61,7 +61,10 @@ prompt reads the CONTROLLING TERMINAL rather than `process.stdin`, which under v
 workers is a pipe and would have made the prompt unaskable in the one place it is needed. A device
 that OPENED is not yet a terminal: Windows opens `CONIN$` with no console attached, so the
 no-terminal refusal has to fire on the RAW-MODE switch (`enterRawMode`) or it reaches a headless
-operator as a bare `setRawMode EPERM`.
+operator as a bare `setRawMode EPERM`. Releasing it is `releaseTerminal` and it may not throw, since
+it runs both on that refusal and at the instant a typed password is accepted: the descriptor a
+`ReadStream` was constructed with is closed by DESTROYING the stream, so a `closeSync` beside it is an
+`EBADF` that replaces the refusal on one path and hangs the prompt on the other.
 
 **Every task the suite files pins `ACCEPTANCE_MODEL_PRESET`**, through the one door
 (`filePinnedTask`), so a pass runs on the model it says it ran on rather than on whatever the

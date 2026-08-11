@@ -147,7 +147,9 @@ function stillLocked(what: string, error: CatFactoryCredentialRequiredError): Er
  * THROWS when there is no terminal to reach at all (CI, a daemon), or one that cannot be switched
  * to raw mode, naming what to do instead. A nullable return would only move that same refusal to
  * the one call site. Raw mode is entered HERE rather than at the read, because being readable
- * without echo is what this function promises and opening the device does not establish it.
+ * without echo is what this function promises and opening the device does not establish it. And
+ * `close` is therefore the symmetric undo, putting echo back before releasing the device it belongs
+ * to. See {@link releaseTerminal} for the one rule that cleanup has to get right.
  */
 function openTerminal(): { input: ReadStream; write: (text: string) => void; close: () => void } {
   const path = process.platform === 'win32' ? '\\\\.\\CONIN$' : '/dev/tty'
@@ -157,38 +159,66 @@ function openTerminal(): { input: ReadStream; write: (text: string) => void; clo
     // straight from a shell (`pnpm status`) has one even where `/dev/tty` is unavailable.
     if (!process.stdin.isTTY) throw noTerminal()
     const input = process.stdin as unknown as ReadStream
-    enterRawMode(input, () => input.pause())
-    return {
-      input,
-      write: (text) => process.stderr.write(text),
-      close: () => {
-        input.setRawMode(false)
-        input.pause()
-      },
+    // The process's OWN stdin: nothing here closes it, so releasing it is putting echo back and
+    // letting go of the reader.
+    const close = () => {
+      restoreEcho(input)
+      input.pause()
     }
+    enterRawMode(input, close)
+    return { input, write: (text) => process.stderr.write(text), close }
   }
   // Prompt down the same terminal where possible, so it cannot be swallowed by the test reporter
   // that owns this worker's stdout. Windows reads and writes the console through two different
   // devices; POSIX can write back down the one it read from.
   const outFd = process.platform === 'win32' ? tryOpen('\\\\.\\CONOUT$', 'w') : tryOpen(path, 'w')
   const input = new ReadStream(fd)
-  enterRawMode(input, () => {
-    input.destroy()
-    closeSync(fd)
-    if (outFd !== null) closeSync(outFd)
-  })
+  const close = () => releaseTerminal(input, outFd)
+  enterRawMode(input, close)
   return {
     input,
     write: (text) => {
       if (outFd === null) process.stderr.write(text)
       else writeSync(outFd, text)
     },
-    close: () => {
-      input.destroy()
-      closeSync(fd)
-      if (outFd !== null) closeSync(outFd)
-    },
+    close,
   }
+}
+
+/**
+ * Echo back on, and ONLY where this prompt is what turned it off.
+ *
+ * `close` runs on every exit path, including the one where entering raw mode is what failed and the
+ * one where the device is already gone. `setRawMode` reports its failure by EMITTING on the stream,
+ * which a stream with no `error` listener throws, so asking a device to leave a mode it never
+ * entered would put a second failure on top of the one being reported.
+ */
+function restoreEcho(input: ReadStream): void {
+  if (input.isRaw) input.setRawMode(false)
+}
+
+/**
+ * Release what {@link openTerminal} established, in the reverse order.
+ *
+ * ONE rule, and it cost this file twice over: the descriptor a `ReadStream` is CONSTRUCTED with
+ * belongs to the stream, so `input.destroy()` is that descriptor's close and a `closeSync(fd)` beside
+ * it is not belt-and-braces but an `EBADF` thrown out of a cleanup. On the refusal path that came out
+ * of the `catch` in {@link enterRawMode} and REPLACED the message naming the password and both ways
+ * out, which is the only reason that path exists. On the ordinary path it came out of the `data`
+ * handler at the instant the operator's password was accepted, so the promise never settled and a
+ * prompt that had already succeeded hung. `outFd` has no such owner and is ours to close.
+ *
+ * `closeFd` is injected because a test cannot own a console to release, and this is the half of the
+ * prompt that no platform lets a unit test drive for real.
+ */
+export function releaseTerminal(
+  input: ReadStream,
+  outFd: number | null,
+  closeFd: (fd: number) => void = closeSync,
+): void {
+  restoreEcho(input)
+  input.destroy()
+  if (outFd !== null) closeFd(outFd)
 }
 
 /** Open a path, or `null` — used for the OPTIONAL half of the terminal (where to print the prompt). */
@@ -243,9 +273,27 @@ function noTerminal(options?: { cause?: unknown }): Error {
  * Raw mode read character by character rather than `readline`'s private `_writeToOutput` override:
  * the same effect through the documented API. See {@link openTerminal} for why the terminal is
  * opened rather than taken from `process.stdin`, and why it arrives already in raw mode.
+ *
+ * `finally`, because it arrives already in raw mode: the prompt is the first thing that can fail
+ * afterwards (a revoked console handle, a closed pipe on the `process.stderr` fallback), and every
+ * path out of here has to put echo back. Left to the read alone, a prompt that could not be printed
+ * returned the operator to a shell that echoed nothing they typed, with the process gone and nothing
+ * left to restore it.
  */
 async function readSecretFromTty(prompt: string): Promise<string> {
   const terminal = openTerminal()
+  try {
+    return await readWithoutEcho(terminal, prompt)
+  } finally {
+    terminal.close()
+  }
+}
+
+/** The read itself: character by character, ending on Enter or on the operator declining. */
+function readWithoutEcho(
+  terminal: { input: ReadStream; write: (text: string) => void },
+  prompt: string,
+): Promise<string> {
   const input = terminal.input
   terminal.write(prompt)
   input.resume()
@@ -254,9 +302,9 @@ async function readSecretFromTty(prompt: string): Promise<string> {
     let value = ''
     const done = (settle: () => void) => {
       input.off('data', onData)
-      input.setRawMode(false)
+      // The newline the suppressed echo did not print. Here rather than beside `close`, so a prompt
+      // that could not be WRITTEN reports that failure instead of a second one on top of it.
       terminal.write('\n')
-      terminal.close()
       settle()
     }
     const onData = (chunk: string) => {

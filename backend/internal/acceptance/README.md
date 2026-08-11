@@ -287,12 +287,15 @@ person's subscription, and only their personal password opens it. Two consequenc
   [`individual-subscription-usage.md` §7](../../docs/individual-subscription-usage.md).
 - **So run the pass from an INTERACTIVE terminal**, with the ordinary invocation above: nothing
   about the command changes, and there is no separate mode for this. Under the hood the prompt opens
-  the CONTROLLING TERMINAL (`/dev/tty`, `CONIN$` on Windows) for reading and `CONOUT$` for writing,
-  never `process.stdout`/`stdin`, and both halves of that are what make it work under vitest at all:
-  a worker is forked with PIPED stdio, so `stdin.isTTY` is undefined there and a stdin prompt could
-  never ask, while the reporter owning that worker's stdout would swallow a printed one. A console is
-  inherited by child processes independently of stdio, so the pnpm and vitest layers between your
-  shell and the spec cost nothing.
+  the CONTROLLING TERMINAL for reading (`/dev/tty`, `CONIN$` on Windows) and writes the prompt back
+  down it (`CONOUT$` on Windows, the device it read from on POSIX) rather than through this process's
+  own stdio, and both halves of that are what make it work under vitest at all: a worker is forked
+  with PIPED stdio, so `stdin.isTTY` is undefined there and a stdin prompt could never ask, while the
+  reporter owning that worker's stdout would swallow a printed one. A console is inherited by child
+  processes independently of stdio, so the pnpm and vitest layers between your shell and the spec
+  cost nothing. Where that terminal cannot be opened at all, `process.stdin` is the fallback IF it
+  happens to be one (which is what a plain `run status` from a shell gets) and the prompt goes to
+  stderr; a process with neither refuses.
 - **A pass with no console REFUSES at that first dispatch**, naming the two ways out (run it
   interactively, or pin a preset whose model resolves to a provider API key). That covers CI, a
   daemon, `nohup`, and an agent's detached background shell. Windows opens `CONIN$` even with no
@@ -391,11 +394,15 @@ $env:ACCEPTANCE_RUN_ID = 'latest'; pnpm --filter @cat-factory/acceptance run acc
 
 **PowerShell has no inline environment prefix**, so the POSIX form is not merely unidiomatic there,
 it reads the assignment as the command NAME and fails with `CommandNotFoundException`. Every command
-this suite PRINTS (the resume in two prerequisite remedies, the one the status report ends with, and
-the per-person prefix) is rendered for the platform it is printed on, so a pasted remedy runs where
-it was read. `$env:` also persists for the whole session rather than the one command, which is what
-makes it a resume that outlives the pass you meant it for: `Remove-Item Env:ACCEPTANCE_RUN_ID`
-clears it.
+this suite PRINTS with a variable in it is rendered for the shell that will RECEIVE it (the resume in
+two prerequisite remedies, the line the status report ends with, the per-person prefix, and the three
+remedies whose whole fix is one value), so a pasted remedy runs where it was read. The shell, not the
+platform: on Windows that is PowerShell unless `SHELL` or `MSYSTEM` is set, which is how a Git Bash or
+MSYS operator gets the POSIX form. The `curl` remedies are the remaining exception and are still
+POSIX-only: they interpolate `$CAT_FACTORY_API_KEY`, which PowerShell expands as one of its own
+variables and sends as an empty bearer token. `$env:` also persists for the whole session rather than
+the one command, which is what makes it a resume that outlives the pass you meant it for:
+`Remove-Item Env:ACCEPTANCE_RUN_ID` clears it.
 
 Putting the id in the `.env` works everywhere and survives closing the terminal, with the same trap
 inverted: it resumes that pass until the line is removed.
@@ -548,7 +555,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                             |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                          |
 | `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                     |
-| `src/operatorText.ts`        | The three ways a value is rendered for an operator: a thrown chain, a scrubbed address, a pasteable command. Pure; unit-tested.                                                                 |
+| `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Pure; unit-tested.              |
 | `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested. |
 | `src/presets.ts`             | The one preset-to-catalog join `configure` and `model-preset` share. Pure.                                                                                                                      |
 | `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                                                                                                                                 |
