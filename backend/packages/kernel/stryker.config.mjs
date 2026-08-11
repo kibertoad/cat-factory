@@ -17,9 +17,9 @@ import { defineMutationConfig } from '../../../scripts/stryker-base.mjs'
 // anything".
 export default defineMutationConfig({
   mutate: ['src/domain/**/*.ts', 'src/shared/**/*.ts', '!src/**/*.test.ts'],
-  // Measured 81.78% total / 84.51% covered over 6,152 mutants. The floor is the truncated total
+  // Measured 84.23% total / 85.79% covered over 7,316 mutants. The floor is the truncated total
   // less the two-point margin every floor here carries (docs/internal/mutation-testing.md says
   // what the margin absorbs); kernel is the package that needs it most, since ONE new `domain/`
   // module arriving with no tests moves the total by more than a point on its own.
-  minimumScore: 79,
+  minimumScore: 82,
 })

@@ -59,9 +59,9 @@ saturate every core.
 
 | Package               | Mutated                          | Mutants | Score (total / covered) | Floor |
 | --------------------- | -------------------------------- | ------- | ----------------------- | ----- |
-| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 6,152   | 81.78% / 84.51%         | 79%   |
-| `@cat-factory/gates`  | all of `src/`                    | 651     | 88.17% / 91.99%         | 86%   |
-| `@cat-factory/spend`  | all of `src/`                    | 396     | 95.71% / 95.71%         | 93%   |
+| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 7,316   | 84.23% / 85.79%         | 82%   |
+| `@cat-factory/gates`  | all of `src/`                    | 651     | 90.78% / 92.06%         | 88%   |
+| `@cat-factory/spend`  | all of `src/`                    | 396     | 97.73% / 97.73%         | 95%   |
 
 These three are pure logic with fast, database-free unit suites, which is the only shape mutation
 testing can afford: the suite runs once per surviving mutant, so a package whose tests need
@@ -82,11 +82,18 @@ both sides agree about, e.g. `binaryFormatCoverage`), `@cat-factory/workspaces`,
 LAST: it is the only one with no `NoCoverage` left, so there is nothing in its scope a new file
 would be joining.
 
-Inside the packages already in scope, kernel's remaining `NoCoverage` is now concentrated in
-`domain/catalog.ts`'s and `domain/seed.ts`'s data (the disposition for which is nothing) and in
-`gates.ts`'s notification-card copy. The app-owned registry seams a deployment extends the platform
-through now all have a test sibling; `pipeline-registry` is the only one still carrying survivors,
-the `findIndex` bounds inside its merge helpers.
+Inside the packages already in scope, kernel's `NoCoverage` is down to 133 and its two largest
+holders are 16 mutants each, which is where the per-file read earns its keep because they want
+opposite dispositions: `domain/seed.ts` is the demo board's data (nothing to do, per the standing
+example below), while `domain/vcs-errors.ts` scores 66.30% total against 80.26% covered, and a gap
+that wide on a small file is untested code rather than weak assertions. `domain/catalog.ts` was on
+this list and is now off it at 94.12% with no `NoCoverage` left; gates' own count went 27 to 9.
+
+The app-owned registry seams a deployment extends the platform through all have a test sibling now,
+but a sibling is not a score: `binary-store-registry` is the lowest in the set at 68.97% with 9
+survivors, ahead of `pipeline-registry`'s 92.54% and the `findIndex` bounds in its merge helpers,
+and `gate-registry` and `foundational-service-registry` each carry 6 `NoCoverage` mutants behind a
+covered score of 100.00% and 95.24%.
 
 `gate-registry` and `binary-generator-registry` were the last two without one, and how they got
 counted as done is worth keeping: the claim was read off the registry seams' AGGREGATE score, which
@@ -176,8 +183,8 @@ real.
 `minimumScore` in each package's config becomes Stryker's `thresholds.break`: below it, `stryker
 run` exits non-zero and the nightly job goes red.
 
-**A floor is the measured total truncated to a whole percent, less two points** (kernel 78.79 →
-78 → 76, gates 85.25 → 85 → 83, spend 95.71 → 95 → 93). The margin is not provisional slack
+**A floor is the measured total truncated to a whole percent, less two points** (kernel 84.23 →
+84 → 82, gates 90.78 → 90 → 88, spend 97.73 → 97 → 95). The margin is not provisional slack
 waiting to be reclaimed. It is sized to the one thing that moves this number without any test
 having changed: **the denominator**.
 
@@ -187,15 +194,21 @@ the total by roughly `its mutants / total`, about 1.6 points for a 150-mutant on
 therefore about one ordinary module's worth of room: enough that unrelated growth cannot turn the
 nightly red, small enough that a real regression still does.
 
-This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 → 6,115 → 6,152 mutants
-across the baselines behind this table, purely from ordinary main-branch work, and one of those
-steps landed WHILE the floor was being set: `prompt-fragment-registry.ts` arrived with no test file,
-adding 20 `NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One module, no test
-regression anywhere, and a floor pinned to the measured value would already have been that much
-closer to red. (The last step is the same story with the sign flipped: the 37 mutants between 6,115
-and 6,152 arrived on main while this table's third round was being measured, which is why the
-before-and-after above is a pair of runs on ONE scope rather than a comparison against the row the
-previous round left behind.)
+This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 → 6,115 → 6,152 → 7,316
+mutants across the baselines behind this table, purely from ordinary main-branch work, and one of
+those steps landed WHILE the floor was being set: `prompt-fragment-registry.ts` arrived with no test
+file, adding 20 `NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One module, no
+test regression anywhere, and a floor pinned to the measured value would already have been that much
+closer to red. The 37 mutants between 6,115 and 6,152 are the same story with the sign flipped: they
+arrived while the third round was being measured, which is why that round's before-and-after is a
+pair of runs on ONE scope rather than a comparison against the row the previous round left behind.
+
+The last step is by far the largest and it cuts the other way, which is the part to read before
+sizing a margin off any of this. 1,063 of those mutants arrived on main between the third round's
+measurement and the fourth's, and across the same interval main's own total moved 81.78 → 81.51: one
+mutant in seven was new, and it cost a quarter of a point, because it arrived with its tests. The
+margin buys room for UNTESTED growth, not for growth as such. Had that same slice landed bare it
+would have taken the total to 69.7%, which is 12 points, and no margin worth setting absorbs that.
 
 The scope can also SHRINK, and for a good reason: deleting a branch nothing could distinguish (one
 of the three dispositions below) removes its mutants from the denominator. Spend went 400 → 396
