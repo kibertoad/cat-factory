@@ -48,7 +48,7 @@ import {
 import type { DeploymentApi } from './deploymentApi.ts'
 import type { AcceptanceConfig } from './config.ts'
 import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3s.ts'
-import { shellQuoted } from './operatorText.ts'
+import { perPersonPrefixInvocation, resumeInvocation, shellQuoted } from './operatorText.ts'
 import type { Prerequisite, PrerequisiteVerdict, Remedy, RemedyCommand } from './preflight.ts'
 import { baseUrlStep } from './probeFailure.ts'
 import { usablePresets } from './presets.ts'
@@ -877,7 +877,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
             ],
             commands: [
               {
-                run: 'ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance',
+                run: resumeInvocation('latest'),
                 purpose: 'resume the most recent pass instead of starting a second one',
               },
               repoRead,
@@ -1146,11 +1146,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
               purpose: 'show the most recent pass and its run id, without touching the deployment',
             },
             {
-              run: 'ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance',
+              run: resumeInvocation('latest'),
               purpose: 'resume the most recent pass instead of starting a second one',
             },
             {
-              run: `export ACCEPTANCE_NAME_PREFIX="${config.namePrefix}-$(whoami)"`,
+              run: perPersonPrefixInvocation(config.namePrefix),
               purpose: 'take a per-person prefix, so two people share one board without colliding',
             },
           ],

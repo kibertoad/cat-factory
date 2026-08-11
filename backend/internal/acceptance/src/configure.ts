@@ -780,8 +780,9 @@ function buildEntries(input: {
       comment: [
         'Acceptance suite (@cat-factory/acceptance), written by `run configure`.',
         'Gitignored: it holds an API token and a cluster credential.',
-        'A variable exported in the shell WINS over this file, so a one-off',
-        '`ACCEPTANCE_RUN_ID=latest pnpm … acceptance` resumes without editing anything.',
+        'A variable set in the shell WINS over this file, so a one-off resume needs no',
+        'edit here; setting ACCEPTANCE_RUN_ID below instead resumes every later pass',
+        'until the line is removed.',
         'Backend origin serving /api/v1.',
       ],
       key: 'CAT_FACTORY_BASE_URL',

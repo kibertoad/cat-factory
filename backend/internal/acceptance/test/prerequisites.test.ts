@@ -2,6 +2,7 @@ import type { CatFactoryClient } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
 import { unreachableRepoSteps } from '../src/adopt.ts'
 import type { AcceptanceConfig } from '../src/config.ts'
+import { perPersonPrefixInvocation, resumeInvocation } from '../src/operatorText.ts'
 import type { PrerequisiteVerdict, Remedy } from '../src/preflight.ts'
 import { type PreflightContext, PREREQUISITES } from '../src/prerequisites.ts'
 import type { IssueApi, IssueCredentialVerdict } from '../src/vcsIssues.ts'
@@ -555,7 +556,9 @@ describe('target-repos', () => {
       ]),
     })
     expect(verdict.problem).toContain('blk_9')
-    expect(commandsOf(verdict.remedy)[0]).toContain('ACCEPTANCE_RUN_ID=latest')
+    // Compared against the renderer rather than a spelling, so this stays an assertion about WHICH
+    // command is offered; `operatorText.test.ts` pins what each shell's form must be.
+    expect(commandsOf(verdict.remedy)[0]).toBe(resumeInvocation('latest'))
   })
 
   it('allows the link the LEDGER names, on a resumed pass', async () => {
@@ -779,8 +782,8 @@ describe('board-titles', () => {
     })
     const commands = commandsOf(verdict.remedy)
     expect(commands[0]).toContain('run status')
-    expect(commands[1]).toContain('ACCEPTANCE_RUN_ID=latest')
-    expect(commands[2]).toContain('ACCEPTANCE_NAME_PREFIX="cf-acc-$(whoami)"')
+    expect(commands[1]).toBe(resumeInvocation('latest'))
+    expect(commands[2]).toBe(perPersonPrefixInvocation('cf-acc'))
   })
 })
 

@@ -12,6 +12,7 @@
 // runs this.
 
 import type { JournalEvent } from './journal.ts'
+import { resumeInvocation } from './operatorText.ts'
 import type { IssueRecord, RunRecord, ServiceRecord, World } from './world.ts'
 
 export type PhaseStatus = {
@@ -177,6 +178,6 @@ export function formatPassStatus(
     // absence carry a meaning nobody can see.
     lines.push('', `Last journal line ${formatDuration(status.idleMs)} ago.`)
   }
-  lines.push('', `Resume with: ACCEPTANCE_RUN_ID=${status.runId} pnpm run acceptance`)
+  lines.push('', `Resume with: ${resumeInvocation(status.runId)}`)
   return lines.join('\n')
 }

@@ -384,9 +384,9 @@ function buildRemedy(steps: readonly string[], reachTarget: string | undefined):
   return {
     steps: [
       ...steps,
-      'Fix that, then re-run the suite. A pass that has already created things resumes under the ' +
-        'ACCEPTANCE_RUN_ID printed above this failure (or `ACCEPTANCE_RUN_ID=latest`); only a pass ' +
-        'that created nothing yet starts clean.',
+      'Fix that, then re-run the suite. A pass that has already created things resumes when ' +
+        'ACCEPTANCE_RUN_ID is set to the run id printed above this failure (or to `latest`), in ' +
+        'the shell or in the `.env`; only a pass that created nothing yet starts clean.',
     ],
     ...(reachTarget
       ? {

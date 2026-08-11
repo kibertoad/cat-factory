@@ -372,12 +372,33 @@ summary names every key it replaced, and anything in the file it does not manage
 | `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Prefixes the board frames and tasks, not the repositories. Set it per-person when a board is shared.                                                            |
 | `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a vitest timeout; see below.                                                                                                                 |
 | `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                                                                                                  |
-| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass. Unset starts a new one.                                                                                             |
+| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass. Unset starts a new one. The one variable normally set per invocation, so see the shell forms below.                 |
 
 They live in a **`.env` beside `vitest.acceptance.config.ts`** (gitignored, and read by that
-config: vitest does not pick one up on its own). A variable exported in the shell wins over the
-file, so the file states the setup and the invocation states the exception:
-`ACCEPTANCE_RUN_ID=latest pnpm … acceptance` resumes without editing anything.
+config: vitest does not pick one up on its own). A variable set in the shell wins over the file, so
+the file states the setup and the invocation states the exception.
+
+**Every variable can be set either way, and the file is the one form that needs no shell dialect.**
+That matters most for `ACCEPTANCE_RUN_ID`, the only one routinely set per invocation:
+
+```sh
+ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance   # POSIX
+```
+
+```powershell
+$env:ACCEPTANCE_RUN_ID = 'latest'; pnpm --filter @cat-factory/acceptance run acceptance
+```
+
+**PowerShell has no inline environment prefix**, so the POSIX form is not merely unidiomatic there,
+it reads the assignment as the command NAME and fails with `CommandNotFoundException`. Every command
+this suite PRINTS (the resume in two prerequisite remedies, the one the status report ends with, and
+the per-person prefix) is rendered for the platform it is printed on, so a pasted remedy runs where
+it was read. `$env:` also persists for the whole session rather than the one command, which is what
+makes it a resume that outlives the pass you meant it for: `Remove-Item Env:ACCEPTANCE_RUN_ID`
+clears it.
+
+Putting the id in the `.env` works everywhere and survives closing the terminal, with the same trap
+inverted: it resumes that pass until the line is removed.
 
 Missing configuration is reported **all at once**, with what each variable is for. The suite
 refuses rather than guessing, because it merges real pull requests into real repositories.
@@ -416,6 +437,14 @@ against the deployment rather than trusting it.
 ACCEPTANCE_RUN_ID=20260809175530 pnpm --filter @cat-factory/acceptance run acceptance
 ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance
 ```
+
+```powershell
+$env:ACCEPTANCE_RUN_ID = '20260809175530'; pnpm --filter @cat-factory/acceptance run acceptance
+$env:ACCEPTANCE_RUN_ID = 'latest'; pnpm --filter @cat-factory/acceptance run acceptance
+```
+
+Or the `ACCEPTANCE_RUN_ID` line in the `.env`, which needs no dialect at all; see
+[Configuration](#configuration) for what each form costs.
 
 `latest` resolves through a pointer written when a pass OPENS, not when it finishes: the pass
 worth resuming is by definition one that did not finish. Asking for `latest` when no pass exists

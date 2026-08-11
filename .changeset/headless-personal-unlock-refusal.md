@@ -25,3 +25,22 @@ this is a message, not a behaviour change. The README now states the invocation 
 makes it work under vitest at all, which is the part that reads like it cannot: a worker is forked
 with piped stdio, so the prompt goes to the console devices directly rather than through the stdio
 the reporter owns.
+
+**Every command this suite prints is now rendered for the shell that will receive it.** The same
+session found the second half of the same problem: `VAR=value command` is POSIX syntax, and it was
+hard-coded into both prerequisite remedies that offer a resume, the line the status report ends with,
+and the per-person prefix remedy. PowerShell has no inline environment prefix, so it reads the
+assignment as the command NAME and answers `CommandNotFoundException`. On the Windows machine this
+suite is documented to run a local deployment on, every one of those pasted into a failure. A remedy
+that does not parse is worse than no remedy, because it is offered as the thing to run, which is the
+rule `shellQuoted` already existed for.
+
+`resumeInvocation` and `perPersonPrefixInvocation` (in `operatorText.ts`, which owns how a value
+becomes text an operator pastes) render both dialects, and each is asserted for both platforms with
+an injected `platform` rather than against `process.platform`, so the Windows form is covered by the
+Linux CI lane that would otherwise never execute it. The call-site tests now compare against the
+renderer instead of restating a spelling, so shell knowledge lives in one place.
+
+The README documents both forms plus the `.env` line, which is the one form needing no dialect, and
+states what each costs: `$env:` persists for the whole session and a line in the file persists until
+removed, so either one silently resumes a pass you meant to leave behind.

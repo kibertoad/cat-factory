@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { formatDuration } from '../src/deadline.ts'
 import type { JournalEvent } from '../src/journal.ts'
+import { resumeInvocation } from '../src/operatorText.ts'
 import { formatPassStatus, summarisePass } from '../src/status.ts'
 import { emptyWorld, type World } from '../src/world.ts'
 
@@ -177,7 +178,7 @@ describe('formatPassStatus', () => {
   it('always ends with the command that resumes this exact pass', () => {
     // The value an operator needs and cannot recover any other way once the terminal is gone.
     const rendered = formatPassStatus(summarise({}), formatDuration)
-    expect(rendered).toContain('ACCEPTANCE_RUN_ID=run-1')
+    expect(rendered).toContain(resumeInvocation('run-1'))
   })
 
   it('says outright that nothing has been recorded, rather than rendering an empty report', () => {

@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { describeThrown, scrubbed, shellQuoted } from '../src/operatorText.ts'
+import {
+  describeThrown,
+  perPersonPrefixInvocation,
+  resumeInvocation,
+  scrubbed,
+  shellQuoted,
+} from '../src/operatorText.ts'
 
-// Three one-liners, and each is pinned here because each has exactly one edge case that undoes the
-// point of it: a chain with nothing to say, a URL carrying a credential, and a value holding the
-// quote the command is built with.
+// Each of these is pinned here because each has exactly one edge case that undoes the point of it: a
+// chain with nothing to say, a URL carrying a credential, a value holding the quote the command is
+// built with, and a command printed in a shell that cannot parse it.
 
 describe('describeThrown', () => {
   it('reads the WHOLE chain, not the outermost link', () => {
@@ -55,6 +61,47 @@ describe('shellQuoted', () => {
   it('scrubs as well as quotes, since these commands are printed beside the steps', () => {
     expect(shellQuoted('https://svc:hunter2@backend.example.com/health')).toBe(
       `'https://svc:[REDACTED]@backend.example.com/health'`,
+    )
+  })
+})
+
+// Both of these render a command for the shell that will RECEIVE it. Asserted per platform rather
+// than against `process.platform`, so the Windows form is covered by the Linux CI lane that would
+// otherwise never see it, and the POSIX form stays covered when the suite is run from Windows.
+describe('resumeInvocation', () => {
+  it('carries the id as an inline prefix on POSIX', () => {
+    expect(resumeInvocation('20260809175530', 'linux')).toBe(
+      `ACCEPTANCE_RUN_ID='20260809175530' pnpm --filter @cat-factory/acceptance run acceptance`,
+    )
+  })
+
+  it('assigns before the command on Windows, where an inline prefix is not a command at all', () => {
+    // PowerShell reads `ACCEPTANCE_RUN_ID=latest pnpm …` as the name of a command to look up and
+    // answers CommandNotFoundException, so the POSIX form is a remedy that cannot be pasted.
+    expect(resumeInvocation('latest', 'win32')).toBe(
+      `$env:ACCEPTANCE_RUN_ID = 'latest'; pnpm --filter @cat-factory/acceptance run acceptance`,
+    )
+  })
+
+  it('separates the assignment with `;`, since PowerShell 5.1 cannot parse `&&`', () => {
+    expect(resumeInvocation('latest', 'win32')).not.toContain('&&')
+  })
+
+  it('quotes each shell the way that shell escapes, for an id holding a quote', () => {
+    // Neither dialect escapes inside single quotes: POSIX ends and reopens them, PowerShell doubles
+    // the quote. A run id should never hold one, which is exactly why nothing would catch this.
+    expect(resumeInvocation("it's", 'linux')).toContain(`ACCEPTANCE_RUN_ID='it'\\''s'`)
+    expect(resumeInvocation("it's", 'win32')).toContain(`$env:ACCEPTANCE_RUN_ID = 'it''s'`)
+  })
+})
+
+describe('perPersonPrefixInvocation', () => {
+  it('substitutes the username the way each shell spells it', () => {
+    expect(perPersonPrefixInvocation('cf-acc', 'linux')).toBe(
+      'export ACCEPTANCE_NAME_PREFIX="cf-acc-$(whoami)"',
+    )
+    expect(perPersonPrefixInvocation('cf-acc', 'win32')).toBe(
+      '$env:ACCEPTANCE_NAME_PREFIX = "cf-acc-$env:USERNAME"',
     )
   })
 })
