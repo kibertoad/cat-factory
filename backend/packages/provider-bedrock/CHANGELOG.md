@@ -1,5 +1,13 @@
 # @cat-factory/provider-bedrock
 
+## 0.7.457
+
+### Patch Changes
+
+- Updated dependencies [ee733ee]
+  - @cat-factory/kernel@0.291.0
+  - @cat-factory/agents@0.126.5
+
 ## 0.7.456
 
 ### Patch Changes
