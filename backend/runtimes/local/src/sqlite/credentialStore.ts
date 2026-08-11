@@ -15,6 +15,7 @@ import type {
   SubscriptionActivationRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
+import { parseLocalModelDeclarations } from '@cat-factory/kernel'
 import type { LocalRunner } from '@cat-factory/contracts'
 import { openSqliteDb, queryAll, queryOne } from './db.js'
 
@@ -411,24 +412,17 @@ interface LocalEndpointRow {
 }
 
 function endpointRowToRecord(row: LocalEndpointRow): LocalModelEndpointRecord {
+  const { models, unreadable } = parseLocalModelDeclarations(row.models)
   return {
     userId: row.user_id,
     provider: row.provider as LocalRunner,
     label: row.label,
     baseUrl: row.base_url,
     apiKeyCipher: row.api_key_cipher,
-    models: parseModels(row.models),
+    models,
+    unreadableModels: unreadable,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }
-}
-
-function parseModels(json: string): string[] {
-  try {
-    const parsed = JSON.parse(json)
-    return Array.isArray(parsed) ? parsed.map(String) : []
-  } catch {
-    return []
   }
 }
 

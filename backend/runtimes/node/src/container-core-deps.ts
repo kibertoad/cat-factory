@@ -77,6 +77,7 @@ import {
 // executor + bootstrapper + env-config repairer, GitHub-issue filer, trace-sink builder), lifted
 // into a sibling module so this composition root stays within the file-size budget.
 import { RUNNERS_CIPHER_INFO, buildTraceSink } from './container-executor-deps.js'
+import { selectNodeLocalModelEndpointRepository } from './wireCredentialServices.js'
 
 import type { NodeAppRegistriesResult, NodeContainerFoundation } from './container-foundation.js'
 import type {
@@ -418,6 +419,15 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // undefined and there is no external emission.
     llmTraceSink: buildTraceSink(config),
     modelPresetRepository: repos.modelPresetRepository,
+    // The per-USER locally-run endpoints, for the engine's per-dispatch read of what the run
+    // initiator DECLARED about a local model (does it read images). Selected through the shared
+    // rule rather than off `repos`, because in mothership mode this row lives in the laptop's own
+    // sqlite store and must not be read from the org database. Undefined ⇒ local refs stay
+    // undeclared. The Worker mirrors this in `selectPerUserDeps`.
+    localModelEndpointRepository: selectNodeLocalModelEndpointRepository(
+      db,
+      options.localModelEndpointRepository,
+    ),
     // The consensus-GROUP library: the estimate-gated panels a pipeline step escalates to. Read
     // by the settings controller AND on the run path (per-dispatch tier resolution).
     consensusGroupRepository: repos.consensusGroupRepository,

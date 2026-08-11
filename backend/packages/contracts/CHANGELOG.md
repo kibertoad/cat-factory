@@ -1,5 +1,135 @@
 # @cat-factory/contracts
 
+## 0.297.0
+
+### Minor Changes
+
+- a634746: A locally-run model can now be given a run's design renders. Its image support resolves in two
+  tiers: a table of recognised open-weights families (`KNOWN_LOCAL_MODELS`, so ticking Gemma 4 or Muse
+  Glimmer needs no second step), overridden by a per-model declaration on the user's own runner entry
+  for anything the table cannot know about.
+
+  The gap was structural rather than a missed case. `acceptsImages` is a per-FLAVOUR fact declared on
+  `MODEL_CATALOG`, and a local model has no catalog row: it lives on one person's machine, its id is
+  free text, and the OpenAI-compatible `/models` probe the panel discovers models with returns ids and
+  nothing else. So every local ref arrived with the modality absent and `resolveDesignImageDelivery`
+  answered `unknown_model_image_input` for all of them, forever. That reason exists precisely so this
+  would stay visible instead of reading as a text-only model, and the arrival of image-capable local
+  models is what turned it from a latent hole into a lost capability.
+
+  The declaration wins over the table on purpose: the person who pulled the weights is the one who
+  knows whether they are running a text-only quant, a fine-tune or a re-tagged copy. The table
+  therefore carries only families whose SILENCE costs a capability (every member is image-capable; a
+  text-only entry would behave identically to an absent one), and a family whose modality depends on
+  the size is left out rather than approximated, which is why Gemma 3 is absent while Gemma 4 is
+  present. It lives in `@cat-factory/contracts` because the settings panel labels its "not set" option
+  with what the table will do and the engine folds the same answer onto the dispatched ref.
+
+  The initiator's declarations are read on EVERY dispatch, because the winning model is not known
+  until the shared resolver has walked its sources, so the read goes through a new `AppCaches`
+  slice keyed on the user (the endpoint write paths invalidate it). Without that, a deployment with no
+  local runners at all still paid a query per step, and a mothership-mode node an extra
+  `/internal/persistence` round trip per step.
+
+  Delivery still joins the HARNESS's answer first, and that is what decides where this lands today: a
+  local ref names no harness, so a container dispatch runs it on Pi, whose `HARNESS_IMAGE_INPUT` entry
+  is `false` and refuses without consulting the ref. The modality is therefore acted on by the inline
+  path, and the container path becomes a reader the day an image-carrying harness serves a local model,
+  which is a one-line table edit rather than new plumbing. It is resolved for every path regardless,
+  because the winning model is not known until the shared resolver has walked its sources.
+
+  `contextTokens` is deliberately NOT declared for a local model, though the same shape could carry it.
+  The window a runner serves is a fact about its config rather than about the weights (Ollama's
+  `num_ctx` default sits far below what a 128K-window model can do), nothing enforces it for a local
+  ref, and stating a number the runner silently ignores would be worse than stating none. The
+  truncation trap that follows from that is now written down in `backend/docs/model-support.md`.
+
+  **Internal break:** the endpoint row's enabled-model list changes from `string[]` to a declaration
+  array. A row written before this loses its entries on read: bare strings are dropped rather than
+  coerced, so the break cannot arrive as a model id of `[object Object]`. The endpoint reports the
+  discard (`unreadableModels`) and the panel names it per runner, because a shortened list on its own
+  reads exactly like a runner nobody ever enabled a model on and only one of those is fixed by
+  re-ticking. The fix is to re-tick the models in "My local runners", which rewrites the whole blob.
+
+## 0.296.0
+
+### Minor Changes
+
+- 7893f35: `/api/v1` can ADOPT a repository that already exists: `GET /api/v1/repos/available` lists what a
+  workspace's connection can reach, and `POST /api/v1/repos/link` adopts one by name. Surface version
+  1.44.0, additive.
+
+  The hole they close was invisible from the surface. `GET /api/v1/repos` serves the repositories a
+  workspace has LINKED, which is a set someone assembles in the app: linking is explicit per workspace,
+  the provider webhook for an added repository does not project one, and a resync refreshes what is
+  already linked rather than rediscovering the installation. So a repository that exists and is
+  perfectly reachable is absent from every public read until a human opens the picker, and
+  `POST /api/v1/services` answers 404 for its `repoId`, which is byte-for-byte what a caller gets for a
+  repository that does not exist. A deployment could CREATE a repository through this API (1.41.0's
+  bootstrap) and could not adopt one it already had.
+
+  The two reads are a population pair rather than a duplicate, with `linked` as the join, so an absent
+  repository is now diagnosable: reachable-but-unadopted appears in `/repos/available` with
+  `linked: false`, and one that does not exist appears in neither. The adopt takes `owner`/`name`
+  because a caller setting a workspace up from configuration knows the name and cannot know a provider
+  id for a repository no public read lists; it is idempotent, answers the same row shape `/repos`
+  serves (projected from the same read, so the two cannot disagree about whether a repository is free),
+  and refuses an unreachable one with `404 repo_not_reachable`, a reason that covers "does not exist"
+  and "your credential is not granted it" together because a provider answers those identically.
+  `GitHubSyncService.linkRepoBySlug` resolves through the same path the app's own picker uses, and
+  matches the OWNER as well as the name: a slug search can surface a look-alike, and linking that one
+  would file a caller's work in someone else's account while answering 200.
+
+  The acceptance suite uses them, which is what makes a hand-written `.env` a supported way in rather
+  than a setup only `configure` could finish. Spec 01 adopts a repository the workspace does not hold
+  instead of refusing; `target-repos` gates on REACHABILITY, point-reading `/repos/available` for
+  anything unlinked and reporting "reachable but not adopted yet" as a pass; and `configure` adopts each
+  repository rather than printing instructions for doing it by hand. Every attempt states its outcome,
+  because a loop that reports only its positive answer is indistinguishable from one doing nothing, and
+  what a refusal now asks for is only what no API can do: create the repository, and grant the
+  credential access to it.
+
+  Review follow-ups on the pair, all still inside 1.44.0 and still additive:
+
+  Both rows now report whether a repository is SPOKEN FOR, from one account-scoped judgement.
+  `/repos/available` publishes `serviceId` and `linkedElsewhere` exactly as `/repos` does, because a
+  repository nobody here has linked can still back a service on another board of the account, and
+  `POST /api/v1/services` refuses it either way. A discovery read that could not say so handed a
+  caller a repository whose next call fails, and it was the acceptance gate that felt it first: it
+  green-lit a pass that then died on the adopt, after the run the gate exists to precede. The
+  judgement is now `PublicBoardReads.repoUse`, asked once of the projection (the repos list) and once
+  of a batch of ids (the available read), so there is no second derivation to drift.
+
+  The available read also publishes `truncated`. The provider legs behind it stop at a page cap and a
+  search cap, so on a wide connection the rows are a prefix and a reachable repository can be missing
+  from them, which is indistinguishable from the non-existence this read exists to diagnose. A
+  point-read (`?q=owner/name`) resolves the exact slug directly and stays authoritative either way.
+
+  A provider refusal is answered as one on BOTH operations and on either provider. The available read
+  was left unwrapped, so a revoked credential or a rate limit on it arrived as `500 internal` rather
+  than the documented 503/429; and the mapping recognised `GitHubApiError` alone, so a GitLab-connected
+  workspace got that same `500` for a revoked token on both routes. Kernel now owns a `VcsApiError`
+  base that both provider clients extend, which is the identity a consumer above the adapters branches
+  on.
+
+  The adopt is idempotent for a repository the credential can no longer reach: it resolves from what
+  the workspace LINKS before consulting the provider, so a re-run no longer answers 404 for a
+  repository `GET /api/v1/repos` still lists (a personal repository, or a narrowed App grant). And the
+  link's `owner` accepts a namespace PATH, so a GitLab project under nested groups can be adopted at
+  all: the available read published `group/subgroup` and the adopt refused it with a 422.
+
+  In the suite, "the connection cannot reach it" is now recognised by `details.reason`, not by the 404
+  alone: a deployment older than these endpoints answers an unmatched route with the same status, and
+  reading that as "create the repository" sent an operator to create one they already had.
+
+  Internal, breaking for in-repo callers only: `GitHubSyncService.listAvailableRepos` answers
+  `{ repos, truncated }` rather than an array, the kernel `GitHubClient.searchInstallationRepos` port
+  answers a `Paged` rather than an array (every adapter caps something, and a search that filters a
+  bounded listing can return two rows and still be a prefix, which no row count reveals), and the
+  `viewerRepos` / `patInstallationRepos` caches hold the whole page rather than its items (an
+  enumeration that stopped at the cap is a prefix, and caching only the rows served that prefix to
+  every later keystroke as the complete set).
+
 ## 0.295.0
 
 ### Minor Changes

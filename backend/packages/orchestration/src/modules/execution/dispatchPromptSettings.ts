@@ -2,6 +2,9 @@ import type {
   AgentPromptRepository,
   Block,
   GroupCacheHandle,
+  LocalModelDeclarations,
+  LocalModelDeclarationsCacheValue,
+  LocalModelEndpointRepository,
   Logger,
   ModelFlavor,
   ModelPresetCacheValue,
@@ -9,12 +12,14 @@ import type {
   PipelineStep,
   WorkspaceAgentSettingsRepository,
 } from '@cat-factory/kernel'
+import { readCachedLocalModelDeclarations } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { applyAgentVariant, shippedBasePromptFor } from '@cat-factory/agents'
 import { resolvePresetProviderPreference } from '../modelPresets/ModelPresetService.js'
 
 // The per-dispatch GENERATION settings one dispatch runs under: which system prompt, how much the
-// agent may say, and which of a model's ROUTES it is preferred to run on. Extracted from
+// agent may say, which of a model's ROUTES it is preferred to run on, and what its initiator
+// declared about a locally-run model it may resolve to. Extracted from
 // `AgentContextBuilder` so it stays the context ASSEMBLER while this cohesive concern — the tiers of
 // "what was this agent told to be, how much may it say, and where does it run", plus the two facts
 // that must be PINNED on the step because they cannot be re-derived later — lives in one place.
@@ -33,15 +38,32 @@ import { resolvePresetProviderPreference } from '../modelPresets/ModelPresetServ
 // what is configured for the kind actually running rather than the hosting step's — while the route
 // order is keyed on the BLOCK, because a preset states one order for every step it covers.
 
-/** The three settings one dispatch runs under, as a spread-ready slice of the run context. */
+/** The settings one dispatch runs under, as a spread-ready slice of the run context. */
 export interface DispatchPromptSettings {
   systemPromptOverride?: string
   maxOutputTokens?: number
   providerPreference?: readonly ModelFlavor[]
+  localModelDeclarations?: readonly LocalModelDeclarations[]
 }
 
 /**
- * Resolve all three at once, concurrently. The ENTRY POINT the context builder uses: they are one
+ * What one dispatch is: the scope it runs in, the kind actually running, and the two rows the
+ * resolvers key off. A named argument rather than a positional list because the KEYS differ per
+ * setting (see the resolvers below) and three of these are strings a caller could silently
+ * transpose, which no signature of six positionals would catch.
+ */
+export interface DispatchSettingsTarget {
+  workspaceId: string
+  /** The EFFECTIVE dispatched kind, which is not always `step.agentKind` (a gate's fixer). */
+  agentKind: string
+  step: PipelineStep
+  block: Block
+  /** The run's initiator, or null for a schedule / system sweep, which declares nothing. */
+  initiatedBy: string | null | undefined
+}
+
+/**
+ * Resolve all of them at once, concurrently. The ENTRY POINT the context builder uses: they are one
  * family (each resolved exactly once per dispatch, by the engine rather than any executor), and
  * asking for them together is what keeps a new member from being added here and forgotten at the
  * call site. Each is documented on its own resolver below, because the precedence and the KEY
@@ -49,17 +71,16 @@ export interface DispatchPromptSettings {
  */
 export async function resolveDispatchSettings(
   deps: DispatchPromptSettingsDeps,
-  workspaceId: string,
-  agentKind: string,
-  step: PipelineStep,
-  block: Block,
+  target: DispatchSettingsTarget,
 ): Promise<DispatchPromptSettings> {
-  const [prompt, budget, routes] = await Promise.all([
+  const { workspaceId, agentKind, step, block, initiatedBy } = target
+  const [prompt, budget, routes, localModels] = await Promise.all([
     resolveDispatchSystemPrompt(deps, workspaceId, agentKind, step),
     resolveDispatchMaxOutputTokens(deps, workspaceId, agentKind, step),
     resolveDispatchProviderPreference(deps, workspaceId, block),
+    resolveDispatchLocalModelDeclarations(deps, initiatedBy),
   ])
-  return { ...prompt, ...budget, ...routes }
+  return { ...prompt, ...budget, ...routes, ...localModels }
 }
 
 /** The narrow slice of the builder's dependencies these resolvers need. */
@@ -72,11 +93,23 @@ export interface DispatchPromptSettingsDeps {
   /** The workspace's model-preset library, read for the block's route order. */
   modelPresets?: ModelPresetRepository
   /**
+   * The per-USER locally-run endpoint store, read for what the run initiator declared about the
+   * local models they enabled. Absent ⇒ the deployment wired no local runners, so no dispatch can
+   * resolve to one anyway.
+   */
+  localModelEndpoints?: LocalModelEndpointRepository
+  /**
    * The `AppCaches.modelPreset` slice that read goes through. The row is slow-moving admin config
    * that EVERY dispatch resolves, so it is exactly the profile the merge preset's cache exists for;
    * absent ⇒ the read runs live (tests / no cache wired).
    */
   modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
+  /**
+   * The `AppCaches.localModelDeclarations` slice the endpoint read above goes through: the same
+   * profile as the preset one row over (hand-edited config that every dispatch re-reads), keyed on
+   * the USER rather than the workspace. Absent ⇒ the read runs live.
+   */
+  localModelDeclarationsCache?: GroupCacheHandle<LocalModelDeclarationsCacheValue>
   logger?: Logger
 }
 
@@ -199,4 +232,44 @@ export async function resolveDispatchProviderPreference(
     deps.modelPresetCache,
   )
   return preference?.length ? { providerPreference: preference } : {}
+}
+
+/**
+ * What the RUN INITIATOR declared about their locally-run models, or nothing when this dispatch
+ * cannot resolve to one.
+ *
+ * Keyed on the USER, unlike all three siblings: a runner lives on one person's machine, so what
+ * `ollama:muse-glimmer:30b` means is a fact about whoever started the run (the same key
+ * `hasPersonalSubscription` and the LLM proxy's endpoint resolution use). A run with no initiator
+ * (a schedule, a system sweep) therefore has nothing to declare, and resolves to nothing rather
+ * than to another user's endpoints.
+ *
+ * Read for EVERY dispatch rather than only for a local pin, because the winning model is not known
+ * until `resolveStepModelRef` has walked its three sources. That is a per-STEP read of a row a
+ * person edits by hand a handful of times, on every deployment including the ones that have wired
+ * no runner at all, so it goes through the app cache seam like the route order above; the two write
+ * paths (the endpoint upsert and remove) drop the user's entry.
+ *
+ * The endpoint's URL POLICY is not re-applied here, and cannot silently matter: this read decides
+ * only what to SAY about a model, never whether it may run. A runner the policy denies is refused
+ * at admission (`ProviderCapabilities.localModels` is built through the service that applies it)
+ * and again on every run-time forward (`LocalModelEndpointService.fetchRunner`, per redirect hop),
+ * so a declaration folded off a denied row could only ever decorate a dispatch that is already
+ * going to fail at its first call.
+ */
+export async function resolveDispatchLocalModelDeclarations(
+  deps: DispatchPromptSettingsDeps,
+  initiatedByUserId: string | null | undefined,
+): Promise<{ localModelDeclarations?: readonly LocalModelDeclarations[] }> {
+  if (!deps.localModelEndpoints || !initiatedByUserId) return {}
+  const declared = await readCachedLocalModelDeclarations(
+    deps.localModelDeclarationsCache,
+    deps.localModelEndpoints,
+    initiatedByUserId,
+  )
+  // An empty slice rather than an empty array, for the same reason the route order returns one:
+  // spread straight onto the context, `localModelDeclarations: []` would make "this user has no
+  // local runners" indistinguishable from "declarations were never resolved" at every reader, and
+  // `withLocalModelDeclaration` treats those two differently on purpose.
+  return declared.length ? { localModelDeclarations: declared } : {}
 }

@@ -6,6 +6,7 @@ import type {
 } from '@cat-factory/kernel'
 import { getErrorMessage, ValidationError } from '@cat-factory/kernel'
 import type {
+  LocalModelDeclaration,
   LocalModelEndpoint,
   LocalModelEndpointTestResult,
   LocalRunner,
@@ -115,6 +116,10 @@ export class LocalModelEndpointService {
       baseUrl: input.baseUrl,
       apiKeyCipher,
       models: dedupe(input.models),
+      // What is about to be stored is exactly what the request validated, so nothing was discarded
+      // reading it. This write is also the FIX for a row that did lose entries: it replaces the
+      // whole blob, so the next read of it reports clean again.
+      unreadableModels: false,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     }
@@ -130,11 +135,13 @@ export class LocalModelEndpointService {
 
   /**
    * The set of local-runner providers the user has configured with ≥1 enabled model,
-   * plus the enabled models per provider — the input to the per-user model catalog.
+   * plus the enabled models per provider: the input to the per-user model catalog. Each model
+   * carries the user's own declaration about it, so the picker can state what a local model may
+   * be given exactly as it does for a curated one.
    */
   async capabilitiesFor(
     userId: string,
-  ): Promise<{ provider: LocalRunner; label: string; models: string[] }[]> {
+  ): Promise<{ provider: LocalRunner; label: string; models: LocalModelDeclaration[] }[]> {
     const rows = await this.deps.localModelEndpointRepository.listByUser(userId)
     return (
       rows
@@ -252,12 +259,23 @@ function toWire(
     baseUrl: record.baseUrl,
     hasApiKey: record.apiKeyCipher !== null,
     models: record.models,
+    unreadableModels: record.unreadableModels,
     urlBlockedReason,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
 }
 
-function dedupe(models: string[]): string[] {
-  return [...new Set(models.map((m) => m.trim()).filter(Boolean))]
+/**
+ * One entry per model id, in first-seen order. LAST declaration wins for a repeated id: the panel
+ * sends one entry per ticked model, so a duplicate is a client bug rather than a choice, and taking
+ * the later one means the value the user set most recently is the one stored.
+ */
+function dedupe(models: LocalModelDeclaration[]): LocalModelDeclaration[] {
+  const byId = new Map<string, LocalModelDeclaration>()
+  for (const model of models) {
+    const id = model.id.trim()
+    if (id) byId.set(id, { ...model, id })
+  }
+  return [...byId.values()]
 }

@@ -173,11 +173,13 @@ export async function resolveWorkspaceCapabilities(
   }
   // Local runners are per-user: a model is usable when the resolving user has enabled it.
   // Keyed by the dynamic model id (`"<provider>:<model>"`) so usability is model-granular
-  // (a runner configured but with this model un-enabled must not pass).
+  // (a runner configured but with this model un-enabled must not pass). The id comes off the
+  // DECLARATION's own field: each enabled model is an object (the id plus what the user declared
+  // about it), and interpolating the object here would key every entry `[object Object]`.
   const localModels = new Set<string>()
   if (userId && services.localModelEndpoints) {
     for (const cap of await services.localModelEndpoints.capabilitiesFor(userId)) {
-      for (const model of cap.models) localModels.add(`${cap.provider}:${model}`)
+      for (const model of cap.models) localModels.add(`${cap.provider}:${model.id}`)
     }
   }
   // Dynamic OpenRouter catalog (per-workspace): the enabled slugs gate the dynamic
