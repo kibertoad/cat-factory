@@ -8,7 +8,7 @@ import type {
   Initiative,
   InitiativeRepository,
   RiskPolicy,
-  RiskPolicyDefaultScope,
+  RunDefaultScope,
   RiskPolicyRepository,
   SharedStack,
   SharedStackRepository,
@@ -160,6 +160,7 @@ function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
     // vocabulary no longer carries reads as `attended`, the posture that stops for a person, never
     // as a licence this row cannot be shown to have granted.
     autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
+    minAutoAnswerConfidence: row.min_auto_answer_confidence,
     isDefault: row.is_default === 1,
     isUnattendedDefault: row.is_unattended_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
@@ -171,7 +172,7 @@ function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
 const DEFAULT_COLUMN = {
   interactive: riskPolicies.is_default,
   unattended: riskPolicies.is_unattended_default,
-} as const satisfies Record<RiskPolicyDefaultScope, unknown>
+} as const satisfies Record<RunDefaultScope, unknown>
 
 /**
  * Per-workspace merge threshold presets over Postgres (the Drizzle mirror of the
@@ -204,7 +205,7 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
     return rows.map(rowToRiskPolicy)
   }
 
-  async getDefault(workspaceId: string, scope: RiskPolicyDefaultScope): Promise<RiskPolicy | null> {
+  async getDefault(workspaceId: string, scope: RunDefaultScope): Promise<RiskPolicy | null> {
     const rows = await this.db
       .select()
       .from(riskPolicies)
@@ -239,6 +240,7 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
       submission_classes_by_role: JSON.stringify(preset.submissionClassesByRole ?? {}),
       version: preset.version ?? null,
       autonomy: preset.autonomy,
+      min_auto_answer_confidence: preset.minAutoAnswerConfidence,
       is_default: preset.isDefault ? 1 : 0,
       is_unattended_default: preset.isUnattendedDefault ? 1 : 0,
       created_at: preset.createdAt,
@@ -288,6 +290,13 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
             release_watch_window_minutes: values.release_watch_window_minutes,
             release_max_attempts: values.release_max_attempts,
             human_review_grace_minutes: values.human_review_grace_minutes,
+            // The judge pair was missing from this projection while being present on the INSERT, so
+            // an edit or a reseed left a stored row's rubric floor and bounce budget at whatever it
+            // held. Same class of gap as the `detail`-mapper allow-list: silent, and invisible to a
+            // unit test that hands the service an in-memory preset.
+            judge_min_score: values.judge_min_score,
+            judge_max_bounces: values.judge_max_bounces,
+            min_auto_answer_confidence: values.min_auto_answer_confidence,
             class_rules: values.class_rules,
             class_rules_by_role: values.class_rules_by_role,
             dry_run_roles: values.dry_run_roles,

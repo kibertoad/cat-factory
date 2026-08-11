@@ -19,12 +19,47 @@ answer and buries the questions only they can. The boundary is ONE shared
 holds if every agent honours it. Editing any of them means bumping its number in
 `kinds/versions.ts`.
 
+## Every finding is in ONE of two groups, and the group decides who answers
+
+The reviewer classifies each finding it raises (`autoAnswerable`), and the two groups are the review
+window's primary structure rather than a badge on one edge case:
+
+- **answerable from practice** — universal best practice, the idiomatic approach of a stack the work
+  already uses, or the context already provided settles it. The Requirement Writer pre-answers these
+  so a human is handed a mostly-filled review;
+- **needs a product decision** — a business / product / domain call, a judgement somebody should own,
+  or information the reviewer was not given.
+
+An UNCLASSIFIED finding (a reviewer pass predating the flag, a garbled reply) is read as the second
+group, by the contract, the engine and the window alike: the safe direction is the one that asks a
+person. A false TRUE is the one mistake here nobody sees, which is why the prompt says so.
+
+Each Writer suggestion additionally reports a `confidence` (0..1), which is a DIFFERENT claim from
+`groundedIn`: that one says where the answer came from, this one how sure the Writer is of the answer.
+A standard can settle a finding only partly and a general practice can be near-universal, so neither
+predicts the other. Unreported stays null rather than defaulting, and a number outside the scale is
+read as unreported rather than clamped.
+
 ## Headless callers drive the same loop
 
 They act over `/api/v1/runs/:runId/decisions`, on the `decide` rung of the scope ladder
 (`read ⊂ write ⊂ decide ⊂ admin`). **Do not add a park timeout: a parked run waits for a human
 indefinitely by design.** The backstops are the workspace in-flight cap and
 `POST /api/v1/jobs/:id/cancel`.
+
+**A run nobody is watching may settle the FIRST group for itself**, and only it. Under
+`autonomy: 'unattended'` the gate folds the answers in and carries on when every finding was
+dismissed, resolved, answered by a person, or auto-answered by a suggestion at or above the policy's
+`minAutoAnswerConfidence` (`reviewSettledForUnattended`); one finding in the second group, or one
+graded below the floor, parks the whole review exactly as before. The step stamps
+`autoAnsweredByPolicy` when it folded in, distinct from `reviewCapSettledByPolicy`: that one means the
+loop gave up, this one that it converged on answers nobody read. Under `attended` nothing changes — a
+suggestion there is a draft a person is about to read, so grading it changes nothing about who
+decides. Design record: [ADR 0054](./adr/0054-per-scope-pipeline-defaults.md).
+
+**The pipeline a headless run resolves is a separate lever, and usually the better one.** The seeded
+unattended default (`pl_unattended`) runs no requirements conversation at all; a caller that wants one
+names `pl_complex`.
 
 ## The platform must TELL the reviewer what system the work is about
 

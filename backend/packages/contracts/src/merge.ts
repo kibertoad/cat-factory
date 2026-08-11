@@ -7,6 +7,7 @@ import {
   type RuleableChangeClass,
 } from './mergeTrackRecord.js'
 import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
+import { DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE } from './requirements.js'
 import { WORKSPACE_ROLES, workspaceRoleSchema, type WorkspaceRole } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
@@ -387,32 +388,9 @@ export const runAutonomySchema = v.picklist(['attended', 'unattended'])
 export type RunAutonomy = v.InferOutput<typeof runAutonomySchema>
 
 /**
- * WHICH of a workspace's two default policies a run resolves when its task pinned none.
- *
- * `interactive` is a run somebody started in the app and is watching; `unattended` is one nothing
- * is watching, whatever surface dispatched it. The mapping from a run's `IntakeOrigin` to this is
- * `riskPolicyDefaultScopeFor` in `run-provenance.ts`, deliberately its own `Record` rather than a
- * reuse of `isHeadlessIntake`: that predicate answers "is there a stable place to hold a
- * CONVERSATION", which a schedule fire fails for reasons that have nothing to do with whether
- * anyone is watching it run.
- */
-export const riskPolicyDefaultScopeSchema = v.picklist(['interactive', 'unattended'])
-export type RiskPolicyDefaultScope = v.InferOutput<typeof riskPolicyDefaultScopeSchema>
-
-/**
- * Every scope, for the readers that must answer about ALL of them (the board's policy-selection
- * guard judges a move against each, because a task can be started either way).
- *
- * Read off the picklist's OWN options rather than restated, so a third scope cannot appear in one
- * place and be missed in the other.
- */
-export const RISK_POLICY_DEFAULT_SCOPES: readonly RiskPolicyDefaultScope[] =
-  riskPolicyDefaultScopeSchema.options
-
-/**
  * A named, per-workspace merge policy: the upper bounds (0..1) a PR's assessment
  * must stay within to auto-merge, plus the CI-fixer attempt budget. A workspace carries TWO
- * defaults, one per {@link riskPolicyDefaultScopeSchema}: `isDefault` governs a task somebody
+ * defaults, one per `runDefaultScopeSchema` (`run-provenance.ts`): `isDefault` governs a task somebody
  * started in the app, `isUnattendedDefault` one nothing is watching. Either is used by any task
  * that has not picked a policy explicitly.
  */
@@ -530,6 +508,21 @@ export const riskPolicySchema = v.object({
    */
   autonomy: runAutonomySchema,
   /**
+   * The minimum confidence (0..1) a Requirement-Writer recommendation must REPORT for an
+   * `unattended` run to take it as a review finding's answer and carry on with no person.
+   *
+   * Read ONLY on the unattended path, and inert under `attended` for the reason `dryRunRoles` is
+   * inert without a role policy: an attended run's auto-recommendations are drafts a human is
+   * about to read, so grading them changes nothing about who decides. Under `unattended` the same
+   * suggestion is the final answer, so the grade is the whole bar.
+   *
+   * It gates only the findings the REVIEWER classified `autoAnswerable` — a genuine product
+   * judgement is never eligible however confident the Writer sounds — and an UNREPORTED
+   * confidence is below every floor above 0, so a garbled Writer reply parks the run rather than
+   * quietly answering it. `0` accepts anything the Writer produces for that class of finding.
+   */
+  minAutoAnswerConfidence: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /**
    * The workspace's fallback preset for a run somebody started IN THE APP, used by tasks that
    * pick none. Exactly one per workspace is true.
    */
@@ -592,6 +585,11 @@ export const createRiskPolicySchema = v.object({
   submissionClassesByRole: v.optional(submissionClassesByRoleSchema, {}),
   /** Whether this policy answers its own automatic-loop caps; absent ⇒ it parks for a person. */
   autonomy: v.optional(runAutonomySchema, 'attended'),
+  /**
+   * Confidence floor for an unattended run taking a Writer recommendation as a finding's answer;
+   * absent ⇒ {@link DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE}. Inert under `attended`.
+   */
+  minAutoAnswerConfidence: v.optional(scoreSchema, DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE),
   /** Make this the workspace's in-app default (demotes the previous one). */
   isDefault: v.optional(v.boolean(), false),
   /** Make this the workspace's unattended default (demotes the previous one). */
@@ -625,6 +623,7 @@ export const updateRiskPolicySchema = v.object({
   /** Replaces the whole map, so un-scoping a role is a plain omission (never an empty array). */
   submissionClassesByRole: v.optional(submissionClassesByRoleSchema),
   autonomy: v.optional(runAutonomySchema),
+  minAutoAnswerConfidence: v.optional(scoreSchema),
   isDefault: v.optional(v.boolean()),
   isUnattendedDefault: v.optional(v.boolean()),
 })

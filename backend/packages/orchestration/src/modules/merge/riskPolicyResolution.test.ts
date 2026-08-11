@@ -34,6 +34,7 @@ function policy(over: Partial<RiskPolicy> = {}): RiskPolicy {
     dryRunRoles: [],
     submissionClassesByRole: {},
     autonomy: 'attended',
+    minAutoAnswerConfidence: 0.8,
     isDefault: false,
     isUnattendedDefault: false,
     createdAt: 0,

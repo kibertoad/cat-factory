@@ -611,6 +611,10 @@
         "label": "Completare le esecuzioni non presidiate senza attendere una persona",
         "unattendedHint": "Quando un ciclo automatico si arrende (un companion al suo limite di rilavorazioni, una revisione al suo limite di passaggi, follow-up non smistati), l'esecuzione prosegue lasciandone traccia invece di fermarsi. I varchi richiesti dalla pipeline, come test manuale, revisione e approvazione, fermano comunque l'esecuzione.",
         "attendedHint": "Quando un ciclo automatico si arrende, l'esecuzione si ferma e attende una scelta. Adatto a una board che qualcuno sta guardando; un'esecuzione avviata via API attende all'infinito."
+      },
+      "autoAnswer": {
+        "label": "Confidenza minima per la risposta automatica (%)",
+        "hint": "Quanto deve essere sicuro il Requirement Writer perché un run non presidiato mantenga la risposta suggerita invece di fermarsi per una persona. Sono ammessi solo i rilievi che il revisore ha giudicato risolvibili senza un product owner."
       }
     },
     "observabilityConnection": {
@@ -4509,7 +4513,17 @@
       "binaryComparison": "Confronta i candidati prima di consegnare",
       "binaryPerGenerator": "Candidati per integrazione",
       "binaryMultiSelect": "Consenti di tenerne più di uno",
-      "binaryComparisonUnreachable": "Questo passo può produrre un solo candidato per soggetto, quindi non ci sarebbe nulla da confrontare e l’unico verrebbe tenuto senza chiedere. Seleziona una seconda integrazione oppure aumenta il numero di candidati per integrazione."
+      "binaryComparisonUnreachable": "Questo passo può produrre un solo candidato per soggetto, quindi non ci sarebbe nulla da confrontare e l’unico verrebbe tenuto senza chiedere. Seleziona una seconda integrazione oppure aumenta il numero di candidati per integrazione.",
+      "scopeDefault": {
+        "interactive": "Predefinita nell'app",
+        "interactiveHint": "Cosa esegue un task avviato dalla board quando non fissa una pipeline propria.",
+        "unattended": "Predefinita non presidiata",
+        "unattendedHint": "Cosa esegue un run che nessuno sta guardando (API, ticket, pianificazione) quando il task non fissa una pipeline.",
+        "claimInteractive": "Rendi predefinita nell'app",
+        "releaseInteractive": "Non più predefinita nell'app",
+        "claimUnattended": "Rendi predefinita non presidiata",
+        "releaseUnattended": "Non più predefinita non presidiata"
+      }
     },
     "progress": {
       "status": {
@@ -4794,6 +4808,17 @@
       "reReview": "Impossibile rivedere di nuovo i requisiti",
       "proceed": "Impossibile procedere",
       "resolveReview": "Impossibile risolvere la revisione"
+    },
+    "findingClass": {
+      "judgement": "Serve una tua decisione",
+      "judgementHint": "Una scelta di business, prodotto o dominio, o qualcosa che il revisore non sapeva. Solo tu puoi deciderlo.",
+      "practice": "Risolvibile con la prassi",
+      "practiceHint": "Risolto dalla prassi consolidata, dallo stack già in uso o dal contesto fornito. Precompilato: confermalo o modificalo."
+    },
+    "confidence": {
+      "high": "Confidenza alta",
+      "medium": "Confidenza media",
+      "low": "Confidenza bassa"
     }
   },
   "bootstrap": {

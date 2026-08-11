@@ -705,6 +705,13 @@ export interface PipelineRow {
    * {@link readClassifier} is where that is resolved.
    */
   purpose?: string | null
+  /**
+   * Truthy (1) when this pipeline is the workspace's declared default for a run somebody started
+   * in the app / for one nothing is watching (migration 0091_pipeline_defaults). NULL on every row
+   * of a scope no operator has declared, which is a real state: the scope's own fallback answers.
+   */
+  is_default?: number | boolean | null
+  is_unattended_default?: number | boolean | null
 }
 
 // Declared once. The many nullable JSON arrays parse only when present; `archived`/`builtin`/
@@ -732,6 +739,8 @@ const pipelineReader = makeRowReader<PipelineRow, Pipeline>([
   // `purpose` is mandatory on the entity, so this read must be TOTAL: see {@link readClassifier}
   // for why an empty column resolves to `build` while an unnameable member passes through.
   readClassifier('purpose', 'build'),
+  readFlag('isDefault'),
+  readFlag('isUnattendedDefault'),
 ])
 
 export function rowToPipeline(row: PipelineRow): Pipeline {

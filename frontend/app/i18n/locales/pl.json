@@ -3068,6 +3068,10 @@
         "label": "Kończ uruchomienia bez nadzoru bez czekania na człowieka",
         "unattendedHint": "Gdy automatyczna pętla się poddaje (companion na limicie poprawek, przegląd na limicie przebiegów, nieposegregowane zadania pochodne), uruchomienie idzie dalej z zapisem zamiast się zatrzymywać. Bramki, o które prosi pipeline, takie jak testy ręczne, przegląd i zatwierdzenie, nadal je zatrzymują.",
         "attendedHint": "Gdy automatyczna pętla się poddaje, uruchomienie zatrzymuje się i czeka na decyzję. Właściwe dla tablicy, którą ktoś obserwuje; uruchomienie wystartowane przez API czeka bez końca."
+      },
+      "autoAnswer": {
+        "label": "Minimalna pewność automatycznej odpowiedzi (%)",
+        "hint": "Jak pewny musi być Requirement Writer, aby nienadzorowany przebieg zachował podpowiedzianą odpowiedź zamiast zatrzymać się na człowieku. Kwalifikują się tylko uwagi uznane przez recenzenta za rozstrzygalne bez product ownera."
       }
     },
     "observabilityConnection": {
@@ -4948,7 +4952,17 @@
       "binaryComparison": "Porównaj kandydatów przed dostarczeniem",
       "binaryPerGenerator": "Kandydaci na integrację",
       "binaryMultiSelect": "Pozwól zachować więcej niż jednego",
-      "binaryComparisonUnreachable": "Ten krok może wytworzyć tylko jednego kandydata na temat, więc nie byłoby czego porównywać, a ten jeden zostałby zachowany bez pytania. Wybierz drugą integrację albo zwiększ liczbę kandydatów na integrację."
+      "binaryComparisonUnreachable": "Ten krok może wytworzyć tylko jednego kandydata na temat, więc nie byłoby czego porównywać, a ten jeden zostałby zachowany bez pytania. Wybierz drugą integrację albo zwiększ liczbę kandydatów na integrację.",
+      "scopeDefault": {
+        "interactive": "Domyślny w aplikacji",
+        "interactiveHint": "Co uruchamia zadanie startowane z tablicy, gdy nie wskazuje własnego procesu.",
+        "unattended": "Domyślny bez nadzoru",
+        "unattendedHint": "Co uruchamia przebieg, którego nikt nie obserwuje (API, zgłoszenie, harmonogram), gdy zadanie nie wskazuje procesu.",
+        "claimInteractive": "Ustaw jako domyślny w aplikacji",
+        "releaseInteractive": "Przestań być domyślnym w aplikacji",
+        "claimUnattended": "Ustaw jako domyślny bez nadzoru",
+        "releaseUnattended": "Przestań być domyślnym bez nadzoru"
+      }
     },
     "progress": {
       "status": {
@@ -5396,6 +5410,17 @@
       "reReview": "Nie udało się ponownie przejrzeć wymagań",
       "proceed": "Nie udało się kontynuować",
       "resolveReview": "Nie udało się rozstrzygnąć przeglądu"
+    },
+    "findingClass": {
+      "judgement": "Wymaga Twojej decyzji",
+      "judgementHint": "Decyzja biznesowa, produktowa lub domenowa albo informacja, której recenzent nie znał. Tylko Ty możesz to rozstrzygnąć.",
+      "practice": "Rozstrzygalne praktyką",
+      "practiceHint": "Rozstrzygane przez utrwaloną praktykę, używany już stos technologiczny lub dostarczony kontekst. Wypełnione wstępnie — zostaw lub zmień."
+    },
+    "confidence": {
+      "high": "Wysoka pewność",
+      "medium": "Średnia pewność",
+      "low": "Niska pewność"
     }
   },
   "clarity": {

@@ -3347,6 +3347,10 @@
         "label": "Finish unattended runs without waiting for a person",
         "unattendedHint": "When an automatic loop gives up (a companion at its rework cap, a review at its pass cap, untriaged follow-ups), the run proceeds on the record instead of parking. Gates the pipeline asks for, such as human testing, review and approval, still stop the run.",
         "attendedHint": "When an automatic loop gives up, the run parks and waits for someone to choose. Right for a board somebody is watching; a run started over the API waits indefinitely."
+      },
+      "autoAnswer": {
+        "label": "Auto-answer confidence floor (%)",
+        "hint": "How sure the Requirement Writer must be for an unwatched run to keep its suggested answer instead of stopping for a person. Only findings the reviewer judged answerable without a product owner are eligible."
       }
     },
     "observabilityConnection": {
@@ -5117,7 +5121,17 @@
       "binaryComparison": "Compare candidates before delivering",
       "binaryPerGenerator": "Candidates per integration",
       "binaryMultiSelect": "Allow keeping more than one",
-      "binaryComparisonUnreachable": "This step can only produce one candidate per subject, so nothing would be compared and the only one would be kept without asking. Select a second integration, or raise the candidates-per-integration count."
+      "binaryComparisonUnreachable": "This step can only produce one candidate per subject, so nothing would be compared and the only one would be kept without asking. Select a second integration, or raise the candidates-per-integration count.",
+      "scopeDefault": {
+        "interactive": "In-app default",
+        "interactiveHint": "What a task started from the board runs when it pins no pipeline of its own.",
+        "unattended": "Unattended default",
+        "unattendedHint": "What a run nobody is watching runs (the API, a ticket, a schedule) when the task pins no pipeline.",
+        "claimInteractive": "Make the in-app default",
+        "releaseInteractive": "Stop being the in-app default",
+        "claimUnattended": "Make the unattended default",
+        "releaseUnattended": "Stop being the unattended default"
+      }
     },
     "progress": {
       "status": {
@@ -5654,6 +5668,17 @@
       "reReview": "Could not re-review the requirements",
       "proceed": "Could not proceed",
       "resolveReview": "Could not resolve the review"
+    },
+    "findingClass": {
+      "judgement": "Needs your decision",
+      "judgementHint": "A business, product or domain call, or something the reviewer was not told. Only you can settle these.",
+      "practice": "Answerable from practice",
+      "practiceHint": "Settled by established practice, the stack already in use, or the context provided. Pre-filled for you to keep or change."
+    },
+    "confidence": {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence"
     }
   },
   "clarity": {

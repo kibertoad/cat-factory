@@ -515,12 +515,31 @@ export const createPublicTaskSchema = v.object({
    * pin any policy its workspace holds, which is the same authority it already had by editing one.
    */
   riskPolicyId: v.optional(presetPinSchema),
+  /**
+   * The pipeline this task runs, from `GET /api/v1/pipelines`. Omitted ⇒ the task type's own
+   * default where it has one (a `document` task is created on the document pipeline), else nothing
+   * is pinned and the start call decides.
+   *
+   * Pinning it AT CREATION is what lets a caller file a task now and have somebody start it later,
+   * from the board or from `POST /tasks/:taskId/start` with an empty body, and still get the chain
+   * the filer chose. Without it the choice had to be repeated on every start, and a task filed by an
+   * integration and started from the app silently ran whatever that board defaults to.
+   *
+   * Unlike `modelPresetId` / `riskPolicyId`, an id nothing defines is NOT refused here: it is
+   * refused when the task is STARTED, with the same `404` the board gets, because a pipeline id is
+   * resolved rather than defaulted (`PipelineService.resolveForRun`). The distinction is worth
+   * knowing rather than tidying away: a dangling PRESET pin falls back to the workspace default and
+   * runs, which is why that one has to be caught at the write; a dangling pipeline pin can start
+   * nothing, so the failure is loud on its own and arrives at the door that has a picker.
+   */
+  pipelineId: v.optional(presetPinSchema),
 })
 export type CreatePublicTaskInput = v.InferOutput<typeof createPublicTaskSchema>
 
 /**
- * Start (run) a task. `pipelineId` is optional — it falls back to the task's pinned
- * pipeline; a task with neither is rejected with `pipeline_required`.
+ * Start (run) a task. `pipelineId` is optional — it falls back to the task's pinned pipeline, then
+ * to the workspace's default pipeline for a run nothing is watching (`Pipeline.isUnattendedDefault`,
+ * the seeded `pl_unattended`); a task with none of the three is rejected with `pipeline_required`.
  */
 export const startPublicTaskSchema = v.object({
   pipelineId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
@@ -745,6 +764,17 @@ export const publicPipelineSchema = v.object({
    * can be driven end-to-end with no interactive user; others may park awaiting input.
    */
   headlessStartable: v.boolean(),
+  /**
+   * Whether this pipeline is the workspace's DEFAULT for a run nothing is watching — what
+   * `POST /tasks/:taskId/start` runs when neither the call nor the task names one.
+   *
+   * Exposed because the alternative is a caller unable to find out what an empty start body does:
+   * omitting `pipelineId` is the ordinary way to use that route, and "whatever the workspace
+   * decided" is only a usable contract if the decision is readable. At most one row carries it, and
+   * none does on a workspace that released it (the start call then refuses with
+   * `pipeline_required`).
+   */
+  unattendedDefault: v.boolean(),
 })
 export type PublicPipeline = v.InferOutput<typeof publicPipelineSchema>
 

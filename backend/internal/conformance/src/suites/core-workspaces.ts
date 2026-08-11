@@ -5,6 +5,8 @@ import {
   type WorkspaceSnapshot,
   offeredPipelines,
   seedPipelines,
+  SIMPLE_PIPELINE_ID,
+  UNATTENDED_BUILD_PIPELINE_ID,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -153,6 +155,51 @@ export function defineCoreWorkspacesConformance(harness: ConformanceHarness): vo
       // resolve it, which is the whole difference between internal and retired.
       const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
       expect(snapshot.body.pipelines.map((p) => p.id)).not.toContain(internal[0]!.id)
+    })
+
+    it('round-trips the per-scope default pipeline, one holder per scope', async () => {
+      // Both facades store the two claims as their own columns behind a PARTIAL unique index, and
+      // promoting touches a SECOND row. So the invariant a sequential unit test cannot see is the
+      // one asserted here: after a promotion, exactly one row carries the flag, on a real store.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const base = `/workspaces/${workspace.id}/pipelines`
+      const seeded = await call<Pipeline[]>('GET', base)
+      const unattendedDefault = seeded.body.filter((p) => p.isUnattendedDefault)
+      // The catalog seeds the unattended rung and deliberately seeds NO interactive default: the
+      // in-app scope already resolves an answer without a flagged row.
+      expect(unattendedDefault.map((p) => p.id)).toEqual([UNATTENDED_BUILD_PIPELINE_ID])
+      expect(seeded.body.filter((p) => p.isDefault)).toHaveLength(0)
+
+      const other = seeded.body.find((p) => p.id === SIMPLE_PIPELINE_ID)!
+      const promoted = await call<Pipeline>('PATCH', `${base}/${other.id}/organize`, {
+        isUnattendedDefault: true,
+      })
+      expect(promoted.status).toBe(200)
+      expect(promoted.body.isUnattendedDefault).toBe(true)
+      const afterPromote = await call<Pipeline[]>('GET', base)
+      expect(afterPromote.body.filter((p) => p.isUnattendedDefault).map((p) => p.id)).toEqual([
+        other.id,
+      ])
+
+      // The scopes are independent: claiming the in-app one must leave the unattended holder alone.
+      await call('PATCH', `${base}/${UNATTENDED_BUILD_PIPELINE_ID}/organize`, { isDefault: true })
+      const bothScopes = await call<Pipeline[]>('GET', base)
+      expect(bothScopes.body.filter((p) => p.isDefault).map((p) => p.id)).toEqual([
+        UNATTENDED_BUILD_PIPELINE_ID,
+      ])
+      expect(bothScopes.body.filter((p) => p.isUnattendedDefault).map((p) => p.id)).toEqual([
+        other.id,
+      ])
+
+      // Releasing leaves the scope with NO declared default, which is a real state here (unlike on
+      // the risk-policy library, where a default always resolves).
+      const released = await call<Pipeline>('PATCH', `${base}/${other.id}/organize`, {
+        isUnattendedDefault: false,
+      })
+      expect(released.body.isUnattendedDefault).toBeFalsy()
+      const afterRelease = await call<Pipeline[]>('GET', base)
+      expect(afterRelease.body.filter((p) => p.isUnattendedDefault)).toHaveLength(0)
     })
 
     it('lists and deletes boards', async () => {

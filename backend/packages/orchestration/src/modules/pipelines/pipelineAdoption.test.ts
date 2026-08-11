@@ -22,6 +22,12 @@ function repo(store = new Map<string, Pipeline>()) {
       if (!store.has(p.id)) store.set(p.id, p)
     },
     update: async (_ws, p) => void store.set(p.id, p),
+    setDefault: async (_ws, id, scope, claimed) => {
+      const field = scope === 'unattended' ? 'isUnattendedDefault' : 'isDefault'
+      for (const [key, row] of store) store.set(key, { ...row, [field]: undefined })
+      const target = store.get(id)
+      if (claimed && target) store.set(id, { ...target, [field]: true })
+    },
     delete: async (_ws, id) => void store.delete(id),
   }
   return { repository, store, inserts }

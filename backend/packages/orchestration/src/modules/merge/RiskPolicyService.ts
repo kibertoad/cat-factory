@@ -98,6 +98,7 @@ export class RiskPolicyService {
       dryRunRoles: input.dryRunRoles,
       submissionClassesByRole: input.submissionClassesByRole,
       autonomy: input.autonomy,
+      minAutoAnswerConfidence: input.minAutoAnswerConfidence,
       // The very first preset must be BOTH defaults; otherwise honour the request. A workspace
       // with exactly one policy has no other row either scope could resolve, and a scope with no
       // default falls through to `FALLBACK_RISK_POLICY`, which merges nothing: the empty-library
@@ -167,6 +168,9 @@ export class RiskPolicyService {
         ? { submissionClassesByRole: patch.submissionClassesByRole }
         : {}),
       ...(patch.autonomy !== undefined ? { autonomy: patch.autonomy } : {}),
+      ...(patch.minAutoAnswerConfidence !== undefined
+        ? { minAutoAnswerConfidence: patch.minAutoAnswerConfidence }
+        : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
       ...(patch.isUnattendedDefault !== undefined
         ? { isUnattendedDefault: patch.isUnattendedDefault }

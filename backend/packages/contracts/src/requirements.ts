@@ -165,6 +165,56 @@ export const recommendationSourceSchema = v.picklist([
 export type RecommendationSource = v.InferOutput<typeof recommendationSourceSchema>
 
 /**
+ * The confidence floor an `unattended` run's auto-answer must clear, when the resolved risk policy
+ * states none (`RiskPolicy.minAutoAnswerConfidence`).
+ *
+ * `0.8` rather than a lower number because of what the floor buys: below it the finding stays open
+ * and the run parks, which costs a wait; above it the platform answers a question in the
+ * requirements every later agent implements, with nobody reading it. The cheap failure is the one
+ * to prefer.
+ */
+export const DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE = 0.8
+
+/**
+ * The display bands a reported confidence falls into. A CLOSED vocabulary so every surface
+ * showing a grade has an exhaustive set of keys to translate, rather than each inventing its own
+ * cut-points and disagreeing about what "high" means.
+ */
+export const recommendationConfidenceBandSchema = v.picklist(['high', 'medium', 'low'])
+export type RecommendationConfidenceBand = v.InferOutput<typeof recommendationConfidenceBandSchema>
+
+/**
+ * The band a Requirement-Writer confidence falls into, or `null` when the Writer reported none.
+ *
+ * `null` is a THIRD answer, never folded into `low`: "the model did not say" and "the model said it
+ * is unsure" want different reactions from a reader, and only the second is evidence about the
+ * suggestion. Both are below any floor above 0, so the automation treats them alike; a person
+ * reading the window does not have to.
+ */
+export function recommendationConfidenceBand(
+  confidence: number | null | undefined,
+): RecommendationConfidenceBand | null {
+  if (confidence == null) return null
+  if (confidence >= 0.8) return 'high'
+  return confidence >= 0.5 ? 'medium' : 'low'
+}
+
+/**
+ * Whether a Writer recommendation is confident enough for an unattended run to take it as the
+ * finding's answer and carry on with no person.
+ *
+ * An UNREPORTED confidence clears only a floor of `0`, which is the point: a garbled or older
+ * Writer reply must not read as a confident one, and an operator who set no floor at all asked for
+ * exactly the ungraded behaviour.
+ */
+export function clearsAutoAnswerFloor(
+  confidence: number | null | undefined,
+  floor: number,
+): boolean {
+  return confidence == null ? floor <= 0 : confidence >= floor
+}
+
+/**
  * A Requirement-Writer suggestion for one finding. Recommendations are a first-class
  * collection on the review (NOT on items) so they survive the item churn each re-review
  * causes — the source finding is snapshotted by title/detail rather than referenced by a
@@ -213,10 +263,75 @@ export const requirementRecommendationSchema = v.object({
    * evidence of a weak one.
    */
   groundedIn: v.optional(v.nullable(recommendationSourceSchema)),
+  /**
+   * How confident the Writer reports being in this suggestion (0..1), or null when it reported
+   * nothing (an older row, a garbled response).
+   *
+   * SEPARATE from {@link groundedIn}, which says where the answer came from: a `project-spec`
+   * answer can rest on a spec paragraph that only half addresses the question, and a
+   * `general-practice` one can be near-certain because the practice is universal. Provenance tells
+   * a reader how much to trust the SOURCE; this is the Writer's own claim about the ANSWER, and
+   * the unattended auto-answer floor compares against it (see
+   * `RiskPolicy.minAutoAnswerConfidence`).
+   *
+   * Null rather than a default, for the reason `groundedIn` is: an unreported grade is not
+   * evidence of a low one, and pretending otherwise would put a number the model never gave in
+   * front of the person deciding whether to keep the answer.
+   */
+  confidence: v.optional(v.nullable(v.pipe(v.number(), v.minValue(0), v.maxValue(1)))),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
 export type RequirementRecommendation = v.InferOutput<typeof requirementRecommendationSchema>
+
+/**
+ * Whether every finding on this review is settled well enough for a run NOBODY IS WATCHING to fold
+ * the answers in and carry on with no person.
+ *
+ * Three ways a finding can qualify, and the third is the only new one:
+ *
+ *   - it was dismissed or resolved;
+ *   - it was ANSWERED by something a person wrote (in the app, over `/api/v1`, or on the ticket);
+ *   - it was answered by an AUTO recommendation whose reported confidence clears `floor`, which is
+ *     only ever the group the reviewer itself judged answerable without a product owner.
+ *
+ * Anything else — an open finding, one awaiting a recommendation, one auto-answered at or below the
+ * floor — means a person is still needed, and the run parks exactly as it always did. ADR 0053 put
+ * it as the rule this function has to keep: inventing a product judgement is the one thing an
+ * unattended policy may never do. The narrowing that makes this compatible with it is that the
+ * reviewer sorted its own findings into two groups first, and this only ever looks at one of them.
+ *
+ * Stated in contracts rather than in the engine because the review window shows the same verdict:
+ * a person looking at a parked review needs to see WHICH finding is holding it, and a second
+ * reading of "settled enough" would answer that differently from the engine that parked it.
+ */
+export function reviewSettledForUnattended(
+  review: {
+    items: readonly Pick<RequirementReviewItem, 'id' | 'status'>[]
+    /**
+     * Absent on a review kind that has no Writer (the clarity gate), which needs no special case:
+     * with nothing auto-answered, every finding is either open (so the run parks, exactly as a
+     * reporter's unanswered question should) or answered by the person who replied.
+     */
+    recommendations?: readonly Pick<
+      RequirementRecommendation,
+      'auto' | 'status' | 'sourceFinding' | 'confidence'
+    >[]
+  },
+  floor: number,
+): boolean {
+  const autoAnswers = new Map(
+    (review.recommendations ?? [])
+      .filter((rec) => rec.auto === true && rec.status === 'accepted' && rec.sourceFinding.itemId)
+      .map((rec) => [rec.sourceFinding.itemId as string, rec]),
+  )
+  return review.items.every((item) => {
+    if (item.status === 'dismissed' || item.status === 'resolved') return true
+    if (item.status !== 'answered') return false
+    const auto = autoAnswers.get(item.id)
+    return auto ? clearsAutoAnswerFloor(auto.confidence, floor) : true
+  })
+}
 
 /** A completed requirements review for one board block. */
 export const requirementReviewSchema = v.object({

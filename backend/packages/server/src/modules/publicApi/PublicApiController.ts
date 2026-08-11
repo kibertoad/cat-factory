@@ -16,6 +16,7 @@ import {
   listPublicServiceTasksContract,
   listPublicServicesContract,
   retryPublicTaskContract,
+  runDefaultScopeFor,
   startPublicTaskContract,
   stopPublicTaskContract,
   UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
@@ -49,7 +50,7 @@ import {
   unlockIsUnavailable,
 } from './personalUnlock.js'
 import { headlessActRefusal, notificationActEffect } from '../notifications/notificationActions.js'
-import type { AppEnv } from '../../http/env.js'
+import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { keyInitiatorRole } from '../../http/runAdmission.js'
 import { authorize } from './publicApiAuth.js'
@@ -215,10 +216,36 @@ function toPublicRun(
 }
 
 /**
+ * The pipeline a headless START runs: the request's, else the task's pinned pipeline, else the
+ * workspace's default for a run NOTHING IS WATCHING (`runDefaultScopeFor('public-api')`). `null`
+ * when the workspace declares none of the three, which is this surface's documented
+ * `pipeline_required` refusal — a caller here has no run-time picker, so inventing a rung for it
+ * would run work nobody chose.
+ *
+ * The scope rung is what makes the headless door land on a headless-shaped pipeline rather than on
+ * whatever an in-app board happens to default to: the seeded `pl_unattended` holds no requirements
+ * conversation and reaches its human doors only by measured risk. Resolved HERE rather than inside
+ * `ExecutionService.start`, so the refusal stays with the surface that documents it.
+ */
+async function startPipelineIdFor(
+  container: ServerContainer,
+  workspaceId: string,
+  named: { requested?: string | undefined; pinned?: string | undefined },
+): Promise<string | null> {
+  if (named.requested) return named.requested
+  if (named.pinned) return named.pinned
+  return container.pipelineService.defaultPipelineIdForScope(
+    workspaceId,
+    runDefaultScopeFor('public-api'),
+  )
+}
+
+/**
  * Project an internal pipeline onto the external pipeline resource: its id/name, the enabled
- * step chain (in order), and the two headless-relevant flags a caller needs to choose a
- * `pipelineId` for `start` — `public` (job-startable via `POST /jobs`) and `headlessStartable` (safe to
- * run with no interactive user). Archived pipelines are filtered out by the caller.
+ * step chain (in order), the two headless-relevant flags a caller needs to choose a `pipelineId`
+ * for `start` — `public` (job-startable via `POST /jobs`) and `headlessStartable` (safe to run with
+ * no interactive user) — and whether it is what an empty start body resolves. Archived pipelines
+ * are filtered out by the caller.
  */
 function toPublicPipeline(
   pipeline: {
@@ -228,6 +255,7 @@ function toPublicPipeline(
     enabled?: boolean[]
     gates?: boolean[]
     public?: boolean
+    isUnattendedDefault?: boolean
   },
   registries: AdmissionRegistries,
 ): PublicPipeline {
@@ -237,6 +265,7 @@ function toPublicPipeline(
     steps: pipeline.agentKinds.filter((_, i) => pipeline.enabled?.[i] !== false),
     public: pipeline.public === true,
     headlessStartable: isHeadlessInlinePipeline(pipeline, registries),
+    unattendedDefault: pipeline.isUnattendedDefault === true,
   }
 }
 
@@ -859,9 +888,10 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
         409,
       )
     }
-    // The pipeline to run: the request's, else the task's pinned pipeline. A task with
-    // neither can't be started headlessly (there is no run-time picker for an API caller).
-    const pipelineId = c.req.valid('json').pipelineId ?? found.block.pipelineId
+    const pipelineId = await startPipelineIdFor(container, auth.workspaceId, {
+      requested: c.req.valid('json').pipelineId,
+      pinned: found.block.pipelineId,
+    })
     if (!pipelineId) {
       return c.json(
         {

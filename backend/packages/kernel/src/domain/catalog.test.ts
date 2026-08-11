@@ -55,7 +55,7 @@ describe('seedRiskPolicies', () => {
   it('gives the unattended default the SAME landing authority as the in-app one', () => {
     // The seed may decide that an unwatched run should not wait forever on an automation budget.
     // It may NOT decide that an unwatched run gets to land what an operator's own thresholds
-    // would have held, so every field but the two this feature owns is Balanced's, and this is
+    // would have held, so every field outside its own two concerns is Balanced's, and this is
     // what stops the next edit quietly widening it.
     const unattended = seedRiskPolicies().find((s) => s.id === UNATTENDED_RISK_POLICY_ID)!
     const balanced = seedRiskPolicies().find((s) => s.isDefault)!
@@ -66,13 +66,49 @@ describe('seedRiskPolicies', () => {
       name: _n,
       id: _i,
       version: _v,
+      // The posture's own knobs, asserted below for DIRECTION rather than for equality. Excluded
+      // here rather than dropped from the comparison silently: this list is the whole set of
+      // fields the unattended seed is allowed to differ on, so adding an entry is the decision.
       ...authority
-    } = unattended
+    } = { ...unattended, ...Object.fromEntries(POSTURE_FIELDS.map((key) => [key, undefined])) }
     for (const key of Object.keys(authority) as (keyof typeof authority)[]) {
+      if (authority[key] === undefined) continue
       expect(unattended[key], key).toEqual(balanced[key])
     }
   })
+
+  it('narrows the unattended default only DOWNWARD, and only on the loops policy answers', () => {
+    // Every field here is a budget whose exhaustion `autonomy: 'unattended'` settles, so spending
+    // it buys an unwatched run nothing but tokens. What must never happen is the reverse: a budget
+    // WIDER than the in-app default would mean an unwatched run grinding longer than a watched one
+    // before reaching the same policy-given answer.
+    const unattended = seedRiskPolicies().find((s) => s.id === UNATTENDED_RISK_POLICY_ID)!
+    const balanced = seedRiskPolicies().find((s) => s.isDefault)!
+    for (const key of [
+      'maxRequirementIterations',
+      'maxTesterQualityIterations',
+      'judgeMaxBounces',
+    ] as const) {
+      expect(unattended[key], key).toBeLessThanOrEqual(balanced[key])
+    }
+    // NOT narrowed, and the exception is the point: exhausting the CI-fixer budget raises
+    // `ci_failed`, a park this policy does not answer, so cutting it would produce one more stop
+    // for a person rather than one fewer.
+    expect(unattended.ciMaxAttempts).toBe(balanced.ciMaxAttempts)
+  })
 })
+
+/**
+ * The fields the unattended seed may differ from `Balanced` on: its posture, the loop budgets that
+ * posture makes cheap, and the confidence floor only it reads. Everything else is landing
+ * authority, which it may never move.
+ */
+const POSTURE_FIELDS = [
+  'maxRequirementIterations',
+  'maxTesterQualityIterations',
+  'judgeMaxBounces',
+  'minAutoAnswerConfidence',
+] as const
 
 describe('riskPolicyFromSeed', () => {
   it('carries every field of the seed onto the row, plus the stamped createdAt', () => {

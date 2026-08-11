@@ -209,10 +209,12 @@ export function buildReviewPrompt(ctx: RequirementsContext): string {
       'Assign a severity to EVERY item — no item may omit it. Use `high` for a gap or ' +
       'ambiguity that would block correct implementation, `medium` for one that risks ' +
       'rework or a wrong assumption, and `low` for a minor clarification or nice-to-have. ' +
-      'Set `autoAnswerable` on EVERY item: true only when a confident answer follows from ' +
-      'universal best practice or the context already provided (no product owner needed), ' +
-      'false when it needs a real business / product / domain decision or missing information ' +
-      '(when unsure, false). ' +
+      'Set `autoAnswerable` on EVERY item, sorting it into one of two groups: true when a ' +
+      'confident answer follows from universal best practice, from the idiomatic approach of a ' +
+      'stack this work already uses, or from the context already provided (no product owner ' +
+      'needed), false when it needs a real business / product / domain decision, a judgement call ' +
+      'somebody should own, or information that is missing (when unsure, false — a run with nobody ' +
+      'watching may answer the first group on its own and always stops for the second). ' +
       'Raise between 0 and 20 items, ordered by severity (high first). If the requirements ' +
       'are complete and unambiguous at the product level, or the work is purely technical ' +
       'and changes no user-visible behaviour or business rule, return an empty items array. ' +
@@ -432,6 +434,23 @@ export interface WriterSuggestion {
   fromStandard: string | null
   /** The precedence level the Writer reports it came from; null when it reported none. */
   groundedIn: RecommendationSource | null
+  /** How sure the Writer reports being (0..1); null when it reported nothing usable. */
+  confidence: number | null
+}
+
+/**
+ * Coerce the Writer's reported confidence, or null.
+ *
+ * Null for anything that is not a finite number in 0..1, INCLUDING a number outside the range: a
+ * `confidence: 5` is a model that did not understand the scale, and reading it as "extremely sure"
+ * by clamping to 1 would hand an unwatched run its strongest possible signal on the strength of a
+ * misunderstanding. The floor treats null as below every bar above 0, so the failure lands on the
+ * side that asks a person.
+ */
+function coerceConfidence(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : null
 }
 
 const RECOMMENDATION_SOURCES: RecommendationSource[] = [
@@ -478,6 +497,7 @@ export function coerceRecommendations(raw: unknown): Map<string, WriterSuggestio
       recommendation,
       fromStandard: fromStandard || null,
       groundedIn: coerceSource(obj.groundedIn),
+      confidence: coerceConfidence(obj.confidence),
     })
   }
   return out
@@ -509,6 +529,7 @@ export function coerceChunkRecommendations(
       recommendation: asString(obj.recommendation),
       fromStandard: asString(obj.fromStandard) || null,
       groundedIn: coerceSource(obj.groundedIn),
+      confidence: coerceConfidence(obj.confidence),
     }))
     .filter((e) => e.recommendation)
   const out = new Map<string, WriterSuggestion>()
@@ -521,6 +542,7 @@ export function coerceChunkRecommendations(
         recommendation: e.recommendation,
         fromStandard: e.fromStandard,
         groundedIn: e.groundedIn,
+        confidence: e.confidence,
       })
       consumed.add(idx)
     }
@@ -535,6 +557,7 @@ export function coerceChunkRecommendations(
       recommendation: e.recommendation,
       fromStandard: e.fromStandard,
       groundedIn: e.groundedIn,
+      confidence: e.confidence,
     })
   }
   return out
@@ -562,6 +585,7 @@ export function coerceSingleRecommendation(raw: unknown, itemId: string): Writer
       recommendation: asString(obj.recommendation),
       fromStandard: asString(obj.fromStandard) || null,
       groundedIn: coerceSource(obj.groundedIn),
+      confidence: coerceConfidence(obj.confidence),
     }))
     .filter((e) => e.recommendation)
   if (entries.length === 0) return null
@@ -572,6 +596,7 @@ export function coerceSingleRecommendation(raw: unknown, itemId: string): Writer
         recommendation: chosen.recommendation,
         fromStandard: chosen.fromStandard,
         groundedIn: chosen.groundedIn,
+        confidence: chosen.confidence,
       }
     : null
 }

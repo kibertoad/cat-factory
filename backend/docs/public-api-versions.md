@@ -676,3 +676,29 @@ waits indefinitely. Under `unattended` the platform takes the documented "procee
 of those and records that it did. It never covers a gate the PIPELINE asked for: a human-test step,
 a review gate or an approval gate stops the run under either value, which is what keeps the field a
 statement about waiting rather than about oversight.
+
+## 1.50.0
+
+1.50.0, not 1.49.1: two additive fields, one on each side of the pipeline question. `POST
+/api/v1/services/:serviceId/tasks` accepts `pipelineId`, and `GET /api/v1/pipelines` reports
+`unattendedDefault`. No existing field changes meaning, so a consumer built against 1.49.0 keeps
+parsing and keeps behaving unchanged.
+
+One BEHAVIOUR change rides with them, and it turns a refusal into a run rather than the reverse:
+`POST /api/v1/tasks/:taskId/start` with no `pipelineId`, against a task that pinned none, used to
+answer `400 pipeline_required`. It now resolves the workspace's default pipeline for a run nothing
+is watching and starts it. The refusal survives for the case where the workspace declares no such
+default, so the error code is not retired and a client branching on it still needs to.
+
+That is worth stating as a change rather than filing under "it works now", because a caller
+depending on the 400 as a validation signal (checking that a task is startable by trying it) will
+now start work. The check that does not start anything is `GET /api/v1/tasks/:taskId`, which reports
+the task's own pinned pipeline, plus `GET /api/v1/pipelines` for what an empty body would resolve.
+
+`pipelineId` at creation is what makes the pairing usable: a caller that files a task now and lets
+somebody start it later, from the board or from an empty start body, previously had to repeat its
+pipeline choice on the start call, and a task filed by an integration and started from the app ran
+whatever that board defaults to. Unlike `modelPresetId` / `riskPolicyId`, an id nothing defines is
+NOT refused at creation: a dangling preset pin falls back to a default and runs, which is why that
+one has to be caught at the write, while a dangling pipeline pin can start nothing and so refuses
+loudly on its own at the start call.

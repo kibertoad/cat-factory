@@ -741,11 +741,28 @@ export const pipelineStepSchema = v.object({
    * looks, and a review row outlives the run that settled it. Without it, a review whose findings
    * were never answered reads exactly like one a product owner signed off.
    *
-   * Absent on every other step and on every attended run. Note this records the ITERATION CAP
-   * only: a review still ASKING questions parks under either posture, because the answers are a
-   * product judgement and inventing them is the one thing an unattended policy may never do.
+   * Absent on every other step and on every attended run. This records the ITERATION CAP only; its
+   * sibling {@link autoAnsweredByPolicy} records the other, narrower thing an unattended run may
+   * now do with a review that is still asking.
    */
   reviewCapSettledByPolicy: v.optional(v.boolean()),
+  /**
+   * Set on a review-gate step where an unattended run FOLDED IN the graded answers it had rather
+   * than parking: every finding was either settled by a person, or was one the reviewer itself
+   * classified as answerable without a product owner AND carried a Requirement-Writer suggestion at
+   * or above the policy's `minAutoAnswerConfidence`.
+   *
+   * A DIFFERENT fact from {@link reviewCapSettledByPolicy}, and kept apart for the reason the merge
+   * decision keeps its four reasons apart: that one means "the loop gave up and policy took the
+   * proceed", this one means "the loop converged on answers nobody read". A reviewer of the
+   * resulting pull request needs to know which, because only the second one has answers in it to
+   * check — they are on the review, with their grade and their provenance.
+   *
+   * Absent on every attended run, and on every unattended run that parked, which stays the normal
+   * outcome: a single finding needing a product owner, or one graded below the floor, holds the
+   * whole review.
+   */
+  autoAnsweredByPolicy: v.optional(v.boolean()),
   /**
    * Live Follow-up companion state while a `coder` step runs/parks: the items the Coder
    * streamed (loose ends / side-tasks / questions), whether the companion is enabled, and

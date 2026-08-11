@@ -3068,6 +3068,10 @@
         "label": "Completar las ejecuciones sin supervisión sin esperar a una persona",
         "unattendedHint": "Cuando un bucle automático se rinde (un companion en su límite de reintentos, una revisión en su límite de pasadas, seguimientos sin triar), la ejecución continúa dejando constancia en lugar de detenerse. Las puertas que pide la pipeline, como pruebas manuales, revisión y aprobación, siguen deteniendo la ejecución.",
         "attendedHint": "Cuando un bucle automático se rinde, la ejecución se detiene y espera a que alguien elija. Adecuado para un tablero que alguien está mirando; una ejecución iniciada por la API espera indefinidamente."
+      },
+      "autoAnswer": {
+        "label": "Confianza mínima para autorrespuesta (%)",
+        "hint": "Cuánta seguridad debe tener el Requirement Writer para que una ejecución sin observadores conserve su respuesta sugerida en lugar de detenerse. Solo son elegibles los hallazgos que el revisor juzgó resolubles sin un product owner."
       }
     },
     "observabilityConnection": {
@@ -4948,7 +4952,17 @@
       "binaryComparison": "Comparar candidatos antes de entregar",
       "binaryPerGenerator": "Candidatos por integración",
       "binaryMultiSelect": "Permitir conservar más de uno",
-      "binaryComparisonUnreachable": "Este paso solo puede producir un candidato por sujeto, así que no habría nada que comparar y el único se conservaría sin preguntar. Selecciona una segunda integración o sube el número de candidatos por integración."
+      "binaryComparisonUnreachable": "Este paso solo puede producir un candidato por sujeto, así que no habría nada que comparar y el único se conservaría sin preguntar. Selecciona una segunda integración o sube el número de candidatos por integración.",
+      "scopeDefault": {
+        "interactive": "Predeterminada en la app",
+        "interactiveHint": "Lo que ejecuta una tarea iniciada desde el tablero cuando no fija ninguna pipeline propia.",
+        "unattended": "Predeterminada sin supervisión",
+        "unattendedHint": "Lo que ejecuta una ejecución que nadie observa (la API, un ticket, una programación) cuando la tarea no fija pipeline.",
+        "claimInteractive": "Hacer predeterminada en la app",
+        "releaseInteractive": "Dejar de ser la predeterminada en la app",
+        "claimUnattended": "Hacer predeterminada sin supervisión",
+        "releaseUnattended": "Dejar de ser la predeterminada sin supervisión"
+      }
     },
     "progress": {
       "status": {
@@ -5396,6 +5410,17 @@
       "reReview": "No se pudieron volver a revisar los requisitos",
       "proceed": "No se pudo continuar",
       "resolveReview": "No se pudo resolver la revisión"
+    },
+    "findingClass": {
+      "judgement": "Necesita tu decisión",
+      "judgementHint": "Una decisión de negocio, producto o dominio, o algo que el revisor no sabía. Solo tú puedes resolverlo.",
+      "practice": "Resoluble con buenas prácticas",
+      "practiceHint": "Se resuelve con la práctica establecida, el stack ya en uso o el contexto aportado. Se rellena para que lo mantengas o lo cambies."
+    },
+    "confidence": {
+      "high": "Confianza alta",
+      "medium": "Confianza media",
+      "low": "Confianza baja"
     }
   },
   "clarity": {

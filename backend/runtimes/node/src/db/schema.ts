@@ -1,7 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
   bigint,
-  customType,
   doublePrecision,
   index,
   integer,
@@ -12,20 +11,6 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
-// Raw binary column (Postgres `bytea`), used by the Node-only `binary_artifact_blobs`
-// store-in-DB blob backend. Reads/writes as a `Uint8Array`.
-const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
-  dataType() {
-    return 'bytea'
-  },
-  toDriver(value: Uint8Array): Buffer {
-    return Buffer.from(value)
-  },
-  fromDriver(value: Buffer): Uint8Array {
-    return new Uint8Array(value)
-  },
-})
-
 // Postgres schema mirroring the Cloudflare D1 tables column-for-column (snake_case
 // field names = column names) so the shared row<->domain mappers in
 // @cat-factory/server work unchanged against either store. JSON-shaped columns are
@@ -286,13 +271,33 @@ export const pipelines = pgTable(
     // `'planning'` (mirror of D1 migration 0056_pipeline_purpose). NULL/absent ⇒ unclassified.
     // Drives the task pickers (a `document` task offers only `'document'`) and the builder palette.
     purpose: text('purpose'),
+    // The workspace's DECLARED default pipeline per resolution scope (mirror of D1 migration
+    // 0091_pipeline_defaults): `is_default` for a run somebody started in the app, and
+    // `is_unattended_default` for one nothing is watching. NULL/absent on every row means the
+    // scope has no declared default and its own fallback answers (the interface-mode rung in the
+    // app; catalog order behind it) — which is why neither is `NOT NULL DEFAULT 0`: "nobody said"
+    // is a real state here, unlike on `merge_threshold_presets` where a default always resolves.
+    is_default: integer('is_default'),
+    is_unattended_default: integer('is_unattended_default'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
     // matches the Cloudflare facade (which orders by `rowid`). Auto-assigned on insert.
     seq: serial('seq').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // One row per scope may claim a default, enforced by the store rather than by the writer
+    // remembering to demote: a partial unique index, so the many rows claiming NEITHER do not
+    // collide (a plain unique index on a nullable column would allow only one NULL on some
+    // engines and is the wrong statement anyway).
+    uniqueIndex('idx_pipelines_default')
+      .on(t.workspace_id)
+      .where(sql`${t.is_default} = 1`),
+    uniqueIndex('idx_pipelines_unattended_default')
+      .on(t.workspace_id)
+      .where(sql`${t.is_unattended_default} = 1`),
+  ],
 )
 
 export const agentRuns = pgTable(
@@ -1017,6 +1022,14 @@ export const riskPolicies = pgTable(
     // give up (`attended` | `unattended`; see `runAutonomySchema`). Defaults to the historical
     // behaviour, which is to stop for a person.
     autonomy: text('autonomy').notNull().default('attended'),
+    // The confidence floor a Requirement-Writer suggestion must report for an `unattended` run to
+    // take it as a review finding's answer rather than parking (mirror of D1
+    // 0091_pipeline_defaults). Read only under `unattended`, so the default is the shipped floor
+    // rather than 0: a policy that never reads it is unaffected either way, and one that does
+    // should not start out accepting an ungraded answer.
+    min_auto_answer_confidence: doublePrecision('min_auto_answer_confidence')
+      .notNull()
+      .default(0.8),
     is_default: integer('is_default').notNull().default(0),
     // The workspace's default for a run NOTHING is watching (the public API, a tracker dispatch,
     // a schedule fire). Independent of `is_default`: one row may hold both, and each scope has
@@ -1445,53 +1458,9 @@ export {
   githubSyncCursors,
 } from './tables/vcs.js'
 
-// Binary-artifact METADATA (mirror of D1 migration 0017). The bytes live in a blob
-// backend keyed by `storage_key` (R2 / S3 / the `binary_artifact_blobs` table below);
-// this table holds only the queryable metadata, identical column-for-column to D1.
-export const binaryArtifacts = pgTable(
-  'binary_artifacts',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    id: text('id').notNull(),
-    execution_id: text('execution_id'),
-    block_id: text('block_id'),
-    kind: text('kind').notNull(),
-    view: text('view'),
-    content_type: text('content_type').notNull(),
-    byte_size: integer('byte_size').notNull(),
-    hash: text('hash').notNull(),
-    storage: text('storage').notNull(),
-    storage_key: text('storage_key').notNull(),
-    // The imported document this artifact was rendered FROM (mirror of D1 migration 0087), or NULL
-    // for one a person uploaded. The document's own source identity rather than the block it is
-    // attached to: an import runs before any attachment exists, and only document-sourced artifacts
-    // are replaced wholesale on a re-import.
-    document_source: text('document_source'),
-    document_external_id: text('document_external_id'),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workspace_id, t.id] }),
-    index('idx_binary_artifacts_execution').on(t.workspace_id, t.execution_id),
-    index('idx_binary_artifacts_block').on(t.workspace_id, t.block_id),
-    // The re-import reclaim deletes every artifact rendered from one document, so it is an indexed
-    // range delete rather than a per-workspace scan.
-    index('idx_binary_artifacts_document').on(
-      t.workspace_id,
-      t.document_source,
-      t.document_external_id,
-    ),
-    // The per-workspace retention sweep filters on `created_at`; index it so the prune is an
-    // indexed range delete (mirrors the D1 idx_binary_artifacts_created index).
-    index('idx_binary_artifacts_created').on(t.workspace_id, t.created_at),
-  ],
-)
-
-// Node-ONLY blob backend: when an account selects the `db` content-storage backend, the
-// bytes live in this Postgres `bytea` table (keyed by the artifact's `storage_key`). There
-// is no D1 equivalent — on Cloudflare blobs always go to R2 (D1 can't hold large values), so
-// this store-in-DB backend genuinely cannot exist on the Worker runtime.
-export const binaryArtifactBlobs = pgTable('binary_artifact_blobs', {
-  storage_key: text('storage_key').primaryKey(),
-  bytes: bytea('bytes').notNull(),
-})
+// The BINARY-artifact tables (the queryable metadata mirror of D1, plus the Node-only
+// store-in-DB blob backend and the `bytea` column type only it uses) live in
+// `tables/binary.ts` — one cohesive group, extracted to keep this module inside its size
+// budget — and are re-exported below so every `from '../db/schema.js'` importer is
+// unaffected and drizzle-kit still sees the tables through that entry point.
+export { binaryArtifacts, binaryArtifactBlobs } from './tables/binary.js'

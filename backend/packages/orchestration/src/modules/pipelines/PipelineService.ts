@@ -7,6 +7,7 @@ import type {
 import type {
   ConsensusStepConfig,
   Pipeline,
+  RunDefaultScope,
   StepGating,
   StepOptions,
   TesterQualityConfig,
@@ -15,6 +16,7 @@ import type { GateRegistry, PipelineRegistry } from '@cat-factory/kernel'
 import {
   assertFound,
   ConflictError,
+  declaredDefaultPipelineId,
   noopOperationalMetrics,
   retiredPipelines,
   offeredPipelines,
@@ -217,6 +219,35 @@ export class PipelineService {
   async resolveForRun(workspaceId: string, id: string): Promise<Pipeline | null> {
     await this.requireWorkspace(workspaceId)
     return this.adoption.resolveDefinition(workspaceId, id)
+  }
+
+  /**
+   * The pipeline id a run of this RESOLUTION SCOPE falls back to when neither the caller nor the
+   * task named one, or `null` when the workspace has no answer for that scope.
+   *
+   * `null` is a real answer and the caller states it as one: the public start path keeps its
+   * `pipeline_required` refusal, because a headless caller has no run-time picker and inventing a
+   * rung for it would run work nobody chose.
+   *
+   * The ladder is stored-then-catalog, and the second rung is bounded on purpose. A workspace
+   * seeded before a rung existed holds no row for it, so reading only the library would leave every
+   * existing deployment on the old refusal until somebody opened the board and accepted a reseed
+   * advisory — the same trap `pipelineAdoption` exists to close for a PINNED pipeline. But once the
+   * row IS in the library, its flags are the operator's own answer, INCLUDING the absence of one:
+   * releasing a default has to mean something, so the catalog is consulted only while the workspace
+   * has never adopted the rung the catalog declares.
+   */
+  async defaultPipelineIdForScope(
+    workspaceId: string,
+    scope: RunDefaultScope,
+  ): Promise<string | null> {
+    await this.requireWorkspace(workspaceId)
+    const stored = await this.pipelineRepository.listByWorkspace(workspaceId)
+    const declared = declaredDefaultPipelineId(stored, scope)
+    if (declared) return declared
+    const fromCatalog = declaredDefaultPipelineId(seedPipelines(this.pipelineRegistry), scope)
+    if (!fromCatalog) return null
+    return stored.some((pipeline) => pipeline.id === fromCatalog) ? null : fromCatalog
   }
 
   async create(workspaceId: string, input: CreatePipelineInput): Promise<Pipeline> {
@@ -554,7 +585,50 @@ export class PipelineService {
       ...(archived ? { archived: true } : { archived: undefined }),
     }
     await this.pipelineRepository.update(workspaceId, pipeline)
-    return pipeline
+    // The default claims go through their OWN store call, because promoting touches a SECOND row
+    // (the incumbent) and `update` deliberately does not carry the flags. Applied after the row
+    // write so a rejected edit never leaves a moved default behind, and re-read so the returned
+    // pipeline states what the store settled rather than what this request asked for.
+    const claims = await this.applyDefaultClaims(workspaceId, pipeline, input)
+    return claims ?? pipeline
+  }
+
+  /**
+   * Apply the two default claims an organize request carried, returning the re-read pipeline when
+   * either fired and `null` when the request named neither.
+   *
+   * An ARCHIVED or INTERNAL pipeline may not hold a default. Archiving is how a library hides a
+   * rung and `internal` is how the platform withholds one, so either row answering every headless
+   * start is the concealed-setting failure: a default nobody can see in the library they would go
+   * to change it in. Refused rather than accepted-and-hidden, and judged against the row this
+   * request just WROTE, so archiving and promoting in one call is refused whichever order the two
+   * fields appear in.
+   */
+  private async applyDefaultClaims(
+    workspaceId: string,
+    pipeline: Pipeline,
+    input: OrganizePipelineInput,
+  ): Promise<Pipeline | null> {
+    const requested = (
+      [
+        ['interactive', input.isDefault],
+        ['unattended', input.isUnattendedDefault],
+      ] as const satisfies readonly (readonly [RunDefaultScope, boolean | undefined])[]
+    ).filter(([, claimed]) => claimed !== undefined)
+    if (!requested.length) return null
+    for (const [scope, claimed] of requested) {
+      if (claimed === true && (pipeline.archived || pipeline.internal)) {
+        throw new ValidationError('An archived or internal pipeline cannot be a default', {
+          reason: 'pipeline_not_defaultable',
+        })
+      }
+      await this.pipelineRepository.setDefault(workspaceId, pipeline.id, scope, claimed === true)
+    }
+    return assertFound(
+      await this.pipelineRepository.get(workspaceId, pipeline.id),
+      'Pipeline',
+      pipeline.id,
+    )
   }
 }
 

@@ -3210,6 +3210,10 @@
         "label": "Gözetimsiz çalıştırmaları bir kişiyi beklemeden tamamla",
         "unattendedHint": "Otomatik bir döngü pes ettiğinde (yeniden çalışma sınırındaki bir companion, geçiş sınırındaki bir inceleme, ayıklanmamış takip maddeleri), çalıştırma durmak yerine kayda geçirilerek devam eder. Hattın istediği kapılar, örneğin insan testi, inceleme ve onay, çalıştırmayı yine durdurur.",
         "attendedHint": "Otomatik bir döngü pes ettiğinde çalıştırma durur ve birinin seçim yapmasını bekler. Birinin izlediği bir pano için doğrudur; API üzerinden başlatılan bir çalıştırma süresiz bekler."
+      },
+      "autoAnswer": {
+        "label": "Otomatik yanıt güven eşiği (%)",
+        "hint": "Gözetimsiz bir çalıştırmanın bir kişiyi beklemek yerine önerilen yanıtı kullanabilmesi için Requirement Writer’ın ne kadar emin olması gerektiği. Yalnızca inceleyicinin ürün sahibi olmadan yanıtlanabilir bulduğu bulgular uygundur."
       }
     },
     "observabilityConnection": {
@@ -4948,7 +4952,17 @@
       "binaryComparison": "Teslimden önce adayları karşılaştır",
       "binaryPerGenerator": "Entegrasyon başına aday",
       "binaryMultiSelect": "Birden fazlasını tutmaya izin ver",
-      "binaryComparisonUnreachable": "Bu adım her konu için yalnızca bir aday üretebilir; karşılaştırılacak bir şey olmaz ve tek aday sorulmadan tutulur. İkinci bir entegrasyon seçin ya da entegrasyon başına aday sayısını artırın."
+      "binaryComparisonUnreachable": "Bu adım her konu için yalnızca bir aday üretebilir; karşılaştırılacak bir şey olmaz ve tek aday sorulmadan tutulur. İkinci bir entegrasyon seçin ya da entegrasyon başına aday sayısını artırın.",
+      "scopeDefault": {
+        "interactive": "Uygulama içi varsayılan",
+        "interactiveHint": "Panodan başlatılan bir görev kendi hattını belirtmediğinde ne çalıştırılır.",
+        "unattended": "Gözetimsiz varsayılan",
+        "unattendedHint": "Kimsenin izlemediği bir çalıştırmanın (API, kayıt, zamanlama) görev hat belirtmediğinde ne çalıştıracağı.",
+        "claimInteractive": "Uygulama içi varsayılan yap",
+        "releaseInteractive": "Uygulama içi varsayılan olmaktan çıkar",
+        "claimUnattended": "Gözetimsiz varsayılan yap",
+        "releaseUnattended": "Gözetimsiz varsayılan olmaktan çıkar"
+      }
     },
     "progress": {
       "status": {
@@ -5396,6 +5410,17 @@
       "reReview": "Gereksinimler yeniden incelenemedi",
       "proceed": "Devam edilemedi",
       "resolveReview": "İnceleme çözümlenemedi"
+    },
+    "findingClass": {
+      "judgement": "Sizin kararınız gerekiyor",
+      "judgementHint": "İş, ürün veya alan kararı ya da inceleyiciye söylenmemiş bir bilgi. Bunu yalnızca siz çözebilirsiniz.",
+      "practice": "Yerleşik uygulamayla yanıtlanabilir",
+      "practiceHint": "Yerleşik uygulama, hâlihazırda kullanılan teknoloji yığını veya verilen bağlam belirler. Önceden doldurulur; olduğu gibi bırakın ya da değiştirin."
+    },
+    "confidence": {
+      "high": "Yüksek güven",
+      "medium": "Orta güven",
+      "low": "Düşük güven"
     }
   },
   "clarity": {

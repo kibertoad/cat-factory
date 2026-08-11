@@ -184,6 +184,13 @@ function definePipeline(spec: {
   public?: boolean
   /** Hide from every user-facing surface; the platform still starts it by id. */
   internal?: boolean
+  /**
+   * Seed this rung as the workspace's default for a run nothing is watching
+   * (`Pipeline.isUnattendedDefault`). There is deliberately no `interactiveDefault` twin: the
+   * in-app scope already resolves an answer without a flagged row, so a seeded one would overrule
+   * the interface-mode rung a board resolves today (see `Pipeline.isDefault`).
+   */
+  unattendedDefault?: boolean
 }): Pipeline {
   const norm = spec.steps.map((s) => (typeof s === 'string' ? { kind: s } : s))
   // A human checkpoint is `gate: true`, or an object configuring the APPROVAL half. An object that
@@ -219,6 +226,7 @@ function definePipeline(spec: {
     ...(spec.version !== undefined ? { version: spec.version } : {}),
     ...(spec.public ? { public: spec.public } : {}),
     ...(spec.internal ? { internal: spec.internal } : {}),
+    ...(spec.unattendedDefault ? { isUnattendedDefault: true } : {}),
   } as Pipeline
 }
 
@@ -467,6 +475,94 @@ function buildBuildPipelineLadder(): Pipeline[] {
         TESTER_UI_STEP,
         'conflicts',
         'ci',
+        'merger',
+        'disposer',
+      ],
+    }),
+  ]
+}
+
+/**
+ * The UNATTENDED rung, in its own builder purely so {@link buildBuildPipelineLadder} stays inside
+ * the function-size budget. Composed straight after it, so catalog order (and the positional
+ * default `pl_build`) is unchanged.
+ *
+ * This is the rung a run NOBODY IS WATCHING resolves when its task pinned no pipeline: seeded as
+ * `isUnattendedDefault`, which is why it is a built-in rather than something each deployment
+ * assembles. Before it, a headless start naming no pipeline against a task pinning none was simply
+ * refused (`pipeline_required`), so the honest default for that door was "there isn't one".
+ *
+ * Two things make it different from every other rung, and they pull in opposite directions on
+ * purpose:
+ *
+ *   - **No `requirements-review`.** The rung a headless caller lands on by default cannot open a
+ *     conversation: its whole park/answer/re-review loop needs somebody to answer, and ADR 0053
+ *     records that a review still ASKING questions parks under either autonomy posture, because
+ *     inventing a product judgement is the one thing an unattended policy may never do. A caller
+ *     that WANTS the conversation names `pl_complex` and answers it over
+ *     `/api/v1/runs/:runId/decisions` or on the ticket (ADR 0047).
+ *   - **Human checkpoints reached by measured risk.** Dropping the conversation removes the
+ *     platform's chance to ask about SCOPE, so the rung buys the oversight back where the evidence
+ *     is strongest: after the automation has run. A `task-estimator` sizes the task and both human
+ *     doors are ESTIMATE-GATED, so a routine change merges on its policy's thresholds and a risky
+ *     one waits for a person even though nobody was watching it start. That is escalation, not a
+ *     pause the estimate can cancel: neither step carries `gates[i]`.
+ *
+ * `human-test` sits behind a HIGHER bar than `human-review`, because the two asks are not the same
+ * size: a review reads a diff that is already open, while a manual test needs somebody to drive a
+ * running environment. Both fail toward `skip` on a missing estimate, the rule `pl_full` already
+ * applies to `human-review`: an unestimated task must never silently wait forever for a person
+ * nobody told about it.
+ */
+function buildUnattendedPipelineRung(): Pipeline[] {
+  const HUMAN_DOOR_MISSING_ESTIMATE = 'skip' as const
+  return [
+    definePipeline({
+      id: 'pl_unattended',
+      name: 'Unattended delivery',
+      purpose: 'build',
+      description:
+        'The default for a run nobody is watching: sizes the task up, designs it only when it needs designing, implements, reviews and verifies it, then gates on conflicts + CI before merging. No requirements interview — a risky or complex task instead waits for a human test and a human PR review.',
+      unattendedDefault: true,
+      steps: [
+        // Every gate below reads this estimate; `assertValidGating` requires it to come first.
+        'task-estimator',
+        {
+          kind: 'architect',
+          gating: { enabled: true, minComplexity: 0.4, onMissingEstimate: 'run' },
+        },
+        // No gate of its own: it CASCADES with the architect (`producerWasSkipped`).
+        'architect-companion',
+        'coder',
+        'reviewer',
+        'deployer',
+        ...gatedTesterSteps({
+          enabled: true,
+          minComplexity: 0.3,
+          minRisk: 0.3,
+          onMissingEstimate: 'run',
+        }),
+        'conflicts',
+        'ci',
+        // Asked AFTER the guards on purpose: a person driving a build that cannot merge anyway is
+        // the one review round this rung can be sure it wasted.
+        {
+          kind: 'human-test',
+          gating: {
+            enabled: true,
+            minComplexity: 0.8,
+            minRisk: 0.7,
+            onMissingEstimate: HUMAN_DOOR_MISSING_ESTIMATE,
+          },
+        },
+        {
+          kind: 'human-review',
+          gating: {
+            enabled: true,
+            minRisk: 0.6,
+            onMissingEstimate: HUMAN_DOOR_MISSING_ESTIMATE,
+          },
+        },
         'merger',
         'disposer',
       ],
@@ -1000,6 +1096,7 @@ export interface RetiredPipeline {
 export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
   const builtins: Pipeline[] = [
     ...buildBuildPipelineLadder(),
+    ...buildUnattendedPipelineRung(),
     ...buildOtherDeliveryPipelines(),
     ...buildBuildVariantPipelines(),
     ...buildSpecialtyPipelines(),
@@ -1170,5 +1267,7 @@ export {
   BUILD_PIPELINE_ID,
   COMPLEX_BUILD_PIPELINE_ID,
   SIMPLE_PIPELINE_ID,
+  UNATTENDED_BUILD_PIPELINE_ID,
+  declaredDefaultPipelineId,
   defaultBuildPipelineId,
 } from '@cat-factory/contracts'

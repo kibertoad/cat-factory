@@ -1,10 +1,10 @@
 import type {
   BlockEditActor,
   BlockEditAuthority,
-  RiskPolicyDefaultScope,
+  RunDefaultScope,
   RiskPolicySelectionRefusal,
 } from '@cat-factory/contracts'
-import { refuseRiskPolicySelection, RISK_POLICY_DEFAULT_SCOPES } from '@cat-factory/contracts'
+import { refuseRiskPolicySelection, RUN_DEFAULT_SCOPES } from '@cat-factory/contracts'
 import type { RiskPolicy, RiskPolicyRepository } from '@cat-factory/kernel'
 import { ForbiddenError } from '@cat-factory/kernel'
 import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
@@ -90,11 +90,11 @@ export interface RiskPolicySelectionGuard {
  * verdict. The moment either side falls back to a default the two scopes can disagree, and that
  * disagreement is exactly what the second scope was added to catch, so then both are judged.
  */
-const scopesFor = (...ids: (string | null | undefined)[]): readonly RiskPolicyDefaultScope[] =>
-  ids.every((id) => id) ? SCOPE_INDEPENDENT : RISK_POLICY_DEFAULT_SCOPES
+const scopesFor = (...ids: (string | null | undefined)[]): readonly RunDefaultScope[] =>
+  ids.every((id) => id) ? SCOPE_INDEPENDENT : RUN_DEFAULT_SCOPES
 
 /** One arbitrary scope, for the pinned case above where they all resolve alike. */
-const SCOPE_INDEPENDENT: readonly RiskPolicyDefaultScope[] = [RISK_POLICY_DEFAULT_SCOPES[0]!]
+const SCOPE_INDEPENDENT: readonly RunDefaultScope[] = [RUN_DEFAULT_SCOPES[0]!]
 
 /** Why the swap was refused, in copy the person holding the picker can act on. */
 const REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
@@ -162,7 +162,7 @@ export function createRiskPolicySelectionGuard(deps: {
     const read = preloadedRiskPolicyRead(library)
     return (
       riskPolicyId: string | null | undefined,
-      scope: RiskPolicyDefaultScope,
+      scope: RunDefaultScope,
     ): Promise<ResolvedRunRiskPolicy> =>
       resolveRiskPolicy({
         repository: deps.riskPolicyRepository,

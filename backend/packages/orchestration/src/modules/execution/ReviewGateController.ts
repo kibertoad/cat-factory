@@ -8,12 +8,17 @@ import type {
   PipelineStep,
   RequestRecommendationItem,
   RequirementConcernLevel,
+  RequirementRecommendation,
   ResolveRequirementsExceededChoice,
   ReviewQuestionSubject,
   RunAutonomy,
   WorkRunner,
 } from '@cat-factory/kernel'
 import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
+import {
+  DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
+  reviewSettledForUnattended,
+} from '@cat-factory/contracts'
 import { hasNotesToIncorporate } from '../requirements/requirements.logic.js'
 import type { ReviewCommon } from '../review/IterativeReviewService.js'
 import type { AdvanceResult } from './advance.js'
@@ -24,6 +29,25 @@ import {
 import type { RunStateMachine } from './RunStateMachine.js'
 import { resolvesOwnCaps, type RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
+
+/**
+ * A review as `reviewSettledForUnattended` reads it: the findings, plus the Writer recommendations
+ * where the kind has any.
+ *
+ * The one cast in this file, and it is a read of a field the GENERIC type cannot promise: only the
+ * requirements review carries recommendations, and the clarity gate deliberately has no Writer at
+ * all. Absent reads as none, which is the answer that keeps a reporter's unanswered question
+ * parking the run (see the predicate's own note).
+ */
+function unattendedReviewView(
+  review: ReviewCommon,
+): Parameters<typeof reviewSettledForUnattended>[0] {
+  const held = (review as { recommendations?: unknown }).recommendations
+  return {
+    items: review.items,
+    ...(Array.isArray(held) ? { recommendations: held as RequirementRecommendation[] } : {}),
+  }
+}
 
 /**
  * The merge-preset knobs an iterative review consults: how many reviewer passes it
@@ -40,6 +64,13 @@ export interface ReviewPreset {
    * nothing else should not have to state a posture, and absent reads as `attended`.
    */
   autonomy?: RunAutonomy
+  /**
+   * The confidence floor a Writer suggestion must report for an `unattended` run to fold it in as a
+   * finding's answer instead of parking. Optional for the reason `autonomy` is, and absent reads as
+   * the shipped default rather than `0`: an unstated floor is not a licence to accept an answer the
+   * model never graded.
+   */
+  minAutoAnswerConfidence?: number
 }
 
 /**
@@ -186,7 +217,7 @@ export class ReviewGateController {
    * is governed by, and an off-path "run review" on an API-started task is still that task's run.
    *
    * A block with no live run at all degrades to `undefined`, which
-   * {@link riskPolicyDefaultScopeFor} reads as interactive: there is no unattended run to speak
+   * {@link runDefaultScopeFor} reads as interactive: there is no unattended run to speak
    * for, and somebody is making this request right now.
    */
   private async runScope(
@@ -243,7 +274,7 @@ export class ReviewGateController {
     const pending = step.pendingIncorporation
     if (pending) {
       step.pendingIncorporation = null
-      const review = await this.runIncorporationCycle(
+      const cycled = await this.runIncorporationCycle(
         kind,
         workspaceId,
         block.id,
@@ -251,6 +282,20 @@ export class ReviewGateController {
         autoRecommendEnabled,
         instance,
       )
+      // The same self-settling the fresh pass gets, for the same reason: a re-review can surface a
+      // fresh batch of practice-level findings, and an unattended run that could settle the first
+      // batch is not helped by parking on the second.
+      const review =
+        cycled.status === 'ready' && autoRecommendEnabled
+          ? await this.settleQuestionsUnattended(
+              kind,
+              workspaceId,
+              instance,
+              step,
+              block,
+              autoRecommendEnabled,
+            )
+          : cycled
       if (review.status === 'incorporated') {
         return this.completeStep(workspaceId, instance, step, isFinalStep)
       }
@@ -288,12 +333,88 @@ export class ReviewGateController {
     // human is handed a mostly-filled review (only the genuine business decisions remain
     // blank). Best-effort — a failure here must not wedge the parked run. Skipped on `exceeded`
     // (the human is picking how to proceed, not answering findings).
+    let current = review
     if (review.status === 'ready' && autoRecommendEnabled) {
       await this.maybeAutoRecommend(kind, workspaceId, block.id)
+      current = await this.settleQuestionsUnattended(
+        kind,
+        workspaceId,
+        instance,
+        step,
+        block,
+        autoRecommendEnabled,
+      )
     }
-    if (review.status === 'exceeded')
+    if (current.status === 'incorporated') {
+      return this.completeStep(workspaceId, instance, step, isFinalStep)
+    }
+    if (await this.settleCapUnattended(kind, workspaceId, instance, block, current, step)) {
+      return this.completeStep(workspaceId, instance, step, isFinalStep)
+    }
+    if (current.status === 'exceeded')
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
-    return this.park(kind, workspaceId, instance, step, block, review)
+    return this.park(kind, workspaceId, instance, step, block, current)
+  }
+
+  /**
+   * The QUESTIONS an unattended run may answer for itself: fold in and re-review, for as long as
+   * every outstanding finding is either settled by a person or is one the REVIEWER classified as
+   * answerable without a product owner and the Writer graded at or above the policy's floor.
+   *
+   * ADR 0053 drew the line this sits on and left it where a person still had to be there: an
+   * unattended policy may answer a park the AUTOMATION raised by giving up, and may never invent a
+   * product judgement. The narrowing that makes this compatible with that rule rather than an
+   * exception to it is that two independent judgements have to agree before anything is folded — the
+   * reviewer sorted its own findings into "answerable from practice" and "needs an owner", and the
+   * Writer then said how sure it is of the specific answer. A finding in the second group, or one
+   * graded below the floor, holds the whole review exactly as before, and a floor of `0` is the
+   * operator asking for the ungraded behaviour explicitly.
+   *
+   * Re-READS rather than taking the caller's snapshot, because the auto-recommendation pass that
+   * runs immediately before it has just rewritten the row this decision is about.
+   *
+   * The loop is bounded by the review's OWN pass budget: each cycle spends one reviewer pass, and
+   * `disposeReview` turns the last of them into `exceeded`, which `settleCapUnattended` then answers
+   * on the same policy. Without the loop, a re-review that surfaced a fresh batch of practice-level
+   * findings would park a run that had just demonstrated it could settle exactly that kind.
+   */
+  private async settleQuestionsUnattended<TReview extends ReviewCommon>(
+    kind: ReviewKind<TReview>,
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    autoRecommendEnabled: boolean,
+  ): Promise<TReview> {
+    let current = await this.currentReview(kind, workspaceId, block.id)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
+    if (!resolvesOwnCaps(preset)) return current
+    const floor = preset.minAutoAnswerConfidence ?? DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE
+    for (let cycle = 0; cycle < current.maxIterations; cycle += 1) {
+      if (current.status !== 'ready') return current
+      if (!reviewSettledForUnattended(unattendedReviewView(current), floor)) return current
+      // Stamped BEFORE the fold, so a driver that dies mid-cycle still leaves the run saying a
+      // machine answered these questions. The answers themselves are on the review, each with its
+      // grade and its provenance; this is what stops the step reading like a signed-off review.
+      step.autoAnsweredByPolicy = true
+      this.deps.logger?.info('review questions auto-answered by policy', {
+        workspaceId,
+        runId: instance.id,
+        blockId: block.id,
+        reviewId: current.id,
+        agentKind: step.agentKind,
+        minConfidence: floor,
+      })
+      current = await this.runIncorporationCycle(
+        kind,
+        workspaceId,
+        block.id,
+        undefined,
+        autoRecommendEnabled,
+        instance,
+      )
+    }
+    return current
   }
 
   /**
