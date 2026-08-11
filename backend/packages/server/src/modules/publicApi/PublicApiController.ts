@@ -43,10 +43,15 @@ import {
   personalGateForRun,
   type PersonalCredentialGate,
 } from '../providers/personalCredentialGate.js'
-import { personalUnlockFor, unlockIsUnavailable } from './personalUnlock.js'
+import {
+  individualModelUnsupported,
+  personalUnlockFor,
+  unlockIsUnavailable,
+} from './personalUnlock.js'
 import { headlessActRefusal, notificationActEffect } from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
+import { keyInitiatorRole } from '../../http/runAdmission.js'
 import { authorize } from './publicApiAuth.js'
 import { toPublicService, toPublicTask } from './boardProjection.js'
 import { createTaskWithAttachments, taskCreationDeps } from './taskCreation.js'
@@ -449,34 +454,54 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
       )
     }
 
+    // What this call may unlock, read before anything is written so the refusal below and the
+    // attribution above are decided from one answer.
+    const unlock = personalUnlockFor(c, auth)
     const block = await container.boardService.createInternalTask(auth.workspaceId, {
       title: title?.trim() || input.slice(0, 80),
       description: input,
     })
-    // The bound user, or `null` for an unbound key (headless / system-initiated, as before). No
-    // personal-credential gate here, and that is a property of the pipeline rather than an
-    // omission: a public pipeline is inline-only, and an inline step never leases a subscription
-    // token — where a deployment can run one inline at all it does so on its own ambient CLI,
-    // which needs no unlock. So the binding decides ATTRIBUTION here and nothing else.
-    // If start fails, roll the
-    // whole run back: `ExecutionService.start` persists the execution + live-run row and flips the
-    // block to `in_progress` BEFORE its throwing dispatch (`workRunner.startRun`), so deleting only
-    // the anchor block would orphan a `running` execution the stale-run sweeper then re-drives
-    // forever against a since-deleted block. `rollbackInitiativeRun` drops the execution first, then
-    // the block, so a failed dispatch leaves nothing behind (whether it threw before or after the
-    // rows were written).
+    // If anything below fails, roll the whole run back: `ExecutionService.start` persists the
+    // execution + live-run row and flips the block to `in_progress` BEFORE its throwing dispatch
+    // (`workRunner.startRun`), so deleting only the anchor block would orphan a `running` execution
+    // the stale-run sweeper then re-drives forever against a since-deleted block.
+    // `rollbackInitiativeRun` drops the execution first, then the block, so a failed start leaves
+    // nothing behind (whether it threw before or after the rows were written) — and the gate below
+    // throws before either exists, which the same rollback covers.
     let execution: ExecutionInstance
     try {
+      // The SAME personal-credential gate the board-start route runs, on the same primitive. An
+      // inline-only pipeline settles what a public run may DO (no container, no push); it says
+      // nothing about WHOSE credential the work needs, because an inline step leases a personal
+      // subscription like any other — the inline harness's `makeContainerRunner` leases one for
+      // every individual-usage vendor. Skipping the gate here would trade a refusal the caller can
+      // act on for a run that dies at its first dispatch with nothing to lease.
+      const personal = await personalGateForBlock(
+        container,
+        auth.workspaceId,
+        block.id,
+        pipelineId,
+        unlock.user,
+        unlock.password,
+      )
       execution = await container.executionService.start(auth.workspaceId, block.id, pipelineId, {
-        initiatedBy: personalUnlockFor(c, auth).user?.id ?? null,
+        // The bound user, or `null` for an unbound key (headless / system-initiated, as before).
+        initiatedBy: personal.initiatedBy,
+        // Whose policy the run is admitted under: the bound user's own tier, so a headless start
+        // cannot land what that person could not land from the board. See `keyInitiatorRole`.
+        initiatedByRole: await keyInitiatorRole(container, auth.workspaceId, personal.initiatedBy),
         // Beside the initiator, never instead of it: the KEY may still name who it acts for on
         // its provisioner's side. Pinned on the run so a caller minting one key per person can
         // map this job back to that person later, whether or not the platform knows them.
         initiatedByExternalIdentity: auth.externalIdentity,
         intakeOrigin: 'public-api',
+        activate: personal.activate,
       })
     } catch (err) {
       await rollbackInitiativeRun(c, auth.workspaceId, block.id)
+      if (err instanceof CredentialRequiredError && unlockIsUnavailable(unlock)) {
+        return c.json({ error: individualModelUnsupported('job') }, 409)
+      }
       throw err
     }
 
@@ -902,16 +927,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
       )
     } catch (err) {
       if (err instanceof CredentialRequiredError && unlockIsUnavailable(unlock)) {
-        return c.json(
-          {
-            error: {
-              code: 'individual_model_unsupported',
-              message:
-                'This task runs on an individual-usage model that needs a personal-credential unlock; start it from the app, or use a key bound to the subscription owner and send the X-Personal-Password header',
-            },
-          },
-          409,
-        )
+        return c.json({ error: individualModelUnsupported('task') }, 409)
       }
       // A bound key CAN answer this: let the 428 through with its vendor + reason so the caller
       // knows to prompt for (or correct) the password rather than treating it as unsupported.
@@ -924,6 +940,11 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     await container.executionService.start(auth.workspaceId, taskId, pipelineId, {
       // The bound user, or `null` for an unbound key (headless / system-initiated, as before).
       initiatedBy: personal.initiatedBy,
+      // And the tier that user holds on this board, so a bound key's run is admitted under the
+      // same merge policy, submission allow-list and dry-run sandbox its holder gets in the app.
+      // See `keyInitiatorRole`: an initiator with no role is a run with no policy, not a lenient
+      // one.
+      initiatedByRole: await keyInitiatorRole(container, auth.workspaceId, personal.initiatedBy),
       // As on the jobs surface: the key can still name who it started this for, and it does so
       // whether or not a user is bound — the two answer different questions (a `usr_*` account
       // here, an identity only the caller's own side can resolve there).
@@ -1062,22 +1083,23 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
       )
     } catch (err) {
       if (err instanceof CredentialRequiredError && unlockIsUnavailable(unlock)) {
-        return c.json(
-          {
-            error: {
-              code: 'individual_model_unsupported',
-              message:
-                'This task runs on an individual-usage model that needs a personal-credential unlock; retry it from the app, or use a key bound to the subscription owner and send the X-Personal-Password header',
-            },
-          },
-          409,
-        )
+        return c.json({ error: individualModelUnsupported('task') }, 409)
       }
       throw err
     }
     // A non-failed run is rejected inside `retry` with `run_not_retryable` → 409 via the shared
     // error handler. The retry re-drives the STORED steps, so the activation the gate minted (if
     // any) is the one those steps will lease.
+    //
+    // No role is pinned here, and that asymmetry with the start routes above is the engine's rule
+    // rather than an omission. A bound key that retries someone else's failed run BECOMES its
+    // initiator, because only the person present can unlock their own subscription — but the
+    // ADMISSION authority does not move with them: `buildResumedInstance` carries the pinned role
+    // and mode forward from the run being replaced, so a re-drive stays the same work under the
+    // authority it was originally granted. Re-resolving it for whoever drove the retry is what
+    // would be wrong (a sweeper drives one with no user at all), and dropping it is the escape
+    // hatch that comment names: restart-from-step-0 would launder a dry run into a live one. The
+    // SPA's retry path (`AgentRunController`) has exactly this shape, for exactly this reason.
     await container.executionService.retry(
       auth.workspaceId,
       run.id,

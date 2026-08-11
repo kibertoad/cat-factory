@@ -3249,7 +3249,8 @@
         "createdByYou": "vous",
         "createdByKey": "la clé d’API {id}",
         "revoke": "Révoquer le jeton",
-        "boundToUser": "Votre abonnement"
+        "boundToYou": "Votre abonnement",
+        "boundToOther": "Abonnement de {user}"
       },
       "add": {
         "heading": "Créer un jeton",

@@ -57,6 +57,23 @@ function minterLabel(key: PublicApiKey): string | null {
     ? t('settings.apiTokens.list.createdByYou')
     : key.createdByUserId
 }
+
+/**
+ * The badge for a key bound to a person's subscription, WHOSE person named.
+ *
+ * Keys are workspace-scoped and this list is shared, so a colleague's bound key is right here in
+ * everyone's panel: a fixed "your subscription" tells every other member that a token they never
+ * minted reaches theirs, which is alarming and false. The same comparison {@link minterLabel} makes
+ * is available (a binding is always to the minter), so the honest badge names the owner, and falls
+ * back to the `usr_*` id for the same reason that function does — there is no user-name lookup here,
+ * and an id is not misleading.
+ */
+function boundLabel(key: PublicApiKey): string | null {
+  if (!key.actsAsUserId) return null
+  return key.actsAsUserId === auth.user?.id
+    ? t('settings.apiTokens.list.boundToYou')
+    : t('settings.apiTokens.list.boundToOther', { user: key.actsAsUserId })
+}
 const toast = useToast()
 const { present } = usePipelineErrorToast()
 const { confirmAction, toastDone } = useConfirmAction()
@@ -233,13 +250,13 @@ async function revokeToken(key: PublicApiKey) {
                      binding, and this is the only place its holder can see that a token they
                      are about to hand out reaches a personal subscription. -->
                 <UBadge
-                  v-if="key.actsAsUserId"
+                  v-if="boundLabel(key)"
                   color="warning"
                   variant="subtle"
                   size="sm"
                   :data-testid="`api-token-bound-${key.id}`"
                 >
-                  {{ t('settings.apiTokens.list.boundToUser') }}
+                  {{ boundLabel(key) }}
                 </UBadge>
               </div>
               <div class="text-[11px] text-slate-500">

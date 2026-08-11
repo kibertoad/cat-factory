@@ -3391,7 +3391,8 @@
         "createdByYou": "あなた",
         "createdByKey": "APIキー {id}",
         "revoke": "トークンを取り消す",
-        "boundToUser": "あなたのサブスクリプション"
+        "boundToYou": "あなたのサブスクリプション",
+        "boundToOther": "{user} のサブスクリプション"
       },
       "add": {
         "heading": "トークンを作成",

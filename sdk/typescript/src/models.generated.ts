@@ -1301,6 +1301,7 @@ export interface ListPublicWiredModelsResponseModel {
   modelId: string
   policyBlocked: boolean
   provider: string
+  userScoped: boolean
 }
 
 export type LlmCallOutcome = 'ok' | 'warning' | 'error'

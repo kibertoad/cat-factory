@@ -192,16 +192,19 @@ A pinned preset whose model is an individual-usage vendor (Claude / Codex / GLM)
 person's subscription, and only their personal password opens it. Two consequences for a pass:
 
 - **Mint the key as a PERSONAL token** (Integrations → API access tokens, "Runs as" → yourself).
-  A system token cannot see such a model at all: `GET /api/v1/models` reports it `available: false`
-  and sets `excludesUserScopedModels`, which `configure` and the `model-preset` gate now render as
-  "not visible to this system token" rather than the "no provider wired for it" that used to send
-  operators off to configure a deployment that was already correct.
+  A system token cannot judge such a model at all: `GET /api/v1/models` reports it `available: false`
+  with `userScoped: true`, which `configure` and the `model-preset` gate now render as "not visible
+  to this system token" rather than the "no provider wired for it" that used to send operators off to
+  configure a deployment that was already correct. A model that genuinely has no provider still reads
+  as unwired, because that verdict comes from the row rather than from a flag about the whole answer.
 - **The pass asks for your personal password at the terminal**, once, at the first call that needs
   it — not at `configure` time, and never for a workspace running on a provider API key. It is held
   in the process's memory and written NOWHERE: not the `.env`, not the ledger, not the journal. That
   is deliberate rather than an omission, since a copy beside `CAT_FACTORY_API_KEY` would put both
-  halves of a two-factor credential in one file. A resumed pass asks again, and stdin must be a
-  terminal (a piped password is one that came from a file). See
+  halves of a two-factor credential in one file. A resumed pass asks again. The prompt opens the
+  CONTROLLING TERMINAL (`/dev/tty`, `CONIN$` on Windows) rather than reading stdin, which the suite's
+  own test worker does not own; run the pass from an interactive shell, and note that no variable or
+  file can supply the password instead. See
   [`individual-subscription-usage.md` §7](../../docs/individual-subscription-usage.md).
 
 **The repositories**

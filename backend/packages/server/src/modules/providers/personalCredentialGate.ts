@@ -62,14 +62,57 @@ export async function activateForInteraction<E extends AppEnv>(
   workspaceId: string,
   executionId: string,
 ): Promise<void> {
-  const { activate } = await personalGateForRun(
+  await refreshRunActivation(
     c.get('container'),
     workspaceId,
     executionId,
     c.get('user'),
     readPersonalPassword(c),
   )
-  await activate?.(executionId)
+}
+
+/**
+ * {@link activateForInteraction}'s context-free core, shared with the public-API decision surface
+ * (which resolves its user from the key's binding rather than from a session).
+ *
+ * Skips the whole gate when the run already holds a FRESH activation for every vendor it needs, and
+ * that short-circuit is what makes the interaction gate safe to mount in a shared preamble. Each
+ * re-mint derives the password's key with 210k PBKDF2 iterations per vendor, so a headless driver
+ * answering a run's parks one HTTP call at a time would pay that cost per call — seconds of blocked
+ * event loop on Node, a CPU-limit kill on workerd. `hasFreshActivation` owns the threshold, because
+ * only the service that mints the TTL can say what "fresh" means against it.
+ *
+ * The skip drops the password CHECK along with the derivation, and that is the honest reading rather
+ * than a hole: the gate exists to tell a caller to supply the password while it can still act on
+ * being told, and a run holding a credential that outlives its next dispatch has nothing to be told
+ * about. Consent was given for THIS run, by this holder, within the same activation window.
+ */
+export async function refreshRunActivation(
+  container: ServerContainer,
+  workspaceId: string,
+  executionId: string,
+  user: PersonalCredentialOwner | undefined,
+  password: string | undefined,
+): Promise<void> {
+  const vendors = await runVendorsNeedingUnlock(container, workspaceId, executionId, user)
+  if (vendors.length === 0) return
+  if (user && (await holdsFreshActivations(container, executionId, user.id, vendors))) return
+  await gate(container, vendors, user, password).activate?.(executionId)
+}
+
+/** Whether every vendor the run needs already has an activation worth keeping. */
+async function holdsFreshActivations(
+  container: ServerContainer,
+  executionId: string,
+  userId: string,
+  vendors: SubscriptionVendor[],
+): Promise<boolean> {
+  const personal = container.personalSubscriptions
+  if (!personal) return false
+  const fresh = await Promise.all(
+    vendors.map((vendor) => personal.hasFreshActivation(executionId, userId, vendor)),
+  )
+  return fresh.every(Boolean)
 }
 
 // Shared gate for the individual-usage restricted mode (Claude / GLM / ChatGPT-Codex).
@@ -209,17 +252,34 @@ export async function personalGateForRun(
   user: PersonalCredentialOwner | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
+  return gate(
+    container,
+    await runVendorsNeedingUnlock(container, workspaceId, executionId, user),
+    user,
+    password,
+  )
+}
+
+/**
+ * The individual-usage vendors a run's remaining steps need a MANAGED unlock for: what the engine
+ * resolves off the stored steps, less the ones native mode serves with the developer's own ambient
+ * CLI login (see {@link ambientVendors}).
+ *
+ * Extracted because two callers ask the same question and must not answer it differently: the retry
+ * gate, which mints a full-TTL activation for a fresh attempt, and {@link refreshRunActivation},
+ * which needs the set BEFORE deciding whether re-minting is necessary at all.
+ */
+async function runVendorsNeedingUnlock(
+  container: ServerContainer,
+  workspaceId: string,
+  executionId: string,
+  user: PersonalCredentialOwner | undefined,
+): Promise<SubscriptionVendor[]> {
   const vendors = await container.executionService.individualVendorsForRun(
     workspaceId,
     executionId,
     await resolvePersonalVendorPredicate(container, user),
   )
-  // See personalGateForBlock: drop only the vendors native mode serves ambiently.
   const ambient = ambientVendors(container)
-  return gate(
-    container,
-    vendors.filter((v) => !ambient.has(v)),
-    user,
-    password,
-  )
+  return vendors.filter((v) => !ambient.has(v))
 }

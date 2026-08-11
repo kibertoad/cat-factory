@@ -16,6 +16,9 @@
 // the start, each of those wakes the durable driver and re-mints the run's activation, and each
 // therefore needs the password again. The server never keeps it between calls.
 
+import { closeSync, openSync, writeSync } from 'node:fs'
+import { ReadStream } from 'node:tty'
+import { personalPasswordProblem } from '@cat-factory/contracts'
 import { CatFactoryCredentialRequiredError } from '@cat-factory/sdk'
 
 /** The header the platform reads the personal password from (`PERSONAL_PASSWORD_HEADER`). */
@@ -33,9 +36,6 @@ function vendorOf(error: CatFactoryCredentialRequiredError): string | null {
   const vendor = (details as { vendor?: unknown }).vendor
   return typeof vendor === 'string' && vendor ? vendor : null
 }
-
-/** Printable ASCII only, matching what the platform accepts: an HTTP header value is Latin-1. */
-const PRINTABLE_ASCII = /^[\x20-\x7e]+$/
 
 export interface PersonalUnlock {
   /** The header to merge into a request, or nothing while no password is held. */
@@ -60,16 +60,17 @@ export function createPersonalUnlock(
       password ? { [PERSONAL_PASSWORD_HEADER]: password } : {},
     held: () => password !== undefined,
     async obtain(reason) {
-      const entered = (await readSecret(`${reason}\nPersonal password: `)).trim()
-      if (!entered) {
-        throw new Error('No personal password entered, so the run cannot be unlocked.')
-      }
-      if (!PRINTABLE_ASCII.test(entered)) {
-        throw new Error(
-          'A personal password must be printable ASCII (it travels as an HTTP header, which is ' +
-            'Latin-1). This one is not, so the deployment would refuse it.',
-        )
-      }
+      // The line terminator only, never `trim()`: a space is printable ASCII, so a leading or
+      // trailing one is part of a legal password, and trimming would send a value the operator did
+      // not type and then report the deployment's `wrong_password` as if they had mistyped.
+      const entered = (await readSecret(`${reason}\nPersonal password: `)).replace(/\r?\n$/, '')
+      // Checked against the platform's OWN rule (`personalPasswordProblem`), so a password this
+      // suite accepts is one the deployment accepts. Locally rather than after a round trip,
+      // because a too-short entry comes back as the same `wrong_password` as a wrong one, and the
+      // suite never re-prompts: the operator would be told their password is wrong when what
+      // happened is that it was never long enough to be one.
+      const problem = personalPasswordProblem(entered)
+      if (problem) throw new Error(`${problem} The run cannot be unlocked.`)
       password = entered
     },
   }
@@ -131,26 +132,89 @@ function stillLocked(what: string, error: CatFactoryCredentialRequiredError): Er
 }
 
 /**
+ * The terminal to ask on: the process's CONTROLLING terminal, opened directly, with `process.stdin`
+ * as the fallback when it happens to be one.
+ *
+ * `process.stdin` alone is not enough, and this is the whole reason this indirection exists. The
+ * pass runs under vitest, whose worker processes are forked with PIPED stdio, so `stdin.isTTY` is
+ * undefined there and a prompt built on it could never ask anything — the one path this feature
+ * exists for would have thrown "stdin is not a terminal" at the first start, on every run, while a
+ * terminal sat right there. Opening `/dev/tty` (`CONIN$` on Windows) is how every other password
+ * prompt solves this, and it is STRONGER than the stdin check it replaces rather than weaker: a
+ * controlling terminal cannot be fed from a pipe, a file or a shell variable at all, so the
+ * "nothing persisted" property is now structural instead of a check.
+ *
+ * THROWS when there is no terminal to reach at all (CI, a daemon), naming what to do instead. A
+ * nullable return would only move that same refusal to the one call site.
+ */
+function openTerminal(): { input: ReadStream; write: (text: string) => void; close: () => void } {
+  const path = process.platform === 'win32' ? '\\\\.\\CONIN$' : '/dev/tty'
+  const fd = tryOpen(path, 'r')
+  if (fd === null) {
+    // No controlling terminal. `process.stdin` is still worth trying, because a standalone CLI run
+    // straight from a shell (`pnpm status`) has one even where `/dev/tty` is unavailable.
+    if (!process.stdin.isTTY) throw noTerminal()
+    const input = process.stdin as unknown as ReadStream
+    return {
+      input,
+      write: (text) => process.stderr.write(text),
+      close: () => {
+        input.setRawMode(false)
+        input.pause()
+      },
+    }
+  }
+  // Prompt down the same terminal where possible, so it cannot be swallowed by the test reporter
+  // that owns this worker's stdout. Windows reads and writes the console through two different
+  // devices; POSIX can write back down the one it read from.
+  const outFd = process.platform === 'win32' ? tryOpen('\\\\.\\CONOUT$', 'w') : tryOpen(path, 'w')
+  const input = new ReadStream(fd)
+  return {
+    input,
+    write: (text) => {
+      if (outFd === null) process.stderr.write(text)
+      else writeSync(outFd, text)
+    },
+    close: () => {
+      input.destroy()
+      closeSync(fd)
+      if (outFd !== null) closeSync(outFd)
+    },
+  }
+}
+
+/** Open a path, or `null` — used for the OPTIONAL half of the terminal (where to print the prompt). */
+function tryOpen(path: string, flags: string): number | null {
+  try {
+    return openSync(path, flags)
+  } catch {
+    return null
+  }
+}
+
+/** The refusal when there is no terminal at all: what to do instead, and why not an env var. */
+function noTerminal(): Error {
+  return new Error(
+    'This pass needs your personal password to unlock the subscription its model runs on, but ' +
+      'this process has no terminal to ask on.\n' +
+      '  Run the suite from an interactive shell. The password is deliberately not readable ' +
+      'from a variable or a file: it is the second factor protecting the stored credential, ' +
+      'and a copy on disk would defeat it.\n' +
+      '  To run unattended instead, pin a preset whose model resolves to a provider API key.',
+  )
+}
+
+/**
  * Read a secret from the terminal without echoing it.
  *
  * Raw mode read character by character rather than `readline`'s private `_writeToOutput` override:
- * the same effect through the documented API. A non-TTY stdin REFUSES rather than reading the
- * password from a pipe, because a piped password is one that came from a file or a shell history
- * — exactly the persistence this whole path exists to avoid.
+ * the same effect through the documented API. See {@link openTerminal} for why the terminal is
+ * opened rather than taken from `process.stdin`.
  */
 async function readSecretFromTty(prompt: string): Promise<string> {
-  const input = process.stdin
-  if (!input.isTTY) {
-    throw new Error(
-      'This pass needs your personal password to unlock the subscription its model runs on, but ' +
-        'stdin is not a terminal so there is nothing to ask.\n' +
-        '  Run the suite from an interactive shell. The password is deliberately not readable ' +
-        'from a variable or a file: it is the second factor protecting the stored credential, ' +
-        'and a copy on disk would defeat it.\n' +
-        '  To run unattended instead, pin a preset whose model resolves to a provider API key.',
-    )
-  }
-  process.stdout.write(prompt)
+  const terminal = openTerminal()
+  const input = terminal.input
+  terminal.write(prompt)
   input.setRawMode(true)
   input.resume()
   input.setEncoding('utf8')
@@ -159,8 +223,8 @@ async function readSecretFromTty(prompt: string): Promise<string> {
     const done = (settle: () => void) => {
       input.off('data', onData)
       input.setRawMode(false)
-      input.pause()
-      process.stdout.write('\n')
+      terminal.write('\n')
+      terminal.close()
       settle()
     }
     const onData = (chunk: string) => {

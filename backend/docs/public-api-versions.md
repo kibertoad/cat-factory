@@ -516,10 +516,23 @@ nothing, and a leaked personal token cannot open a subscription.
 password would help. A personal token reaches the answerable `428` instead. The one operation that
 still refuses both is `POST /api/v1/notifications/:id/act`, whose retry arm mints no activation.
 
-`excludesUserScopedModels` on `GET /api/v1/models` gained the case it most needed to cover. It
-reported per-user locally-run endpoints only, so a personal SUBSCRIPTION — the commonest user-scoped
-credential — was withheld from the catalog with nothing on the response saying so, and `available:
-false` read as "no provider is wired" for a model the workspace ran every day. It now covers both,
-and is `false` for a personal token, which had nothing withheld from it. The flag was always the
-field that separates "not visible to you" from "not configured"; it now separates them for the case
-that actually arises.
+`GET /api/v1/models` gained the case it most needed to cover, as a NEW per-model field rather than a
+new meaning for the existing one. A personal SUBSCRIPTION — the commonest user-scoped credential —
+was reported `available: false` with nothing saying why, so it read as "no provider is wired" for a
+model the workspace ran every day. Each row now carries `userScoped`, true where the model runs on a
+subscription vendor, so a token that resolved no user can say precisely which rows it could not judge.
+
+`excludesUserScopedModels` keeps the meaning it was published with: models this answer could not
+ENUMERATE, which is per-user locally-run endpoints. Widening it to "a personal subscription exists
+here" was the alternative and was rejected: the server cannot know whether one exists without a user,
+so the honest implementation would be `personalSubscriptions !== undefined`, true on every deployment
+with `ENCRYPTION_KEY` set. A flag that is true everywhere says "this build supports withholding"
+where a consumer reads "something was withheld from you", and it would have re-pointed a published
+field at a different predicate under the same name. Personal tokens see it `false` where their own
+endpoints resolved, which the field's own wording ("that this read cannot enumerate") already covered.
+
+`X-Personal-Password` is now DECLARED on every operation that reads it (the two starts, the retry,
+and each decision mutation), so it appears in `docs/openapi.json` and the generated clients document
+it. Each official client also gained a way to supply it after construction
+(`setPersonalPassword` / `set_personal_password` / `SetPersonalPassword`), because a caller learns it
+is needed from a `428` and rebuilding a configured client to send one header is not a workflow.

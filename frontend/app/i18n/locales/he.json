@@ -3391,7 +3391,8 @@
         "createdByYou": "אתה",
         "createdByKey": "מפתח API {id}",
         "revoke": "בטל אסימון",
-        "boundToUser": "המנוי שלך"
+        "boundToYou": "המנוי שלך",
+        "boundToOther": "המנוי של {user}"
       },
       "add": {
         "heading": "צור אסימון",

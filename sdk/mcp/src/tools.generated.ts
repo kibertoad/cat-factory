@@ -586,7 +586,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: true,
     description: 'List the models a run in this workspace could dispatch to\n\nThe workspace’s model catalog with the two flags that decide whether an agent step can run at all: `available`, and `policyBlocked` for a model that is configured but refused by the account’s model-family policy. Those two need OPPOSITE fixes, which is why they are separate: everything blocked by policy is already configured, so adding another provider key changes nothing.\n\nCalls `GET /api/v1/models` (operation `listPublicWiredModels`).',
     inputSchema: {"type":"object","properties":{},"additionalProperties":false},
-    outputSchema: {"type":"object","properties":{"excludesUserScopedModels":{"type":"boolean"},"models":{"type":"array","items":{"type":"object","properties":{"available":{"type":"boolean"},"label":{"type":"string"},"modelId":{"type":"string"},"policyBlocked":{"type":"boolean"},"provider":{"type":"string"}}}}}},
+    outputSchema: {"type":"object","properties":{"excludesUserScopedModels":{"type":"boolean"},"models":{"type":"array","items":{"type":"object","properties":{"available":{"type":"boolean"},"label":{"type":"string"},"modelId":{"type":"string"},"policyBlocked":{"type":"boolean"},"provider":{"type":"string"},"userScoped":{"type":"boolean"}}}}}},
     invoke: (client, args) => client.models.list(),
   },
   {

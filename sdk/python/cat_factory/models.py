@@ -5310,6 +5310,7 @@ class ListPublicWiredModelsResponseModel:
     model_id: str
     policy_blocked: bool
     provider: str
+    user_scoped: bool
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -5319,13 +5320,14 @@ class ListPublicWiredModelsResponseModel:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicWiredModelsResponseModel":
         """Decode a `ListPublicWiredModelsResponseModel` from its JSON object."""
-        known = {"available", "label", "modelId", "policyBlocked", "provider"}
+        known = {"available", "label", "modelId", "policyBlocked", "provider", "userScoped"}
         return cls(
             available=data.get("available"),
             label=data.get("label"),
             model_id=data.get("modelId"),
             policy_blocked=data.get("policyBlocked"),
             provider=data.get("provider"),
+            user_scoped=data.get("userScoped"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -5337,6 +5339,7 @@ class ListPublicWiredModelsResponseModel:
         out["modelId"] = self.model_id
         out["policyBlocked"] = self.policy_blocked
         out["provider"] = self.provider
+        out["userScoped"] = self.user_scoped
         return out
 
 

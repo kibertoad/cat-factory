@@ -6,7 +6,7 @@ import type {
   RequirementReview,
 } from '@cat-factory/contracts'
 import type { GateActor } from '@cat-factory/kernel'
-import { NotFoundError } from '@cat-factory/kernel'
+import { CredentialRequiredError, NotFoundError } from '@cat-factory/kernel'
 import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import type { Context } from 'hono'
 import { findParkedInterviewStep } from '@cat-factory/orchestration'
@@ -17,7 +17,10 @@ import type {
   RequirementsModule,
 } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../../http/env.js'
-import { personalGateForRun, readPersonalPassword } from '../../providers/personalCredentialGate.js'
+import {
+  readPersonalPassword,
+  refreshRunActivation,
+} from '../../providers/personalCredentialGate.js'
 import { authorize } from '../publicApiAuth.js'
 
 // Resolution + authorization for the public parked-decision surface: the preamble every route in
@@ -102,7 +105,21 @@ export async function requireScopedRun<E extends AppEnv>(
 }
 
 /** The error a gate rejected with, kept as DATA so each handler emits its own typed `c.json`. */
-export type GateFailure = { fail: { status: 401 | 403 | 404 | 503; code: string; message: string } }
+export type GateFailure = {
+  fail: {
+    status: 401 | 403 | 404 | 428 | 503
+    code: string
+    message: string
+    /**
+     * The machine-readable cause, for the refusals that HAVE one to give. Only the credential
+     * unlock does today (`{ vendor, reason }`), and it is the reason this field exists: a caller
+     * told to supply a password needs to know for which vendor, and whether the one it sent was
+     * missing or wrong. Flattening that to prose would leave the 428 unactionable, which is the
+     * same mistake `details.reason` exists to prevent on the throwing surfaces.
+     */
+    details?: unknown
+  }
+}
 
 /**
  * Emit a gate's rejection as the surface's standard error body.
@@ -114,9 +131,17 @@ export type GateFailure = { fail: { status: 401 | 403 | 404 | 503; code: string;
  * in between two routes of the same surface.
  */
 export function failureBody(fail: GateFailure['fail']): {
-  error: { code: string; message: string }
+  error: { code: string; message: string; details?: unknown }
 } {
-  return { error: { code: fail.code, message: fail.message } }
+  return {
+    error: {
+      code: fail.code,
+      message: fail.message,
+      // Spread rather than always-present, so the ordinary refusals keep emitting exactly the
+      // two-key body they always did and no consumer starts seeing a `details: undefined` key.
+      ...(fail.details === undefined ? {} : { details: fail.details }),
+    },
+  }
 }
 
 /**
@@ -144,7 +169,8 @@ export async function gateDecisionAction<E extends AppEnv>(
   if (!scoped) {
     return { fail: { status: 404, code: 'not_found', message: 'Run not found' } }
   }
-  await reactivatePersonalCredential(c, workspaceId, scoped.execution.id, gate.auth)
+  const locked = await reactivatePersonalCredential(c, workspaceId, scoped.execution.id, gate.auth)
+  if (locked) return locked
   return { workspaceId, scoped, auth: gate.auth }
 }
 
@@ -162,22 +188,44 @@ export async function gateDecisionAction<E extends AppEnv>(
  * A no-op for an UNBOUND key, and that is load-bearing rather than an optimisation: such a key can
  * unlock nothing, so probing the gate could only ever produce a 428 on a route that answers parks
  * for ordinary poolable runs today. The binding is what makes the question meaningful.
+ *
+ * The refusal comes back as a {@link GateFailure} rather than thrown, like every other gate on this
+ * surface and for the reason stated at the top of this file: `PublicDecisionController` keeps its
+ * error bodies hand-built so each handler stays typed against its contract's response union, and a
+ * thrown `DomainError` would answer one route of that surface in `handleError`'s envelope while its
+ * siblings answer in theirs. `details` carries the vendor + reason through, so returning it as data
+ * costs the caller nothing it would have got from the throw.
+ *
+ * It is also cheap on the common path: {@link refreshRunActivation} leaves a fresh activation alone,
+ * so a driver answering a run's parks one call at a time does not re-derive the same key per call.
  */
 async function reactivatePersonalCredential<E extends AppEnv>(
   c: Context<E>,
   workspaceId: string,
   executionId: string,
   auth: PublicApiKeyAuth,
-): Promise<void> {
-  if (!auth.actsAsUserId) return
-  const { activate } = await personalGateForRun(
-    c.get('container'),
-    workspaceId,
-    executionId,
-    { id: auth.actsAsUserId },
-    readPersonalPassword(c),
-  )
-  await activate?.(executionId)
+): Promise<GateFailure | null> {
+  if (!auth.actsAsUserId) return null
+  try {
+    await refreshRunActivation(
+      c.get('container'),
+      workspaceId,
+      executionId,
+      { id: auth.actsAsUserId },
+      readPersonalPassword(c),
+    )
+    return null
+  } catch (err) {
+    if (!(err instanceof CredentialRequiredError)) throw err
+    return {
+      fail: {
+        status: 428,
+        code: 'credential_required',
+        message: err.message,
+        ...(err.details === undefined ? {} : { details: err.details }),
+      },
+    }
+  }
 }
 
 /**

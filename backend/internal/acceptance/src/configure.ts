@@ -46,7 +46,7 @@ import {
   REPO_CREATION_URL,
 } from './configureEnv.ts'
 import { formatRemedy } from './preflight.ts'
-import { usablePresets } from './presets.ts'
+import { presetAvailability, type PresetAvailability } from './presets.ts'
 
 /**
  * What one adopt attempt answered.
@@ -498,41 +498,59 @@ async function resolvePreset(
         'without saying which can be dispatched to.',
     )
   }
-  // Whether the deployment says this TOKEN could not see part of the catalog. A system token cannot
-  // see a per-user credential, so an unavailable entry has two very different causes and only one
-  // of them is "add a provider key" — saying the wrong one sends an operator to configure something
-  // that is already configured, which is exactly what happened before the flag was read here.
-  const withheld = catalog.ok && catalog.value.excludesUserScopedModels
+  // The same join `model-preset`'s remedy is built from (`presets.ts`), so this menu never offers
+  // what that gate will refuse — and, per ROW, never confuses "nothing is wired for this" with
+  // "this token was not allowed to look".
+  const availability = presetAvailability(catalog.ok ? catalog.value.models : [])
+  // Whether this TOKEN could not see part of the catalog, from the two places that can say so: a
+  // model OMITTED from the answer (a locally-run endpoint belongs to one developer's machine, which
+  // is what `excludesUserScopedModels` reports) and a model LISTED but unjudged (a personal
+  // subscription, which the rows report themselves). Either way an unavailable entry has two very
+  // different causes and only one of them is "add a provider key"; saying the wrong one sends an
+  // operator to configure something already configured. Asking BOTH is what keeps the warning off
+  // deployments where nothing was withheld at all — the flag alone is true of any deployment that
+  // merely COULD hold a personal subscription.
+  const withheld =
+    catalog.ok &&
+    (catalog.value.excludesUserScopedModels ||
+      presets.some((preset) => availability(preset) === 'unjudged'))
   if (withheld) {
     io.warn(
-      'This token is a SYSTEM token, so the catalog below leaves out every model that belongs to a ' +
-        'person: a personal Claude / Codex / GLM subscription, and any locally-run endpoint. Such ' +
-        'a model is marked below as invisible rather than unwired.\n' +
+      'This token is a SYSTEM token, so the catalog below cannot account for a model that belongs ' +
+        'to a person: a personal Claude / Codex / GLM subscription, or a locally-run endpoint. ' +
+        'Such a model is marked below as invisible rather than unwired.\n' +
         '  To run the pass on your own subscription, mint the token again in the app under ' +
         'Integrations → API access tokens with "Runs as" set to yourself. The pass then asks for ' +
         'your personal password once, at the moment a run needs it, and never stores it.',
     )
   }
-  // The same join `model-preset`'s remedy is built from (`presets.ts`), so this menu never offers
-  // what that gate will refuse.
-  const selectable = new Set(
-    usablePresets(presets, catalog.ok ? catalog.value.models : []).map(
-      (preset) => preset.baseModelId,
-    ),
-  )
-  const unusable = withheld ? ' (not visible to this system token)' : ' (no provider wired for it)'
-  const options = presets.map((preset) => ({
-    value: preset.presetId,
-    label:
-      `${preset.name} (${preset.baseModelId})` +
-      (catalog.ok && !selectable.has(preset.baseModelId) ? unusable : '') +
-      (preset.isDefault ? ' [workspace default]' : ''),
-  }))
+  const suffix: Record<Exclude<PresetAvailability, 'selectable'>, string> = {
+    unjudged: ' (not visible to this system token)',
+    unwired: ' (no provider wired for it)',
+  }
+  const options = presets.map((preset) => {
+    const stands = availability(preset)
+    return {
+      value: preset.presetId,
+      label:
+        `${preset.name} (${preset.baseModelId})` +
+        (catalog.ok && stands !== 'selectable' ? suffix[stands] : '') +
+        (preset.isDefault ? ' [workspace default]' : ''),
+    }
+  })
   // A selectable preset is preselected over the workspace default when the two differ, because the
   // default is whatever the board was seeded with and the pass has to actually be able to run.
+  //
+  // An `unjudged` default is NOT skipped, though, and that exception is the point of tracking the
+  // third state. Such a preset is very likely the right one (it is what this workspace runs in the
+  // app, on a subscription this token cannot see), and quietly preselecting some other model would
+  // run the whole pass on a model nobody chose, in the one case the warning above has just told the
+  // operator to expect. Leaving it selected costs at worst one refusal at start, which names the
+  // token as the problem and can be fixed by re-minting it.
+  const preferred: readonly PresetAvailability[] = ['selectable', 'unjudged']
   const fallback =
-    presets.find((preset) => selectable.has(preset.baseModelId) && preset.isDefault) ??
-    presets.find((preset) => selectable.has(preset.baseModelId)) ??
+    presets.find((preset) => preset.isDefault && preferred.includes(availability(preset))) ??
+    presets.find((preset) => availability(preset) === 'selectable') ??
     first
   const stillOffered = stored && presets.some((preset) => preset.presetId === stored)
   return io.select(

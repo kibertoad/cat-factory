@@ -76,20 +76,30 @@ The create body also takes `actsAsSelf` (optional, default `false`), which picks
 IDENTITIES a key can have. This is a different question from `scope`: scope is what the key may DO,
 identity is WHOSE credentials, spend and merge-policy role its runs answer to.
 
-|                                                            | **System token** (`actsAsSelf: false`, the default)              | **Personal token** (`actsAsSelf: true`) |
-| ---------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------- |
-| `actsAsUserId`                                             | `null`                                                           | the minter's own `usr_*`                |
-| Runs it starts are attributed to                           | nobody                                                           | the person who minted it                |
-| A task on an individual-usage model (Claude / Codex / GLM) | refused, `409 individual_model_unsupported`                      | runs, once unlocked per call            |
-| `GET /api/v1/models`                                       | omits user-scoped models; says so via `excludesUserScopedModels` | resolves under that user                |
+|                                                            | **System token** (`actsAsSelf: false`, the default)          | **Personal token** (`actsAsSelf: true`) |
+| ---------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------- |
+| `actsAsUserId`                                             | `null`                                                       | the minter's own `usr_*`                |
+| Runs it starts are attributed to                           | nobody                                                       | the person who minted it                |
+| Its runs are admitted under the merge policy of            | no role (the preset's base rules)                            | that person's workspace role            |
+| A task on an individual-usage model (Claude / Codex / GLM) | refused, `409 individual_model_unsupported`                  | runs, once unlocked per call            |
+| `GET /api/v1/models`                                       | cannot judge a `userScoped` row; omits locally-run endpoints | resolves under that user                |
 
 **Prefer a system token**: it is the narrower credential, and a leak cannot spend one person's
 subscription because no person is attached. Mint a personal token only where the runs genuinely are
 that person's. Such a token must send the operator's personal password in the `X-Personal-Password`
 header on **every** call that advances a run on an individual-usage model (start, retry, and each
 answered decision, since answering wakes the run's next dispatch); the server never stores it, and a
-call missing it gets `428 credential_required` carrying `{ vendor, reason }`. Full model:
+call missing it gets `428 credential_required` carrying `{ vendor, reason }`. The header is declared
+on each of those operations in [the spec](../../docs/openapi.json), and every official client sends
+it: `setPersonalPassword` / `set_personal_password` / `SetPersonalPassword` on the client (the
+TypeScript client also takes it per call, as `{ headers: … }`). Full model:
 [`individual-subscription-usage.md` §7](./individual-subscription-usage.md).
+
+A run started by a personal token is admitted under the ROLE its owner holds on that workspace, so
+it merges exactly what they could merge from the app: a `dryRunRoles` member's headless runs open
+pull requests and never land them, and a `classRulesByRole` narrowing applies unchanged. A system
+token pins no role and stays on the preset's base rules, which is what every run did before role
+scoping existed.
 
 A key can only ever be bound to the person minting it — the field is a boolean, and the server reads
 the id from the session — so there is no way to mint a key onto someone else's subscription. A mint
@@ -1169,18 +1179,25 @@ never observable in anything a run does.
 adding a key changes nothing and the fix is the policy. Collapsing the two is why "no model
 available" so often sends someone to change a setting that was already correct.
 
-There is a third state, and it is on the RESPONSE rather than on a model: `excludesUserScopedModels`
-reports that this answer left out every model belonging to a PERSON — a per-user locally-run
-endpoint, or a personal Claude / Codex / GLM subscription. A system token has no person, so those are
-absent from `models` entirely. On a deployment wired that way alone, every catalog row reads
-`available: false`, and the honest remedy is not a provider key: for a personal subscription, mint a
-[personal token](#1-mint-a-key) and the same read resolves under its user (and the flag goes false,
-because nothing was withheld); for a locally-run endpoint, which no token can reach, it is a run
-started by that user in the app.
+There is a third state, and it comes in two halves because a model belonging to a PERSON can be
+missing from this answer in two different ways.
 
-Treat `available: false` as unanswerable while this flag is true. It says "not visible to you", and
-reading it as "no provider is wired" is what sends an operator to configure a model their workspace
-already runs on every day.
+`userScoped: true` on a ROW says that model runs on a subscription vendor, which any member may hold
+their own personal subscription for. A token bound to nobody consults nobody's personal store, so
+`available: false` on such a row means "nobody's credential was consulted", not "no provider is
+wired". Treat it as unanswerable: the remedy is to mint a [personal token](#1-mint-a-key) bound to
+the subscription's owner, and the same read then resolves under that user.
+
+`excludesUserScopedModels: true` on the RESPONSE says this answer OMITTED models it could not
+enumerate at all: per-user locally-run endpoints, which live on one developer's machine. Those never
+appear as rows, so on a deployment wired that way alone the catalog looks empty rather than
+unavailable, and no token can reach them — the fix is a run started by that user in the app.
+
+The split is deliberate: a listed-but-unjudged model is named by its own row, while a model that is
+not there at all can only be reported once for the whole answer. Reading either as "no provider is
+wired" is what sends an operator to configure a model their workspace already runs every day; reading
+the response flag as if it applied to every unavailable row is the same mistake with the sign
+flipped, and sends them to re-mint a token for a model that genuinely has no provider.
 
 `GET /api/v1/vcs/connection` exists for `canCreateRepos` and `canManageWorkflows`. Both are enforced
 by the provider at PUSH time, so a caller that does not check them discovers a missing workflow

@@ -2331,6 +2331,7 @@ type ListPublicWiredModelsResponseModel struct {
 	ModelID       string `json:"modelId"`
 	PolicyBlocked bool   `json:"policyBlocked"`
 	Provider      string `json:"provider"`
+	UserScoped    bool   `json:"userScoped"`
 }
 
 // LlmCallOutcome is the `LlmCallOutcome` vocabulary as carried on the wire.

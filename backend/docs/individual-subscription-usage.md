@@ -206,17 +206,28 @@ is identical on Cloudflare D1 and Node/local Postgres.
 A public-API key is one of two things, chosen when it is minted (Integrations → API access
 tokens, "Runs as"), and the choice decides whether this whole mechanism is reachable at all:
 
-|                        | **System token** (the default)                                            | **Personal token**       |
-| ---------------------- | ------------------------------------------------------------------------- | ------------------------ |
-| `actsAsUserId`         | `null`                                                                    | the minter's own `usr_*` |
-| Who its runs belong to | nobody                                                                    | the person who minted it |
-| Individual-usage model | refused, `409 individual_model_unsupported`                               | runs, once unlocked      |
-| `GET /api/v1/models`   | omits every user-scoped model, and says so via `excludesUserScopedModels` | resolves under that user |
+|                        | **System token** (the default)                               | **Personal token**           |
+| ---------------------- | ------------------------------------------------------------ | ---------------------------- |
+| `actsAsUserId`         | `null`                                                       | the minter's own `usr_*`     |
+| Who its runs belong to | nobody                                                       | the person who minted it     |
+| Whose merge policy     | none pinned (the preset's base rules)                        | that person's workspace role |
+| Individual-usage model | refused, `409 individual_model_unsupported`                  | runs, once unlocked          |
+| `GET /api/v1/models`   | cannot judge a `userScoped` row; omits locally-run endpoints | resolves under that user     |
+
+**A bound run is that person's run all the way through, policy included.** The start resolves
+the bound user's workspace role (`keyInitiatorRole`) and pins it, so a headless start is
+admitted under the same `classRulesByRole` narrowing and the same `dryRunRoles` sandbox they
+get in the app: a key cannot land what its own holder could not. A retry is the one exception
+and deliberately so — `buildResumedInstance` carries the ORIGINAL run's pinned role forward,
+because a re-drive is the same work under the authority it was first granted.
 
 **The binding alone unlocks nothing.** A personal token still has to send
 `X-Personal-Password` on **every** call that advances such a run: the start, the retry, and
 each answered decision (which wakes the driver and re-mints the activation). The server holds
-the password for exactly the duration of that request. Storing it anywhere — on the key row,
+the password for exactly the duration of that request. An answered decision leaves a still-fresh
+activation alone rather than re-deriving it (`hasFreshActivation`): the key derivation is
+deliberately expensive, and a driver answering a run's parks one call at a time would otherwise
+pay it once per call. Storing it anywhere — on the key row,
 in a session, in a client's config file — would collapse the two factors §3 keeps apart into
 one, which is the whole reason the password layer exists. A call that needs one and does not
 carry it gets `428 credential_required` with `{ vendor, reason }`, exactly as the app does.

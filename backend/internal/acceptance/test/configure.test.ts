@@ -406,16 +406,16 @@ describe('configure: adopting the repositories', () => {
     ])
   })
 
-  it('says a model is INVISIBLE, not unwired, when the token cannot see user-scoped models', async () => {
-    // The misreport this flag exists to prevent, and the one that sent an operator here: a
+  it('says a model is INVISIBLE, not unwired, when the ROW says its credential is a person’s', async () => {
+    // The misreport this path exists to prevent, and the one that sent an operator here: a
     // workspace whose Claude runs come from a stored personal subscription got "no provider wired
     // for it" against the model it uses every day, and the fix it named (add a provider key) was
     // for a deployment that was already configured correctly.
     const { io } = await run({
       client: fakeClient({
         models: async () => ({
-          models: [{ modelId: 'claude-opus', available: false }],
-          excludesUserScopedModels: true,
+          models: [{ modelId: 'claude-opus', available: false, userScoped: true }],
+          excludesUserScopedModels: false,
         }),
       }),
       script: { secrets: [TOKEN] },
@@ -426,6 +426,54 @@ describe('configure: adopting the repositories', () => {
     // And the remedy is stated once, in full, rather than left for the operator to infer from a
     // parenthetical: it is a different token, not a different deployment setting.
     expect(io.output.join('\n')).toContain('"Runs as" set to yourself')
+  })
+
+  it('still calls a genuinely unwired model unwired, on a deployment that withholds others', async () => {
+    // The opposite misreport, and the reason the label is read off the ROW: a per-RESPONSE flag is
+    // true of any deployment that COULD hold a personal subscription, so deriving the label from it
+    // told an operator to re-mint their token for a model whose provider key was simply never
+    // added. Re-minting would change nothing.
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [{ modelId: 'claude-opus', available: false, userScoped: false }],
+          excludesUserScopedModels: true,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (no provider wired for it) [workspace default]',
+    ])
+  })
+
+  it('keeps an invisible workspace default selected rather than steering to another model', async () => {
+    // Preselecting the "selectable" one would run the whole pass on a model nobody chose, in
+    // exactly the case the warning above has just told the operator to expect. An invisible default
+    // costs at worst one refusal at start, which names the token as the problem and can be fixed by
+    // re-minting it; a silent switch to Kimi is a green pass that proved the wrong thing.
+    const { written } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            { modelId: 'claude-opus', available: false, userScoped: true },
+            { modelId: 'kimi-k2', available: true, userScoped: false },
+          ],
+          excludesUserScopedModels: false,
+        }),
+        presets: async () => [
+          {
+            presetId: 'mdp_claude',
+            name: 'Claude Opus 5',
+            baseModelId: 'claude-opus',
+            isDefault: true,
+          },
+          { presetId: 'mdp_kimi', name: 'Kimi', baseModelId: 'kimi-k2', isDefault: false },
+        ],
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_claude')
   })
 
   it('withholds a creation link on GitLab rather than linking gitlab.com', async () => {

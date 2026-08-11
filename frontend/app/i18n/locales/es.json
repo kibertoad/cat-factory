@@ -3249,7 +3249,8 @@
         "createdByYou": "ti",
         "createdByKey": "la clave de API {id}",
         "revoke": "Revocar token",
-        "boundToUser": "Tu suscripción"
+        "boundToYou": "Tu suscripción",
+        "boundToOther": "Suscripción de {user}"
       },
       "add": {
         "heading": "Crear un token",

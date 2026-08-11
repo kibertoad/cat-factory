@@ -39,8 +39,32 @@ describe('createPersonalUnlock', () => {
   })
 
   it('refuses an empty answer rather than sending a blank password', async () => {
-    const unlock = createPersonalUnlock(async () => '   ')
-    await expect(unlock.obtain('because')).rejects.toThrow(/No personal password/)
+    const unlock = createPersonalUnlock(async () => '')
+    await expect(unlock.obtain('because')).rejects.toThrow(/No password entered/)
+  })
+
+  it('refuses one shorter than the platform accepts, before spending a round trip on it', async () => {
+    // The deployment answers a too-short password with the same `wrong_password` as an incorrect
+    // one, and the suite never re-prompts — so without this the operator is told their password is
+    // wrong when what happened is that it was never long enough to be one.
+    const unlock = createPersonalUnlock(async () => 'short')
+    await expect(unlock.obtain('because')).rejects.toThrow(/at least 6 characters/)
+    expect(unlock.held()).toBe(false)
+  })
+
+  it('keeps a password the operator typed with surrounding spaces intact', async () => {
+    // A space is printable ASCII, so `personalPasswordSchema` accepts one at either end and a
+    // stored password may genuinely have it. Trimming sent a DIFFERENT password than the one typed
+    // and reported the deployment's refusal as if the operator had mistyped it.
+    const unlock = createPersonalUnlock(async () => ' hunter2 ')
+    await unlock.obtain('because')
+    expect(unlock.headers()).toEqual({ 'X-Personal-Password': ' hunter2 ' })
+  })
+
+  it('drops only the line terminator a piped answer carries', async () => {
+    const unlock = createPersonalUnlock(async () => 'hunter2\n')
+    await unlock.obtain('because')
+    expect(unlock.headers()).toEqual({ 'X-Personal-Password': 'hunter2' })
   })
 })
 
@@ -69,7 +93,9 @@ describe('withPersonalUnlock', () => {
   })
 
   it('gives up after one retry rather than re-prompting a terminal nobody is watching', async () => {
-    const readSecret = vi.fn(async () => 'wrong')
+    // Long enough to be a legal password, so what is under test is the retry budget rather than
+    // the local length check (which would refuse a 5-character one before any call).
+    const readSecret = vi.fn(async () => 'wrong-but-long-enough')
     const unlock = createPersonalUnlock(readSecret)
     const call = vi.fn(async () => {
       throw credentialRequired('claude')

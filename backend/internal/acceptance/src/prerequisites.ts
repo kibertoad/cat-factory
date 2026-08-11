@@ -401,9 +401,21 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         )
       }
       if (!base.available) {
+        // WHY it is not selectable, in the HEADLINE and not only three bullets down. The first line
+        // is what an operator reads and acts on, so a model that may already be wired as somebody's
+        // personal subscription must not be announced as having no provider: that is the misreport
+        // this whole path exists to remove, and burying the correction in `steps` leaves it intact
+        // where it is read. `userScoped` is the row's own answer, so it names THIS model rather
+        // than inferring from a flag about the whole response.
+        const cause = base.policyBlocked
+          ? ' (refused by the account model-family policy)'
+          : base.userScoped
+            ? ' (its credential belongs to a person, and this system token resolved none, so ' +
+              'whether it is wired is unknown here)'
+            : ' (no provider wired for it)'
         return unsatisfied(
           `preset '${preset.name}' runs on '${base.label}' (${base.modelId}), which is in the ` +
-            `catalog but not selectable${base.policyBlocked ? ' (refused by the account model-family policy)' : ' (no provider wired for it)'}`,
+            `catalog but not selectable${cause}`,
           {
             steps: base.policyBlocked
               ? [
@@ -414,8 +426,10 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
               : [
                   // Stated FIRST when it applies, because it is the one cause whose fix is not
                   // "wire something": the provider may already be wired, as a credential that
-                  // belongs to a person and that a system token is not allowed to see.
-                  ...(excludesUserScopedModels
+                  // belongs to a person and that a system token is not allowed to see. Either
+                  // signal can say so — the row for a personal subscription that IS listed, the
+                  // response flag for a locally-run endpoint that is not.
+                  ...(base.userScoped || excludesUserScopedModels
                     ? [
                         `'${base.modelId}' may already be wired as a PERSONAL subscription, which ` +
                           'this system token cannot see. If it is yours, mint the token again ' +

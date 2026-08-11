@@ -1147,6 +1147,35 @@ function addHandDocumentedRoutes(paths, tags) {
   }
 }
 
+/**
+ * The personal-unlock header parameter (`withPersonalUnlock`), for the routes that start, retry or
+ * answer a run. It is a real request input, so leaving it out published an operation whose `428` no
+ * consumer could satisfy from the document alone. Optional everywhere: a poolable run needs no
+ * unlock and a key bound to nobody can use none.
+ *
+ * The header's NAME is read from the contracts rather than restated here, because a second spelling
+ * of it in this file would be one the deployment does not read.
+ */
+function personalUnlockParam(contracts) {
+  const name = contracts.PERSONAL_PASSWORD_HEADER
+  if (typeof name !== 'string') {
+    throw new Error(
+      'Contracts export no PERSONAL_PASSWORD_HEADER to publish as a header parameter.',
+    )
+  }
+  return {
+    name,
+    in: 'header',
+    required: false,
+    description:
+      "The personal password of the user this key is bound to, unlocking that user's own " +
+      'subscription for this call. Send it when a response answers `428 credential_required`; ' +
+      'a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` ' +
+      'instead).',
+    schema: { type: 'string' },
+  }
+}
+
 export async function buildOpenApiDoc() {
   const contracts = await import(pathToFileURL(CONTRACTS_DIST).href)
 
@@ -1220,6 +1249,7 @@ export async function buildOpenApiDoc() {
         params.push({ name, in: 'query', required: required.has(name), schema })
       }
     }
+    if (contract.personalUnlock === true) params.push(personalUnlockParam(contracts))
     if (params.length) operation.parameters = params
 
     if (isSchema(contract.requestBodySchema)) {

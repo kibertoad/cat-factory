@@ -794,7 +794,8 @@
         "createdByYou": "Ihnen",
         "createdByKey": "API-Schlüssel {id}",
         "revoke": "Token widerrufen",
-        "boundToUser": "Ihr Abonnement"
+        "boundToYou": "Ihr Abonnement",
+        "boundToOther": "Abonnement von {user}"
       },
       "add": {
         "heading": "Token erstellen",

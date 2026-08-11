@@ -3391,7 +3391,8 @@
         "createdByYou": "siz",
         "createdByKey": "{id} API anahtarı",
         "revoke": "Belirteci iptal et",
-        "boundToUser": "Aboneliğiniz"
+        "boundToYou": "Aboneliğiniz",
+        "boundToOther": "{user} kullanıcısının aboneliği"
       },
       "add": {
         "heading": "Belirteç oluştur",

@@ -3249,7 +3249,8 @@
         "createdByYou": "вами",
         "createdByKey": "ключ API {id}",
         "revoke": "Відкликати токен",
-        "boundToUser": "Ваша підписка"
+        "boundToYou": "Ваша підписка",
+        "boundToOther": "Підписка {user}"
       },
       "add": {
         "heading": "Створити токен",

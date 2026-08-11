@@ -555,6 +555,19 @@ export const publicWiredModelSchema = v.object({
   available: v.boolean(),
   /** Whether it is unavailable specifically because an account model policy refuses its family. */
   policyBlocked: v.boolean(),
+  /**
+   * Whether this model can be authenticated by a credential belonging to a PERSON rather than to
+   * the workspace: it runs on a subscription vendor, and any member may hold their own personal
+   * subscription for one.
+   *
+   * It is the row-level half of `excludesUserScopedModels`, and it is what makes an `available:
+   * false` here READABLE. A key that resolves no user consults no personal store, so for such a
+   * model "false" means "nobody's credential was consulted", which is a different fact from "no
+   * provider is wired" and takes the opposite remedy: bind a key to the subscription owner (or
+   * start the run from the app) rather than add a provider key. A caller cannot derive this from
+   * the rest of the row, which is why it is stated rather than left to be inferred from a label.
+   */
+  userScoped: v.boolean(),
 })
 export type PublicWiredModel = v.InferOutput<typeof publicWiredModelSchema>
 
@@ -562,16 +575,23 @@ export type PublicWiredModel = v.InferOutput<typeof publicWiredModelSchema>
  * The catalog, plus the one thing the catalog itself cannot say.
  *
  * `excludesUserScopedModels` reports that this deployment serves per-user locally-run model
- * endpoints, which a key-authenticated read does not see: they are one developer's own machine, and
- * an API key has no developer, so folding them in would attribute someone else's endpoints to the
- * caller. Without this flag their absence is byte-for-byte "this deployment has nothing wired", and
- * those two need OPPOSITE remedies: the first is a run that must be started by a signed-in user,
- * the second is a provider key. That is the same conflation `policyBlocked` exists to prevent, one
- * level up: a third state, stated rather than collapsed into a false.
+ * endpoints which THIS read could not enumerate: they are one developer's own machine, so a read
+ * that resolved no user (an unbound key) cannot fold them in without attributing someone else's
+ * endpoints to the caller. Without the flag their absence is byte-for-byte "this deployment has
+ * nothing wired", and those two need OPPOSITE remedies: the first is a run started by (or a key
+ * bound to) the person whose machine serves them, the second is a provider key. That is the same
+ * conflation `policyBlocked` exists to prevent, one level up: a third state, stated rather than
+ * collapsed into a false.
+ *
+ * It answers for the models this read OMITS. The ones it lists but cannot judge are the row-level
+ * `userScoped` flag's job, and the split is deliberate: a personal subscription's model IS in this
+ * catalog (as unavailable), so reporting it here would say "something is missing" about an entry
+ * the caller can see, while saying nothing about WHICH. A caller diagnosing one model wants the
+ * row; a caller deciding whether the whole answer is complete wants the flag.
  */
 export const publicWiredModelListSchema = v.object({
   models: v.array(publicWiredModelSchema),
-  /** Whether per-user locally-run endpoints exist here that this read cannot enumerate. */
+  /** Whether per-user locally-run endpoints exist here that this read could not enumerate. */
   excludesUserScopedModels: v.boolean(),
 })
 export type PublicWiredModelList = v.InferOutput<typeof publicWiredModelListSchema>

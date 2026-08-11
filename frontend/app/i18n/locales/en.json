@@ -3528,7 +3528,8 @@
         "createdByYou": "you",
         "createdByKey": "API key {id}",
         "revoke": "Revoke token",
-        "boundToUser": "Your subscription"
+        "boundToYou": "Your subscription",
+        "boundToOther": "{user}'s subscription"
       },
       "add": {
         "heading": "Create a token",

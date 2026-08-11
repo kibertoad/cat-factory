@@ -44,14 +44,19 @@ holding one of the two services cannot vouch for the other.
 
 **A pass on the operator's OWN subscription needs a PERSONAL token and a prompt, never a stored
 password.** An individual-usage model (Claude / Codex / GLM) is a per-user credential, so a SYSTEM
-token cannot even see it: the catalog answers `available: false` with `excludesUserScopedModels`,
+token cannot even see it: the catalog answers `available: false` with `userScoped: true` on the ROW,
 which `configure` and the `model-preset` gate render as "not visible to this system token" rather
-than as a missing provider. `src/personalUnlock.ts` holds the password for the process and nothing
-else writes it down, which is why it is asked for LAZILY (on the first `428`, so a provider-key
-workspace is never prompted) and why the header rides EVERY request through the client's `fetch`
-seam rather than being attached at the call that first needed it: answering a park re-mints the
-run's activation server-side, so a pass needs it for hours after the start. Trap: writing it beside
-`CAT_FACTORY_API_KEY` would collapse a two-factor credential into one file.
+than as a missing provider. Read the ROW, never the response's `excludesUserScopedModels`: that flag
+is about models omitted ENTIRELY (locally-run endpoints), so labelling from it calls every unwired
+model invisible and sends an operator to re-mint a token that will change nothing. `src/presets.ts`
+owns the three-way verdict both commands share. `src/personalUnlock.ts` holds the password for the
+process and nothing else writes it down, which is why it is asked for LAZILY (on the first `428`, so
+a provider-key workspace is never prompted) and why the header rides EVERY request through the
+client's `fetch` seam rather than being attached at the call that first needed it: answering a park
+re-mints the run's activation server-side, so a pass needs it for hours after the start. Traps:
+writing it beside `CAT_FACTORY_API_KEY` would collapse a two-factor credential into one file, and the
+prompt reads the CONTROLLING TERMINAL rather than `process.stdin`, which under vitest's forked
+workers is a pipe and would have made the prompt unaskable in the one place it is needed.
 
 **Every task the suite files pins `ACCEPTANCE_MODEL_PRESET`**, through the one door
 (`filePinnedTask`), so a pass runs on the model it says it ran on rather than on whatever the

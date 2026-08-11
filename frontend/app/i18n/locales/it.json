@@ -794,7 +794,8 @@
         "createdByYou": "te",
         "createdByKey": "la chiave API {id}",
         "revoke": "Revoca token",
-        "boundToUser": "Il tuo abbonamento"
+        "boundToYou": "Il tuo abbonamento",
+        "boundToOther": "Abbonamento di {user}"
       },
       "add": {
         "heading": "Crea un token",

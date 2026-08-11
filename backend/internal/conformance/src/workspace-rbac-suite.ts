@@ -195,6 +195,7 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
     registerRbacMemberManagementTests(harness, scenario, bearer, uniq)
     registerRbacAdminTierTests(harness, scenario, bearer, uniq)
     registerRiskPolicySelectionTests(harness, scenario, bearer)
+    registerPublicApiKeyBindingTests(harness, scenario, bearer)
   })
 }
 
@@ -999,5 +1000,88 @@ function registerRiskPolicySelectionTests(
       bearer(await app.session({ id: c })),
     )
     expect(renamed.status).toBe(200)
+  })
+}
+
+/**
+ * The public-API key BINDING, round-tripped through the facade's own repository.
+ *
+ * It lives in THIS suite rather than beside the other public-API assertions because the binding is
+ * read off the SESSION and never off the body: a dev-open harness has no session to read, so it
+ * cannot mint a bound key at all and the assertion would have to write the row itself, which is how
+ * a suite stops testing the product.
+ */
+function registerPublicApiKeyBindingTests(
+  harness: ConformanceHarness,
+  scenario: RbacScenarioSeeder,
+  bearer: (token: string) => { authorization: string },
+): void {
+  // A public-API key BOUND to its minter (`actsAsSelf`), round-tripped through the facade's own
+  // repository. It lives in this suite rather than beside the other public-API assertions because
+  // the binding is read off the SESSION and never off the body — a dev-open harness has no session
+  // to read, so it cannot mint one at all, and the assertion would have to write the row itself and
+  // stop testing the product.
+  //
+  // The round trip is the point. Only two lines of SQL per facade carry this column (a D1 INSERT +
+  // SELECT, a Drizzle insert + row mapping), and a facade that added it to one half answers
+  // `undefined` or `null` here rather than failing anywhere: the run would then quietly act for
+  // nobody, unlock nothing, and be admitted under no policy, which is exactly the state a bound key
+  // exists to avoid.
+  it('binds a key to its minter, and every read agrees on whose subscription it reaches', async () => {
+    const app = harness.makeApp()
+    const { adminA, c, wsId } = await scenario(app)
+    const ha = bearer(await app.session({ id: adminA }))
+
+    const bound = await app.call<{
+      key: { id: string; actsAsUserId: string | null }
+      secret: string
+    }>(
+      'POST',
+      `/workspaces/${wsId}/public-api-keys`,
+      { label: 'my own runs', scope: 'write', actsAsSelf: true },
+      ha,
+    )
+    expect(bound.status).toBe(201)
+    expect(bound.body.key.actsAsUserId).toBe(adminA)
+
+    // Read back through the LIST (the repository's own SELECT + row mapping) …
+    const listed = await app.call<{ keys: Array<{ id: string; actsAsUserId: string | null }> }>(
+      'GET',
+      `/workspaces/${wsId}/public-api-keys`,
+      undefined,
+      ha,
+    )
+    expect(listed.body.keys.find((k) => k.id === bound.body.key.id)?.actsAsUserId).toBe(adminA)
+
+    // … and through AUTHENTICATION, which is the read every run path actually uses: `/me` answers
+    // from the auth result, so a column dropped from that lookup would leave the list correct and
+    // every run unattributed.
+    const me = await app.call<{ keyId: string }>('GET', '/api/v1/me', undefined, {
+      authorization: `Bearer ${bound.body.secret}`,
+    })
+    expect(me.status).toBe(200)
+    expect(me.body.keyId).toBe(bound.body.key.id)
+
+    // An UNBOUND key on the same board stays unbound: the flag is what decides it, not the presence
+    // of a session, so a facade defaulting the column to the minter would pass every assertion above.
+    const unbound = await app.call<{ key: { actsAsUserId: string | null } }>(
+      'POST',
+      `/workspaces/${wsId}/public-api-keys`,
+      { label: 'ci', scope: 'write' },
+      ha,
+    )
+    expect(unbound.body.key.actsAsUserId).toBeNull()
+
+    // And one person can never bind a key onto another's subscription: the request carries no field
+    // that could ask for it, so the only id the route may write is the session's own.
+    await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+    await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'admin' }, ha)
+    const byC = await app.call<{ key: { actsAsUserId: string | null } }>(
+      'POST',
+      `/workspaces/${wsId}/public-api-keys`,
+      { label: 'c own', scope: 'write', actsAsSelf: true },
+      bearer(await app.session({ id: c })),
+    )
+    expect(byC.body.key.actsAsUserId).toBe(c)
   })
 }

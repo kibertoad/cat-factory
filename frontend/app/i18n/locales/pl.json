@@ -3249,7 +3249,8 @@
         "createdByYou": "Ciebie",
         "createdByKey": "klucz API {id}",
         "revoke": "Unieważnij token",
-        "boundToUser": "Twoja subskrypcja"
+        "boundToYou": "Twoja subskrypcja",
+        "boundToOther": "Subskrypcja użytkownika {user}"
       },
       "add": {
         "heading": "Utwórz token",

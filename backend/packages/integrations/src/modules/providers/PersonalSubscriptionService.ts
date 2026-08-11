@@ -260,20 +260,50 @@ export class PersonalSubscriptionService {
     return { vendor, secret }
   }
 
-  /** Whether the run currently has a live activation for the user+vendor. */
+  /**
+   * Whether the run has an activation for the user+vendor that is still live `minRemainingMs`
+   * from now (default: right now, i.e. plain liveness).
+   *
+   * The horizon is what makes this answerable as "may an interaction leave this alone?" rather
+   * than only "is it live?". An activation with two minutes left is live and will not survive the
+   * step the caller is about to dispatch, so treating it as good enough would push the failure into
+   * the run, which is the opposite of what the interaction gate exists for.
+   */
   async hasActivation(
     executionId: string,
     userId: string,
     vendor: SubscriptionVendor,
+    minRemainingMs = 0,
   ): Promise<boolean> {
     return (
       (await this.deps.subscriptionActivationRepository.get(
         executionId,
         userId,
         vendor,
-        this.deps.clock.now(),
+        this.deps.clock.now() + minRemainingMs,
       )) !== null
     )
+  }
+
+  /**
+   * Whether the run's activation for this vendor is FRESH ENOUGH that an interaction need not
+   * re-mint it — more than half its lifetime still to run.
+   *
+   * The rule lives here because only this service knows the TTL it mints against, and it exists
+   * because re-minting is not cheap: {@link unlock} derives the password's key with 210k PBKDF2
+   * iterations, which the cipher's own header describes as a once-per-unlock cost. A human
+   * clicking through a parked run pays it once and nobody notices; a headless driver answering
+   * eight follow-ups in a loop pays it eight times in a row, which on a CPU-metered runtime is a
+   * killed request rather than a slow one. Halving the TTL keeps the guarantee the re-mint is for
+   * (the next dispatch has a comfortable credential) while making the cost proportional to the
+   * time the run has been tended rather than to the number of times it was poked.
+   */
+  async hasFreshActivation(
+    executionId: string,
+    userId: string,
+    vendor: SubscriptionVendor,
+  ): Promise<boolean> {
+    return this.hasActivation(executionId, userId, vendor, this.activationTtlMs / 2)
   }
 
   /** Delete every activation for a finished run (called when a run terminates). */

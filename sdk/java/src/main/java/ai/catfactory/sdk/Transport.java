@@ -62,6 +62,15 @@ public final class Transport {
     private final Map<String, String> headers;
     private final Random jitter = new Random();
 
+    /**
+     * The personal password sent on every request while set, for a key BOUND to a user.
+     *
+     * <p>The one mutable piece of a Transport's configuration, and {@code volatile} because of it: a
+     * client is documented as safe to share across threads, and this is settable after construction
+     * (a caller learns it is needed from a {@code 428 credential_required}).
+     */
+    private volatile @Nullable String personalPassword;
+
     Transport(CatFactoryClient.Builder options) {
         this.baseUrl = options.baseUrl().replaceAll("/+$", "");
         this.apiKey = options.apiKey();
@@ -102,6 +111,12 @@ public final class Transport {
         merged.put("user-agent", agent + "cat-factory-sdk-java/" + SDK_VERSION);
         merged.putAll(options.headers());
         this.headers = Map.copyOf(merged);
+        this.personalPassword = options.personalPassword();
+    }
+
+    /** @see CatFactoryClient#setPersonalPassword(String) */
+    void personalPassword(@Nullable String password) {
+        this.personalPassword = password;
     }
 
     /**
@@ -268,6 +283,10 @@ public final class Transport {
         // Authorization the transport did not build, or an Accept that disagrees with how the
         // response will be read, are not customisations — they are the client not working.
         headers.forEach(builder::setHeader);
+        String password = personalPassword;
+        if (password != null) {
+            builder.setHeader("x-personal-password", password);
+        }
         builder.setHeader("authorization", "Bearer " + apiKey);
         builder.setHeader("accept", accept);
         if (body == null) {

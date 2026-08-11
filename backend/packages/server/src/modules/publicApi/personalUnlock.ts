@@ -60,3 +60,29 @@ export function personalUnlockFor<E extends AppEnv>(
 export function unlockIsUnavailable(unlock: PublicPersonalUnlock): boolean {
   return unlock.user === undefined
 }
+
+/**
+ * The `409` body every public start/retry surface answers when {@link unlockIsUnavailable} holds.
+ *
+ * One factory rather than a literal per route, because a caller that hits this on `POST /jobs`,
+ * again on `POST /tasks/:id/start` and again on `retry` must not be told three different stories
+ * about the same key. The `code` is the machine-readable half and is identical everywhere; only the
+ * remedy tail differs, and it differs because it has to be TRUE: a board task can also be started
+ * by its owner in the app, while a headless job has no board affordance to fall back on, so
+ * offering one there would send an operator looking for a button that does not exist.
+ */
+export function individualModelUnsupported(subject: 'task' | 'job'): {
+  code: string
+  message: string
+} {
+  const remedy =
+    subject === 'task'
+      ? 'start or retry it from the app, or use a key bound to the subscription owner and send the'
+      : 'use a key bound to the subscription owner and send the'
+  return {
+    code: 'individual_model_unsupported',
+    message:
+      `This ${subject} runs on an individual-usage model that needs a personal-credential ` +
+      `unlock; ${remedy} X-Personal-Password header`,
+  }
+}
