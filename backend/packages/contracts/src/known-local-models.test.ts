@@ -3,22 +3,30 @@ import { KNOWN_LOCAL_MODELS, knownLocalModel, squashModelId } from './known-loca
 
 // The table exists so the common case needs no hand-declaration. What has to hold is that one
 // entry covers every SPELLING the ecosystem serves the same weights under, and that it never
-// reaches a NEIGHBOURING family — a wrong match is worse than no match, because it hands a
+// reaches a NEIGHBOURING family: a wrong match is worse than no match, because it hands a
 // picture to a model that cannot read it (or, in the version case, claims a capability the
 // user's build does not have).
 
 describe('squashModelId', () => {
   it('drops the org prefix, the size tag, the quantisation and the format', () => {
-    expect(squashModelId('google/gemma-4-12b')).toBe('gemma412b')
-    expect(squashModelId('gemma4:12b')).toBe('gemma412b')
-    expect(squashModelId('lmstudio-community/Muse-Glimmer-30B-GGUF')).toBe('museglimmer30bgguf')
-    expect(squashModelId('/models/muse-glimmer-30b-q4_k_m.gguf')).toBe('museglimmer30bq4kmgguf')
+    expect(squashModelId('google/gemma-4-12b')).toBe('gemma4')
+    expect(squashModelId('gemma4:12b')).toBe('gemma4')
+    expect(squashModelId('lmstudio-community/Muse-Glimmer-30B-GGUF')).toBe('museglimmer')
+    expect(squashModelId('mixtral-8x7b-instruct')).toBe('mixtralinstruct')
   })
 
   it('keeps version DIGITS significant', () => {
     // The one thing the squash must not lose: `gemma3` and `gemma4` differ only here, and they
     // differ in whether the small sizes read images at all.
+    expect(squashModelId('gemma3:1b')).toBe('gemma3')
     expect(squashModelId('gemma3:1b')).not.toContain('gemma4')
+  })
+
+  it('cannot fuse a SIZE tag onto the family name', () => {
+    // The reason the packaging goes before the squash rather than after: deleting the separators
+    // first would leave `gemma4bit`, whose `gemma4` substring is a size tag misread as a version.
+    expect(squashModelId('gemma-4b-it')).not.toContain('gemma4')
+    expect(squashModelId('/models/llama-4bit.gguf')).not.toContain('llama4')
   })
 })
 
@@ -55,6 +63,17 @@ describe('knownLocalModel', () => {
     // that a text-only build reads images.
     expect(knownLocalModel('qwen3.6:27b')).toBeUndefined()
     expect(knownLocalModel('qwen2.5-coder:32b')).toBeUndefined()
+  })
+
+  it('recognises Llama 4 across its packaged spellings, and not a 4-BIT quant of another', () => {
+    expect(knownLocalModel('llama4:scout')?.family).toBe('llama4')
+    expect(knownLocalModel('mlx-community/Llama-4-Scout-17B-16E-Instruct-4bit')?.family).toBe(
+      'llama4',
+    )
+    // The size/quant collision the squash would otherwise create: neither of these is a version-4
+    // build, and calling either one would hand a text-only model the run's design renders.
+    expect(knownLocalModel('gemma-4b-it')).toBeUndefined()
+    expect(knownLocalModel('/models/llama-4bit.gguf')).toBeUndefined()
   })
 
   it('answers undefined for an unknown model and for no id at all', () => {

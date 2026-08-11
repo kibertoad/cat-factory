@@ -87,3 +87,40 @@ describe('resolveWorkspaceCapabilities — model policy', () => {
     expect(read).not.toHaveBeenCalled()
   })
 })
+
+describe('resolveWorkspaceCapabilities: locally-run models', () => {
+  // The enabled-model set is what `isModelUsable` asks about a `"<provider>:<model>"` pin, so it
+  // has to carry the model IDS. Each enabled model arrives as a DECLARATION object (the id plus
+  // what the user declared about it), and reading the id off it is the whole assertion: keying on
+  // the object instead produced `ollama:[object Object]`, which typechecks, and greys out every
+  // locally-run model in the picker while refusing every run pinned to one.
+  const capabilitiesFor = async () => [
+    {
+      provider: 'ollama' as const,
+      label: 'Ollama',
+      models: [{ id: 'gemma4:12b', acceptsImages: true }, { id: 'my-finetune' }],
+    },
+  ]
+
+  it('keys the enabled set on the declared model id', async () => {
+    const services: CapabilityServices = {
+      localModelEndpoints: {
+        capabilitiesFor,
+      } as unknown as CapabilityServices['localModelEndpoints'],
+    }
+    const caps = await resolveWorkspaceCapabilities(services, 'ws-1', 'user-1')
+    expect([...(caps.localModels ?? [])]).toEqual(['ollama:gemma4:12b', 'ollama:my-finetune'])
+  })
+
+  it('reads no endpoints for an unauthenticated caller (a runner is per-user)', async () => {
+    const probe = vi.fn(capabilitiesFor)
+    const services: CapabilityServices = {
+      localModelEndpoints: {
+        capabilitiesFor: probe,
+      } as unknown as CapabilityServices['localModelEndpoints'],
+    }
+    const caps = await resolveWorkspaceCapabilities(services, 'ws-1')
+    expect(caps.localModels?.size).toBe(0)
+    expect(probe).not.toHaveBeenCalled()
+  })
+})

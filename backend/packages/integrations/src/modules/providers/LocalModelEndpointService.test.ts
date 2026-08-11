@@ -187,4 +187,32 @@ describe('LocalModelEndpointService model declarations', () => {
     const created = await makeService().upsert('usr_1', input([{ id: '  ' }, { id: ' qwen3 ' }]))
     expect(created.models).toEqual([{ id: 'qwen3' }])
   })
+
+  it('carries a store-reported DISCARD onto the wire, and clears it on the write that fixes it', async () => {
+    // A row written before declarations existed held bare strings, which the stores refuse rather
+    // than coerce. The shortened list alone reads exactly like a runner nobody enabled a model on,
+    // so the flag is the only thing that can send the user back to re-tick.
+    const repo = fakeRepo()
+    await repo.upsert({
+      userId: 'usr_1',
+      provider: 'ollama',
+      label: 'Ollama',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      apiKeyCipher: null,
+      models: [],
+      unreadableModels: true,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const svc = new LocalModelEndpointService({
+      localModelEndpointRepository: repo,
+      secretCipher: plainCipher,
+      clock: { now: () => 1_700_000_000_000 },
+    })
+    expect(await svc.list('usr_1')).toMatchObject([{ models: [], unreadableModels: true }])
+    await expect(svc.upsert('usr_1', input([{ id: 'qwen3' }]))).resolves.toMatchObject({
+      unreadableModels: false,
+    })
+    expect(await svc.list('usr_1')).toMatchObject([{ unreadableModels: false }])
+  })
 })

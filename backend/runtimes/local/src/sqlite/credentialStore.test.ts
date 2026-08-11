@@ -259,6 +259,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       baseUrl: 'http://localhost:11434/v1',
       apiKeyCipher: null,
       models: [{ id: 'llama3' }, { id: 'qwen', acceptsImages: true }],
+      unreadableModels: false,
       createdAt: 100,
       updatedAt: 100,
     })
@@ -270,6 +271,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       baseUrl: 'http://localhost:11434/v1',
       apiKeyCipher: null,
       models: [{ id: 'llama3' }, { id: 'qwen', acceptsImages: true }],
+      unreadableModels: false,
       createdAt: 100,
       updatedAt: 100,
     })
@@ -285,6 +287,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       baseUrl: 'http://a/v1',
       apiKeyCipher: null,
       models: [{ id: 'a' }],
+      unreadableModels: false,
       createdAt: 100,
       updatedAt: 100,
     })
@@ -295,6 +298,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       baseUrl: 'http://b/v1',
       apiKeyCipher: 'sealed:key',
       models: [{ id: 'b' }, { id: 'c' }],
+      unreadableModels: false,
       createdAt: 999, // must be ignored
       updatedAt: 200,
     })
@@ -327,6 +331,7 @@ function endpoint(provider: 'ollama' | 'lmstudio', createdAt: number) {
     baseUrl: `http://localhost/${provider}/v1`,
     apiKeyCipher: null,
     models: [],
+    unreadableModels: false,
     createdAt,
     updatedAt: createdAt,
   }

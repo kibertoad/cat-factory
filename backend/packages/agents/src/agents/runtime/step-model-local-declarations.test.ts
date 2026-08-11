@@ -67,11 +67,15 @@ describe('resolveStepModelRef local-model modality', () => {
     // silence, which downstream reports as `unknown_model_image_input` rather than as a refusal.
     // The field is omitted entirely rather than passed as undefined, which is the shape a context
     // with no initiator actually produces.
-    const ref = await resolveStepModelRef(resolvers, {
-      agentKind: 'coder',
-      blockModelId: 'ollama:my-finetune',
-    })
-    expect(ref).not.toHaveProperty('acceptsImages')
+    //
+    // Pinned on a RECOGNISED family, because an unrecognised id would pass this whether or not the
+    // absent case is honoured: with nothing resolved, the table must NOT answer either. What could
+    // not be read includes the initiator's own `false`, and the table is exactly what would
+    // overwrite it with pictures.
+    for (const blockModelId of ['ollama:gemma4:12b', 'ollama:my-finetune']) {
+      const ref = await resolveStepModelRef(resolvers, { agentKind: 'coder', blockModelId })
+      expect(ref, blockModelId).not.toHaveProperty('acceptsImages')
+    }
   })
 
   it('does not touch the routing DEFAULT a step falls through to', async () => {

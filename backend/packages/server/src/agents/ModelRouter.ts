@@ -74,9 +74,13 @@ export class ModelRouter {
         // Read off the CONTEXT rather than re-derived here, so this router, the inline executor
         // and the consensus panel cannot disagree about which provider a step ran on.
         ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
-        // Likewise the initiator's local-model declarations: this is the container path, whose
-        // `dispatchDesignImageDelivery` decides off the resolved ref whether the harness is given
-        // the run's design renders at all.
+        // Likewise the initiator's local-model declarations, folded onto the ref by the shared
+        // resolver. Nothing on the CONTAINER path reads the modality today: a local ref names no
+        // harness, so this dispatch runs it on Pi, and `dispatchDesignImageDelivery` answers
+        // `harness_no_image_input` before it ever asks the ref (the inline executor is the reader
+        // that benefits). Threaded here anyway because ONE resolution serving every path is what
+        // stops them disagreeing about what a step ran on, so the day an image-carrying harness
+        // serves a local model this is a `HARNESS_IMAGE_INPUT` edit rather than new plumbing.
         ...(context.localModelDeclarations
           ? { localModelDeclarations: context.localModelDeclarations }
           : {}),

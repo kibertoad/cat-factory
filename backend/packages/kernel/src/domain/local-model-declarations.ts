@@ -6,8 +6,8 @@ import type { ModelRef } from '../ports/model-provider.js'
 //
 // Every OTHER model's per-flavour facts (`contextTokens`, `acceptsImages`) come off `MODEL_CATALOG`,
 // which is code: `resolveModelRef` finds the entry and the ref it returns already carries them. A
-// local model has no entry to find — it lives on one person's machine, and `parseLocalModelId`
-// builds its ref out of the ID ALONE — so the ref arrives with every declared fact absent, and
+// local model has no entry to find (it lives on one person's machine, and `parseLocalModelId`
+// builds its ref out of the ID ALONE), so the ref arrives with every declared fact absent, and
 // nothing downstream can tell "this model is text-only" from "this platform never asked".
 //
 // Two tiers close that gap, and this module owns the precedence between them: the user's own
@@ -23,6 +23,22 @@ import type { ModelRef } from '../ports/model-provider.js'
 // `localSelectableModels`. Both then come through `resolveLocalModelModality` below, so the option
 // the settings panel labels and the picture the run attaches cannot disagree.
 
+/** What one stored `models` blob held: the declarations it could read, and whether it lost any. */
+export interface ParsedLocalModelDeclarations {
+  models: LocalModelDeclaration[]
+  /**
+   * Whether anything in the blob was REFUSED rather than read: an unparseable blob, a blob that is
+   * not an array, or an entry that is not an object with a non-empty string `id`.
+   *
+   * Reported rather than swallowed because the drop is otherwise indistinguishable from a runner
+   * the user never enabled anything on: both render as "0 models" and offer nothing in the picker,
+   * and only one of them is fixed by re-ticking. A boolean rather than a count on purpose, because
+   * a blob that is not an array at all has no entries left to count and a number there would be a
+   * guess presented as evidence.
+   */
+  unreadable: boolean
+}
+
 /**
  * Read the `models` JSON of a stored local-runner endpoint. Lives here, not in each store, because
  * all three (D1, Postgres, the local-sqlite mothership store) must answer a given blob identically
@@ -30,27 +46,36 @@ import type { ModelRef } from '../ports/model-provider.js'
  *
  * An entry that is not an object with a non-empty string `id` is DROPPED rather than coerced. That
  * covers a row written before declarations existed, when the column held bare strings: per the
- * internals compatibility rule such state is allowed to break, but it has to break AS a break —
+ * internals compatibility rule such state is allowed to break, but it has to break AS a break.
  * `String(entry)` would have produced a declaration for the model id `[object Object]`, and
  * `{ id: undefined }` an entry no picker can render and no run can resolve. Dropping surfaces it
- * where it is fixable: the runner lists nothing enabled, and the panel's model count says zero.
+ * where it is fixable, and {@link ParsedLocalModelDeclarations.unreadable} is what carries the
+ * drop as far as the panel, so the runner says its models were discarded instead of reading as one
+ * nothing was ever enabled on.
  */
-export function parseLocalModelDeclarations(json: string): LocalModelDeclaration[] {
+export function parseLocalModelDeclarations(json: string): ParsedLocalModelDeclarations {
   let parsed: unknown
   try {
     parsed = JSON.parse(json)
   } catch {
-    return []
+    return { models: [], unreadable: true }
   }
-  if (!Array.isArray(parsed)) return []
-  const out: LocalModelDeclaration[] = []
+  if (!Array.isArray(parsed)) return { models: [], unreadable: true }
+  const models: LocalModelDeclaration[] = []
+  let unreadable = false
   for (const entry of parsed) {
-    if (typeof entry !== 'object' || entry === null) continue
+    if (typeof entry !== 'object' || entry === null) {
+      unreadable = true
+      continue
+    }
     const { id, acceptsImages } = entry as { id?: unknown; acceptsImages?: unknown }
-    if (typeof id !== 'string' || !id) continue
-    out.push({ id, ...(typeof acceptsImages === 'boolean' ? { acceptsImages } : {}) })
+    if (typeof id !== 'string' || !id) {
+      unreadable = true
+      continue
+    }
+    models.push({ id, ...(typeof acceptsImages === 'boolean' ? { acceptsImages } : {}) })
   }
-  return out
+  return { models, unreadable }
 }
 
 /** One runner's enabled models plus what the user declared about each. */
@@ -71,7 +96,7 @@ export function declaredLocalModel(
   if (!declarations?.length || !isLocalRunner(ref.provider)) return undefined
   // Matched on the runner too, never on the model id alone: two runners can serve the same model
   // id (the whole point of `"<provider>:<model>"` being the catalog id), and they need not agree
-  // about it — one may be an image-capable build and the other not.
+  // about it, one being an image-capable build and the other not.
   return declarations
     .find((d) => d.provider === ref.provider)
     ?.models.find((m) => m.id === ref.model)
@@ -100,12 +125,20 @@ export function resolveLocalModelModality(
  * stamping a `false`: absent is a real third answer here (see `localModelDeclarationSchema`), and it
  * is what makes `resolveDesignImageDelivery` report `unknown_model_image_input` instead of claiming
  * the model cannot read pictures.
+ *
+ * NO declarations at all is that same absent answer, and the recognised-family table is NOT
+ * consulted for it. "The initiator declared nothing about this model" and "nobody resolved any
+ * declarations for this dispatch" are different facts: the second is what a run with no initiator
+ * (a schedule, a system sweep) or a deployment with no runner store produces, and it means the
+ * user's own `false` is exactly what could not be read. Letting the table answer over an unread
+ * declaration would attach pictures to a build its owner marked text-only, which is the one
+ * outcome the escape hatch exists to prevent.
  */
 export function withLocalModelDeclaration(
   ref: ModelRef,
   declarations: readonly LocalModelDeclarations[] | undefined,
 ): ModelRef {
-  if (!isLocalRunner(ref.provider)) return ref
+  if (!declarations?.length || !isLocalRunner(ref.provider)) return ref
   const acceptsImages = resolveLocalModelModality(ref.model, declaredLocalModel(ref, declarations))
   if (acceptsImages === undefined) return ref
   return { ...ref, acceptsImages }

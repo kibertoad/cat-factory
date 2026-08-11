@@ -37,8 +37,8 @@ export interface KnownLocalModel {
    *
    * Every entry today says `true`, and that is a rule rather than a coincidence: an entry earns
    * its place only where the platform's SILENCE would cost a capability. A text-only model
-   * behaves identically whether this table calls it `false` or says nothing — both withhold the
-   * run's design renders — so listing one would add a maintenance surface, and a wrong `false`
+   * behaves identically whether this table calls it `false` or says nothing (both withhold the
+   * run's design renders), so listing one would add a maintenance surface, and a wrong `false`
    * would silently withhold pictures from a model that could have read them. The field is
    * explicit anyway so a future entry that genuinely needs to correct an assumption can.
    */
@@ -53,7 +53,7 @@ export interface KnownLocalModel {
  * A family whose modality depends on the SIZE is deliberately ABSENT rather than approximated:
  * Gemma 3 is the worked example (its 1B is text-only while its 4B and up are not), and an entry
  * matching the family name would have told every `gemma3:1b` user their model reads images. When
- * in doubt, leave it out — the user's own declaration is right there, and an absence self-corrects
+ * in doubt, leave it out: the user's own declaration is right there, and an absence self-corrects
  * where a wrong entry does not.
  */
 export const KNOWN_LOCAL_MODELS: readonly KnownLocalModel[] = [
@@ -111,10 +111,24 @@ export const KNOWN_LOCAL_MODELS: readonly KnownLocalModel[] = [
 ]
 
 /**
- * Reduce a runner-reported model id to its comparable core: the last path segment, lowercased,
- * with every non-alphanumeric character removed.
+ * A token that describes how a build was PACKAGED rather than which weights it holds: the
+ * parameter size (`12b`, `8x7b`, `500m`), the quantisation (`q4_k_m`, `4bit`, `fp16`, `int8`) and
+ * the serialisation format (`gguf`, `mlx`, `awq`, …).
  *
- * One squash rather than a set of per-runner regexes, because the SAME weights arrive under
+ * Dropped BEFORE the squash, and that order is the whole point: the squash deletes exactly the
+ * separators that keep a size tag apart from the family name, so `gemma-4b-it` squashed whole
+ * reads as `gemma4bit`, which CONTAINS the `gemma4` fragment and would hand a Gemma 1 4B build
+ * the run's design renders. Removing the packaging first cannot create that adjacency, where a
+ * boundary rule applied after the squash has no boundary left to test.
+ */
+const PACKAGING_TOKEN =
+  /^(?:\d+(?:x\d+)?[bm]|\d+bits?|q\d\w*|fp\d+|bf\d+|int\d+|gguf|ggml|mlx|awq|gptq|exl\d+|safetensors)$/
+
+/**
+ * Reduce a runner-reported model id to its comparable core: the last path segment, lowercased,
+ * split on every non-alphanumeric run, packaging tokens dropped, the rest joined.
+ *
+ * One normalisation rather than a set of per-runner regexes, because the SAME weights arrive under
  * wildly different spellings and the differences are all punctuation and packaging: an org
  * prefix (`google/`), a size tag (`:12b`), a quantisation suffix (`-q4_k_m`), a format
  * (`-gguf`, `-mlx`, `.gguf`), a hyphen where another registry uses none. Squashing both sides
@@ -123,7 +137,11 @@ export const KNOWN_LOCAL_MODELS: readonly KnownLocalModel[] = [
  */
 export function squashModelId(id: string): string {
   const segment = id.split('/').pop() ?? id
-  return segment.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return segment
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 0 && !PACKAGING_TOKEN.test(token))
+    .join('')
 }
 
 /**

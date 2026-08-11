@@ -80,11 +80,26 @@ describe('withLocalModelDeclaration', () => {
   })
 
   it('folds the RECOGNISED family onto a model the user enabled without declaring', () => {
-    // No declaration for `gemma4` anywhere in OLLAMA's list, so this is the table answering — the
+    // No declaration for `gemma4` anywhere in OLLAMA's list, so this is the table answering: the
     // path that makes ticking a popular model enough on its own.
     expect(
       withLocalModelDeclaration({ provider: 'ollama', model: 'gemma4:12b' }, [OLLAMA]),
     ).toEqual({ provider: 'ollama', model: 'gemma4:12b', acceptsImages: true })
+  })
+
+  it('does NOT let the table answer when no declarations were resolved at all', () => {
+    // "The user declared nothing" and "nothing was resolved for this dispatch" are different
+    // facts, and only the first one leaves the table free to answer. With no declarations in hand
+    // a `false` the initiator DID record is exactly what could not be read, so a recognised family
+    // must stay absent rather than attach pictures over the top of it.
+    const ref = { provider: 'ollama', model: 'gemma4:12b' }
+    const unresolved = withLocalModelDeclaration(ref, undefined)
+    expect(unresolved).toBe(ref)
+    expect(withLocalModelDeclaration(ref, [])).toBe(ref)
+    expect(resolveDesignImageDelivery({ channel: 'message' }, unresolved)).toEqual({
+      attached: false,
+      reason: 'unknown_model_image_input',
+    })
   })
 
   it('leaves an UNDECLARED model absent rather than stamping a false', () => {
@@ -133,29 +148,38 @@ describe('withLocalModelDeclaration', () => {
 })
 
 describe('parseLocalModelDeclarations', () => {
-  it('round-trips what a store wrote', () => {
-    expect(parseLocalModelDeclarations(JSON.stringify(OLLAMA.models))).toEqual(OLLAMA.models)
+  it('round-trips what a store wrote, reporting nothing lost', () => {
+    expect(parseLocalModelDeclarations(JSON.stringify(OLLAMA.models))).toEqual({
+      models: OLLAMA.models,
+      unreadable: false,
+    })
   })
 
-  it('drops a pre-declaration BARE STRING entry instead of coercing it', () => {
+  it('drops a pre-declaration BARE STRING entry instead of coercing it, and SAYS it did', () => {
     // The shape these rows held before declarations existed. `String(entry)` would have minted a
-    // model id, and an object with no `id` an entry nothing can render — so the break arrives as an
-    // empty enabled list the panel reports, which is what sends the user to re-tick.
-    expect(parseLocalModelDeclarations(JSON.stringify(['gemma3', 'qwen3']))).toEqual([])
+    // model id, and an object with no `id` an entry nothing can render, so the break arrives as a
+    // shortened enabled list. `unreadable` is what keeps that from reading like a runner the user
+    // never ticked anything on: it is the difference between "re-tick these" and "nothing here".
+    expect(parseLocalModelDeclarations(JSON.stringify(['gemma3', 'qwen3']))).toEqual({
+      models: [],
+      unreadable: true,
+    })
     expect(
       parseLocalModelDeclarations(JSON.stringify([{ id: 'ok' }, 'gemma3', { id: '' }])),
-    ).toEqual([{ id: 'ok' }])
+    ).toEqual({ models: [{ id: 'ok' }], unreadable: true })
   })
 
   it('ignores a non-boolean modality rather than truthy-coercing it', () => {
+    // The ENTRY is readable, so nothing is reported lost: the id stands and the modality falls
+    // back to the recognised-family table, exactly as an omitted field would.
     expect(
       parseLocalModelDeclarations(JSON.stringify([{ id: 'a', acceptsImages: 'yes' }])),
-    ).toEqual([{ id: 'a' }])
+    ).toEqual({ models: [{ id: 'a' }], unreadable: false })
   })
 
-  it('answers empty for malformed JSON and for a non-array payload', () => {
-    expect(parseLocalModelDeclarations('{')).toEqual([])
-    expect(parseLocalModelDeclarations('null')).toEqual([])
-    expect(parseLocalModelDeclarations('{"id":"a"}')).toEqual([])
+  it('answers empty AND unreadable for malformed JSON and for a non-array payload', () => {
+    for (const blob of ['{', 'null', '{"id":"a"}']) {
+      expect(parseLocalModelDeclarations(blob), blob).toEqual({ models: [], unreadable: true })
+    }
   })
 })

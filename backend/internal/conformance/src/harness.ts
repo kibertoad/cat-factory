@@ -499,6 +499,8 @@ export interface LocalModelEndpointsProbe {
       baseUrl: string
       hasApiKey: boolean
       models: LocalModelDeclaration[]
+      /** Whether the store had to discard part of the row's stored model list. */
+      unreadableModels: boolean
     }[]
   >
   upsert(

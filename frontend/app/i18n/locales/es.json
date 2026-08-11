@@ -3588,7 +3588,7 @@
       "reachable": "Accesible · ningún modelo | Accesible · {count} modelo | Accesible · {count} modelos",
       "noModels": "No se informó de ningún modelo.",
       "enableModels": "Habilitar modelos",
-      "imageInputHint": "Algunos modelos locales leen capturas de pantalla y renders de diseño. Nada puede detectarlo, así que una ejecución solo envía imágenes a los modelos que marques como capaces de leerlas.",
+      "imageInputHint": "Algunos modelos locales leen capturas de pantalla y renders de diseño. Las familias conocidas se reconocen automáticamente, y la opción Sin definir de cada modelo indica cómo se tratará; defínelo tú mismo para una compilación que la plataforma no puede conocer, como una cuantización solo de texto o un ajuste fino.",
       "imageInputLabel": "Compatibilidad con imágenes de {model}",
       "imageInput": {
         "autoYes": "Sin definir: {family} lee imágenes",
@@ -3608,6 +3608,7 @@
         "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
       },
       "blocked": "La URL de este runner no está permitida en esta instalación, por lo que sus modelos están ocultos en el selector.",
+      "modelsDiscarded": "Algunos de los modelos habilitados de este runner no se pudieron leer y se descartaron. Vuelve a seleccionar los que quieras y guarda.",
       "urlReason": {
         "invalid_url": "Esa URL no es válida.",
         "scheme_not_allowed": "La URL de un runner debe empezar por http:// o https://.",

@@ -31,16 +31,6 @@ const open = computed({
 })
 const back = useIntegrationBack(open)
 
-// Load the user's endpoints whenever the panel opens (loaded independently of the
-// workspace snapshot, like personal subscriptions).
-watch(
-  open,
-  (isOpen) => {
-    if (isOpen) void store.load()
-  },
-  { immediate: true },
-)
-
 const RUNNERS: { value: LocalRunner; label: string }[] = (
   Object.keys(LOCAL_RUNNER_LABELS) as LocalRunner[]
 ).map((value) => ({ value, label: LOCAL_RUNNER_LABELS[value] }))
@@ -112,16 +102,26 @@ const discovered = ref<string[]>([])
 const selected = ref<string[]>([])
 const imageInput = ref<Record<string, ImageInputChoice>>({})
 
-/** The three options for one model: "not set" carries what the recognised-family table will do. */
-function imageInputItems(modelId: string): { value: ImageInputChoice; label: string }[] {
-  return IMAGE_INPUT_CHOICES.map((value) => ({
-    value,
-    label:
-      value === 'unknown'
-        ? unsetLabelFor(modelId)
-        : t(`settings.localModelEndpoints.imageInput.${value}`),
-  }))
-}
+/**
+ * The three options per discovered model: "not set" carries what the recognised-family table will
+ * do. Built once per discovered set rather than per row per render, because the "not set" label
+ * scans the family table and a fresh array identity each tick also defeats the select's own
+ * memoisation (a runner serving forty models re-ran both on every keystroke elsewhere in the form).
+ */
+const imageInputItems = computed<Record<string, { value: ImageInputChoice; label: string }[]>>(() =>
+  Object.fromEntries(
+    discovered.value.map((modelId) => [
+      modelId,
+      IMAGE_INPUT_CHOICES.map((value) => ({
+        value,
+        label:
+          value === 'unknown'
+            ? unsetLabelFor(modelId)
+            : t(`settings.localModelEndpoints.imageInput.${value}`),
+      })),
+    ]),
+  ),
+)
 const testError = ref<string | null>(null)
 // The backend's own wording, kept as DETAIL beside a translated refusal rather than being
 // shown as the description (it names env vars an operator, not this user, acts on).
@@ -132,27 +132,48 @@ const busy = ref(false)
 
 const existing = computed(() => store.endpoints.find((e) => e.provider === provider.value))
 
-// Switching runner type prefills the default base URL and resets the discovered models —
-// editing an already-connected runner loads its stored config instead.
-watch(provider, (p) => {
+/**
+ * Point the draft at one runner: its stored config when that runner is already connected (so the
+ * ticks and the declarations the user made come back), else the defaults for a fresh one.
+ *
+ * Called EXPLICITLY from each event that means "start editing this runner", never watched off
+ * `provider`, because the commonest of those events does not change it: clicking Edit on the row
+ * the form is already showing assigns the same value, which fires no watcher. The draft would then
+ * be whatever the empty initial state was, and saving it PUTs every model with no declaration,
+ * destroying what the user had recorded with nothing saying so.
+ */
+function seedDraft(p: LocalRunner) {
   const e = store.endpoints.find((x) => x.provider === p)
-  if (e) {
-    label.value = e.label
-    baseUrl.value = e.baseUrl
-    discovered.value = e.models.map((m) => m.id)
-    selected.value = e.models.map((m) => m.id)
-    imageInput.value = Object.fromEntries(e.models.map((m) => [m.id, choiceFor(m)]))
-  } else {
-    label.value = ''
-    baseUrl.value = LOCAL_RUNNER_DEFAULTS[p] ?? ''
-    discovered.value = []
-    selected.value = []
-    imageInput.value = {}
-  }
+  label.value = e?.label ?? ''
+  baseUrl.value = e?.baseUrl ?? LOCAL_RUNNER_DEFAULTS[p] ?? ''
+  discovered.value = e?.models.map((m) => m.id) ?? []
+  selected.value = e?.models.map((m) => m.id) ?? []
+  imageInput.value = Object.fromEntries(e?.models.map((m) => [m.id, choiceFor(m)]) ?? [])
   apiKey.value = ''
   testError.value = null
+  testErrorDetail.value = null
   tested.value = false
-})
+}
+
+/** Select a runner in the form: the runner-type select and each row's Edit button share this. */
+function selectRunner(p: LocalRunner) {
+  provider.value = p
+  seedDraft(p)
+}
+
+// Load the user's endpoints whenever the panel opens (loaded independently of the workspace
+// snapshot, like personal subscriptions), then seed the draft from what arrived. The seed WAITS
+// for the load: the panel mounts against an empty store, so seeding before it resolves would
+// leave a form headed "Edit runner" holding none of that runner's config.
+watch(
+  open,
+  async (isOpen) => {
+    if (!isOpen) return
+    await store.load()
+    seedDraft(provider.value)
+  },
+  { immediate: true },
+)
 
 async function test() {
   if (!baseUrl.value.trim()) return
@@ -235,14 +256,9 @@ async function remove(p: LocalRunner) {
   busy.value = true
   try {
     await store.remove(p)
-    if (provider.value === p) {
-      baseUrl.value = LOCAL_RUNNER_DEFAULTS[p] ?? ''
-      label.value = ''
-      discovered.value = []
-      selected.value = []
-      imageInput.value = {}
-      tested.value = false
-    }
+    // The row is gone from the store, so re-seeding the draft it was showing yields the
+    // fresh-runner defaults: the same reset, without a second copy of what a reset means.
+    if (provider.value === p) seedDraft(p)
     toast.add({ title: t('settings.localModelEndpoints.toast.removed'), icon: 'i-lucide-check' })
   } catch (e) {
     present(e, 'settings.localModelEndpoints.toast.removeFailed')
@@ -304,6 +320,12 @@ async function remove(p: LocalRunner) {
               {{ t('settings.localModelEndpoints.blocked') }}
               <span class="block text-amber-300/70">{{ urlReasonText(e.urlBlockedReason) }}</span>
             </div>
+            <!-- Part of the stored model list could not be read and was discarded. Without this
+                 the shortened list reads exactly like a runner nothing was ever enabled on, and
+                 only one of those is fixed by re-ticking. -->
+            <div v-if="e.unreadableModels" class="mt-1 text-[11px] text-amber-400">
+              {{ t('settings.localModelEndpoints.modelsDiscarded') }}
+            </div>
           </div>
           <div class="flex items-center gap-1">
             <UButton
@@ -313,11 +335,7 @@ async function remove(p: LocalRunner) {
               size="xs"
               :disabled="busy"
               :title="t('settings.localModelEndpoints.edit')"
-              @click="
-                () => {
-                  provider = e.provider
-                }
-              "
+              @click="selectRunner(e.provider)"
             />
             <UButton
               icon="i-lucide-trash-2"
@@ -342,7 +360,13 @@ async function remove(p: LocalRunner) {
 
           <div class="flex flex-wrap items-end gap-3">
             <UFormField :label="t('settings.localModelEndpoints.runnerType')">
-              <USelect v-model="provider" :items="RUNNERS" value-key="value" class="w-48" />
+              <USelect
+                :model-value="provider"
+                :items="RUNNERS"
+                value-key="value"
+                class="w-48"
+                @update:model-value="(v: string) => selectRunner(v as LocalRunner)"
+              />
             </UFormField>
             <UFormField
               :label="t('settings.localModelEndpoints.labelOptional')"
@@ -431,7 +455,7 @@ async function remove(p: LocalRunner) {
                 <USelect
                   v-if="selected.includes(m)"
                   :model-value="imageInput[m] ?? 'unknown'"
-                  :items="imageInputItems(m)"
+                  :items="imageInputItems[m]"
                   value-key="value"
                   size="xs"
                   class="w-52 shrink-0"

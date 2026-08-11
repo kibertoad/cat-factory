@@ -516,6 +516,11 @@ function registerCustomBackendKindTests(harness: ConformanceHarness): void {
       // `acceptsImages: undefined` and an absent property behave the same in the fold, but a store
       // that materialised `false` would silently withhold every design render from that model.
       expect(listed[0]!.models[2]).not.toHaveProperty('acceptsImages')
+      // A row this suite just wrote lost nothing reading it back, and every store has to SAY so
+      // rather than leave the field absent: `undefined` there would read as a clean row on the wire
+      // while a genuinely discarded list read the same, which is the distinction the flag exists
+      // for (the parse rule itself is pinned by kernel's own unit tests).
+      expect(listed[0]!.unreadableModels).toBe(false)
 
       // The run-time resolve path decrypts the key (the proxy / inline provider use this).
       const resolved = await probe.resolve(userId, 'ollama')

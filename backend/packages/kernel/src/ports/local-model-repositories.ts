@@ -24,9 +24,17 @@ export interface LocalModelEndpointRecord {
    * they DECLARED about it. Persisted as one JSON array in the `models` column, so a store
    * needs no migration to carry a new declared fact. But an entry written before the
    * declarations landed is a bare string and is DROPPED on read rather than coerced, which
-   * shows up as a runner with nothing enabled for the user to re-tick.
+   * shows up as a runner with fewer models enabled than the user ticked.
    */
   models: LocalModelDeclaration[]
+  /**
+   * Whether reading {@link models} had to DISCARD part of the stored blob (see
+   * `parseLocalModelDeclarations`). Carried on the record, and onward to the panel, because a
+   * discarded list and a runner nobody ever enabled a model on render identically otherwise, and
+   * only the first one is fixed by re-ticking. A record built for a WRITE sets it false: what the
+   * service is about to store is by construction what it just validated.
+   */
+  unreadableModels: boolean
   createdAt: number
   updatedAt: number
 }

@@ -21,6 +21,7 @@ import type {
   InitiativePresetRegistry,
   InitiativeRepository,
   LinkedDocumentRefresher,
+  LocalModelDeclarationsCacheValue,
   LocalModelEndpointRepository,
   Logger,
   ModelPresetCacheValue,
@@ -273,6 +274,12 @@ export interface AgentContextBuilderDeps {
    */
   localModelEndpoints?: LocalModelEndpointRepository
   /**
+   * Optional: the `AppCaches.localModelDeclarations` slice the endpoint read above goes through,
+   * the per-USER sibling of `modelPresetCache` and read on the same per-dispatch schedule. Absent ⇒
+   * the read runs live.
+   */
+  localModelDeclarationsCache?: GroupCacheHandle<LocalModelDeclarationsCacheValue>
+  /**
    * Optional: the workspace's consensus-GROUP library. When wired, a consensus step naming a
    * tier set (`consensus.groupIds`) resolves it here — ONE batched read per dispatch — and the
    * group the task's estimate earns is materialised onto the context. Absent (or the step names
@@ -434,6 +441,9 @@ export class AgentContextBuilder {
     options?: BuildContextOptions,
   ): Promise<AgentRunContext> {
     const agentKind = options?.agentKind ?? step.agentKind
+    // Read twice below (the dispatch settings key their per-user resolution on it; the context
+    // carries it for attribution), so it is named once here.
+    const initiatedBy = instance.initiatedBy
     const observations = stepObservations(step, options)
     // When a block's requirements have been reworked, that standardized document is
     // the single source of truth for every agent step: it already folds in the
@@ -498,10 +508,10 @@ export class AgentContextBuilder {
       // that picked none skip it entirely (no extra read). Throws when a REQUIRED skill can't
       // resolve — a step asked to apply a skill must never run against nothing.
       runSkills,
-      // The three per-dispatch GENERATION settings — the workspace's own system prompt for the
-      // kind, the output-token ceiling, and the ROUTE order the block's preset prefers. Resolved
-      // HERE, once per dispatch in the engine, rather than in each executor, so the container /
-      // inline / consensus paths cannot disagree about what a step ran under.
+      // The per-dispatch GENERATION settings, ALL of them (`DispatchPromptSettings` enumerates
+      // them, so a new member is added there rather than restated here). Resolved HERE, once per
+      // dispatch in the engine, rather than in each executor, so the container / inline / consensus
+      // paths cannot disagree about what a step ran under.
       dispatchSettings,
       // The consensus config this dispatch actually runs under: the step's own config when it
       // authored inline participants, the workspace group its estimate earned when it named a
@@ -539,7 +549,7 @@ export class AgentContextBuilder {
       }),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
-      resolveDispatchSettings(this.deps, workspaceId, agentKind, step, block, instance.initiatedBy),
+      resolveDispatchSettings(this.deps, { workspaceId, agentKind, step, block, initiatedBy }),
       // A consensus step's TIER SET: resolve the named groups and materialise the one this
       // task's estimate earns. In the same read wave as the rest of the context, so a tiered
       // step costs one extra batched query and nothing else.
@@ -558,7 +568,7 @@ export class AgentContextBuilder {
       executionId: instance.id,
       // Carry the run initiator so the container executor can lease their OWN personal
       // (individual-usage) subscription for the step. Null on system/dev runs.
-      ...(instance.initiatedBy != null ? { initiatedByUserId: instance.initiatedBy } : {}),
+      ...(initiatedBy != null ? { initiatedByUserId: initiatedBy } : {}),
       stepIndex: instance.currentStep,
       // Per-step dispatch epoch (see AgentRunContext.dispatchEpoch): the count of fixer/helper
       // rounds this step has been through, so a re-dispatched job (the Tester re-test after a

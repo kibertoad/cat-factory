@@ -3730,7 +3730,7 @@
       "reachable": "Ulaşılabilir · model yok | Ulaşılabilir · {count} model | Ulaşılabilir · {count} model",
       "noModels": "Model bildirilmedi.",
       "enableModels": "Modelleri etkinleştir",
-      "imageInputHint": "Bazı yerel modeller ekran görüntülerini ve tasarım render'larını okuyabilir. Bu algılanamadığı için bir çalıştırma görselleri yalnızca görsel okuduğunu işaretlediğiniz modellere gönderir.",
+      "imageInputHint": "Bazı yerel modeller ekran görüntülerini ve tasarım render'larını okuyabilir. Bilinen model aileleri otomatik olarak tanınır ve her modeldeki Ayarlanmadı seçeneği hangi sonucu vereceğini belirtir; yalnızca metin niceleme ya da ince ayar gibi platformun bilemeyeceği bir yapı için bunu kendiniz ayarlayın.",
       "imageInputLabel": "{model} için görsel desteği",
       "imageInput": {
         "autoYes": "Ayarlanmadı: {family} görsel okur",
@@ -3750,6 +3750,7 @@
         "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
       },
       "blocked": "Bu çalıştırıcının URL adresi bu kurulumda izinli değil, bu nedenle modelleri seçicide gizlendi.",
+      "modelsDiscarded": "Bu çalıştırıcının etkin modellerinin bir kısmı okunamadı ve atıldı. İstediklerinizi yeniden seçip kaydedin.",
       "urlReason": {
         "invalid_url": "Bu geçerli bir URL değil.",
         "scheme_not_allowed": "Çalıştırıcı URL adresi http:// veya https:// ile başlamalıdır.",

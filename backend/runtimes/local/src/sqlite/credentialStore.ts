@@ -412,13 +412,15 @@ interface LocalEndpointRow {
 }
 
 function endpointRowToRecord(row: LocalEndpointRow): LocalModelEndpointRecord {
+  const { models, unreadable } = parseLocalModelDeclarations(row.models)
   return {
     userId: row.user_id,
     provider: row.provider as LocalRunner,
     label: row.label,
     baseUrl: row.base_url,
     apiKeyCipher: row.api_key_cipher,
-    models: parseLocalModelDeclarations(row.models),
+    models,
+    unreadableModels: unreadable,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

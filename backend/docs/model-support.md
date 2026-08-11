@@ -207,7 +207,19 @@ rather than as a text-only model. The run path gets the declarations from
 `AgentRunContext.localModelDeclarations`, resolved once per dispatch by the engine from the RUN
 INITIATOR's endpoints and folded in `resolveStepModelRef`, the one function the container, inline
 and consensus paths all resolve through. It cannot ride `ProviderCapabilities` or the boot-time
-`resolveBlockModel` closure: those answer whether a model may run and know no user.
+`resolveBlockModel` closure: those answer whether a model may run and know no user. **No
+declarations at all is the undeclared answer too, and the family table is NOT consulted for it**:
+"the initiator said nothing" and "nobody resolved any declarations for this dispatch" are different
+facts, and letting the table answer over the second would attach pictures to a build whose owner
+declared it text-only.
+
+**Which path can act on the answer is the HARNESS's question, and it is asked first.** A local ref
+names no harness, so a container dispatch runs it on Pi, and `HARNESS_IMAGE_INPUT.pi` is `false`:
+that dispatch reports `harness_no_image_input` without consulting the ref. So the delivery this
+buys today happens on the INLINE path, and the container path becomes a reader the day an
+image-carrying harness serves a local model, which is a `HARNESS_IMAGE_INPUT` edit rather than new
+plumbing. The declaration is resolved for every path regardless, because the winning model is not
+known until `resolveStepModelRef` has walked its sources.
 
 **`contextTokens` is deliberately NOT declared for a local model.** The window a runner actually
 serves is a fact about its CONFIG, not about the weights: Ollama's `num_ctx` default is far below

@@ -25,6 +25,7 @@ import type {
   IssueWritebackProvider,
   JudgeAssessor,
   JudgeRegistry,
+  LocalModelDeclarationsCacheValue,
   LocalModelEndpointRepository,
   Logger,
   ModelPresetCacheValue,
@@ -519,6 +520,14 @@ export interface ExecutionServiceDependencies {
    * `ModelPresetService` on every preset write.
    */
   modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
+  /**
+   * Optional: the {@link AppCaches.localModelDeclarations} slice, read-through for what the run
+   * INITIATOR declared about the locally-run models they enabled. Same profile as the preset slice
+   * above, keyed on the user rather than the workspace, and read by every dispatch for the same
+   * reason: the winning model is not known until the shared resolver has walked its sources. Absent
+   * → every dispatch hits the repository. Invalidated by the endpoint write paths.
+   */
+  localModelDeclarationsCache?: GroupCacheHandle<LocalModelDeclarationsCacheValue>
   /**
    * Optional: the merge track record — the per-class change classification the merge policy's
    * per-class rules key off, plus the best-effort record of every merge decision (and the

@@ -116,6 +116,10 @@ export class LocalModelEndpointService {
       baseUrl: input.baseUrl,
       apiKeyCipher,
       models: dedupe(input.models),
+      // What is about to be stored is exactly what the request validated, so nothing was discarded
+      // reading it. This write is also the FIX for a row that did lose entries: it replaces the
+      // whole blob, so the next read of it reports clean again.
+      unreadableModels: false,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     }
@@ -255,6 +259,7 @@ function toWire(
     baseUrl: record.baseUrl,
     hasApiKey: record.apiKeyCipher !== null,
     models: record.models,
+    unreadableModels: record.unreadableModels,
     urlBlockedReason,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,

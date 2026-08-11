@@ -97,6 +97,13 @@ export const localModelEndpointSchema = v.object({
   /** The models the user has enabled from this runner, with what they declared about each. */
   models: v.array(localModelDeclarationSchema),
   /**
+   * Whether part of this endpoint's stored model list could not be READ and was discarded (a row
+   * written before declarations existed held bare strings). Reported rather than swallowed because
+   * a discarded list and a runner nobody enabled a model on are the same `models: []` and opposite
+   * facts: only one of them is fixed by re-ticking, and nothing else anywhere would say so.
+   */
+  unreadableModels: v.boolean(),
+  /**
    * Why this stored endpoint is currently unusable under the deployment's runner-URL
    * policy, or `null` when it is fine. A row written while LAN hosts were permitted must
    * not keep rendering as healthy after an operator narrows the policy: the models it
