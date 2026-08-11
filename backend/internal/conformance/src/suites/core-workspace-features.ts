@@ -714,6 +714,39 @@ function registerEpicDependencyTests(harness: ConformanceHarness): void {
       // Empty input short-circuits to an empty result.
       expect(await repo.findByIds([])).toEqual([])
     })
+
+    it('getByExecution resolves the block a run is stamped on, and nothing otherwise', async () => {
+      // The run→block REVERSE link, read when a run row cannot be decoded and so names no block of
+      // its own: it is what stops the disposal of a poison run leaving the card wedged
+      // `in_progress` forever. Asserted per store because the column and its scoping are the only
+      // things it consists of, and a workspace-blind read here would hand one board's disposal
+      // another board's block.
+      const app = harness.makeApp()
+      const { workspace: wsA } = await app.createWorkspace()
+      const { workspace: wsB } = await app.createWorkspace()
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsA.id}/pipelines`, {
+        name: 'Code only',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const task = await app.call<Block>('POST', `/workspaces/${wsA.id}/blocks/blk_auth/tasks`, {
+        title: 'Stamped task',
+      })
+      const run = await app.call<{ id: string }>(
+        'POST',
+        `/workspaces/${wsA.id}/blocks/${task.body.id}/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(run.status).toBe(201)
+      const repo = app.blockRepository()
+      const found = await repo.getByExecution(wsA.id, run.body.id)
+      expect(found?.id).toBe(task.body.id)
+      // Scoped to the workspace: the same run id asked of another board resolves to nothing
+      // rather than to the block that happens to carry it elsewhere.
+      expect(await repo.getByExecution(wsB.id, run.body.id)).toBeNull()
+      // A run id no block carries is a real state (a cancel clears the link), not an error.
+      expect(await repo.getByExecution(wsA.id, 'exec_never_started')).toBeNull()
+    })
   })
 }
 

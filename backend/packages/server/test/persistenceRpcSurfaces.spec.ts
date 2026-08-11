@@ -49,6 +49,10 @@ describe('board-load read surface (workspace-scoped)', () => {
     { repo: 'bootstrapJobRepository', method: 'listByWorkspace', args: [] },
     { repo: 'executionRepository', method: 'listRecent', args: [{ limit: 10 }] },
     { repo: 'executionRepository', method: 'exists', args: ['exec_1'] },
+    // The run→block reverse link. It is on the DISPOSAL path of a run whose row cannot be decoded,
+    // so an unrouted method would leave a mothership-mode board's card wedged `in_progress` for
+    // good, with the run row settled and nothing on screen to say so.
+    { repo: 'blockRepository', method: 'getByExecution', args: ['exec_1'] },
     { repo: 'tokenUsageRepository', method: 'totalsSinceForWorkspace', args: [0] },
     { repo: 'requirementReviewRepository', method: 'getByBlock', args: ['blk_1'] },
     { repo: 'clarityReviewRepository', method: 'getByBlock', args: ['blk_1'] },

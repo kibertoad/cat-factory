@@ -3789,6 +3789,7 @@
       "rejected": "Rifiutata",
       "companion_rejected": "Companion rifiutato",
       "stalled": "In stallo",
+      "state_unreadable": "Stato illeggibile",
       "cancelled": "Annullata",
       "unknown": "Sconosciuto"
     },

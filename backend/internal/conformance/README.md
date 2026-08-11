@@ -56,3 +56,8 @@ catalog owes each of those suites is in
   author: `seedLegacyPipeline` writes a pipeline shape the save boundary now refuses, because the
   engine still has to handle the rows that predate the rule. Reaching for it to skip a validation
   that WOULD accept your shape is how a suite stops testing the product.
+- **A suite about a row NO write path may produce rides a RAW seed seam instead**, and says so:
+  `defineUndecodableRunSuite` needs an `agent_runs` row the write-side guard now refuses to compose,
+  so it seeds through `PlatformMetricsSeed` (shared with `definePlatformMetricsSuite`, whose entry
+  points are the two `platform-metrics.spec.ts` files rather than the table above). That is the
+  narrow case: a raw seam reached for anything the API can author is the previous bullet's trap.

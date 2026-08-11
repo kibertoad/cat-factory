@@ -633,3 +633,25 @@ members at large is strictly more leakage for the same remedy.
 "asked, and there is none" is a subscription to connect, where "there was nobody to ask" is a token to
 mint in the app instead of through `POST /api/v1/keys`. A client that collapses them is back to
 sending an operator to a screen that was already correct.
+
+1.48.0, not 1.47.0: one additive enum member, `state_unreadable`, on the failure kind the
+run-debugging reads report. A consumer built against 1.47.0 keeps parsing (the SDKs tolerate an
+unknown member by design), and no existing value changes meaning. Written against 1.47.0 and moved
+once main published the `GET /api/v1/models` pair above under that number, the same collision the
+entry above describes: both sides wrote `'1.47.0'`, the version LINE auto-merged, and only the prose
+came back as a conflict.
+
+What a consumer NOTICES is a kind that could not previously be produced at all, because the runs it
+describes could not previously be settled: a run whose stored row violates its own contract. Every
+richer settle path begins by READING the run, so such a row used to stay `running` forever while
+each recovery attempt threw on the load. It is now closed through the one write that decodes
+nothing, and the kind says which runs those were rather than filing them under `stalled`, whose
+whole advice is "retry" and whose retry would re-read the same row.
+
+Where the kind actually surfaces is the operator's failure-kind breakdown, which aggregates the
+`failure` column in SQL and so can report a row nothing can decode. It is deliberately NOT reachable
+from the ordinary run reads, and that includes the debug ones: `GET /debug/runs` drops such a row
+from its page and `GET /debug/runs/:runId` answers 500, because both decode the run before they
+project it and the whole premise of this kind is that the decode fails. A consumer holding the id of
+a `state_unreadable` run therefore sees it in the aggregate and cannot fetch it, which is the honest
+outcome: the row is beyond what an API can say about it, and the fix is a person at the data.

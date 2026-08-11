@@ -231,6 +231,33 @@ describe('rowToExecution', () => {
     expect(() => rowToExecution({ ...base, block_id: null })).toThrow(DataIntegrityError)
   })
 
+  // The WRITE side of the same rule. A blockless run row is not just unreadable, it is
+  // un-disposable (every settle path re-reads it on the way in), and by the time the read guard
+  // above trips, the write that produced it is long gone. Refusing at compose time is what makes
+  // the offending writer, rather than a sweeper hours later, the thing that reports the fault.
+  // Both facades' `upsert`/`insertLive`/`compareAndSwap` compose their detail JSON here, which is
+  // what makes this the one place a new write path cannot forget to pass through.
+  it('refuses to compose the stored detail for a run carrying no blockId', () => {
+    const instance = rowToExecution(base)
+    expect(() => executionToDetail({ ...instance, blockId: '' })).toThrow(DataIntegrityError)
+    expect(() => executionToDetail(instance)).not.toThrow()
+  })
+
+  it('refuses to compose the stored detail for an out-of-bounds cursor too', () => {
+    // The write guard has to assert EVERY invariant the read refuses, not just the one that
+    // motivated it: a writer that truncated `steps` while leaving the cursor where it was composes
+    // cleanly under a blockId-only guard, and the row it stores is exactly as un-loadable. The
+    // upper bound is the legitimate "ran off the end" cursor, so it must still be accepted.
+    const instance = rowToExecution(base)
+    expect(() => executionToDetail({ ...instance, steps: [], currentStep: 1 })).toThrow(
+      DataIntegrityError,
+    )
+    expect(() => executionToDetail({ ...instance, currentStep: -1 })).toThrow(DataIntegrityError)
+    expect(() =>
+      executionToDetail({ ...instance, currentStep: instance.steps.length }),
+    ).not.toThrow()
+  })
+
   it('rejects an out-of-bounds currentStep', () => {
     const detail = JSON.stringify({
       pipelineId: 'pl',

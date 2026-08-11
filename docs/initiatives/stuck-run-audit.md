@@ -44,6 +44,20 @@ supposed to catch it:
    `paused` run is _deliberately invisible_ to the sweepers: its only recovery is a human
    acting on a signal (an inbox notification card, escalated yellow → red by the periodic
    sweep). This makes the notification the load-bearing recovery path for every park.
+   Four properties of the pass itself were added later and are worth measuring a finding
+   against. Each run is recovered inside a PER-RUN boundary (one that throws is logged, counted
+   as `sweep.run_recovery_failed` and skipped, never ending the pass). A run whose stored row
+   cannot be DECODED is settled `state_unreadable` through the SQL-only terminal write rather
+   than re-listed forever, since every richer settle path begins by reading it, and the owning
+   BLOCK is dropped to `blocked` through the reverse link (`BlockRepository.getByExecution`),
+   because the run row is gone from the board snapshot and a card left `in_progress` has no
+   failure card and no Retry. That disposal is gated on the integrity FAULT and fires only for a
+   structurally `malformed` row: a value this build does not RECOGNISE is a fact about the
+   reader, so during a rolling deploy an older replica would otherwise destroy live runs the
+   newer one wrote. And a pass that took runs on and recovered NONE of them reports itself as a
+   FAILED pass (`sweepPassRecoveredNothing`), since per-run isolation means such a pass now
+   completes, and a success recorded there would reset `sweep_degraded` on the wedged sweeper
+   that condition exists to catch.
 2. **In-drive poll budgets**: `jobMaxPolls` (~70 min) / `ciMaxPolls` +
    `jobPollFailureTolerance` (6) bound every `awaiting_job` / `awaiting_gate` wait, ending in
    `failRun('timeout')` or `resolveGatePollExhaustion`.

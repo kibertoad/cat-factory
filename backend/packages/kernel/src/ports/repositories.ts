@@ -127,6 +127,20 @@ export interface BlockRepository {
   listByServices(serviceIds: string[]): Promise<Block[]>
   get(workspaceId: string, id: string): Promise<Block | null>
   /**
+   * The block currently running `executionId`, read off the `execution_id` REVERSE LINK a run
+   * start/retry stamps on it, or null when no block in this workspace carries that run.
+   *
+   * It exists for the one case where the run itself cannot answer: a run row that fails its own
+   * decode names no block, and yet the block naming the RUN is right there. Without this the
+   * disposal of a poison run settles the row and leaves the card wedged `in_progress` forever, with
+   * the run dropped from the board snapshot so there is no failure card and no Retry either.
+   *
+   * At most one block matches: the id is minted per run and only the block the run was started on
+   * is ever stamped with it. Cheap without an index of its own, being anchored on the
+   * `(workspace_id, …)` primary-key prefix over one board's blocks.
+   */
+  getByExecution(workspaceId: string, executionId: string): Promise<Block | null>
+  /**
    * Resolve a block by its (globally unique) id, regardless of which workspace homes it,
    * returning the block plus its home `workspaceId` and its `serviceId` (or null). Backs
    * the shared-board mutation path: a block belonging to a service mounted from another

@@ -62,7 +62,7 @@ const API_PREFIX = '/api/v1'
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.47.0'
+const API_VERSION = '1.48.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

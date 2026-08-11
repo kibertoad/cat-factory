@@ -42,6 +42,16 @@ export type OperationalCounter =
    * backstop stopped backstopping, which matters more than any single run it did not recover.
    */
   | 'sweep.run_state_unknown'
+  /**
+   * Recovering ONE stale run threw, so the sweeper skipped it and carried on with the rest of
+   * the pass. Dimensioned by `kind`, like its siblings.
+   *
+   * Counted apart from `sweep.failed` (a whole pass throwing) because the two now mean opposite
+   * things about the fleet: a pass that survives a poison run keeps recovering everything else,
+   * and this is the only number that says one run is permanently unrecoverable. A run that
+   * cannot even be read is the worked example, and it sorts to the FRONT of every future pass.
+   */
+  | 'sweep.run_recovery_failed'
   /** A sweeper pass threw. Dimensioned by `sweep`, so one sick sweeper is identifiable. */
   | 'sweep.failed'
   /** A container job dispatch threw — the job never existed, so no poll can report it. */

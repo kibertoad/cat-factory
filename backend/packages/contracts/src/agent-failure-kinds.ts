@@ -51,6 +51,12 @@ export const agentFailureKindSchema = v.picklist([
   // not recover it within the hard-stall deadline — so it is failed for human attention
   // instead of spinning `running` forever with no progress. Retry spins a fresh run.
   'stalled',
+  // The run's own stored row could not be decoded (a column that must never be null, an
+  // out-of-contract enum), so no driver can resume it and no board can render it. Written
+  // by the engine straight through the SQL-only terminal write, because every richer path
+  // begins by reading the row that cannot be read. Distinct from `stalled`, whose advice is
+  // "retry": a retry re-reads the same unreadable row, so this one needs a human at the data.
+  'state_unreadable',
   'cancelled',
   'unknown',
 ])

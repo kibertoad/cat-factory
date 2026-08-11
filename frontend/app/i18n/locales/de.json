@@ -3789,6 +3789,7 @@
       "rejected": "Abgelehnt",
       "companion_rejected": "Begleiter abgelehnt",
       "stalled": "Hängengeblieben",
+      "state_unreadable": "Zustand unlesbar",
       "cancelled": "Abgebrochen",
       "unknown": "Unbekannt"
     },

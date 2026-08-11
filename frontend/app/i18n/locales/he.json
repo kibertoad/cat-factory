@@ -1784,6 +1784,7 @@
       "rejected": "נדחתה",
       "companion_rejected": "המלווה נדחה",
       "stalled": "נתקעה",
+      "state_unreadable": "מצב בלתי קריא",
       "cancelled": "בוטלה",
       "unknown": "לא ידוע"
     },

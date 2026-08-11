@@ -1784,6 +1784,7 @@
       "rejected": "Rechazada",
       "companion_rejected": "Acompañante rechazado",
       "stalled": "Estancada",
+      "state_unreadable": "Estado ilegible",
       "cancelled": "Cancelada",
       "unknown": "Desconocido"
     },

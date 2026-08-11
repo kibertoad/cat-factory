@@ -24,6 +24,7 @@ public enum DebugRunFailureKind {
     REJECTED("rejected"),
     COMPANION_REJECTED("companion_rejected"),
     STALLED("stalled"),
+    STATE_UNREADABLE("state_unreadable"),
     CANCELLED("cancelled"),
     UNKNOWN("unknown"),
 

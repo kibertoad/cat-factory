@@ -92,6 +92,7 @@ export {
   type PlatformMetricsSeed,
   type PlatformMetricsSeedRun,
 } from './platform-metrics-suite.js'
+export { defineUndecodableRunSuite, type UndecodableRunDeps } from './undecodable-run-suite.js'
 export { defineGateOutcomeSuite, type GateOutcomeSeed } from './gate-outcome-suite.js'
 export { defineNotificationSettingsSuite } from './notification-settings-suite.js'
 export {

@@ -1157,6 +1157,14 @@ The **generic persistence-RPC** spine is the template every later slice follows:
   passed-in instance before resolving: the optimistic-concurrency contract the engine relies on.
 - **`DomainError` re-throw.** `ConflictError`/`assertFound` etc. must be re-thrown client-side from
   an error code in the envelope, so CAS-retry / 404 control flow is preserved.
+- **`DataIntegrityError` re-throw, WITH its fault.** The one other throw that may not be flattened
+  into the opaque `internal` 500, and the reason is that the node's ENGINE branches on it: a run row
+  the mothership cannot decode is DISPOSED of rather than re-driven forever, and only for the
+  `malformed` fault. Relayed as a plain `Error`, `isDataIntegrityError` answers false and the
+  disposal silently does nothing on the one deployment shape whose operator has no database in
+  front of them. The fault rides `details.fault`, and a value the reading node does not know falls
+  back to the SAFE half of the vocabulary, so it declines to destroy a run over a difference in
+  builds. Anything else still becomes an opaque 500 with its message suppressed.
 - **`Clock` / `IdGenerator` stay local**, never serialized.
 
 ### The local-sqlite bucket pattern (credentials + settings)
@@ -1236,78 +1244,78 @@ never remotely invocable (mothership-internal cron).
 
 **Org / durable (remote: the mothership RPC):**
 
-| Port                                     | Status  | Remote surface / what's still off                                                                  |
-| ---------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
-| `workspaceRepository`                    | ✅ done | board reads + rename/setDescription; `create` onboarding, `delete` sweeper                         |
-| `blockRepository`                        | ◑ part  | board/run reads+writes + public-API `countActiveInternal`; unbatched `listByService` unused        |
-| `executionRepository` (CAS/rev)          | ◑ part  | run surface; `listByService` pending, `listStale` sweeper                                          |
-| `pipelineRepository`                     | ✅ done | full CRUD + `insertIfAbsent` (run-path catalog adoption)                                           |
-| `accountRepository`                      | ✅ done | reads only; `rename`/`updateSettings` admin, `create`/`ensurePersonal` onboarding                  |
-| `membershipRepository`                   | ✅ done | reads only; `upsert`/`remove` admin                                                                |
-| `userSettingsRepository`                 | ✅ done | self-scoped get/upsert (user-tier budget)                                                          |
-| `riskPolicyRepository` (merge presets)   | ✅ done | full library CRUD                                                                                  |
-| `modelPresetRepository`                  | ✅ done | full library CRUD                                                                                  |
-| `sharedStackRepository`                  | ✅ done | full library CRUD                                                                                  |
-| `workspaceSettingsRepository`            | ✅ done | get/upsert; `listByWorkspaceIds` sweeper                                                           |
-| `serviceFragmentDefaultsRepository`      | ✅ done | get/set                                                                                            |
-| `taskTypeSuppressionRepository`          | ✅ done | list/suppress/restore (board load + creation refusal)                                              |
-| `trackerSettingsRepository`              | ✅ done | get/put                                                                                            |
-| `pipelineScheduleRepository`             | ◑ part  | schedule mgmt + runNow; `listByService` pending, sweeper reads internal                            |
-| `serviceRepository`                      | ◑ part  | mount + board-composition + run-path reads; CRUD/`getByRepo` pending (GitHub sync)                 |
-| `workspaceMountRepository`               | ◑ part  | mount mgmt + the per-publish fan-out read; batch cleanup / rehome reads pending                    |
-| `notificationRepository`                 | ✅ done | inbox read/act/dismiss/escalate; retention prune sweeper                                           |
-| `requirementReviewRepository`            | ✅ done | full get/upsert/deleteByBlock                                                                      |
-| `docInterviewRepository`                 | ✅ done | run-path + interview window get/upsert/deleteByBlock                                               |
-| `clarityReviewRepository`                | ✅ done | full get/upsert/deleteByBlock                                                                      |
-| `brainstormSessionRepository`            | ✅ done | full get/upsert/deleteByBlockStage                                                                 |
-| `consensusSessionRepository`             | ✅ done | full get/upsert                                                                                    |
-| `initiativeRepository`                   | ✅ done | CRUD + rev-CAS; `listExecuting` sweeper                                                            |
-| `kaizenGradingRepository`                | ◑ part  | run-path + screen reads; single-grade `get` internal, sweep reads internal                         |
-| `kaizenVerifiedComboRepository`          | ◑ part  | `getByKey`/`listByWorkspace`; `upsert` (streak write) pending                                      |
-| `agentRunRepository`                     | ✅ done | `getRef` (retry/stop entry); sweeper reads internal                                                |
-| `bootstrapJobRepository`                 | ✅ done | start/poll/retry/stop mgmt; `listByService` pending                                                |
-| `referenceArchitectureRepository`        | ✅ done | full library CRUD + retry re-resolve                                                               |
-| `envConfigRepairJobRepository`           | ✅ done | full run-mgmt (list/get/insert/update)                                                             |
-| `environmentTestRunRepository`           | ✅ done | whole repo; full self-test still gated on provisioning writes below                                |
-| `environmentConnectionRepository`        | ✅ done | connection + handler mgmt (sealed `secretsCipher`)                                                 |
-| `customManifestTypeRepository`           | ✅ done | full catalog CRUD (no secrets)                                                                     |
-| `environmentRegistryRepository`          | ◑ part  | reads + provision writes (`insert`/`update`); access cipher opened via `/internal/secrets/*`       |
-| `observabilityConnectionRepository`      | ✅ done | settings CRUD (sealed) + the gate probe (opened via `/internal/secrets/unseal`)                    |
-| `releaseHealthConfigRepository`          | ✅ done | per-block config CRUD                                                                              |
-| `incidentEnrichmentConnectionRepository` | ✅ done | settings CRUD (sealed)                                                                             |
-| `packageRegistryConnectionRepository`    | ✅ done | settings + decrypt-time reads (sealed)                                                             |
-| `testSecretsRepository`                  | ◑ part  | inspector CRUD + run-path read (sealed); `listByWorkspace` no consumer yet                         |
-| `runnerPoolConnectionRepository`         | ✅ done | connect/rotate/disconnect (sealed `secretsCipher`)                                                 |
-| `binaryArtifactMetadataStore` (metadata) | ✅ done | metadata CRUD; bytes → per-account blob backend; retention sweeper                                 |
-| `slackConnectionRepository`              | ✅ done | connect/disconnect (sealed `tokenCipher`); `getByTeam` inbound-OAuth internal                      |
-| `slackSettingsRepository`                | ✅ done | per-workspace routing (no secrets)                                                                 |
-| `slackMemberMappingRepository`           | ✅ done | per-account mention map (no secrets)                                                               |
-| `promptFragmentRepository`               | ✅ done | owner-scoped library mgmt + the source-keyed sync pair (`librarySource`)                           |
-| `fragmentSourceRepository`               | ✅ done | owner-scoped list + link + id-keyed sync mgmt; `upsert` binds the stored row (`ownerFieldUpsert`)  |
-| `fragmentBriefRepository`                | ✅ done | owner-scoped generated briefs, read + written on the run path                                      |
-| `foundationalServiceRepository`          | ✅ done | owner-scoped catalog CRUD (run path) + the source-keyed sync pair                                  |
-| `apiContractRepository`                  | ✅ done | owner-scoped contract manifest + per-service replace/delete                                        |
-| `foundationalServiceSourceRepository`    | ✅ done | owner-scoped list + link + id-keyed sync mgmt; `listStale`/`listByRepo` internal                   |
-| `accountSkillRepository`                 | ✅ done | whole repo: catalog reads (run path) + the source-keyed sync writes                                |
-| `skillSourceRepository`                  | ✅ done | account list + link + the id-keyed sync mgmt; global `listByRepo` internal                         |
-| `documentRepository`                     | ✅ done | whole repo: run-path context reads + import/link writes + the WS1 role-link surface                |
-| `documentConnectionRepository`           | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)        |
-| `taskRepository`                         | ✅ done | whole repo: run-path context reads + import/link writes + the atomic `claimBlockLink`              |
-| `taskConnectionRepository`               | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)        |
-| `taskSourceSettingsRepository`           | ✅ done | the per-workspace source on/off toggles (no secrets)                                               |
-| `reviewQuestionPostRepository`           | ✅ done | engine-written park writeback markers: claim/settle/get on `workspaceField`                        |
-| `trackerCommentIngestRepository`         | n/a     | inbound webhook dedupe: written where a delivery ARRIVES, which is never a node                    |
-| `githubInstallationRepository`           | ◑ part  | `getByWorkspace` + `listActiveForAccount` run-path reads; id-keyed / sync writes pending           |
-| `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal            |
-| `branchProjectionRepository`             | ◑ part  | `listByRepo` read; `upsertMany` sync pending                                                       |
-| `pullRequestProjectionRepository`        | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                                |
-| `issueProjectionRepository`              | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                                |
-| `commitProjectionRepository`             | ⬜ todo | sync-write slice (all pending/sweeper/helper)                                                      |
-| `checkRunProjectionRepository`           | ⬜ todo | sync-write slice (all pending)                                                                     |
-| `userRepository`                         | ◑ part  | member-display reads (`get`/`listByIds`, co-membership scope); identity/auth reads leak hash → off |
-| `invitationRepository`                   | ◑ part  | `listByAccount` read; `create`/`setStatus` admin, accept-invite lookups pre-auth                   |
-| `emailConnectionRepository`              | ◑ part  | `getByAccount` read (sealed); connect/disconnect admin                                             |
-| `passwordResetTokenRepository`           | ⬜ todo | pre-auth flow (all pending; `deleteExpired` sweeper)                                               |
+| Port                                     | Status  | Remote surface / what's still off                                                                                                     |
+| ---------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspaceRepository`                    | ✅ done | board reads + rename/setDescription; `create` onboarding, `delete` sweeper                                                            |
+| `blockRepository`                        | ◑ part  | board/run reads+writes (incl. the `getByExecution` reverse link) + public-API `countActiveInternal`; unbatched `listByService` unused |
+| `executionRepository` (CAS/rev)          | ◑ part  | run surface; `listByService` pending, `listStale` sweeper                                                                             |
+| `pipelineRepository`                     | ✅ done | full CRUD + `insertIfAbsent` (run-path catalog adoption)                                                                              |
+| `accountRepository`                      | ✅ done | reads only; `rename`/`updateSettings` admin, `create`/`ensurePersonal` onboarding                                                     |
+| `membershipRepository`                   | ✅ done | reads only; `upsert`/`remove` admin                                                                                                   |
+| `userSettingsRepository`                 | ✅ done | self-scoped get/upsert (user-tier budget)                                                                                             |
+| `riskPolicyRepository` (merge presets)   | ✅ done | full library CRUD                                                                                                                     |
+| `modelPresetRepository`                  | ✅ done | full library CRUD                                                                                                                     |
+| `sharedStackRepository`                  | ✅ done | full library CRUD                                                                                                                     |
+| `workspaceSettingsRepository`            | ✅ done | get/upsert; `listByWorkspaceIds` sweeper                                                                                              |
+| `serviceFragmentDefaultsRepository`      | ✅ done | get/set                                                                                                                               |
+| `taskTypeSuppressionRepository`          | ✅ done | list/suppress/restore (board load + creation refusal)                                                                                 |
+| `trackerSettingsRepository`              | ✅ done | get/put                                                                                                                               |
+| `pipelineScheduleRepository`             | ◑ part  | schedule mgmt + runNow; `listByService` pending, sweeper reads internal                                                               |
+| `serviceRepository`                      | ◑ part  | mount + board-composition + run-path reads; CRUD/`getByRepo` pending (GitHub sync)                                                    |
+| `workspaceMountRepository`               | ◑ part  | mount mgmt + the per-publish fan-out read; batch cleanup / rehome reads pending                                                       |
+| `notificationRepository`                 | ✅ done | inbox read/act/dismiss/escalate; retention prune sweeper                                                                              |
+| `requirementReviewRepository`            | ✅ done | full get/upsert/deleteByBlock                                                                                                         |
+| `docInterviewRepository`                 | ✅ done | run-path + interview window get/upsert/deleteByBlock                                                                                  |
+| `clarityReviewRepository`                | ✅ done | full get/upsert/deleteByBlock                                                                                                         |
+| `brainstormSessionRepository`            | ✅ done | full get/upsert/deleteByBlockStage                                                                                                    |
+| `consensusSessionRepository`             | ✅ done | full get/upsert                                                                                                                       |
+| `initiativeRepository`                   | ✅ done | CRUD + rev-CAS; `listExecuting` sweeper                                                                                               |
+| `kaizenGradingRepository`                | ◑ part  | run-path + screen reads; single-grade `get` internal, sweep reads internal                                                            |
+| `kaizenVerifiedComboRepository`          | ◑ part  | `getByKey`/`listByWorkspace`; `upsert` (streak write) pending                                                                         |
+| `agentRunRepository`                     | ✅ done | `getRef` (retry/stop entry); sweeper reads internal                                                                                   |
+| `bootstrapJobRepository`                 | ✅ done | start/poll/retry/stop mgmt; `listByService` pending                                                                                   |
+| `referenceArchitectureRepository`        | ✅ done | full library CRUD + retry re-resolve                                                                                                  |
+| `envConfigRepairJobRepository`           | ✅ done | full run-mgmt (list/get/insert/update)                                                                                                |
+| `environmentTestRunRepository`           | ✅ done | whole repo; full self-test still gated on provisioning writes below                                                                   |
+| `environmentConnectionRepository`        | ✅ done | connection + handler mgmt (sealed `secretsCipher`)                                                                                    |
+| `customManifestTypeRepository`           | ✅ done | full catalog CRUD (no secrets)                                                                                                        |
+| `environmentRegistryRepository`          | ◑ part  | reads + provision writes (`insert`/`update`); access cipher opened via `/internal/secrets/*`                                          |
+| `observabilityConnectionRepository`      | ✅ done | settings CRUD (sealed) + the gate probe (opened via `/internal/secrets/unseal`)                                                       |
+| `releaseHealthConfigRepository`          | ✅ done | per-block config CRUD                                                                                                                 |
+| `incidentEnrichmentConnectionRepository` | ✅ done | settings CRUD (sealed)                                                                                                                |
+| `packageRegistryConnectionRepository`    | ✅ done | settings + decrypt-time reads (sealed)                                                                                                |
+| `testSecretsRepository`                  | ◑ part  | inspector CRUD + run-path read (sealed); `listByWorkspace` no consumer yet                                                            |
+| `runnerPoolConnectionRepository`         | ✅ done | connect/rotate/disconnect (sealed `secretsCipher`)                                                                                    |
+| `binaryArtifactMetadataStore` (metadata) | ✅ done | metadata CRUD; bytes → per-account blob backend; retention sweeper                                                                    |
+| `slackConnectionRepository`              | ✅ done | connect/disconnect (sealed `tokenCipher`); `getByTeam` inbound-OAuth internal                                                         |
+| `slackSettingsRepository`                | ✅ done | per-workspace routing (no secrets)                                                                                                    |
+| `slackMemberMappingRepository`           | ✅ done | per-account mention map (no secrets)                                                                                                  |
+| `promptFragmentRepository`               | ✅ done | owner-scoped library mgmt + the source-keyed sync pair (`librarySource`)                                                              |
+| `fragmentSourceRepository`               | ✅ done | owner-scoped list + link + id-keyed sync mgmt; `upsert` binds the stored row (`ownerFieldUpsert`)                                     |
+| `fragmentBriefRepository`                | ✅ done | owner-scoped generated briefs, read + written on the run path                                                                         |
+| `foundationalServiceRepository`          | ✅ done | owner-scoped catalog CRUD (run path) + the source-keyed sync pair                                                                     |
+| `apiContractRepository`                  | ✅ done | owner-scoped contract manifest + per-service replace/delete                                                                           |
+| `foundationalServiceSourceRepository`    | ✅ done | owner-scoped list + link + id-keyed sync mgmt; `listStale`/`listByRepo` internal                                                      |
+| `accountSkillRepository`                 | ✅ done | whole repo: catalog reads (run path) + the source-keyed sync writes                                                                   |
+| `skillSourceRepository`                  | ✅ done | account list + link + the id-keyed sync mgmt; global `listByRepo` internal                                                            |
+| `documentRepository`                     | ✅ done | whole repo: run-path context reads + import/link writes + the WS1 role-link surface                                                   |
+| `documentConnectionRepository`           | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)                                           |
+| `taskRepository`                         | ✅ done | whole repo: run-path context reads + import/link writes + the atomic `claimBlockLink`                                                 |
+| `taskConnectionRepository`               | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)                                           |
+| `taskSourceSettingsRepository`           | ✅ done | the per-workspace source on/off toggles (no secrets)                                                                                  |
+| `reviewQuestionPostRepository`           | ✅ done | engine-written park writeback markers: claim/settle/get on `workspaceField`                                                           |
+| `trackerCommentIngestRepository`         | n/a     | inbound webhook dedupe: written where a delivery ARRIVES, which is never a node                                                       |
+| `githubInstallationRepository`           | ◑ part  | `getByWorkspace` + `listActiveForAccount` run-path reads; id-keyed / sync writes pending                                              |
+| `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal                                               |
+| `branchProjectionRepository`             | ◑ part  | `listByRepo` read; `upsertMany` sync pending                                                                                          |
+| `pullRequestProjectionRepository`        | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                                                                   |
+| `issueProjectionRepository`              | ◑ part  | `listByWorkspace` read; sync/per-repo reads pending                                                                                   |
+| `commitProjectionRepository`             | ⬜ todo | sync-write slice (all pending/sweeper/helper)                                                                                         |
+| `checkRunProjectionRepository`           | ⬜ todo | sync-write slice (all pending)                                                                                                        |
+| `userRepository`                         | ◑ part  | member-display reads (`get`/`listByIds`, co-membership scope); identity/auth reads leak hash → off                                    |
+| `invitationRepository`                   | ◑ part  | `listByAccount` read; `create`/`setStatus` admin, accept-invite lookups pre-auth                                                      |
+| `emailConnectionRepository`              | ◑ part  | `getByAccount` read (sealed); connect/disconnect admin                                                                                |
+| `passwordResetTokenRepository`           | ⬜ todo | pre-auth flow (all pending; `deleteExpired` sweeper)                                                                                  |
 
 **Dispatch-time document freshness now RUNS on a mothership node, and the shape of the fix is the
 reusable part.** The linked-context refresh (`LinkedDocumentRefreshService`) probes each linked

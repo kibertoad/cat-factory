@@ -1,7 +1,12 @@
-import type { OperationalMetrics, WorkRunner } from '@cat-factory/kernel'
+import type { OperationalMetrics, StaleAgentRun, WorkRunner } from '@cat-factory/kernel'
 import { createQueueWithDeadLetter } from './deadLetter.js'
-import { getErrorMessage, runBestEffort } from '@cat-factory/kernel'
-import type { Logger, ServerContainer, SweepHealthTracker } from '@cat-factory/server'
+import { describeError, getErrorMessage, runBestEffort } from '@cat-factory/kernel'
+import {
+  type Logger,
+  type ServerContainer,
+  type SweepHealthTracker,
+  sweepPassRecoveredNothing,
+} from '@cat-factory/server'
 import type { Job, JobInsert, PgBoss, SendOptions } from 'pg-boss'
 import { BOOTSTRAP_QUEUE, reenqueueStaleBootstrap } from './bootstrapRunner.js'
 import { ENV_CONFIG_REPAIR_QUEUE, reenqueueStaleEnvConfigRepair } from './envConfigRepairRunner.js'
@@ -259,6 +264,188 @@ function queueForKind(kind: string): string | null {
   return null
 }
 
+/** What {@link createStaleRunRecovery} needs, as bound callbacks over the facade's own wiring. */
+interface StaleRunRecoveryDeps {
+  boss: PgBoss
+  jobs: JobStore
+  /** Bump this run's persisted re-drive counter, returning the new total. */
+  recordRedrive(workspaceId: string, id: string): Promise<number>
+  /** Settle a run the recovery could not resume (the hard-stall backstop's terminal write). */
+  failRun(workspaceId: string, executionId: string, message: string): Promise<void>
+  hardStallMs: number
+  /** A heartbeat older than this means a dead worker, not a long drive. */
+  staleHeartbeatMs: number
+  queueOptions: AdvanceQueueOptions
+  /**
+   * The sweeper's per-PROCESS "first observed orphaned" clock, keyed by run id, SHARED with the
+   * caller: the recovery writes and prunes entries, and the caller's own prune loop reads it. Passed
+   * in rather than owned here because its lifetime is the sweeper's, not one pass's.
+   */
+  orphanedSince: Map<string, number>
+  log: Logger
+  metrics: OperationalMetrics
+}
+
+/**
+ * One tick's stale-run RECOVERY: classify each run's advance job, reclaim an orphaned one, apply the
+ * hard-stall backstop, and re-drive per kind.
+ *
+ * Extracted from `startStaleRunSweeper` so the per-run isolation and the pass's own tally have a home
+ * of their own; the sweeper it left behind owns the interval, the spend-paused resume and the health
+ * report it builds from that tally.
+ */
+function createStaleRunRecovery(deps: StaleRunRecoveryDeps) {
+  const { boss, jobs, hardStallMs, staleHeartbeatMs, queueOptions, orphanedSince, log, metrics } =
+    deps
+  // Count a re-drive, in memory and on the run itself. The persisted half is best-effort and
+  // runs AFTER the re-enqueue: it is bookkeeping about the recovery and must never be able to
+  // fail one, and a counter claiming a re-drive that did not happen is worse than a missed one.
+  // The `orphanedSince` map answers "still orphaned this tick"; only the column survives a
+  // restart, which is what makes "how many times has THIS run been re-driven" answerable.
+  const countRedrive = async (ref: { workspaceId: string; id: string; kind: string }) => {
+    metrics.increment('sweep.run_redriven', { kind: ref.kind })
+    await runBestEffort(log, 'sweep.recordRedrive', () =>
+      deps.recordRedrive(ref.workspaceId, ref.id),
+    )
+  }
+  // Recover ONE stale run: reclaim an orphaned advance job, apply the hard-stall backstop, and
+  // re-drive (per kind). Records into `keepOrphanClock` whether this run's per-process orphaned
+  // clock must survive the tick (so the caller can forget the ones that recovered) and pushes an
+  // execution re-drive into `advanceReenqueues` for the caller's single batch insert.
+  const recoverStaleRun = async (
+    ref: StaleAgentRun,
+    now: number,
+    keepOrphanClock: Set<string>,
+    advanceReenqueues: JobInsert<AdvanceJob>[],
+  ): Promise<void> => {
+    const queue = queueForKind(ref.kind)
+    if (!queue) return
+
+    // Distinguish a healthy long drive (heartbeating) from an orphaned job whose worker
+    // died, so we recover the orphan instead of silently no-op re-sending onto it.
+    const { state, jobId } = await classifyAdvanceJob(jobs, queue, ref.id, staleHeartbeatMs, now)
+    if (state === 'live') {
+      orphanedSince.delete(ref.id)
+      return
+    }
+    // Start (or carry forward) this run's per-process orphaned clock.
+    const firstSeenOrphaned = orphanedSince.get(ref.id) ?? now
+    orphanedSince.set(ref.id, firstSeenOrphaned)
+    keepOrphanClock.add(ref.id)
+
+    if (state === 'orphaned' && jobId) {
+      log.warn('reclaiming orphaned advance job (dead worker) before re-drive', {
+        workspaceId: ref.workspaceId,
+        runId: ref.id,
+        kind: ref.kind,
+        jobId,
+      })
+      await reclaimAdvanceJob(boss, queue, jobId).catch((err) =>
+        log.error('failed to reclaim orphaned advance job', {
+          runId: ref.id,
+          err: getErrorMessage(err),
+        }),
+      )
+    }
+
+    // Hard-stall backstop (execution only): a run this process has been unable to recover
+    // for the whole deadline — re-driven on earlier ticks yet still not live — is failed
+    // rather than left spinning `running`. Gated on the per-process clock (not lease age),
+    // so a run first seen orphaned this tick (e.g. right after a long downtime) is always
+    // re-driven at least once below before it can ever be given up on.
+    if (ref.kind === 'execution' && now - firstSeenOrphaned > hardStallMs) {
+      const mins = Math.round((now - ref.updatedAt) / 60_000)
+      log.warn('run stalled past hard deadline; recovery could not resume it; failing', {
+        workspaceId: ref.workspaceId,
+        executionId: ref.id,
+        staleMinutes: mins,
+      })
+      await deps.failRun(
+        ref.workspaceId,
+        ref.id,
+        `Run stalled: no progress for ${mins} minutes and recovery could not resume it.`,
+      )
+      orphanedSince.delete(ref.id)
+      keepOrphanClock.delete(ref.id)
+      // The run KIND is a bounded enum and the split that matters: bootstrap runs and
+      // execution runs are lost for different reasons and fixed in different places.
+      metrics.increment('sweep.run_stalled', { kind: ref.kind })
+      return
+    }
+
+    if (ref.kind === 'bootstrap') {
+      log.warn('re-driving stale bootstrap', { workspaceId: ref.workspaceId, jobId: ref.id })
+      await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
+      await countRedrive(ref)
+      return
+    }
+    if (ref.kind === 'env-config-repair') {
+      log.warn('re-driving stale env-config-repair', {
+        workspaceId: ref.workspaceId,
+        jobId: ref.id,
+      })
+      await reenqueueStaleEnvConfigRepair(boss, ref.workspaceId, ref.id, queueOptions)
+      await countRedrive(ref)
+      return
+    }
+    log.warn('re-driving stale run', { workspaceId: ref.workspaceId, executionId: ref.id })
+    advanceReenqueues.push(
+      advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
+    )
+    await countRedrive(ref)
+  }
+
+  /**
+   * Process one tick's stale runs, ONE RUN AT A TIME AND ISOLATED FROM EACH OTHER, and return how
+   * many of them threw.
+   *
+   * The isolation is the point. Recovering a run touches the queue, the run row and (past the
+   * hard-stall deadline) the execution service, so any single run can throw for reasons entirely
+   * its own, and `listStale` is ordered OLDEST FIRST, so an unrecoverable run sorts to the front
+   * of every future pass. Left to propagate, one such run does not merely fail to recover: it
+   * ends the pass, taking with it every other stale run behind it, the spend-paused resumes and
+   * the batch enqueue. The sweeper then looks healthy in the only way that is easy to check (it
+   * is running) while recovering nothing at all.
+   *
+   * The COUNT is returned rather than merely logged because the pass's own health verdict turns on
+   * it: a pass that took runs on and recovered none of them completes now, and the caller has to
+   * report that as a failed pass rather than reset the `sweep_degraded` streak on it.
+   */
+  const recoverPass = async (
+    stale: StaleAgentRun[],
+    now: number,
+    keepOrphanClock: Set<string>,
+    advanceReenqueues: JobInsert<AdvanceJob>[],
+  ): Promise<number> => {
+    let failed = 0
+    for (const ref of stale) {
+      try {
+        await recoverStaleRun(ref, now, keepOrphanClock, advanceReenqueues)
+      } catch (error) {
+        failed++
+        log.error('stale-run recovery failed for one run; continuing the sweep', {
+          workspaceId: ref.workspaceId,
+          runId: ref.id,
+          kind: ref.kind,
+          ...describeError(error),
+        })
+        metrics.increment('sweep.run_recovery_failed', { kind: ref.kind })
+        // This run made no OBSERVATION, so its orphan clock is carried forward rather than pruned
+        // below. Nothing here claims it is still orphaned; the claim is only that nothing learned
+        // otherwise, and the two are different from the prune loop's point of view. Left out, a
+        // probe that throws every pass resets the hard-stall deadline every pass, and the backstop
+        // that exists to settle an unrecoverable run could never fire. Before the isolation the
+        // throw propagated and the prune loop was never reached, which preserved the clock by
+        // accident; it has to be deliberate now.
+        keepOrphanClock.add(ref.id)
+      }
+    }
+    return failed
+  }
+
+  return { recoverPass }
+}
+
 /**
  * Backstop for runs still `running` in storage but whose durable advance job is gone or
  * orphaned (the worker crashed/was evicted). Mirrors — and now matches the recovery power
@@ -303,109 +490,19 @@ export function startStaleRunSweeper(
   // inflates `updated_at`) can't fail an otherwise-recoverable run before recovery is even
   // attempted. Entries are dropped once a run recovers or leaves the stale set.
   const orphanedSince = new Map<string, number>()
-  // Count a re-drive, in memory and on the run itself. The persisted half is best-effort and
-  // runs AFTER the re-enqueue: it is bookkeeping about the recovery and must never be able to
-  // fail one, and a counter claiming a re-drive that did not happen is worse than a missed one.
-  // The in-memory map above answers "still orphaned this tick"; only the column survives a
-  // restart, which is what makes "how many times has THIS run been re-driven" answerable.
-  const countRedrive = async (ref: { workspaceId: string; id: string; kind: string }) => {
-    metrics.increment('sweep.run_redriven', { kind: ref.kind })
-    await runBestEffort(log, 'sweep.recordRedrive', () =>
-      container.agentRunRepository.recordRedrive(ref.workspaceId, ref.id),
-    )
-  }
-  // Process one tick's stale runs: recover an orphaned advance job, apply the hard-stall backstop,
-  // and re-drive (per kind). Records into `stillOrphaned` which runs are still orphaned this tick
-  // (so the caller can forget the ones that recovered) and pushes execution re-drives into
-  // `advanceReenqueues` for the caller's single batch insert. Extracted from the sweep tick to keep
-  // it under the statement ceiling; the body is unchanged.
-  const reenqueueStaleRuns = async (
-    stale: Awaited<ReturnType<typeof container.agentRunRepository.listStale>>,
-    now: number,
-    stillOrphaned: Set<string>,
-    advanceReenqueues: JobInsert<AdvanceJob>[],
-  ): Promise<void> => {
-    for (const ref of stale) {
-      const queue = queueForKind(ref.kind)
-      if (!queue) continue
-
-      // Distinguish a healthy long drive (heartbeating) from an orphaned job whose worker
-      // died, so we recover the orphan instead of silently no-op re-sending onto it.
-      const { state, jobId } = await classifyAdvanceJob(jobs, queue, ref.id, staleHeartbeatMs, now)
-      if (state === 'live') {
-        orphanedSince.delete(ref.id)
-        continue
-      }
-      // Start (or carry forward) this run's per-process orphaned clock.
-      const firstSeenOrphaned = orphanedSince.get(ref.id) ?? now
-      orphanedSince.set(ref.id, firstSeenOrphaned)
-      stillOrphaned.add(ref.id)
-
-      if (state === 'orphaned' && jobId) {
-        log.warn('reclaiming orphaned advance job (dead worker) before re-drive', {
-          workspaceId: ref.workspaceId,
-          runId: ref.id,
-          kind: ref.kind,
-          jobId,
-        })
-        await reclaimAdvanceJob(boss, queue, jobId).catch((err) =>
-          log.error('failed to reclaim orphaned advance job', {
-            runId: ref.id,
-            err: getErrorMessage(err),
-          }),
-        )
-      }
-
-      // Hard-stall backstop (execution only): a run this process has been unable to recover
-      // for the whole deadline — re-driven on earlier ticks yet still not live — is failed
-      // rather than left spinning `running`. Gated on the per-process clock (not lease age),
-      // so a run first seen orphaned this tick (e.g. right after a long downtime) is always
-      // re-driven at least once below before it can ever be given up on.
-      if (ref.kind === 'execution' && now - firstSeenOrphaned > cfg.hardStallMs) {
-        const mins = Math.round((now - ref.updatedAt) / 60_000)
-        log.warn('run stalled past hard deadline; recovery could not resume it; failing', {
-          workspaceId: ref.workspaceId,
-          executionId: ref.id,
-          staleMinutes: mins,
-        })
-        await container.executionService.failRun(
-          ref.workspaceId,
-          ref.id,
-          `Run stalled: no progress for ${mins} minutes and recovery could not resume it.`,
-          'stalled',
-          null,
-        )
-        orphanedSince.delete(ref.id)
-        stillOrphaned.delete(ref.id)
-        // The run KIND is a bounded enum and the split that matters: bootstrap runs and
-        // execution runs are lost for different reasons and fixed in different places.
-        metrics.increment('sweep.run_stalled', { kind: ref.kind })
-        continue
-      }
-
-      if (ref.kind === 'bootstrap') {
-        log.warn('re-driving stale bootstrap', { workspaceId: ref.workspaceId, jobId: ref.id })
-        await reenqueueStaleBootstrap(boss, ref.workspaceId, ref.id, queueOptions)
-        await countRedrive(ref)
-        continue
-      }
-      if (ref.kind === 'env-config-repair') {
-        log.warn('re-driving stale env-config-repair', {
-          workspaceId: ref.workspaceId,
-          jobId: ref.id,
-        })
-        await reenqueueStaleEnvConfigRepair(boss, ref.workspaceId, ref.id, queueOptions)
-        await countRedrive(ref)
-        continue
-      }
-      log.warn('re-driving stale run', { workspaceId: ref.workspaceId, executionId: ref.id })
-      advanceReenqueues.push(
-        advanceInsert({ workspaceId: ref.workspaceId, executionId: ref.id }, queueOptions),
-      )
-      await countRedrive(ref)
-    }
-  }
-
+  const { recoverPass } = createStaleRunRecovery({
+    boss,
+    jobs,
+    recordRedrive: (workspaceId, id) => container.agentRunRepository.recordRedrive(workspaceId, id),
+    failRun: (workspaceId, executionId, message) =>
+      container.executionService.failRun(workspaceId, executionId, message, 'stalled', null),
+    hardStallMs: cfg.hardStallMs,
+    staleHeartbeatMs,
+    queueOptions,
+    orphanedSince,
+    log,
+    metrics,
+  })
   // Auto-resume spend-paused runs once the monthly budget frees (parity with the Cloudflare
   // ExecutionWorkflow, whose parked instance re-checks the budget itself). `listStale` skips
   // `paused` runs, so re-check them here: re-drive ONLY those whose WORKSPACE and ACCOUNT
@@ -447,7 +544,9 @@ export function startStaleRunSweeper(
     try {
       const now = Date.now()
       const stale = await container.agentRunRepository.listStale(now - cfg.leaseMs)
-      const stillOrphaned = new Set<string>()
+      // Which runs' per-process orphaned clock survives this tick: the ones observed still orphaned,
+      // plus the ones nothing could observe because their own recovery threw.
+      const keepOrphanClock = new Set<string>()
       // Every `execution.advance` re-drive this tick decides on — stale re-drives AND spend-paused
       // resumes — is gathered here and flushed as ONE batch `insert` instead of a `send` per run.
       // singletonKeys are distinct across the batch (a run is either `running`/stale or `paused`,
@@ -456,17 +555,28 @@ export function startStaleRunSweeper(
       // row. (Bootstrap / env-config-repair re-drives target other queues via their own helpers and
       // are left as individual sends — different queue, typically N=1.)
       const advanceReenqueues: JobInsert<AdvanceJob>[] = []
-      await reenqueueStaleRuns(stale, now, stillOrphaned, advanceReenqueues)
+      const failed = await recoverPass(stale, now, keepOrphanClock, advanceReenqueues)
       // Forget runs that recovered (bumped their lease → left the stale set) or went terminal,
       // so their per-process orphaned clock restarts if they ever stall again.
       for (const id of orphanedSince.keys()) {
-        if (!stillOrphaned.has(id)) orphanedSince.delete(id)
+        if (!keepOrphanClock.has(id)) orphanedSince.delete(id)
       }
       await resumePausedRuns(advanceReenqueues)
       // One batch insert for every execution.advance re-drive gathered this tick (stale
       // re-drives + spend-paused resumes), replacing N per-run `send` round-trips.
       if (advanceReenqueues.length > 0) await boss.insert(QUEUE, advanceReenqueues)
-      health.recordSuccess('stale-run')
+      // A pass that took runs on and recovered NONE of them is reported as a failed pass, not a
+      // successful one: per-run isolation means such a pass now resolves, and recording a success
+      // would reset the `sweep_degraded` streak on exactly the wedged sweeper it watches for.
+      if (sweepPassRecoveredNothing({ attempted: stale.length, failed })) {
+        log.error('stale-run sweep recovered none of the runs it took on', {
+          attempted: stale.length,
+          failed,
+        })
+        health.recordFailure('stale-run')
+      } else {
+        health.recordSuccess('stale-run')
+      }
     } catch (error) {
       log.error('stale-run sweep failed', {
         err: getErrorMessage(error),

@@ -1784,6 +1784,7 @@
       "rejected": "Odrzucone",
       "companion_rejected": "Towarzysz odrzucony",
       "stalled": "Zawieszone",
+      "state_unreadable": "Stan nieodczytywalny",
       "cancelled": "Anulowane",
       "unknown": "Nieznane"
     },

@@ -27,6 +27,33 @@ export interface SweepFailureStreak {
   consecutive: number
 }
 
+/** How many runs a per-run-isolated sweep pass TOUCHED, and how many of those threw. */
+export interface SweepPassTally {
+  /** Candidates the pass took on (the size of its stale list). */
+  attempted: number
+  /** Of those, the ones whose own recovery threw and were skipped. */
+  failed: number
+}
+
+/**
+ * Whether a pass that RESOLVED nonetheless recovered nothing it took on, and so must be reported
+ * as a failed pass.
+ *
+ * Isolating each run means a pass no longer dies with the first unrecoverable one, which is the
+ * fix; the hole it opens is that a pass in which EVERY run threw now resolves, records a success,
+ * and RESETS the `sweep_degraded` streak. That is the wedged sweeper this whole condition exists to
+ * catch, reporting itself healthy. The rule is "every run it touched threw" rather than "any run
+ * threw" so that it says exactly what the propagating throw used to say and nothing more: a pass
+ * that recovers forty-nine runs and skips one poison row is a working sweeper, and the skipped run
+ * is already its own counter (`sweep.run_recovery_failed`).
+ *
+ * Shared because both facades' stale-run sweeps must answer it identically; a rule restated per
+ * runtime is how `sweep_degraded` came to describe a different set of sweepers on each.
+ */
+export function sweepPassRecoveredNothing({ attempted, failed }: SweepPassTally): boolean {
+  return attempted > 0 && failed >= attempted
+}
+
 /**
  * Records each sweep pass's outcome and answers which sweeper is doing worst.
  *

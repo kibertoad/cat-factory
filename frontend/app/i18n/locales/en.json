@@ -1882,6 +1882,7 @@
       "rejected": "Rejected",
       "companion_rejected": "Companion rejected",
       "stalled": "Stalled",
+      "state_unreadable": "Unreadable state",
       "cancelled": "Cancelled",
       "unknown": "Unknown"
     },
