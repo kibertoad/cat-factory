@@ -278,13 +278,21 @@ person's subscription, and only their personal password opens it. Two consequenc
   could not resolve, until `subscriptionConfigured` answers. That is the whole reason the three
   states are kept separate rather than collapsed into "user-scoped".
 
-- **The pass asks for your personal password at the terminal**, once, at the first call that needs
-  it, not at `configure` time, and never for a workspace running on a provider API key. It is held
-  in the process's memory and written NOWHERE: not the `.env`, not the ledger, not the journal. That
+- **The pass asks for your personal password at the terminal**, once for the WHOLE pass, before the
+  first spec runs, and never for a workspace running on a provider API key. It is held in memory and
+  written NOWHERE: not the `.env`, not the ledger, not the journal, not an environment variable. That
   is deliberate rather than an omission, since a copy beside `CAT_FACTORY_API_KEY` would put both
   halves of a two-factor credential in one file. A resumed pass asks again. No variable or file can
   supply it instead. See
   [`individual-subscription-usage.md` §7](../../docs/individual-subscription-usage.md).
+- **Asked up front because vitest isolates every spec file.** Each file gets its own module graph, in
+  its own worker process, so a password collected in spec 01 cannot be reached from spec 02: asked at
+  the first call that needs one, a pass is asked four times, each prompt drawn over a reporter that is
+  redrawing the same lines. `acceptance/globalSetup.ts` asks once in the main process, before any
+  worker exists and before a test line is printed, and hands the value to each worker over vitest's
+  RPC channel. It only asks when the pinned preset's base model reports `personalSubscription`, so a
+  provider-key workspace sees no prompt; when the catalog cannot be read, it says so and leaves the
+  ask at the first dispatch that needs it, exactly as before.
 - **So run the pass from an INTERACTIVE terminal**, with the ordinary invocation above: nothing
   about the command changes, and there is no separate mode for this. Under the hood the prompt opens
   the CONTROLLING TERMINAL for reading (`/dev/tty`, `CONIN$` on Windows) and writes the prompt back
@@ -559,13 +567,15 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | Path                         | What                                                                                                                                                                                            |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `acceptance/*.acceptance.ts` | The five specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                 |
+| `acceptance/globalSetup.ts`  | The ONE personal-password ask, in the main process before any worker exists. Decides from the pinned preset; degrades to asking later.                                                          |
 | `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.                                                                                                                       |
+| `src/envFile.ts`             | The `.env` beside the vitest config, read the same way by the config and by `globalSetup`. Pure.                                                                                                |
 | `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                             |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                          |
 | `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                     |
 | `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Pure; unit-tested.              |
 | `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested. |
-| `src/presets.ts`             | The one preset-to-catalog join `configure` and `model-preset` share. Pure.                                                                                                                      |
+| `src/presets.ts`             | The one preset-to-catalog join `configure`, `model-preset` and the up-front unlock share. Pure; unit-tested.                                                                                    |
 | `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                                                                                                                                 |
 | `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                  |
 | `src/status.ts`              | Ledger + journal → "where is this pass". Pure; unit-tested.                                                                                                                                     |

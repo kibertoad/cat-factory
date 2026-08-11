@@ -93,6 +93,45 @@ export function isPersonalCredentialState(state: PresetAvailability): boolean {
 }
 
 /**
+ * The preset a pass is PINNED to, with the catalog row its base model resolves to, or `null` when
+ * either is missing.
+ *
+ * Generic in both rows so the caller keeps the fields this join does not read. The up-front unlock
+ * names the model and its provider to the operator, and narrowing the return to
+ * `PresetRow`/`ModelRow` would send it back to re-find what this already found.
+ */
+export function pinnedModel<P extends PresetRow, M extends ModelRow>(
+  presets: readonly P[],
+  models: readonly M[],
+  presetId: string,
+): { preset: P; model: M } | null {
+  const preset = presets.find((row) => row.presetId === presetId)
+  const model = preset ? models.find((row) => row.modelId === preset.baseModelId) : undefined
+  return preset && model ? { preset, model } : null
+}
+
+/** Whether a pass on the pinned preset will be asked for the operator's PERSONAL password. */
+export type PersonalPasswordNeed = 'needed' | 'not-needed' | 'unknown'
+
+/**
+ * That question, answered from the catalog row alone.
+ *
+ * THREE answers, and `unknown` is the one worth having: a catalog that could not be read and a model
+ * that needs no password are opposite facts, the same distinction {@link selectableModelIds} keeps
+ * for the same reason. `unknown` means ASK LATER, which is exactly the behaviour that existed before
+ * anything asked early, so a deployment this cannot reach loses nothing.
+ *
+ * The signal is `personalSubscription` ALONE, never `available`. A selectable personal-subscription
+ * model is the case that produced this: the catalog reports the model dispatchable for this token and
+ * the dispatch still answers `428`, because what opens the credential is the password. Reading
+ * `available` here would ask for nothing in precisely the pass that needs it.
+ */
+export function personalPasswordNeed(pinned: { model: ModelRow } | null): PersonalPasswordNeed {
+  if (!pinned) return 'unknown'
+  return pinned.model.personalSubscription === true ? 'needed' : 'not-needed'
+}
+
+/**
  * Build the per-preset verdict once, then ask it per row: the sets are computed a single time
  * rather than per preset, so a 40-preset menu does not rebuild them 40 times.
  */

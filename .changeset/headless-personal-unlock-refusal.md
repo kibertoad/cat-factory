@@ -42,6 +42,28 @@ The README now states the invocation together with what makes it work under vite
 the part that reads like it cannot: a worker is forked with piped stdio, so the prompt goes to the
 console devices directly rather than through the stdio the reporter owns.
 
+**And it is asked ONCE per pass, before the first spec, rather than once per spec file.** Vitest
+isolates every test file in its own module graph and its own worker process, so the holder in
+`fixtures.ts` cannot outlive the file that built it: asked lazily, a pass that starts and answers runs
+across four specs is asked four times, and each of those prompts is written while the reporter is
+redrawing test lines over it, which is how an operator ends up unsure whether their password was even
+accepted. `acceptance/globalSetup.ts` asks in the MAIN process before any worker exists and before a
+test line is printed, and hands the value to each worker through vitest's `provide`/`inject`, which is
+the RPC channel rather than a file.
+
+It asks only when it can tell one will be needed: the pinned preset's base model reporting
+`personalSubscription`, which is `personalSubscription` alone and never `available`, since a selectable
+personal-subscription model is exactly the case whose dispatch still answers `428`. A provider-key
+workspace is asked nothing. A catalog it could not read is `unknown`, not `not-needed`: it says so and
+leaves the ask at the first dispatch, so an unreachable deployment loses nothing and the preflight
+keeps ownership of diagnosing it. A headless invocation now also refuses in seconds, from
+`globalSetup`, instead of after the preflight and a first dispatch.
+
+Two consequences worth knowing. The password now sits in the main process's memory as well as each
+worker's, which is the cost of asking once; no copy is written down, which is the property the design
+protects. And `test.env` is not applied in the main process, so the `.env` reader moved to
+`src/envFile.ts` and is now read by the vitest config and the hook alike rather than existing twice.
+
 **Every command this suite prints with a variable in it is now rendered for the shell that will
 receive it.** The same session found the second half of the same problem: `VAR=value command` and
 `export VAR=value` are POSIX syntax, and between them they were hard-coded into both prerequisite

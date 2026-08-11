@@ -60,20 +60,53 @@ export function createPersonalUnlock(
       password ? { [PERSONAL_PASSWORD_HEADER]: password } : {},
     held: () => password !== undefined,
     async obtain(reason) {
-      // The line terminator only, never `trim()`: a space is printable ASCII, so a leading or
-      // trailing one is part of a legal password, and trimming would send a value the operator did
-      // not type and then report the deployment's `wrong_password` as if they had mistyped.
-      const entered = (await readSecret(`${reason}\nPersonal password: `)).replace(/\r?\n$/, '')
-      // Checked against the platform's OWN rule (`personalPasswordProblem`), so a password this
-      // suite accepts is one the deployment accepts. Locally rather than after a round trip,
-      // because a too-short entry comes back as the same `wrong_password` as a wrong one, and the
-      // suite never re-prompts: the operator would be told their password is wrong when what
-      // happened is that it was never long enough to be one.
-      const problem = personalPasswordProblem(entered)
-      if (problem) throw new Error(`${problem} The run cannot be unlocked.`)
-      password = entered
+      password = checked(await readSecret(promptFor(reason)))
     },
   }
+}
+
+/** The question an operator reads, from the reason its caller gives, so both asks ask it once. */
+function promptFor(reason: string): string {
+  return `${reason}\nPersonal password: `
+}
+
+/**
+ * An entered password, or a refusal naming what is wrong with it.
+ *
+ * The line terminator only, never `trim()`: a space is printable ASCII, so a leading or trailing one
+ * is part of a legal password, and trimming would send a value the operator did not type and then
+ * report the deployment's `wrong_password` as if they had mistyped.
+ *
+ * Checked against the platform's OWN rule (`personalPasswordProblem`), so a password this suite
+ * accepts is one the deployment accepts. Locally rather than after a round trip, because a too-short
+ * entry comes back as the same `wrong_password` as a wrong one, and the suite never re-prompts: the
+ * operator would be told their password is wrong when what happened is that it was never long enough
+ * to be one.
+ */
+function checked(entered: string): string {
+  const value = entered.replace(/\r?\n$/, '')
+  const problem = personalPasswordProblem(value)
+  if (problem) throw new Error(`${problem} The run cannot be unlocked.`)
+  return value
+}
+
+/**
+ * Ask for the password and RETURN it: the up-front ask, for `acceptance/globalSetup.ts`.
+ *
+ * The one function here that hands the password out rather than sealing it in a closure, and it earns
+ * that because of how vitest is shaped. Every spec file gets its OWN module graph even under one
+ * worker, so a holder built in spec 01 cannot be reached from spec 02, and asking lazily is asking
+ * once per FILE that starts or answers a run: four prompts a pass, each drawn over a live reporter
+ * that is redrawing the same lines. `globalSetup` runs in the main process before any of that, asks
+ * once, and hands the value to each worker over vitest's RPC channel.
+ *
+ * What that costs is honest and bounded: the password now sits in the main process's memory as well
+ * as each worker's. What it does NOT cost is the property the design actually protects, which is that
+ * no copy is ever written down: not the `.env`, not the ledger, not the journal, not a log line, and
+ * not an environment variable a child process would inherit.
+ */
+export async function readPersonalPassword(reason: string): Promise<string> {
+  return checked(await readSecretFromTty(promptFor(reason)))
 }
 
 /**
