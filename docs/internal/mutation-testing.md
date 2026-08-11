@@ -190,25 +190,39 @@ having changed: **the denominator**.
 
 The total score is `detected / (detected + survived + NoCoverage)` over the whole `mutate` scope,
 so every file the scope gains re-bases it. A new `domain/` module arriving before its tests drops
-the total by roughly `its mutants / total`, about 1.6 points for a 150-mutant one. Two points is
-therefore about one ordinary module's worth of room: enough that unrelated growth cannot turn the
-nightly red, small enough that a real regression still does.
+the total by roughly `its mutants / total`, about 1.6 points for a 150-mutant one against kernel's
+scope. Two points is therefore about one ordinary module's worth of room there: enough that
+unrelated growth cannot turn the nightly red, small enough that a real regression still does.
 
-This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 → 6,115 → 6,152 → 7,316
-mutants across the baselines behind this table, purely from ordinary main-branch work, and one of
-those steps landed WHILE the floor was being set: `prompt-fragment-registry.ts` arrived with no test
-file, adding 20 `NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One module, no
-test regression anywhere, and a floor pinned to the measured value would already have been that much
-closer to red. The 37 mutants between 6,115 and 6,152 are the same story with the sign flipped: they
-arrived while the third round was being measured, which is why that round's before-and-after is a
-pair of runs on ONE scope rather than a comparison against the row the previous round left behind.
+**The margin is a PERCENTAGE, so what it buys shrinks with the denominator**, and the rule reads
+very differently down the table. At the floors above, the untested growth each package absorbs
+before going red is 198 mutants on kernel, 20 on gates and 11 on spend: a module, a large function,
+a helper. So on the two small rows a dip is as likely to be scope growth as a regression, and the
+per-file `NoCoverage` count in the report is what tells them apart. The answer when it is growth is
+the missing test, never a lowered floor.
+
+This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 → 6,115 → 6,152 → 7,215 →
+7,316 mutants across the baselines behind this table, purely from ordinary main-branch work, and
+one of those steps landed WHILE the floor was being set: `prompt-fragment-registry.ts` arrived with
+no test file, adding 20 `NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One
+module, no test regression anywhere, and a floor pinned to the measured value would already have
+been that much closer to red. The 37 mutants between 6,115 and 6,152 are the same story with the
+sign flipped: they arrived while the third round was being measured, which is why that round's
+before-and-after is a pair of runs on ONE scope rather than a comparison against the row the
+previous round left behind.
 
 The last step is by far the largest and it cuts the other way, which is the part to read before
-sizing a margin off any of this. 1,063 of those mutants arrived on main between the third round's
-measurement and the fourth's, and across the same interval main's own total moved 81.78 → 81.51: one
-mutant in seven was new, and it cost a quarter of a point, because it arrived with its tests. The
-margin buys room for UNTESTED growth, not for growth as such. Had that same slice landed bare it
-would have taken the total to 69.7%, which is 12 points, and no margin worth setting absorbs that.
+sizing a margin off any of this. It also spans TWO denominators 101 mutants apart, so keep them
+straight: main's own scope stood at **7,215** when the growth below was read, and the **7,316** in
+the table is the fourth round's own later run, which is where the 84.23% and the floor of 82 come
+from.
+
+1,063 mutants arrived on main between the third round's measurement and the fourth's, taking it
+6,152 → 7,215, and across the same interval main's total moved 81.78 → 81.51: one mutant in seven
+was new, and it cost a quarter of a point, because it arrived with its tests. The margin buys room
+for UNTESTED growth, not for growth as such. Had that same slice landed bare, the third round's
+5,031 kills over 7,215 mutants would have read 69.7%, which is 12 points, and no margin worth
+setting absorbs that.
 
 The scope can also SHRINK, and for a good reason: deleting a branch nothing could distinguish (one
 of the three dispositions below) removes its mutants from the denominator. Spend went 400 → 396

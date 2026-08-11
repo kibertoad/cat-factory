@@ -56,6 +56,31 @@ function snapshot(over: Partial<PullRequestReviewSnapshot> = {}): PullRequestRev
 const state = (over: Partial<GateStepState> = {}): Pick<GateStepState, 'lastAddressedCommentAt'> =>
   ({ lastAddressedCommentAt: null, ...over }) as GateStepState
 
+/** A step parked mid-gate with `handed` threads stashed for the fixer round that just ended. */
+const stepWith = (gate: Partial<GateStepState>): PipelineStep =>
+  ({
+    agentKind: 'human-review',
+    gate: { phase: 'working', attempts: 1, maxAttempts: 1, ...gate },
+  }) as unknown as PipelineStep
+
+/**
+ * One fixer round settling on the gate. The cast lives here and nowhere else: every call site
+ * would otherwise carry its own copy of it plus the four arguments the gate ignores, which is what
+ * lets a change to `GateHelperCompletionArgs` be made in one place and not four.
+ */
+const complete = async (
+  gate: ReturnType<typeof humanReviewGate>,
+  step: PipelineStep,
+  result: GateHelperJobResult,
+) =>
+  gate.onHelperComplete!({
+    workspaceId: 'ws',
+    instance: {} as never,
+    block: { id: 'b' } as never,
+    step,
+    result,
+  })
+
 describe('classifyHumanReview', () => {
   it('advances when there is no open PR', () => {
     const v = classifyHumanReview(snapshot({ headSha: null }), state(), {
@@ -463,23 +488,10 @@ describe('humanReviewGate', () => {
         resolved.push(...ids)
       },
     })
-    const gate = humanReviewGate(stubGateContext({}, providerRegistry))
-    const step = {
-      agentKind: 'human-review',
-      gate: {
-        phase: 'working',
-        attempts: 1,
-        maxAttempts: 1,
-        headSha: 'sha-old',
-        pendingThreadIds: ['T9'],
-      },
-    } as unknown as Parameters<NonNullable<typeof gate.onHelperComplete>>[0]['step']
-    await gate.onHelperComplete!({
-      workspaceId: 'ws',
-      instance: {} as never,
-      block: { id: 'b' } as never,
-      step,
-      result: { state: 'done', result: { output: 'fixed' } },
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
     })
     expect(resolved).toEqual(['T9'])
     expect(step.gate?.pendingThreadIds).toBeNull()
@@ -497,23 +509,10 @@ describe('humanReviewGate', () => {
         resolved.push(...ids)
       },
     })
-    const gate = humanReviewGate(stubGateContext({}, providerRegistry))
-    const step = {
-      agentKind: 'human-review',
-      gate: {
-        phase: 'working',
-        attempts: 1,
-        maxAttempts: 1,
-        headSha: 'sha1',
-        pendingThreadIds: ['T9'],
-      },
-    } as unknown as Parameters<NonNullable<typeof gate.onHelperComplete>>[0]['step']
-    await gate.onHelperComplete!({
-      workspaceId: 'ws',
-      instance: {} as never,
-      block: { id: 'b' } as never,
-      step,
-      result: { state: 'done', result: { output: '' } },
+    const step = stepWith({ headSha: 'sha1', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: '' },
     })
     expect(resolved).toEqual([])
     expect(step.gate?.pendingThreadIds).toBeNull()
@@ -529,23 +528,10 @@ describe('humanReviewGate', () => {
         throw new Error('502 from GitHub')
       },
     })
-    const gate = humanReviewGate(stubGateContext({}, providerRegistry))
-    const step = {
-      agentKind: 'human-review',
-      gate: {
-        phase: 'working',
-        attempts: 1,
-        maxAttempts: 1,
-        headSha: 'sha-old',
-        pendingThreadIds: ['T9'],
-      },
-    } as unknown as Parameters<NonNullable<typeof gate.onHelperComplete>>[0]['step']
-    await gate.onHelperComplete!({
-      workspaceId: 'ws',
-      instance: {} as never,
-      block: { id: 'b' } as never,
-      step,
-      result: { state: 'done', result: { output: '' } },
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: '' },
     })
     expect(step.gate?.pendingThreadIds).toEqual(['T9'])
   })
@@ -987,26 +973,6 @@ describe('humanReviewGate: onHelperComplete, the rounds that resolve NOTHING', (
   beforeEach(() => {
     providerRegistry = defaultProviderRegistry()
   })
-
-  /** A step parked mid-gate with `handed` threads stashed for the fixer round that just ended. */
-  const stepWith = (gate: Partial<GateStepState>) =>
-    ({
-      agentKind: 'human-review',
-      gate: { phase: 'working', attempts: 1, maxAttempts: 1, ...gate },
-    }) as unknown as PipelineStep
-
-  const complete = async (
-    gate: ReturnType<typeof humanReviewGate>,
-    step: PipelineStep,
-    result: GateHelperJobResult,
-  ) =>
-    gate.onHelperComplete!({
-      workspaceId: 'ws',
-      instance: {} as never,
-      block: { id: 'b' } as never,
-      step,
-      result,
-    })
 
   // Every case here ends the same way (the stash is dropped and NOTHING is resolved), and each
   // arrives by a different route. Resolving on any of them posts an "addressed" reply on feedback

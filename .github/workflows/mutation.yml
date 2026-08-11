@@ -12,7 +12,7 @@ name: Mutation
 #
 # It is also never expected to run on a developer's machine (see CLAUDE.md → "Run the CI guard
 # scripts locally before committing"). Model, scope and how a package joins the set:
-# docs/mutation-testing.md.
+# docs/internal/mutation-testing.md.
 
 on:
   # Nightly, off-peak. Scheduled runs only ever fire on the default branch, so this is the
@@ -85,10 +85,10 @@ jobs:
     needs: targets
     runs-on: ubuntu-latest
     # Sized off the measured runs: the small packages are ~2 minutes on a 4-vCPU runner, kernel's
-    # ~5,800 mutants are the outlier at well under an hour. Generous on purpose (this blocks
+    # ~7,300 mutants are the outlier at well under an hour. Generous on purpose (this blocks
     # nothing), but bounded so a mutant that hangs the runner cannot burn six hours. If the tail
     # gets uncomfortable, Stryker's `--incremental` is the lever, not a smaller scope: see
-    # docs/mutation-testing.md.
+    # docs/internal/mutation-testing.md.
     timeout-minutes: 120
     permissions:
       contents: read

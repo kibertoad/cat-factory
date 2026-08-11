@@ -1,28 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { BinaryCandidateStepState } from '@cat-factory/contracts'
-import type { BinaryGeneratorView } from './binary-generator-registry.js'
+import { generator } from './binary-generators.fixtures.js'
 import {
   MAX_BINARY_CANDIDATES,
+  MAX_DISPLAY_CHARS,
+  MAX_IDENTITY_CHARS,
   isRenderablePreviewUrl,
   parseBinaryCandidateDeclaration,
   renderBinaryCandidateChoiceSection,
   renderBinaryCandidateSection,
 } from './binary-candidates.js'
-
-function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGeneratorView {
-  return {
-    id: 'retro-diffusion',
-    name: 'Retro Diffusion',
-    summary: 'Pixel-art image generation.',
-    description: '',
-    modalities: ['image'],
-    mediaTypes: ['image/png'],
-    capabilities: [],
-    credentials: [],
-    contracts: [],
-    ...overrides,
-  }
-}
 
 function block(body: string): string {
   return ['Here you go.', '', '```binary-candidates', body, '```'].join('\n')
@@ -267,32 +254,49 @@ describe('parseBinaryCandidateDeclaration: the field caps', () => {
   it('refuses an identity field past its cap, because a truncated address is a wrong one', () => {
     // An elided location is not a shorter location: it names a file that does not exist, and the
     // promotion pass would fail on it. The entry is counted instead.
-    const parsed = parseBinaryCandidateDeclaration(
+    //
+    // Probed AT the cap and one past it, which is the only pair that pins the comparison itself:
+    // a location of exactly `MAX_IDENTITY_CHARS` is addressable and must be kept, and reading the
+    // bound as `>=` would refuse it while every test on a round 600 stayed green.
+    const location = (length: number) => 'x'.repeat(length)
+    const atCap = parseBinaryCandidateDeclaration(
+      block(JSON.stringify([{ service: 'asset-store', location: location(MAX_IDENTITY_CHARS) }])),
+    )
+    expect(atCap.candidates[0]?.location).toBe(location(MAX_IDENTITY_CHARS))
+    expect(atCap.invalidEntries).toBe(0)
+
+    const pastCap = parseBinaryCandidateDeclaration(
       block(
-        JSON.stringify([{ service: 'asset-store', location: `staging/${'x'.repeat(600)}.png` }]),
+        JSON.stringify([{ service: 'asset-store', location: location(MAX_IDENTITY_CHARS + 1) }]),
       ),
     )
-    expect(parsed.candidates).toEqual([])
-    expect(parsed.invalidEntries).toBe(1)
+    expect(pastCap.candidates).toEqual([])
+    expect(pastCap.invalidEntries).toBe(1)
   })
 
-  it('elides an over-long DISPLAY field with a marker rather than dropping the candidate', () => {
+  it('elides an over-long DISPLAY field to exactly the cap, with a marker', () => {
     // The opposite disposition, for the opposite reason: a note is read by a human comparing
     // candidates, so a long one is worth keeping shortened, and the marker is what says so.
-    const note = 'n'.repeat(900)
+    //
+    // The retained LENGTH is asserted rather than merely "shorter with a marker": a slice bound
+    // that collapsed to nothing would still end in the marker and still be shorter, so the loose
+    // assertion passes on a note thrown away whole.
+    const note = 'n'.repeat(MAX_DISPLAY_CHARS + 600)
     const parsed = parseBinaryCandidateDeclaration(
       block(
         JSON.stringify([{ service: 'asset-store', location: 'a.png', note, label: '  Anvil  ' }]),
       ),
     )
     const [candidate] = parsed.candidates
-    expect(candidate?.note).toMatch(/…$/)
-    expect(candidate?.note?.length).toBeLessThan(note.length)
+    expect(candidate?.note).toBe(`${'n'.repeat(MAX_DISPLAY_CHARS)}…`)
     expect(candidate?.label).toBe('Anvil')
   })
 
   it('keeps a display field that fits exactly as written, with no marker', () => {
-    const note = 'fits comfortably'
+    // AT the cap, not comfortably inside it: `>` and `>=` differ on exactly this note, and only
+    // this length can tell them apart. Reading the bound as `>=` appends a marker to a note that
+    // lost nothing, which claims a truncation that did not happen.
+    const note = 'n'.repeat(MAX_DISPLAY_CHARS)
     const parsed = parseBinaryCandidateDeclaration(
       block(JSON.stringify([{ service: 'asset-store', location: 'a.png', note }])),
     )
@@ -472,6 +476,40 @@ describe('renderBinaryCandidateChoiceSection: the decision as work', () => {
       'DISCARD the 2 candidates the person did not keep, and remove the staged files',
     )
     expect(two).toContain('`staging/b.png`, `staging/c.png`')
+  })
+
+  // The same two persisted halves the kept-id case above is about, read from the other side. The
+  // count and the list are produced from ONE reduction on purpose, so the instruction can never
+  // claim more files than it names: an agent told to remove three and handed two locations has to
+  // guess at the third.
+  it('counts only the discarded candidates it can still name', () => {
+    const lines = renderBinaryCandidateChoiceSection(
+      state({
+        choice: {
+          kept: [{ candidateId: 'cand_1' }],
+          discarded: ['cand_gone', 'cand_2'],
+          at: 1,
+        },
+      }),
+    ).join('\n')
+    expect(lines).toContain('DISCARD the 1 candidate the person did not keep')
+    expect(lines).toContain('`staging/b.png`')
+    expect(lines).not.toContain('cand_gone')
+  })
+
+  it('omits the discard instruction when NO discarded id resolves, having no file to name', () => {
+    // The honest end of the same rule rather than an oversight: a candidate the list no longer
+    // holds has no recorded `location`, so there is no staged file to point the agent at and an
+    // instruction naming none would be one it cannot act on. The loss is the candidate record,
+    // which happened before this render.
+    const lines = renderBinaryCandidateChoiceSection(
+      state({
+        choice: { kept: [{ candidateId: 'cand_1' }], discarded: ['cand_gone'], at: 1 },
+      }),
+    ).join('\n')
+    expect(lines).not.toContain('DISCARD')
+    // The rest of the brief is unaffected: the kept candidate still gets its instruction.
+    expect(lines).toContain('`staging/a.png`')
   })
 
   it('says nothing about discarding when the person kept everything', () => {

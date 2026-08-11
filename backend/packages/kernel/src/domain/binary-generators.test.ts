@@ -15,23 +15,8 @@ import {
   renderBinaryGeneratorSection,
   resolveBinaryGeneratorSelection,
 } from './binary-generators.js'
+import { generator } from './binary-generators.fixtures.js'
 import { binaryContextFileFor, renderBinaryOutputBrief } from './binary-outputs.js'
-
-function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGeneratorView {
-  return {
-    id: 'retro-diffusion',
-    name: 'Retro Diffusion',
-    summary: 'Pixel-art image generation.',
-    description: 'Good for sprites and tiles; not for photorealism.',
-    modalities: ['image'],
-    mediaTypes: ['image/png'],
-    capabilities: [],
-    endpoint: 'https://api.retrodiffusion.ai/v1',
-    credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token request header' }],
-    contracts: [],
-    ...overrides,
-  }
-}
 
 const music = generator({
   id: 'studio-music',

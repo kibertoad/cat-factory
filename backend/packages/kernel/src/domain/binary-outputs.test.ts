@@ -4,6 +4,8 @@ import {
   ASSET_STORAGE_CAPABILITY,
   BINARY_OUTPUT_DECLARATION_TAG,
   MAX_BINARY_OUTPUT_ENTRIES,
+  MAX_DISPLAY_CHARS,
+  MAX_IDENTITY_CHARS,
   binaryContextFileFor,
   binaryOutputConfigIssues,
   describeBinaryOutputConfigIssues,
@@ -561,26 +563,50 @@ describe('parseBinaryOutputDeclaration: entries that are not artifacts at all', 
   })
 
   it('refuses an over-long location, because a truncated address is a wrong one', () => {
-    const parsed = parseBinaryOutputDeclaration(
+    // At the cap and one past it, the pair the comparison itself needs: a location of exactly
+    // `MAX_IDENTITY_CHARS` addresses a real file and must survive, and a bound read as `>=` would
+    // refuse it while a probe on a round 600 stayed green either way.
+    const at = parseBinaryOutputDeclaration(
       declaration(
-        JSON.stringify([{ service: 'asset-store', location: `icons/${'x'.repeat(600)}.png` }]),
+        JSON.stringify([{ service: 'asset-store', location: 'x'.repeat(MAX_IDENTITY_CHARS) }]),
       ),
       known,
     )
-    expect(parsed.stored).toEqual([])
-    expect(parsed.invalidEntries).toBe(1)
+    expect(at.stored[0]?.location).toBe('x'.repeat(MAX_IDENTITY_CHARS))
+    expect(at.invalidEntries).toBe(0)
+
+    const past = parseBinaryOutputDeclaration(
+      declaration(
+        JSON.stringify([{ service: 'asset-store', location: 'x'.repeat(MAX_IDENTITY_CHARS + 1) }]),
+      ),
+      known,
+    )
+    expect(past.stored).toEqual([])
+    expect(past.invalidEntries).toBe(1)
   })
 
-  it('keeps a display field that fits exactly as written, with no marker', () => {
-    const parsed = parseBinaryOutputDeclaration(
+  it('keeps a display field that fits exactly as written, and elides only past it', () => {
+    // The description is trimmed first, so the cap applies to the trimmed length: padding either
+    // side of a description that exactly fits must not push it over.
+    const fits = 'd'.repeat(MAX_DISPLAY_CHARS)
+    const kept = parseBinaryOutputDeclaration(
       declaration(
-        JSON.stringify([
-          { service: 'asset-store', location: 'a.png', description: '  A potion icon.  ' },
-        ]),
+        JSON.stringify([{ service: 'asset-store', location: 'a.png', description: `  ${fits}  ` }]),
       ),
       known,
     )
-    expect(parsed.stored[0]?.description).toBe('A potion icon.')
+    expect(kept.stored[0]?.description).toBe(fits)
+
+    // One character past, and the RETAINED length is asserted rather than "shorter, with a
+    // marker": a slice bound collapsed to nothing satisfies the loose reading while throwing the
+    // whole description away.
+    const elided = parseBinaryOutputDeclaration(
+      declaration(
+        JSON.stringify([{ service: 'asset-store', location: 'a.png', description: `${fits}d` }]),
+      ),
+      known,
+    )
+    expect(elided.stored[0]?.description).toBe(`${fits}…`)
   })
 })
 
@@ -600,6 +626,22 @@ describe('describeBinaryOutputConfigIssues: one issue versus several', () => {
       { problem: 'unknown_service', serviceId: 'gone', role: 'context' },
     ])
     expect(context).toContain("'gone' (selected as generation context)")
+  })
+
+  // The other half of the branch, and the one with teeth: naming EVERY issue is why they are
+  // collected at all, so a reader fixing three lost context ids clears them in one edit instead of
+  // one refused admission cycle per id. Rendered as a single inline clause, the message states the
+  // first fault and silently drops the rest.
+  it('lists SEVERAL issues as separate bulleted clauses, losing none of them', () => {
+    const message = describeBinaryOutputConfigIssues('illustrator', [
+      { problem: 'unknown_service', serviceId: 'gone', role: 'storage' },
+      { problem: 'not_storage_capable', serviceId: 'docs', role: 'storage' },
+      { problem: 'unknown_service', serviceId: 'also-gone', role: 'context' },
+    ])
+    for (const id of ['gone', 'docs', 'also-gone']) {
+      expect(message).toContain(`\n  - '${id}'`)
+    }
+    expect(message.match(/\n {2}- /g)).toHaveLength(3)
   })
 })
 

@@ -80,12 +80,18 @@ export const BINARY_OUTPUT_DECLARATION_TAG = 'binary-outputs'
  */
 export const MAX_BINARY_OUTPUT_ENTRIES = 100
 
-/** Longest `service`/`location` accepted per entry — beyond it the entry is INVALID (a
- *  truncated storage location is corrupt, not shortened). */
-const MAX_IDENTITY_CHARS = 512
+/**
+ * Longest `service`/`location` accepted per entry: beyond it the entry is INVALID (a truncated
+ * storage location is corrupt, not shortened).
+ *
+ * Exported for the same reason {@link MAX_BINARY_PIXEL_EXTENT} is read rather than repeated: the
+ * boundary is probed AT the cap, so `>` and `>=` are told apart instead of both passing on a
+ * round number well past it.
+ */
+export const MAX_IDENTITY_CHARS = 512
 
 /** Longest optional display field retained per entry; the excess is elided with a marker. */
-const MAX_DISPLAY_CHARS = 500
+export const MAX_DISPLAY_CHARS = 500
 
 // --- selection validation ---------------------------------------------------
 

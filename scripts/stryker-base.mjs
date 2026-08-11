@@ -10,7 +10,7 @@
 // It is deliberately NOT part of `pnpm test:run` and NOT part of any blocking CI gate. A run is
 // minutes of CPU per package, so it lives in its own nightly workflow
 // (`.github/workflows/mutation.yml`) and is never expected on a developer's laptop. Full model,
-// including how a package joins the set: `docs/mutation-testing.md`.
+// including how a package joins the set: `docs/internal/mutation-testing.md`.
 //
 // Every mutation-tested package's `stryker.config.mjs` is this function plus its own `mutate`
 // scope and score floor, so the policy below (how coverage is analysed, where reports land, what

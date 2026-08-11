@@ -31,11 +31,17 @@ export const BINARY_CANDIDATE_DECLARATION_TAG = 'binary-candidates'
  */
 export const MAX_BINARY_CANDIDATES = 24
 
-/** Longest `service`/`location` accepted per candidate; beyond it the entry is INVALID. */
-const MAX_IDENTITY_CHARS = 512
+/**
+ * Longest `service`/`location` accepted per candidate; beyond it the entry is INVALID.
+ *
+ * Exported so the boundary can be probed AT the cap rather than at a round number well past it:
+ * a test that only ever sends 600 characters cannot tell `>` from `>=`, and off-by-one there
+ * refuses a candidate whose address was fine.
+ */
+export const MAX_IDENTITY_CHARS = 512
 
 /** Longest optional display field retained per candidate; the excess is elided with a marker. */
-const MAX_DISPLAY_CHARS = 300
+export const MAX_DISPLAY_CHARS = 300
 
 /**
  * What a first-phase reply declared it staged, before the engine mints ids and records it.
@@ -307,6 +313,11 @@ export function renderBinaryCandidateChoiceSection(state: BinaryCandidateStepSta
           : " Store it under this step's ordinary naming."),
     )
   }
+  // The count and the list come from ONE reduction, so the instruction can never claim more files
+  // than it names. An id the candidate list no longer holds carries no `location`, and the two
+  // halves are persisted separately, so that is a reachable state rather than a defensive read:
+  // dropping it costs the cleanup of a file nothing here can address, where naming a number
+  // without its location would hand the agent a count to guess at.
   const discarded = choice.discarded.flatMap((id) => byId.get(id) ?? [])
   if (discarded.length > 0) {
     lines.push(

@@ -2,6 +2,7 @@ import { binaryGeneratorCapabilitySchema } from '@cat-factory/contracts'
 import type { BinaryGenerationOptions } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { BinaryGeneratorView } from './binary-generator-registry.js'
+import { generator } from './binary-generators.fixtures.js'
 import {
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
@@ -15,23 +16,9 @@ import {
 //
 // Its own file rather than more of `binary-generators.test.ts`, which the selection, the brief's
 // per-integration entries and the requirement lines already fill: this is one function's surface
-// and every fixture here declares capabilities, which nothing in that file needs.
-
-function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGeneratorView {
-  return {
-    id: 'retro-diffusion',
-    name: 'Retro Diffusion',
-    summary: 'Pixel-art image generation.',
-    description: 'Good for sprites and tiles; not for photorealism.',
-    modalities: ['image'],
-    mediaTypes: ['image/png'],
-    capabilities: [],
-    endpoint: 'https://api.retrodiffusion.ai/v1',
-    credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token request header' }],
-    contracts: [],
-    ...overrides,
-  }
-}
+// and every fixture here declares capabilities, which nothing in that file needs. The `generator`
+// factory is shared with that sibling rather than copied, so the two halves cannot drift onto
+// different defaults under one name.
 
 describe('generation options', () => {
   // The THIRD refusal axis, and it has the same three outcomes the format one does. That is what
@@ -348,12 +335,11 @@ describe('renderBinaryGeneratorSection: the generation-option instructions', () 
   }
 
   it('states a seed of 0, which is a real seed and the one a falsy check would drop', () => {
+    // The only generation option with a producible falsy value (`seed` accepts 0), so this is the
+    // one place the `!== undefined` reads in `generationOptionLines` can be told from a truthiness
+    // check at all. `upscale` starts at 2, which is why it gets no twin of this test: the note at
+    // that line records the mutant as equivalent rather than pretending an input can kill it.
     expect(optionLines({ seed: 0 })).toContain('- Seed: 0.')
-  })
-
-  it('states an upscale factor without treating it as a flag', () => {
-    // `upscale` and `seed` are the two numeric options, so both are read with `!== undefined`.
-    expect(optionLines({ upscale: 4 })).toContain('- Upscale the result 4x')
   })
 })
 
@@ -472,7 +458,10 @@ describe('renderBinaryGeneratorSection: which integrations honour which option',
   it('inflects the unverifiable-capability sentence for one option and for several', () => {
     // Nothing declares the capability AND at least one integration declared no capabilities at
     // all: unknown rather than settled, which is neither of the two things the agent would assume.
-    const silent = generator({ id: 'quiet', capabilities: undefined })
+    // An EMPTY list, not an absent one: the registry projects every view through
+    // `[...(definition.capabilities ?? [])]`, so `undefined` is a shape no reader can be handed
+    // and a test pinning it would keep passing with that projection removed.
+    const silent = generator({ id: 'quiet', capabilities: [] })
     const one = text([silent], { seed: 7 })
     expect(one).toContain('No selected integration declares support for a fixed seed')
     expect(one).toContain('before relying on it')

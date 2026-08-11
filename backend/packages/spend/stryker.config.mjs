@@ -15,7 +15,12 @@ export default defineMutationConfig({
   //
   // This is the package's CEILING, not a rung: all nine remaining survivors were checked one by one
   // and every one is behaviour-preserving (the worked list is in
-  // docs/internal/mutation-testing.md). So the floor is raised to lock in what is real, and a
-  // future run that dips is a regression rather than a nudge to write another test.
+  // docs/internal/mutation-testing.md). So the floor is raised to lock in what is real.
+  //
+  // Read a dip against the DENOMINATOR before reading it as a regression. The margin is two
+  // PERCENT, and on the smallest package in the set that is 11 mutants: 387 killed stays above 95%
+  // only while the scope holds no more than 407. `mutate` is all of `src/`, so one new spend helper
+  // landing ahead of its tests can trip this on its own, which is a nudge to write that test and
+  // not a statement that anything stopped being pinned. The report says which of the two it is.
   minimumScore: 95,
 })
