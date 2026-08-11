@@ -3588,6 +3588,15 @@
       "reachable": "Osiągalny · {count} model | Osiągalny · {count} modele | Osiągalny · {count} modeli",
       "noModels": "Nie zgłoszono żadnych modeli.",
       "enableModels": "Włącz modele",
+      "imageInputHint": "Część modeli lokalnych czyta zrzuty ekranu i rendery projektów. Nie da się tego wykryć, więc uruchomienie wysyła obrazy tylko do modeli oznaczonych jako czytające obrazy.",
+      "imageInputLabel": "Obsługa obrazów dla {model}",
+      "imageInput": {
+        "autoYes": "Nie ustawiono: {family} czyta obrazy",
+        "autoNo": "Nie ustawiono: {family} obsługuje tylko tekst",
+        "unknown": "Obrazy: nie ustawiono",
+        "yes": "Czyta obrazy",
+        "no": "Tylko tekst"
+      },
       "toast": {
         "saved": "Zapisano {name}",
         "saveFailed": "Nie udało się zapisać runnera",

@@ -25,6 +25,7 @@ import type {
   TaskTypeFields,
   WebSearchAvailability,
 } from '../domain/types.js'
+import type { LocalModelDeclarations } from '../domain/local-model-declarations.js'
 import type {
   ResolvedSkill,
   ResolvedToolServer,
@@ -143,6 +144,18 @@ export interface AgentRunContext {
    * preset omitted still resolves — see kernel's `orderedProviderPreference`.
    */
   providerPreference?: readonly ModelFlavor[]
+  /**
+   * What the RUN INITIATOR declared about the locally-run models they enabled (Ollama / LM Studio
+   * / …), folded onto the resolved ref by `resolveStepModelRef`.
+   *
+   * Resolved ONCE per dispatch by the engine (`AgentContextBuilder`), for the same reason as
+   * {@link providerPreference}, but for a second reason too, and it is the load-bearing one: a
+   * local model has NO catalog entry, so the per-flavour facts every other model's ref carries have
+   * nowhere else to come from, and the boot-time `resolveBlockModel` closure has no user in hand to
+   * read them for. Absent (a system run, a deployment with no local runners) ⇒ every local ref
+   * stays undeclared, which reads as `unknown_model_image_input` rather than as a text-only model.
+   */
+  localModelDeclarations?: readonly LocalModelDeclarations[]
   /**
    * Consensus configuration for this step, when it is consensus-enabled in the
    * pipeline (copied from the pipeline's `consensus` array onto the run's step).

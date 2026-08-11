@@ -1133,6 +1133,15 @@
       "reachable": "Erreichbar · keine Modelle | Erreichbar · {count} Modell | Erreichbar · {count} Modelle",
       "noModels": "Keine Modelle gemeldet.",
       "enableModels": "Modelle aktivieren",
+      "imageInputHint": "Manche lokalen Modelle lesen Screenshots und Design-Renderings. Das lässt sich nicht erkennen, deshalb sendet ein Lauf Bilder nur an Modelle, die Sie als bildfähig markieren.",
+      "imageInputLabel": "Bildunterstützung für {model}",
+      "imageInput": {
+        "autoYes": "Nicht gesetzt: {family} liest Bilder",
+        "autoNo": "Nicht gesetzt: {family} ist nur Text",
+        "unknown": "Bilder: nicht gesetzt",
+        "yes": "Liest Bilder",
+        "no": "Nur Text"
+      },
       "toast": {
         "saved": "{name} gespeichert",
         "saveFailed": "Runner konnte nicht gespeichert werden",

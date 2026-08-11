@@ -258,7 +258,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Ollama',
       baseUrl: 'http://localhost:11434/v1',
       apiKeyCipher: null,
-      models: ['llama3', 'qwen'],
+      models: [{ id: 'llama3' }, { id: 'qwen', acceptsImages: true }],
       createdAt: 100,
       updatedAt: 100,
     })
@@ -269,7 +269,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Ollama',
       baseUrl: 'http://localhost:11434/v1',
       apiKeyCipher: null,
-      models: ['llama3', 'qwen'],
+      models: [{ id: 'llama3' }, { id: 'qwen', acceptsImages: true }],
       createdAt: 100,
       updatedAt: 100,
     })
@@ -284,7 +284,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'First',
       baseUrl: 'http://a/v1',
       apiKeyCipher: null,
-      models: ['a'],
+      models: [{ id: 'a' }],
       createdAt: 100,
       updatedAt: 100,
     })
@@ -294,7 +294,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Second',
       baseUrl: 'http://b/v1',
       apiKeyCipher: 'sealed:key',
-      models: ['b', 'c'],
+      models: [{ id: 'b' }, { id: 'c' }],
       createdAt: 999, // must be ignored
       updatedAt: 200,
     })
@@ -303,7 +303,7 @@ describe('SqliteLocalModelEndpointRepository', () => {
       label: 'Second',
       baseUrl: 'http://b/v1',
       apiKeyCipher: 'sealed:key',
-      models: ['b', 'c'],
+      models: [{ id: 'b' }, { id: 'c' }],
       createdAt: 100,
       updatedAt: 200,
     })

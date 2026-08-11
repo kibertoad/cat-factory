@@ -3588,6 +3588,15 @@
       "reachable": "Joignable · aucun modèle | Joignable · {count} modèle | Joignable · {count} modèles",
       "noModels": "Aucun modèle signalé.",
       "enableModels": "Activer les modèles",
+      "imageInputHint": "Certains modèles locaux lisent les captures d'écran et les rendus de design. Rien ne permet de le détecter, donc une exécution n'envoie des images qu'aux modèles que vous marquez comme capables de les lire.",
+      "imageInputLabel": "Prise en charge des images pour {model}",
+      "imageInput": {
+        "autoYes": "Non défini : {family} lit les images",
+        "autoNo": "Non défini : {family} est texte seulement",
+        "unknown": "Images : non défini",
+        "yes": "Lit les images",
+        "no": "Texte seulement"
+      },
       "toast": {
         "saved": "{name} enregistré",
         "saveFailed": "Impossible d'enregistrer le runner",

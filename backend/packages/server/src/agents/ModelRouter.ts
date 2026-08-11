@@ -74,6 +74,12 @@ export class ModelRouter {
         // Read off the CONTEXT rather than re-derived here, so this router, the inline executor
         // and the consensus panel cannot disagree about which provider a step ran on.
         ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
+        // Likewise the initiator's local-model declarations: this is the container path, whose
+        // `dispatchDesignImageDelivery` decides off the resolved ref whether the harness is given
+        // the run's design renders at all.
+        ...(context.localModelDeclarations
+          ? { localModelDeclarations: context.localModelDeclarations }
+          : {}),
       },
     )
   }

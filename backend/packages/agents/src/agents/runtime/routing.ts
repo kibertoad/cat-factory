@@ -1,6 +1,6 @@
-import type { AgentKind, ModelFlavor } from '@cat-factory/kernel'
+import type { AgentKind, LocalModelDeclarations, ModelFlavor } from '@cat-factory/kernel'
 import type { ModelRef } from '@cat-factory/kernel'
-import { inlineModelRef } from '@cat-factory/kernel'
+import { inlineModelRef, withLocalModelDeclaration } from '@cat-factory/kernel'
 
 // "Which LLM, with what configuration, for what." Routing maps each agent kind
 // to a model and generation settings, with a mandatory default fallback. The
@@ -76,6 +76,13 @@ export interface StepModelInputs {
    * carried on `AgentRunContext.providerPreference`. Absent ⇒ the deployment's default order.
    */
   providerPreference?: readonly ModelFlavor[]
+  /**
+   * What the run initiator declared about their locally-run models, resolved ONCE per dispatch by
+   * the engine and carried on `AgentRunContext.localModelDeclarations`. Folded onto the resolved
+   * ref below, because a local model has no catalog entry for those facts to come from. Absent ⇒
+   * a local ref stays undeclared.
+   */
+  localModelDeclarations?: readonly LocalModelDeclarations[]
 }
 
 /**
@@ -86,8 +93,24 @@ export interface StepModelInputs {
  * candidate id is run through {@link StepModelResolvers.resolveBlockModel}, so an
  * unresolvable pin (e.g. a stale id) falls through to the next source rather than
  * silently skipping the workspace default.
+ *
+ * Whichever source wins, a LOCAL ref leaves here carrying the initiator's declaration for it. The
+ * fold is applied here rather than at each dispatch site precisely because this is the one function
+ * all three of them resolve through: `resolveBlockModel` is a boot-time closure over deployment
+ * capabilities, so it can neither know the user nor find a per-user model in the catalog.
  */
 export async function resolveStepModelRef(
+  resolvers: StepModelResolvers,
+  inputs: StepModelInputs,
+): Promise<ModelRef> {
+  return withLocalModelDeclaration(
+    await resolveRoutedRef(resolvers, inputs),
+    inputs.localModelDeclarations,
+  )
+}
+
+/** The precedence itself: block pin > workspace per-kind default > the kind's env routing. */
+async function resolveRoutedRef(
   resolvers: StepModelResolvers,
   inputs: StepModelInputs,
 ): Promise<ModelRef> {

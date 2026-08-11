@@ -6,9 +6,12 @@
 // serves and tick which to enable. Save persists the endpoint; the enabled models then surface
 // automatically in the per-workspace model picker. One endpoint per runner type.
 import { computed, ref, watch } from 'vue'
+
 import {
+  knownLocalModel,
   LOCAL_RUNNER_DEFAULTS,
   LOCAL_RUNNER_LABELS,
+  type LocalModelDeclaration,
   type LocalRunner,
   type LocalRunnerUrlReason,
 } from '~/types/localModels'
@@ -59,14 +62,66 @@ function urlReasonText(reason: LocalRunnerUrlReason): string {
   return t(URL_REASON_KEYS[reason])
 }
 
+// Whether an enabled model reads IMAGES. Three states, because the runner's `/models` probe cannot
+// tell us and "nobody has said" is not the same answer as "no": undeclared says the platform never
+// asked, while `no` says the model cannot. Mirrors `LocalModelDeclaration.acceptsImages`.
+//
+// For a RECOGNISED family the platform already knows, so leaving this alone is the right answer and
+// the "not set" option says which way that falls: the control is the ESCAPE HATCH for a build the
+// table cannot know about (a text-only quant, a fine-tune, a re-tagged copy), not a step everyone
+// has to take.
+const IMAGE_INPUT_CHOICES = ['unknown', 'yes', 'no'] as const
+type ImageInputChoice = (typeof IMAGE_INPUT_CHOICES)[number]
+
+function choiceFor(declared: LocalModelDeclaration): ImageInputChoice {
+  return declared.acceptsImages === undefined ? 'unknown' : declared.acceptsImages ? 'yes' : 'no'
+}
+
+/** The declared modality for a choice, as a spread-ready slice (undeclared adds no key at all). */
+function modalityOf(choice: ImageInputChoice | undefined): { acceptsImages?: boolean } {
+  if (choice === 'yes') return { acceptsImages: true }
+  if (choice === 'no') return { acceptsImages: false }
+  return {}
+}
+
+/**
+ * What "not set" will actually do for one model id: name the recognised family and the modality it
+ * implies, else say plainly that nothing has been said. Read from the SAME table the engine folds
+ * onto the dispatched ref, so this label cannot promise a picture the run then withholds.
+ */
+function unsetLabelFor(modelId: string): string {
+  const known = knownLocalModel(modelId)
+  if (!known) return t('settings.localModelEndpoints.imageInput.unknown')
+  return t(
+    known.acceptsImages
+      ? 'settings.localModelEndpoints.imageInput.autoYes'
+      : 'settings.localModelEndpoints.imageInput.autoNo',
+    { family: known.label },
+  )
+}
+
 // ---- add / edit draft ------------------------------------------------------
 const provider = ref<LocalRunner>('ollama')
 const label = ref('')
 const baseUrl = ref(LOCAL_RUNNER_DEFAULTS.ollama ?? '')
 const apiKey = ref('')
-// The models discovered by the last "Test connection", plus the user's tick selection.
+// The models discovered by the last "Test connection", plus the user's tick selection and what
+// they declared about each ticked one (kept per model id, so un-ticking and re-ticking a model
+// does not silently drop the declaration they already made for it).
 const discovered = ref<string[]>([])
 const selected = ref<string[]>([])
+const imageInput = ref<Record<string, ImageInputChoice>>({})
+
+/** The three options for one model: "not set" carries what the recognised-family table will do. */
+function imageInputItems(modelId: string): { value: ImageInputChoice; label: string }[] {
+  return IMAGE_INPUT_CHOICES.map((value) => ({
+    value,
+    label:
+      value === 'unknown'
+        ? unsetLabelFor(modelId)
+        : t(`settings.localModelEndpoints.imageInput.${value}`),
+  }))
+}
 const testError = ref<string | null>(null)
 // The backend's own wording, kept as DETAIL beside a translated refusal rather than being
 // shown as the description (it names env vars an operator, not this user, acts on).
@@ -84,13 +139,15 @@ watch(provider, (p) => {
   if (e) {
     label.value = e.label
     baseUrl.value = e.baseUrl
-    discovered.value = [...e.models]
-    selected.value = [...e.models]
+    discovered.value = e.models.map((m) => m.id)
+    selected.value = e.models.map((m) => m.id)
+    imageInput.value = Object.fromEntries(e.models.map((m) => [m.id, choiceFor(m)]))
   } else {
     label.value = ''
     baseUrl.value = LOCAL_RUNNER_DEFAULTS[p] ?? ''
     discovered.value = []
     selected.value = []
+    imageInput.value = {}
   }
   apiKey.value = ''
   testError.value = null
@@ -147,7 +204,7 @@ async function save() {
       label: label.value.trim() || undefined,
       baseUrl: baseUrl.value.trim(),
       apiKey: apiKey.value.trim() || undefined,
-      models: selected.value,
+      models: selected.value.map((id) => ({ id, ...modalityOf(imageInput.value[id]) })),
     })
     apiKey.value = ''
     toast.add({
@@ -183,6 +240,7 @@ async function remove(p: LocalRunner) {
       label.value = ''
       discovered.value = []
       selected.value = []
+      imageInput.value = {}
       tested.value = false
     }
     toast.add({ title: t('settings.localModelEndpoints.toast.removed'), icon: 'i-lucide-check' })
@@ -349,23 +407,38 @@ async function remove(p: LocalRunner) {
             }}</span>
           </div>
 
-          <!-- discovered models multi-select -->
+          <!-- discovered models multi-select, each with its declared image support -->
           <div v-if="discovered.length" class="space-y-1.5">
             <span class="block text-[10px] uppercase tracking-wide text-slate-500">
               {{ t('settings.localModelEndpoints.enableModels') }}
             </span>
-            <div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              <label
-                v-for="m in discovered"
-                :key="m"
-                class="flex items-center gap-2 text-sm text-slate-300"
-              >
-                <UCheckbox
-                  :model-value="selected.includes(m)"
-                  @update:model-value="(v: boolean | 'indeterminate') => toggleModel(m, v === true)"
+            <p class="text-[11px] text-slate-500">
+              {{ t('settings.localModelEndpoints.imageInputHint') }}
+            </p>
+            <div class="space-y-1.5">
+              <div v-for="m in discovered" :key="m" class="flex items-center gap-2">
+                <label class="flex min-w-0 flex-1 items-center gap-2 text-sm text-slate-300">
+                  <UCheckbox
+                    :model-value="selected.includes(m)"
+                    @update:model-value="
+                      (v: boolean | 'indeterminate') => toggleModel(m, v === true)
+                    "
+                  />
+                  <span class="truncate font-mono text-xs">{{ m }}</span>
+                </label>
+                <!-- Shown only for a model that is actually enabled: declaring a modality for one
+                     nothing can run would be a setting with no effect. -->
+                <USelect
+                  v-if="selected.includes(m)"
+                  :model-value="imageInput[m] ?? 'unknown'"
+                  :items="imageInputItems(m)"
+                  value-key="value"
+                  size="xs"
+                  class="w-52 shrink-0"
+                  :aria-label="t('settings.localModelEndpoints.imageInputLabel', { model: m })"
+                  @update:model-value="(v: string) => (imageInput[m] = v as ImageInputChoice)"
                 />
-                <span class="truncate font-mono text-xs">{{ m }}</span>
-              </label>
+              </div>
             </div>
           </div>
 

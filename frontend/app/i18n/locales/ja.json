@@ -3730,6 +3730,15 @@
       "reachable": "接続可能 · モデルなし | 接続可能 · {count} 個のモデル | 接続可能 · {count} 個のモデル",
       "noModels": "報告されたモデルがありません。",
       "enableModels": "モデルを有効化",
+      "imageInputHint": "一部のローカルモデルはスクリーンショットやデザインのレンダー画像を読み取れます。これは自動判別できないため、画像を読み取ると指定したモデルにのみ画像を渡します。",
+      "imageInputLabel": "{model} の画像対応",
+      "imageInput": {
+        "autoYes": "未設定: {family} は画像を読み取る",
+        "autoNo": "未設定: {family} はテキストのみ",
+        "unknown": "画像: 未設定",
+        "yes": "画像を読み取る",
+        "no": "テキストのみ"
+      },
       "toast": {
         "saved": "{name} を保存しました",
         "saveFailed": "ランナーを保存できませんでした",

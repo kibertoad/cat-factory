@@ -1133,6 +1133,15 @@
       "reachable": "Raggiungibile · nessun modello | Raggiungibile · {count} modello | Raggiungibile · {count} modelli",
       "noModels": "Nessun modello riportato.",
       "enableModels": "Abilita i modelli",
+      "imageInputHint": "Alcuni modelli locali leggono screenshot e render di design. Non è possibile rilevarlo, quindi un'esecuzione invia immagini solo ai modelli che contrassegni come in grado di leggerle.",
+      "imageInputLabel": "Supporto immagini per {model}",
+      "imageInput": {
+        "autoYes": "Non impostato: {family} legge immagini",
+        "autoNo": "Non impostato: {family} è solo testo",
+        "unknown": "Immagini: non impostato",
+        "yes": "Legge immagini",
+        "no": "Solo testo"
+      },
       "toast": {
         "saved": "{name} salvato",
         "saveFailed": "Impossibile salvare il runner",

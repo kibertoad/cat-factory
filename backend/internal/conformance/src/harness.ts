@@ -44,7 +44,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
-import type { DispatchToolServers } from '@cat-factory/contracts'
+import type { DispatchToolServers, LocalModelDeclaration } from '@cat-factory/contracts'
 import { boardChangeSubject } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
 import type { OnboardingProbe } from './onboarding.js'
@@ -493,13 +493,24 @@ export interface OpenRouterCatalogProbe {
 
 /** The subset of the local-model-endpoints service the conformance suite drives. */
 export interface LocalModelEndpointsProbe {
-  list(
-    userId: string,
-  ): Promise<{ provider: string; baseUrl: string; hasApiKey: boolean; models: string[] }[]>
+  list(userId: string): Promise<
+    {
+      provider: string
+      baseUrl: string
+      hasApiKey: boolean
+      models: LocalModelDeclaration[]
+    }[]
+  >
   upsert(
     userId: string,
-    input: { provider: string; label?: string; baseUrl: string; apiKey?: string; models: string[] },
-  ): Promise<{ provider: string; hasApiKey: boolean; models: string[] }>
+    input: {
+      provider: string
+      label?: string
+      baseUrl: string
+      apiKey?: string
+      models: LocalModelDeclaration[]
+    },
+  ): Promise<{ provider: string; hasApiKey: boolean; models: LocalModelDeclaration[] }>
   resolve(
     userId: string,
     provider: string,

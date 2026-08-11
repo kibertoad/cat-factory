@@ -25,6 +25,7 @@ import type {
   IssueWritebackProvider,
   JudgeAssessor,
   JudgeRegistry,
+  LocalModelEndpointRepository,
   Logger,
   ModelPresetCacheValue,
   ModelPresetRepository,
@@ -195,6 +196,13 @@ export interface ExecutionServiceDependencies {
    * default route order (the feature is simply off).
    */
   modelPresetRepository?: ModelPresetRepository
+  /**
+   * Optional: the per-USER locally-run model endpoints, threaded into the context builder so each
+   * dispatch resolves what the RUN INITIATOR declared about the local models they enabled (today:
+   * whether one reads images) and every executor reads it off the resolved ref. Absent ⇒ a local
+   * ref stays undeclared, which reads as unknown rather than as a model refusing images.
+   */
+  localModelEndpointRepository?: LocalModelEndpointRepository
   /**
    * Optional: the workspace's consensus-GROUP library, threaded into the context builder so a
    * consensus step naming a tier set resolves the group its task's estimate earned. Absent ⇒ a

@@ -3730,6 +3730,15 @@
       "reachable": "Ulaşılabilir · model yok | Ulaşılabilir · {count} model | Ulaşılabilir · {count} model",
       "noModels": "Model bildirilmedi.",
       "enableModels": "Modelleri etkinleştir",
+      "imageInputHint": "Bazı yerel modeller ekran görüntülerini ve tasarım render'larını okuyabilir. Bu algılanamadığı için bir çalıştırma görselleri yalnızca görsel okuduğunu işaretlediğiniz modellere gönderir.",
+      "imageInputLabel": "{model} için görsel desteği",
+      "imageInput": {
+        "autoYes": "Ayarlanmadı: {family} görsel okur",
+        "autoNo": "Ayarlanmadı: {family} yalnızca metin",
+        "unknown": "Görseller: ayarlanmadı",
+        "yes": "Görsel okur",
+        "no": "Yalnızca metin"
+      },
       "toast": {
         "saved": "{name} kaydedildi",
         "saveFailed": "Çalıştırıcı kaydedilemedi",

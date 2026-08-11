@@ -163,6 +163,9 @@ Several shapes of entry fall out of this:
   dynamically (id `"<provider>:<model>"`, e.g. `ollama:gemma3`). They present as the
   `direct` flavour but need **no API key**: gated by the new `localModels` capability (the
   set of model ids the user has _enabled_, so usability is model-granular), not a `keyEnv`.
+  **Their per-flavour facts have nowhere else to come from, so they are resolved in TWO
+  tiers** (§2.1 below), because no catalog entry exists to declare them and the runner's
+  `/models` probe returns ids and nothing else.
   At run time the LLM proxy + inline provider resolve the **run initiator's** endpoint (base
   URL + optional bearer key) and skip the DB key lease, mirroring the personal-subscription
   initiator model. The base URL is forwarded server-side, so it is constrained to a
@@ -179,6 +182,39 @@ Several shapes of entry fall out of this:
 The effective, display-ready projection (which flavour is actually active, plus
 informational cost and context window) is computed by `effectiveCatalog()` and served
 read-only at **`GET /models`**: labels and provider/model ids only, never keys.
+
+### 2.1 A local model's modality: recognised family, else the user's own declaration
+
+`acceptsImages` is the one per-flavour fact whose absence COSTS a capability (a run withholds its
+design renders), and a local model has no catalog row to carry it. Two tiers answer, and
+`resolveLocalModelModality` (kernel) is the ONE place their precedence lives:
+
+1. **The user's declaration**, per enabled model on their endpoint row
+   (`LocalModelDeclaration.acceptsImages`, three-state exactly like the `ModelRef` field). It wins,
+   because the person who pulled the weights is the one who knows which build they run: a text-only
+   quant of a multimodal family, a fine-tune, a re-tagged local copy.
+2. **`KNOWN_LOCAL_MODELS`** (`@cat-factory/contracts`), a small table of popular open-weights
+   families matched by squashed id substring, so ticking Gemma 4 or Muse Glimmer needs no second
+   step. It lives in contracts because the settings panel labels its "not set" option with what the
+   table will do and the engine folds the same answer: a copy would let the panel promise a picture
+   the run withholds. **An entry earns its place only where SILENCE costs something**, so every
+   member is image-capable (a text-only entry behaves identically to an absent one), and a family
+   whose modality depends on the SIZE is left OUT rather than approximated (Gemma 3: its 1B is
+   text-only, its 4B and up are not).
+
+Neither tier answering leaves the ref undeclared, which is reported as `unknown_model_image_input`
+rather than as a text-only model. The run path gets the declarations from
+`AgentRunContext.localModelDeclarations`, resolved once per dispatch by the engine from the RUN
+INITIATOR's endpoints and folded in `resolveStepModelRef`, the one function the container, inline
+and consensus paths all resolve through. It cannot ride `ProviderCapabilities` or the boot-time
+`resolveBlockModel` closure: those answer whether a model may run and know no user.
+
+**`contextTokens` is deliberately NOT declared for a local model.** The window a runner actually
+serves is a fact about its CONFIG, not about the weights: Ollama's `num_ctx` default is far below
+what a 128K-window model can do, so a declared window would be a number the platform states and the
+runner silently ignores, and nothing enforces it either way (the proxy's output cap is
+Workers-AI-only). A long agent loop on an under-configured runner therefore truncates silently, and
+raising `num_ctx` is the operator-side fix.
 
 ---
 

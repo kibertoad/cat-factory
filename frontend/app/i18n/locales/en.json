@@ -3870,6 +3870,15 @@
       "reachable": "Reachable · no models | Reachable · {count} model | Reachable · {count} models",
       "noModels": "No models reported.",
       "enableModels": "Enable models",
+      "imageInputHint": "Some local models read screenshots and design renders. Nothing can detect that, so a run sends pictures only to a model you mark as reading images.",
+      "imageInputLabel": "Image support for {model}",
+      "imageInput": {
+        "autoYes": "Not set: {family} reads images",
+        "autoNo": "Not set: {family} is text only",
+        "unknown": "Images: not set",
+        "yes": "Reads images",
+        "no": "Text only"
+      },
       "toast": {
         "saved": "{name} saved",
         "saveFailed": "Could not save runner",

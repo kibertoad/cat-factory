@@ -3588,6 +3588,15 @@
       "reachable": "Accesible · ningún modelo | Accesible · {count} modelo | Accesible · {count} modelos",
       "noModels": "No se informó de ningún modelo.",
       "enableModels": "Habilitar modelos",
+      "imageInputHint": "Algunos modelos locales leen capturas de pantalla y renders de diseño. Nada puede detectarlo, así que una ejecución solo envía imágenes a los modelos que marques como capaces de leerlas.",
+      "imageInputLabel": "Compatibilidad con imágenes de {model}",
+      "imageInput": {
+        "autoYes": "Sin definir: {family} lee imágenes",
+        "autoNo": "Sin definir: {family} es solo texto",
+        "unknown": "Imágenes: sin definir",
+        "yes": "Lee imágenes",
+        "no": "Solo texto"
+      },
       "toast": {
         "saved": "{name} guardado",
         "saveFailed": "No se pudo guardar el runner",

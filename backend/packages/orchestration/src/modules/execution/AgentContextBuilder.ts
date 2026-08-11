@@ -21,6 +21,7 @@ import type {
   InitiativePresetRegistry,
   InitiativeRepository,
   LinkedDocumentRefresher,
+  LocalModelEndpointRepository,
   Logger,
   ModelPresetCacheValue,
   ModelPresetRepository,
@@ -263,6 +264,14 @@ export interface AgentContextBuilderDeps {
    * slow-moving admin config that every dispatch resolves. Absent ⇒ the read runs live.
    */
   modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
+  /**
+   * Optional: the per-USER locally-run model endpoints, read for what the RUN INITIATOR declared
+   * about the local models they enabled (today: whether one reads images). Resolved here, once per
+   * dispatch, because a local model has no catalog entry for those facts to come from and the
+   * boot-time model resolver has no user in hand. Absent ⇒ a local ref stays undeclared, which
+   * every reader reports as unknown rather than as a refusal by the model.
+   */
+  localModelEndpoints?: LocalModelEndpointRepository
   /**
    * Optional: the workspace's consensus-GROUP library. When wired, a consensus step naming a
    * tier set (`consensus.groupIds`) resolves it here — ONE batched read per dispatch — and the
@@ -530,7 +539,7 @@ export class AgentContextBuilder {
       }),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
-      resolveDispatchSettings(this.deps, workspaceId, agentKind, step, block),
+      resolveDispatchSettings(this.deps, workspaceId, agentKind, step, block, instance.initiatedBy),
       // A consensus step's TIER SET: resolve the named groups and materialise the one this
       // task's estimate earns. In the same read wave as the rest of the context, so a tiered
       // step costs one extra batched query and nothing else.

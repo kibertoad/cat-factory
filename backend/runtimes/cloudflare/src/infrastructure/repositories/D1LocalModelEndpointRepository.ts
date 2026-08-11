@@ -1,4 +1,5 @@
 import type { LocalModelEndpointRecord, LocalModelEndpointRepository } from '@cat-factory/kernel'
+import { parseLocalModelDeclarations } from '@cat-factory/kernel'
 import type { LocalRunner } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -20,18 +21,9 @@ function toRecord(row: LocalModelEndpointRow): LocalModelEndpointRecord {
     label: row.label,
     baseUrl: row.base_url,
     apiKeyCipher: row.api_key_cipher,
-    models: parseModels(row.models),
+    models: parseLocalModelDeclarations(row.models),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }
-}
-
-function parseModels(json: string): string[] {
-  try {
-    const parsed = JSON.parse(json)
-    return Array.isArray(parsed) ? parsed.map(String) : []
-  } catch {
-    return []
   }
 }
 
