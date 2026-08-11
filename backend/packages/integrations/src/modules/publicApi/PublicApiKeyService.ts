@@ -81,7 +81,7 @@ export interface PublicApiKeyAuth {
    * Carried here for one reader, and only ever to DESCRIBE: `GET /api/v1/models` resolves whether a
    * personal subscription exists for this person so an unbound key can be told that the model it
    * cannot dispatch to is nonetheless configured, and that binding is the fix. That is a lookup, not
-   * an unlock — see `subscriptionConfigured` on the wire row.
+   * an unlock; see `subscriptionConfigured` on the wire row.
    */
   createdByUserId: string | null
   createdAt: number

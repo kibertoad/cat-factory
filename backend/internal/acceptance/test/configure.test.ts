@@ -461,8 +461,8 @@ describe('configure: adopting the repositories', () => {
   })
 })
 
-// Its own block, and not only for the line budget: every test here is about ONE join — the preset
-// library against the model catalog — where the repository tests above are about a write. The
+// Its own block, and not only for the line budget: every test here is about ONE join (the preset
+// library against the model catalog), where the repository tests above are about a write. The
 // question they all answer is what a menu may claim about a model nobody can dispatch to, which is
 // where every misreport in this command's history has lived.
 describe('configure: the model preset', () => {
@@ -510,7 +510,8 @@ describe('configure: the model preset', () => {
             {
               modelId: 'claude-opus',
               available: false,
-              userScoped: true,
+              policyBlocked: false,
+              personalSubscription: true,
               subscriptionConfigured: null,
             },
           ],
@@ -530,7 +531,7 @@ describe('configure: the model preset', () => {
   it('says the subscription IS connected when the deployment resolved one for this key’s owner', async () => {
     // The state the whole read exists to reach, and the one an operator previously arrived at only
     // by re-minting the token to see what happened. Whether the credential EXISTS is a row lookup,
-    // so the deployment can answer it without the personal password that would OPEN it — and the
+    // so the deployment can answer it without the personal password that would OPEN it, and the
     // answer turns a diagnosis ("this cannot be judged") into an instruction ("mint it bound").
     const { io } = await run({
       client: fakeClient({
@@ -539,7 +540,8 @@ describe('configure: the model preset', () => {
             {
               modelId: 'claude-opus',
               available: false,
-              userScoped: true,
+              policyBlocked: false,
+              personalSubscription: true,
               subscriptionConfigured: true,
             },
           ],
@@ -567,7 +569,8 @@ describe('configure: the model preset', () => {
             {
               modelId: 'claude-opus',
               available: false,
-              userScoped: true,
+              policyBlocked: false,
+              personalSubscription: true,
               subscriptionConfigured: false,
             },
           ],
@@ -591,7 +594,15 @@ describe('configure: the model preset', () => {
     const { io } = await run({
       client: fakeClient({
         models: async () => ({
-          models: [{ modelId: 'claude-opus', available: false, userScoped: false }],
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
+          ],
           excludesUserScopedModels: true,
         }),
       }),
@@ -602,17 +613,32 @@ describe('configure: the model preset', () => {
     ])
   })
 
-  it('keeps an invisible workspace default selected rather than steering to another model', async () => {
+  it('keeps an UNJUDGED workspace default selected rather than steering to another model', async () => {
     // Preselecting the "selectable" one would run the whole pass on a model nobody chose, in
-    // exactly the case the warning above has just told the operator to expect. An invisible default
+    // exactly the case the warning above has just told the operator to expect. An unjudged default
     // costs at worst one refusal at start, which names the token as the problem and can be fixed by
     // re-minting it; a silent switch to Kimi is a green pass that proved the wrong thing.
+    //
+    // UNJUDGED specifically: the deployment resolved nobody, so the subscription may well be there.
+    // The sibling below pins the opposite disposition for the case it answered.
     const { written } = await run({
       client: fakeClient({
         models: async () => ({
           models: [
-            { modelId: 'claude-opus', available: false, userScoped: true },
-            { modelId: 'kimi-k2', available: true, userScoped: false },
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: true,
+              subscriptionConfigured: null,
+            },
+            {
+              modelId: 'kimi-k2',
+              available: true,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
           ],
           excludesUserScopedModels: false,
         }),
@@ -631,6 +657,78 @@ describe('configure: the model preset', () => {
     expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_claude')
   })
 
+  it('steers off a default the deployment ANSWERED has no subscription behind it', async () => {
+    // The line between the two dispositions. `null` is worth waiting on, because re-minting the
+    // token might resolve a person who holds one. `false` is the deployment saying it resolved the
+    // person and they hold none, so keeping the default selected buys a CERTAIN refusal at the
+    // first dispatch over a preset that runs. Identical fixture to the sibling above but for that
+    // one field, which is the whole point: the two states must not share a disposition.
+    const { written } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: true,
+              subscriptionConfigured: false,
+            },
+            {
+              modelId: 'kimi-k2',
+              available: true,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+        presets: async () => [
+          {
+            presetId: 'mdp_claude',
+            name: 'Claude Opus 5',
+            baseModelId: 'claude-opus',
+            isDefault: true,
+          },
+          { presetId: 'mdp_kimi', name: 'Kimi', baseModelId: 'kimi-k2', isDefault: false },
+        ],
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(written).toContain('ACCEPTANCE_MODEL_PRESET=mdp_kimi')
+  })
+
+  it('marks a POLICY-refused model as refused, not as one belonging to a person', async () => {
+    // The cause no credential can undo, and the one the join used to miss entirely: a row the
+    // account's model-family policy refuses was ranked by its subscription fields, so a model with
+    // a live subscription behind it read as "your subscription is connected; this token is not
+    // bound to spend it" and told the operator nothing was missing from the deployment. Both
+    // claims are false, and the policy is what has to change.
+    const { io } = await run({
+      client: fakeClient({
+        models: async () => ({
+          models: [
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: true,
+              personalSubscription: true,
+              subscriptionConfigured: true,
+            },
+          ],
+          excludesUserScopedModels: false,
+        }),
+      }),
+      script: { secrets: [TOKEN] },
+    })
+    expect(io.offered).toEqual([
+      'Claude Opus 5 (claude-opus) (configured, and refused by the account’s model-family policy) ' +
+        '[workspace default]',
+    ])
+    expect(io.output.join('\n')).not.toContain('Nothing is missing from the deployment')
+  })
+
   it('preselects a preset whose model is wired over the workspace default that is not', async () => {
     const { written, io } = await run({
       client: fakeClient({
@@ -640,8 +738,20 @@ describe('configure: the model preset', () => {
         ],
         models: async () => ({
           models: [
-            { modelId: 'claude-opus', available: false },
-            { modelId: 'kimi', available: true },
+            {
+              modelId: 'claude-opus',
+              available: false,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
+            {
+              modelId: 'kimi',
+              available: true,
+              policyBlocked: false,
+              personalSubscription: false,
+              subscriptionConfigured: null,
+            },
           ],
           excludesUserScopedModels: false,
         }),

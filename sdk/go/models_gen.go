@@ -2340,11 +2340,12 @@ type ListPublicWiredModelsResponse struct {
 
 // ListPublicWiredModelsResponseModel is the `ListPublicWiredModelsResponseModel` wire model.
 type ListPublicWiredModelsResponseModel struct {
-	Available     bool   `json:"available"`
-	Label         string `json:"label"`
-	ModelID       string `json:"modelId"`
-	PolicyBlocked bool   `json:"policyBlocked"`
-	Provider      string `json:"provider"`
+	Available            bool   `json:"available"`
+	Label                string `json:"label"`
+	ModelID              string `json:"modelId"`
+	PersonalSubscription bool   `json:"personalSubscription"`
+	PolicyBlocked        bool   `json:"policyBlocked"`
+	Provider             string `json:"provider"`
 	// SubscriptionConfigured always present; nil when the server has no value for it.
 	SubscriptionConfigured *bool `json:"subscriptionConfigured"`
 	UserScoped             bool  `json:"userScoped"`

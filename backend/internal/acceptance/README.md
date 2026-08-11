@@ -235,8 +235,16 @@ person's subscription, and only their personal password opens it. Two consequenc
   is in the way, which `configure` and the `model-preset` gate render as "your subscription is
   connected; this token is not bound to spend it". `false` means the owner is known and holds none;
   `null` means there was nobody to ask about, which is a token minted through `POST /api/v1/keys`
-  rather than in the app. A model that genuinely has no provider still reads as unwired, because
-  every one of those verdicts comes from the row rather than from a flag about the whole answer.
+  rather than in the app. Those three are gated on `personalSubscription`, so a model with no
+  individual-usage subscription route at all keeps reading as unwired and a workspace-POOLED
+  subscription (Kimi, DeepSeek) is never mistaken for one: its token belongs to the workspace, which
+  every key can already see.
+
+  What the row cannot tell you apart, and the suite therefore does not claim to: a model that
+  declares a personal subscription NOBODY has connected reads the same as one whose owner this token
+  could not resolve, until `subscriptionConfigured` answers. That is the whole reason the three
+  states are kept separate rather than collapsed into "user-scoped".
+
 - **The pass asks for your personal password at the terminal**, once, at the first call that needs
   it — not at `configure` time, and never for a workspace running on a provider API key. It is held
   in the process's memory and written NOWHERE: not the `.env`, not the ledger, not the journal. That

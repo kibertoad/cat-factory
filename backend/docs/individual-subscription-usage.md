@@ -206,13 +206,13 @@ is identical on Cloudflare D1 and Node/local Postgres.
 A public-API key is one of two things, chosen when it is minted (Integrations → API access
 tokens, "Runs as"), and the choice decides whether this whole mechanism is reachable at all:
 
-|                        | **System token** (the default)                                                                                                                | **Personal token**           |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| `actsAsUserId`         | `null`                                                                                                                                        | the minter's own `usr_*`     |
-| Who its runs belong to | nobody                                                                                                                                        | the person who minted it     |
-| Whose merge policy     | none pinned (the preset's base rules)                                                                                                         | that person's workspace role |
-| Individual-usage model | refused, `409 individual_model_unsupported`                                                                                                   | runs, once unlocked          |
-| `GET /api/v1/models`   | cannot RUN a `userScoped` row, but reports via `subscriptionConfigured` whether its minter's subscription exists; omits locally-run endpoints | resolves under that user     |
+|                        | **System token** (the default)                                                                                                                          | **Personal token**           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `actsAsUserId`         | `null`                                                                                                                                                  | the minter's own `usr_*`     |
+| Who its runs belong to | nobody                                                                                                                                                  | the person who minted it     |
+| Whose merge policy     | none pinned (the preset's base rules)                                                                                                                   | that person's workspace role |
+| Individual-usage model | refused, `409 individual_model_unsupported`                                                                                                             | runs, once unlocked          |
+| `GET /api/v1/models`   | cannot RUN a `personalSubscription` row, but reports via `subscriptionConfigured` whether its minter's subscription exists; omits locally-run endpoints | resolves under that user     |
 
 **A bound run is that person's run all the way through, policy included.** The start resolves
 the bound user's workspace role (`keyInitiatorRole`) and pins it, so a headless start is

@@ -209,6 +209,54 @@ describe('api-key', () => {
   })
 })
 
+describe('agent-model', () => {
+  const client = (models: Record<string, unknown>[]) =>
+    ({
+      models: { list: async () => ({ models, excludesUserScopedModels: false }) },
+    }) as unknown as CatFactoryClient
+
+  it('names the POLICY when it refuses the whole catalog, even with a connected subscription', async () => {
+    // The two causes can hold at once, and only one of them can be acted on. Reaching the identity
+    // answer first announced "Nothing is missing from the deployment" about a deployment whose
+    // model-family policy refuses every entry, and pointed at a re-mint that changes nothing.
+    const verdict = await refusal('agent-model', {
+      client: client([
+        {
+          modelId: 'claude-opus',
+          label: 'Claude',
+          available: false,
+          policyBlocked: true,
+          personalSubscription: true,
+          subscriptionConfigured: true,
+        },
+        { modelId: 'gpt-5', label: 'GPT', available: false, policyBlocked: true },
+      ]),
+    })
+    expect(verdict.problem).toContain('model-family policy')
+    expect(verdict.problem).not.toContain('Nothing is missing from the deployment')
+  })
+
+  it('names the token when a connected subscription is what the catalog is missing', async () => {
+    // The same read with the policy out of the way: now the deployment IS correct and the token's
+    // identity is the whole problem, which is the one refusal here whose remedy is not "wire
+    // something".
+    const verdict = await refusal('agent-model', {
+      client: client([
+        {
+          modelId: 'claude-opus',
+          label: 'Claude',
+          available: false,
+          policyBlocked: false,
+          personalSubscription: true,
+          subscriptionConfigured: true,
+        },
+      ]),
+    })
+    expect(verdict.problem).toContain('Nothing is missing from the deployment')
+    expect(verdict.remedy.steps.join('\n')).toContain('"Runs as" set to yourself')
+  })
+})
+
 describe('model-preset', () => {
   const client = (
     presets: Record<string, unknown>[],
@@ -267,7 +315,7 @@ describe('model-preset', () => {
             modelId: 'claude-opus',
             label: 'Claude',
             available: false,
-            userScoped: true,
+            personalSubscription: true,
             subscriptionConfigured: true,
           },
         ],
@@ -288,6 +336,55 @@ describe('model-preset', () => {
     })
     expect(verdict.problem).toContain('model-family policy')
     expect(verdict.remedy.steps.join('\n')).toContain('adding a provider key changes nothing')
+  })
+
+  it('keeps the policy ahead of a subscription the deployment CONFIRMED is connected', async () => {
+    // Both facts are true of this row, and only one of them can be acted on: a re-minted token
+    // spends the subscription and the policy refuses the model anyway. Ranking the identity answer
+    // first told an operator nothing was missing from a deployment whose policy was the problem.
+    const verdict = await refusal('model-preset', {
+      client: client(
+        [preset()],
+        [
+          {
+            modelId: 'claude-opus',
+            label: 'Claude',
+            available: false,
+            policyBlocked: true,
+            personalSubscription: true,
+            subscriptionConfigured: true,
+          },
+        ],
+      ),
+    })
+    expect(verdict.problem).toContain('model-family policy')
+    expect(verdict.problem).not.toContain('IS connected')
+  })
+
+  it('says the owner holds NONE rather than calling the question unanswerable', async () => {
+    // `false` is the deployment's own answer: it resolved the person and they hold no subscription
+    // for the vendor. Folding it into the `null` wording ("this token resolved none, so whether it
+    // is wired is unknown here") reported an ANSWERED question as unanswerable and sent the reader
+    // to re-mint a token that would resolve the same person and the same absence.
+    const verdict = await refusal('model-preset', {
+      client: client(
+        [preset()],
+        [
+          {
+            modelId: 'claude-opus',
+            label: 'Claude',
+            available: false,
+            personalSubscription: true,
+            subscriptionConfigured: false,
+          },
+        ],
+      ),
+    })
+    expect(verdict.problem).toContain('holds none for that vendor')
+    expect(verdict.problem).not.toContain('unknown here')
+    const steps = verdict.remedy.steps.join('\n')
+    expect(steps).toContain('re-minting the token changes nothing')
+    expect(steps).not.toContain('"Runs as" set to yourself')
   })
 
   it('offers only presets whose model IS selectable as the alternative', async () => {

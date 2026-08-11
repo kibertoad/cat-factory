@@ -76,13 +76,13 @@ The create body also takes `actsAsSelf` (optional, default `false`), which picks
 IDENTITIES a key can have. This is a different question from `scope`: scope is what the key may DO,
 identity is WHOSE credentials, spend and merge-policy role its runs answer to.
 
-|                                                            | **System token** (`actsAsSelf: false`, the default)                                                               | **Personal token** (`actsAsSelf: true`) |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| `actsAsUserId`                                             | `null`                                                                                                            | the minter's own `usr_*`                |
-| Runs it starts are attributed to                           | nobody                                                                                                            | the person who minted it                |
-| Its runs are admitted under the merge policy of            | no role (the preset's base rules)                                                                                 | that person's workspace role            |
-| A task on an individual-usage model (Claude / Codex / GLM) | refused, `409 individual_model_unsupported`                                                                       | runs, once unlocked per call            |
-| `GET /api/v1/models`                                       | cannot RUN a `userScoped` row (but reports whether the minter's subscription exists); omits locally-run endpoints | resolves under that user                |
+|                                                            | **System token** (`actsAsSelf: false`, the default)                                                                         | **Personal token** (`actsAsSelf: true`) |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `actsAsUserId`                                             | `null`                                                                                                                      | the minter's own `usr_*`                |
+| Runs it starts are attributed to                           | nobody                                                                                                                      | the person who minted it                |
+| Its runs are admitted under the merge policy of            | no role (the preset's base rules)                                                                                           | that person's workspace role            |
+| A task on an individual-usage model (Claude / Codex / GLM) | refused, `409 individual_model_unsupported`                                                                                 | runs, once unlocked per call            |
+| `GET /api/v1/models`                                       | cannot RUN a `personalSubscription` row (but reports whether the minter's subscription exists); omits locally-run endpoints | resolves under that user                |
 
 **Prefer a system token**: it is the narrower credential, and a leak cannot spend one person's
 subscription because no person is attached. Mint a personal token only where the runs genuinely are
@@ -1228,16 +1228,26 @@ available" so often sends someone to change a setting that was already correct.
 There is a third state, and it comes in two halves because a model belonging to a PERSON can be
 missing from this answer in two different ways.
 
-`userScoped: true` on a ROW says that model runs on a subscription vendor, which any member may hold
-their own personal subscription for. A token bound to nobody consults nobody's personal store, so
-`available: false` on such a row is never "no provider is wired". It is true wherever the model
-DECLARES a subscription route, not merely where that route is the one in force: a model reachable
-both by subscription and by a metered gateway resolves to the gateway with nothing configured, so
-reading the route in force would report the commonest personal credential of all (`claude-opus` on a
-Claude subscription) as plainly unwired.
+`personalSubscription: true` on a ROW says that model runs on a credential belonging to a PERSON: it
+declares a subscription route whose vendor is licensed for individual use only (Claude, Codex, GLM),
+so the credential is stored per user. A token bound to nobody consults nobody's personal store, so
+`available: false` on such a row is never "no provider is wired".
+
+Two things it deliberately does NOT do, each of which was a real misreport. It is true wherever the
+model DECLARES that route, not merely where the route is the one in force: a model reachable both by
+subscription and by a metered gateway resolves to the gateway with nothing configured, so reading the
+route in force reported the commonest personal credential of all (`claude-opus` on a Claude
+subscription) as plainly unwired. And it is FALSE for a poolable vendor (Kimi, DeepSeek), whose token
+belongs to the workspace and which every key can therefore already see: flagging one sends an
+operator to re-mint a token when the fix is a pooled token or a provider key.
+
+`userScoped` is the superseded predecessor of this field and still answers its original, narrower
+question (whether a subscription route is the one in force), so it is wrong in both of the directions
+above. It stays on the wire for callers already built against it and will be removed in a future
+major version. Prefer `personalSubscription`.
 
 `subscriptionConfigured` then says whether the credential is actually THERE, for the person the key
-belongs to — its `actsAsUserId` when bound, else its minter. `true` is the case worth acting on: the
+belongs to: its `actsAsUserId` when bound, else its minter. `true` is the case worth acting on: the
 subscription is connected and this token simply may not spend it, so the remedy is a
 [personal token](#1-mint-a-key) and nothing about the deployment needs changing. `false` means that
 person holds none, and a bound token would fare no better. `null` means the question was not answered
@@ -1248,12 +1258,20 @@ and you are back to telling an operator to configure something that may already 
 Existence is a row lookup, which is why the answer costs nothing: the credential is sealed under its
 owner's personal password, that password opens it, and this read neither holds nor wants one. So a
 system token can be told the truth about a model it cannot run, and `available` stays resolved under
-`actsAsUserId` alone — the two facts are reported separately because they are separate.
+`actsAsUserId` alone: the two facts are reported separately because they are separate.
+
+It does disclose one bit about a named person, and that is a deliberate trade rather than an
+oversight. On an unbound key the person asked about is its MINTER, who need not be whoever holds the
+key, and provenance is never re-validated against current membership, so a key handed to CI or a
+contractor learns whether a specific colleague (including a departed one) holds a live subscription
+for that vendor. What contains it: the bit is EXISTENCE only, never the person, the vendor account or
+the credential, and the route floors at `admin` scope. Reporting for the workspace's members at large
+would be strictly more leakage for the same remedy.
 
 `excludesUserScopedModels: true` on the RESPONSE says this answer OMITTED models it could not
 enumerate at all: per-user locally-run endpoints, which live on one developer's machine. Those never
 appear as rows, so on a deployment wired that way alone the catalog looks empty rather than
-unavailable, and no token can reach them — the fix is a run started by that user in the app.
+unavailable, and no token can reach them: the fix is a run started by that user in the app.
 
 The split is deliberate: a listed-but-unrunnable model is named by its own row, while a model that is
 not there at all can only be reported once for the whole answer. Reading either as "no provider is

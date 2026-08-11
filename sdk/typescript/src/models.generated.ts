@@ -1311,6 +1311,7 @@ export interface ListPublicWiredModelsResponseModel {
   available: boolean
   label: string
   modelId: string
+  personalSubscription: boolean
   policyBlocked: boolean
   provider: string
   /** Always present; `null` when the server has no value for it. */

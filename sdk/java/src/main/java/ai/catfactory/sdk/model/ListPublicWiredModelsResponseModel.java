@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
  * @param available the {@code available} field.
  * @param label the {@code label} field.
  * @param modelId the {@code modelId} field.
+ * @param personalSubscription the {@code personalSubscription} field.
  * @param policyBlocked the {@code policyBlocked} field.
  * @param provider the {@code provider} field.
  * @param subscriptionConfigured Always present; {@code null} when the server has no value for it.
@@ -24,6 +25,8 @@ public record ListPublicWiredModelsResponseModel(
     @JsonProperty("label") String label,
 
     @JsonProperty("modelId") String modelId,
+
+    @JsonProperty("personalSubscription") Boolean personalSubscription,
 
     @JsonProperty("policyBlocked") Boolean policyBlocked,
 
@@ -50,6 +53,7 @@ public record ListPublicWiredModelsResponseModel(
         private @Nullable Boolean available;
         private @Nullable String label;
         private @Nullable String modelId;
+        private @Nullable Boolean personalSubscription;
         private @Nullable Boolean policyBlocked;
         private @Nullable String provider;
         private @Nullable Boolean subscriptionConfigured;
@@ -70,6 +74,12 @@ public record ListPublicWiredModelsResponseModel(
         /** Set {@code modelId}. */
         public Builder modelId(@Nullable String modelId) {
             this.modelId = modelId;
+            return this;
+        }
+
+        /** Set {@code personalSubscription}. */
+        public Builder personalSubscription(@Nullable Boolean personalSubscription) {
+            this.personalSubscription = personalSubscription;
             return this;
         }
 
@@ -99,7 +109,7 @@ public record ListPublicWiredModelsResponseModel(
 
         /** Build the {@link ListPublicWiredModelsResponseModel}. */
         public ListPublicWiredModelsResponseModel build() {
-            return new ListPublicWiredModelsResponseModel(available, label, modelId, policyBlocked, provider, subscriptionConfigured, userScoped);
+            return new ListPublicWiredModelsResponseModel(available, label, modelId, personalSubscription, policyBlocked, provider, subscriptionConfigured, userScoped);
         }
     }
 }

@@ -584,32 +584,50 @@ What a consumer NOTICES, beyond the two new methods:
   accident, which is the reasoning behind the flip; a deployment that wants the old behaviour turns
   it off with one call to the new operation.
 
-1.47.0, not 1.46.0: one new response field on `GET /api/v1/models`, additive, plus a fix to the field
-1.45.0 added, which never fired for the model every report of the bug was about. Written against
-1.46.0 and moved once main took that number for the tracker-writeback pair above. The collision this
-file warns about, arriving exactly as described: both sides wrote `'1.46.0'`, so the VERSION LINE
-auto-merged with no conflict and only this paragraph came back as one.
+1.47.0, not 1.46.0: TWO new response fields on `GET /api/v1/models`, both additive, and nothing
+already published changes meaning. Written against 1.46.0 and moved once main took that number for
+the tracker-writeback pair above. The collision this file warns about, arriving exactly as described:
+both sides wrote `'1.46.0'`, so the VERSION LINE auto-merged with no conflict and only this paragraph
+came back as one.
 
-`userScoped` was derived from the route IN FORCE (`flavor === 'subscription'`), and a model with more
-than one route resolves, when nothing is configured, to the most-preferred route it merely DECLARES.
-`subscription` is last in that order, so `claude-opus` — the built-in Claude preset's own model, which
-also declares OpenRouter — answered `userScoped: false` and read as "no provider is wired". The
-version that shipped the flag to remove that misreport left it in place for the commonest personal
-credential in the product; `claude-sonnet` (subscription-only) was the case it did cover. It is now
-read off what a model DECLARES, so every subscription-reachable row answers true. A consumer that
-branched on it sees more rows flagged, which is the direction the field was for.
+`personalSubscription` is the first, and it exists because the field it supersedes could not be
+corrected in place. `userScoped` (1.45.0) is derived from the route IN FORCE
+(`flavor === 'subscription'`), and a model with more than one route resolves, when nothing is
+configured, to the most-preferred route it merely DECLARES. `subscription` is last in that order, so
+`claude-opus`, the built-in Claude preset's own model, which also declares OpenRouter, answered
+`userScoped: false` and read as "no provider is wired". The version that shipped the flag to remove
+that misreport left it in place for the commonest personal credential in the product;
+`claude-sonnet` (subscription-only) was the case it did cover.
 
-`subscriptionConfigured` is the new field: whether a personal subscription for that row's vendor is
+Fixing that reading in place would have moved a published field's meaning in BOTH directions at once,
+which is the thing this surface does not do. It would have started answering true for `claude-opus`
+(right) and stopped answering true for a POOLED vendor's model whose subscription route is in force
+(also right, and also a change under a consumer already branching on it). So `userScoped` keeps
+answering exactly what it always answered, `personalSubscription` answers the question both
+corrections were reaching for, and the removal of the old half is a later change once consumers have
+had a release window: true where the model DECLARES a subscription route whose vendor is
+individual-usage only. The pooled exclusion is not a detail. A Kimi or DeepSeek token belongs to the
+WORKSPACE, so every key can already see it, and reporting such a model as belonging to a person sent
+an operator to re-mint a token when the fix was a pooled token or a provider key.
+
+`subscriptionConfigured` is the second: whether a personal subscription for that row's vendor is
 stored for the person the key belongs to (`actsAsUserId` when bound, else its MINTER), `null` when
-there was nobody to ask about. `userScoped` alone tells a caller its answer is unreliable and stops
-there; the operator's next move was to re-mint the token and see what happened, which is what the
-first person to hit this actually did. Existence is a row lookup, so the deployment can answer it
-without the personal password that OPENS the credential — which is precisely what 1.45.0's rejected
-alternative got wrong. That entry concluded "the server cannot know whether one exists without a
-user"; the correction is that an unbound key does have a user for DESCRIPTION purposes, its minter,
-and reading it changes nothing about admission. `available` is still resolved under `actsAsUserId`
-alone, so a system token reads `available: false` beside `subscriptionConfigured: true` and the two
-statements are both true: the model is wired, and this credential may not spend it.
+there was nobody to ask about. `personalSubscription` alone tells a caller its answer is unreliable
+and stops there; the operator's next move was to re-mint the token and see what happened, which is
+what the first person to hit this actually did. Existence is a row lookup, so the deployment can
+answer it without the personal password that OPENS the credential, which is precisely what 1.45.0's
+rejected alternative got wrong. That entry concluded "the server cannot know whether one exists
+without a user"; the correction is that an unbound key does have a user for DESCRIPTION purposes, its
+minter, and reading it changes nothing about admission. `available` is still resolved under
+`actsAsUserId` alone, so a system token reads `available: false` beside `subscriptionConfigured:
+true` and the two statements are both true: the model is wired, and this credential may not spend it.
+
+What that trades is stated rather than left implicit: on an unbound key the person asked about is the
+MINTER, who need not be whoever holds the key, and provenance is never re-validated against current
+membership. So an `admin`-scoped key learns one bit about a named colleague, including one who has
+left. Contained by the bit being EXISTENCE only (never the person, the vendor account or the
+credential) and by the route's `admin` floor; the alternative of reporting for the workspace's
+members at large is strictly more leakage for the same remedy.
 
 `null` is a third state and not a shy `false`, for the same reason `excludesUserScopedModels` exists:
 "asked, and there is none" is a subscription to connect, where "there was nobody to ask" is a token to

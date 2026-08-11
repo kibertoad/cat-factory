@@ -567,26 +567,54 @@ export const publicWiredModelSchema = v.object({
    * start the run from the app) rather than add a provider key. A caller cannot derive this from
    * the rest of the row, which is why it is stated rather than left to be inferred from a label.
    *
-   * True where the model DECLARES a subscription route, not merely where one is the route in
-   * force. A model reachable both by subscription and by a metered gateway resolves, with nothing
-   * configured, to the gateway — so reading the route in force would report the commonest personal
-   * credential of all (`claude-opus` on a Claude subscription) as plainly unwired, which is the
-   * exact misreport this field was added to remove.
+   * SUPERSEDED by `personalSubscription`, and kept answering exactly as it always has: the
+   * subscription route is the one IN FORCE for this model. That reading has two faults this field
+   * cannot be corrected for without breaking a caller already branching on it. It is true of a
+   * POOLABLE vendor, whose token belongs to the workspace and which any key can therefore see; and
+   * it is false of a model that merely DECLARES a subscription beside a metered gateway, which is
+   * what `claude-opus` resolves to on a deployment with nothing configured. `personalSubscription`
+   * answers both correctly. Prefer it; this field will be removed in a future major version.
    */
   userScoped: v.boolean(),
   /**
+   * Whether this model runs on a credential that belongs to a PERSON: it declares a subscription
+   * route whose vendor is licensed for individual use only (Claude, Codex, GLM), so the credential
+   * is stored per user and no key that resolves no user can see it.
+   *
+   * Read off what the model DECLARES rather than off the route in force. A model reachable both by
+   * subscription and by a metered gateway resolves, with nothing configured, to the gateway, so
+   * reading the route in force reports the commonest personal credential of all (`claude-opus` on
+   * a Claude subscription) as plainly unwired.
+   *
+   * A POOLABLE vendor is deliberately NOT included, and that is the other half of the correction.
+   * Its token is held by the WORKSPACE, so a system token can see it and no identity is missing:
+   * reporting such a model as personal sends an operator to re-mint a key when the fix is a pooled
+   * token or a provider key.
+   */
+  personalSubscription: v.boolean(),
+  /**
    * Whether a personal subscription for this model's vendor IS stored for the person this key
    * belongs to: its `actsAsUserId` when bound, else its minter. `null` when the question was not
-   * answered at all — there is no such person (a key provisioned headlessly through
+   * answered at all: there is no such person (a key provisioned headlessly through
    * `POST /api/v1/keys`), the deployment stores no personal subscriptions, or the row is not
-   * `userScoped` and so has no vendor to ask about. `null` is NOT `false` and must not be read as
-   * one: "nobody was asked" and "asked, and there is none" send an operator to different screens.
+   * `personalSubscription` and so has no vendor to ask about. `null` is NOT `false` and must not be
+   * read as one: "nobody was asked" and "asked, and there is none" send an operator to different
+   * screens.
    *
    * Only ever a statement about EXISTENCE, which is a row lookup: opening the credential needs the
    * owner's personal password, and nothing here holds or wants one. That is what lets a system
-   * token be told the truth about a model it cannot run — `available: false` with
+   * token be told the truth about a model it cannot run: `available: false` with
    * `subscriptionConfigured: true` means the subscription is there and this token is not bound to
    * it, so the remedy is to mint a personal key rather than to wire a provider.
+   *
+   * DISCLOSURE, stated because it is a deliberate trade rather than an oversight. When the key is
+   * unbound the person asked about is its MINTER, who need not be whoever holds the key: an
+   * `admin`-scoped key handed to CI or to a contractor learns one bit (a live personal subscription
+   * for this vendor exists / does not) about a named colleague, and about one who has since left
+   * the workspace too, since provenance is never re-validated against current membership. What
+   * contains it is that the bit is EXISTENCE only, never the person, never the vendor account and
+   * never the credential, and that the route floors at `admin` scope. The alternative, reporting
+   * for the workspace's members at large, is strictly more leakage for the same remedy.
    */
   subscriptionConfigured: v.nullable(v.boolean()),
 })
@@ -605,7 +633,7 @@ export type PublicWiredModel = v.InferOutput<typeof publicWiredModelSchema>
  * collapsed into a false.
  *
  * It answers for the models this read OMITS. The ones it lists but could not run are the row-level
- * `userScoped` / `subscriptionConfigured` pair's job, and the split is deliberate: a personal
+ * `personalSubscription` / `subscriptionConfigured` pair's job, and the split is deliberate: a personal
  * subscription's model IS in this catalog (as unavailable), so reporting it here would say
  * "something is missing" about an entry the caller can see, while saying nothing about WHICH. A
  * caller diagnosing one model wants the row; a caller deciding whether the whole answer is complete

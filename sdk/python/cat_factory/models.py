@@ -5372,6 +5372,7 @@ class ListPublicWiredModelsResponseModel:
     available: bool
     label: str
     model_id: str
+    personal_subscription: bool
     policy_blocked: bool
     provider: str
     user_scoped: bool
@@ -5386,11 +5387,12 @@ class ListPublicWiredModelsResponseModel:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicWiredModelsResponseModel":
         """Decode a `ListPublicWiredModelsResponseModel` from its JSON object."""
-        known = {"available", "label", "modelId", "policyBlocked", "provider", "userScoped", "subscriptionConfigured"}
+        known = {"available", "label", "modelId", "personalSubscription", "policyBlocked", "provider", "userScoped", "subscriptionConfigured"}
         return cls(
             available=data.get("available"),
             label=data.get("label"),
             model_id=data.get("modelId"),
+            personal_subscription=data.get("personalSubscription"),
             policy_blocked=data.get("policyBlocked"),
             provider=data.get("provider"),
             user_scoped=data.get("userScoped"),
@@ -5404,6 +5406,7 @@ class ListPublicWiredModelsResponseModel:
         out["available"] = self.available
         out["label"] = self.label
         out["modelId"] = self.model_id
+        out["personalSubscription"] = self.personal_subscription
         out["policyBlocked"] = self.policy_blocked
         out["provider"] = self.provider
         out["userScoped"] = self.user_scoped

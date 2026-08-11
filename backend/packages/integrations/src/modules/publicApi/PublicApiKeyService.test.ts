@@ -93,7 +93,7 @@ describe('PublicApiKeyService', () => {
     )
     const auth = await service.authenticate(secret)
     // Provenance, and it stays provenance: the key acts for nobody, so nothing it does may reach
-    // that person's credentials. What the minter buys is DESCRIPTION — `GET /api/v1/models` can
+    // that person's credentials. What the minter buys is DESCRIPTION: `GET /api/v1/models` can
     // say a model this key cannot dispatch to is nonetheless wired, as their own subscription.
     expect(auth?.createdByUserId).toBe('usr_7')
     expect(auth?.actsAsUserId).toBeNull()

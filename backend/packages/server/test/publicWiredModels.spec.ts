@@ -13,7 +13,7 @@ import { publicProvisioningController } from '../src/modules/publicApi/PublicPro
 // nothing is wired, a policy refuses it, a person's credential was never consulted, or a person's
 // credential is right there and this token may not spend it. The last is the one a deployment
 // running every day on a Claude subscription actually hits, and the one that used to render as "no
-// provider wired for it" — sending its operator to buy an API key for a model they already pay for.
+// provider wired for it", sending its operator to buy an API key for a model they already pay for.
 //
 // Driven through the real controller with stubbed stores rather than through the catalog helpers,
 // because both bugs this pins lived in the PROJECTION: the flags are derived from the catalog row
@@ -87,6 +87,7 @@ async function rowFor(app: Hono<AppEnv>, secret: string, modelId: string) {
       modelId: string
       available: boolean
       userScoped: boolean
+      personalSubscription: boolean
       subscriptionConfigured: boolean | null
     }[]
   }
@@ -98,24 +99,45 @@ async function rowFor(app: Hono<AppEnv>, secret: string, modelId: string) {
 describe('GET /api/v1/models: which models belong to a PERSON', () => {
   // `claude-opus` is the model the built-in Claude preset pins and the one every report of this bug
   // has been about. It declares TWO routes (OpenRouter and the subscription), and with neither
-  // configured the catalog resolves it to the most-preferred DECLARED one — OpenRouter. So a
-  // `userScoped` read off the route IN FORCE answered false here, for the single commonest personal
-  // credential in the product, and the flag added to prevent this exact misreport never fired.
-  it('marks a model reachable by subscription as user-scoped even when another route wins', async () => {
+  // configured the catalog resolves it to the most-preferred DECLARED one, OpenRouter. So a flag
+  // read off the route IN FORCE answers false here, for the single commonest personal credential in
+  // the product, and `userScoped` (which is exactly that reading) never fired for it.
+  it('marks a model reachable by subscription as personal even when another route wins', async () => {
     const row = await rowFor(build(), 'system.secret', 'claude-opus')
     expect(row.available).toBe(false)
-    expect(row.userScoped).toBe(true)
+    expect(row.personalSubscription).toBe(true)
   })
 
-  it('marks a subscription-ONLY model as user-scoped', async () => {
-    expect((await rowFor(build(), 'system.secret', 'claude-sonnet')).userScoped).toBe(true)
+  it('marks a subscription-ONLY model as personal', async () => {
+    expect((await rowFor(build(), 'system.secret', 'claude-sonnet')).personalSubscription).toBe(
+      true,
+    )
   })
 
   it('leaves a model with no subscription route alone', async () => {
     const row = await rowFor(build(), 'system.secret', 'claude-opus-4-8')
-    expect(row.userScoped).toBe(false)
+    expect(row.personalSubscription).toBe(false)
     // No vendor to ask about, so there is no answer rather than a negative one.
     expect(row.subscriptionConfigured).toBeNull()
+  })
+
+  it('does NOT mark a POOLABLE vendor’s model as personal', async () => {
+    // Kimi and DeepSeek are licensed for org use, so their token is held by the WORKSPACE and every
+    // key can see it. Flagging one as belonging to a person is not a harmless over-report: it is
+    // what makes the suite tell an operator to re-mint their token when the fix is a pooled token
+    // or a provider key, and no identity is missing at all.
+    const row = await rowFor(build(), 'system.secret', 'kimi')
+    expect(row.personalSubscription).toBe(false)
+    expect(row.subscriptionConfigured).toBeNull()
+  })
+
+  it('keeps the superseded `userScoped` answering the route IN FORCE', async () => {
+    // Published at 1.45.0 and branched on by consumers, so it is served beside its replacement
+    // rather than corrected under them. Which means it stays WRONG in the direction that made a
+    // new field necessary, and this pins that as deliberate rather than as an oversight: false for
+    // the Claude preset's own model, whose declared subscription lost the route race to OpenRouter.
+    expect((await rowFor(build(), 'system.secret', 'claude-opus')).userScoped).toBe(false)
+    expect((await rowFor(build(), 'system.secret', 'claude-sonnet')).userScoped).toBe(true)
   })
 })
 
@@ -127,7 +149,7 @@ describe('GET /api/v1/models: whether the credential is actually there', () => {
       'claude-opus',
     )
     // The whole point: wired, and still not dispatchable by THIS credential. Reporting either half
-    // alone is a lie — `available: true` promises a run that would be refused at start, and
+    // alone is a lie: `available: true` promises a run that would be refused at start, and
     // `subscriptionConfigured: false` sends its operator to buy a key they do not need.
     expect(row.subscriptionConfigured).toBe(true)
     expect(row.available).toBe(false)
@@ -150,7 +172,7 @@ describe('GET /api/v1/models: whether the credential is actually there', () => {
       'claude-opus',
     )
     expect(row.subscriptionConfigured).toBe(false)
-    expect(row.userScoped).toBe(true)
+    expect(row.personalSubscription).toBe(true)
   })
 
   it('answers NULL, never false, when there is no person to ask about', async () => {
@@ -163,7 +185,7 @@ describe('GET /api/v1/models: whether the credential is actually there', () => {
       'claude-opus',
     )
     expect(row.subscriptionConfigured).toBeNull()
-    expect(row.userScoped).toBe(true)
+    expect(row.personalSubscription).toBe(true)
   })
 
   it('answers NULL on a deployment that stores no personal subscriptions', async () => {
