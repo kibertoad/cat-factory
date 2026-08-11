@@ -1,9 +1,10 @@
 import type {
   BlockEditActor,
   BlockEditAuthority,
+  RiskPolicyDefaultScope,
   RiskPolicySelectionRefusal,
 } from '@cat-factory/contracts'
-import { refuseRiskPolicySelection } from '@cat-factory/contracts'
+import { refuseRiskPolicySelection, RISK_POLICY_DEFAULT_SCOPES } from '@cat-factory/contracts'
 import type { RiskPolicy, RiskPolicyRepository } from '@cat-factory/kernel'
 import { ForbiddenError } from '@cat-factory/kernel'
 import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
@@ -125,13 +126,28 @@ export function createRiskPolicySelectionGuard(deps: {
    * them), and a preset library is a handful of hand-maintained rows either way. The resolution
    * itself stays `resolveRiskPolicy`, the one the engine uses, so a preloaded answer and a live
    * one cannot diverge on a dangling id or an unseeded default.
+   *
+   * The resolver takes a SCOPE because a task that pins no policy resolves a different row
+   * depending on how its runs enter, and the guard cannot know which of those a future run will
+   * be. Both callers therefore judge the pair under EVERY scope and refuse if any of them widens:
+   * a move that is safe for the board's in-app runs and hands the same task's API-started runs a
+   * wider landing authority is exactly the escalation this guard exists to catch.
    */
   const openLibrary = async (workspaceId: string) => {
     const library: readonly RiskPolicy[] =
       (await deps.riskPolicyRepository?.list(workspaceId)) ?? []
     const read = preloadedRiskPolicyRead(library)
-    return (riskPolicyId: string | null | undefined): Promise<ResolvedRunRiskPolicy> =>
-      resolveRiskPolicy({ repository: deps.riskPolicyRepository, workspaceId, riskPolicyId, read })
+    return (
+      riskPolicyId: string | null | undefined,
+      scope: RiskPolicyDefaultScope,
+    ): Promise<ResolvedRunRiskPolicy> =>
+      resolveRiskPolicy({
+        repository: deps.riskPolicyRepository,
+        workspaceId,
+        riskPolicyId,
+        scope,
+        read,
+      })
   }
 
   /**
@@ -151,12 +167,14 @@ export function createRiskPolicySelectionGuard(deps: {
       // Both sides are in force in the SAME workspace here, so one actor answers for both.
       if (!couldRefuse(actor, actor)) return
       const policy = await openLibrary(homeWorkspaceId)
-      const [from, to] = await Promise.all([policy(currentId), policy(nextId)])
-      const refusal = refuseRiskPolicySelection({
-        from: { policy: from, actor },
-        to: { policy: to, actor },
-      })
-      if (refusal) throw new ForbiddenError(REFUSAL_MESSAGE[refusal], { reason: refusal })
+      for (const scope of RISK_POLICY_DEFAULT_SCOPES) {
+        const [from, to] = await Promise.all([policy(currentId, scope), policy(nextId, scope)])
+        const refusal = refuseRiskPolicySelection({
+          from: { policy: from, actor },
+          to: { policy: to, actor },
+        })
+        if (refusal) throw new ForbiddenError(REFUSAL_MESSAGE[refusal], { reason: refusal })
+      }
     },
 
     async assertMayMove(input) {
@@ -180,12 +198,14 @@ export function createRiskPolicySelectionGuard(deps: {
       ])
       for (const pick of picks) {
         const id = pick || null
-        const [held, next] = await Promise.all([fromPolicy(id), toPolicy(id)])
-        const refusal = refuseRiskPolicySelection({
-          from: { policy: held, actor: fromActor },
-          to: { policy: next, actor: toActor },
-        })
-        if (refusal) throw new ForbiddenError(MOVE_REFUSAL_MESSAGE[refusal], { reason: refusal })
+        for (const scope of RISK_POLICY_DEFAULT_SCOPES) {
+          const [held, next] = await Promise.all([fromPolicy(id, scope), toPolicy(id, scope)])
+          const refusal = refuseRiskPolicySelection({
+            from: { policy: held, actor: fromActor },
+            to: { policy: next, actor: toActor },
+          })
+          if (refusal) throw new ForbiddenError(MOVE_REFUSAL_MESSAGE[refusal], { reason: refusal })
+        }
       }
     },
   }

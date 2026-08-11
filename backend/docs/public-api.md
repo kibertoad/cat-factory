@@ -1045,7 +1045,7 @@ deployment actually has.
 | `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                              |
 | `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                               |
 | `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                              |
-| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the workspace default. Pin one as `riskPolicyId`.                                      |
+| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the default for runs nothing is watching (yours). Pin one as `riskPolicyId`.           |
 | `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                                     |
 | `GET /api/v1/tracker/writeback`              | `admin` | What a task's linked tracker issue hears as its pull request opens, merges, or parks a review.                               |
 | `PATCH /api/v1/tracker/writeback`            | `admin` | Turn those actions on or off. MERGES: an action you omit keeps its stored value.                                             |
@@ -1284,12 +1284,25 @@ by the provider at PUSH time, so a caller that does not check them discovers a m
 permission as a repository that bootstrapped and then failed to gain its CI workflow, which reads as
 a broken bootstrap.
 
-`GET /api/v1/risk-policies`: `autoMergeEnabled` on the `isDefault` row decides whether a run can land
-its pull request without a person. `dryRunRoles` and `submissionRestrictedRoles` are the two caveats
-this API cannot resolve for you, since it does not report which workspace role your key's runs are
-admitted under: the first names roles whose runs open a pull request and never merge it, the second
-names roles that may land only certain change classes. Either being non-empty means the policy merges
-for some roles and not others, so report the caveat rather than concluding "this policy merges".
+`GET /api/v1/risk-policies`: a workspace carries TWO defaults, and the one that governs YOUR runs is
+`isUnattendedDefault`, not `isDefault`. `isDefault` is the policy a task resolves when a person starts
+it in the app; every run this API starts (and every tracker dispatch and schedule fire) resolves the
+unattended one, because nothing is watching it. A task that pins `riskPolicyId` overrides both.
+
+On that row, `autoMergeEnabled` decides whether a run can land its pull request without a person, and
+`autonomy` decides whether it can REACH that point without one. Under `attended` a run can stop on a
+judgement call this API will list under `GET /runs/{runId}/decisions` and that only a human can
+settle: a companion at its rework cap, an iterative review at its pass cap, follow-up items nobody
+triaged. A caller with nobody to escalate to waits indefinitely. Under `unattended` the platform
+takes the documented "proceed" answer to each of those and records on the step that it did. Neither
+value covers a gate the PIPELINE asks for: a human-test step, a review gate or an approval gate stops
+the run either way, which is the distinction to keep when reporting what a policy will do.
+
+`dryRunRoles` and `submissionRestrictedRoles` are the two caveats this API cannot resolve for you,
+since it does not report which workspace role your key's runs are admitted under: the first names
+roles whose runs open a pull request and never merge it, the second names roles that may land only
+certain change classes. Either being non-empty means the policy merges for some roles and not others,
+so report the caveat rather than concluding "this policy merges".
 
 `GET /api/v1/model-presets`: `baseModelId` is the model every agent step runs on under that preset,
 and `overrides` names the kinds that run on something else, which is usually what separates two

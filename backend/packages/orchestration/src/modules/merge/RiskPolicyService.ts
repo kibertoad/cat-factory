@@ -97,8 +97,13 @@ export class RiskPolicyService {
       classRulesByRole: input.classRulesByRole,
       dryRunRoles: input.dryRunRoles,
       submissionClassesByRole: input.submissionClassesByRole,
-      // The very first preset must be the default; otherwise honour the request.
+      autonomy: input.autonomy,
+      // The very first preset must be BOTH defaults; otherwise honour the request. A workspace
+      // with exactly one policy has no other row either scope could resolve, and a scope with no
+      // default falls through to `FALLBACK_RISK_POLICY`, which merges nothing: the empty-library
+      // case must not leave a workspace unable to land anything through one of its two doors.
       isDefault: existing.length === 0 ? true : input.isDefault,
+      isUnattendedDefault: existing.length === 0 ? true : input.isUnattendedDefault,
       createdAt: this.clock.now(),
     }
     await this.presets.upsert(workspaceId, preset)
@@ -112,6 +117,14 @@ export class RiskPolicyService {
     const existing = assertFound(await this.presets.get(workspaceId, id), 'RiskPolicy', id)
     if (existing.isDefault && patch.isDefault === false) {
       throw new ConflictError('Cannot unset the default preset; promote another preset instead.')
+    }
+    // The same rule for the second scope, and it needs its own check rather than sharing the one
+    // above: a scope left with no default resolves `FALLBACK_RISK_POLICY`, which auto-merges
+    // nothing, so demoting the unattended default silently stops every API-started task landing.
+    if (existing.isUnattendedDefault && patch.isUnattendedDefault === false) {
+      throw new ConflictError(
+        'Cannot unset the unattended default preset; promote another preset instead.',
+      )
     }
     const updated: RiskPolicy = {
       ...existing,
@@ -153,19 +166,28 @@ export class RiskPolicyService {
       ...(patch.submissionClassesByRole !== undefined
         ? { submissionClassesByRole: patch.submissionClassesByRole }
         : {}),
+      ...(patch.autonomy !== undefined ? { autonomy: patch.autonomy } : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
+      ...(patch.isUnattendedDefault !== undefined
+        ? { isUnattendedDefault: patch.isUnattendedDefault }
+        : {}),
     }
     await this.presets.upsert(workspaceId, updated)
     await this.invalidate(workspaceId)
     return updated
   }
 
-  /** Remove a preset. The default preset cannot be removed. */
+  /** Remove a preset. Neither scope's default preset can be removed. */
   async remove(workspaceId: string, id: string): Promise<void> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const existing = await this.presets.get(workspaceId, id)
     if (existing?.isDefault) {
       throw new ConflictError('Cannot delete the default preset; promote another preset first.')
+    }
+    if (existing?.isUnattendedDefault) {
+      throw new ConflictError(
+        'Cannot delete the unattended default preset; promote another preset first.',
+      )
     }
     await this.presets.remove(workspaceId, id)
     await this.invalidate(workspaceId)
@@ -197,10 +219,18 @@ export class RiskPolicyService {
     // otherwise the seed's `isDefault` would silently demote the user's chosen default.
     const isDefault = existing
       ? existing.isDefault
-      : seed.isDefault && (await this.presets.getDefault(workspaceId)) === null
+      : seed.isDefault && (await this.presets.getDefault(workspaceId, 'interactive')) === null
+    // The same rule per scope, asked separately: a workspace can have an in-app default and no
+    // unattended one (its library predates the unattended scope), and re-materialising
+    // `mp_unattended` there SHOULD claim the empty scope while still not touching the other.
+    const isUnattendedDefault = existing
+      ? existing.isUnattendedDefault
+      : seed.isUnattendedDefault &&
+        (await this.presets.getDefault(workspaceId, 'unattended')) === null
     const preset: RiskPolicy = {
       ...riskPolicyFromSeed(seed, existing?.createdAt ?? this.clock.now()),
       isDefault,
+      isUnattendedDefault,
     }
     await this.presets.upsert(workspaceId, preset)
     await this.invalidate(workspaceId)

@@ -3057,6 +3057,13 @@
         "redundant": "Bez efektu: ta zasada jest już co najmniej tak samo surowa.",
         "alreadyStrictest": "Już zawsze przeglądane",
         "baseHint": "Ta zasada porównuje oceny w każdej kategorii, więc rola może zaostrzyć kategorię jedynie do wymogu przeglądu."
+      },
+      "unattendedDefault": "Domyślna dla bez nadzoru",
+      "makeUnattendedDefault": "Ustaw jako domyślną dla uruchomień bez nadzoru (API, tracker, harmonogram)",
+      "autonomy": {
+        "label": "Kończ uruchomienia bez nadzoru bez czekania na człowieka",
+        "unattendedHint": "Gdy automatyczna pętla się poddaje (companion na limicie poprawek, przegląd na limicie przebiegów, nieposegregowane zadania pochodne), uruchomienie idzie dalej z zapisem zamiast się zatrzymywać. Bramki, o które prosi pipeline, takie jak testy ręczne, przegląd i zatwierdzenie, nadal je zatrzymują.",
+        "attendedHint": "Gdy automatyczna pętla się poddaje, uruchomienie zatrzymuje się i czeka na decyzję. Właściwe dla tablicy, którą ktoś obserwuje; uruchomienie wystartowane przez API czeka bez końca."
       }
     },
     "observabilityConnection": {

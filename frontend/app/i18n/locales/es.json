@@ -3057,6 +3057,13 @@
         "redundant": "Sin efecto: esta política ya es igual de estricta o más.",
         "alreadyStrictest": "Ya se revisa siempre",
         "baseHint": "Esta política compara las puntuaciones en todas las categorías, así que un rol solo puede endurecer una categoría hasta exigir revisión."
+      },
+      "unattendedDefault": "Predeterminada sin supervisión",
+      "makeUnattendedDefault": "Convertir en predeterminada para ejecuciones sin supervisión (API, tracker, programación)",
+      "autonomy": {
+        "label": "Completar las ejecuciones sin supervisión sin esperar a una persona",
+        "unattendedHint": "Cuando un bucle automático se rinde (un companion en su límite de reintentos, una revisión en su límite de pasadas, seguimientos sin triar), la ejecución continúa dejando constancia en lugar de detenerse. Las puertas que pide la pipeline, como pruebas manuales, revisión y aprobación, siguen deteniendo la ejecución.",
+        "attendedHint": "Cuando un bucle automático se rinde, la ejecución se detiene y espera a que alguien elija. Adecuado para un tablero que alguien está mirando; una ejecución iniciada por la API espera indefinidamente."
       }
     },
     "observabilityConnection": {

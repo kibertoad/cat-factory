@@ -29,6 +29,7 @@ import { parseJudgeVerdict } from '@cat-factory/contracts'
 import type { AdvanceResult } from './advance.js'
 import type { FragmentBodyResolver } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
 
 // ---------------------------------------------------------------------------
@@ -77,6 +78,7 @@ export interface JudgeStepControllerDeps {
   resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
+    run: RunPolicyScope,
   ) => Promise<Pick<RiskPolicy, 'judgeMinScore' | 'judgeMaxBounces'>>
   /**
    * The prompt-fragment library, used for ONE thing: resolving a rubric's per-workspace
@@ -181,13 +183,14 @@ export class JudgeStepController {
     workspaceId: string,
     step: PipelineStep,
     block: Block,
+    run: RunPolicyScope,
     judge: JudgeDefinition,
   ): Promise<JudgeStepState> {
     if (step.judge) {
       step.judge = { ...step.judge, status: 'evaluating' }
       return step.judge
     }
-    const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+    const preset = await this.deps.resolveRiskPolicy(workspaceId, block, run)
     step.judge = {
       status: 'evaluating',
       rubricId: judge.rubric.id,
@@ -219,7 +222,7 @@ export class JudgeStepController {
     }
     // The live state, kept as a local so the rest of the method reads it without re-narrowing
     // `step.judge` (which stays the persisted source of truth and is re-assigned below).
-    let judgeState = await this.initState(workspaceId, step, block, judge)
+    let judgeState = await this.initState(workspaceId, step, block, instance, judge)
 
     const { body: rubric, overridden } = await this.resolveRubric(workspaceId, judge)
     judgeState.rubricOverridden = overridden

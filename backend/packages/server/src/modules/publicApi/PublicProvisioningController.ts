@@ -782,6 +782,8 @@ function toPublicRiskPolicy(policy: RiskPolicy): PublicRiskPolicy {
     policyId: policy.id,
     name: policy.name,
     isDefault: policy.isDefault,
+    isUnattendedDefault: policy.isUnattendedDefault,
+    autonomy: policy.autonomy,
     autoMergeEnabled: policy.autoMergeEnabled,
     ciMaxAttempts: policy.ciMaxAttempts,
     dryRunRoles: [...policy.dryRunRoles],

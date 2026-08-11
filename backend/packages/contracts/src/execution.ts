@@ -715,6 +715,18 @@ export const pipelineStepSchema = v.object({
          * an extra round (the loop resumes). Absent until/unless the cap is hit.
          */
         exceeded: v.optional(v.boolean()),
+        /**
+         * Set true when the run's risk policy ANSWERED that cap instead of parking on it
+         * (`autonomy: 'unattended'`), taking the "proceed anyway" choice a person would have been
+         * offered. Mutually exclusive with `exceeded` in practice: one records a cap waiting on a
+         * human, the other a cap already settled without one.
+         *
+         * It exists so the two are never confused by a reader. The last `verdicts` entry says the
+         * producer was below the bar either way, and without this flag a run that advanced anyway
+         * is indistinguishable from one whose companion quietly stopped grading. Rendered on the
+         * step and read by whoever reviews the resulting pull request.
+         */
+        capSettledByPolicy: v.optional(v.boolean()),
       }),
     ),
   ),

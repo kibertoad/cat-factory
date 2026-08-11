@@ -3,6 +3,7 @@ import { frameRepoTypeSchema } from './primitives.js'
 import { stepSubtasksSchema } from './execution.js'
 import { bootstrapStatusSchema } from './bootstrap.js'
 import { agentFailureKindSchema } from './agent-failure-kinds.js'
+import { runAutonomySchema } from './merge.js'
 import { vcsProviderSchema } from './routes/auth.js'
 import { vcsConnectMethodSchema } from './routes/vcs.js'
 import { workspaceRoleSchema } from './workspace-members.js'
@@ -30,7 +31,8 @@ import { workspaceRoleSchema } from './workspace-members.js'
 //
 // **The shared closed VOCABULARIES are the stated exception, and they are pinned rather than
 // copied**: `bootstrapStatus`, `agentFailureKind`, `vcsProvider`, `vcsConnectMethod`,
-// `workspaceRole` and the three counters of `stepSubtasks` are imported and used as they are. A
+// `workspaceRole`, `runAutonomy` and the three counters of `stepSubtasks` are imported and used as
+// they are. A
 // second copy of a picklist buys nothing a projection buys: the members ARE meant to be the same
 // set, and duplicating them creates the stale-value hazard the repo warns about (a value a stored
 // row still holds, mapped through a lookup that no longer has it). What a projection would have
@@ -704,8 +706,29 @@ export type PublicVcsConnectionView = v.InferOutput<typeof publicVcsConnectionVi
 export const publicRiskPolicySchema = v.object({
   policyId: v.string(),
   name: v.string(),
-  /** Whether a task that pins no policy resolves this one. */
+  /** Whether a task that pins no policy resolves this one when a person starts it IN THE APP. */
   isDefault: v.boolean(),
+  /**
+   * Whether a task that pins no policy resolves this one when NOTHING is watching the run: every
+   * start through this API, a tracker dispatch, a schedule fire.
+   *
+   * The field a caller of this API actually wants, and the reason `isDefault` alone could not stay
+   * the whole answer: a workspace holds one default per scope, and the runs a key starts are
+   * governed by this one. A single row may hold both flags.
+   */
+  isUnattendedDefault: v.boolean(),
+  /**
+   * Whether a run under this policy ANSWERS the parks its own automatic loops raise when they give
+   * up (a companion at its rework cap, an iterative review at its pass cap, untriaged follow-ups),
+   * or stops for a person: `attended` | `unattended`.
+   *
+   * Published because it decides whether a headless caller can expect a run to reach a terminal
+   * state on its own. Under `attended` a run can park on a decision this API can list but only a
+   * judgement call can settle, and a caller with nobody to escalate to waits forever. It never
+   * covers a gate the PIPELINE asked for: a human-test step, a review gate or an approval gate
+   * stops the run under either value.
+   */
+  autonomy: runAutonomySchema,
   /** The master switch: false holds every pull request for a person. */
   autoMergeEnabled: v.boolean(),
   /** How many times the `ci-fixer` may try to turn CI green before giving up. */

@@ -744,17 +744,16 @@ per-ticket match is a VERDICT (`unconfirmed` fires `queue` and withholds `per-ti
 Doc: [ADR 0032](./backend/docs/adr/0032-tracker-webhook-intake.md).
 
 **Bug hunt**: scan a tracker board's open unassigned bugs, rate impact against complexity, adopt one onto
-`pl_bugfix`; persists NOTHING. Traps: one vendor call per scan is a hard requirement, and the rating
-takes `isOverBudget`, being the platform's first billable call no run start gates; any future
-un-run-scoped LLM call owes the same guard. Doc: [`bug-hunt.md`](./backend/docs/bug-hunt.md).
+`pl_bugfix`; persists NOTHING. Traps: one vendor call per scan is a hard requirement, and the rating takes
+`isOverBudget`, being the platform's first billable call no run start gates; any future un-run-scoped LLM
+call owes the same guard. Doc: [`bug-hunt.md`](./backend/docs/bug-hunt.md).
 
 **Implementation-fork decision**: an optional two-phase `coder` step that proposes materially different
 implementations and parks for a human BETWEEN two dispatches on the same step (a container job can't
-pause mid-run). Rides `step.forkDecision`; primary repo only. Doc:
-[ADR 0022](./backend/docs/adr/0022-coder-fork-decision.md).
+pause mid-run). Rides `step.forkDecision`; primary repo only. Doc: [ADR 0022](./backend/docs/adr/0022-coder-fork-decision.md).
 
-**Dependency prepopulation**: one declared install command run before the agent's first turn. Trap:
-NEVER a gate; an install is SETUP, so every failure becomes a prompt NOTE and the run continues. Doc:
+**Dependency prepopulation**: one declared install command run before the agent's first turn. Trap: NEVER
+a gate; an install is SETUP, so every failure becomes a prompt NOTE and the run continues. Doc:
 [`agent-dependency-prepopulation.md`](./docs/initiatives/agent-dependency-prepopulation.md).
 
 **Foundational services**: a tiered (builtin ⊕ account ⊕ workspace) catalog of the shared capabilities
@@ -774,13 +773,12 @@ capability/format/value-set is unverifiable, never uncovered; a credential VALUE
 
 **Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
 (in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the
-project directory anchors on the first `path` layer, NEVER the first layer; seeds are idempotent by
-NAME, never overwritten. Doc:
-[`stack-recipes-and-shared-stacks.md`](./docs/initiatives/stack-recipes-and-shared-stacks.md).
+project directory anchors on the first `path` layer, NEVER the first layer; seeds are idempotent by NAME,
+never overwritten. Doc: [`stack-recipes-and-shared-stacks.md`](./docs/initiatives/stack-recipes-and-shared-stacks.md).
 
 **Pre-PR validation**: per-frame install/lint/test/build commands after the agent settles; only a green
-checkout opens a PR. Traps: autodetection SUGGESTS, it never writes; unconfigured is byte-for-byte the
-old behaviour. Doc: [`pre-pr-validation.md`](./docs/initiatives/pre-pr-validation.md).
+checkout opens a PR. Traps: autodetection SUGGESTS, it never writes; unconfigured is byte-for-byte the old
+behaviour. Doc: [`pre-pr-validation.md`](./docs/initiatives/pre-pr-validation.md).
 
 **Bugfix reproduction proof**: the declared reproduction command against the pre-fix tree and the PR
 tree; only red-then-green is proof. Traps: SYMMETRY between the two trees is the safety property; target
@@ -796,8 +794,7 @@ Doc: [`pipeline-pr-descriptions.md`](./backend/docs/pipeline-pr-descriptions.md)
 
 **Consensus panels**: an eligible step runs as a multi-model panel (`@cat-factory/consensus`). Traps: a
 panel participant has NO checkout and `dispatchDeliversCheckout` is the one definition every layer asks;
-the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
-[`consensus-panels.md`](./backend/docs/consensus-panels.md).
+the tier is chosen by the ENGINE at dispatch, deterministically. Doc: [`consensus-panels.md`](./backend/docs/consensus-panels.md).
 
 **Merge lifecycle** turns an open PR into a merged one, gated on REAL CI and a REAL merge, so a task is
 `done` only when its PR actually merged.
@@ -806,23 +803,27 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   pending sleeps, failure dispatches `ci-fixer` (which pushes back onto the SAME branch) up to
   `ciMaxAttempts` then raises `ci_failed`.
 - **`merger`** (last standard step) returns ONLY a JSON assessment; `resolveMergerStep` scores it against
-  the task's merge threshold preset (a per-workspace library on `Block.mergePresetId`, carrying the
-  auto-merge ceilings, `ciMaxAttempts` and the per-class `classRules`) and either merges for real or raises
-  `merge_review`. A pipeline with no merger raises `pipeline_complete`, never auto-`done`.
+  the task's risk policy (a per-workspace library carrying the auto-merge ceilings, the budgets and the
+  per-class `classRules`) and either merges for real or raises `merge_review`. A pipeline with no merger
+  raises `pipeline_complete`, never auto-`done`.
 - **Who started the run is part of the merge policy**, and a bar on LANDING is refused at BOTH exits
   (auto-merge AND `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin
   PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads
-  as a run with no policy rather than as an error.
-  [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md),
+  as a run with no policy rather than as an error. [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md),
   [ADR 0039](./backend/docs/adr/0039-role-scoped-submission-allowlists.md).
 - **Merge track record** persists each decision best-effort. Trap: an unreadable diff yields `unknown`,
   which never matches a rule, so a VCS outage cannot change policy.
   [ADR 0046](./backend/docs/adr/0046-merge-track-record.md).
+- **Whether a run WAITS is policy too**: a workspace has TWO defaults (`isDefault` ⇄
+  `isUnattendedDefault`, picked by `riskPolicyDefaultScopeFor(intakeOrigin)`) and `autonomy` says
+  whether the parks the engine's own loops raise WHEN THEY GIVE UP are answered on the record. Trap:
+  never a park the PIPELINE asked for, and a new give-up park picks a side.
+  [ADR 0053](./backend/docs/adr/0053-unattended-run-autonomy.md).
 - **Notifications** (`NotificationChannel`) and run-lifecycle events (`RunLifecycleSink`) are built together
   by `buildNotificationWebhookSupport` onto ONE registered endpoint and the ONE `signedDelivery.ts`
   retry/SSRF/signature core. Traps: the started edge is exactly-once via `handOffLiveRun` (announced LAST,
   after the claim and the local write); the terminal edges are at-least-once with a `<runId>:<event>` dedupe
-  id a receiver dedupes on, never on the body. [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
+  id a receiver dedupes on, never the body. [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
 **Run evidence reductions**: the ENGINE keeps a verification report of captured facts on EVERY pull request
 a run opened (marker-delimited body section, idempotent, no persisted state) and reduces the same evidence
@@ -831,11 +832,10 @@ a settlement HOOK reading in-memory state, never a re-probe; a peer's copy WITHH
 sections, so the write-avoidance cache keys per TARGET; a rule BOTH reductions state (which testers count,
 regressions, coverage) lives in contracts' `run-evidence.ts`. Doc: [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
-**Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
-it, every teardown path re-probes afterwards, and a SAVE refuses a chain that neither reclaims nor says
-the environment outlives it. Traps: a no-op `teardown:` reports `torn_down`, so only a `confirmed` probe
-is a reclaim, a missing verify row is never a pass, and a DECLARED-retained environment is not `pending`.
-Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
+**Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed it,
+every teardown path re-probes afterwards, and a SAVE refuses a chain that neither reclaims nor says the
+environment outlives it. Traps: a no-op `teardown:` reports `torn_down`, so only a `confirmed` probe is a
+reclaim, a missing verify row is never a pass, and a DECLARED-retained environment is not `pending`. Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
 spawn an `on-call` agent to investigate. **It never auto-reverts.** The kernel `ReleaseHealthProvider`

@@ -3057,6 +3057,13 @@
         "redundant": "Sans effet : cette politique est déjà au moins aussi stricte.",
         "alreadyStrictest": "Déjà toujours relu",
         "baseHint": "Cette politique compare les scores pour chaque catégorie : un rôle ne peut donc durcir une catégorie que jusqu'à la revue obligatoire."
+      },
+      "unattendedDefault": "Par défaut sans surveillance",
+      "makeUnattendedDefault": "Définir par défaut pour les exécutions sans surveillance (API, tracker, planification)",
+      "autonomy": {
+        "label": "Terminer les exécutions sans surveillance sans attendre une personne",
+        "unattendedHint": "Quand une boucle automatique abandonne (un companion à sa limite de reprises, une revue à sa limite de passes, des suivis non triés), l'exécution continue en le consignant au lieu de s'arrêter. Les points de contrôle demandés par le pipeline, comme le test humain, la revue et l'approbation, arrêtent toujours l'exécution.",
+        "attendedHint": "Quand une boucle automatique abandonne, l'exécution s'arrête et attend un choix. Adapté à un tableau que quelqu'un surveille ; une exécution lancée via l'API attend indéfiniment."
       }
     },
     "observabilityConnection": {

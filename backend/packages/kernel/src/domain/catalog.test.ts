@@ -4,6 +4,7 @@ import {
   DEFAULT_MODEL_PRESETS,
   DEFAULT_MODEL_PRESET_ID,
   RISK_POLICY_SEEDS,
+  UNATTENDED_RISK_POLICY_ID,
   modelForKindFromPreset,
   presetOverrideForKind,
   riskPolicyFromSeed,
@@ -26,11 +27,50 @@ describe('seedRiskPolicies', () => {
     expect(seedRiskPolicies()[0]).not.toBe(RISK_POLICY_SEEDS[0])
   })
 
-  it('ships the whole catalog, with exactly one default', () => {
+  it('ships the whole catalog, with exactly one default PER SCOPE', () => {
     const seeds = seedRiskPolicies()
     expect(seeds).toHaveLength(RISK_POLICY_SEEDS.length)
     expect(seeds.filter((s) => s.isDefault)).toHaveLength(1)
+    // The second scope, asserted separately: a workspace resolves this one for every run nothing
+    // is watching, and a catalog that seeded none would hand those runs `FALLBACK_RISK_POLICY`,
+    // which auto-merges nothing. Two defaults with one assertion between them would let that
+    // through as long as the totals still came to one.
+    expect(seeds.filter((s) => s.isUnattendedDefault)).toHaveLength(1)
     expect(new Set(seeds.map((s) => s.id)).size).toBe(seeds.length)
+  })
+
+  it('grants the unattended licence to exactly the policy that is the unattended default', () => {
+    // The relation, not the roster: the catalog is free to gain policies, and what must hold is
+    // that `autonomy: 'unattended'` and `isUnattendedDefault` name the same row. A policy that
+    // answers its own caps but is nobody's default is dead weight; one that is the default for
+    // unwatched runs and still parks on them is the bug this whole feature exists to fix.
+    for (const seed of seedRiskPolicies()) {
+      expect(seed.autonomy === 'unattended', seed.id).toBe(seed.isUnattendedDefault)
+    }
+    expect(seedRiskPolicies().find((s) => s.isUnattendedDefault)?.id).toBe(
+      UNATTENDED_RISK_POLICY_ID,
+    )
+  })
+
+  it('gives the unattended default the SAME landing authority as the in-app one', () => {
+    // The seed may decide that an unwatched run should not wait forever on an automation budget.
+    // It may NOT decide that an unwatched run gets to land what an operator's own thresholds
+    // would have held, so every field but the two this feature owns is Balanced's, and this is
+    // what stops the next edit quietly widening it.
+    const unattended = seedRiskPolicies().find((s) => s.id === UNATTENDED_RISK_POLICY_ID)!
+    const balanced = seedRiskPolicies().find((s) => s.isDefault)!
+    const {
+      autonomy: _a,
+      isDefault: _d,
+      isUnattendedDefault: _u,
+      name: _n,
+      id: _i,
+      version: _v,
+      ...authority
+    } = unattended
+    for (const key of Object.keys(authority) as (keyof typeof authority)[]) {
+      expect(unattended[key], key).toEqual(balanced[key])
+    }
   })
 })
 

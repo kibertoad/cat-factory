@@ -1,4 +1,5 @@
 import type {
+  Block,
   BlockRepository,
   Clock,
   ExecutionInstance,
@@ -6,7 +7,9 @@ import type {
   FollowUpItem,
   FollowUpsStepState,
   IdGenerator,
+  Logger,
   PipelineStep,
+  RunAutonomy,
   StreamedFollowUp,
   TicketTrackerProvider,
   WorkRunner,
@@ -20,6 +23,7 @@ import {
 } from './followUp.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import { resolvesOwnCaps, type RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
 import type { AdvanceResult } from './advance.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
@@ -36,6 +40,17 @@ export interface FollowUpGateControllerDeps {
   clock: Clock
   notificationService?: NotificationService
   ticketTrackerProvider?: TicketTrackerProvider
+  /**
+   * The run's risk policy, read for ONE decision here: whether undecided follow-ups park for a
+   * person or are dismissed by policy ({@link FollowUpGateController.dismissPendingUnattended}).
+   */
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<{ autonomy?: RunAutonomy }>
+  /** Facade logger; absent in tests, where the dismissal is asserted off the step instead. */
+  logger?: Logger
 }
 
 /**
@@ -59,6 +74,8 @@ export class FollowUpGateController {
   private readonly clock: Clock
   private readonly notificationService?: NotificationService
   private readonly ticketTrackerProvider?: TicketTrackerProvider
+  private readonly resolveRiskPolicy: FollowUpGateControllerDeps['resolveRiskPolicy']
+  private readonly logger?: Logger
 
   constructor(deps: FollowUpGateControllerDeps) {
     this.executionRepository = deps.executionRepository
@@ -71,6 +88,8 @@ export class FollowUpGateController {
     this.clock = deps.clock
     this.notificationService = deps.notificationService
     this.ticketTrackerProvider = deps.ticketTrackerProvider
+    this.resolveRiskPolicy = deps.resolveRiskPolicy
+    this.logger = deps.logger
   }
 
   /**
@@ -112,8 +131,10 @@ export class FollowUpGateController {
     const state = step.followUps
     if (!state?.enabled) return undefined
     if (hasPendingFollowUps(state)) {
-      await this.raiseFollowUpPending(workspaceId, instance, state)
-      return this.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
+      if (!(await this.dismissPendingUnattended(workspaceId, instance, state))) {
+        await this.raiseFollowUpPending(workspaceId, instance, state)
+        return this.runStateMachine.parkStepOnDecision(workspaceId, instance, step)
+      }
     }
     if (shouldLoopCoder(state)) {
       this.loopCoderForFollowUps(instance, step)
@@ -123,6 +144,47 @@ export class FollowUpGateController {
       return { kind: 'continue' }
     }
     return undefined
+  }
+
+  /**
+   * The follow-up triage under an unattended policy: DISMISS every undecided item, so the run
+   * proceeds instead of parking on a triage nobody is going to do.
+   *
+   * `dismiss` and not `queue`, and the asymmetry is the point. A follow-up is work the Coder
+   * deliberately did NOT do, and queueing it sends the Coder back to widen a change past what the
+   * task asked for, unreviewed, on a run with no supervision. Dismissing keeps the run inside its
+   * brief; the items themselves stay on the step with their text intact, so nothing the Coder
+   * noticed is lost, it is just not acted on. A `question` is dismissed on the same terms: the
+   * only honest unattended answer to "what should I do here" is that nobody said.
+   *
+   * Returns whether it dismissed anything, so the caller falls through to the ordinary
+   * loop/advance instead of parking. `false` leaves the park exactly as it was.
+   */
+  private async dismissPendingUnattended(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    state: FollowUpsStepState,
+  ): Promise<boolean> {
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return false
+    const policy = await this.resolveRiskPolicy(workspaceId, block, instance)
+    if (!resolvesOwnCaps(policy)) return false
+    const now = this.clock.now()
+    let dismissed = 0
+    for (const item of state.items) {
+      if (item.status !== 'pending') continue
+      item.status = 'dismissed'
+      item.dismissedByPolicy = true
+      item.updatedAt = now
+      dismissed++
+    }
+    this.logger?.info('follow-up items dismissed by policy', {
+      workspaceId,
+      runId: instance.id,
+      blockId: block.id,
+      dismissed,
+    })
+    return dismissed > 0
   }
 
   /**

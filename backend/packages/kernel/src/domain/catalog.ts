@@ -6,6 +6,7 @@ import type {
   ModelPreset,
   RequirementConcernLevel,
   RiskPolicy,
+  RunAutonomy,
   StepGating,
   SubmissionClassesByRole,
   WorkspaceRole,
@@ -107,6 +108,10 @@ export const DEFAULT_RISK_POLICY = {
   autoMergeEnabled: true,
   // Implementation-fork decision gate: disabled by default (see DEFAULT_FORK_DECISION_GATING).
   forkDecision: DEFAULT_FORK_DECISION_GATING,
+  // A run under this policy parks for a person when an automatic loop exhausts its budget: the
+  // historical behaviour, and the right one for a board somebody is looking at. The unattended
+  // counterpart is `UNATTENDED_RISK_POLICY_ID` (see `RISK_POLICY_SEEDS`).
+  autonomy: 'attended',
 } as const
 
 /**
@@ -134,6 +139,9 @@ export const DEFAULT_RISK_POLICY = {
  * nothing to do with it. Every OTHER knob is inherited, because the rest are BUDGETS (CI-fixer
  * attempts, reviewer iterations, watch windows) rather than postures: an unconfigured deployment
  * should still run its gates the usual number of times, it just may not land the result on its own.
+ *
+ * `autonomy` is inherited at `attended` for the same reason the ceilings are pinned to 0. A licence
+ * to answer a run's own caps is a posture somebody grants, and nobody granted it here.
  */
 export const FALLBACK_RISK_POLICY = {
   ...DEFAULT_RISK_POLICY,
@@ -208,8 +216,12 @@ export interface RiskPolicySeed {
   dryRunRoles: WorkspaceRole[]
   /** Per-role allowlist of landable change classes; empty on the built-ins. */
   submissionClassesByRole: SubmissionClassesByRole
-  /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
+  /** Whether a run under this policy answers its own automatic-loop caps. */
+  autonomy: RunAutonomy
+  /** The workspace's fallback preset for an IN-APP run. Exactly one is true. */
   isDefault: boolean
+  /** The workspace's fallback preset for a run nothing is watching. Exactly one is true. */
+  isUnattendedDefault: boolean
   /**
    * Monotonic seed version. When the current catalog version for this id exceeds a
    * workspace's persisted copy, the SPA offers to reseed it. Bump this when a built-in's
@@ -219,8 +231,16 @@ export interface RiskPolicySeed {
 }
 
 /**
+ * The id of the built-in policy that governs a run nothing is watching. Named as a constant
+ * because two things have to agree on it and neither is the seed list: the workspace-creation
+ * seed writes it as the unattended default, and the docs point an operator at it by id.
+ */
+export const UNATTENDED_RISK_POLICY_ID = 'mp_unattended'
+
+/**
  * The built-in merge threshold presets seeded for every workspace. `Balanced` is the
- * default auto-merge policy; `Manual review only` disables auto-merge entirely
+ * default for a run somebody started in the app; `Unattended delivery` is the default for a run
+ * nothing is watching; `Manual review only` disables auto-merge entirely
  * (`autoMergeEnabled: false`), so every PR on a task using it is routed to a human
  * `merge_review` notification regardless of the assessment. A workspace keeps at least
  * these until the operator edits the library. To ship a new built-in (or a new version
@@ -249,8 +269,51 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     classRulesByRole: { ...DEFAULT_CLASS_RULES_BY_ROLE },
     dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
     submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
+    autonomy: DEFAULT_RISK_POLICY.autonomy,
     isDefault: true,
-    version: 6,
+    isUnattendedDefault: false,
+    version: 7,
+  },
+  // The UNATTENDED default: `Balanced` with one thing changed, and the fact that it is one thing
+  // is the design. A run started over the API, dispatched from a ticket or fired by a schedule has
+  // nobody in the app, so the parks an automatic loop raises when it gives up (a companion at its
+  // rework cap, an iterative review at its pass cap, untriaged Coder follow-ups) stop it for
+  // somebody who is not coming. This policy answers those itself, on the record, and changes
+  // NOTHING about what may land: the same ceilings, the same class rules, the same role scoping.
+  //
+  // Deliberately not more permissive than `Balanced` anywhere else. A seed may decide that an
+  // unwatched run should not wait forever on an automation budget, because waiting was never the
+  // answer anybody wanted there; it may NOT decide that an unwatched run gets to merge a change
+  // an operator's own thresholds would have held. A deployment that wants that widens the
+  // ceilings itself, having seen its own track record.
+  {
+    id: UNATTENDED_RISK_POLICY_ID,
+    name: 'Unattended delivery',
+    maxComplexity: DEFAULT_RISK_POLICY.maxComplexity,
+    maxRisk: DEFAULT_RISK_POLICY.maxRisk,
+    maxImpact: DEFAULT_RISK_POLICY.maxImpact,
+    ciMaxAttempts: DEFAULT_RISK_POLICY.ciMaxAttempts,
+    maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
+    maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
+    maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
+    releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
+    releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
+    humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
+    judgeMinScore: DEFAULT_RISK_POLICY.judgeMinScore,
+    judgeMaxBounces: DEFAULT_RISK_POLICY.judgeMaxBounces,
+    autoMergeEnabled: DEFAULT_RISK_POLICY.autoMergeEnabled,
+    // Left disabled like every other built-in, and here the reason is sharper: the fork decision
+    // exists to put a CHOICE in front of a person, so a policy for runs with no person watching
+    // is the last one that should switch it on.
+    forkDecision: { ...DEFAULT_FORK_DECISION_GATING },
+    classRules: { ...DEFAULT_MERGE_CLASS_RULES },
+    classRulesByRole: { ...DEFAULT_CLASS_RULES_BY_ROLE },
+    dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
+    submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
+    autonomy: 'unattended',
+    isDefault: false,
+    isUnattendedDefault: true,
+    version: 1,
   },
   {
     id: 'mp_manual_review',
@@ -284,8 +347,12 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // one role setting that would still bite here (it refuses the MANUAL merge too), and seeding
     // one would be this catalog deciding which tier a deployment trusts with what.
     submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
+    // A policy that routes every pull request to a human is the one place where answering a
+    // companion's rework cap on its own would be incoherent.
+    autonomy: 'attended',
     isDefault: false,
-    version: 6,
+    isUnattendedDefault: false,
+    version: 7,
   },
 ]
 
@@ -323,7 +390,9 @@ export function riskPolicyFromSeed(seed: RiskPolicySeed, createdAt: number): Ris
     classRulesByRole: seed.classRulesByRole,
     dryRunRoles: seed.dryRunRoles,
     submissionClassesByRole: seed.submissionClassesByRole,
+    autonomy: seed.autonomy,
     isDefault: seed.isDefault,
+    isUnattendedDefault: seed.isUnattendedDefault,
     version: seed.version,
     createdAt,
   }

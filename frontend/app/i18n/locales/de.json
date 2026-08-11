@@ -601,6 +601,13 @@
         "redundant": "Ohne Wirkung: Diese Richtlinie ist bereits mindestens so streng.",
         "alreadyStrictest": "Wird ohnehin immer geprüft",
         "baseHint": "Diese Richtlinie vergleicht in jeder Kategorie die Bewertungen, eine Rolle kann eine Kategorie daher nur auf \"immer Review\" verschärfen."
+      },
+      "unattendedDefault": "Standard ohne Aufsicht",
+      "makeUnattendedDefault": "Zum Standard für unbeaufsichtigte Läufe machen (API, Tracker, Zeitplan)",
+      "autonomy": {
+        "label": "Unbeaufsichtigte Läufe ohne Wartezeit auf eine Person abschließen",
+        "unattendedHint": "Wenn eine automatische Schleife aufgibt (ein Companion an seinem Überarbeitungslimit, eine Prüfung an ihrem Durchlauflimit, unbearbeitete Folgepunkte), läuft der Durchlauf nachvollziehbar weiter statt anzuhalten. Von der Pipeline angeforderte Gates wie manuelles Testen, Review und Freigabe halten den Durchlauf weiterhin an.",
+        "attendedHint": "Wenn eine automatische Schleife aufgibt, hält der Durchlauf an und wartet auf eine Entscheidung. Richtig für ein Board, das jemand beobachtet; ein über die API gestarteter Durchlauf wartet unbegrenzt."
       }
     },
     "observabilityConnection": {

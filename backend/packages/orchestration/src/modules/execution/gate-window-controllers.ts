@@ -22,6 +22,7 @@ import type { AgentExecutor } from '@cat-factory/kernel'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { Block } from '@cat-factory/contracts'
 import type { ExecutionServiceDependencies, ResolvedRunRiskPolicy } from './ExecutionService.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
 import { TesterController } from './TesterController.js'
@@ -59,7 +60,11 @@ export interface GateWindowControllerDeps {
   clock: Clock
   /** The engine clock's `now()`, bound (gate verdicts are stamped with it). */
   clockNow: () => number
-  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ResolvedRunRiskPolicy>
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<ResolvedRunRiskPolicy>
   dispatchIterationCap: ReviewGateControllerDeps['dispatchIterationCap']
   notificationService: ExecutionServiceDependencies['notificationService']
   testerQualityReviewer: ExecutionServiceDependencies['testerQualityReviewer']

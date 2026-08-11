@@ -6,6 +6,7 @@ import {
   publicBootstrapJobSchema,
   publicKubernetesManifestSourceSchema,
   publicKubernetesUrlSourceSchema,
+  publicRiskPolicySchema,
   publicVcsConnectionSchema,
   updatePublicServiceSchema,
 } from './public-provisioning.js'
@@ -70,6 +71,15 @@ describe('the shared vocabularies this surface publishes', () => {
     )
     expect(membersOf(publicVcsConnectionSchema.entries.method)).toEqual(
       expect.arrayContaining(['app', 'pat']),
+    )
+  })
+
+  it('still publishes both autonomy postures, which decide whether a headless run can finish', () => {
+    // The one vocabulary on this surface a caller BRANCHES ON before it starts anything: under
+    // `attended` a run can park on a judgement call the caller has nobody to make, so losing a
+    // member here is losing the caller's ability to tell those two deployments apart.
+    expect(membersOf(publicRiskPolicySchema.entries.autonomy)).toEqual(
+      expect.arrayContaining(['attended', 'unattended']),
     )
   })
 })

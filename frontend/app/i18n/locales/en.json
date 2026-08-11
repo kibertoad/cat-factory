@@ -3336,6 +3336,13 @@
         "redundant": "No effect: this policy is already at least as strict.",
         "alreadyStrictest": "Already always reviewed",
         "baseHint": "This policy compares the scores for every class, so a role can only narrow a class to review-only."
+      },
+      "unattendedDefault": "Unattended default",
+      "makeUnattendedDefault": "Make the default for unattended runs (API, tracker, schedule)",
+      "autonomy": {
+        "label": "Finish unattended runs without waiting for a person",
+        "unattendedHint": "When an automatic loop gives up (a companion at its rework cap, a review at its pass cap, untriaged follow-ups), the run proceeds on the record instead of parking. Gates the pipeline asks for, such as human testing, review and approval, still stop the run.",
+        "attendedHint": "When an automatic loop gives up, the run parks and waits for someone to choose. Right for a board somebody is watching; a run started over the API waits indefinitely."
       }
     },
     "observabilityConnection": {
