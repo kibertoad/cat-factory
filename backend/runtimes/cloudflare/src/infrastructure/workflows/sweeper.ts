@@ -264,6 +264,13 @@ export interface SweepDeps {
 
 /** What a sweep did, for logging. */
 export interface SweepResult {
+  /**
+   * Runs the pass TOOK ON (the size of its stale list), which is what makes {@link failed}
+   * interpretable: with recovery isolated per run, "three runs threw" is a healthy sweeper on a
+   * busy board and a completely wedged one on a list of three. `sweepPassRecoveredNothing` reads
+   * the pair and decides which, and the pass's health report follows that answer.
+   */
+  attempted: number
   /** Runs whose lost instance was re-created. */
   redriven: number
   /** Runs whose instance was terminal and so were finalized instead. */
@@ -314,11 +321,18 @@ export async function sweepStuckRuns({
 }: SweepDeps): Promise<SweepResult> {
   const now = clock.now()
   const stale = await agentRunRepository.listStale(now - leaseMs)
-  const tally: SweepResult = { redriven: 0, finalized: 0, stalled: 0, unknown: 0, failed: 0 }
-  // Which runs were observed still-orphaned (`missing`) THIS tick — used to prune the
-  // per-process clock of any run that recovered or went terminal so its deadline restarts
-  // if it ever stalls again.
-  const stillOrphaned = new Set<string>()
+  const tally: SweepResult = {
+    attempted: stale.length,
+    redriven: 0,
+    finalized: 0,
+    stalled: 0,
+    unknown: 0,
+    failed: 0,
+  }
+  // Which runs' per-process orphaned clock survives THIS tick: the ones observed still-orphaned
+  // (`missing`), plus the ones nothing could observe because their own recovery threw. Every other
+  // run's clock is pruned below, so its deadline restarts if it ever stalls again.
+  const keepOrphanClock = new Set<string>()
   for (const ref of stale) {
     // ISOLATED PER RUN, the same rule as the Node sweeper's `reenqueueStaleRuns`. Recovering a
     // run probes a durable instance and can settle the run itself, so any one of them can throw
@@ -337,12 +351,19 @@ export async function sweepStuckRuns({
         ...describeError(error),
       })
       metrics.increment('sweep.run_recovery_failed', { kind: ref.kind })
+      // This run made no OBSERVATION, so its orphan clock is carried forward rather than pruned
+      // below. Nothing here claims it is still orphaned; the claim is only that nothing learned
+      // otherwise. Left out, a probe that throws every pass resets the hard-stall deadline every
+      // pass and the backstop that exists to settle an unrecoverable run could never fire. Before
+      // the isolation the throw propagated and the prune loop was never reached, which preserved
+      // the clock by accident; it has to be deliberate now.
+      keepOrphanClock.add(ref.id)
     }
   }
   // Forget runs that recovered (bumped their lease → left the stale set) or went terminal, so
   // their per-process orphaned clock restarts if they ever stall again.
   for (const id of orphanedSince.keys()) {
-    if (!stillOrphaned.has(id)) orphanedSince.delete(id)
+    if (!keepOrphanClock.has(id)) orphanedSince.delete(id)
   }
   return tally
 
@@ -381,7 +402,7 @@ export async function sweepStuckRuns({
     // once before it can ever be given up on.
     const firstSeenOrphaned = orphanedSince.get(ref.id) ?? now
     orphanedSince.set(ref.id, firstSeenOrphaned)
-    stillOrphaned.add(ref.id)
+    keepOrphanClock.add(ref.id)
     // An execution stuck `missing` past the hard deadline (re-driving isn't resurrecting it)
     // is failed `stalled` so it stops showing `running` forever and surfaces the failure
     // banner + retry.
@@ -390,7 +411,7 @@ export async function sweepStuckRuns({
       tally.stalled++
       metrics.increment('sweep.run_stalled', { kind: ref.kind })
       orphanedSince.delete(ref.id)
-      stillOrphaned.delete(ref.id)
+      keepOrphanClock.delete(ref.id)
       return
     }
     await redrive(ref)

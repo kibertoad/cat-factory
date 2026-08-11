@@ -199,6 +199,12 @@ skipped and counts it (`sweep.run_recovery_failed`). The case that forced it: a 
 cannot be decoded throws on every read, and `listStale` is ordered oldest first, so it sorted to the
 front of every pass and the sweeper recovered nothing at all while reporting itself as running.
 
+The isolation has a companion the counter alone does not give: a pass that takes runs on and recovers
+NONE of them now RESOLVES, so `sweepPassRecoveredNothing` reads the tally and both facades report that
+pass as failed. Without it the fix would have closed one blind spot by opening a worse one, since a
+recorded success resets the `sweep_degraded` streak and that streak is the only pass-level signal for
+"this sweeper is recovering nothing".
+
 **B8: `MergeTrackRecordService` drops the repo identity its own comment promises to keep. (P2)**
 _(FIXED in Phase 1.2: `repo` is now bound outside the `try` and re-attached in the catch. 2.3 is
 therefore closed; the service also gained the logger it had no way to report through.)_

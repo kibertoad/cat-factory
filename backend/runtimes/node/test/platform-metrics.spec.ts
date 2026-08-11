@@ -1,4 +1,8 @@
-import { type PlatformMetricsSeed, definePlatformMetricsSuite } from '@cat-factory/conformance'
+import {
+  type PlatformMetricsSeed,
+  definePlatformMetricsSuite,
+  defineUndecodableRunSuite,
+} from '@cat-factory/conformance'
 import { describe, it } from 'vitest'
 import { agentRuns, workspaces } from '../src/db/schema.js'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
@@ -34,6 +38,8 @@ if (databaseUrl) {
           id: row.id,
           kind: row.kind,
           status: row.status,
+          block_id: row.blockId ?? null,
+          detail: row.detail ?? '{}',
           created_at: row.createdAt,
           updated_at: row.updatedAt,
           failure,
@@ -49,6 +55,13 @@ if (databaseUrl) {
     () => repos.platformMetricsRepository,
     () => seed,
   )
+  // Shares the raw seed above: the poison row it needs is one no domain write path may produce.
+  defineUndecodableRunSuite('node', () => ({
+    executions: repos.executionRepository,
+    agentRuns: repos.agentRunRepository,
+    platformMetrics: repos.platformMetricsRepository,
+    seed,
+  }))
 } else {
   describe.skip('[node] platform metrics (set DATABASE_URL to run)', () => {
     it('requires Postgres', () => {})

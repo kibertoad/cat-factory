@@ -595,6 +595,10 @@ each recovery attempt threw on the load. It is now closed through the one write 
 nothing, and the kind says which runs those were rather than filing them under `stalled`, whose
 whole advice is "retry" and whose retry would re-read the same row.
 
-The kind is deliberately NOT reachable from the ordinary run reads: a row nothing can decode is
-dropped from the board snapshot, so it surfaces in the operator's failure-kind breakdown and in
-this debug report, which are the two places someone who can act on it is looking.
+Where the kind actually surfaces is the operator's failure-kind breakdown, which aggregates the
+`failure` column in SQL and so can report a row nothing can decode. It is deliberately NOT reachable
+from the ordinary run reads, and that includes the debug ones: `GET /debug/runs` drops such a row
+from its page and `GET /debug/runs/:runId` answers 500, because both decode the run before they
+project it and the whole premise of this kind is that the decode fails. A consumer holding the id of
+a `state_unreadable` run therefore sees it in the aggregate and cannot fetch it, which is the honest
+outcome: the row is beyond what an API can say about it, and the fix is a person at the data.

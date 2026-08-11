@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ExecutionInstance } from '@cat-factory/kernel'
+import { dataIntegrityFaultOf, isDataIntegrityError } from '@cat-factory/kernel'
 import { createRemoteRepositoryRegistry } from '../src/persistence/remoteRepositories.js'
+import { persistenceErrorToThrowable } from '../src/persistence/rpc.js'
 import {
   ACCOUNT,
   inProcessClient,
@@ -8,6 +10,7 @@ import {
   OTHER_ACCOUNT,
   remote,
   remoteRegistry,
+  UNDECODABLE_RUN_ID,
   USER,
 } from './persistenceRpc.harness.js'
 
@@ -55,6 +58,38 @@ describe('persistence RPC round-trip', () => {
     await expect(
       repos.executionRepository.markFailed('ws_in', 'ex_1', { message: 'x' } as never),
     ).rejects.toMatchObject({ code: 'conflict' })
+  })
+
+  it('re-throws a DataIntegrityError as one, carrying its FAULT', async () => {
+    // A mothership-mode node runs the engine with no database of its own, so the row decode that
+    // recognises a poison run happens on the FAR side of this hop. Relayed as an opaque 500 it
+    // arrives as a plain `Error`, `isDataIntegrityError` answers false, and the disposal that
+    // breaks the immortal-run loop does nothing at all on the one deployment shape whose operator
+    // cannot look at the row.
+    const repos = remote()
+    const thrown = await repos.executionRepository.get('ws_in', UNDECODABLE_RUN_ID).then(
+      () => null,
+      (error: unknown) => error,
+    )
+    expect(isDataIntegrityError(thrown)).toBe(true)
+    // The fault is what the engine branches on, so it has to survive the hop too: without it the
+    // disposal would take the reversible disposition and leave the run immortal after all.
+    expect(dataIntegrityFaultOf(thrown as never)).toBe('malformed')
+    // And the context, so the failure recorded on the row names the offending column.
+    expect((thrown as { context?: Record<string, unknown> }).context).toMatchObject({
+      table: 'agent_runs',
+    })
+  })
+
+  it('reconstructs an integrity error whose fault the peer did not send as the SAFE one', async () => {
+    // A node one build behind a mothership that added a fault value knows less than the thrower
+    // did. `unrecognized_value` is the disposition that costs a re-drive rather than a live run.
+    const rebuilt = persistenceErrorToThrowable({
+      code: 'data_integrity',
+      message: 'Execution row has no block_id',
+    })
+    expect(isDataIntegrityError(rebuilt)).toBe(true)
+    expect(dataIntegrityFaultOf(rebuilt as never)).toBe('unrecognized_value')
   })
 
   it('refuses a method outside the allow-list', async () => {

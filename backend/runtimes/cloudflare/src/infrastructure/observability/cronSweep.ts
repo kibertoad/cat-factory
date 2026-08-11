@@ -20,11 +20,22 @@ import { logger } from './logger'
 // that essentially never comes.
 
 /** What {@link SweepTick.run} needs to describe one pass. */
-export interface CronSweepPass {
+export interface CronSweepPass<T = unknown> {
   /** Sweep name — the `sweep` dimension and the `sweep_degraded` streak key. Bounded set. */
   name: string
   /** The message logged (with the cause bound) when the pass rejects. */
   failureMessage: string
+  /**
+   * Whether a pass that RESOLVED nonetheless failed to do its job, read off its own result.
+   * Absent ⇒ resolving IS success, which is right for a pass that either works or throws.
+   *
+   * It exists because that is no longer true of every pass. A sweep that isolates each item so one
+   * bad one cannot end the whole pass will RESOLVE even when every item it touched threw, and a
+   * success recorded there resets the `sweep_degraded` streak on precisely the wedged sweeper the
+   * streak watches for. The predicate belongs to the pass because only the pass knows what its
+   * numbers mean; recording the outcome stays here, so no site can report half of it.
+   */
+  degraded?: (result: T) => boolean
 }
 
 /**
@@ -45,9 +56,17 @@ export class SweepTick {
    * Success-path logging still belongs on the caller's own `.then`, because only the caller
    * knows what its result means.
    */
-  run({ name, failureMessage }: CronSweepPass, pass: Promise<unknown>): void {
+  run<T>({ name, failureMessage, degraded }: CronSweepPass<T>, pass: Promise<T>): void {
     const tracked = pass.then(
-      () => {
+      (result: T) => {
+        // A resolved-but-useless pass is reported as the failure it is, under the same name and
+        // the same message: to the fleet there is no difference between a pass that threw and one
+        // that recovered nothing it took on.
+        if (degraded?.(result)) {
+          logger.error(failureMessage, { cron: name, degraded: true })
+          sweepHealth.recordFailure(name)
+          return
+        }
         sweepHealth.recordSuccess(name)
       },
       (error: unknown) => {

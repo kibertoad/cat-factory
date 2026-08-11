@@ -23,6 +23,8 @@ export {
   sweepHealth,
   type SweepFailureStreak,
   type SweepHealthTracker,
+  type SweepPassTally,
+  sweepPassRecoveredNothing,
 } from './observability/sweepHealth.js'
 export {
   type AppEnv,

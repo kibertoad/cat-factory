@@ -1,4 +1,11 @@
-import { DomainError, type DomainErrorCode } from '@cat-factory/kernel'
+import {
+  DataIntegrityError,
+  DomainError,
+  type DomainErrorCode,
+  dataIntegrityFaultOf,
+  isDataIntegrityError,
+  isDataIntegrityFault,
+} from '@cat-factory/kernel'
 import { REMOTE_PERSISTENCE_METHODS } from './rpc-allowlist.js'
 import {
   checkLibrarySourceScope,
@@ -48,8 +55,21 @@ export type PersistenceRpcResponse =
   | { ok: true; value: unknown; undef?: boolean; mutated?: MutatedArg }
   | { ok: false; error: PersistenceRpcError }
 
-/** A `DomainErrorCode` plus the transport-only codes the RPC layer itself can raise. */
-export type PersistenceErrorCode = DomainErrorCode | 'forbidden' | 'unknown_method' | 'internal'
+/**
+ * A `DomainErrorCode` plus the transport-only codes the RPC layer itself can raise.
+ *
+ * `data_integrity` is the one non-`DomainError` throw that may NOT be flattened into `internal`.
+ * A mothership-mode node runs the engine with no database of its own, so the row decode that
+ * recognises a poison run happens on the FAR side of this hop; relayed as an opaque 500 it arrives
+ * as a plain `Error`, `isDataIntegrityError` answers false, and the disposal that exists to break
+ * the immortal-run loop silently does nothing on exactly the deployment shape that cannot debug it.
+ */
+export type PersistenceErrorCode =
+  | DomainErrorCode
+  | 'forbidden'
+  | 'unknown_method'
+  | 'internal'
+  | 'data_integrity'
 
 export interface PersistenceRpcError {
   code: PersistenceErrorCode
@@ -70,6 +90,9 @@ const ERROR_STATUS: Record<PersistenceErrorCode, number> = {
   rate_limited: 429,
   unknown_method: 400,
   internal: 500,
+  // Internal data corruption, like `internal`: the status class is right and the code is what
+  // carries the distinction the caller acts on.
+  data_integrity: 500,
 }
 
 /** Map an error code to the HTTP status the controller returns (and the client reads). */
@@ -442,6 +465,18 @@ export async function dispatchPersistenceCall(
   } catch (err) {
     if (err instanceof DomainError) {
       return fail(err.code, err.message, err.details)
+    }
+    // A row the mothership cannot decode survives the hop with its FAULT, because that fault is
+    // what the node's engine branches on to dispose of a poison run. Reported rather than
+    // suppressed for the same reason `DomainError`s are: the message and context describe a row in
+    // the caller's OWN scope (already checked above), which this RPC hands over wholesale anyway,
+    // so there is nothing here the caller could not have read from the row itself.
+    if (isDataIntegrityError(err)) {
+      return fail('data_integrity', err.message, {
+        fault: dataIntegrityFaultOf(err),
+        // Nested, so a context key of its own can never shadow the fault above.
+        context: err.context ?? {},
+      })
     }
     // Opaque 500 — never leak an internal error's message over the machine API.
     return fail('internal', 'Internal error')
@@ -870,6 +905,19 @@ export function persistenceErrorToThrowable(error: PersistenceRpcError): Error {
   ]
   if ((domainCodes as string[]).includes(error.code)) {
     return new DomainError(error.code as DomainErrorCode, error.message, error.details)
+  }
+  // Rebuilt as the real class, so a mothership-mode node's engine recognises a poison row exactly
+  // as a direct-database one does. The fault is decoded through kernel's own predicate: a value
+  // this build does not know falls back to `unrecognized_value`, i.e. the reading node declines to
+  // destroy a run on a vocabulary it does not share with the mothership.
+  if (error.code === 'data_integrity') {
+    const details = error.details ?? {}
+    const context = details.context
+    return new DataIntegrityError(
+      error.message,
+      context && typeof context === 'object' ? (context as Record<string, unknown>) : {},
+      isDataIntegrityFault(details.fault) ? details.fault : 'unrecognized_value',
+    )
   }
   return new Error(error.message)
 }

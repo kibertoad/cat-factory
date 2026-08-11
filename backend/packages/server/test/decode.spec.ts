@@ -68,7 +68,7 @@ describe('tryDecodeRow', () => {
   it('returns null (drops the row) when a DataIntegrityError bubbles up', () => {
     expect(
       tryDecodeRow(() => {
-        throw new DataIntegrityError('corrupt', ctx)
+        throw new DataIntegrityError('corrupt', ctx, 'malformed')
       }, ctx),
     ).toBeNull()
   })
@@ -79,6 +79,20 @@ describe('tryDecodeRow', () => {
         throw new TypeError('unexpected')
       }, ctx),
     ).toThrow(TypeError)
+  })
+
+  it('drops a row whose integrity error came from ANOTHER copy of kernel', () => {
+    // The class lives in kernel now, so thrower and catcher can genuinely disagree: a facade with
+    // two copies of that package in its tree makes `instanceof` false for the same class. Getting
+    // it wrong here does not resurrect an immortal run, it does something quieter and worse than
+    // the pre-move behaviour: one corrupt row fails a WHOLE board/list read instead of dropping.
+    const foreign = new Error('Execution row has no block_id')
+    foreign.name = 'DataIntegrityError'
+    expect(
+      tryDecodeRow(() => {
+        throw foreign
+      }, ctx),
+    ).toBeNull()
   })
 })
 
@@ -94,7 +108,7 @@ describe('tryDecodeRows', () => {
     const out = tryDecodeRows(
       rows,
       (r) => {
-        if (r.v === undefined) throw new DataIntegrityError('missing v', rowCtx(r))
+        if (r.v === undefined) throw new DataIntegrityError('missing v', rowCtx(r), 'malformed')
         return r.v
       },
       rowCtx,

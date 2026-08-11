@@ -67,6 +67,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   blockRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // The run→block REVERSE link, read when a run row cannot be decoded and so names no block of
+    // its own. Remote and workspace-scoped like `get`, and for a sharper reason than most: the
+    // engine that needs it runs on the laptop, where the row it cannot read lives on the
+    // mothership, so an un-routed method would leave a mothership node's boards wedged only.
+    getByExecution: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspace', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
     setService: { scope: { kind: 'workspace', arg: 0 } },

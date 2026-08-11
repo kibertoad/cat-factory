@@ -10,6 +10,7 @@
 import {
   type AccountRepository,
   ConflictError,
+  DataIntegrityError,
   type ExecutionInstance,
   type ExecutionRepository,
   type MembershipRepository,
@@ -40,6 +41,8 @@ export function inProcessClient(opts: DispatchOptions): PersistenceRpcClient {
 export const ACCOUNT = 'acc_1'
 export const OTHER_ACCOUNT = 'acc_2'
 export const USER = 'usr_1'
+/** The run id whose row the fake mothership cannot decode (see `executionRepository.get`). */
+export const UNDECODABLE_RUN_ID = 'ex_undecodable'
 
 function workspace(id: string, accountId: string): Workspace & { accountId: string } {
   return { id, name: id, accountId } as unknown as Workspace & { accountId: string }
@@ -118,7 +121,20 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
         executions.set(execution.id, { ...execution })
         return true
       },
-      get: async (_workspaceId: string, id: string) => executions.get(id) ?? null,
+      get: async (_workspaceId: string, id: string) => {
+        // One sentinel id stands for a row the MOTHERSHIP cannot decode. It is the only throw on
+        // this hop that is neither a `DomainError` nor an opaque internal fault, and the node's
+        // engine branches on recognising it: flattened to `internal`, the disposal of a poison run
+        // silently does nothing on mothership deployments.
+        if (id === UNDECODABLE_RUN_ID) {
+          throw new DataIntegrityError(
+            'Execution row has no block_id',
+            { table: 'agent_runs', id },
+            'malformed',
+          )
+        }
+        return executions.get(id) ?? null
+      },
       // Always conflicts — to prove a DomainError survives the hop.
       markFailed: async () => {
         throw new ConflictError('already terminal', 'invalid_state' as never)
@@ -152,6 +168,9 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
           })
           .filter(Boolean),
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      // The run→block REVERSE link, read when a run row cannot be decoded. Echoes the bound
+      // workspace like the other workspace-scoped reads (the real method returns a `Block | null`).
+      getByExecution: async (ws: string, executionId: string) => ({ ws, executionId }),
       // The public API's in-flight cap (workspace-scoped SQL COUNT → a number).
       countActiveInternal: async (_ws: string) => 3,
       // The container-resize child translation: a workspace-scoped arithmetic UPDATE returning

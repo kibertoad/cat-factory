@@ -243,6 +243,21 @@ describe('rowToExecution', () => {
     expect(() => executionToDetail(instance)).not.toThrow()
   })
 
+  it('refuses to compose the stored detail for an out-of-bounds cursor too', () => {
+    // The write guard has to assert EVERY invariant the read refuses, not just the one that
+    // motivated it: a writer that truncated `steps` while leaving the cursor where it was composes
+    // cleanly under a blockId-only guard, and the row it stores is exactly as un-loadable. The
+    // upper bound is the legitimate "ran off the end" cursor, so it must still be accepted.
+    const instance = rowToExecution(base)
+    expect(() => executionToDetail({ ...instance, steps: [], currentStep: 1 })).toThrow(
+      DataIntegrityError,
+    )
+    expect(() => executionToDetail({ ...instance, currentStep: -1 })).toThrow(DataIntegrityError)
+    expect(() =>
+      executionToDetail({ ...instance, currentStep: instance.steps.length }),
+    ).not.toThrow()
+  })
+
   it('rejects an out-of-bounds currentStep', () => {
     const detail = JSON.stringify({
       pipelineId: 'pl',
