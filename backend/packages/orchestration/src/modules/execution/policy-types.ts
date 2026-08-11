@@ -1,11 +1,25 @@
 import type {
+  ExecutionInstance,
   ClassRulesByRole,
   MergeClassRules,
   RequirementConcernLevel,
+  RunAutonomy,
   StepGating,
   SubmissionClassesByRole,
   WorkspaceRole,
 } from '@cat-factory/kernel'
+
+/**
+ * What policy resolution needs to know about the RUN, as opposed to the task: which of the
+ * workspace's two defaults applies when the task pinned no policy of its own.
+ *
+ * A structural `Pick` rather than the whole instance, so a caller holding only the run's
+ * provenance can satisfy it, and so a call site that has not threaded the run through fails to
+ * compile naming the one field that matters. It lives here, beside the resolved policy, for the
+ * reason the resolved policy does: every gate window has to name it and none of them may import
+ * the engine.
+ */
+export type RunPolicyScope = Pick<ExecutionInstance, 'intakeOrigin'>
 
 /**
  * The effective risk/merge policy for one run, as {@link RunMergePolicy.resolve} resolves it
@@ -39,6 +53,16 @@ export interface ResolvedRunRiskPolicy {
   judgeMinScore: number
   judgeMaxBounces: number
   autoMergeEnabled: boolean
+  /**
+   * Whether this run answers the parks its own AUTOMATIC loops raise when they give up (a
+   * companion at its rework cap, an iterative review at its pass cap, untriaged Coder follow-ups),
+   * or stops for a person. Never touches a gate a pipeline asked for.
+   *
+   * Optional here alone: the field is required on a stored policy, and a hand-built subset in a
+   * test that gates on nothing else should not have to state a posture it never reads. Absent is
+   * read as `attended` everywhere, which is the historical behaviour.
+   */
+  autonomy?: RunAutonomy
   forkDecision?: StepGating | null
   /**
    * Per-change-class auto-merge rules. Absent on the built-in fallback ⇒ every class uses the
@@ -65,4 +89,18 @@ export interface ResolvedRunRiskPolicy {
    * not a weaker guarantee, only a later one: opening the PR was never the harm, landing it is.
    */
   submissionClassesByRole?: SubmissionClassesByRole
+}
+
+/**
+ * Whether this policy lets a run ANSWER the parks its own automatic loops raise, rather than
+ * stopping for a person who may not be there.
+ *
+ * Stated once, and as `=== 'unattended'` rather than `!== 'attended'`, because the vocabulary is
+ * closed and PERSISTED: a row written under a member later retired reads back as neither, and the
+ * two spellings disagree about it in the one direction that matters. Not knowing what a policy
+ * says is not a licence to proceed unattended, so an unrecognised value parks like every policy
+ * did before this existed.
+ */
+export function resolvesOwnCaps(policy: Pick<ResolvedRunRiskPolicy, 'autonomy'>): boolean {
+  return policy.autonomy === 'unattended'
 }

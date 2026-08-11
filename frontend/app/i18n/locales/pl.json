@@ -149,6 +149,7 @@
       "archiveFailed": "Nie udało się zarchiwizować usługi",
       "restoreFailed": "Nie udało się przywrócić usługi",
       "moveRefused": {
+        "relaxes_run_oversight": "W miejscu, do którego przenosisz to zadanie, uruchomienie samo odpowiada na własne punkty kontrolne zamiast zatrzymywać się na człowieku, a zasada scalania obowiązująca tutaj tego nie robi. Poproś administrację przestrzeni roboczej o przeniesienie.",
         "relaxes_role_sandbox": "Uruchomienia tego zadania są w obecnym miejscu izolowane dla twojej roli, a zasada scalania obowiązująca w miejscu docelowym już nie. Poproś administrację przestrzeni roboczej o przeniesienie.",
         "relaxes_role_submission_allowlist": "Zasada scalania w miejscu docelowym pozwoliłaby ci scalać rodzaje zmian, których tutaj nie możesz. Poproś administrację przestrzeni roboczej o przeniesienie.",
         "relaxes_role_class_rule": "Zasada scalania w miejscu docelowym automatycznie scala zmiany, które tutaj musisz przejrzeć. Poproś administrację przestrzeni roboczej o przeniesienie."
@@ -2979,6 +2980,8 @@
       "default": "Domyślne",
       "makeDefault": "Ustaw jako domyślne",
       "deleteDefaultBlocked": "Nie można usunąć zasady domyślnej",
+      "deleteUnattendedDefaultBlocked": "Nie można usunąć domyślnej zasady dla uruchomień bez nadzoru",
+      "deleteBothDefaultsBlocked": "Ta zasada jest jednocześnie domyślną w aplikacji i domyślną bez nadzoru, więc nie można jej usunąć",
       "deletePreset": "Usuń zasadę",
       "field": {
         "maxComplexity": "Maks. złożoność %",
@@ -3057,6 +3060,14 @@
         "redundant": "Bez efektu: ta zasada jest już co najmniej tak samo surowa.",
         "alreadyStrictest": "Już zawsze przeglądane",
         "baseHint": "Ta zasada porównuje oceny w każdej kategorii, więc rola może zaostrzyć kategorię jedynie do wymogu przeglądu."
+      },
+      "unattendedDefault": "Domyślna dla bez nadzoru",
+      "makeUnattendedDefault": "Ustaw jako domyślną dla uruchomień bez nadzoru (API, tracker, harmonogram)",
+      "makeUnattendedDefaultShort": "Domyślna bez nadzoru",
+      "autonomy": {
+        "label": "Kończ uruchomienia bez nadzoru bez czekania na człowieka",
+        "unattendedHint": "Gdy automatyczna pętla się poddaje (companion na limicie poprawek, przegląd na limicie przebiegów, nieposegregowane zadania pochodne), uruchomienie idzie dalej z zapisem zamiast się zatrzymywać. Bramki, o które prosi pipeline, takie jak testy ręczne, przegląd i zatwierdzenie, nadal je zatrzymują.",
+        "attendedHint": "Gdy automatyczna pętla się poddaje, uruchomienie zatrzymuje się i czeka na decyzję. Właściwe dla tablicy, którą ktoś obserwuje; uruchomienie wystartowane przez API czeka bez końca."
       }
     },
     "observabilityConnection": {
@@ -6704,6 +6715,7 @@
       "workspaceDefaultCaption": "Stosowana, ponieważ to zadanie nie wybiera własnej zasady.",
       "noneHint": "Nie skonfigurowano żadnej zasady ryzyka. Każdy pull request czeka na ludzką recenzję.",
       "refused": {
+        "relaxes_run_oversight": "Niedostępne dla twojej roli: ta zasada pozwala uruchomieniu samemu odpowiadać na własne punkty kontrolne zamiast zatrzymywać się na człowieku. Administrator obszaru roboczego może to zmienić.",
         "relaxes_role_sandbox": "Niedostępne dla twojej roli: uruchomienia tego zadania działają w piaskownicy, a ta zasada pozwoliłaby je scalić. Administrator obszaru roboczego może to zmienić.",
         "relaxes_role_submission_allowlist": "Niedostępne dla twojej roli: ta zasada pozwoliłaby ci scalać rodzaje zmian, których to zadanie ci zabrania. Administrator obszaru roboczego może to zmienić.",
         "relaxes_role_class_rule": "Niedostępne dla twojej roli: ta zasada automatycznie scala zmiany, które musisz przejrzeć w tym zadaniu. Administrator obszaru roboczego może to zmienić."

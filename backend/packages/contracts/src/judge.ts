@@ -166,6 +166,18 @@ export const judgeStepStateSchema = v.object({
    * because a judge that quietly did nothing is indistinguishable from one that passed.
    */
   note: v.optional(v.nullable(v.string())),
+  /**
+   * Set true when the run's risk policy ANSWERED this judge's rework cap instead of parking on
+   * it (`autonomy: 'unattended'`), taking the "proceed anyway" choice a person would have been
+   * offered. The sibling of `step.companion.capSettledByPolicy`, and there for the same reason:
+   * the last round's verdict says the work was below the bar either way, so without this the
+   * step reads exactly like one whose judge scored it acceptable.
+   *
+   * Only ever set for the BUDGET-SPENT park. A judge that declared `onFail: 'park'` asked for a
+   * person, and one with no producing step to bounce to never got to try — neither is the
+   * automation giving up, and autonomy leaves both alone (see kernel's `JudgeParkReason`).
+   */
+  capSettledByPolicy: v.optional(v.boolean()),
   /** The human's resolution of a park, once made. */
   resolution: v.optional(
     v.nullable(

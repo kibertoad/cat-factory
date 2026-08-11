@@ -655,3 +655,24 @@ from its page and `GET /debug/runs/:runId` answers 500, because both decode the 
 project it and the whole premise of this kind is that the decode fails. A consumer holding the id of
 a `state_unreadable` run therefore sees it in the aggregate and cannot fetch it, which is the honest
 outcome: the row is beyond what an API can say about it, and the fix is a person at the data.
+
+1.49.0, not 1.48.1: two additive fields on `GET /api/v1/risk-policies`, `isUnattendedDefault` and
+`autonomy`. No existing field changes meaning and no value changes shape, so a consumer built
+against 1.48.0 keeps parsing unchanged.
+
+What a consumer NOTICES is that `isDefault` was only ever half the answer to the question this
+surface is asked. A workspace now carries TWO default policies, one for a run somebody started in
+the app and one for a run nothing is watching, and every run a key starts resolves the SECOND. A
+client that read `isDefault` to predict which policy would govern its own task was reading the
+in-app row; `isUnattendedDefault` is the field it wanted. `isDefault` keeps its exact former
+meaning rather than being re-pointed, which is why this is an addition and not a break: an existing
+client is not wrong about anything it was told, it was told about a different scope.
+
+`autonomy` answers the question a headless caller could not previously ask at all: whether a run
+under this policy can reach a terminal state without a person. Under `attended`, a run can park on
+a judgement call the API can LIST but only a human can settle (a companion at its rework cap, an
+iterative review at its pass cap, untriaged follow-ups), and a caller with nobody to escalate to
+waits indefinitely. Under `unattended` the platform takes the documented "proceed" answer to each
+of those and records that it did. It never covers a gate the PIPELINE asked for: a human-test step,
+a review gate or an approval gate stops the run under either value, which is what keeps the field a
+statement about waiting rather than about oversight.

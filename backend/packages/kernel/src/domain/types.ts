@@ -515,6 +515,10 @@ export type {
   RequirementConcernLevel,
   CreateRiskPolicyInput,
   UpdateRiskPolicyInput,
+  // Whether a policy answers a run's own automatic-loop caps, and which of a workspace's two
+  // default policies a run resolves when its task pinned none.
+  RunAutonomy,
+  RiskPolicyDefaultScope,
   // Where one ordered `-f` compose layer's text comes from: a path in the primary repo, a
   // directly-supplied document, or a path in another repo.
   ComposeFileRef,

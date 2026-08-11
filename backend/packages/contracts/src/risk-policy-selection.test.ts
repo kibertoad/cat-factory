@@ -32,6 +32,85 @@ const judge = (input: { from: RolePolicyView; to: RolePolicyView; actor: BlockEd
     to: { policy: input.to, actor: input.actor },
   })
 
+describe('refuseRiskPolicySelection: the oversight arm', () => {
+  it('refuses a swap onto an unattended preset, the one every workspace now seeds', () => {
+    // The escape hatch this arm closes, and the reason the other three miss it: `mp_unattended`
+    // ships with an EMPTY role layer, byte-for-byte identical to `mp_balanced`'s, so the sandbox,
+    // allowlist and class-rule tests all pass it. What it changes is that the run answers the
+    // parks its own loops raise, which is a member-tier board write away with no arm here.
+    expect(
+      judge({
+        from: policy({ autonomy: 'attended' }),
+        to: policy({ autonomy: 'unattended' }),
+        actor: member,
+      }),
+    ).toBe('relaxes_run_oversight')
+  })
+
+  it('allows a swap INTO oversight, and one that keeps the posture either way', () => {
+    // Narrow-only, like every other arm: adopting the policy that stops for a person needs no
+    // permission, and two presets that agree relax nothing.
+    expect(
+      judge({
+        from: policy({ autonomy: 'unattended' }),
+        to: policy({ autonomy: 'attended' }),
+        actor: member,
+      }),
+    ).toBeNull()
+    expect(
+      judge({
+        from: policy({ autonomy: 'unattended' }),
+        to: policy({ autonomy: 'unattended' }),
+        actor: member,
+      }),
+    ).toBeNull()
+    expect(
+      judge({
+        from: policy({ autonomy: 'attended' }),
+        to: policy({ autonomy: 'attended' }),
+        actor: member,
+      }),
+    ).toBeNull()
+  })
+
+  it('reads an absent or unrecognised posture as attended, in BOTH directions', () => {
+    // The closed-vocabulary rule `resolvesOwnCaps` states: a row written under a member later
+    // retired reads back as neither spelling, and not knowing what a policy says is not a licence
+    // to drop a checkpoint. So an unknown value never relaxes, and never excuses a relaxation.
+    const unknown = policy({ autonomy: 'sometimes' as never })
+    expect(judge({ from: policy(), to: policy({ autonomy: 'unattended' }), actor: member })).toBe(
+      'relaxes_run_oversight',
+    )
+    expect(judge({ from: unknown, to: policy({ autonomy: 'unattended' }), actor: member })).toBe(
+      'relaxes_run_oversight',
+    )
+    expect(judge({ from: policy({ autonomy: 'attended' }), to: unknown, actor: member })).toBeNull()
+  })
+
+  it('yields to the library owner, like every other arm', () => {
+    expect(
+      judge({
+        from: policy({ autonomy: 'attended' }),
+        to: policy({ autonomy: 'unattended' }),
+        actor: admin,
+      }),
+    ).toBeNull()
+  })
+
+  it('is named AHEAD of the merge-ladder arms when a swap relaxes both', () => {
+    // Precedence matters because the refusal reaches a person as ONE reason. The parks this drops
+    // are raised while the run is still working, before anything has a pull request to weigh, so
+    // it is the one to name.
+    expect(
+      judge({
+        from: policy({ autonomy: 'attended', dryRunRoles: ['member'] }),
+        to: policy({ autonomy: 'unattended' }),
+        actor: member,
+      }),
+    ).toBe('relaxes_run_oversight')
+  })
+})
+
 describe('refuseRiskPolicySelection: the sandbox arm', () => {
   it('refuses a swap that drops the sandbox the selector was under', () => {
     // The escape hatch this rule exists to close: editing `dryRunRoles` is admin-gated, but

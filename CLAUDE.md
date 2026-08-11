@@ -766,16 +766,13 @@ declaration", "empty declaration" and "unknown id" are three states needing diff
 
 **Binary-output steps**: a `binary-output`-trait kind generates artifacts, stored through a foundational
 service its step SELECTS; what MAKES them is `BinaryGeneratorRegistry`, read only via `BinaryGeneratorSource`
-(unreachable ⇒ 503, mothership rule), whose `capabilities` + `accepts` gate the generation options and, past
-two producers, a human CANDIDATE park. Traps: content type is CLOSED and stops deciding at the SECOND producer
-(overlaps are STATED, never ranked; a capability gates an OPTION, not a producer); a capability says a request
-can CARRY a value, `accepts` says WHICH, one taking no parameter declares neither; an UNDECLARED
-capability/format/value-set is unverifiable, never uncovered; a credential VALUE never reaches a prompt. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
+(unreachable ⇒ 503, mothership rule), whose `capabilities` + `accepts` gate the options and, past two
+producers, a human CANDIDATE park. Deadliest trap: content type is CLOSED and stops deciding at the SECOND
+producer, so overlaps are STATED and never ranked. Doc: [`binary-output-foundational-storage.md`](./docs/initiatives/binary-output-foundational-storage.md).
 
 **Compose layers**: `StackRecipe` / `SharedStack` name an ORDERED list of `ComposeFileRef` layers
 (in-repo path, `inline`, or `repo`), letting a deployment declare infra dependencies in code. Traps: the
-project directory anchors on the first `path` layer, NEVER the first layer; seeds are idempotent by
-NAME, never overwritten. Doc:
+project directory anchors on the first `path` layer, NEVER the first layer. Doc:
 [`stack-recipes-and-shared-stacks.md`](./docs/initiatives/stack-recipes-and-shared-stacks.md).
 
 **Pre-PR validation**: per-frame install/lint/test/build commands after the agent settles; only a green
@@ -806,9 +803,9 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   pending sleeps, failure dispatches `ci-fixer` (which pushes back onto the SAME branch) up to
   `ciMaxAttempts` then raises `ci_failed`.
 - **`merger`** (last standard step) returns ONLY a JSON assessment; `resolveMergerStep` scores it against
-  the task's merge threshold preset (a per-workspace library on `Block.mergePresetId`, carrying the
-  auto-merge ceilings, `ciMaxAttempts` and the per-class `classRules`) and either merges for real or raises
-  `merge_review`. A pipeline with no merger raises `pipeline_complete`, never auto-`done`.
+  the task's risk policy (a per-workspace library carrying the auto-merge ceilings, the budgets and
+  the per-class `classRules`) and either merges for real or raises `merge_review`. A pipeline with no
+  merger raises `pipeline_complete`, never auto-`done`.
 - **Who started the run is part of the merge policy**, and a bar on LANDING is refused at BOTH exits
   (auto-merge AND `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin
   PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads
@@ -818,6 +815,10 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
 - **Merge track record** persists each decision best-effort. Trap: an unreadable diff yields `unknown`,
   which never matches a rule, so a VCS outage cannot change policy.
   [ADR 0046](./backend/docs/adr/0046-merge-track-record.md).
+- **Whether a run WAITS is policy too**: `autonomy` says whether the parks the engine's loops raise WHEN
+  THEY GIVE UP are answered on the record; a workspace holds TWO defaults for it. Traps: never a park the
+  PIPELINE asked for; a new give-up park picks a side; a grader re-scoring with no memory of its own asks
+  never converges. [ADR 0053](./backend/docs/adr/0053-unattended-run-autonomy.md).
 - **Notifications** (`NotificationChannel`) and run-lifecycle events (`RunLifecycleSink`) are built together
   by `buildNotificationWebhookSupport` onto ONE registered endpoint and the ONE `signedDelivery.ts`
   retry/SSRF/signature core. Traps: the started edge is exactly-once via `handOffLiveRun` (announced LAST,
@@ -833,9 +834,8 @@ regressions, coverage) lives in contracts' `run-evidence.ts`. Doc: [`pr-verifica
 
 **Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
 it, every teardown path re-probes afterwards, and a SAVE refuses a chain that neither reclaims nor says
-the environment outlives it. Traps: a no-op `teardown:` reports `torn_down`, so only a `confirmed` probe
-is a reclaim, a missing verify row is never a pass, and a DECLARED-retained environment is not `pending`.
-Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
+the environment outlives it. Deadliest trap: a no-op `teardown:` reports `torn_down`, so only a
+`confirmed` probe is a reclaim and a missing verify row is never a pass. Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
 spawn an `on-call` agent to investigate. **It never auto-reverts.** The kernel `ReleaseHealthProvider`

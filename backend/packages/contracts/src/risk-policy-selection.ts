@@ -115,15 +115,28 @@ export interface RolePolicyView {
   classRulesByRole?: RiskPolicy['classRulesByRole'] | null
   dryRunRoles?: readonly WorkspaceRole[] | null
   submissionClassesByRole?: RiskPolicy['submissionClassesByRole'] | null
+  /**
+   * Whether a run under this preset answers the parks its own automatic loops raise. Unlike its
+   * neighbours this one is not ROLE-scoped, and it is here anyway because it is the same kind of
+   * capability the rest of this view exists to compare: what a task's governing preset lets a run
+   * do WITHOUT a person. Every workspace now seeds an `unattended` built-in whose role layer is
+   * empty, so without this arm the picker's other three tests all pass and any member can move a
+   * task onto it — removing the human checkpoints their own default raises, with the landing
+   * authority unchanged. Optional, and an absent or unrecognised value reads as `attended`, which
+   * is what {@link resolvesOwnCaps} does with the same vocabulary and for the same reason.
+   */
+  autonomy?: RiskPolicy['autonomy'] | null
 }
 
 /**
- * Why a preset selection is refused: the machine-readable half, kept apart because the three mean
- * different things to the person holding the picker. The first is about a run that would otherwise
- * merge NOTHING, the second about work this tier may not land at all however it is reviewed, and
- * the third about review the tier owes on work it may land.
+ * Why a preset selection is refused: the machine-readable half, kept apart because the four mean
+ * different things to the person holding the picker. The first is about the human checkpoints a
+ * run would stop at, the second about a run that would otherwise merge NOTHING, the third about
+ * work this tier may not land at all however it is reviewed, and the fourth about review the tier
+ * owes on work it may land.
  */
 export type RiskPolicySelectionRefusal =
+  | 'relaxes_run_oversight'
   | 'relaxes_role_sandbox'
   | 'relaxes_role_submission_allowlist'
   | 'relaxes_role_class_rule'
@@ -179,6 +192,14 @@ export function refuseRiskPolicySelection(input: {
   const nextRole = to.actor.role
   if (!heldRole || !nextRole) return null
   if (from.actor.managesPolicy || to.actor.managesPolicy) return null
+  // Oversight first, ahead of the merge-ladder arms: the parks this drops are raised while the run
+  // is still WORKING, long before anything has a pull request to weigh, so it is the broadest thing
+  // a swap can relax and the one a picker should name. Tested with `=== 'unattended'` on the far
+  // side and `!== 'unattended'` on the held one, so a value neither member spells reads as attended
+  // in both directions: not knowing what a policy says is not a licence to drop a checkpoint.
+  if (from.policy.autonomy !== 'unattended' && to.policy.autonomy === 'unattended') {
+    return 'relaxes_run_oversight'
+  }
   if (
     dryRunForcedForRole(from.policy.dryRunRoles, heldRole) &&
     !dryRunForcedForRole(to.policy.dryRunRoles, nextRole)

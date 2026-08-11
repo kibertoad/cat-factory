@@ -75,7 +75,7 @@ import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { ReviewEffort } from '@cat-factory/kernel'
 import { RunMergePolicy } from './RunMergePolicy.js'
-import type { ResolvedRunRiskPolicy } from './policy-types.js'
+import type { ResolvedRunRiskPolicy, RunPolicyScope } from './policy-types.js'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { BoardService } from '../board/BoardService.js'
@@ -387,7 +387,7 @@ export class ExecutionService {
       blockRepository,
       notificationService,
       mergeTrackRecord,
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
       finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
     })
     this.companionController = new CompanionController({
@@ -400,6 +400,8 @@ export class ExecutionService {
       runAgent: (ctx, opts) => this.runDispatcher.runAgent(ctx, opts),
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
+      ...(dependencies.logger ? { logger: dependencies.logger } : {}),
       inferTechnicalLabel: (ws, block, producer, companionStep) =>
         this.inferBlockTechnical(ws, block, producer, companionStep),
     })
@@ -419,7 +421,7 @@ export class ExecutionService {
       idGenerator,
       clock,
       clockNow: () => this.clock.now(),
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.runActions.iterationCap.dispatchIterationCap(ws, blockId, choice, handlers),
       testerQualityReviewer,
@@ -517,8 +519,8 @@ export class ExecutionService {
       logger: this.log,
       // The one merge-policy fact the start path needs, as a bound callback: the lifecycle
       // controller launches runs and has no other business with the preset layer.
-      resolveDryRunRoles: async (ws, block) =>
-        (await this.mergePolicy.resolve(ws, block)).dryRunRoles,
+      resolveDryRunRoles: async (ws, block, run) =>
+        (await this.mergePolicy.resolve(ws, block, run)).dryRunRoles,
       requireWorkspace: (ws) => this.requireWorkspace(ws),
       requireBlock: (ws, id) => this.requireBlock(ws, id),
       failRun: (ws, id, message, kind, detail, reason) =>
@@ -633,7 +635,7 @@ export class ExecutionService {
       interviewControllers: this.wiredInterviewGates,
       prVerificationReport: this.prVerificationReport,
       runInitiatorScope: runInitiatorScopeFn,
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block, run) => this.resolveRiskPolicy(ws, block, run),
       modelIdIsMetered: (id, caps) => this.admission.modelIdIsMetered(id, caps),
     })
   }
@@ -1206,8 +1208,12 @@ export class ExecutionService {
    * Resolve the merge threshold preset that governs a task — delegated to {@link RunMergePolicy}
    * (preset resolution + its cache read-through live there, alongside the track-record settle).
    */
-  private resolveRiskPolicy(workspaceId: string, block: Block): Promise<ResolvedRunRiskPolicy> {
-    return this.mergePolicy.resolve(workspaceId, block)
+  private resolveRiskPolicy(
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ): Promise<ResolvedRunRiskPolicy> {
+    return this.mergePolicy.resolve(workspaceId, block, run)
   }
 
   /**
