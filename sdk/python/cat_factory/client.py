@@ -101,3 +101,17 @@ class CatFactoryClient:
         )
         for name, resource in build_resources(self._transport).items():
             setattr(self, name, resource)
+
+    def set_personal_password(self, password: str | None) -> None:
+        """Supply the personal password for a key BOUND to a user.
+
+        It unlocks that user's own model subscription for the runs this client starts, retries and
+        answers parks on, riding every subsequent request as ``X-Personal-Password``. The
+        deployment never stores it.
+
+        Settable after construction because that is when a caller learns it is needed: an operation
+        answers ``428 credential_required``, the caller prompts (or reads its secret store), and
+        retries. Passing it to ``__init__`` would mean discarding a configured client to send one
+        header.
+        """
+        self._transport.personal_password = password

@@ -20,6 +20,7 @@ const KEYS: Record<string, Awaited<ReturnType<PublicApiKeyService['authenticate'
     scope: 'read',
     label: 'CI pipeline',
     externalIdentity: null,
+    actsAsUserId: null,
     createdAt: 1_700_000_000_000,
   },
   // A key a provisioner minted FOR someone: `/me` is how the subsystem holding it discovers which
@@ -31,6 +32,7 @@ const KEYS: Record<string, Awaited<ReturnType<PublicApiKeyService['authenticate'
     scope: 'read',
     label: 'os user',
     externalIdentity: 'os-user:42',
+    actsAsUserId: null,
     createdAt: 1_700_000_000_000,
   },
 }

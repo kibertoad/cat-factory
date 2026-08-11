@@ -204,6 +204,27 @@ describe('PersonalSubscriptionService', () => {
     expect(await svc.sweepExpiredActivations()).toBe(1)
   })
 
+  it('calls an activation FRESH only while over half its life is left', async () => {
+    // The threshold an interaction reads to decide whether re-minting is necessary at all. It lives
+    // here because only this service knows the TTL it mints against, and it is what keeps a headless
+    // driver answering a run's parks from paying the unlock's 210k PBKDF2 iterations once per call.
+    let now = 1000
+    const { svc } = makeService(() => now)
+    await svc.store('usr_7', { vendor: 'claude', label: 'm', token: 'T', password: 'longpassword' })
+    await svc.activateForRun('exec_1', 'usr_7', 'claude', 'longpassword')
+    expect(await svc.hasFreshActivation('exec_1', 'usr_7', 'claude')).toBe(true)
+
+    // Just past halfway: still LIVE, so a dispatch would work — and deliberately no longer fresh,
+    // because the point is to re-mint while a caller is present rather than at the edge of expiry.
+    now += DEFAULT_ACTIVATION_TTL_MS / 2 + 1
+    expect(await svc.hasFreshActivation('exec_1', 'usr_7', 'claude')).toBe(false)
+    expect(await svc.hasActivation('exec_1', 'usr_7', 'claude')).toBe(true)
+
+    // And past the TTL it is neither.
+    now += DEFAULT_ACTIVATION_TTL_MS
+    expect(await svc.hasActivation('exec_1', 'usr_7', 'claude')).toBe(false)
+  })
+
   it('computes expiry/renewal status and lists expiring subscriptions', async () => {
     const day = 24 * 60 * 60 * 1000
     const { svc } = makeService(() => 0)

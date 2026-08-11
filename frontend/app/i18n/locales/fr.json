@@ -3248,7 +3248,9 @@
         "createdBy": "créé par {user}",
         "createdByYou": "vous",
         "createdByKey": "la clé d’API {id}",
-        "revoke": "Révoquer le jeton"
+        "revoke": "Révoquer le jeton",
+        "boundToYou": "Votre abonnement",
+        "boundToOther": "Abonnement de {user}"
       },
       "add": {
         "heading": "Créer un jeton",
@@ -3257,7 +3259,12 @@
         "labelPlaceholder": "ex. pipeline CI",
         "scope": "Portée",
         "scopeHelp": "Ce que ce jeton peut faire : lecture seule, lecture et écriture, ou accès complet (qui autorise aussi la suppression).",
-        "create": "Créer le jeton"
+        "create": "Créer le jeton",
+        "identity": "S'exécute en tant que",
+        "identitySystem": "Cet espace de travail (jeton système)",
+        "identitySelf": "Moi (jeton personnel)",
+        "identitySystemHelp": "Les exécutions lancées avec ce jeton appartiennent à l'espace de travail et ne sont attribuées à personne. Il ne peut utiliser l'abonnement personnel Claude / Codex / GLM de qui que ce soit : une tâche fixée sur un tel modèle est refusée plutôt que facturée à quelqu'un d'absent. À utiliser pour la CI et les intégrations partagées.",
+        "identitySelfHelp": "Les exécutions lancées avec ce jeton vous sont attribuées et peuvent utiliser votre abonnement personnel Claude / Codex / GLM. Chaque appel doit aussi envoyer votre mot de passe personnel dans l'en-tête X-Personal-Password ; il n'est jamais conservé. À utiliser pour vos propres exécutions headless."
       },
       "scopes": {
         "read": "Lecture seule",

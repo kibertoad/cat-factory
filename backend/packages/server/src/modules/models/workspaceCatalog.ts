@@ -44,6 +44,10 @@ export async function resolveWorkspaceModelCatalog(
   const caps = await resolveWorkspaceCapabilities(
     {
       ...container,
+      // Not supplied by the container spread: it lives on `config`, not beside the services.
+      ...(container.config.nativeAmbientAuth
+        ? { nativeAmbientAuth: container.config.nativeAmbientAuth }
+        : {}),
       accountSettings: container.accountSettings?.service,
       workspaceAccountOf: (ws) => container.workspaceService.accountOf(ws),
       modelPolicySupported: container.config.infrastructure?.modelPolicy?.supported ?? false,

@@ -86,6 +86,12 @@ export function publicKeyController(): Hono<AppEnv> {
         // defaulting to its own would attribute every minted key (and every run they start) to
         // the integration itself, which is exactly the answer this field exists to improve on.
         externalIdentity: externalIdentity ?? null,
+        // No `actsAsUserId`, and there is no body field that could set one. Binding a key to a
+        // user's PERSONAL subscription is a consent that only that person can give, in the app,
+        // about their own credential; a provisioning key holds nobody's consent and inheriting
+        // the parent's binding would hand every minted key an unlock its holder never agreed to.
+        // An integration that needs one asks the person to mint it.
+        actsAsUserId: null,
       },
       label,
       scope ?? DEFAULT_MINTED_SCOPE,

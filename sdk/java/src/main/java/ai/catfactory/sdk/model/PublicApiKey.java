@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PublicApiKey} wire model.
  * @param accountId the {@code accountId} field.
+ * @param actsAsUserId Always present; {@code null} when the server has no value for it.
  * @param createdAt the {@code createdAt} field.
  * @param createdByKeyId Always present; {@code null} when the server has no value for it.
  * @param createdByUserId Always present; {@code null} when the server has no value for it.
@@ -24,6 +25,9 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicApiKey(
     @JsonProperty("accountId") String accountId,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("actsAsUserId") @Nullable String actsAsUserId,
 
     @JsonProperty("createdAt") Double createdAt,
 
@@ -64,6 +68,7 @@ public record PublicApiKey(
      */
     public static final class Builder {
         private @Nullable String accountId;
+        private @Nullable String actsAsUserId;
         private @Nullable Double createdAt;
         private @Nullable String createdByKeyId;
         private @Nullable String createdByUserId;
@@ -78,6 +83,12 @@ public record PublicApiKey(
         /** Set {@code accountId}. */
         public Builder accountId(@Nullable String accountId) {
             this.accountId = accountId;
+            return this;
+        }
+
+        /** Set {@code actsAsUserId}. */
+        public Builder actsAsUserId(@Nullable String actsAsUserId) {
+            this.actsAsUserId = actsAsUserId;
             return this;
         }
 
@@ -143,7 +154,7 @@ public record PublicApiKey(
 
         /** Build the {@link PublicApiKey}. */
         public PublicApiKey build() {
-            return new PublicApiKey(accountId, createdAt, createdByKeyId, createdByUserId, externalIdentity, id, label, lastUsedAt, revokedAt, scope, workspaceId);
+            return new PublicApiKey(accountId, actsAsUserId, createdAt, createdByKeyId, createdByUserId, externalIdentity, id, label, lastUsedAt, revokedAt, scope, workspaceId);
         }
     }
 }

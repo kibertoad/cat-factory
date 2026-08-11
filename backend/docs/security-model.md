@@ -229,6 +229,22 @@ facades), and so does the engine's own GitHub client via `PatPreferringAppRegist
 the CI gate, mergeability, and the real merge call. The deployment credential is the fallback, not
 the default.
 
+**A public-API key can now BE an initiator, and that is how it reaches the rule above.** A key is
+minted as one of two identities (`actsAsSelf`, [`public-api.md`](./public-api.md#1-mint-a-key)). A
+**system** token — the default, and every headlessly-provisioned key — starts runs with
+`initiatedBy: null`, so nothing here applies to it: no personal PAT is consulted and no personal
+subscription can be unlocked, which is why an individual-usage model is refused outright rather
+than charged to someone who is not present. A **personal** token carries its minter's `usr_*`, so
+its runs are that person's in every sense this page describes: their PAT outranks the deployment's
+by the same precedence, and their sealed subscription can be activated for the run.
+
+Two properties bound that. The binding names **only the minter** (the wire field is a boolean and
+the server reads the id off the session), so a workspace admin cannot mint a key onto a colleague's
+credentials. And the subscription half additionally needs the **personal password on every call**,
+which the platform never stores — so a leaked personal token reaches that user's PAT (exactly as a
+leaked session would) but not their subscription. `allowInitiatorPat` governs the PAT half here as
+it does everywhere else.
+
 **`allowInitiatorPat` (per workspace, on by default) is the enforced control over that.** Turned
 off, every run authenticates as the App installation (or, in local mode, the deployment's own
 token) and the initiator's PAT is never even decrypted, so the blast radius goes back to being a

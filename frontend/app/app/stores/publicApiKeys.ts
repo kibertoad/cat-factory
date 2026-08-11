@@ -54,10 +54,18 @@ export const usePublicApiKeysStore = defineStore('publicApiKeys', () => {
   /**
    * Mint a key with a permission `scope` (read ⊂ write ⊂ admin). Returns the created record
    * PLUS the one-time raw secret (shown once).
+   *
+   * `actsAsSelf` binds the key to the signed-in user's PERSONAL subscriptions, so a headless run
+   * it starts can unlock them with the password sent on that call. Passed through rather than
+   * defaulted here: the server writes the id off the session, so this is only ever a yes/no.
    */
-  async function create(label: string, scope: PublicApiScope): Promise<CreatedPublicApiKey> {
+  async function create(
+    label: string,
+    scope: PublicApiScope,
+    actsAsSelf = false,
+  ): Promise<CreatedPublicApiKey> {
     const ws = useWorkspaceStore()
-    const created = await api.createPublicApiKey(ws.requireId(), { label, scope })
+    const created = await api.createPublicApiKey(ws.requireId(), { label, scope, actsAsSelf })
     // Prepend: the backend lists newest-first, so the freshly minted key belongs at the
     // top — matching the order a subsequent `load()` would produce.
     keys.value = [created.key, ...keys.value]

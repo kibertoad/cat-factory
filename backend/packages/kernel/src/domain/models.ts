@@ -867,7 +867,13 @@ export function contextWindowFor(ref: { provider: string; model: string }): numb
 export interface ProviderCapabilities {
   /** Direct providers (e.g. `qwen`, `openai`) with ≥1 key in the merged scope pool. */
   directProviders: Set<string>
-  /** Subscription vendors with a usable token (pool or personal). */
+  /**
+   * Subscription vendors this deployment can actually dispatch to: one with a usable token
+   * (pool or personal), OR one NATIVE LOCAL EXECUTION serves from the host's own ambient CLI
+   * login, which has no token at all ({@link isAmbientNativeVendor}). The third case is why
+   * this is not named after the credential: a member here means "a run can use this vendor",
+   * never "a credential for it was found".
+   */
   subscriptionVendors: Set<SubscriptionVendor>
   /** Whether the opt-in Cloudflare Workers AI lib is registered for this deployment. */
   cloudflareEnabled: boolean

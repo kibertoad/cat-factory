@@ -3,6 +3,7 @@ import {
   listPublicApiKeysContract,
   revokePublicApiKeyContract,
 } from '@cat-factory/contracts'
+import { ValidationError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -48,13 +49,31 @@ export function publicApiKeyController(): Hono<AppEnv> {
     if (accountId == null) {
       return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
     }
-    const { label, scope } = c.req.valid('json')
+    const { label, scope, actsAsSelf } = c.req.valid('json')
     // Attribute the mint to the acting user (audit + UI); `null` in dev-open (no session).
     const createdByUserId = c.get('user')?.id ?? null
+    // The binding reads the id off the SESSION and never off the body, which is the whole of the
+    // safety argument: the request can only ask for "me", so there is no shape in which one person
+    // mints a key onto another's personal subscription. A dev-open mint has no session to read, and
+    // a key bound to nobody is exactly an unbound key wearing a promise — so refuse rather than
+    // silently drop the flag, since the failure would otherwise surface much later as a run that
+    // could not unlock a credential the operator believed they had authorised.
+    if (actsAsSelf && !createdByUserId) {
+      throw new ValidationError(
+        'A key can only be bound to the person minting it, and this request has no signed-in ' +
+          'user. Sign in and mint the key again, or mint it unbound.',
+        { reason: 'acts_as_self_requires_session' },
+      )
+    }
     // No `createdByKeyId`: a person minted this one. That field is what marks a key provisioned
     // through `POST /api/v1/keys`, and it is also the link the revocation cascade follows.
     const { record, secret } = await publicApiKeys.issue(
-      { accountId, workspaceId, createdByUserId },
+      {
+        accountId,
+        workspaceId,
+        createdByUserId,
+        actsAsUserId: actsAsSelf ? createdByUserId : null,
+      },
       label,
       scope,
     )

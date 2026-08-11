@@ -46,7 +46,7 @@ const STEER =
   'worked examples. Do not broaden the scope.'
 
 describe('feature delivery: two services ship through pl_build onto k3s', () => {
-  const { config, client, world, journal } = harness('02-feature-with-defect')
+  const { config, client, world, journal, unlock } = harness('02-feature-with-defect')
 
   beforeAll(assertPrerequisites)
 
@@ -128,6 +128,7 @@ describe('feature delivery: two services ship through pl_build onto k3s', () => 
     const { run, answered, record } = await fileAndDrive({
       client,
       journal,
+      unlock,
       existing: world.value[options.ledgerKey],
       label: options.title,
       createTask: () =>

@@ -51,8 +51,31 @@ import org.jspecify.annotations.Nullable;
  */
 public final class CatFactoryClient extends Resources {
 
+    private final Transport transport;
+
     private CatFactoryClient(Builder builder) {
-        super(new Transport(builder));
+        this(new Transport(builder));
+    }
+
+    private CatFactoryClient(Transport transport) {
+        super(transport);
+        this.transport = transport;
+    }
+
+    /**
+     * Supply the personal password for a key BOUND to a user.
+     *
+     * <p>It unlocks that user's own model subscription for the runs this client starts, retries and
+     * answers parks on, riding every subsequent request as {@code X-Personal-Password}. The
+     * deployment never stores it. Pass {@code null} to clear it.
+     *
+     * <p>Settable after construction because that is when a caller learns it is needed: an operation
+     * answers {@code 428 credential_required}, the caller prompts (or reads its secret store), and
+     * retries. Rebuilding the client to send one header would discard its configuration and its
+     * connection pool.
+     */
+    public void setPersonalPassword(@Nullable String password) {
+        transport.personalPassword(password);
     }
 
     /** Start building a client. */
@@ -75,6 +98,7 @@ public final class CatFactoryClient extends Resources {
         private final Map<String, String> headers = new LinkedHashMap<>();
         private @Nullable String userAgent;
         private @Nullable HttpClient httpClient;
+        private @Nullable String personalPassword;
 
         /** The deployment's origin, e.g. {@code https://cat-factory.example.com}. Required. */
         public Builder baseUrl(String baseUrl) {
@@ -126,6 +150,17 @@ public final class CatFactoryClient extends Resources {
             return this;
         }
 
+        /**
+         * The personal password of the user this key is BOUND to, if any.
+         *
+         * <p>Usually supplied later with {@link CatFactoryClient#setPersonalPassword(String)},
+         * since a caller learns it is needed from a {@code 428 credential_required}.
+         */
+        public Builder personalPassword(String personalPassword) {
+            this.personalPassword = personalPassword;
+            return this;
+        }
+
         /** Build the client. */
         public CatFactoryClient build() {
             if (baseUrl == null || baseUrl.isEmpty()) {
@@ -166,6 +201,10 @@ public final class CatFactoryClient extends Resources {
 
         @Nullable HttpClient httpClient() {
             return httpClient;
+        }
+
+        @Nullable String personalPassword() {
+            return personalPassword;
         }
     }
 }

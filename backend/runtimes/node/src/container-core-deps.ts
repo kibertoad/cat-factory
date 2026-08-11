@@ -778,6 +778,9 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
           cloudflareModelsEnabled,
           ...(bedrockModels ? { bedrockModels } : {}),
           baseUrlFor: (provider) => baseUrlForNode(provider, env),
+          // Local mode's ambient-CLI allow-list: a vendor it serves needs no credential, so it is
+          // usable here whether or not the initiator has one. Absent on the plain Node facade.
+          ...(config.nativeAmbientAuth ? { nativeAmbientAuth: config.nativeAmbientAuth } : {}),
           localModelEndpoints,
           openRouterCatalog,
           accountSettings,

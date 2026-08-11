@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * @param modelId the {@code modelId} field.
  * @param policyBlocked the {@code policyBlocked} field.
  * @param provider the {@code provider} field.
+ * @param userScoped the {@code userScoped} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ListPublicWiredModelsResponseModel(
@@ -25,7 +26,9 @@ public record ListPublicWiredModelsResponseModel(
 
     @JsonProperty("policyBlocked") Boolean policyBlocked,
 
-    @JsonProperty("provider") String provider
+    @JsonProperty("provider") String provider,
+
+    @JsonProperty("userScoped") Boolean userScoped
 ) {
 
     /** A new builder for {@link ListPublicWiredModelsResponseModel}. */
@@ -45,6 +48,7 @@ public record ListPublicWiredModelsResponseModel(
         private @Nullable String modelId;
         private @Nullable Boolean policyBlocked;
         private @Nullable String provider;
+        private @Nullable Boolean userScoped;
 
         /** Set {@code available}. */
         public Builder available(@Nullable Boolean available) {
@@ -76,9 +80,15 @@ public record ListPublicWiredModelsResponseModel(
             return this;
         }
 
+        /** Set {@code userScoped}. */
+        public Builder userScoped(@Nullable Boolean userScoped) {
+            this.userScoped = userScoped;
+            return this;
+        }
+
         /** Build the {@link ListPublicWiredModelsResponseModel}. */
         public ListPublicWiredModelsResponseModel build() {
-            return new ListPublicWiredModelsResponseModel(available, label, modelId, policyBlocked, provider);
+            return new ListPublicWiredModelsResponseModel(available, label, modelId, policyBlocked, provider, userScoped);
         }
     }
 }

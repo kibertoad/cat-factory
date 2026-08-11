@@ -19,11 +19,37 @@ import type { AcceptanceConfig } from './config.ts'
 import { waitFor } from './deadline.ts'
 import { isActionable } from './decisions.ts'
 import type { Journal } from './journal.ts'
+import type { PersonalUnlock } from './personalUnlock.ts'
 
 export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
 
-export function createClient(config: AcceptanceConfig): CatFactoryClient {
-  return new CatFactoryClient({ baseUrl: config.baseUrl, apiKey: config.apiKey })
+/**
+ * Build the client, optionally carrying the operator's personal-subscription unlock.
+ *
+ * The password rides through the `fetch` seam rather than the client's `headers` option, and that
+ * is forced by what the password IS: `headers` is snapshotted at construction, while this one is
+ * not known until a call has already been refused for want of it, and must then travel on EVERY
+ * later request (each answered decision re-mints the run's activation server-side). Threading it
+ * through the transport keeps a single place where it is attached, so no call site can forget it
+ * and none has to hold a copy.
+ *
+ * Absent unlock ⇒ the plain client, byte for byte: a workspace on a provider API key sends no such
+ * header and is never asked for a password.
+ */
+export function createClient(config: AcceptanceConfig, unlock?: PersonalUnlock): CatFactoryClient {
+  return new CatFactoryClient({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    ...(unlock
+      ? {
+          fetch: ((input, init) =>
+            globalThis.fetch(input, {
+              ...init,
+              headers: { ...(init?.headers as Record<string, string>), ...unlock.headers() },
+            })) satisfies typeof globalThis.fetch,
+        }
+      : {}),
+  })
 }
 
 /**

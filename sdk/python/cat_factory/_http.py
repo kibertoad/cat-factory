@@ -78,6 +78,10 @@ class Transport:
             **dict(headers or {}),
         }
         self._opener = opener or urllib.request.build_opener()
+        #: The personal password sent on every request while set, for a key bound to a user.
+        #: Mutable, because a caller learns it is needed from a 428 and must be able to supply it
+        #: without rebuilding a configured client.
+        self.personal_password: str | None = None
 
     # -- public surface the generated operations call ------------------------------------------
 
@@ -183,6 +187,8 @@ class Transport:
         request = urllib.request.Request(self._url(path, query), data=payload, method=method)
         for key, value in self._headers.items():
             request.add_header(key, value)
+        if self.personal_password is not None:
+            request.add_header("x-personal-password", self.personal_password)
         request.add_header("accept", accept)
         request.add_header("authorization", f"Bearer {self._api_key}")
         if payload is not None:
