@@ -2,6 +2,7 @@
 import type { RequirementVerdictStatus, TestReport } from '~/types/domain'
 import type { TesterStepState } from '~/types/execution'
 import { resolveVerdictMeta, type VerdictMeta } from './StepTestReport.logic'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 // A tester step's latest structured report (what was tested, the per-area outcomes,
 // the concerns it raised and the greenlight verdict) plus the fixer-loop phase.
@@ -57,9 +58,11 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
         }}<span v-if="phase.phase === 'fixing'"> {{ t('panels.testReport.fixing') }}</span>
       </span>
     </div>
-    <p v-if="report.summary" class="mb-3 text-[13px] leading-relaxed text-slate-300">
-      {{ report.summary }}
-    </p>
+    <MarkdownProse
+      v-if="report.summary"
+      :text="report.summary"
+      class="mb-3 text-[13px] leading-relaxed text-slate-300"
+    />
 
     <div v-if="report.tested.length" class="mb-3">
       <div class="mb-1 text-[11px] text-slate-500">{{ t('panels.testReport.tested') }}</div>
@@ -123,7 +126,7 @@ function verdictMeta(status: RequirementVerdictStatus): VerdictMeta {
           >
           <span class="font-medium text-slate-200">{{ c.title }}</span>
         </div>
-        <p v-if="c.detail" class="mt-1 text-slate-400">{{ c.detail }}</p>
+        <MarkdownProse v-if="c.detail" :text="c.detail" class="mt-1 text-slate-400" />
       </div>
     </div>
   </section>

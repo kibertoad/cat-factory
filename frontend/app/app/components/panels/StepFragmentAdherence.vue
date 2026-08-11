@@ -6,6 +6,7 @@
 // reviewer reported at least one standard; when none were reachable the reviewer says so in its
 // summary instead (so there is nothing to show here).
 import type { FragmentAdherence } from '~/types/execution'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 const props = defineProps<{ items: FragmentAdherence }>()
 const { t } = useI18n()
@@ -63,12 +64,11 @@ function label(item: FragmentAdherence[number]): string {
             {{ t('panels.stepDetail.adherence.outOfTen', { value: item.rating }) }}
           </span>
         </div>
-        <p
+        <MarkdownProse
           v-if="item.assessment"
-          class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300"
-        >
-          {{ item.assessment }}
-        </p>
+          :text="item.assessment"
+          class="mt-1 text-[12px] leading-relaxed text-slate-300"
+        />
         <div v-if="item.relatedFindings.length" class="mt-1.5">
           <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             {{ t('panels.stepDetail.adherence.relatedFindings') }}

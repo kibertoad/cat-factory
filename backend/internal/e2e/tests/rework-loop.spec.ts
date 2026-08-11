@@ -3,6 +3,7 @@ import {
   LIVE_TIMEOUT,
   RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
+  openAttention,
   setFakeProfile,
   startRun,
   taskCard,
@@ -38,6 +39,20 @@ test.describe('companion rework loop (iteration cap)', () => {
     // The automatic rework budget is spent without converging → the run parks `blocked` at the
     // iteration cap (NOT auto-passed and not silently failed), pushed live.
     await expect(card).toHaveAttribute('data-status', 'blocked', { timeout: RUN_TERMINAL_TIMEOUT })
+
+    // The parked step is the COMPANION, and its metadata card is where a human reads why the loop
+    // never converged: one card per correction round, each rendering the reviewer's verdict as
+    // markdown. It used to trail the score inside the same line, which made a multi-point review
+    // one unreadable run of text — so what is asserted is the RENDER (the fake's `**Must fix**`
+    // arriving as a real bold element), not merely that the text is present.
+    const detail = page.getByTestId('step-detail')
+    await openAttention(card, detail)
+    const rounds = detail.getByTestId('companion-verdict')
+    await expect(rounds.first()).toBeVisible()
+    await expect(rounds.first().locator('strong').first()).toHaveText('Must fix')
+    // Leave the overlay the way a user does, so the board underneath is actionable again.
+    await page.keyboard.press('Escape')
+    await expect(detail).toBeHidden()
 
     // LIVE: the iteration-cap decision is surfaced in the inbox as a `decision_required` card.
     const bell = page.getByTestId('notifications-bell')

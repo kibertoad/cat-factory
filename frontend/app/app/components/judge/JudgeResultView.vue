@@ -12,6 +12,7 @@ import { agentKindMeta } from '~/utils/catalog'
 import type { JudgeFinding, JudgeStepState } from '~/types/execution'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import CopyButton from '~/components/common/CopyButton.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -190,11 +191,14 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
           {{ judge.note }}
         </p>
 
+        <!-- The verdict a human reads. Markdown, because the judge prompt asks for a verdict
+             line plus grouped bullets rather than one paragraph. -->
         <div v-if="verdict?.summary" class="relative mt-3">
           <CopyButton :text="verdict.summary" class="absolute end-1 top-1" />
-          <p class="whitespace-pre-wrap pe-8 text-[13px] leading-relaxed text-slate-200">
-            {{ verdict.summary }}
-          </p>
+          <MarkdownProse
+            :text="verdict.summary"
+            class="pe-8 text-[13px] leading-relaxed text-slate-200"
+          />
         </div>
 
         <section v-if="findings.length" class="mt-4">
@@ -220,12 +224,11 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
                   finding.where
                 }}</code>
               </div>
-              <p
+              <MarkdownProse
                 v-if="finding.detail"
-                class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400"
-              >
-                {{ finding.detail }}
-              </p>
+                :text="finding.detail"
+                class="mt-1 text-[12px] leading-relaxed text-slate-400"
+              />
             </li>
           </ul>
         </section>
