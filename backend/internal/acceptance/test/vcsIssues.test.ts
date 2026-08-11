@@ -18,9 +18,16 @@ import type { AcceptanceConfig } from '../src/config.ts'
 
 const TARGET = { owner: 'acme', repo: 'catalog-api' }
 
+/**
+ * One canned answer. `throws` takes the VALUE thrown rather than a message, because the shapes that
+ * matter here are undici's: a contentless wrapper over the link that names the failure. `text` is
+ * for a body that is not JSON at all, which is what something other than the API answers with.
+ */
+type Route = { status: number; body?: unknown; text?: string; throws?: unknown }
+
 /** A `fetch` answering a table keyed by `METHOD /path`, and 599 for anything unrouted. */
 function fakeFetch(
-  routes: Record<string, { status: number; body?: unknown; throws?: string }>,
+  routes: Record<string, Route>,
   calls: { method: string; url: string; headers: Record<string, string>; body?: string }[] = [],
 ): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
@@ -39,14 +46,14 @@ function fakeFetch(
       ...(typeof init?.body === 'string' ? { body: init.body } : {}),
     })
     const route = routes[`${method} ${path}`]
-    if (route?.throws) throw new Error(route.throws)
+    if (route?.throws) throw route.throws
     const status = route?.status ?? 599
-    return new Response(JSON.stringify(route?.body ?? {}), { status })
+    return new Response(route?.text ?? JSON.stringify(route?.body ?? {}), { status })
   }) as unknown as typeof fetch
 }
 
 function github(
-  routes: Record<string, { status: number; body?: unknown; throws?: string }>,
+  routes: Record<string, Route>,
   calls: { method: string; url: string; headers: Record<string, string>; body?: string }[] = [],
 ) {
   const build = ISSUE_APIS.github
@@ -83,14 +90,61 @@ describe('the reporter credential probe', () => {
   it('reports a transport failure as UNREADABLE, never as a bad credential', async () => {
     // The three-state rule at its sharpest: a proxy that is down must not be reported as a token to
     // go and re-mint, which is a fix that cannot work and costs the operator a token rotation.
-    const api = github({ 'GET /repos/acme/catalog-api': { status: 0, throws: 'fetch failed' } })
-    expect(await api.probe(TARGET)).toEqual({ status: 'unreadable', detail: 'fetch failed' })
+    const api = github({
+      'GET /repos/acme/catalog-api': {
+        status: 0,
+        throws: new TypeError('fetch failed', {
+          cause: Object.assign(new Error('connect ECONNREFUSED 140.82.121.6:443'), {
+            code: 'ECONNREFUSED',
+          }),
+        }),
+      },
+    })
+    expect(await api.probe(TARGET)).toMatchObject({ status: 'unreadable' })
+  })
+
+  it('names the CAUSE of that failure, and the address it was reaching', async () => {
+    // `error.message` here is undici's contentless `fetch failed`, identical for a DNS typo, a
+    // refused connection, an untrusted certificate and an Enterprise Server that is down, and the
+    // gate prints it verbatim as its verdict. It is also the ONE probe in the gate that leaves the
+    // deployment, so the runner's probe context (the backend) cannot describe it: this is where the
+    // provider's own address gets named.
+    const api = github({
+      'GET /repos/acme/catalog-api': {
+        status: 0,
+        throws: new TypeError('fetch failed', {
+          cause: Object.assign(new Error('getaddrinfo ENOTFOUND ghe.internal'), {
+            code: 'ENOTFOUND',
+          }),
+        }),
+      },
+    })
+    const verdict = await api.probe(TARGET)
+    if (verdict.status !== 'unreadable') throw new Error('expected an unreadable verdict')
+    expect(verdict.detail).toContain('getaddrinfo ENOTFOUND ghe.internal')
+    expect(verdict.detail).not.toContain('fetch failed')
+    expect(verdict.hint).toContain('https://api.test')
+    expect(verdict.hint).toContain('does not resolve')
   })
 
   it('reports an unexpected status as unreadable rather than guessing which fault it is', async () => {
     const api = github({ 'GET /repos/acme/catalog-api': { status: 500 } })
     const verdict = await api.probe(TARGET)
     expect(verdict.status).toBe('unreadable')
+  })
+
+  it('reports a 200 that is not JSON as unreadable, rather than throwing out of the check', async () => {
+    // The body read used to sit OUTSIDE the try, so a captive portal answering 200 with HTML threw
+    // out of the probe. The gate then described a failure at the PROVIDER against the deployment's
+    // address, `curl` command included, which is the misattribution the probe describer exists to
+    // remove. It is also not evidence about the credential, hence `unreadable` and not a fault.
+    const api = github({
+      'GET /repos/acme/catalog-api': { status: 200, text: '<!DOCTYPE html><title>Sign in</title>' },
+    })
+    const verdict = await api.probe(TARGET)
+    if (verdict.status !== 'unreadable') throw new Error('expected an unreadable verdict')
+    expect(verdict.detail).toContain('HTTP 200 with a body that is not the JSON this API documents')
+    expect(verdict.hint).toContain('intercepting proxy')
   })
 })
 

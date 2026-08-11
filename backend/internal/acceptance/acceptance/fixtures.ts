@@ -117,9 +117,17 @@ export function preflightReport(): Promise<PreflightReport> {
       ),
       issueApiFor: (provider) => issueApiFor(config, provider),
     },
-    (result) => {
-      journal.record('prerequisite', formatPreflightLine(result).trim())
-      console.log(formatPreflightLine(result))
+    {
+      // The DEPLOYMENT, so a thrown probe is described against it rather than as undici's `fetch
+      // failed`. Even `cluster-connection` qualifies: it probes k3s THROUGH the backend, so its
+      // transport failures are the backend's too. `issue-credential` also reaches the provider's own
+      // API, which no one context can name beside this one, so it describes that half itself; see
+      // `PreflightOptions.probe`.
+      probe: { subject: 'the cat-factory backend', target: config.baseUrl },
+      onResult: (result) => {
+        journal.record('prerequisite', formatPreflightLine(result).trim())
+        console.log(formatPreflightLine(result))
+      },
     },
   )
   return preflight

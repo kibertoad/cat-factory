@@ -194,6 +194,12 @@ There are exactly THREE describers, and they all flatten through `shared/error-c
 | `describeError` (`shared/best-effort.ts`)                          | `{ err, errKind }` log fields                     | every `logger.*` site, `runBestEffort`                                                        |
 | `describeConnectionFailure` (`shared/connection-failure.logic.ts`) | the chain PLUS a machine cause class and a remedy | the "Test connection" probes                                                                  |
 
+Still three: `connectionFailureHint` beside the third one is not a fourth describer but the same
+per-cause remedy for a cause a CALLER classified, for the one thing a chain walk cannot see. A client
+that turns its own deadline into a typed error aborts it with a marker NAMED `AbortError` (the SDK's
+`CatFactoryTimeoutError`), so the walk reads a cancelled request where the caller knows it is a
+timeout. The class comes from the caller; the sentence stays kernel's.
+
 **Never hand-roll `error instanceof Error ? error.message : String(error)`.** That expression is the
 bug above, spelled out. It was in ~90 places; the sweep that removed them is why the chain now shows
 up everywhere. Reach for `getErrorMessage` (a human-facing string) or `describeError` (log fields).

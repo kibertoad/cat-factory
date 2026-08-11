@@ -46,6 +46,7 @@ import {
   REPO_CREATION_URL,
   REPORTER_TOKEN_URL,
 } from './configureEnv.ts'
+import { describeThrown } from './operatorText.ts'
 import { formatRemedy } from './preflight.ts'
 import { presetAvailability, type PresetAvailability } from './presets.ts'
 
@@ -157,7 +158,12 @@ async function read<T>(fn: () => Promise<T>): Promise<Read<T>> {
   try {
     return { ok: true, value: await fn() }
   } catch (error) {
-    return { ok: false, error: message(error) }
+    // The WHOLE cause chain, because `error.message` alone renders undici's contentless `fetch
+    // failed` for every transport failure alike, and this is the one place an operator is still
+    // choosing the base URL: "connect ECONNREFUSED 127.0.0.1:8787" is the answer to the question
+    // they are being asked. Shared with the journal and the root reads, so the three cannot invent
+    // three phrases for a chain that said nothing.
+    return { ok: false, error: describeThrown(error) }
   }
 }
 
@@ -799,10 +805,6 @@ function readPrevious(text: string): Record<string, string> {
 
 function stripTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 /** The real deployment port, over the published SDK: the same client the suite itself drives. */

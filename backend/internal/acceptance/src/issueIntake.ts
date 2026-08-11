@@ -18,6 +18,7 @@ import type { PrReportRunProvider } from '@cat-factory/sdk'
 import { waitFor } from './deadline.ts'
 import { check, type Check } from './evidence.ts'
 import type { Journal } from './journal.ts'
+import { describeThrown } from './operatorText.ts'
 import type { IssueApi, IssueState, IssueTarget } from './vcsIssues.ts'
 import { slug } from './vcsIssues.ts'
 import type { IssueRecord } from './world.ts'
@@ -203,7 +204,7 @@ async function observeIssue(
   try {
     state = await api.read(target, number)
   } catch (error) {
-    return { state: null, description: `could not be read: ${describeError(error)}` }
+    return { state: null, description: `could not be read: ${describeThrown(error)}` }
   }
   if (!state) {
     throw new IssueGoneError(
@@ -224,10 +225,6 @@ async function observeIssue(
 function isSettled(state: IssueState, pullRequestUrl: string | null): boolean {
   if (!pullRequestUrl) return state.closed
   return checkIssueWriteback({ state, pullRequestUrl }).every((claim) => claim.ok)
-}
-
-function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 /**
