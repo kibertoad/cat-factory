@@ -29,6 +29,7 @@ import {
   readTokenCommand,
   runCommand,
 } from '@cat-factory/cli'
+import { getErrorMessage } from '@cat-factory/kernel'
 import { CatFactoryClient, type PrReportRunProvider } from '@cat-factory/sdk'
 import {
   blockedRepoMessage,
@@ -728,8 +729,17 @@ function stripTrailingSlash(value: string): string {
   return value.endsWith('/') ? value.slice(0, -1) : value
 }
 
+/**
+ * A failed read's reason, as the WHOLE cause chain.
+ *
+ * `error.message` alone renders undici's contentless `fetch failed` for every transport failure
+ * alike, which is the least useful thing this command could say: it is the one place an operator is
+ * still choosing the base URL, so "connect ECONNREFUSED 127.0.0.1:8787" is the answer to the
+ * question they are being asked. `getErrorMessage` answers empty for an error with nothing to say,
+ * hence the fallback.
+ */
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return getErrorMessage(error) || 'no reason reported'
 }
 
 /** The real deployment port, over the published SDK: the same client the suite itself drives. */

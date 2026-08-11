@@ -115,9 +115,15 @@ export function preflightReport(): Promise<PreflightReport> {
         record ? [record.serviceId] : [],
       ),
     },
-    (result) => {
-      journal.record('prerequisite', formatPreflightLine(result).trim())
-      console.log(formatPreflightLine(result))
+    {
+      // What every probe here reaches, so a thrown one is described against it rather than as
+      // undici's `fetch failed`. Even `cluster-connection` qualifies: it probes k3s THROUGH the
+      // backend, so its transport failures are the backend's too.
+      probe: { subject: 'the cat-factory backend', target: config.baseUrl },
+      onResult: (result) => {
+        journal.record('prerequisite', formatPreflightLine(result).trim())
+        console.log(formatPreflightLine(result))
+      },
     },
   )
   return preflight

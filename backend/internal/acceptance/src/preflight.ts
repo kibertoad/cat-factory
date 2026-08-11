@@ -22,7 +22,12 @@
 //      check to build and why a fix with no CLI states its screen rather than inventing one.
 //
 // The checks themselves live in `prerequisites.ts`. This file holds the vocabulary, the runner and
-// the pure reductions the specs and `test/preflight.test.ts` assert on.
+// the pure reductions the specs and `test/preflight.test.ts` assert on. What a THROWN probe means
+// (rule 2's `unknown` branch) lives in `probeFailure.ts`, which reads the whole cause chain through
+// kernel rather than the one link `error.message` exposes.
+
+import type { ConnectionFailureContext } from '@cat-factory/kernel'
+import { probeFailureVerdict } from './probeFailure.ts'
 
 /**
  * One command an operator can paste, with what it does.
@@ -94,6 +99,22 @@ export type PreflightReport = {
   results: readonly PrerequisiteResult[]
 }
 
+export type PreflightOptions = {
+  /**
+   * What the probes REACH, so a thrown one can be described against it.
+   *
+   * Supplied as data rather than derived, because the runner is generic over `Context` and has no
+   * business knowing that this suite's checks speak HTTP. One context covers every prerequisite:
+   * they all go through the SDK or the two deployment root reads, so even `cluster-connection`
+   * (which probes k3s) reaches the k3s apiserver THROUGH the backend, and a transport failure there
+   * is still a failure to reach the backend. Omitting it costs the target-naming half of the
+   * remedy, never the cause.
+   */
+  probe?: ConnectionFailureContext
+  /** Called as each result lands, so a slow probe is not a silent one. */
+  onResult?: (result: PrerequisiteResult) => void
+}
+
 /**
  * Run every prerequisite, never short-circuiting.
  *
@@ -107,11 +128,11 @@ export type PreflightReport = {
 export async function runPreflight<Context>(
   prerequisites: readonly Prerequisite<Context>[],
   context: Context,
-  onResult?: (result: PrerequisiteResult) => void,
+  options: PreflightOptions = {},
 ): Promise<PreflightReport> {
   const results: PrerequisiteResult[] = []
   for (const prerequisite of prerequisites) {
-    const verdict = await evaluate(prerequisite, context)
+    const verdict = await evaluate(prerequisite, context, options.probe)
     const result = {
       id: prerequisite.id,
       what: prerequisite.what,
@@ -119,7 +140,7 @@ export async function runPreflight<Context>(
       verdict,
     }
     results.push(result)
-    onResult?.(result)
+    options.onResult?.(result)
   }
   return { results }
 }
@@ -127,25 +148,16 @@ export async function runPreflight<Context>(
 async function evaluate<Context>(
   prerequisite: Prerequisite<Context>,
   context: Context,
+  probe: ConnectionFailureContext | undefined,
 ): Promise<PrerequisiteVerdict> {
   try {
     return await prerequisite.check(context)
   } catch (error) {
-    return {
-      status: 'unknown',
-      probeFailure: `the check threw: ${error instanceof Error ? error.message : String(error)}`,
-      // Deliberately generic, and it says so: this branch knows only that a probe threw, so a
-      // remedy naming a cluster or a key here would be a guess dressed as an instruction. What a
-      // reader needs from it is that the prerequisite itself was never graded.
-      remedy: {
-        steps: [
-          'Read the probe failure above: it is a fact about the CHECK, not a verdict on the prerequisite.',
-          'The usual causes are a deployment that is not running, a base URL naming the SPA rather ' +
-            'than the backend, and an API key that is missing, revoked, or scoped below `admin`.',
-          'Fix that, then re-run the suite.',
-        ],
-      },
-    }
+    // `probeFailure.ts` owns what a thrown value means, and the reason it is not three lines
+    // inlined here is the whole point of that module: read as `error.message`, every transport
+    // failure this gate can hit renders as undici's contentless `fetch failed`, so the remedy had
+    // to list the causes it could not tell apart. It now names the one that happened.
+    return probeFailureVerdict(error, probe)
   }
 }
 

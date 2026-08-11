@@ -11,6 +11,7 @@
 // a WORKSPACE. A caller acting on one has a key, so that is a public endpoint.
 
 import type { ConfigProblem } from '@cat-factory/contracts'
+import { getErrorMessage } from '@cat-factory/kernel'
 
 export type DeploymentApiOptions = {
   baseUrl: string
@@ -53,11 +54,29 @@ export class DeploymentApi {
 
   async #request<T>(method: string, path: string): Promise<T> {
     const url = `${this.#baseUrl}${path}`
-    const response = await fetch(url, { method })
+    const response = await this.#reach(method, url)
     if (!response.ok) {
       throw new Error(await describeDeploymentFailure(method, url, response))
     }
     return (await response.json()) as T
+  }
+
+  /**
+   * `fetch`, with the REQUEST named on a transport failure and the thrown value kept as the `cause`.
+   *
+   * Both halves earn their place. The name is what the non-2xx path already gives
+   * (`describeDeploymentFailure` opens with `${method} ${url}`), and without it a refused connection
+   * reported an address with no indication of which read wanted it. Keeping the original as `cause`
+   * is what makes the wrapper safe to add at all: `probeFailure.ts` classifies by walking the chain
+   * DEEPEST-FIRST, so a `new Error(message)` that dropped the cause would turn a diagnosable
+   * `ECONNREFUSED` into `unknown` and cost the very remedy this exists to reach.
+   */
+  async #reach(method: string, url: string): Promise<Response> {
+    try {
+      return await fetch(url, { method })
+    } catch (error) {
+      throw new Error(`${method} ${url} could not be reached`, { cause: error })
+    }
   }
 }
 
@@ -77,7 +96,10 @@ export async function describeDeploymentFailure(
   try {
     detail = (await response.text()).slice(0, 2000)
   } catch (error) {
-    detail = `<body unreadable: ${error instanceof Error ? error.message : String(error)}>`
+    // A body read fails on a truncated or reset response, so the useful link is again one `.cause`
+    // down. `getErrorMessage` answers EMPTY for an error with nothing to say, which is what the
+    // fallback is for: `<body unreadable: >` states less than naming the absence.
+    detail = `<body unreadable: ${getErrorMessage(error) || 'no reason reported'}>`
   }
   return (
     `${method} ${url} failed with ${response.status}: ${detail}\n` +
