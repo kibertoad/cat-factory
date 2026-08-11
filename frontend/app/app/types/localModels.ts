@@ -13,6 +13,7 @@
 
 export type {
   LocalRunner,
+  LocalModelDeclaration,
   LocalModelEndpoint,
   LocalRunnerUrlReason,
   UpsertLocalModelEndpointInput,
@@ -22,3 +23,9 @@ export type {
 
 // Value re-exports (the per-runner default base URL + display labels).
 export { LOCAL_RUNNER_DEFAULTS, LOCAL_RUNNER_LABELS } from '@cat-factory/contracts'
+
+// What the platform already KNOWS about the popular local model families. The panel reads the same
+// table the engine folds onto a dispatched ref, so the "not set" option can state what will happen
+// instead of implying nothing will.
+export { knownLocalModel } from '@cat-factory/contracts'
+export type { KnownLocalModel } from '@cat-factory/contracts'

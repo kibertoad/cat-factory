@@ -28,7 +28,7 @@ import {
 } from '../public-api.js'
 import { publicSpendQuerySchema, publicSpendSchema } from '../public-spend.js'
 import { publicTaskTypeListSchema } from '../public-task-types.js'
-import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
+import { errorResponses, singleStringParam, withMinScope, withPersonalUnlock } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Public-API route contracts. Two surfaces:
@@ -77,14 +77,16 @@ export const revokePublicApiKeyContract = defineApiContract({
  * resource root; the create used to sit apart at `POST /api/v1/initiatives`, which split the
  * resource across two path roots for no reason a caller could see.
  */
-export const createPublicJobContract = withMinScope(
-  'write',
-  defineApiContract({
-    method: 'post',
-    pathResolver: () => '/api/v1/jobs',
-    requestBodySchema: createPublicJobSchema,
-    responsesByStatusCode: { 202: publicJobAcceptedSchema, ...errorResponses },
-  }),
+export const createPublicJobContract = withPersonalUnlock(
+  withMinScope(
+    'write',
+    defineApiContract({
+      method: 'post',
+      pathResolver: () => '/api/v1/jobs',
+      requestBodySchema: createPublicJobSchema,
+      responsesByStatusCode: { 202: publicJobAcceptedSchema, ...errorResponses },
+    }),
+  ),
 )
 
 /**
@@ -183,15 +185,17 @@ export const getPublicTaskContract = withMinScope(
 )
 
 /** Start (run) a task. */
-export const startPublicTaskContract = withMinScope(
-  'write',
-  defineApiContract({
-    method: 'post',
-    requestPathParamsSchema: taskIdParams,
-    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/start`,
-    requestBodySchema: startPublicTaskSchema,
-    responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
-  }),
+export const startPublicTaskContract = withPersonalUnlock(
+  withMinScope(
+    'write',
+    defineApiContract({
+      method: 'post',
+      requestPathParamsSchema: taskIdParams,
+      pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/start`,
+      requestBodySchema: startPublicTaskSchema,
+      responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
+    }),
+  ),
 )
 
 /** Edit a task's authored inputs: title, description and its per-type `fields` bag (pre-start edits). */
@@ -219,15 +223,17 @@ export const stopPublicTaskContract = withMinScope(
 )
 
 /** Retry a task's failed run. */
-export const retryPublicTaskContract = withMinScope(
-  'write',
-  defineApiContract({
-    method: 'post',
-    requestPathParamsSchema: taskIdParams,
-    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/retry`,
-    requestBodySchema: ContractNoBody,
-    responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
-  }),
+export const retryPublicTaskContract = withPersonalUnlock(
+  withMinScope(
+    'write',
+    defineApiContract({
+      method: 'post',
+      requestPathParamsSchema: taskIdParams,
+      pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/retry`,
+      requestBodySchema: ContractNoBody,
+      responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
+    }),
+  ),
 )
 
 /** Read a task's rich run projection (per-step status, subtasks, failure, PR branch). */

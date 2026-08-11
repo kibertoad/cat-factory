@@ -29,6 +29,25 @@ export function withMinScope<const TScope extends PublicApiScope, TContract exte
 }
 
 /**
+ * Declare that a `/api/v1` route reads the personal-unlock header (`PERSONAL_PASSWORD_HEADER`):
+ * the password that lets a key BOUND to a user unlock that user's own subscription for this call.
+ *
+ * It rides the contract for the same reason `minScope` does. The header is a real request input,
+ * and the published surface is generated from these contracts with no hand-editing, so a route
+ * that reads a header no contract declares is an input the spec cannot show and the four SDKs
+ * cannot document: a caller discovers it by getting a 428 and reading prose. Marked here, the
+ * OpenAPI generator emits it as an optional header parameter per operation.
+ *
+ * Optional on every route that takes it, always: a poolable run needs no unlock, and an unbound
+ * key can use none, so the header is required only by the specific condition the 428 names.
+ */
+export function withPersonalUnlock<TContract extends object>(
+  contract: TContract,
+): TContract & { readonly personalUnlock: true } {
+  return Object.assign(contract, { personalUnlock: true } as const)
+}
+
+/**
  * The error envelope every controller emits, produced by the shared `handleError`
  * (domain errors) and the contract request-validator (`{ code: 'validation' }`).
  * `details`/`issues` are the optional extras those two paths attach.

@@ -492,8 +492,53 @@ What a consumer NOTICES, beyond the two new methods:
   its owner reads `group/subgroup`, which is what the available read publishes; the adopt takes back
   exactly what it was given.
 
-1.45.0: two new operations, no change to anything already published, so a consumer built against
-1.44.0 reads and writes exactly what it did before. `GET /api/v1/tracker/writeback` reports what a
+1.45.0: one new request field and one new response field, both optional, and no change to anything
+already published. A consumer built against 1.44.0 mints exactly the key it minted before and reads
+exactly what it read before, because the new identity's default IS the old behaviour.
+
+`POST /workspaces/:ws/public-api-keys` (the session-authed mint, not `/api/v1` itself) takes
+`actsAsSelf`, and every key resource now carries `actsAsUserId`. A key was always a workspace
+credential belonging to nobody, which made one class of run impossible to start over this API at
+all: a task pinned to an individual-usage model (Claude / Codex / GLM) runs on ONE person's
+subscription, and there was no way for a headless caller to be that person. It was refused with
+`409 individual_model_unsupported`, and the refusal was correct for the credential it was refusing.
+
+The new identity is not a permission and is deliberately not spelled as one. A key minted with
+`actsAsSelf` records its MINTER, and the only value the server will write is the id it reads off the
+session, so the wire shape cannot express minting a key onto someone else's subscription. The
+password is the other half and is never stored: such a key must send `X-Personal-Password` on each
+call that advances such a run (start, retry, and each answered decision, because answering wakes the
+next dispatch), and one that does not gets `428 credential_required` carrying `{ vendor, reason }` —
+the same refusal, on the same header, that the app has always used. So the binding alone spends
+nothing, and a leaked personal token cannot open a subscription.
+
+`409 individual_model_unsupported` is unchanged for a system token and now means what it says: no
+password would help. A personal token reaches the answerable `428` instead. The one operation that
+still refuses both is `POST /api/v1/notifications/:id/act`, whose retry arm mints no activation.
+
+`GET /api/v1/models` gained the case it most needed to cover, as a NEW per-model field rather than a
+new meaning for the existing one. A personal SUBSCRIPTION — the commonest user-scoped credential —
+was reported `available: false` with nothing saying why, so it read as "no provider is wired" for a
+model the workspace ran every day. Each row now carries `userScoped`, true where the model runs on a
+subscription vendor, so a token that resolved no user can say precisely which rows it could not judge.
+
+`excludesUserScopedModels` keeps the meaning it was published with: models this answer could not
+ENUMERATE, which is per-user locally-run endpoints. Widening it to "a personal subscription exists
+here" was the alternative and was rejected: the server cannot know whether one exists without a user,
+so the honest implementation would be `personalSubscriptions !== undefined`, true on every deployment
+with `ENCRYPTION_KEY` set. A flag that is true everywhere says "this build supports withholding"
+where a consumer reads "something was withheld from you", and it would have re-pointed a published
+field at a different predicate under the same name. Personal tokens see it `false` where their own
+endpoints resolved, which the field's own wording ("that this read cannot enumerate") already covered.
+
+`X-Personal-Password` is now DECLARED on every operation that reads it (the two starts, the retry,
+and each decision mutation), so it appears in `docs/openapi.json` and the generated clients document
+it. Each official client also gained a way to supply it after construction
+(`setPersonalPassword` / `set_personal_password` / `SetPersonalPassword`), because a caller learns it
+is needed from a `428` and rebuilding a configured client to send one header is not a workflow.
+
+1.46.0: two new operations, no change to anything already published, so a consumer built against
+1.45.0 reads and writes exactly what it did before. `GET /api/v1/tracker/writeback` reports what a
 task's LINKED tracker issue hears as its pull request opens, merges, or parks a requirements review,
 and `PATCH /api/v1/tracker/writeback` changes it.
 
@@ -515,11 +560,14 @@ What a consumer NOTICES, beyond the two new methods:
   was filed from. Publishing both together would invite the reading that one gates the other. The
   path is `/tracker/writeback` rather than `/tracker/settings` so the filing half can be added beside
   it later, additively.
-- **The write MERGES, unlike the internal PUT it goes through.** An action a caller omits keeps its
-  stored value. That is a real difference in behaviour rather than a convenience: the app's panel can
-  replace the row wholesale because it has just rendered all three toggles, where a caller acting on
-  one decision cannot be expected to restate a row it never read, and a replace would silently reset
-  the other two to their defaults.
+- **The write MERGES: an action a caller omits keeps its stored value.** That is now the rule on
+  every door into this row, the app's own included, and the merge happens in the STORE rather than
+  as a load-and-replace above it, so two callers naming different actions both land. The reading it
+  replaces (an omitted action reverting to the deployment default) had no caller who wanted it, the
+  actions being booleans anyone can restate, and one victim: the app's recurring-pipeline dialog
+  persists a FILING tracker and names no action at all, so under the old rule scheduling a tech-debt
+  pipeline re-enabled writeback on a workspace that had turned it off. What this operation keeps
+  from the internal PUT is the SCOPE, not the merge semantics: it never names a filing tracker.
 - **`updatedAt` is nullable, and null means nobody has chosen.** The values alongside it are then the
   deployment's defaults rather than anyone's decision, which is what a caller needs before
   overwriting a board it shares. It is null rather than the `0` the internal read spells an absent

@@ -66,7 +66,7 @@ const STEER =
 const WRITEBACK_BUDGET_MS = 3 * 60 * 1000
 
 describe('tracker intake: an outside issue is delivered and closed', () => {
-  const { config, client, world, journal } = harness('04-issue-intake-to-close')
+  const { config, client, world, journal, unlock } = harness('04-issue-intake-to-close')
 
   beforeAll(assertPrerequisites)
 
@@ -110,6 +110,7 @@ describe('tracker intake: an outside issue is delivered and closed', () => {
     const { run, record } = await fileAndDrive({
       client,
       journal,
+      unlock,
       existing: world.value.issueDelivery,
       label: `the delivery of ${slug(issue)}#${issue.number}`,
       // `ticket` is the whole point of this spec. Supplied, the platform imports the issue, projects
@@ -163,12 +164,16 @@ describe('tracker intake: an outside issue is delivered and closed', () => {
     const api = issueApiFor(config, providerOf(issue))
     if (!api) throw new Error(`No issue client for provider '${issue.provider}'`)
 
+    // The wait is on everything the grade below asserts, so a writeback whose merge-edge comment
+    // lands a beat after the close is waited out rather than failed. What it hands back is the last
+    // state it saw, budget spent or not, because the per-claim detail is the better failure report.
     const state = await waitForIssueSettled({
       api,
       target,
       number: issue.number,
       journal,
       budgetMs: WRITEBACK_BUDGET_MS,
+      pullRequestUrl: delivery.pullRequestUrl,
     })
 
     assertChecks(

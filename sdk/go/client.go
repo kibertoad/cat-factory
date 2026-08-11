@@ -34,11 +34,12 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 // Version is the SDK version, stamped into User-Agent. Kept in step by `pnpm check:sdk`.
-const Version = "0.34.0"
+const Version = "0.35.0"
 
 // Options configures a Client.
 type Options struct {
@@ -55,6 +56,10 @@ type Options struct {
 	MaxRetries int
 	// Header is sent on every request.
 	Header http.Header
+	// PersonalPassword is the personal password of the user this key is BOUND to, if any: it
+	// unlocks that user's own model subscription for the runs this client drives. Usually supplied
+	// later with SetPersonalPassword, since a caller learns it is needed from a 428.
+	PersonalPassword string
 	// HTTPClient replaces the default (a proxy, a custom transport, a shared pool).
 	HTTPClient *http.Client
 	// UserAgent is prefixed to the SDK's own, so a deployment's logs can attribute calls to your
@@ -73,6 +78,10 @@ type Client struct {
 	maxRetries int
 	header     http.Header
 	httpClient *http.Client
+	// The personal password sent on every request while set, for a key bound to a user. Atomic
+	// rather than a plain field because a Client is documented as safe for concurrent use, and this
+	// one field is settable after construction: see SetPersonalPassword.
+	personalPassword atomic.Pointer[string]
 
 	// Headless jobs: a public, inline pipeline run against a brief.
 	Jobs *JobsService
@@ -182,7 +191,27 @@ func New(options Options) (*Client, error) {
 	client.Evidence = &EvidenceService{client: client}
 	client.MergeRecords = &MergeRecordsService{client: client}
 	client.Keys = &KeysService{client: client}
+	if options.PersonalPassword != "" {
+		client.SetPersonalPassword(options.PersonalPassword)
+	}
 	return client, nil
+}
+
+// SetPersonalPassword supplies the personal password for a key BOUND to a user.
+//
+// It unlocks that user's own model subscription for the runs this client starts, retries and
+// answers parks on, riding every subsequent request as X-Personal-Password. The deployment never
+// stores it. Passing an empty string clears it.
+//
+// Settable after construction because that is when a caller learns it is needed: an operation
+// answers 428 credential_required, the caller prompts (or reads its secret store), and retries.
+// Rebuilding the Client to send one header would discard its configuration and its connection pool.
+func (c *Client) SetPersonalPassword(password string) {
+	if password == "" {
+		c.personalPassword.Store(nil)
+		return
+	}
+	c.personalPassword.Store(&password)
 }
 
 // requestSpec is what a generated operation method describes and hands to the transport.
@@ -256,6 +285,9 @@ func (c *Client) buildRequest(ctx context.Context, spec requestSpec, accept stri
 	}
 	for key, values := range c.header {
 		request.Header[key] = values
+	}
+	if password := c.personalPassword.Load(); password != nil {
+		request.Header.Set("X-Personal-Password", *password)
 	}
 	request.Header.Set("Accept", accept)
 	request.Header.Set("Authorization", "Bearer "+c.apiKey)

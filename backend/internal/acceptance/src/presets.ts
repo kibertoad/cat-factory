@@ -12,7 +12,7 @@
 export type PresetRow = { presetId: string; name: string; baseModelId: string }
 
 /** The catalog fields this join reads. `ListPublicWiredModelsResponseModel` satisfies it. */
-export type ModelRow = { modelId: string; available: boolean }
+export type ModelRow = { modelId: string; available: boolean; userScoped?: boolean }
 
 /**
  * The model ids this deployment can dispatch to right now.
@@ -32,4 +32,35 @@ export function usablePresets<T extends PresetRow>(
 ): readonly T[] {
   const selectable = selectableModelIds(models)
   return presets.filter((preset) => selectable.has(preset.baseModelId))
+}
+
+/**
+ * How a preset's base model stands with this deployment AND this token.
+ *
+ * `unjudged` is the state both callers used to get wrong in opposite directions, and it is a
+ * property of the ROW rather than of the answer. A `userScoped` model is authenticated by a
+ * credential that belongs to a PERSON, and a system token resolves no person, so the catalog
+ * reports it unavailable without ever having consulted the store that would have said otherwise.
+ * Told it is `unwired`, an operator adds a provider key for a model their own subscription already
+ * runs; told every unavailable model is `unjudged` (which is what deriving this from a
+ * whole-response flag amounts to), they are sent to re-mint a token for a model that genuinely has
+ * no provider. Only the row can tell those apart.
+ */
+export type PresetAvailability = 'selectable' | 'unjudged' | 'unwired'
+
+/**
+ * Build the per-preset verdict once, then ask it per row: the two sets are computed a single time
+ * rather than per preset, so a 40-preset menu does not rebuild them 40 times.
+ */
+export function presetAvailability(
+  models: readonly ModelRow[],
+): (preset: PresetRow) => PresetAvailability {
+  const selectable = selectableModelIds(models)
+  const unjudged = new Set(
+    models.filter((model) => !model.available && model.userScoped === true).map((m) => m.modelId),
+  )
+  return (preset) => {
+    if (selectable.has(preset.baseModelId)) return 'selectable'
+    return unjudged.has(preset.baseModelId) ? 'unjudged' : 'unwired'
+  }
 }

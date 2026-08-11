@@ -39,6 +39,13 @@ export interface ClientOptions {
   maxRetries?: number
   /** Headers sent on every request. */
   headers?: Record<string, string>
+  /**
+   * The personal password of the user this key is BOUND to, if any: it unlocks that user's own
+   * model subscription for the runs this client starts, retries and answers parks on. Sent as
+   * `X-Personal-Password`, never stored by the deployment. `setPersonalPassword` supplies it later,
+   * which is usually what you want (you learn it is needed from a `428 credential_required`).
+   */
+  personalPassword?: string
   /** Swap the HTTP implementation (a proxy agent, a test double). Defaults to global `fetch`. */
   fetch?: typeof globalThis.fetch
   /** Prefixed to `User-Agent`, so a deployment's logs can attribute calls to your integration. */
@@ -54,7 +61,7 @@ export interface RequestSpec {
 }
 
 /** SDK version, stamped into `User-Agent`. Kept in step with package.json by `check:sdk`. */
-export const SDK_VERSION = '0.34.0'
+export const SDK_VERSION = '0.35.0'
 
 /**
  * Percent-encode a path parameter.
@@ -105,6 +112,12 @@ export class Transport {
   private readonly maxRetries: number
   private readonly headers: Record<string, string>
   private readonly doFetch: typeof globalThis.fetch
+  /**
+   * The personal password sent on every request while set (`X-Personal-Password`), for a key bound
+   * to a user. Mutable, because a caller learns it is needed from a `428` and must be able to
+   * supply it without rebuilding a configured client; a per-call `headers` entry still wins.
+   */
+  personalPassword: string | undefined
 
   constructor(options: ClientOptions) {
     if (!options.baseUrl) throw new Error('cat-factory SDK: `baseUrl` is required.')
@@ -120,6 +133,7 @@ export class Transport {
       ...options.headers,
     }
     this.doFetch = options.fetch ?? globalThis.fetch.bind(globalThis)
+    this.personalPassword = options.personalPassword
   }
 
   /** Perform a request, returning the decoded JSON body. */
@@ -199,6 +213,9 @@ export class Transport {
             // with how the response is about to be read, are not customisations; they are the
             // client not working. All four SDKs apply this same precedence.
             ...this.headers,
+            ...(this.personalPassword === undefined
+              ? {}
+              : { 'x-personal-password': this.personalPassword }),
             ...spec.options.headers,
             accept,
             authorization: `Bearer ${this.apiKey}`,

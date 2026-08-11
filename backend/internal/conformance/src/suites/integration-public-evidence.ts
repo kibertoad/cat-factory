@@ -542,6 +542,16 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
       const stored = listed.body.keys.find((k) => k.id === minted.body.key.id)
       expect(stored?.externalIdentity).toBe(IDENTITY)
 
+      // A headlessly-minted key is a SYSTEM key: it acts for nobody and reaches no personal
+      // subscription. Asserted on the LIST read for the reason above — this column is written by
+      // one facade's SQL and read back by its own row mapping, so a facade that added it to the
+      // INSERT and forgot the SELECT (or vice versa) answers `undefined` here rather than `null`,
+      // and `toBeNull` is what tells those two apart. There is deliberately no wire field that
+      // could set it here: binding is a person's consent about their own credential, given in the
+      // app, so a provisioning key cannot mint one for anybody.
+      expect(minted.body.key.actsAsUserId).toBeNull()
+      expect(stored?.actsAsUserId).toBeNull()
+
       // And on `/me`, which is how a subsystem handed the credential discovers who it runs as.
       const perUserAuth = { authorization: `Bearer ${minted.body.secret}` }
       const me = await app.call<{ externalIdentity: string | null }>(

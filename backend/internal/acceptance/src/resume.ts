@@ -19,6 +19,7 @@
 
 import { type CatFactoryClient, CatFactoryNotFoundError, type PublicRun } from '@cat-factory/sdk'
 import type { Journal } from './journal.ts'
+import { type PersonalUnlock, withPersonalUnlock } from './personalUnlock.ts'
 import { type DriveResult, driveRun } from './runDriver.ts'
 import { describeRun, isTerminal } from './publicApi.ts'
 import type { RunRecord } from './world.ts'
@@ -41,6 +42,12 @@ export type FileAndDriveOptions = {
   onRecord: (record: RunRecord) => void
   /** Human label for the work, used in every message. */
   label: string
+  /**
+   * The pass's personal-subscription unlock. Passed down rather than read from a module global
+   * because it holds a secret for the life of the process, and a global would put that secret one
+   * import away from every file in the suite.
+   */
+  unlock: PersonalUnlock
 }
 
 export type FileAndDriveResult = DriveResult & {
@@ -165,8 +172,13 @@ async function fileTask(options: FileAndDriveOptions): Promise<string> {
 }
 
 async function startRun(options: FileAndDriveOptions, taskId: string): Promise<string> {
-  const { client, journal, pipelineId, label } = options
-  const task = await client.tasks.start(taskId, { pipelineId })
+  const { client, journal, pipelineId, label, unlock } = options
+  // The one call that first learns whether this pass needs the operator's personal subscription:
+  // the deployment answers `428` naming the vendor, and the prompt happens here rather than at
+  // configure time so a workspace on a provider API key is never asked for a password at all.
+  const task = await withPersonalUnlock(unlock, `Starting '${label}'`, () =>
+    client.tasks.start(taskId, { pipelineId }),
+  )
   if (!task.runId) {
     throw new Error(
       `Starting '${label}' (task ${taskId}) on '${pipelineId}' returned no runId, so there is ` +

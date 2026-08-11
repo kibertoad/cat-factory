@@ -134,44 +134,108 @@ describe('filing the reporter’s issue', () => {
 })
 
 describe('waiting for the platform to settle the issue', () => {
-  it('returns as soon as the issue is closed', async () => {
-    const closed = state({ state: 'closed', closed: true, comments: [PR] })
-    const settled = await waitForIssueSettled({
-      api: api({ read: async () => closed }),
+  const settle = (overrides: Partial<Parameters<typeof waitForIssueSettled>[0]> = {}) =>
+    waitForIssueSettled({
+      api: api(),
       target: TARGET,
       number: 7,
       journal: journal(),
       budgetMs: 1000,
+      pullRequestUrl: PR,
+      // A poll gap the test does not sleep through: what is under test is the DECISION each poll
+      // makes, and the real 10s gap is sized against a live provider.
+      intervalMs: 1,
+      ...overrides,
     })
-    expect(settled).toEqual(closed)
+
+  const settled = state({
+    state: 'closed',
+    closed: true,
+    comments: [`opened: ${PR}`, `merged: ${PR}`],
   })
 
-  it('states what it last saw when the budget expires, not just the duration', async () => {
-    // The rule `deadline.ts` exists for: "open, 1 comment(s)" separates a writeback that commented
-    // and did not close from one that never ran at all, and nothing else does.
+  it('returns as soon as the issue carries everything the grade asserts', async () => {
+    expect(await settle({ api: api({ read: async () => settled }) })).toEqual(settled)
+  })
+
+  it('keeps waiting on a CLOSED issue whose second comment has not landed yet', async () => {
+    // The race this wait exists for. A provider closes an issue by itself on a closing keyword, and
+    // the merge-edge comment is a separate best-effort call, so returning on `closed` alone hands
+    // the grader a half-written issue and fails a writeback that was about to work.
+    let reads = 0
+    const answer = await settle({
+      api: api({
+        read: async () => {
+          reads += 1
+          return reads > 1 ? settled : state({ state: 'closed', closed: true, comments: [PR] })
+        },
+      }),
+      budgetMs: 60_000,
+    })
+    expect(reads).toBeGreaterThan(1)
+    expect(answer).toEqual(settled)
+  })
+
+  it('hands back the last state when the budget expires, so the grader gives the verdict', async () => {
+    // Expiry is the end of the patience, not a verdict. `checkIssueWriteback` renders both claims
+    // with their own detail, which beats the one line an expiry message could carry.
+    const observed = state({ comments: [PR] })
+    expect(await settle({ api: api({ read: async () => observed }), budgetMs: 1 })).toEqual(
+      observed,
+    )
+  })
+
+  it('rides out a transient provider failure instead of failing the whole pass', async () => {
+    // One 502 in a three-minute poll says nothing about the writeback. It must cost the observation
+    // and not the afternoon-long pass that produced it.
+    let reads = 0
+    const answer = await settle({
+      api: api({
+        read: async () => {
+          reads += 1
+          if (reads === 1) throw new Error('The provider answered HTTP 502 reading acme/x#7')
+          return settled
+        },
+      }),
+      budgetMs: 60_000,
+    })
+    expect(answer).toEqual(settled)
+  })
+
+  it('spends the budget on a provider that never recovers, saying so on every line', async () => {
+    // The other half of the rule above: an unreadable poll is an observation, so a credential
+    // revoked mid-pass is reported rather than swallowed. With nothing ever observed there is no
+    // state to grade, so this one throws.
+    const lines: string[] = []
     await expect(
-      waitForIssueSettled({
-        api: api({ read: async () => state({ comments: [PR] }) }),
-        target: TARGET,
-        number: 7,
-        journal: journal(),
+      settle({
+        api: api({ read: async () => Promise.reject(new Error('HTTP 401')) }),
+        journal: journal(lines),
         budgetMs: 1,
       }),
-    ).rejects.toThrow(/open, 1 comment\(s\)/)
+    ).rejects.toThrow(/could not be read: HTTP 401/)
+    expect(lines.join('\n')).toContain('could not be read')
   })
 
   it('fails fast when the issue is deleted mid-wait rather than waiting out the budget', async () => {
     // Nothing the platform does deletes an issue, so this is a person, and waiting would report it
-    // as a writeback that never fired.
+    // as a writeback that never fired. The one outcome that is never graded.
     await expect(
-      waitForIssueSettled({
-        api: api({ read: async () => null }),
-        target: TARGET,
-        number: 7,
-        journal: journal(),
-        budgetMs: 60_000,
-      }),
+      settle({ api: api({ read: async () => null }), budgetMs: 60_000 }),
     ).rejects.toThrow(/no longer exists/)
+  })
+
+  it('waits only on the close when no pull request was recorded', async () => {
+    // The comment claim cannot come true without one, so waiting on it would burn the budget to
+    // reach a verdict the ledger already determined. The grader calls that a gap in what was
+    // observed, which is a different thing from a failed writeback.
+    const closed = state({ state: 'closed', closed: true, comments: [] })
+    const answer = await settle({
+      api: api({ read: async () => closed }),
+      pullRequestUrl: null,
+      budgetMs: 60_000,
+    })
+    expect(answer).toEqual(closed)
   })
 })
 

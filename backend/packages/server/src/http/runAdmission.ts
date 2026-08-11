@@ -2,7 +2,8 @@ import type { Context } from 'hono'
 import type { WorkspaceRole } from '@cat-factory/contracts'
 import type { GateActor } from '@cat-factory/kernel'
 import { UNATTRIBUTED_GATE_ACTOR } from '@cat-factory/kernel'
-import type { AppEnv } from './env.js'
+import type { AppEnv, ServerContainer } from './env.js'
+import { loadWorkspaceAccess } from './workspaceAccess.js'
 
 /**
  * The admission facts a run start CONSUMES off the request, in one place.
@@ -29,6 +30,41 @@ import type { AppEnv } from './env.js'
  */
 export function runInitiatorRole<E extends AppEnv>(c: Context<E>): WorkspaceRole | null {
   return c.get('workspaceAccess')?.role ?? null
+}
+
+/**
+ * {@link runInitiatorRole}'s twin for a KEY-authenticated start: the role held by the user a
+ * public-API key is BOUND to (`PublicApiKeyRecord.actsAsUserId`), or `null` when it is bound to
+ * nobody.
+ *
+ * A separate function because the two read different places for the same fact. An SPA request
+ * arrives behind `mountAuthGate`, which has already resolved the caller's access and published it;
+ * `/api/v1` has no such gate, because a key is admitted by SCOPE rather than by membership, so the
+ * one identity a key can name has to be resolved here. It goes through the same single authority
+ * either way (`loadWorkspaceAccess`, ADR 0025) and so reads THROUGH its cache rather than
+ * re-deriving membership.
+ *
+ * Resolving it is what keeps a bound key's run under the SAME policy that person gets in the app.
+ * A start that pins an initiator but no role is not a run with a lenient policy, it is a run with
+ * no policy: `dryRunForcedForRole` sees no role to sandbox, and both role-scoped merge narrowings
+ * pass through unnarrowed, so the key would land what its own holder could not land from the
+ * board. That gap has shipped once already, on the bug-hunt adopt route, which is why the accessor
+ * exists at all.
+ *
+ * `null` covers two states on purpose: an unbound key (there is no person, as before) and a bound
+ * user whose access no longer resolves (they were removed from the roster since minting). Both are
+ * honestly "no tier to scope this run by" rather than a lowest tier, exactly as
+ * {@link runInitiatorRole} treats dev-open. The key itself stays authorized by its scope; only the
+ * role-shaped narrowing has nothing to say.
+ */
+export async function keyInitiatorRole(
+  container: ServerContainer,
+  workspaceId: string,
+  userId: string | null,
+): Promise<WorkspaceRole | null> {
+  if (!userId) return null
+  const access = await loadWorkspaceAccess(container, workspaceId, userId)
+  return access?.allowed ? access.role : null
 }
 
 /**

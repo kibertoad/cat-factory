@@ -793,7 +793,9 @@
         "createdBy": "erstellt von {user}",
         "createdByYou": "Ihnen",
         "createdByKey": "API-Schlüssel {id}",
-        "revoke": "Token widerrufen"
+        "revoke": "Token widerrufen",
+        "boundToYou": "Ihr Abonnement",
+        "boundToOther": "Abonnement von {user}"
       },
       "add": {
         "heading": "Token erstellen",
@@ -802,7 +804,12 @@
         "labelPlaceholder": "z. B. CI-Pipeline",
         "scope": "Berechtigung",
         "scopeHelp": "Was dieses Token darf: nur Lesen, Lesen und Schreiben oder Vollzugriff (der auch das Löschen erlaubt).",
-        "create": "Token erstellen"
+        "create": "Token erstellen",
+        "identity": "Läuft als",
+        "identitySystem": "Dieser Arbeitsbereich (System-Token)",
+        "identitySelf": "Ich (persönliches Token)",
+        "identitySystemHelp": "Mit diesem Token gestartete Läufe gehören dem Arbeitsbereich und werden keiner Person zugeordnet. Es kann kein persönliches Claude-/Codex-/GLM-Abonnement nutzen: Eine Aufgabe mit einem solchen Modell wird abgelehnt, statt jemandem in Abwesenheit berechnet zu werden. Für CI und gemeinsam genutzte Integrationen.",
+        "identitySelfHelp": "Mit diesem Token gestartete Läufe gelten als Ihre und können Ihr persönliches Claude-/Codex-/GLM-Abonnement nutzen. Jeder solche Aufruf muss zusätzlich Ihr persönliches Passwort im Header X-Personal-Password senden; es wird nie gespeichert. Für Ihre eigenen Headless-Läufe."
       },
       "scopes": {
         "read": "Nur Lesen",
@@ -1133,6 +1140,15 @@
       "reachable": "Erreichbar · keine Modelle | Erreichbar · {count} Modell | Erreichbar · {count} Modelle",
       "noModels": "Keine Modelle gemeldet.",
       "enableModels": "Modelle aktivieren",
+      "imageInputHint": "Manche lokalen Modelle lesen Screenshots und Design-Renderings. Bekannte Modellfamilien werden automatisch erkannt, und die Option Nicht gesetzt zeigt pro Modell, wie es behandelt wird; setzen Sie den Wert selbst für einen Build, den die Plattform nicht kennen kann, etwa eine reine Text-Quantisierung oder ein Fine-Tuning.",
+      "imageInputLabel": "Bildunterstützung für {model}",
+      "imageInput": {
+        "autoYes": "Nicht gesetzt: {family} liest Bilder",
+        "autoNo": "Nicht gesetzt: {family} ist nur Text",
+        "unknown": "Bilder: nicht gesetzt",
+        "yes": "Liest Bilder",
+        "no": "Nur Text"
+      },
       "toast": {
         "saved": "{name} gespeichert",
         "saveFailed": "Runner konnte nicht gespeichert werden",
@@ -1144,6 +1160,7 @@
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
       },
       "blocked": "Die URL dieses Runners ist auf dieser Installation nicht erlaubt, daher sind seine Modelle in der Auswahl ausgeblendet.",
+      "modelsDiscarded": "Einige der aktivierten Modelle dieses Runners konnten nicht gelesen werden und wurden verworfen. Wählen Sie die gewünschten erneut aus und speichern Sie.",
       "urlReason": {
         "invalid_url": "Das ist keine gültige URL.",
         "scheme_not_allowed": "Eine Runner-URL muss mit http:// oder https:// beginnen.",

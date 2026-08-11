@@ -741,6 +741,14 @@ export {
 } from './domain/design-image-delivery.js'
 
 export {
+  declaredLocalModel,
+  type LocalModelDeclarations,
+  parseLocalModelDeclarations,
+  resolveLocalModelModality,
+  withLocalModelDeclaration,
+} from './domain/local-model-declarations.js'
+
+export {
   type ServiceRegistrationDeps,
   registerServiceForFrame,
 } from './domain/service-registration.js'

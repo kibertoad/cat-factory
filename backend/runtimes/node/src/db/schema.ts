@@ -1336,6 +1336,13 @@ export const publicApiKeys = pgTable(
     // index and no constraint beyond nullability. Written once; a run pins its own copy at
     // admission rather than joining back to here.
     external_identity: text('external_identity'),
+    // The user whose PERSONAL subscriptions this key may unlock, set at a session-authed mint the
+    // person opted into (D1 migration 0089). The one authorization input on the row, and useless
+    // on its own: the unlock also needs that user's personal password, which is never stored.
+    // Only ever the minter's own id (the wire body is a boolean). Not a FK, for the reason
+    // `created_by_user_id` is not: the key outlives its user's access, and a bound key whose user
+    // is gone must fail the unlock at the run that needed it rather than vanish from the table.
+    acts_as_user_id: text('acts_as_user_id'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     last_used_at: bigint('last_used_at', { mode: 'number' }),
     revoked_at: bigint('revoked_at', { mode: 'number' }),

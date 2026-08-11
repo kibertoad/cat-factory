@@ -105,6 +105,7 @@ import type {
   KaizenVerifiedComboRepository,
   LlmCallMetricRepository,
   LlmTraceSink,
+  LocalModelEndpointRepository,
   Logger,
   MembershipRepository,
   MergeTrackRecordRepository,
@@ -1335,6 +1336,17 @@ export interface CoreDependencies {
    * task's selected/default preset (the built-in default points everything at Kimi K2.7).
    */
   modelPresetRepository?: ModelPresetRepository
+  /**
+   * Stores each USER's locally-run model endpoints (Ollama / LM Studio / …). The engine reads it
+   * for ONE thing: what the run initiator DECLARED about the local models they enabled, which a
+   * dispatch folds onto its resolved ref (a local model has no catalog entry to carry the
+   * per-flavour facts every other model's ref does). The credential half of the same store (the
+   * base URL and sealed bearer key a run-time forward needs) is reached through
+   * `LocalModelEndpointService` in the facade instead, which is also where the runner-URL policy
+   * lives. Optional: absent → local refs stay undeclared, and a run states that rather than
+   * guessing.
+   */
+  localModelEndpointRepository?: LocalModelEndpointRepository
   /**
    * Stores a workspace's consensus-GROUP library — the reusable, estimate-gated panels a
    * pipeline step escalates to (`ConsensusStepConfig.groupIds`). Optional and default-off:

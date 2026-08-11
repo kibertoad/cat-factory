@@ -128,6 +128,16 @@ divergence the smoketest below is built to catch, and the Java client's JSpecify
 `compile`-scope dependency on purpose, since a consumer without them silently falls back to Kotlin
 platform types and loses exactly the thing they exist for.
 
+**An AMBIENT request input is hand-written into each transport, not generated.** Only path, query
+and body reach a generated operation's signature, so a header every call may carry has no generated
+home: `X-Personal-Password` is declared per operation in the spec (`withPersonalUnlock` on the
+contract) and supplied through the client itself — `setPersonalPassword`, `set_personal_password`,
+`SetPersonalPassword`, one per language, plus a construction-time option. It is settable AFTER
+construction on purpose: a caller learns the header is needed from a `428 credential_required`, and
+discarding a configured client (and its connection pool) to send one header is not a workflow. Go
+holds it in an `atomic.Pointer` and Java in a `volatile` field, because both clients are documented
+as safe to share across threads and this is the one piece of their configuration that moves.
+
 ## Smoketests
 
 [`backend/internal/sdk-smoketest`](../backend/internal/sdk-smoketest) boots a real Node backend

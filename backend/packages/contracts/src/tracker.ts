@@ -57,8 +57,7 @@ export type TrackerWritebackFlags = Pick<
 >
 
 /**
- * What each writeback action does for a workspace that has never set one, and what an omitted
- * field on a wholesale PUT resets to.
+ * What each writeback action does for a workspace that has never set one.
  *
  * **ON, and that is a deliberate change of stance** (it was off for all three). The action only
  * ever touches an issue a task is LINKED to, and nothing links one by accident: a link arrives by
@@ -69,12 +68,18 @@ export type TrackerWritebackFlags = Pick<
  * writeback is what makes the tracker, rather than this platform's own board, the place the
  * reporter can keep watching.
  *
- * ONE constant rather than a literal per reader, because four readers have to agree about it: the
- * settings service (what an absent row reports, and what an omitted PUT field resets to), the
- * writeback service (what it does when no row exists), and the SPA's store (what the toggles show
- * before a row does). They disagreed here once already, and the failure is silent both ways round:
- * a reader defaulting off never posts and logs nothing, and one defaulting on closes issues a panel
- * is drawing as off.
+ * ONE constant rather than a literal per reader, because three readers have to agree about it: the
+ * settings service (what an absent row reports, and what the row is seeded with on first write),
+ * the writeback service (what it does when no row exists), and the SPA's store (what the toggles
+ * show before a row does). They disagreed here once already, and the failure is silent both ways
+ * round: a reader defaulting off never posts and logs nothing, and one defaulting on closes issues
+ * a panel is drawing as off.
+ *
+ * It is a SEED and never a reset. No write path fills an omitted action in from here: absence means
+ * the caller is not moving that action, which is the rule on both the internal PUT and
+ * `PATCH /api/v1/tracker/writeback`. Filling one in would make every partial write carry these
+ * values into a workspace that had chosen otherwise, and this flip to ON is exactly when that stops
+ * being harmless.
  */
 export const DEFAULT_TRACKER_WRITEBACK: TrackerWritebackFlags = {
   writebackCommentOnPrOpen: true,
@@ -83,12 +88,20 @@ export const DEFAULT_TRACKER_WRITEBACK: TrackerWritebackFlags = {
 }
 
 /**
- * Set a workspace's issue-tracker selection.
+ * Set a workspace's issue-tracker FILING selection, and optionally move writeback actions with it.
  *
- * A WHOLESALE replace: an omitted writeback flag resets to {@link DEFAULT_TRACKER_WRITEBACK}
- * rather than keeping what the row held. The SPA's panel sends all three every time, which is what
- * makes that safe there; a caller sending one field alone wants
- * `PATCH /api/v1/tracker/settings`, which merges.
+ * The filing half (`tracker` plus that vendor's target) is a wholesale replace, which is why
+ * `tracker` is the one required field: those three are one decision, and a caller editing it has
+ * the whole of it in front of them.
+ *
+ * The writeback half MERGES. An omitted action keeps whatever the row holds, and a caller that
+ * names none moves none, which is what lets a dialog about something else (the recurring
+ * tech-debt schedule, which persists the filing tracker) touch this row without deciding a
+ * workspace's writeback policy as a side effect. A caller that wants
+ * {@link DEFAULT_TRACKER_WRITEBACK} sends those values.
+ *
+ * `PATCH /api/v1/tracker/writeback` is the writeback half on its own, for a caller with no business
+ * naming a filing tracker.
  */
 export const putTrackerSettingsSchema = v.object({
   tracker: v.nullable(trackerKindSchema),

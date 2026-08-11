@@ -491,7 +491,7 @@ describe('effectiveCatalog', () => {
 describe('effectiveCatalogWith', () => {
   it('appends the extra models after the static catalog', () => {
     const extra = localSelectableModels([
-      { provider: 'ollama', label: 'Ollama', models: ['gemma3'] },
+      { provider: 'ollama', label: 'Ollama', models: [{ id: 'gemma3' }] },
     ])
     const options = effectiveCatalogWith(extra, caps({ localModels: new Set(['ollama:gemma3']) }))
     expect(options.at(-1)).toMatchObject({
@@ -514,8 +514,8 @@ describe('localSelectableModels', () => {
   it('builds one direct-flavour entry per enabled model, id-prefixed by its runner', () => {
     expect(
       localSelectableModels([
-        { provider: 'ollama', label: 'Ollama', models: ['gemma3', 'qwen3'] },
-        { provider: 'lmstudio', label: 'LM Studio', models: ['phi4'] },
+        { provider: 'ollama', label: 'Ollama', models: [{ id: 'gemma3' }, { id: 'qwen3' }] },
+        { provider: 'lmstudio', label: 'LM Studio', models: [{ id: 'phi4' }] },
       ]),
     ).toEqual([
       {
@@ -549,6 +549,27 @@ describe('localSelectableModels', () => {
         },
       },
     ])
+  })
+
+  it('carries a DECLARED modality onto the ref, and omits an undeclared one', () => {
+    // The picker renders off these refs, so a declared local model has to state its modality the
+    // way a catalog flavour does. Omission is the point of the third state: an entry that always
+    // carried `acceptsImages` could only ever say yes or no, and "nobody has said" is the honest
+    // answer for a model whose weights this platform has never seen.
+    const [multimodal, textOnly, undeclared] = localSelectableModels([
+      {
+        provider: 'ollama',
+        label: 'Ollama',
+        models: [
+          { id: 'muse-glimmer:30b', acceptsImages: true },
+          { id: 'qwen3', acceptsImages: false },
+          { id: 'gemma3' },
+        ],
+      },
+    ])
+    expect(multimodal?.direct?.ref.acceptsImages).toBe(true)
+    expect(textOnly?.direct?.ref.acceptsImages).toBe(false)
+    expect(undeclared?.direct?.ref).not.toHaveProperty('acceptsImages')
   })
 
   it('yields nothing for no endpoints and for an endpoint with no enabled models', () => {

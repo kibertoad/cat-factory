@@ -447,6 +447,7 @@ export type {
   BudgetLimitCacheValue,
   CachedRepoRead,
   GroupCacheHandle,
+  LocalModelDeclarationsCacheValue,
   ModelPresetCacheValue,
   ResolvedFoundationalService,
   RiskPolicyCacheValue,
@@ -454,7 +455,11 @@ export type {
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
 } from './caching.js'
-export { readCachedWorkspaceSettings, repoFilesCacheGroup } from './caching.js'
+export {
+  readCachedLocalModelDeclarations,
+  readCachedWorkspaceSettings,
+  repoFilesCacheGroup,
+} from './caching.js'
 export type {
   SelectableFragment,
   FragmentSelectionContext,
@@ -796,7 +801,10 @@ export type { WorkspaceAgentSettingsRepository } from './agent-settings-reposito
 export type { TaskTypeSuppressionRepository } from './task-type-repositories.js'
 export type { ServiceFragmentDefaultsRepository } from './service-fragment-default-repositories.js'
 export type { DueSchedule, PipelineScheduleRepository } from './recurring-repositories.js'
-export type { TrackerSettingsRepository } from './tracker-settings-repositories.js'
+export type {
+  TrackerSettingsPatch,
+  TrackerSettingsRepository,
+} from './tracker-settings-repositories.js'
 export type { CreateTicketRequest, CreatedTicket, TicketTrackerProvider } from './ticket-tracker.js'
 export type {
   IssueWritebackProvider,

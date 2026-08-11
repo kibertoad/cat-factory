@@ -1,32 +1,44 @@
 import { DEFAULT_TRACKER_WRITEBACK, type TrackerSettings } from '@cat-factory/contracts'
-import type { TrackerSettingsRepository, WorkspaceRepository } from '@cat-factory/kernel'
+import type {
+  TrackerSettingsPatch,
+  TrackerSettingsRepository,
+  WorkspaceRepository,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { TrackerSettingsService } from './TrackerSettingsService.js'
 
-// The two write shapes this service has, and the difference between them is the whole reason the
-// second one exists: `put` REPLACES the row (an omitted flag resets to the deployment default, which
-// is what the SPA's panel wants because it has just rendered all three), and `patchWriteback` MERGES
-// (which is what `PATCH /api/v1/tracker/writeback` needs, because a caller acting on one decision
-// cannot be expected to restate a row it never read).
+// The two write shapes this service has, and the ONE rule they share: a field the caller did not
+// name is not written. `put` owns the FILING selection and replaces it wholesale; `patchWriteback`
+// owns the writeback half and is what `PATCH /api/v1/tracker/writeback` calls. Neither fills an
+// omitted writeback action in from the deployment defaults.
 //
-// Both bugs these guard are silent. A merge that let absence become `false` would report exactly what
-// the caller asked for while switching off the two actions it never named, and an empty patch that
-// still wrote would stamp `updatedAt`, which is the ONLY thing that tells a chosen disposition from
-// the defaults nobody has touched.
+// Every bug these guard is silent. A merge that let absence become `false` would report exactly what
+// the caller asked for while switching off the two actions it never named; absence becoming the
+// DEFAULT is the same bug pointed the other way, and it is the one that shipped: the
+// recurring-pipeline dialog persists a filing tracker, names no action, and so re-enabled writeback
+// on every workspace that had turned it off. An empty patch that still wrote would stamp
+// `updatedAt`, which is the ONLY thing that tells a chosen disposition from the defaults nobody has
+// touched.
+//
+// The fake below mirrors what the two real repositories do in SQL, which is the point of moving the
+// merge down there: it writes the named columns onto the stored row and seeds an absent one from
+// the defaults it is handed. `written` records the PATCHES, so a test can assert what was NAMED
+// rather than what the merged row happens to hold.
 
 function store(initial: TrackerSettings | null): {
   repo: TrackerSettingsRepository
-  written: TrackerSettings[]
+  written: TrackerSettingsPatch[]
 } {
   let row = initial
-  const written: TrackerSettings[] = []
+  const written: TrackerSettingsPatch[] = []
   return {
     written,
     repo: {
       get: async () => row,
-      put: async (_workspaceId, settings) => {
-        row = settings
-        written.push(settings)
+      merge: async (_workspaceId, patch, defaults, updatedAt) => {
+        written.push(patch)
+        row = { ...(row ?? defaults), ...patch, updatedAt }
+        return row
       },
     },
   }
@@ -69,10 +81,14 @@ describe('get', () => {
 })
 
 describe('put', () => {
-  it('resets an omitted flag to the default, because the row is replaced wholesale', async () => {
-    const { service } = serviceOver(stored())
+  it('never NAMES a writeback action the caller omitted, so a stored off stays off', async () => {
+    // The regression that shipped: the recurring-pipeline dialog sends the filing selection alone.
+    // Asserted on the patch rather than on the answer, because a service that named all three would
+    // return this same row on a workspace whose stored values happened to match.
+    const { service, written } = serviceOver(stored())
     const settings = await service.put('ws', { tracker: 'github' })
-    expect(settings.writebackResolveOnMerge).toBe(DEFAULT_TRACKER_WRITEBACK.writebackResolveOnMerge)
+    expect(written).toEqual([{ tracker: 'github', jiraProjectKey: null, linearTeamId: null }])
+    expect(settings.writebackResolveOnMerge).toBe(false)
   })
 
   it('keeps a flag the caller set explicitly, including a false', async () => {
@@ -82,6 +98,19 @@ describe('put', () => {
       writebackResolveOnMerge: false,
     })
     expect(settings.writebackResolveOnMerge).toBe(false)
+  })
+
+  it('seeds an absent row from the defaults for the actions nobody has ever chosen', async () => {
+    const { service } = serviceOver(null)
+    const settings = await service.put('ws', { tracker: 'github' })
+    expect(settings).toMatchObject(DEFAULT_TRACKER_WRITEBACK)
+  })
+
+  it('replaces the filing selection wholesale, clearing the other vendor’s target', async () => {
+    const { service } = serviceOver(stored({ tracker: 'jira', jiraProjectKey: 'ENG' }))
+    const settings = await service.put('ws', { tracker: 'linear', linearTeamId: 'team_1' })
+    expect(settings.jiraProjectKey).toBeNull()
+    expect(settings.linearTeamId).toBe('team_1')
   })
 })
 
@@ -96,7 +125,8 @@ describe('patchWriteback', () => {
     expect(settings.writebackQuestionsOnPark).toBe(true)
     expect(settings.tracker).toBe('jira')
     expect(settings.jiraProjectKey).toBe('ENG')
-    expect(written).toHaveLength(1)
+    // ONE field named, so the store is what decides the other five, not this process.
+    expect(written).toEqual([{ writebackResolveOnMerge: true }])
   })
 
   it('patches on top of the DEFAULTS when there is no row yet', async () => {

@@ -66,6 +66,13 @@ export interface PublicApiKeyAuth {
    * the run so the run keeps naming the identity that started it after the key is gone.
    */
   externalIdentity: string | null
+  /**
+   * The user whose PERSONAL subscriptions this key may unlock, or `null` when it was minted
+   * without that opt-in. Carried here for the same reason `label` is (the row is in hand), and
+   * consumed by the run paths: it is the initiator a headless start records, and the user whose
+   * credential the supplied personal password unlocks. Never a substitute for `scope`.
+   */
+  actsAsUserId: string | null
   createdAt: number
 }
 
@@ -116,6 +123,12 @@ export class PublicApiKeyService {
        * pinned onto the runs it starts, never interpreted (see {@link PublicApiKeyRecord}).
        */
       externalIdentity?: string | null
+      /**
+       * Bind the key to a user's personal subscriptions. The CALLER is responsible for passing
+       * only the minting user's own id (`PublicApiKeyController` is the one site that may, and
+       * takes it from the session, never from the request body).
+       */
+      actsAsUserId?: string | null
     },
     label: string,
     scope: PublicApiScope = 'write',
@@ -145,6 +158,7 @@ export class PublicApiKeyService {
       createdByUserId: owner.createdByUserId ?? null,
       createdByKeyId: owner.createdByKeyId ?? null,
       externalIdentity: owner.externalIdentity ?? null,
+      actsAsUserId: owner.actsAsUserId ?? null,
       createdAt: this.deps.clock.now(),
       lastUsedAt: null,
       revokedAt: null,
@@ -202,6 +216,7 @@ export class PublicApiKeyService {
       scope: record.scope,
       label: record.label,
       externalIdentity: record.externalIdentity,
+      actsAsUserId: record.actsAsUserId,
       createdAt: record.createdAt,
     }
   }

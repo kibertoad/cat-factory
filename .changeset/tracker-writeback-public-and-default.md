@@ -14,7 +14,7 @@
 Tracker writeback is ON by default, and `/api/v1` can now read and change it:
 `GET /api/v1/tracker/writeback` reports what a task's linked tracker issue hears as its pull request
 progresses, and `PATCH /api/v1/tracker/writeback` changes one action without moving the others.
-Surface version 1.45.0, additive.
+Surface version 1.46.0, additive.
 
 **BEHAVIOUR CHANGE, and worth reading before upgrading.** All three writeback actions (comment when
 the pull request opens, comment and CLOSE the issue when it merges, post a headless run's parked
@@ -40,9 +40,18 @@ configuration reachable only from the app, so the deployment shape that most nee
 (nobody in the SPA at all) could neither read the disposition nor change it, and could not tell "this
 deployment leaves tickets open" from "the writeback is broken". Three things about the shape: it
 publishes the WRITEBACK half of `tracker_settings` and not the filing selection, which is a separate
-decision the writeback does not key off; the write MERGES rather than replacing, so a caller acting on
-one action cannot silently reset the other two; and `updatedAt` is null when nobody has ever chosen,
-which is how a caller knows it is reading defaults rather than somebody's decision.
+decision the writeback does not key off; the write MERGES, so a caller acting on one action cannot
+move the other two; and `updatedAt` is null when nobody has ever chosen, which is how a caller knows
+it is reading defaults rather than somebody's decision.
+
+**Every writeback write now merges, the app's own included.** An omitted action used to revert to the
+deployment default on the internal wholesale PUT, which the default flip above turns from harmless
+into a silent re-enable: the recurring-pipeline dialog persists a FILING tracker and names no
+writeback action, so scheduling a tech-debt pipeline switched writeback back on for a workspace that
+had deliberately turned it off. Absence now means "not moving this action" on both doors, which is
+the only reading any caller wanted, and the merge itself moved down into the two repositories
+(`TrackerSettingsRepository.merge`, replacing `put`), so the SPA panel and a headless patch naming
+different actions both land instead of one silently losing to the other's stale snapshot.
 
 The acceptance suite gains a fifth spec built on all of it: an issue filed on the backend repository
 by an OUTSIDE reporter (its own provider credential, since an issue the platform created and closed

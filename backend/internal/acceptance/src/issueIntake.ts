@@ -64,12 +64,16 @@ export async function fileReporterIssue(options: FileIssueOptions): Promise<Issu
       )
       return existing
     }
-    journal.record(
+    // Printed, not merely recorded. Re-filing is the most surprising thing this function does, and
+    // it is the branch whose CAUSE is somebody else's action minutes ago (a deleted issue, a
+    // re-pointed `.env`). An operator watching a resume needs to see it while they can still
+    // connect it to what they did, not find it in the journal afterwards.
+    journal.say(
       'milestone',
       `the ledger names ${existing.url} but the provider no longer has it; filing again`,
     )
   } else if (existing && mismatch) {
-    journal.record('milestone', `${mismatch}; filing a fresh issue`)
+    journal.say('milestone', `${mismatch}; filing a fresh issue`)
   }
 
   const filed = await api.file(target, options.issue)
@@ -107,7 +111,17 @@ function describeMismatch(
 }
 
 /**
- * Wait until the platform has finished with the issue, or the budget expires stating what it saw.
+ * An issue that stopped existing while the pass was watching it.
+ *
+ * Its own type because it is the ONE outcome of this wait that must not be graded: every other way
+ * the wait can end hands the issue's last observed state to {@link checkIssueWriteback}, which says
+ * precisely what the platform did or did not do, and there is no such state for an issue that a
+ * person deleted out from under the pass.
+ */
+export class IssueGoneError extends Error {}
+
+/**
+ * Wait until the platform has finished with the issue, then hand back what it last saw.
  *
  * A budget of its own rather than the run budget, and a short one, because this is not a pipeline
  * step. The writeback fires from the merge hook as a best-effort side effect, so by the time the run
@@ -115,40 +129,105 @@ function describeMismatch(
  * and, at worst, one retry. A long budget here would only make a genuinely broken writeback take an
  * extra half hour to report.
  *
- * The wait is on CLOSED, which is the claim, and the observation it prints carries the comment count
- * too: "closed, 1 comment" and "open, 2 comments" are different failures (the resolve leg versus the
- * close leg), and the expiry message is the only place anyone will read them.
+ * **It waits for everything {@link checkIssueWriteback} asserts, not just the close**, and that is
+ * the whole point of the pairing. A provider can close an issue on its own the moment a merged pull
+ * request's text carries a closing keyword, and the merge-edge comment is a separate best-effort
+ * call that can land a beat later or after one retry. A wait that returned on `closed` alone would
+ * therefore hand the grader a half-written issue and fail a writeback that was working, which is
+ * the opposite of the determinism the pair exists for.
+ *
+ * **Expiry RETURNS rather than throws**, which is where this departs from `deadline.ts`'s rule that
+ * a wait states what it last saw. The rule is honoured, by the grader: it renders each claim with
+ * its own detail (`state=open, 1 comment(s)`, `1 distinct comment(s) name <pr>`), which is strictly
+ * more than the one-line last observation an expiry could carry. Giving up is not a verdict here,
+ * it is the end of the patience, and the verdict belongs to the checks.
  */
-export function waitForIssueSettled(options: {
+export async function waitForIssueSettled(options: {
   api: IssueApi
   target: IssueTarget
   number: number
   journal: Journal
   budgetMs: number
+  /** The pull request the delivery run opened, which the comment claim is read against. */
+  pullRequestUrl: string | null
+  /** Injected so `test/issueIntake.test.ts` can drive several polls without sleeping through them. */
+  intervalMs?: number
 }): Promise<IssueState> {
-  const { api, target, number, journal, budgetMs } = options
-  return waitFor({
-    label: `the platform to close ${slug(target)}#${number} through its tracker writeback`,
-    budgetMs,
-    intervalMs: 10_000,
-    probe: async () => {
-      const state = await api.read(target, number)
-      if (!state) {
-        // Gone mid-wait is not "not closed yet": nothing the platform does deletes an issue, so this
-        // is a person, and waiting out the budget would report it as a writeback that never fired.
-        throw new Error(
-          `${slug(target)}#${number} no longer exists on the provider, so what the platform did ` +
-            `to it can no longer be read. It was deleted or transferred while the pass was running.`,
-        )
-      }
-      return state.closed
-        ? { done: true, value: state }
-        : { done: false, state: `${state.state}, ${state.comments.length} comment(s)` }
-    },
-    onProgress: (state, elapsedMs) => {
-      journal.say('observation', `[${Math.round(elapsedMs / 1000)}s] issue #${number} ${state}`)
-    },
-  })
+  const { api, target, number, journal, budgetMs, pullRequestUrl } = options
+  let last: IssueState | null = null
+  try {
+    return await waitFor({
+      label: `the platform to close ${slug(target)}#${number} through its tracker writeback`,
+      budgetMs,
+      intervalMs: options.intervalMs ?? 10_000,
+      probe: async () => {
+        const observed = await observeIssue(api, target, number)
+        if (!observed.state) return { done: false, state: observed.description }
+        last = observed.state
+        return isSettled(last, pullRequestUrl)
+          ? { done: true, value: last }
+          : { done: false, state: observed.description }
+      },
+      onProgress: (state, elapsedMs) => {
+        journal.say('observation', `[${Math.round(elapsedMs / 1000)}s] issue #${number} ${state}`)
+      },
+    })
+  } catch (error) {
+    if (error instanceof IssueGoneError || !last) throw error
+    journal.say(
+      'observation',
+      `the writeback budget is spent and ${slug(target)}#${number} has not settled; grading what ` +
+        `it shows now`,
+    )
+    return last
+  }
+}
+
+/**
+ * One poll: the issue's state, or why this poll could not read it.
+ *
+ * A provider that answers 502 or rate-limits one call in a three-minute poll is not evidence about
+ * the writeback, so it costs the observation and not the pass. It cannot be swallowed forever
+ * either: an unreadable poll is reported like any other observation, so a credential revoked
+ * mid-pass spends the budget and then reads back as exactly what it was on every line.
+ *
+ * A 404 is the one answer that is NOT retried. Nothing the platform does deletes an issue, so it is
+ * a person, and polling on would report it as a writeback that never fired.
+ */
+async function observeIssue(
+  api: IssueApi,
+  target: IssueTarget,
+  number: number,
+): Promise<{ state: IssueState | null; description: string }> {
+  let state: IssueState | null
+  try {
+    state = await api.read(target, number)
+  } catch (error) {
+    return { state: null, description: `could not be read: ${describeError(error)}` }
+  }
+  if (!state) {
+    throw new IssueGoneError(
+      `${slug(target)}#${number} no longer exists on the provider, so what the platform did ` +
+        `to it can no longer be read. It was deleted or transferred while the pass was running.`,
+    )
+  }
+  return { state, description: `${state.state}, ${state.comments.length} comment(s)` }
+}
+
+/**
+ * Whether there is anything left to wait for.
+ *
+ * With no pull request recorded the comment claim can never come true, so waiting on it would burn
+ * the whole budget to reach a verdict the ledger already determined. That gap is the grader's to
+ * report, and it says so in those words rather than as a failed writeback.
+ */
+function isSettled(state: IssueState, pullRequestUrl: string | null): boolean {
+  if (!pullRequestUrl) return state.closed
+  return checkIssueWriteback({ state, pullRequestUrl }).every((claim) => claim.ok)
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 /**

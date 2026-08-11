@@ -3527,7 +3527,9 @@
         "createdBy": "created by {user}",
         "createdByYou": "you",
         "createdByKey": "API key {id}",
-        "revoke": "Revoke token"
+        "revoke": "Revoke token",
+        "boundToYou": "Your subscription",
+        "boundToOther": "{user}'s subscription"
       },
       "add": {
         "heading": "Create a token",
@@ -3536,7 +3538,12 @@
         "labelPlaceholder": "e.g. CI pipeline",
         "scope": "Scope",
         "scopeHelp": "What this token can do: read-only, read and write, or full access (which also allows deleting).",
-        "create": "Create token"
+        "create": "Create token",
+        "identity": "Runs as",
+        "identitySystem": "This workspace (system token)",
+        "identitySelf": "Me (personal token)",
+        "identitySystemHelp": "Runs started with this token belong to the workspace and are attributed to no person. It cannot use anyone’s personal Claude / Codex / GLM subscription, so a task pinned to one of those models is refused rather than charged to someone who is not there. Use this for CI and shared integrations.",
+        "identitySelfHelp": "Runs started with this token count as yours and can use your personal Claude / Codex / GLM subscription. Every such call must also send your personal password in the X-Personal-Password header; it is never stored. Use this to drive your own headless runs."
       },
       "scopes": {
         "read": "Read only",
@@ -3870,6 +3877,15 @@
       "reachable": "Reachable · no models | Reachable · {count} model | Reachable · {count} models",
       "noModels": "No models reported.",
       "enableModels": "Enable models",
+      "imageInputHint": "Some local models read screenshots and design renders. Well-known families are recognised automatically, and the not-set option on each model says which way it falls; set it yourself for a build the platform cannot know about, such as a text-only quant or a fine-tune.",
+      "imageInputLabel": "Image support for {model}",
+      "imageInput": {
+        "autoYes": "Not set: {family} reads images",
+        "autoNo": "Not set: {family} is text only",
+        "unknown": "Images: not set",
+        "yes": "Reads images",
+        "no": "Text only"
+      },
       "toast": {
         "saved": "{name} saved",
         "saveFailed": "Could not save runner",
@@ -3881,6 +3897,7 @@
         "body": "\"{name}\" will be removed. This can't be undone."
       },
       "blocked": "This runner's URL is not allowed on this deployment, so its models are hidden from the picker.",
+      "modelsDiscarded": "Some of this runner's enabled models could not be read and were discarded. Re-select the ones you want and save.",
       "urlReason": {
         "invalid_url": "That is not a valid URL.",
         "scheme_not_allowed": "A runner URL must start with http:// or https://.",

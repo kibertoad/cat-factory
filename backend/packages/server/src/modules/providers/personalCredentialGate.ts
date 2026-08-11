@@ -10,6 +10,18 @@ import type { AppEnv, ServerContainer } from '../../http/env.js'
 import type { SessionPayload } from '../../auth/signing.js'
 
 /**
+ * WHOSE personal credential a run may unlock — the user id and nothing else.
+ *
+ * Narrower than `SessionPayload` on purpose. A browser session is one way to establish this, and
+ * a public-API key its holder BOUND to themselves (`PublicApiKeyRecord.actsAsUserId`) is the
+ * other; asking for a whole session would have forced the second caller to fabricate the login,
+ * avatar and expiry of a person who is not signed in, and a fabricated session is a thing later
+ * code reads as one. The gate never needed more than the id: ownership of the credential is what
+ * it is deciding, and the PASSWORD, not this, is what proves the holder consented.
+ */
+export type PersonalCredentialOwner = Pick<SessionPayload, 'id'>
+
+/**
  * Read the ambient personal password from the request header (see
  * `PERSONAL_PASSWORD_HEADER`). The client attaches it on the gated run calls the way it
  * attaches the bearer token, so it never lives in a request body. Absent ⇒ undefined.
@@ -27,7 +39,7 @@ export function readPersonalPassword<E extends AppEnv>(c: Context<E>): string | 
  */
 async function resolvePersonalVendorPredicate(
   container: ServerContainer,
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
 ): Promise<(vendor: SubscriptionVendor) => boolean> {
   const personal = container.personalSubscriptions
   if (!personal || !user) return () => false
@@ -50,14 +62,57 @@ export async function activateForInteraction<E extends AppEnv>(
   workspaceId: string,
   executionId: string,
 ): Promise<void> {
-  const { activate } = await personalGateForRun(
+  await refreshRunActivation(
     c.get('container'),
     workspaceId,
     executionId,
     c.get('user'),
     readPersonalPassword(c),
   )
-  await activate?.(executionId)
+}
+
+/**
+ * {@link activateForInteraction}'s context-free core, shared with the public-API decision surface
+ * (which resolves its user from the key's binding rather than from a session).
+ *
+ * Skips the whole gate when the run already holds a FRESH activation for every vendor it needs, and
+ * that short-circuit is what makes the interaction gate safe to mount in a shared preamble. Each
+ * re-mint derives the password's key with 210k PBKDF2 iterations per vendor, so a headless driver
+ * answering a run's parks one HTTP call at a time would pay that cost per call — seconds of blocked
+ * event loop on Node, a CPU-limit kill on workerd. `hasFreshActivation` owns the threshold, because
+ * only the service that mints the TTL can say what "fresh" means against it.
+ *
+ * The skip drops the password CHECK along with the derivation, and that is the honest reading rather
+ * than a hole: the gate exists to tell a caller to supply the password while it can still act on
+ * being told, and a run holding a credential that outlives its next dispatch has nothing to be told
+ * about. Consent was given for THIS run, by this holder, within the same activation window.
+ */
+export async function refreshRunActivation(
+  container: ServerContainer,
+  workspaceId: string,
+  executionId: string,
+  user: PersonalCredentialOwner | undefined,
+  password: string | undefined,
+): Promise<void> {
+  const vendors = await runVendorsNeedingUnlock(container, workspaceId, executionId, user)
+  if (vendors.length === 0) return
+  if (user && (await holdsFreshActivations(container, executionId, user.id, vendors))) return
+  await gate(container, vendors, user, password).activate?.(executionId)
+}
+
+/** Whether every vendor the run needs already has an activation worth keeping. */
+async function holdsFreshActivations(
+  container: ServerContainer,
+  executionId: string,
+  userId: string,
+  vendors: SubscriptionVendor[],
+): Promise<boolean> {
+  const personal = container.personalSubscriptions
+  if (!personal) return false
+  const fresh = await Promise.all(
+    vendors.map((vendor) => personal.hasFreshActivation(executionId, userId, vendor)),
+  )
+  return fresh.every(Boolean)
 }
 
 // Shared gate for the individual-usage restricted mode (Claude / GLM / ChatGPT-Codex).
@@ -88,7 +143,7 @@ export interface PersonalCredentialGate {
 function gate(
   container: ServerContainer,
   vendors: SubscriptionVendor[],
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
   password: string | undefined,
 ): PersonalCredentialGate {
   if (vendors.length === 0) return { initiatedBy: user?.id ?? null }
@@ -143,7 +198,7 @@ export async function personalGateForBlock(
   workspaceId: string,
   blockId: string,
   pipelineId: string,
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
   const vendors = await container.executionService.individualVendorsForBlock(
@@ -170,7 +225,7 @@ export async function personalGateForAgentKind(
   workspaceId: string,
   blockId: string,
   agentKind: string,
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
   const vendors = await container.executionService.individualVendorsForAgentKind(
@@ -194,20 +249,37 @@ export async function personalGateForRun(
   container: ServerContainer,
   workspaceId: string,
   executionId: string,
-  user: SessionPayload | undefined,
+  user: PersonalCredentialOwner | undefined,
   password: string | undefined,
 ): Promise<PersonalCredentialGate> {
+  return gate(
+    container,
+    await runVendorsNeedingUnlock(container, workspaceId, executionId, user),
+    user,
+    password,
+  )
+}
+
+/**
+ * The individual-usage vendors a run's remaining steps need a MANAGED unlock for: what the engine
+ * resolves off the stored steps, less the ones native mode serves with the developer's own ambient
+ * CLI login (see {@link ambientVendors}).
+ *
+ * Extracted because two callers ask the same question and must not answer it differently: the retry
+ * gate, which mints a full-TTL activation for a fresh attempt, and {@link refreshRunActivation},
+ * which needs the set BEFORE deciding whether re-minting is necessary at all.
+ */
+async function runVendorsNeedingUnlock(
+  container: ServerContainer,
+  workspaceId: string,
+  executionId: string,
+  user: PersonalCredentialOwner | undefined,
+): Promise<SubscriptionVendor[]> {
   const vendors = await container.executionService.individualVendorsForRun(
     workspaceId,
     executionId,
     await resolvePersonalVendorPredicate(container, user),
   )
-  // See personalGateForBlock: drop only the vendors native mode serves ambiently.
   const ambient = ambientVendors(container)
-  return gate(
-    container,
-    vendors.filter((v) => !ambient.has(v)),
-    user,
-    password,
-  )
+  return vendors.filter((v) => !ambient.has(v))
 }

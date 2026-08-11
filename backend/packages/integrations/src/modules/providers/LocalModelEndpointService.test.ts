@@ -44,7 +44,7 @@ function makeService(opts: { allowPrivateLanHosts?: boolean; fetch?: typeof fetc
 const lanInput = {
   provider: 'ollama' as LocalRunner,
   baseUrl: 'http://192.168.1.50:11434/v1',
-  models: ['qwen3'],
+  models: [{ id: 'qwen3' }],
 }
 
 describe('LocalModelEndpointService host policy (SEC-3)', () => {
@@ -147,5 +147,72 @@ describe('LocalModelEndpointService host policy (SEC-3)', () => {
       fetch: doFetch as typeof fetch,
     }).fetchRunner(lanInput.baseUrl, {})
     expect(res.status).toBe(200)
+  })
+})
+
+describe('LocalModelEndpointService model declarations', () => {
+  const input = (models: { id: string; acceptsImages?: boolean }[]) => ({
+    provider: 'ollama' as LocalRunner,
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    models,
+  })
+
+  it('stores the declaration and serves it to both readers', async () => {
+    const svc = makeService()
+    const declared = [{ id: 'muse-glimmer:30b', acceptsImages: true }, { id: 'gemma3' }]
+    const created = await svc.upsert('usr_1', input(declared))
+    expect(created.models).toEqual(declared)
+    expect(await svc.list('usr_1')).toMatchObject([{ models: declared }])
+    // The per-user catalog input, which is what puts the modality on the picker's ref.
+    expect(await svc.capabilitiesFor('usr_1')).toEqual([
+      { provider: 'ollama', label: 'Ollama', models: declared },
+    ])
+  })
+
+  it('keeps ONE entry per model id, taking the last declaration for a repeat', async () => {
+    // The panel sends one entry per ticked model, so a repeat is a client bug; taking the later
+    // one means what the user set most recently is what is stored.
+    const created = await makeService().upsert(
+      'usr_1',
+      input([
+        { id: 'gemma3', acceptsImages: false },
+        { id: 'qwen3' },
+        { id: 'gemma3', acceptsImages: true },
+      ]),
+    )
+    expect(created.models).toEqual([{ id: 'gemma3', acceptsImages: true }, { id: 'qwen3' }])
+  })
+
+  it('drops a blank id rather than storing an unaddressable model', async () => {
+    const created = await makeService().upsert('usr_1', input([{ id: '  ' }, { id: ' qwen3 ' }]))
+    expect(created.models).toEqual([{ id: 'qwen3' }])
+  })
+
+  it('carries a store-reported DISCARD onto the wire, and clears it on the write that fixes it', async () => {
+    // A row written before declarations existed held bare strings, which the stores refuse rather
+    // than coerce. The shortened list alone reads exactly like a runner nobody enabled a model on,
+    // so the flag is the only thing that can send the user back to re-tick.
+    const repo = fakeRepo()
+    await repo.upsert({
+      userId: 'usr_1',
+      provider: 'ollama',
+      label: 'Ollama',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      apiKeyCipher: null,
+      models: [],
+      unreadableModels: true,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const svc = new LocalModelEndpointService({
+      localModelEndpointRepository: repo,
+      secretCipher: plainCipher,
+      clock: { now: () => 1_700_000_000_000 },
+    })
+    expect(await svc.list('usr_1')).toMatchObject([{ models: [], unreadableModels: true }])
+    await expect(svc.upsert('usr_1', input([{ id: 'qwen3' }]))).resolves.toMatchObject({
+      unreadableModels: false,
+    })
+    expect(await svc.list('usr_1')).toMatchObject([{ unreadableModels: false }])
   })
 })

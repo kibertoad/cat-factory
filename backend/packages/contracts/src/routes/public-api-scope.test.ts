@@ -18,6 +18,7 @@ type AnyContract = {
   method: string
   pathResolver: (params: never) => string
   minScope?: unknown
+  personalUnlock?: unknown
 }
 
 const isContract = (value: unknown): value is AnyContract =>
@@ -66,5 +67,45 @@ describe('public-API scope floors', () => {
     // The field is a public-surface concept; on a session-authed contract it would claim a floor
     // nothing reads, and the next reader would trust it.
     expect(contract.minScope).toBeUndefined()
+  })
+})
+
+// The personal-unlock header (`withPersonalUnlock`) is the second annotation the published spec is
+// generated from, and the one a NEW route is most likely to omit: the server reads it in shared
+// preambles (`gateDecisionAction`, `personalUnlockFor`), so a route inherits the behaviour without
+// naming it, and only the declaration makes it appear in `docs/openapi.json`. Derived from the
+// barrel for the same reason the floors above are.
+describe('public-API personal-unlock declarations', () => {
+  const decisionMutations = () =>
+    publicContracts().filter(
+      ([, c]) => patternOf(c).startsWith('/api/v1/runs/') && c.method !== 'get',
+    )
+
+  it('finds decision mutations to check at all', () => {
+    expect(decisionMutations().length).toBeGreaterThan(20)
+  })
+
+  it.each(decisionMutations().map(([name, contract]) => [name, contract] as const))(
+    '%s (answers a park, so wakes the run) declares the personal-unlock header',
+    (_name, contract) => {
+      expect(contract.personalUnlock).toBe(true)
+    },
+  )
+
+  it.each(
+    (
+      ['createPublicJobContract', 'startPublicTaskContract', 'retryPublicTaskContract'] as const
+    ).map((name) => [name] as const),
+  )('%s (starts or re-drives a run) declares the personal-unlock header', (name) => {
+    const contract = contracts().find(([exportName]) => exportName === name)?.[1]
+    expect(contract?.personalUnlock).toBe(true)
+  })
+
+  it('leaves the read-only decision list undeclared', () => {
+    // A GET answers no park and wakes nothing, so declaring the header there would publish an
+    // input the route does not read — the same misreport the declarations exist to prevent, with
+    // the sign flipped.
+    const list = contracts().find(([name]) => name === 'listPublicRunDecisionsContract')?.[1]
+    expect(list?.personalUnlock).toBeUndefined()
   })
 })

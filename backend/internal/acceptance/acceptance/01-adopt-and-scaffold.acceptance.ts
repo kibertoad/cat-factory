@@ -53,7 +53,7 @@ const STEER =
   'worked examples. Do not broaden the scope.'
 
 describe('setup: two empty repositories become two scaffolded board services', () => {
-  const { config, client, world, journal } = harness('01-adopt-and-scaffold')
+  const { config, client, world, journal, unlock } = harness('01-adopt-and-scaffold')
   const titles = serviceTitles(config.namePrefix)
 
   // The gate, not a duplicate of spec 00: a pass resumed straight into this file never ran that
@@ -189,6 +189,7 @@ describe('setup: two empty repositories become two scaffolded board services', (
     const { run, record } = await fileAndDrive({
       client,
       journal,
+      unlock,
       existing: world.value[options.ledgerKey],
       label: options.title,
       createTask: () =>

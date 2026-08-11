@@ -5,9 +5,9 @@ import type { DrizzleDb } from '../db/client.js'
 import { publicApiKeys } from '../db/schema.js'
 
 // Postgres-backed store of the inbound public-API keys (mirror of D1 migrations 0034 + 0053 +
-// 0054 + 0081 + 0086 / D1PublicApiKeyRepository, column-for-column, `scope`, `created_by_key_id`
-// and `external_identity` included). The secret is stored ONLY as a one-way peppered hash: this
-// repo never sees the raw key.
+// 0054 + 0081 + 0086 + 0089 / D1PublicApiKeyRepository, column-for-column, `scope`,
+// `created_by_key_id`, `external_identity` and `acts_as_user_id` included). The secret is stored
+// ONLY as a one-way peppered hash: this repo never sees the raw key.
 
 type Row = typeof publicApiKeys.$inferSelect
 
@@ -22,6 +22,7 @@ function rowToRecord(row: Row): PublicApiKeyRecord {
     createdByUserId: row.created_by_user_id,
     createdByKeyId: row.created_by_key_id,
     externalIdentity: row.external_identity,
+    actsAsUserId: row.acts_as_user_id,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
@@ -42,6 +43,7 @@ export class DrizzlePublicApiKeyRepository implements PublicApiKeyRepository {
       created_by_user_id: record.createdByUserId,
       created_by_key_id: record.createdByKeyId,
       external_identity: record.externalIdentity,
+      acts_as_user_id: record.actsAsUserId,
       created_at: record.createdAt,
       last_used_at: record.lastUsedAt,
       revoked_at: record.revokedAt,

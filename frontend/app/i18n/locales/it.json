@@ -793,7 +793,9 @@
         "createdBy": "creato da {user}",
         "createdByYou": "te",
         "createdByKey": "la chiave API {id}",
-        "revoke": "Revoca token"
+        "revoke": "Revoca token",
+        "boundToYou": "Il tuo abbonamento",
+        "boundToOther": "Abbonamento di {user}"
       },
       "add": {
         "heading": "Crea un token",
@@ -802,7 +804,12 @@
         "labelPlaceholder": "es. pipeline CI",
         "scope": "Ambito",
         "scopeHelp": "Cosa può fare questo token: sola lettura, lettura e scrittura o accesso completo (che consente anche l'eliminazione).",
-        "create": "Crea token"
+        "create": "Crea token",
+        "identity": "Viene eseguito come",
+        "identitySystem": "Questo spazio di lavoro (token di sistema)",
+        "identitySelf": "Io (token personale)",
+        "identitySystemHelp": "Le esecuzioni avviate con questo token appartengono allo spazio di lavoro e non sono attribuite a nessuna persona. Non può usare l'abbonamento personale Claude / Codex / GLM di nessuno: un'attività fissata su uno di quei modelli viene rifiutata anziché addebitata a chi non c'è. Usalo per la CI e le integrazioni condivise.",
+        "identitySelfHelp": "Le esecuzioni avviate con questo token sono attribuite a te e possono usare il tuo abbonamento personale Claude / Codex / GLM. Ogni chiamata deve inviare anche la tua password personale nell'intestazione X-Personal-Password; non viene mai memorizzata. Usalo per le tue esecuzioni headless."
       },
       "scopes": {
         "read": "Sola lettura",
@@ -1133,6 +1140,15 @@
       "reachable": "Raggiungibile · nessun modello | Raggiungibile · {count} modello | Raggiungibile · {count} modelli",
       "noModels": "Nessun modello riportato.",
       "enableModels": "Abilita i modelli",
+      "imageInputHint": "Alcuni modelli locali leggono screenshot e render di design. Le famiglie note vengono riconosciute automaticamente e l'opzione Non impostato di ogni modello indica come verrà trattato; impostalo tu per una build che la piattaforma non può conoscere, come una quantizzazione solo testo o un fine-tuning.",
+      "imageInputLabel": "Supporto immagini per {model}",
+      "imageInput": {
+        "autoYes": "Non impostato: {family} legge immagini",
+        "autoNo": "Non impostato: {family} è solo testo",
+        "unknown": "Immagini: non impostato",
+        "yes": "Legge immagini",
+        "no": "Solo testo"
+      },
       "toast": {
         "saved": "{name} salvato",
         "saveFailed": "Impossibile salvare il runner",
@@ -1144,6 +1160,7 @@
         "body": "\"{name}\" verra rimosso. Questa operazione non puo essere annullata."
       },
       "blocked": "L'URL di questo runner non è consentito su questo deployment, quindi i suoi modelli sono nascosti nel selettore.",
+      "modelsDiscarded": "Alcuni dei modelli abilitati di questo runner non sono risultati leggibili e sono stati scartati. Riseleziona quelli che vuoi e salva.",
       "urlReason": {
         "invalid_url": "Questo URL non è valido.",
         "scheme_not_allowed": "L'URL di un runner deve iniziare con http:// o https://.",

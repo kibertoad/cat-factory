@@ -35,6 +35,17 @@ function assertSignedIn<E extends AppEnv>(c: Context<E>): void {
   requireSignedIn(c)
 }
 
+/**
+ * Drop the user's cached local-model declarations after a write commits, so the next dispatch
+ * resolves the model list and the modalities they just set rather than the TTL's stale copy.
+ *
+ * These two routes are the ONLY writers of the row, which is what makes an invalidation here the
+ * whole coherence story for the run path's read.
+ */
+async function invalidateDeclarations<E extends AppEnv>(c: Context<E>, userId: string) {
+  await c.get('container').caches.localModelDeclarations.invalidate(userId, userId)
+}
+
 export function localModelEndpointController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -50,6 +61,7 @@ export function localModelEndpointController(): Hono<AppEnv> {
     const provider = v.parse(localRunnerSchema, c.req.valid('param').provider)
     const body = c.req.valid('json')
     const endpoint = await local.upsert(user.id, { ...body, provider })
+    await invalidateDeclarations(c, user.id)
     return c.json(endpoint, 201)
   })
 
@@ -58,6 +70,7 @@ export function localModelEndpointController(): Hono<AppEnv> {
     const user = requireSignedIn(c)
     const provider = v.parse(localRunnerSchema, c.req.valid('param').provider)
     await local.remove(user.id, provider)
+    await invalidateDeclarations(c, user.id)
     return c.body(null, 204)
   })
 

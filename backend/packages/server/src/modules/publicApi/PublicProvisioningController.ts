@@ -146,12 +146,21 @@ export async function readVcsConnection(
 }
 
 /**
- * Whether this deployment serves per-user locally-run model endpoints.
+ * Whether this deployment serves models a read resolving no user cannot ENUMERATE: per-user
+ * locally-run endpoints, which live on one developer's own machine.
  *
  * A named predicate over a TYPED container rather than an `!== undefined` in the route, because
  * this is the one optional-capability read on this surface whose answer is DATA rather than a
  * refusal: it is reported to the caller, so it has to be as legible as the `require*` accessors
  * next to it, and the field it names has to fail to compile if it is ever renamed.
+ *
+ * Deliberately NOT widened to `personalSubscriptions`. A personal subscription's models are in this
+ * catalog already (listed as unavailable), so nothing about them is missing from the answer — what
+ * is missing is the CREDENTIAL read that would have judged them, which is a per-model fact and is
+ * reported per model as `userScoped`. Folding it in here instead would make the flag true on every
+ * deployment that merely has `ENCRYPTION_KEY` set, whether or not a single personal subscription
+ * exists, and a flag that is always true has stopped answering its question: it would say "this
+ * build supports withholding" where a caller reads "something was withheld from you".
  */
 function servesUserScopedModels(container: ServerContainer): boolean {
   return container.localModelEndpoints !== undefined
@@ -664,6 +673,12 @@ function toPublicWiredModel(model: ModelCatalog[number]): PublicWiredModel {
     provider: model.providerLabel,
     available: model.available === true,
     policyBlocked: model.policyBlocked === true,
+    // Read off the ACTIVE flavour, which is the same fact the capability resolver decided
+    // availability from: a `subscription` route is satisfied by a pooled workspace token OR by the
+    // resolving user's own personal subscription, and only the first of those exists for a read
+    // with no user. Every subscription vendor qualifies, not just the individual-only ones — a
+    // dual-mode vendor's model is equally unjudgeable when nobody's personal store was consulted.
+    userScoped: model.flavor === 'subscription',
   }
 }
 
@@ -722,23 +737,34 @@ function toPublicRiskPolicy(policy: RiskPolicy): PublicRiskPolicy {
 }
 
 function registerWiringRoutes(app: Hono<AppEnv>): void {
-  // No user id is passed, and that absence is load-bearing rather than an omission: locally-run
-  // models are one developer's own endpoints, and a key-authenticated call has no developer. See
-  // `resolveWorkspaceModelCatalog`.
+  // Resolved for the user the key is BOUND to, and for nobody when it is not — which is most keys.
+  // A user-scoped model (a locally-run endpoint, a personal subscription) belongs to a person, so
+  // an unbound key must not inherit one: it has no developer, and attributing someone else's
+  // endpoints to it would report a catalog its runs cannot dispatch to. A bound key does name a
+  // person, and it is the SAME person whose credential its runs unlock, so resolving under them is
+  // not a widening — it is the only answer that matches what those runs will actually be able to
+  // do. See `resolveWorkspaceModelCatalog`.
   //
-  // Which is exactly why the omission is REPORTED. Those endpoints do not appear in this catalog at
-  // all, so on a deployment whose only wired models are local ones the answer is a list where
-  // nothing is available, which reads as "add a provider key" and would send an operator to change
-  // a setting that is already correct. The flag says whether this deployment has that capability
-  // wired at all, which is the most a key-authenticated read can honestly know.
+  // Which is exactly why the omission is REPORTED, and reported at the level it happens at. A
+  // locally-run endpoint is ABSENT from an unbound key's catalog entirely, so the answer is a list
+  // where nothing is available, which reads as "add a provider key" and would send an operator to
+  // change a setting that is already correct: that is a fact about the whole answer, and
+  // `excludesUserScopedModels` states it (false for a bound key, whose endpoints did resolve). A
+  // personal subscription's model is PRESENT but unjudged, which is a fact about that row, and
+  // `userScoped` states it there. Reporting the second as the first would claim something is
+  // missing while naming nothing, on a deployment where nothing is.
   buildHonoRoute(app, listPublicWiredModelsContract, async (c) => {
     const auth = await authorizeOrThrow(c, listPublicWiredModelsContract.minScope)
     const container = c.get('container')
-    const catalog = await resolveWorkspaceModelCatalog(container, auth.workspaceId)
+    const catalog = await resolveWorkspaceModelCatalog(
+      container,
+      auth.workspaceId,
+      auth.actsAsUserId ?? undefined,
+    )
     return c.json(
       {
         models: catalog.map(toPublicWiredModel),
-        excludesUserScopedModels: servesUserScopedModels(container),
+        excludesUserScopedModels: auth.actsAsUserId === null && servesUserScopedModels(container),
       },
       200,
     )

@@ -486,24 +486,41 @@ function registerCustomBackendKindTests(harness: ConformanceHarness): void {
       if (!probe) return
       const userId = `usr_local_${Date.now()}`
 
-      // Upsert an Ollama runner with a bearer key + duplicate model ids.
+      // Upsert an Ollama runner with a bearer key + duplicate model ids. The models carry the
+      // user's DECLARATIONS, including the three-state modality: declared-yes, declared-no and
+      // undeclared all have to survive the store's JSON round-trip distinctly, because collapsing
+      // the third into `false` is exactly what would make a multimodal local model unreachable.
+      const declared = [
+        { id: 'qwen2.5-coder:32b', acceptsImages: false },
+        { id: 'muse-glimmer:30b', acceptsImages: true },
+        { id: 'gemma3' },
+      ]
       const created = await probe.upsert(userId, {
         provider: 'ollama',
         baseUrl: 'http://localhost:11434/v1',
         apiKey: 'secret-bearer-key',
-        models: ['qwen2.5-coder:32b', 'gemma3', 'qwen2.5-coder:32b'],
+        models: [...declared, { id: 'qwen2.5-coder:32b', acceptsImages: false }],
       })
       expect(created.provider).toBe('ollama')
       expect(created.hasApiKey).toBe(true)
       // The enabled-models JSON round-trips through the store, de-duplicated.
-      expect(created.models).toEqual(['qwen2.5-coder:32b', 'gemma3'])
+      expect(created.models).toEqual(declared)
 
       // The list (wire) shape never leaks the key.
       const listed = await probe.list(userId)
       expect(listed).toHaveLength(1)
       expect(JSON.stringify(listed)).not.toContain('secret-bearer-key')
       expect(listed[0]!.hasApiKey).toBe(true)
-      expect(listed[0]!.models).toEqual(['qwen2.5-coder:32b', 'gemma3'])
+      expect(listed[0]!.models).toEqual(declared)
+      // Read back from the store, an UNDECLARED model must still carry no modality key at all:
+      // `acceptsImages: undefined` and an absent property behave the same in the fold, but a store
+      // that materialised `false` would silently withhold every design render from that model.
+      expect(listed[0]!.models[2]).not.toHaveProperty('acceptsImages')
+      // A row this suite just wrote lost nothing reading it back, and every store has to SAY so
+      // rather than leave the field absent: `undefined` there would read as a clean row on the wire
+      // while a genuinely discarded list read the same, which is the distinction the flag exists
+      // for (the parse rule itself is pinned by kernel's own unit tests).
+      expect(listed[0]!.unreadableModels).toBe(false)
 
       // The run-time resolve path decrypts the key (the proxy / inline provider use this).
       const resolved = await probe.resolve(userId, 'ollama')
@@ -514,7 +531,7 @@ function registerCustomBackendKindTests(harness: ConformanceHarness): void {
       await probe.upsert(userId, {
         provider: 'lmstudio',
         baseUrl: 'http://localhost:1234/v1',
-        models: ['llama3.3'],
+        models: [{ id: 'llama3.3' }],
       })
       const both = await probe.list(userId)
       expect(both.map((e) => e.provider).sort()).toEqual(['lmstudio', 'ollama'])
@@ -540,7 +557,7 @@ function registerCustomBackendKindTests(harness: ConformanceHarness): void {
         'http://8.8.8.8/v1',
       ]) {
         await expect(
-          probe.upsert(userId, { provider: 'custom', baseUrl, models: ['m'] }),
+          probe.upsert(userId, { provider: 'custom', baseUrl, models: [{ id: 'm' }] }),
         ).rejects.toThrow()
       }
       // Nothing was stored.
@@ -550,7 +567,7 @@ function registerCustomBackendKindTests(harness: ConformanceHarness): void {
       const ok = await probe.upsert(userId, {
         provider: 'custom',
         baseUrl: 'http://127.0.0.1:8080/v1',
-        models: ['m'],
+        models: [{ id: 'm' }],
       })
       expect(ok.provider).toBe('custom')
       await probe.remove(userId, 'custom')

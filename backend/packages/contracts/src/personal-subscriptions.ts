@@ -22,18 +22,51 @@ import { subscriptionVendorSchema } from './vendor-credentials.js'
 // honest threat model + the full safeguards.
 // ---------------------------------------------------------------------------
 
+/** The personal password's length bounds, named so a message about them cannot drift from it. */
+export const PERSONAL_PASSWORD_MIN_LENGTH = 6
+export const PERSONAL_PASSWORD_MAX_LENGTH = 256
+
 /**
  * The personal password that gates the second encryption layer (6–256 chars). Restricted
  * to printable ASCII so the same value can ride **raw** in the `X-Personal-Password`
  * request header (see below) when unlocking a run — HTTP header values must be Latin-1, so
  * a non-ASCII password could not be sent without encoding. Never stored server-side.
+ *
+ * A SPACE is printable, so a leading or trailing one is part of a legal password. Anything that
+ * collects this value must therefore not trim it: see {@link personalPasswordProblem}.
  */
 export const personalPasswordSchema = v.pipe(
   v.string(),
-  v.minLength(6),
-  v.maxLength(256),
+  v.minLength(PERSONAL_PASSWORD_MIN_LENGTH),
+  v.maxLength(PERSONAL_PASSWORD_MAX_LENGTH),
   v.regex(/^[\x20-\x7e]+$/, 'Password must use printable ASCII characters (no tabs/newlines).'),
 )
+
+/**
+ * Why a candidate personal password would be refused, in words for a human, or `null` when it
+ * would be accepted.
+ *
+ * It exists because more than one surface has to STATE this rule while collecting the value (the
+ * acceptance suite's terminal prompt today, any local check a form adds tomorrow), and a
+ * hand-written "must be at least 6 characters" beside the schema is the copy that goes stale the
+ * day the schema moves. Checked with the schema itself and worded from the same constants.
+ *
+ * Deliberately no trimming, here or in the callers: a space is printable ASCII, so `" hunter2"` is
+ * a legal stored password, and a collector that trimmed it would send a DIFFERENT password than the
+ * one typed and report the deployment's `wrong_password` as if the operator had mistyped.
+ */
+export function personalPasswordProblem(candidate: string): string | null {
+  if (candidate.length === 0) return 'No password entered.'
+  if (candidate.length < PERSONAL_PASSWORD_MIN_LENGTH) {
+    return `A personal password is at least ${PERSONAL_PASSWORD_MIN_LENGTH} characters; this one is ${candidate.length}.`
+  }
+  if (candidate.length > PERSONAL_PASSWORD_MAX_LENGTH) {
+    return `A personal password is at most ${PERSONAL_PASSWORD_MAX_LENGTH} characters; this one is ${candidate.length}.`
+  }
+  return v.is(personalPasswordSchema, candidate)
+    ? null
+    : 'A personal password must use printable ASCII only (it travels as an HTTP header, which is Latin-1).'
+}
 
 /**
  * HTTP header carrying the personal password to unlock a run's individual-usage

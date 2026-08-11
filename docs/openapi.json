@@ -2559,6 +2559,16 @@
           "accountId": {
             "type": "string"
           },
+          "actsAsUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "number"
           },
@@ -2640,6 +2650,7 @@
           "createdByUserId",
           "createdByKeyId",
           "externalIdentity",
+          "actsAsUserId",
           "createdAt",
           "lastUsedAt",
           "revokedAt"
@@ -5839,7 +5850,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.45.0"
+    "version": "1.46.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -10984,6 +10995,17 @@
       "post": {
         "description": "Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll or stream. Nothing is pushed to GitHub.",
         "operationId": "createPublicJob",
+        "parameters": [
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -12144,6 +12166,9 @@
                           },
                           "provider": {
                             "type": "string"
+                          },
+                          "userScoped": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -12151,7 +12176,8 @@
                           "label",
                           "provider",
                           "available",
-                          "policyBlocked"
+                          "policyBlocked",
+                          "userScoped"
                         ],
                         "type": "object"
                       },
@@ -13802,6 +13828,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -13870,6 +13905,15 @@
             "in": "path",
             "name": "approvalId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -13944,6 +13988,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14015,6 +14068,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14083,6 +14145,15 @@
             "in": "path",
             "name": "stage",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -14165,6 +14236,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14244,6 +14324,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14315,6 +14404,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14376,6 +14474,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14434,6 +14541,15 @@
             "in": "path",
             "name": "stage",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -14508,6 +14624,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14579,6 +14704,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14639,6 +14773,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -14705,6 +14848,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14758,6 +14910,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14808,6 +14969,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -14882,6 +15052,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -14953,6 +15132,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -15011,6 +15199,15 @@
             "in": "path",
             "name": "itemId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -15075,6 +15272,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -15125,6 +15331,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -15191,6 +15406,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -15241,6 +15465,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -15307,6 +15540,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -15367,6 +15609,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -15433,6 +15684,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -15486,6 +15746,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -15536,6 +15805,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -15634,6 +15912,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -15705,6 +15992,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -15755,6 +16051,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -15829,6 +16134,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -15897,6 +16211,15 @@
             "in": "path",
             "name": "itemId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -15971,6 +16294,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -16031,6 +16363,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -16097,6 +16438,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -16150,6 +16500,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -16200,6 +16559,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -16266,6 +16634,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -16316,6 +16693,15 @@
             "in": "path",
             "name": "runId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -18837,6 +19223,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -18940,6 +19335,15 @@
             "in": "path",
             "name": "taskId",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The personal password of the user this key is bound to, unlocking that user's own subscription for this call. Send it when a response answers `428 credential_required`; a key bound to nobody cannot use it (that case answers `409 individual_model_unsupported` instead).",
+            "in": "header",
+            "name": "X-Personal-Password",
+            "required": false,
             "schema": {
               "type": "string"
             }

@@ -633,15 +633,22 @@ function registerTrackerWritebackTests(harness: ConformanceHarness): void {
     const reread = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
     expect(reread.body.writebackQuestionsOnPark).toBe(false)
 
-    // Omitting it on a later PUT resets it to the DEFAULT, exactly like the sibling toggles: the
-    // settings row is replaced wholesale, not merged. That is the whole reason the public
-    // `PATCH /api/v1/tracker/writeback` is a separate operation rather than a thin wrapper.
-    const reset = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
+    // Omitting it on a later PUT KEEPS the stored choice, exactly like the sibling toggles: the
+    // filing selection is replaced wholesale and the writeback half merges, on this door and on
+    // the public one alike. Per store, because "left alone" is a claim about what the repository
+    // wrote, and the response echoes the merged row either way. The victim of the older
+    // reset-to-default rule was the recurring-pipeline dialog, which sets a filing tracker and
+    // names no action, so a workspace that had turned writeback off had it turned back on by a
+    // dialog about scheduling.
+    const kept = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
       tracker: 'github',
     })
-    expect(reset.body.writebackQuestionsOnPark).toBe(
-      DEFAULT_TRACKER_WRITEBACK.writebackQuestionsOnPark,
+    expect(kept.body.writebackQuestionsOnPark).toBe(false)
+    const keptReread = await app.call<TrackerSettings>(
+      'GET',
+      `/workspaces/${wsId}/tracker-settings`,
     )
+    expect(keptReread.body.writebackQuestionsOnPark).toBe(false)
   })
 
   it('merges a public writeback patch onto the stored row, leaving the untouched flags alone', async () => {
@@ -685,6 +692,59 @@ function registerTrackerWritebackTests(harness: ConformanceHarness): void {
     expect(internal.body.writebackResolveOnMerge).toBe(true)
     expect(internal.body.writebackCommentOnPrOpen).toBe(false)
     expect(internal.body.tracker).toBe('github')
+  })
+
+  it('lands both of two CONCURRENT patches naming different writeback actions', async () => {
+    // The property: two writers naming DIFFERENT actions both land. Sequentially a merge in the
+    // store and a read-modify-write above it are indistinguishable, which is the trap: the latter
+    // passes every test that patches once and loses an update the first time a deployment points
+    // both the SPA panel and a headless caller at this row.
+    //
+    // What each half of the coverage is worth. `TrackerSettingsService.test.ts` is the DETERMINISTIC
+    // guard, and it asserts the shape rather than the outcome: the service hands the store only the
+    // fields the caller named, so a re-introduced read-modify-write fails there every time. This
+    // test is the one that binds the STORES, and it is honestly probabilistic, because nothing at
+    // this level can force the interleaving. It earns its place anyway: it is the only assertion
+    // that runs the real SQL of both repositories against a real concurrent writer, and Postgres at
+    // READ COMMITTED is where an unnamed column written back stale actually drops an update, while
+    // SQLite serializes writers so D1 would hide it.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const key = await app.call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'external',
+      scope: 'admin',
+    })
+    const auth = { authorization: `Bearer ${key.body.secret}` }
+
+    await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
+      tracker: 'github',
+      writebackCommentOnPrOpen: false,
+      writebackResolveOnMerge: false,
+      writebackQuestionsOnPark: false,
+    })
+
+    await Promise.all([
+      app.call(
+        'PATCH',
+        '/api/v1/tracker/writeback',
+        { writeback: { commentOnPrOpen: true } },
+        auth,
+      ),
+      app.call(
+        'PATCH',
+        '/api/v1/tracker/writeback',
+        { writeback: { questionsOnPark: true } },
+        auth,
+      ),
+    ])
+
+    const settled = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
+    expect(settled.body.writebackCommentOnPrOpen).toBe(true)
+    expect(settled.body.writebackQuestionsOnPark).toBe(true)
+    // The action neither writer named is still where the seed left it, so "both landed" is not
+    // being read off a row that simply drifted to the defaults.
+    expect(settled.body.writebackResolveOnMerge).toBe(false)
   })
 }
 
