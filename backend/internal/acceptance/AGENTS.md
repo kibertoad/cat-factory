@@ -16,17 +16,27 @@ that `.env`. Its rule is **resolve rather than ask**: the workspace from `GET /a
 from the VCS connection, the preset from the library joined against the model catalog, the cluster
 from the kubeconfig (through `@cat-factory/cli`'s own `readApiServerCommand`/`readTokenCommand`, so
 the namespace and secret name are not restated here). What it asks is the API token and the two
-repository names, and it then opens each repository's creation page and re-reads
-`GET /api/v1/repos` until it sees them. It never overwrites a value without naming it, carries
-unmanaged lines over byte for byte, and prints neither token.
+repository names, and it then ADOPTS each one (`POST /api/v1/repos/link`, idempotent), STATING each
+attempt's outcome: an unreachable repository gets the creation page and the steps only a person can
+carry out. It never overwrites a value without naming it, carries unmanaged lines over byte for byte,
+and prints neither token.
 
 **The operator creates the two repositories; the suite ADOPTS them.** `canCreateRepos` is false for
 every PAT connection and the App path creates only under `/orgs/{org}/repos`, so bootstrapping was
 the one prerequisite no configuration could satisfy. Spec 01 backs a service with each `repoId` and
 scaffolds both through `pl_build` from the briefs in `src/instructions.ts`, which is why a scaffold
-resumes exactly as a feature run does. `target-repos` gates on the repositories being visible AND
+resumes exactly as a feature run does. `target-repos` gates on the repositories being REACHABLE AND
 adoptable, and says outright that emptiness is not what it checked: no `/api/v1` read publishes it.
-Trap: `serviceId: null` does NOT mean free. A service homed on another board has no id this
+Trap: CREATING a repository does not make `GET /api/v1/repos` list it. That read serves the workspace's
+LINKED projection and nothing links a new repository for you (the added-repository webhook does not
+project one; a resync refreshes what is already linked). The suite therefore ADOPTS what it needs
+through `POST /api/v1/repos/link` (added for this in surface 1.44.0) rather than asking an operator to
+open the app, which is what makes a hand-written `.env` a supported way in; `target-repos` gates on
+REACHABILITY, point-reading `/repos/available?q=owner/name` for anything not linked yet.
+`src/adopt.ts` owns the one copy of the reachability steps (`unreachableRepoSteps`), printed by the
+gate and by `configure` too, and they ask only for what no API can do: create the repository, grant the
+credential access.
+Second trap: `serviceId: null` does NOT mean free. A service homed on another board has no id this
 workspace-scoped surface can return, so it answers null WITH `linkedElsewhere: true` and
 `POST /api/v1/services` refuses; `src/adopt.ts` owns that verdict and the gate shares it. An existing
 link is compared against the LEDGER's service ids, never against "is this a resume", since a ledger
@@ -97,8 +107,8 @@ Edit the pagination rules and that trace changes, so the bug report has to chang
 investigator is handed a symptom the code does not produce.
 
 **Every workspace-scoped call goes through the published SDK**, setup included: the repository list,
-backing a service with one, the cluster connection, a service's `provisioning`, the preset pin and
-the wiring reads are all `/api/v1` operations. So a surface change that would break an integrator
+ADOPTING one, backing a service with one, the cluster connection, a service's `provisioning`, the
+preset pin and the wiring reads are all `/api/v1` operations. So a surface change that would break an integrator
 breaks this suite at compile time, which is most of why it is worth driving the SDK rather than raw
 `fetch`.
 

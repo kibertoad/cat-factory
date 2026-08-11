@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   Block,
   BootstrapJob,
+  GitHubAvailableRepo,
   GitHubConnection,
   ServiceProvisioning,
 } from '@cat-factory/contracts'
@@ -10,6 +11,7 @@ import type { ServerContainer } from '../../http/env.js'
 import {
   readVcsConnection,
   toBlockPatch,
+  toPublicAvailableRepo,
   toPublicBootstrapJob,
 } from './PublicProvisioningController.js'
 import { toPublicService } from './boardProjection.js'
@@ -256,5 +258,46 @@ describe('toPublicBootstrapJob', () => {
       }),
     )
     expect(projected.failureKind).toBe('stalled')
+  })
+})
+
+describe('toPublicAvailableRepo', () => {
+  const reachable = (overrides: Record<string, unknown> = {}) =>
+    ({
+      githubId: 101,
+      owner: 'acme',
+      name: 'web',
+      defaultBranch: 'main',
+      private: true,
+      linked: false,
+      ...overrides,
+    }) as GitHubAvailableRepo
+
+  it('renames the provider id to the neutral field a service create takes', () => {
+    // The whole point of the read: what comes back has to be passable to `POST /api/v1/services`,
+    // which takes `repo.repoId`. An internal `githubId` reaching the wire would also re-hardcode a
+    // provider into a surface that is frozen forever.
+    expect(toPublicAvailableRepo(reachable()).repoId).toBe(101)
+  })
+
+  it('states the two booleans the internal shape spells as absent-means-false', () => {
+    // The silent bug this exists for: `isMonorepo` and `personal` are optional internally, so
+    // passing the row through would publish a field that is missing on most rows and false on some.
+    // A caller distinguishing "absent" from "false" would be distinguishing nothing.
+    const projected = toPublicAvailableRepo(reachable())
+    expect(projected.monorepo).toBe(false)
+    expect(projected.personal).toBe(false)
+    expect(toPublicAvailableRepo(reachable({ isMonorepo: true })).monorepo).toBe(true)
+  })
+
+  it('answers the empty string for an unrecorded default branch, as the repos list does', () => {
+    // Null would make a caller reading it to name a base decide between "unknown" and "main", and
+    // there is nothing here that could invent the second.
+    expect(toPublicAvailableRepo(reachable({ defaultBranch: null })).defaultBranch).toBe('')
+  })
+
+  it('falls back to `github` for a row with no provider, as every other read does', () => {
+    expect(toPublicAvailableRepo(reachable()).provider).toBe('github')
+    expect(toPublicAvailableRepo(reachable({ provider: 'gitlab' })).provider).toBe('gitlab')
   })
 })

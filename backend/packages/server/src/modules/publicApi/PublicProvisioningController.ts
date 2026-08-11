@@ -2,6 +2,8 @@ import {
   connectPublicEnvironmentContract,
   getPublicRepoBootstrapContract,
   getPublicVcsConnectionContract,
+  linkPublicRepoContract,
+  listPublicAvailableReposContract,
   listPublicModelPresetsContract,
   listPublicRiskPoliciesContract,
   listPublicWiredModelsContract,
@@ -11,12 +13,14 @@ import {
   UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
   type BootstrapJob,
   type EnvironmentHandlerView,
+  type GitHubAvailableRepo,
   type GitHubConnection,
   type InfraHandlerConfig,
   type KubernetesManifestSource,
   type KubernetesUrlSource,
   type ModelCatalog,
   type ModelPreset,
+  type PublicAvailableRepo,
   type PublicBootstrapJob,
   type PublicEnvironmentConnection,
   type PublicEnvironmentConnectionView,
@@ -45,7 +49,7 @@ import type { Context } from 'hono'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
 import { resolveWorkspaceModelCatalog } from '../models/workspaceCatalog.js'
-import { toPublicService } from './boardProjection.js'
+import { toPublicRepo, toPublicService } from './boardProjection.js'
 import { authorizeOrThrow } from './publicApiAuth.js'
 
 // DEPLOYMENT PROVISIONING on `/api/v1`: bringing a workspace from "connected" to "able to run a
@@ -78,6 +82,24 @@ import { authorizeOrThrow } from './publicApiAuth.js'
 /** The bootstrap module, or the 503 naming what this deployment has not wired. */
 function requireBootstrap<E extends AppEnv>(c: Context<E>): BootstrapModule {
   return requireCapability(c.get('container').bootstrap, 'Repo bootstrap is not configured')
+}
+
+/**
+ * The module that can LINK a repository, or the 503 naming what is missing.
+ *
+ * Its own accessor rather than {@link readVcsConnection}, because the two answer different questions
+ * and a GitLab-only facade is exactly where they diverge: that one reads a CONNECTION, which the PAT
+ * service can hold on its own, while linking needs the sync service, which only the `github` module
+ * builds. So a workspace can truthfully report a connection here and still have nowhere to project a
+ * repository into, and a message borrowed from the connection read would tell an operator to connect
+ * something they have already connected.
+ */
+function requireRepoLinking<E extends AppEnv>(c: Context<E>): GitHubModule {
+  return requireCapability(
+    c.get('container').github,
+    'Adopting a repository needs the source-control module this deployment has not wired',
+    'repo_linking_unwired',
+  )
 }
 
 /** The environments module, or the 503 naming what this deployment has not wired. */
@@ -168,6 +190,7 @@ const KUBERNETES_ENGINE = 'remote-kubernetes' as const
 export function publicProvisioningController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
   registerBootstrapRoutes(app)
+  registerRepoAdoptionRoutes(app)
   registerEnvironmentRoutes(app)
   registerServiceRoutes(app)
   registerWiringRoutes(app)
@@ -249,6 +272,84 @@ function registerBootstrapRoutes(app: Hono<AppEnv>): void {
       toPublicBootstrapJob(await bootstrap.service.getJob(auth.workspaceId, jobId)),
       200,
     )
+  })
+}
+
+/**
+ * Project one reachable repository onto the wire.
+ *
+ * Rebuilt field by field, like every other mapper here: the internal shape carries `githubId` (the
+ * provider-specific name the neutral surface calls `repoId`) and spells two of its booleans as
+ * optional-with-a-default, which a frozen surface may not. Absent becomes the stated value here so a
+ * caller never has to distinguish a missing key from a false one.
+ */
+export function toPublicAvailableRepo(repo: GitHubAvailableRepo): PublicAvailableRepo {
+  return {
+    repoId: repo.githubId,
+    // Absent on a row from a provider-agnostic path that predates the column, which the platform
+    // reads as `github` everywhere else.
+    provider: repo.provider ?? 'github',
+    owner: repo.owner,
+    name: repo.name,
+    // Empty rather than null, matching `GET /api/v1/repos`: a caller reads it to name a base, and
+    // there is nothing here that could invent one.
+    defaultBranch: repo.defaultBranch ?? '',
+    private: repo.private,
+    linked: repo.linked,
+    monorepo: repo.isMonorepo === true,
+    personal: repo.personal === true,
+  }
+}
+
+/**
+ * Adopting a repository that already exists: what it can reach, and linking one by name.
+ *
+ * Both routes go through the SAME sync-service methods the app's own repo picker calls, which is what
+ * makes an adopted repository indistinguishable from one a person ticked: the projection row, its
+ * deep sync and the cache invalidation are one code path rather than two.
+ */
+function registerRepoAdoptionRoutes(app: Hono<AppEnv>): void {
+  // What the connection can REACH, linked or not. The read that makes an absent repository
+  // diagnosable rather than merely absent, since `GET /api/v1/repos` answers identically for a
+  // repository that does not exist and one nobody has linked yet.
+  buildHonoRoute(app, listPublicAvailableReposContract, async (c) => {
+    const auth = await authorizeOrThrow(c, listPublicAvailableReposContract.minScope)
+    const github = requireRepoLinking(c)
+    const { q } = c.req.valid('query')
+    const repos = await github.syncService.listAvailableRepos(auth.workspaceId, (q === undefined ? {} : { q }))
+    // No viewer token is passed, and that is not an omission: a key authenticates as the WORKSPACE,
+    // so the only repositories in scope are the ones its connection reaches. `personal` therefore
+    // reports false throughout, which the contract states rather than leaving a caller to infer from
+    // a field that never varies.
+    return c.json({ repos: repos.map(toPublicAvailableRepo) }, 200)
+  })
+
+  // Adopt one by name, so a headless setup never has to open the app. Idempotent: a repository this
+  // workspace already links returns its row.
+  buildHonoRoute(app, linkPublicRepoContract, async (c) => {
+    const auth = await authorizeOrThrow(c, linkPublicRepoContract.minScope)
+    const github = requireRepoLinking(c)
+    const { owner, name } = c.req.valid('json')
+    const linked = await github.syncService.linkRepoBySlug(auth.workspaceId, owner, name)
+    // One reason for two causes, because this read genuinely cannot tell them apart: a repository
+    // that does not exist and one the workspace's credential is not granted are the same 404 from the
+    // provider. The contract names both, so a caller renders the pair rather than picking one.
+    if (!linked) {
+      throw new NotFoundError('repository', `${owner}/${name}`, { reason: 'repo_not_reachable' })
+    }
+    // Projected from `listRepoOptions` rather than from the row just linked, so the adopt answers in
+    // exactly the shape and with exactly the judgements `GET /api/v1/repos` serves: whether the
+    // repository already backs a service here, and whether one is homed on a board this key cannot
+    // address. Deriving those here would be a second opinion on the question the caller asks next.
+    const options = await c.get('container').boardService.listRepoOptions(auth.workspaceId)
+    const adopted = options.find((option) => option.repo.githubId === linked.githubId)
+    if (!adopted) {
+      // Unreachable by construction (the link wrote the projection row this list reads), so it is a
+      // refusal rather than a `!`: the alternative renders a half-built row into the response whose
+      // whole job is to hand back an id the next call uses.
+      throw new NotFoundError('repository', `${owner}/${name}`, { reason: 'repo_not_projected' })
+    }
+    return c.json(toPublicRepo(adopted), 200)
   })
 }
 

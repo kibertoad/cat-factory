@@ -7,18 +7,16 @@ import {
   listPublicTaskDocumentsContract,
   type CreatePublicServiceInput,
   type PublicAttachedDocument,
-  type PublicRepo,
   removePublicTaskDependencyContract,
 } from '@cat-factory/contracts'
 import type { Block, PublicTask, SourceDocument } from '@cat-factory/contracts'
-import type { PublicRepoOption } from '@cat-factory/orchestration'
 import { NotFoundError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
-import { toPublicService, toPublicTask } from './boardProjection.js'
+import { toPublicRepo, toPublicService, toPublicTask } from './boardProjection.js'
 import { resolveDocuments } from './documentAttachment.js'
 import { authorizeOrThrow } from './publicApiAuth.js'
 
@@ -44,26 +42,6 @@ import { authorizeOrThrow } from './publicApiAuth.js'
 //  4. **Every read is scoped to the key's workspace and to a BOARD-VISIBLE block**
 //     (`getServiceTask`, which excludes the headless job anchors), so a key can never reach a run's
 //     internal anchor or another workspace's task through these paths.
-
-/** Project one repo option onto the wire, dropping the installation/sync bookkeeping. */
-function toPublicRepo(option: PublicRepoOption): PublicRepo {
-  const { repo, serviceBlockId, linkedElsewhere } = option
-  return {
-    repoId: repo.githubId,
-    // Absent on rows written before the column existed, which the platform reads as `github`
-    // everywhere else; stating that here keeps the wire field non-null for every row.
-    provider: repo.provider ?? 'github',
-    owner: repo.owner,
-    name: repo.name,
-    // A repo whose default branch has not been projected yet answers with the empty string rather
-    // than null: a caller reads it to name a base, and there is nothing here that could invent one.
-    defaultBranch: repo.defaultBranch ?? '',
-    private: repo.private,
-    monorepo: repo.isMonorepo === true,
-    serviceId: serviceBlockId,
-    linkedElsewhere,
-  }
-}
 
 /** Project a stored document onto the small attached-document resource. */
 function toPublicAttachedDocument(document: SourceDocument): PublicAttachedDocument {

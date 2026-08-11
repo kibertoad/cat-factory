@@ -44,6 +44,12 @@ const SURFACE = {
   // `client.repos.list()` is choosing between the repositories that exist and making one.
   startPublicRepoBootstrap: { group: 'repos', method: 'bootstrap' },
   getPublicRepoBootstrap: { group: 'repos', method: 'getBootstrap' },
+  // `listAvailable`/`link` and not a group of their own: a caller choosing what to file work against
+  // is choosing between the repositories this workspace already has (`list`), the ones it could adopt
+  // (`listAvailable`), adopting one (`link`) and making a new one (`bootstrap`). Four methods, one
+  // decision.
+  listPublicAvailableRepos: { group: 'repos', method: 'listAvailable' },
+  linkPublicRepo: { group: 'repos', method: 'link' },
 
   // ---- Tasks ----------------------------------------------------------------------------
   createPublicTask: { group: 'tasks', method: 'create' },
@@ -291,7 +297,7 @@ export const GROUP_DOCS = {
     "The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), or patch one, including declaring where the manifests for its per-run environments are read from.",
   spec: "A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome.",
   repos:
-    'The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation), plus creating a brand-new one: a bootstrap writes the repository with an agent and reports the board service it materialises.',
+    'The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation); the ones its connection could reach but has not adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes the repository with an agent and reports the board service it materialises.',
   tasks:
     "A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against.",
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',

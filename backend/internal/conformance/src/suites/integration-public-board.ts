@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 import { mintPublicApiKey } from './shared.js'
 
-// Cross-runtime conformance for the public BOARD-PROVISIONING surface (`GET /api/v1/repos`,
+// Cross-runtime conformance for the public BOARD-PROVISIONING surface (`GET /api/v1/repos`, the
+// adopt pair `GET /api/v1/repos/available` + `POST /api/v1/repos/link`, and
 // `POST /api/v1/services`) and for the two task relationships that outlive a create call
 // (dependency edges, attached requirements documents).
 //
@@ -82,6 +83,42 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       expect([404, 422]).toContain(refused.status)
     })
 
+    it('serves the ADOPT pair on every facade, refusing honestly with nothing connected', async () => {
+      // The pair that makes headless setup finishable: `/repos` lists what a workspace has LINKED,
+      // and linking is a separate act nobody performs for a caller, so a repository that exists and
+      // is reachable was invisible here until a person opened the app.
+      //
+      // What conformance can settle without a provider is the half that silently differs per facade:
+      // that both routes are MOUNTED and answer the documented refusal rather than a route-not-found.
+      // A workspace with no connection has nothing reachable, so the read answers an empty list and
+      // the adopt a 404 (`repo_not_reachable`); a facade that wires no source-control module at all
+      // answers 503 (`repo_linking_unwired`) to both. Both are legitimate, and neither is the 404
+      // Hono raises for a path nobody registered, which is the regression this catches.
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace()
+      const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'board')
+
+      const available = await app.call<{ repos: unknown[] }>(
+        'GET',
+        '/api/v1/repos/available',
+        undefined,
+        admin,
+      )
+      expect([200, 503]).toContain(available.status)
+      if (available.status === 200) expect(available.body.repos).toEqual([])
+
+      const link = await app.call<{ error?: { code: string; details?: { reason?: string } } }>(
+        'POST',
+        '/api/v1/repos/link',
+        { owner: 'acme', name: 'nothing-here' },
+        admin,
+      )
+      expect([404, 503]).toContain(link.status)
+      // The refusal is the platform's, carrying the reason a caller branches on, rather than the
+      // envelope-less 404 an unregistered path produces.
+      expect(link.body.error?.details?.reason).toMatch(/repo_not_reachable|repo_linking_unwired/)
+    })
+
     it('is ADMIN scope: a write key cannot create board structure', async () => {
       // The rung this endpoint sits on, asserted rather than merely documented. `write` is what a
       // ticket-filing integration holds, and creating services is board STRUCTURE.
@@ -92,6 +129,14 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       expect(refused.status).toBe(403)
       // The discovery read is the floor, so the same key still sees what it could create against.
       expect((await app.call('GET', '/api/v1/repos', undefined, write)).status).toBe(200)
+      // The ADOPT pair sits at `admin` on both halves, including the read: it names what the
+      // deployment's own credential can reach, which is operator-facing, and a key that can enumerate
+      // it is at the rung that could adopt one. Refused BEFORE the module check, so a `write` key
+      // cannot tell a wired deployment from an unwired one either.
+      expect((await app.call('GET', '/api/v1/repos/available', undefined, write)).status).toBe(403)
+      expect(
+        (await app.call('POST', '/api/v1/repos/link', { owner: 'a', name: 'b' }, write)).status,
+      ).toBe(403)
     })
   })
 

@@ -34,7 +34,14 @@ import type {
   ListPublicModelPresetsResponsePreset,
   ListPublicWiredModelsResponseModel,
 } from '@cat-factory/sdk'
-import { blockedRepoMessage, findRepo, repoBlocker } from './adopt.ts'
+import {
+  blockedRepoMessage,
+  describeVisibleRepos,
+  findRepo,
+  repoBlocker,
+  sameRepo,
+  unreachableRepoSteps,
+} from './adopt.ts'
 import type { DeploymentApi } from './deploymentApi.ts'
 import type { AcceptanceConfig } from './config.ts'
 import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3s.ts'
@@ -491,7 +498,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
   },
   {
     id: 'target-repos',
-    what: 'both repositories this pass adopts exist and are reachable, and neither is already in use',
+    what: 'both repositories this pass adopts are reachable, and neither is already in use',
     disposition: 'required',
     check: async ({ client, config, adoptedServiceIds }) => {
       const repoRead = publicApiRead(
@@ -509,39 +516,80 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         repo: findRepo(repos, config.repoOwner, entry.name),
       }))
 
-      const missing = found.filter((entry) => !entry.repo)
-      if (missing.length > 0) {
-        const visible = repos.map((repo) => `${repo.owner}/${repo.name}`)
+      // A repository this workspace has not LINKED is not a refusal any more: spec 01 adopts one
+      // through `POST /api/v1/repos/link`. So what this gate has to establish about an unlisted
+      // repository is REACHABILITY, which is a different read, and the only refusal left is the one
+      // no API can fix for an operator.
+      //
+      // One EXACT-SLUG query per unlisted repository rather than one browse-all for both: an
+      // `owner/name` query is resolved by a direct point-read, which is authoritative where an
+      // enumeration truncates at its cap and a name search can miss an exact slug. At most two calls,
+      // and only for what the first read did not answer.
+      const unlisted = found.filter((entry) => !entry.repo)
+      const reachable: { owner: string; name: string }[] = []
+      const unreachable: typeof unlisted = []
+      for (const entry of unlisted) {
+        const { repos: exact } = await client.repos.listAvailable({
+          q: `${config.repoOwner}/${entry.name}`,
+        })
+        const hit = findRepo(exact, config.repoOwner, entry.name)
+        if (hit) reachable.push({ owner: hit.owner, name: hit.name })
+        else unreachable.push(entry)
+      }
+
+      if (unreachable.length > 0) {
+        // A second query per miss, by NAME alone, and only on the failing path: the slug query above
+        // answers reachability and cannot surface a look-alike (a search for `intended/foo` does not
+        // match `someone-else/foo`), which is the one observation that separates a typo in
+        // ACCEPTANCE_REPO_OWNER from a credential that reaches nothing at all.
+        const nearby: { owner: string; name: string }[] = []
+        for (const entry of unreachable) {
+          const { repos: byName } = await client.repos.listAvailable({ q: entry.name })
+          nearby.push(...byName.map((repo) => ({ owner: repo.owner, name: repo.name })))
+        }
+        const seen = nearby.filter(
+          (repo) => !unreachable.some((entry) => sameRepo(repo, config.repoOwner, entry.name)),
+        )
+        // The steps come from `adopt.ts` rather than being written here: this gate, `configure`'s
+        // check and the adopt itself all answer one question, and three copies of the answer is three
+        // places for one of them to fall out of step with what the platform now does for itself.
         return unsatisfied(
-          `${missing.map((entry) => `'${config.repoOwner}/${entry.name}'`).join(' and ')} ` +
-            `${missing.length === 1 ? 'is' : 'are'} not listed by GET /api/v1/repos, so there is ` +
-            `nothing for spec 01 to adopt`,
+          `${unreachable.map((entry) => `'${config.repoOwner}/${entry.name}'`).join(' and ')} ` +
+            `${unreachable.length === 1 ? 'is' : 'are'} not reachable by this workspace's ` +
+            `connection: neither GET /api/v1/repos nor a point-read of ` +
+            `GET /api/v1/repos/available finds ${unreachable.length === 1 ? 'it' : 'them'}, and a ` +
+            `repository that does not exist answers exactly as one the credential is not granted. ` +
+            `Searching the ${unreachable.length === 1 ? 'name' : 'names'} alone reached ` +
+            `${describeVisibleRepos(seen)}`,
           {
             steps: [
-              'Create each missing repository yourself, EMPTY except for a README: the scaffold ' +
-                'runs open a pull request, which needs a default branch to target, and a ' +
-                'repository with no commits has none.',
-              'Then make sure this workspace reaches it: a GitHub App installation must include ' +
-                'that repository, and a PAT must carry `repo`. A repository that exists and is ' +
-                'invisible here answers identically to one that was never created.',
-              `Visible to this workspace right now: ${visible.join(', ') || '(none)'}.`,
+              ...unreachableRepoSteps(
+                seen,
+                unreachable.map((entry) => ({ owner: config.repoOwner, name: entry.name })),
+              ),
               'The `configure` command below opens a prefilled creation page per repository and ' +
-                're-reads this list, so the next click is the thing the suite needs.',
+                're-checks reachability, so the next click is the thing the suite needs.',
             ],
             commands: [
               {
                 run: 'pnpm --filter @cat-factory/acceptance run configure',
-                purpose: 'open the creation page for each missing repository, then re-check',
+                purpose: 'create each missing repository, then re-check',
               },
-              repoRead,
+              publicApiRead(
+                config,
+                `/repos/available?q=${config.repoOwner}/${unreachable[0]?.name ?? ''}`,
+                'point-read one repository, which answers reachability rather than linkage',
+              ),
             ],
           },
         )
       }
 
-      // Past the `missing` guard every entry has a repository, but narrowed through a predicate
-      // rather than asserted with `!`: the alternative renders `undefined/undefined` into the very
-      // verdict a reader would rely on if this ever stopped being true.
+      // The LINKED rows only, which is the population the three checks below can speak about: a
+      // repository nobody has adopted yet has no `serviceId` to be spoken for and no monorepo flag to
+      // be set, so it is reachable-and-free by construction. Narrowed through a predicate rather than
+      // asserted with `!`, so a row that stopped being present renders as absent rather than as
+      // `undefined/undefined` inside the verdict a reader would rely on.
       const resolved = found.flatMap((entry) => (entry.repo ? [entry.repo] : []))
 
       // A repository this workspace can SEE but cannot back a service with. Checked before the
@@ -619,16 +667,27 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // would mean one provider round-trip per row on every call. What a non-empty target actually
       // costs is a scaffold run that builds on top of whatever is there, which is a strange result
       // rather than a failure, so the honest disposition is to say the probe cannot see it.
-      const names = resolved.map((repo) => `${repo.owner}/${repo.name}`).join(' and ')
       const mine = resolved.filter((repo) => repo.serviceId && owned.has(repo.serviceId))
+      // The two populations are reported separately, because they are two different states of the
+      // setup and only one of them has been through the checks above: an ADOPTED repository was read
+      // with its links and flags, where a merely reachable one is a promise that spec 01 will link it.
+      const linkedNote =
+        resolved.length > 0
+          ? `${resolved.map((repo) => `${repo.owner}/${repo.name}`).join(' and ')} ` +
+            (mine.length > 0
+              ? `${mine.length === resolved.length ? 'are both' : `include ${mine.length}`} backed by ` +
+                `a service this pass's own ledger names`
+              : 'are adopted and back no service yet')
+          : ''
+      const pendingNote =
+        reachable.length > 0
+          ? `${reachable.map((repo) => `${repo.owner}/${repo.name}`).join(' and ')} ` +
+            `${reachable.length === 1 ? 'is' : 'are'} reachable but not adopted yet, which spec 01 ` +
+            `does itself (POST /api/v1/repos/link)`
+          : ''
       return satisfied(
-        `${names} are reachable and ` +
-          (mine.length > 0
-            ? `${mine.length === resolved.length ? 'both' : `${mine.length} of ${resolved.length}`} ` +
-              `back a service this pass's own ledger names`
-            : 'back no service yet') +
-          ` (whether they are EMPTY is not readable over /api/v1; a repository with content is ` +
-          `scaffolded on top of)`,
+        `${[linkedNote, pendingNote].filter((note) => note !== '').join('; ')} (whether either is ` +
+          `EMPTY is not readable over /api/v1; a repository with content is scaffolded on top of)`,
       )
     },
   },

@@ -359,3 +359,103 @@ describe('GitHubSyncService.listAvailableRepos — viewer-repos cache', () => {
     expect(enumerations()).toBe(2)
   })
 })
+
+// `linkRepoBySlug`: the resolution behind `POST /api/v1/repos/link`, which is the only door a
+// HEADLESS caller has. It resolves through `listAvailableRepos` above rather than a bare `getRepo`,
+// so everything the picker can reach it can adopt, and the two properties worth pinning are the ones
+// whose failure is a wrong repository rather than an error: the OWNER is part of the match, and an
+// unreachable name is null rather than a guess.
+describe('GitHubSyncService.linkRepoBySlug', () => {
+  /** A service whose projection starts empty and records what `linkRepo` upserts. */
+  function makeLinker(items: GitHubRepo[]): {
+    service: GitHubSyncService
+    linked: GitHubRepo[]
+  } {
+    const linked: GitHubRepo[] = []
+    const deps = {
+      clock: { now: () => 0 },
+      githubInstallationRepository: {
+        getByWorkspace: async () => ({
+          installationId: 1,
+          deletedAt: null,
+          accountLogin: 'acme',
+          targetType: 'Organization',
+          provider: 'github',
+        }),
+        // `linkRepo` deep-syncs what it just projected, which fans the resources out to every
+        // workspace linking the repo. One workspace here, so the sync is a no-op with real ports.
+        listWorkspacesForInstallation: async () => ['ws'],
+      },
+      githubClient: {
+        listInstallationRepos: async () => ({ items }),
+        searchInstallationRepos: async (_id: number, query: string) => {
+          const q = query.trim().toLowerCase()
+          return q ? items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)) : []
+        },
+        // The resource wave `syncRepo` fires after a link; empty pages settle it at once. Stubbed
+        // rather than avoided because the deep sync is part of what linking MEANS, so a test that
+        // skipped it would be asserting a method this one does not have.
+        listBranches: async () => ({ items: [] }),
+        listPullRequests: async () => ({ items: [] }),
+        listIssues: async () => ({ items: [] }),
+        listCommits: async () => ({ items: [] }),
+        listCheckRuns: async () => ({ items: [] }),
+        getRepo: async (_id: number, ref: { owner: string; repo: string }) => {
+          const hit = items.find((r) => r.owner === ref.owner && r.name === ref.repo)
+          if (!hit) throw new Error('HTTP 404')
+          return hit
+        },
+        getRepoById: async (_id: number, githubId: number) =>
+          items.find((r) => r.githubId === githubId) ?? null,
+      },
+      repoProjectionRepository: {
+        list: async () => linked,
+        get: async (_ws: string, githubId: number) =>
+          linked.find((r) => r.githubId === githubId) ?? null,
+        // A real UPSERT, keyed by provider id: the link writes the row and the deep sync re-stamps
+        // it, so a fake that appended would report one adopted repository as two.
+        upsertMany: async (_ws: string, rows: GitHubRepo[]) => {
+          for (const row of rows) {
+            const at = linked.findIndex((held) => held.githubId === row.githubId)
+            if (at === -1) linked.push(row)
+            else linked[at] = row
+          }
+        },
+        linkedWorkspaces: async () => ['ws'],
+        getCursor: async () => null,
+        setCursor: async () => {},
+      },
+      branchProjectionRepository: { upsertMany: async () => {} },
+      pullRequestProjectionRepository: { upsertMany: async () => {} },
+      issueProjectionRepository: { upsertMany: async () => {} },
+      commitProjectionRepository: { upsertMany: async () => {} },
+      checkRunProjectionRepository: { upsertMany: async () => {} },
+    } as unknown as GitHubSyncServiceDependencies
+    return { service: new GitHubSyncService(deps), linked }
+  }
+
+  it('links a repo the connection can reach but the workspace has not adopted', async () => {
+    const { service, linked } = makeLinker(REPOS)
+    const result = await service.linkRepoBySlug('ws', 'acme', 'api-gateway')
+    expect(result?.githubId).toBe(1)
+    expect(linked.map((r) => r.githubId)).toEqual([1])
+  })
+
+  it('matches the name case-insensitively, as both providers treat one', async () => {
+    const { service } = makeLinker(REPOS)
+    expect((await service.linkRepoBySlug('ws', 'GLOBEX', 'api-client'))?.githubId).toBe(3)
+  })
+
+  it('refuses a same-named repository under ANOTHER owner rather than substituting it', async () => {
+    // The failure this guard exists for: a slug search can surface a look-alike, and linking that one
+    // would file a caller's work in someone else's account while answering 200.
+    const { service, linked } = makeLinker(REPOS)
+    expect(await service.linkRepoBySlug('ws', 'acme', 'billing')).toBeNull()
+    expect(linked).toEqual([])
+  })
+
+  it('answers null for a name nothing reaches, which the caller reports as a refusal', async () => {
+    const { service } = makeLinker(REPOS)
+    expect(await service.linkRepoBySlug('ws', 'acme', 'nonexistent')).toBeNull()
+  })
+})

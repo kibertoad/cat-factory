@@ -10,9 +10,9 @@
 //   - **The API token is the one thing nothing can resolve.** No endpoint mints one, so it is asked
 //     for, never echoed, and never printed back in the summary (`configureEnv.ts` owns that list).
 //   - **The two repository names are the operator's choice**, because the operator creates them
-//     (see `adopt.ts`). Having asked, this command opens the creation page prefilled and re-reads
-//     `GET /api/v1/repos` until it can see them, so the answer to "did that work" is not left for
-//     the next hour-long pass to discover.
+//     (see `adopt.ts`). Having asked, this command ADOPTS each one through
+//     `POST /api/v1/repos/link` and reports what that answered, so the two things it cannot do
+//     (create a repository, grant a credential access to one) are the only two it asks for.
 //   - **Nothing is overwritten silently.** An existing value becomes the prompt's default, and the
 //     summary states every key it replaced.
 //
@@ -29,8 +29,17 @@ import {
   readTokenCommand,
   runCommand,
 } from '@cat-factory/cli'
-import { CatFactoryClient, type PrReportRunProvider } from '@cat-factory/sdk'
-import { blockedRepoMessage, findRepo, repoBlocker } from './adopt.ts'
+import {
+  CatFactoryClient,
+  CatFactoryNotFoundError,
+  type PrReportRunProvider,
+} from '@cat-factory/sdk'
+import {
+  blockedRepoMessage,
+  repoBlocker,
+  unreachableRepoSteps,
+  type VcsAccessMethod,
+} from './adopt.ts'
 import {
   describeEntries,
   describeMerge,
@@ -39,29 +48,69 @@ import {
   readAssignments,
   REPO_CREATION_URL,
 } from './configureEnv.ts'
+import { formatRemedy } from './preflight.ts'
 import { usablePresets } from './presets.ts'
 
-/** What this command needs from the deployment, narrowed to the five reads it makes. */
+/**
+ * What one adopt attempt answered.
+ *
+ * Two states rather than a nullable row, so a caller cannot read "could not reach it" as "no row yet"
+ * and carry on: the first needs a person, the second does not exist as an outcome here.
+ */
+export type LinkOutcome =
+  | {
+      status: 'adopted'
+      repo: {
+        owner: string
+        name: string
+        serviceId: string | null
+        linkedElsewhere: boolean
+        monorepo: boolean
+      }
+    }
+  | { status: 'unreachable' }
+
+/** What this command needs from the deployment, narrowed to the six calls it makes. */
 export type ConfigureClient = {
   identity(): Promise<{ workspaceId: string; scope: string; label: string }>
-  connection(): Promise<{ accountLogin: string; provider: PrReportRunProvider } | null>
   /**
-   * The repository list, carrying what decides whether each row can back a service.
-   *
-   * `linkedElsewhere` and `monorepo` ride along because `serviceId: null` alone does not mean
-   * available: a service homed on another board of the account has no id this workspace-scoped
-   * surface can hand back, so it answers null WITH the flag set. Projecting the flag away here would
-   * have this command report such a repository as ready to use and leave the 409 for the pass.
+   * The connected account, plus the two things about the connection that shape what this command
+   * can say: WHICH platform (so a creation link is offered only where one can be built) and HOW the
+   * workspace authenticates (so a repository the picker cannot offer is diagnosed against the right
+   * screen: an installation's repository access list, or a token's scopes).
    */
-  repos(): Promise<
-    readonly {
-      owner: string
-      name: string
-      serviceId: string | null
-      linkedElsewhere: boolean
-      monorepo: boolean
-    }[]
-  >
+  connection(): Promise<{
+    accountLogin: string
+    provider: PrReportRunProvider
+    method: VcsAccessMethod
+  } | null>
+  /**
+   * Adopt one repository into the workspace, or report that the connection cannot reach it.
+   *
+   * The command's one WRITE, and it replaced the read it used to make. Listing what the workspace had
+   * linked could only ever report a gap: linking is a separate act, so a repository the operator had
+   * just created was absent from that list and the command's whole answer was instructions for going
+   * and doing it by hand. `POST /api/v1/repos/link` is idempotent, so calling it is both the fix and
+   * the cheapest way to ASK whether the repository is reachable at all.
+   *
+   * `unreachable` is a VALUE rather than a throw because it is the one refusal that is a fact about
+   * the repository rather than about the deployment; everything else propagates, so an unwired module
+   * or a provider outage is never reported as "create the repository".
+   *
+   * The row carries what decides whether it can back a service: `linkedElsewhere` and `monorepo` ride
+   * along because `serviceId: null` alone does not mean available (a service homed on another board of
+   * the account has no id this workspace-scoped surface can hand back, so it answers null WITH the
+   * flag set), and projecting the flag away here would report such a repository as ready to use.
+   */
+  link(owner: string, name: string): Promise<LinkOutcome>
+  /**
+   * What the connection can REACH for a query, used only to diagnose a repository it cannot.
+   *
+   * Read on the failure path alone, because on the success path there is nothing left to ask: the
+   * adopt already answered. What this adds is the difference between a typo in the owner and a
+   * credential that reaches nothing, which is a distinction no other read here can make.
+   */
+  available(query: string): Promise<readonly { owner: string; name: string }[]>
   presets(): Promise<
     readonly { presetId: string; name: string; baseModelId: string; isDefault: boolean }[]
   >
@@ -211,13 +260,19 @@ async function resolveApiKey(io: Io, stored: string | undefined): Promise<string
 }
 
 /**
- * The account the two repositories live under, plus WHICH platform it is on.
+ * The account the two repositories live under, plus WHICH platform it is on and HOW it is reached.
  *
  * The provider rides along because it is what decides whether a creation link can be offered at
  * all, and it is null when nothing is connected rather than defaulted: guessing GitHub there would
- * send a GitLab operator to a form on the wrong platform.
+ * send a GitLab operator to a form on the wrong platform. `method` is null on the same reading: an
+ * unresolved connection means nobody read how this workspace authenticates, so the visibility
+ * diagnosis names both cases rather than asserting one.
  */
-type ResolvedOwner = { owner: string; provider: PrReportRunProvider | null }
+type ResolvedOwner = {
+  owner: string
+  provider: PrReportRunProvider | null
+  method: VcsAccessMethod | null
+}
 
 /**
  * The connected account, resolved from the deployment; asked for only when it cannot be.
@@ -237,9 +292,13 @@ async function resolveOwner(
   if (connection.ok && connection.value) {
     deps.io.info(
       `Resolved repository owner '${connection.value.accountLogin}' from the workspace's ` +
-        `${connection.value.provider} connection.`,
+        `${connection.value.provider} connection (${connection.value.method}).`,
     )
-    return { owner: connection.value.accountLogin, provider: connection.value.provider }
+    return {
+      owner: connection.value.accountLogin,
+      provider: connection.value.provider,
+      method: connection.value.method,
+    }
   }
   deps.io.warn(
     connection.ok
@@ -251,16 +310,12 @@ async function resolveOwner(
           'under.',
   )
   const answered = (await deps.io.question('Repository owner (user or org)', stored)).trim()
-  return answered ? { owner: answered, provider: null } : null
+  return answered ? { owner: answered, provider: null, method: null } : null
 }
 
 /**
- * The two repository names, then the creation page for whichever does not exist yet.
- *
- * The loop is the point. `GET /api/v1/repos` is the same read `target-repos` gates the pass on, so
- * confirming here that both are visible is confirming the prerequisite, and a repository created
- * under the wrong account or outside a GitHub App's installation is caught now rather than at the
- * start of an afternoon.
+ * The two repository names, then {@link adoptRepo} for each: the names are the operator's choice, and
+ * whether the connection can reach what they chose is not.
  */
 async function resolveRepos(
   deps: ConfigureDeps,
@@ -277,47 +332,92 @@ async function resolveRepos(
     input.previous.ACCEPTANCE_FRONTEND_REPO ?? `${input.prefix}-catalog-web`,
   )
   for (const name of [backend, frontend]) {
-    await ensureRepoVisible(deps, client, { ...input.owner, name })
+    await adoptRepo(deps, client, { ...input.owner, name })
   }
   return { backend, frontend }
 }
 
-/** Offer the creation page for one repository, re-reading the list until the operator stops. */
-async function ensureRepoVisible(
+/**
+ * Adopt one repository, retrying while the operator works on what only they can fix.
+ *
+ * The loop is the point, and it is now an ADOPT rather than a poll: `POST /api/v1/repos/link` is
+ * idempotent, so the call that fixes "not linked yet" is the same call that answers "can this
+ * connection reach it", and the pass's `target-repos` gate then finds the work already done. A
+ * repository created under the wrong account, or outside a GitHub App's installation, is caught here
+ * rather than at the start of an afternoon.
+ *
+ * **Every attempt STATES ITS OUTCOME, and a negative one carries the remedy.** A loop that reports
+ * only its positive answer is indistinguishable from one doing nothing, and the operator concludes the
+ * command is stuck rather than that the repository is still absent. The remedy is `adopt.ts`'s, the one
+ * `target-repos` prints too, rendered through the gate's own {@link formatRemedy} so both surfaces read
+ * alike.
+ */
+async function adoptRepo(
   deps: ConfigureDeps,
   client: ConfigureClient,
   target: ResolvedOwner & { name: string },
 ): Promise<void> {
   const { io } = deps
+  const slug = `${target.owner}/${target.name}`
+  let attempts = 0
   while (true) {
-    const listed = await read(() => client.repos())
-    if (!listed.ok) {
+    const attempt = await read(() => client.link(target.owner, target.name))
+    attempts += 1
+    if (!attempt.ok) {
+      // A failure that is not the documented 404 is a fact about the DEPLOYMENT, so it is reported as
+      // one rather than turned into "go and create the repository": an unwired module (503) and a
+      // provider outage (500) are both fixed somewhere else entirely, and the three-state rule this
+      // command is built on applies hardest to the call that would otherwise blame the operator.
       io.warn(
-        `GET /api/v1/repos could not be read (${listed.error}), so whether ` +
-          `'${target.name}' exists is unknown rather than answered no.`,
+        `POST /api/v1/repos/link could not be completed for ${slug} (${attempt.error}), so whether ` +
+          'the repository exists is unknown rather than answered no.',
       )
       return
     }
-    // The same case-folding match `adopt.ts` and the `target-repos` prerequisite use, not a third
-    // copy of it: an operator who typed `CF-Acc-Catalog-Api` into the creation form and
-    // `cf-acc-catalog-api` here has configured one repository, and all three sites have to agree.
-    const found = findRepo(listed.value, target.owner, target.name)
-    if (found) {
-      const slug = `${target.owner}/${target.name}`
-      // Visible is not the same as usable, and this is the difference `serviceId` alone cannot
-      // state: a service homed on another board answers `serviceId: null` WITH
-      // `linkedElsewhere: true`, so reporting only the id would call it ready and leave the
-      // `repo_service_homed_elsewhere` 409 for the first adopt of an hour-long pass.
-      const blocker = repoBlocker(found)
+    if (attempt.value.status === 'adopted') {
+      // Reachable, and now linked by this command rather than by anybody's hand. Adoptable is the
+      // stricter question and `serviceId` alone cannot answer it: a service homed on another board
+      // answers `serviceId: null` WITH `linkedElsewhere: true`, so reporting only the id would call
+      // this ready and leave the `repo_service_homed_elsewhere` 409 for the first adopt of an
+      // hour-long pass.
+      const repo = attempt.value.repo
+      const blocker = repoBlocker(repo)
       if (blocker) io.warn(blockedRepoMessage(slug, blocker).join('\n'))
       else {
         io.info(
-          `${slug} is visible to this workspace` +
-            (found.serviceId ? `, and already backs service ${found.serviceId}` : ''),
+          `${slug} is adopted by this workspace` +
+            (repo.serviceId ? `, and already backs service ${repo.serviceId}` : ''),
         )
       }
       return
     }
+
+    // The answer to what the operator just did, on every attempt rather than only on the one that
+    // succeeds: a silent negative reads as a no-op.
+    io.warn(
+      (attempts === 1
+        ? `${slug} is not reachable by this workspace's connection.`
+        : `Re-checked, and ${slug} is STILL not reachable.`) +
+        ' Either it does not exist, or this credential is not granted it.',
+    )
+    // A search on the NAME alone, which is the only thing that separates a typo in the OWNER from a
+    // credential that reaches nothing: the adopt has already answered the slug, and a slug search
+    // cannot surface a look-alike (`intended/foo` does not match `someone-else/foo`). The steps read
+    // it to name a same-named repository under another account. An unreadable answer contributes
+    // nothing rather than an empty list, since "reaches nothing" is a claim this command would then be
+    // making on a failed read's behalf.
+    const nearby = await read(() => client.available(target.name))
+    if (!nearby.ok) {
+      io.warn(
+        `GET /api/v1/repos/available could not be read (${nearby.error}), so what this connection ` +
+          'CAN reach is unknown; the steps below stand on their own.',
+      )
+    }
+    io.info(
+      formatRemedy({
+        steps: unreachableRepoSteps(nearby.ok ? nearby.value : [], [target], target.method),
+      }),
+    )
 
     const url = target.provider
       ? REPO_CREATION_URL[target.provider](target.owner, target.name)
@@ -327,17 +427,22 @@ async function ensureRepoVisible(
       // cannot verify from `/api/v1` (an Enterprise Server deployment answers the same), so an
       // operator who is not on it can see that and go elsewhere.
       io.info(`Create it here (private, and tick "Add a README"):\n  ${url}`)
-      if (await io.confirm('Open that page now?', true)) await io.openBrowser(url)
+      // Offered as the DEFAULT only on the first attempt. Past one re-check the repository usually
+      // exists and what is missing is the credential's access to it, so re-opening the creation form
+      // is the one action that cannot help, and defaulting to it is how a loop starts feeling like a
+      // dead end.
+      if (await io.confirm('Open the creation page?', attempts === 1)) await io.openBrowser(url)
     } else {
       io.info(
         `Create '${target.name}' under '${target.owner}' on your provider: private, empty except ` +
           'for a README so it has a default branch for the scaffold pull request to target.',
       )
     }
-    if (!(await io.confirm(`Re-check whether ${target.owner}/${target.name} is visible?`, true))) {
+    // Named for the call it makes, so the operator knows which read the answer above came from.
+    if (!(await io.confirm(`Re-check ${slug} (retries POST /api/v1/repos/link)?`, true))) {
       io.warn(
         `Leaving '${target.name}' unconfirmed. The suite's 'target-repos' prerequisite will refuse ` +
-          'until it is created and this workspace can see it.',
+          'until this connection can reach it, with the same steps as above.',
       )
       return
     }
@@ -597,18 +702,38 @@ export function connectDeployment(baseUrl: string, apiKey: string): ConfigureCli
     async connection() {
       const { connection } = await client.vcs.getConnection()
       return connection
-        ? { accountLogin: connection.accountLogin, provider: connection.provider }
+        ? {
+            accountLogin: connection.accountLogin,
+            provider: connection.provider,
+            method: connection.method,
+          }
         : null
     },
-    async repos() {
-      const { repos } = await client.repos.list()
-      return repos.map((repo) => ({
-        owner: repo.owner,
-        name: repo.name,
-        serviceId: repo.serviceId,
-        linkedElsewhere: repo.linkedElsewhere,
-        monorepo: repo.monorepo,
-      }))
+    async link(owner, name) {
+      try {
+        const repo = await client.repos.link({ owner, name })
+        return {
+          status: 'adopted',
+          repo: {
+            owner: repo.owner,
+            name: repo.name,
+            serviceId: repo.serviceId,
+            linkedElsewhere: repo.linkedElsewhere,
+            monorepo: repo.monorepo,
+          },
+        }
+      } catch (error) {
+        // The ONE status this command turns into a value. `repo_not_reachable` is the documented
+        // reason, and it is matched on the STATUS rather than the reason string because the status is
+        // what the surface promises; anything else is a deployment fault and belongs to the caller's
+        // three-state read.
+        if (error instanceof CatFactoryNotFoundError) return { status: 'unreachable' }
+        throw error
+      }
+    },
+    async available(query) {
+      const { repos } = await client.repos.listAvailable({ q: query })
+      return repos.map((repo) => ({ owner: repo.owner, name: repo.name }))
     },
     async presets() {
       const { presets } = await client.modelPresets.list()

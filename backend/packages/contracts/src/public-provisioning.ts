@@ -11,10 +11,10 @@ import { workspaceRoleSchema } from './workspace-members.js'
 // DEPLOYMENT PROVISIONING on `/api/v1`: what a headless caller needs to bring a workspace from
 // "connected" to "able to run a pipeline", which until now had no public counterpart at all.
 //
-// Four groups, and they are four because each answers a different question a caller asks BEFORE it
-// has anything to file work against: make me a repository; connect me to the infrastructure a run
-// deploys onto; tell one service where its manifests live; and tell me what this deployment has
-// actually wired.
+// Five groups, and they are five because each answers a different question a caller asks BEFORE it
+// has anything to file work against: make me a repository; ADOPT one that already exists; connect me
+// to the infrastructure a run deploys onto; tell one service where its manifests live; and tell me
+// what this deployment has actually wired.
 //
 // **Every STRUCTURAL shape here is a PROJECTION, never a re-export of the internal one**, and that
 // is the load-bearing decision in this file. The internal shapes it projects from
@@ -152,7 +152,85 @@ export const publicBootstrapJobSchema = v.object({
 })
 export type PublicBootstrapJob = v.InferOutput<typeof publicBootstrapJobSchema>
 
-// ---- 2. The environment connection (the ENGINE half) ------------------------
+// ---- 2. Adopting a repository that already exists ---------------------------
+//
+// The other half of "give me something to file work against", and the half that was missing: a
+// caller could make a NEW repository here (section 1) but could not adopt one it already had.
+//
+// The gap is not obvious from `GET /api/v1/repos`, and that is the point. That read serves the
+// repositories this workspace has LINKED, which is a set someone assembles in the app: repositories
+// are linked explicitly per workspace, the provider webhook for an added repository does not project
+// one, and a resync refreshes what is already linked rather than rediscovering the installation. So a
+// repository the connection can reach perfectly well is absent from every public read until a human
+// opens the picker, and `POST /api/v1/services` answers 404 for its `repoId`, which is
+// indistinguishable from a repository that does not exist. These two operations close that:
+// {@link publicAvailableRepoSchema} is what the connection can REACH, and
+// {@link linkPublicRepoSchema} adopts one by name.
+
+/**
+ * A repository the workspace's connection can reach, whether or not this workspace links it yet.
+ *
+ * The discovery read for adoption, and a superset of {@link publicRepoSchema}'s population by
+ * design: that one lists what is linked (so every row carries a `repoId` a service can be created
+ * against), this one lists what COULD be. `linked` is the join between them.
+ *
+ * A small projection, like every other shape here: enough to recognise a repository, decide whether
+ * to adopt it, and name it in the adopt call. `serviceId` and `linkedElsewhere` are deliberately
+ * absent rather than nullable, because both are facts about a LINKED repository's board and an
+ * unlinked repository has no answer to give; read them off `GET /api/v1/repos` once it is linked.
+ */
+export const publicAvailableRepoSchema = v.object({
+  /** The provider's id for the repo, as `GET /api/v1/repos` reports it once linked. */
+  repoId: v.number(),
+  provider: vcsProviderSchema,
+  owner: v.string(),
+  name: v.string(),
+  /** The branch a run would base its work on. Empty when the provider reports none. */
+  defaultBranch: v.string(),
+  private: v.boolean(),
+  /** Whether THIS workspace already links it, i.e. whether it appears in `GET /api/v1/repos`. */
+  linked: v.boolean(),
+  /** Whether it is flagged as hosting several services. Always false until it is linked. */
+  monorepo: v.boolean(),
+  /**
+   * True when it is reachable only through the SIGNED-IN USER's own token rather than the
+   * workspace's connection.
+   *
+   * Always false on this surface, and published rather than omitted because it is the one field that
+   * says why a repository a person can see in the app may be missing here: an API key authenticates
+   * as the workspace, so a repository only somebody's personal token reaches is not reachable by a
+   * key at all. A caller comparing this list against what a colleague sees needs that stated.
+   */
+  personal: v.boolean(),
+})
+export type PublicAvailableRepo = v.InferOutput<typeof publicAvailableRepoSchema>
+
+export const publicAvailableRepoListSchema = v.object({
+  repos: v.array(publicAvailableRepoSchema),
+})
+export type PublicAvailableRepoList = v.InferOutput<typeof publicAvailableRepoListSchema>
+
+/**
+ * Adopt a repository into this workspace, by name.
+ *
+ * By NAME rather than by the `repoId` its sibling reads report, and that asymmetry is deliberate: a
+ * caller setting a workspace up from configuration knows `owner/name` (a person typed it, or a
+ * template holds it) and cannot know a provider's numeric id for a repository no public read lists.
+ * Taking the name makes this one call sufficient, so a headless setup never has to search first, and
+ * the response carries the `repoId` for the `POST /api/v1/services` call that follows.
+ *
+ * The owner is required rather than defaulted to the connected account, because an installation can
+ * reach several owners and a request that guessed one would silently adopt a look-alike.
+ */
+export const linkPublicRepoSchema = v.object({
+  /** The account (user or organisation) the repository lives under. */
+  owner: slugField,
+  /** The repository's name, matched case-insensitively as both providers treat it. */
+  name: slugField,
+})
+export type LinkPublicRepoInput = v.InferOutput<typeof linkPublicRepoSchema>
+
+// ---- 3. The environment connection (the ENGINE half) ------------------------
 
 /**
  * How the manifests at `path` are rendered. `raw` (the default) treats the path as a manifest file
@@ -350,7 +428,7 @@ export type PublicEnvironmentConnectionView = v.InferOutput<
   typeof publicEnvironmentConnectionViewSchema
 >
 
-// ---- 3. A service's provisioning (the SOURCE half) --------------------------
+// ---- 4. A service's provisioning (the SOURCE half) --------------------------
 
 /**
  * Where ONE service's per-run manifests live: the half the engine connection does not carry.
@@ -390,7 +468,7 @@ export const updatePublicServiceSchema = v.pipe(
 )
 export type UpdatePublicServiceInput = v.InferOutput<typeof updatePublicServiceSchema>
 
-// ---- 4. What this deployment has WIRED --------------------------------------
+// ---- 5. What this deployment has WIRED --------------------------------------
 
 /**
  * One model in the workspace's catalog, reduced to the question a caller actually has: can a run

@@ -364,6 +364,38 @@ export class GitHubSyncService {
   }
 
   /**
+   * Link a repo named as `owner/name`, resolving the provider id here rather than in the caller.
+   *
+   * The door a HEADLESS caller comes through (`POST /api/v1/repos/link`): a browser-driven flow
+   * picks a repo out of {@link listAvailableRepos} and already holds a provider id, but a setup
+   * script holds the name a person typed and cannot know an id for a repo no public read lists.
+   *
+   * Resolution goes through `listAvailableRepos` with an exact-slug query rather than a bare
+   * `getRepo`, so it reaches everything the picker can reach: the App/PAT point-read, the provider
+   * search, and the viewer expansion when a token is supplied. Null means UNREACHABLE, which is the
+   * one thing the caller must not report as "linked": there is nothing here that could tell an
+   * unreachable repo from one that does not exist, so the refusal names both.
+   */
+  async linkRepoBySlug(
+    workspaceId: string,
+    owner: string,
+    name: string,
+    opts: { userId?: string; userToken?: string } = {},
+  ): Promise<GitHubRepo | null> {
+    const available = await this.listAvailableRepos(workspaceId, { ...opts, q: `${owner}/${name}` })
+    // Matched case-insensitively, as both providers treat a repository name, and against the OWNER
+    // too: a slug search can surface a same-named repository under another account, and linking that
+    // one would be a silent substitution rather than the miss it is.
+    const match = available.find(
+      (repo) =>
+        repo.owner.toLowerCase() === owner.toLowerCase() &&
+        repo.name.toLowerCase() === name.toLowerCase(),
+    )
+    if (!match) return null
+    return this.linkRepo(workspaceId, match.githubId, opts)
+  }
+
+  /**
    * Link a single repo into this workspace without disturbing the rest (unlike
    * {@link setLinkedRepos}, which sets the exact set and tombstones the others).
    * Projects + deep-syncs the repo the first time it's seen, and is a no-op that
