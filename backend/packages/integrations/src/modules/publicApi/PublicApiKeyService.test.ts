@@ -79,8 +79,20 @@ describe('PublicApiKeyService', () => {
       scope: 'write',
       label: 'external system',
       externalIdentity: null,
+      actsAsUserId: null,
       createdAt: record.createdAt,
     })
+  })
+
+  it('carries the bound user through authentication, so a run can pin it at admission', async () => {
+    const { service } = makeService()
+    const { secret } = await service.issue(
+      { accountId: 'acc_1', workspaceId: 'ws_1', actsAsUserId: 'usr_7' },
+      'my own runs',
+    )
+    // The binding is what lets a headless start unlock the minter's personal subscription; it has
+    // to survive `authenticate`, because that is the only place the run paths ever see the row.
+    expect((await service.authenticate(secret))?.actsAsUserId).toBe('usr_7')
   })
 
   it('records the minting user (audit), defaulting to null when none is supplied', async () => {
