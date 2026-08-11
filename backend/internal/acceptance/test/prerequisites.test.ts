@@ -4,6 +4,7 @@ import { unreachableRepoSteps } from '../src/adopt.ts'
 import type { AcceptanceConfig } from '../src/config.ts'
 import type { PrerequisiteVerdict, Remedy } from '../src/preflight.ts'
 import { type PreflightContext, PREREQUISITES } from '../src/prerequisites.ts'
+import type { IssueApi, IssueCredentialVerdict } from '../src/vcsIssues.ts'
 
 // What is pinned here is that a refusal is ACTIONABLE, which is a different property from being
 // correct: `test/preflight.test.ts` covers the disposition logic, and these cover the instructions
@@ -32,10 +33,29 @@ function config(overrides: Partial<AcceptanceConfig> = {}): AcceptanceConfig {
       ingressHostTemplate: '{{namespace}}.127.0.0.1.nip.io',
       namespaceTemplate: 'cf-acc-{{pullNumber}}',
     },
+    vcs: { token: 'reporter-token', apiBaseUrl: 'https://api.github.com' },
     stateDir: '.acceptance',
     runBudgetMs: 60_000,
     ...overrides,
   }
+}
+
+/**
+ * The reporter's issue client, faked at the seam the context takes it through.
+ *
+ * A verdict rather than a `fetch` fake, because what these cases pin is how the GATE reacts to each
+ * verdict: the four-way mapping from a provider's answer to instructions. Whether the client reads a
+ * 404 as `unreachable` is `test/vcsIssues.test.ts`'s claim, over the transport.
+ */
+function issueApiFor(verdict: IssueCredentialVerdict): PreflightContext['issueApiFor'] {
+  return () =>
+    ({
+      probe: async () => verdict,
+      file: async () => {
+        throw new Error('the gate must not FILE anything')
+      },
+      read: async () => null,
+    }) satisfies IssueApi
 }
 
 /** Run one prerequisite against a fake deployment and assert it refused, returning the verdict. */
@@ -49,6 +69,7 @@ async function refusal(
     config: config(),
     serviceTitles: [],
     adoptedServiceIds: [],
+    issueApiFor: issueApiFor({ status: 'ready' }),
     ...context,
   } as PreflightContext)
   if (verdict.status !== 'unsatisfied') {
@@ -66,6 +87,7 @@ async function satisfied(id: string, context: Partial<PreflightContext>): Promis
     config: config(),
     serviceTitles: [],
     adoptedServiceIds: [],
+    issueApiFor: issueApiFor({ status: 'ready' }),
     ...context,
   } as PreflightContext)
   if (verdict.status !== 'satisfied') {
@@ -75,6 +97,33 @@ async function satisfied(id: string, context: Partial<PreflightContext>): Promis
     )
   }
   return verdict.detail
+}
+
+/**
+ * Run one prerequisite and assert it reported UNKNOWN: it could not read an answer.
+ *
+ * The third state `preflight.ts` exists for, and worth its own helper beside the two above because
+ * the property is easy to lose: a probe that cannot reach a provider must not be reported as
+ * evidence the credential is bad, and nothing about a refusal's shape says so.
+ */
+async function unreadable(
+  id: string,
+  context: Partial<PreflightContext>,
+): Promise<Extract<PrerequisiteVerdict, { status: 'unknown' }>> {
+  const prerequisite = PREREQUISITES.find((entry) => entry.id === id)
+  if (!prerequisite) throw new Error(`no prerequisite '${id}'`)
+  const verdict = await prerequisite.check({
+    config: config(),
+    serviceTitles: [],
+    adoptedServiceIds: [],
+    issueApiFor: issueApiFor({ status: 'ready' }),
+    ...context,
+  } as PreflightContext)
+  if (verdict.status !== 'unknown') {
+    throw new Error(`expected '${id}' to report unknown, got '${verdict.status}'`)
+  }
+  assertActionable(id, verdict.remedy)
+  return verdict
 }
 
 /**
@@ -467,6 +516,117 @@ describe('target-repos', () => {
     // repository holds content, and a verdict that read as "both are empty" would be a guess.
     const detail = await satisfied('target-repos', { client: client(both()) })
     expect(detail).toContain('not readable over /api/v1')
+  })
+})
+
+describe('issue-credential', () => {
+  const client = (provider: string | null) =>
+    ({
+      vcs: {
+        getConnection: async () => ({
+          connection: provider ? { provider, accountLogin: 'intended-org' } : null,
+        }),
+      },
+    }) as unknown as CatFactoryClient
+
+  it('sends an expired token to be re-minted, naming both scope shapes that work', async () => {
+    const verdict = await refusal('issue-credential', {
+      client: client('github'),
+      issueApiFor: issueApiFor({ status: 'unauthenticated' }),
+    })
+    expect(verdict.problem).toContain('401')
+    expect(verdict.remedy.steps.join('\n')).toContain('Issues: Read and write')
+    // The prefilled minting page is the whole reason `configure` grew a step for this.
+    expect(verdict.remedy.steps.join('\n')).toContain('run configure')
+  })
+
+  it('names BOTH causes of a 404, which a provider deliberately answers identically', async () => {
+    const verdict = await refusal('issue-credential', {
+      client: client('github'),
+      issueApiFor: issueApiFor({ status: 'unreachable' }),
+    })
+    expect(verdict.problem).toContain('cf-acc-catalog-api')
+    expect(verdict.remedy.steps.join('\n')).toContain('Grant this token access')
+    // The repository the SPEC files against, not the other one: probing the wrong half would pass a
+    // pass that then cannot file.
+    expect(commandsOf(verdict.remedy).join('\n')).toContain(
+      'https://api.github.com/repos/intended-org/cf-acc-catalog-api',
+    )
+  })
+
+  it('offers the one-click fix for a repository with Issues switched off', async () => {
+    const verdict = await refusal('issue-credential', {
+      client: client('github'),
+      issueApiFor: issueApiFor({ status: 'issues-disabled' }),
+    })
+    expect(verdict.remedy.steps.join('\n')).toContain('Turn Issues on')
+  })
+
+  it('states what would unblock a provider this suite cannot file on', async () => {
+    // Not a defect to work around silently: the missing piece is one configured URL, and a refusal
+    // that says so is what stops the next reader concluding the client is broken.
+    const verdict = await refusal('issue-credential', {
+      client: client('gitlab'),
+      issueApiFor: () => null,
+    })
+    expect(verdict.problem).toContain('gitlab')
+    expect(verdict.remedy.steps.join('\n')).toContain('ACCEPTANCE_VCS_API_BASE')
+  })
+
+  it('reports an unreadable probe as UNKNOWN rather than as a bad credential', async () => {
+    const verdict = await unreadable('issue-credential', {
+      client: client('github'),
+      issueApiFor: issueApiFor({ status: 'unreadable', detail: 'fetch failed' }),
+    })
+    expect(verdict.probeFailure).toContain('fetch failed')
+    // The one override that turns this into a fix rather than a shrug.
+    expect(verdict.remedy.steps.join('\n')).toContain('ACCEPTANCE_VCS_API_BASE')
+  })
+
+  it('does not claim a verdict when nothing is connected, since the provider decides the API', async () => {
+    const verdict = await unreadable('issue-credential', { client: client(null) })
+    expect(verdict.probeFailure).toContain('vcs-connection')
+  })
+})
+
+describe('tracker-writeback', () => {
+  const client = (writeback: Record<string, boolean>, updatedAt: number | null = null) =>
+    ({
+      tracker: { getWriteback: async () => ({ writeback, updatedAt }) },
+    }) as unknown as CatFactoryClient
+
+  const all = { commentOnPrOpen: true, resolveOnMerge: true, questionsOnPark: true }
+
+  it('passes a workspace that has never configured it, since the defaults are ON', async () => {
+    // The gate exists for the deliberately-off case; a fresh board must not have to configure
+    // anything to run the pass.
+    const detail = await satisfied('tracker-writeback', { client: client(all) })
+    expect(detail).toContain('deployment defaults')
+  })
+
+  it('says whose choice it is reporting when the workspace HAS configured it', async () => {
+    const detail = await satisfied('tracker-writeback', { client: client(all, 1_700_000_000_000) })
+    expect(detail).toContain("workspace's own setting")
+  })
+
+  it('names every action that is off, and offers the merging PATCH as the fix', async () => {
+    const verdict = await refusal('tracker-writeback', {
+      client: client({ ...all, commentOnPrOpen: false, resolveOnMerge: false }, 1),
+    })
+    expect(verdict.problem).toContain('resolveOnMerge')
+    expect(verdict.problem).toContain('commentOnPrOpen')
+    const commands = commandsOf(verdict.remedy).join('\n')
+    expect(commands).toContain('PATCH')
+    expect(commands).toContain('/api/v1/tracker/writeback')
+    // A MERGE, so the fix cannot quietly move the setting it does not name.
+    expect(verdict.remedy.steps.join('\n')).toContain('MERGE')
+  })
+
+  it('passes with questionsOnPark off, which spec 04 does not use, and says so', async () => {
+    const detail = await satisfied('tracker-writeback', {
+      client: client({ ...all, questionsOnPark: false }, 1),
+    })
+    expect(detail).toContain('questionsOnPark is off')
   })
 })
 

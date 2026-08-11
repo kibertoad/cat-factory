@@ -218,3 +218,59 @@ correct before paging was added.
 
 ${where}`.trim()
 }
+
+/**
+ * The issue spec 04 files on the provider, as an outside reporter.
+ *
+ * Written as an issue rather than as a task description, because that is what it is: it lands on a
+ * repository through the provider's own API and the platform has to make sense of it AS FOUND
+ * (`GET /api/v1/repos` never sees it; the task is filed with `ticket`, and every agent step then
+ * re-reads the live issue as context).
+ *
+ * Two rules shape what it asks for, and both are about keeping spec 04 a test of the INTAKE loop
+ * rather than a second test of the delivery machinery specs 02 and 03 already cover:
+ *
+ *   - **Small, and orthogonal to the shipped contract.** It tightens input VALIDATION on
+ *     `GET /items` and changes nothing about a valid request, so it cannot disturb the paging
+ *     contract spec 03 has just settled between the two services. A feature that moved that
+ *     contract would make a spec 04 failure unreadable: nobody could tell an intake bug from a
+ *     regression in the thing before it.
+ *   - **Complete enough not to park.** The pipeline's requirements review parks a run that has to
+ *     ask a question, which spec 03 exists to exercise and which here would only slow the loop
+ *     down, so the expected behaviour is stated flatly: which input, which status, which message
+ *     shape, and what must NOT change.
+ *
+ * It is also a real inconsistency the scaffold briefs planted between them rather than an invented
+ * chore: {@link backendFeatureBrief} makes `limit` strict (out of range is a 400) and `offset`
+ * lenient (clamped), so a caller who fat-fingers one gets an error and the other silently gets
+ * page 1. That is exactly the kind of thing a reporter notices from outside.
+ */
+export function offsetValidationIssue(): { title: string; body: string } {
+  return {
+    title: 'GET /items silently ignores a non-numeric offset instead of rejecting it',
+    body: `
+Filing this from outside the team: I am calling the catalog API from a script and lost half an hour
+to it, so it seems worth reporting.
+
+\`GET /items?limit=abc\` behaves as I would expect: HTTP 400, and the body tells me \`limit\` was
+wrong. But \`GET /items?offset=abc\` returns HTTP 200 with the FIRST page of items, exactly as if I
+had passed no offset at all. My script was building the query string wrong for every page, and
+because each response was a valid 200 nothing in my error handling ever fired: I just kept reading
+page 1 and concluding the catalog had ten items in it.
+
+What I would expect, so the two parameters behave alike:
+
+- \`offset\` that is not a base-10 integer (\`abc\`, \`1.5\`, \`\` \`1e3\` \`\`, an empty
+  \`?offset=\`) is rejected with HTTP 400 and a body naming \`offset\` as the parameter at fault,
+  in the same shape the existing \`limit\` error uses.
+- The documented clamping of a NUMERIC offset below the first position must not change: an offset
+  of 0 or a negative offset still answers 200 from the start of the catalog, because that is
+  documented behaviour other callers rely on. Only unparseable input becomes an error.
+- A valid \`offset\` and \`limit\` keep answering exactly as they do today, including the total.
+- The README's query-parameter section says which values are rejected and which are clamped, since
+  the difference is the whole surprise here.
+
+Please cover both branches with tests: an unparseable offset is a 400, and offset 0 is still a 200
+starting at the first item.`.trim(),
+  }
+}

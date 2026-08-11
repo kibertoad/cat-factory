@@ -36,6 +36,7 @@ from .models import (
     GetDebugLlmExportResponse,
     GetPublicMergeRecordResponse,
     GetPublicRunOutcomeResponse,
+    GetPublicTrackerWritebackResponse,
     GetPublicVcsConnectionResponse,
     LinkPublicRepoRequest,
     ListDebugAgentContextResponse,
@@ -111,6 +112,7 @@ from .models import (
     TestPublicEnvironmentConnectionResponse,
     UpdatePublicServiceRequest,
     UpdatePublicTask,
+    UpdatePublicTrackerWritebackRequest,
 )
 
 
@@ -933,6 +935,57 @@ class VcsResource:
             timeout=timeout,
         )
         return GetPublicVcsConnectionResponse.from_dict(raw)
+
+
+class TrackerResource:
+    """What this workspace does to a task's LINKED tracker issue as its pull request
+    progresses: comment when it opens, comment and close the issue when it merges, and post
+    a headless run's parked review findings so the reporter can answer where they filed. The
+    write MERGES, so turning one action on leaves the other two as they were. It is the
+    writeback half of the workspace's tracker configuration; the filing selection (which
+    tracker a tech-debt ticket is raised on) is not published yet.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def get_writeback(self, *, timeout: float | None = None) -> GetPublicTrackerWritebackResponse:
+        """Read the workspace’s tracker writeback disposition
+        What this workspace does to a task’s LINKED tracker issue as its pull request
+        progresses: comment when the pull request opens, comment and close the issue when it
+        merges, and post a headless run’s parked requirements-review findings so the
+        reporter can answer where they filed. Worth reading before filing a ticket-linked
+        task, since it decides whether the issue the work came from ever hears the outcome.
+        `updatedAt` is null when nobody has chosen a disposition, in which case the values
+        are this deployment’s defaults (all three ON). Requires an `admin` key.
+        `GET /api/v1/tracker/writeback` (operation `getPublicTrackerWriteback`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/tracker/writeback",
+            query=None,
+            timeout=timeout,
+        )
+        return GetPublicTrackerWritebackResponse.from_dict(raw)
+
+    def update_writeback(self, body: UpdatePublicTrackerWritebackRequest | None = None, *, timeout: float | None = None) -> GetPublicTrackerWritebackResponse:
+        """Change the workspace’s tracker writeback disposition
+        Turn one or more writeback actions on or off. A MERGE: an action you omit keeps its
+        stored value, so a caller acting on one decision cannot silently move the other two.
+        This is workspace-wide configuration, so it changes what happens to every task’s
+        ticket on the board; the read beside it reports `updatedAt` so a caller can see
+        whether it is about to overwrite somebody’s choice. An empty patch is a no-op and
+        does not stamp `updatedAt`. Requires an `admin` key.
+        `PATCH /api/v1/tracker/writeback` (operation `updatePublicTrackerWriteback`).
+        """
+        raw = self._transport.request(
+            "PATCH",
+            f"/api/v1/tracker/writeback",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return GetPublicTrackerWritebackResponse.from_dict(raw)
 
 
 class RiskPoliciesResource:
@@ -2420,6 +2473,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "environments": EnvironmentsResource(transport),
         "models": ModelsResource(transport),
         "vcs": VcsResource(transport),
+        "tracker": TrackerResource(transport),
         "risk_policies": RiskPoliciesResource(transport),
         "model_presets": ModelPresetsResource(transport),
         "webhook": WebhookResource(transport),

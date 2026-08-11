@@ -10,7 +10,7 @@ import {
   type TrackerSettings,
   type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
-import { adHocPipelineIdFor } from '@cat-factory/contracts'
+import { adHocPipelineIdFor, DEFAULT_TRACKER_WRITEBACK } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { FakeTaskSourceProvider } from '../FakeTaskSourceProvider.js'
 import { defineBugHuntConformance } from './bug-hunt.js'
@@ -605,31 +605,86 @@ function registerTrackerWritebackTests(harness: ConformanceHarness): void {
   })
 
   it('round-trips the headless question-writeback workspace toggle', async () => {
-    // The opt-in that admits the headless clarification loop's question echo. It rides the
+    // The toggle that admits the headless clarification loop's question echo. It rides the
     // same `tracker_settings` row as the PR toggles on both stores, so a facade that forgot
     // the column would silently leave every headless park un-echoed.
     const app = harness.makeApp()
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
 
-    const off = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
+    // A workspace that has set nothing runs on the deployment defaults, which are ON for all
+    // three actions (`DEFAULT_TRACKER_WRITEBACK`). Asserted against the constant rather than a
+    // literal `true`: this is the value the writeback service and the SPA's panel resolve too, so
+    // a change of stance has to move all of them together or fail here.
+    const unset = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
+    expect(unset.body.writebackQuestionsOnPark).toBe(
+      DEFAULT_TRACKER_WRITEBACK.writebackQuestionsOnPark,
+    )
+    expect(unset.body.writebackResolveOnMerge).toBe(
+      DEFAULT_TRACKER_WRITEBACK.writebackResolveOnMerge,
+    )
+
+    const off = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
+      tracker: 'github',
+      writebackQuestionsOnPark: false,
+    })
     expect(off.body.writebackQuestionsOnPark).toBe(false)
 
-    const on = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
-      tracker: 'github',
-      writebackQuestionsOnPark: true,
-    })
-    expect(on.body.writebackQuestionsOnPark).toBe(true)
-
     const reread = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
-    expect(reread.body.writebackQuestionsOnPark).toBe(true)
+    expect(reread.body.writebackQuestionsOnPark).toBe(false)
 
-    // Omitting it on a later PUT resets it to off, exactly like the sibling toggles — the
-    // settings row is replaced wholesale, not merged.
+    // Omitting it on a later PUT resets it to the DEFAULT, exactly like the sibling toggles: the
+    // settings row is replaced wholesale, not merged. That is the whole reason the public
+    // `PATCH /api/v1/tracker/writeback` is a separate operation rather than a thin wrapper.
     const reset = await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
       tracker: 'github',
     })
-    expect(reset.body.writebackQuestionsOnPark).toBe(false)
+    expect(reset.body.writebackQuestionsOnPark).toBe(
+      DEFAULT_TRACKER_WRITEBACK.writebackQuestionsOnPark,
+    )
+  })
+
+  it('merges a public writeback patch onto the stored row, leaving the untouched flags alone', async () => {
+    // The `/api/v1` half of the same row, and the property that separates it from the PUT above:
+    // a caller naming ONE action must not move the other two. Only a conformance test can pin it
+    // per store, because "left alone" is a claim about what the repository wrote, and the response
+    // to the patch itself looks identical whether the merge happened in the service or the caller
+    // happened to send all three.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    // `admin`, which is the floor both tracker routes declare: workspace-wide configuration.
+    const key = await app.call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'external',
+      scope: 'admin',
+    })
+    const auth = { authorization: `Bearer ${key.body.secret}` }
+
+    await app.call<TrackerSettings>('PUT', `/workspaces/${wsId}/tracker-settings`, {
+      tracker: 'github',
+      writebackCommentOnPrOpen: false,
+      writebackResolveOnMerge: false,
+      writebackQuestionsOnPark: false,
+    })
+
+    const patched = await app.call<{
+      writeback: { commentOnPrOpen: boolean; resolveOnMerge: boolean; questionsOnPark: boolean }
+      updatedAt: number | null
+    }>('PATCH', '/api/v1/tracker/writeback', { writeback: { resolveOnMerge: true } }, auth)
+    expect(patched.status).toBe(200)
+    expect(patched.body.writeback).toEqual({
+      commentOnPrOpen: false,
+      resolveOnMerge: true,
+      questionsOnPark: false,
+    })
+    expect(patched.body.updatedAt).toBeGreaterThan(0)
+
+    // The internal read sees the same row: one surface, two doors, and the filing selection the
+    // patch never named is still there.
+    const internal = await app.call<TrackerSettings>('GET', `/workspaces/${wsId}/tracker-settings`)
+    expect(internal.body.writebackResolveOnMerge).toBe(true)
+    expect(internal.body.writebackCommentOnPrOpen).toBe(false)
+    expect(internal.body.tracker).toBe('github')
   })
 }
 

@@ -690,3 +690,80 @@ export type PublicModelPreset = v.InferOutput<typeof publicModelPresetSchema>
 
 export const publicModelPresetListSchema = v.object({ presets: v.array(publicModelPresetSchema) })
 export type PublicModelPresetList = v.InferOutput<typeof publicModelPresetListSchema>
+
+// ---- the workspace's tracker WRITEBACK disposition ----------------------------
+
+/**
+ * What the platform does to a task's linked tracker issue as its pull request progresses.
+ *
+ * Three independent actions rather than one switch, because they are answerable separately: a
+ * workspace can want the merge recorded on the ticket without wanting a parked review's questions
+ * asked there. Each is `true`/`false` here and not the internal `'on' | 'off'` override vocabulary,
+ * which belongs to the PER-TASK field this setting is the default for.
+ *
+ * The names drop the internal `writeback` prefix, which the nesting already says.
+ */
+export const publicTrackerWritebackSchema = v.object({
+  /** Comment on the linked issue when a task's pull request opens. */
+  commentOnPrOpen: v.boolean(),
+  /** Comment and CLOSE the linked issue when the pull request merges. */
+  resolveOnMerge: v.boolean(),
+  /**
+   * Post a headless run's parked requirements-review findings on the linked issue, so the
+   * reporter can answer where they filed. Only consulted for runs started through this API or
+   * dispatched from a ticket (`backend/docs/adr/0047-headless-clarification-loop.md`).
+   */
+  questionsOnPark: v.boolean(),
+})
+export type PublicTrackerWriteback = v.InferOutput<typeof publicTrackerWritebackSchema>
+
+/**
+ * The workspace's writeback disposition, and whether anyone has ever chosen it.
+ *
+ * **Writeback only, deliberately, though the row it reads holds more.** The rest of
+ * `tracker_settings` is the FILING selection (which tracker the tech-debt recurring pipeline raises
+ * its ticket on, plus that vendor's target: a Jira project key, a Linear team). That is a different
+ * decision with its own cross-field rules, and it is not what writeback keys off: the writeback
+ * follows each LINKED issue's own source, so a workspace with no filing tracker selected still
+ * writes back to the GitHub issue a task was filed from. Publishing the two together would invite
+ * exactly the misreading that one gates the other. The filing half can be added here later, which
+ * is why the path is `/tracker/writeback` under a `tracker` group rather than the whole row.
+ */
+export const publicTrackerWritebackSettingsSchema = v.object({
+  writeback: publicTrackerWritebackSchema,
+  /**
+   * When the workspace last saved its writeback disposition, or NULL when it never has, in which
+   * case the values above are this deployment's defaults rather than anyone's choice.
+   *
+   * Null rather than a `0`, which is what the internal read spells an absent row as: an epoch
+   * timestamp is a value a caller can format, print and compare, and every one of those reads as a
+   * setting saved in 1970 rather than as one nobody has touched.
+   */
+  updatedAt: v.nullable(v.number()),
+})
+export type PublicTrackerWritebackSettings = v.InferOutput<
+  typeof publicTrackerWritebackSettingsSchema
+>
+
+/**
+ * Change one or more writeback actions, leaving the rest as they are.
+ *
+ * A genuine PATCH, unlike the internal `PUT /tracker-settings` it writes through, which replaces
+ * the row wholesale and resets an omitted flag to the default. The SPA's panel can send all three
+ * every time because it has just rendered all three; a caller here is acting on one decision, and a
+ * merge is the only semantics under which doing so cannot silently move the other two.
+ *
+ * An empty patch is a harmless no-op, exactly as it is on task update.
+ */
+export const updatePublicTrackerWritebackSchema = v.object({
+  writeback: v.optional(
+    v.object({
+      commentOnPrOpen: v.optional(v.boolean()),
+      resolveOnMerge: v.optional(v.boolean()),
+      questionsOnPark: v.optional(v.boolean()),
+    }),
+  ),
+})
+export type UpdatePublicTrackerWritebackInput = v.InferOutput<
+  typeof updatePublicTrackerWritebackSchema
+>

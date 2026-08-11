@@ -1,8 +1,9 @@
 # `@cat-factory/acceptance`: the live-deployment acceptance suite
 
 Adopts two empty repositories an operator created, scaffolds a service into each, ships a
-cross-service feature onto a real k3s ephemeral environment, then investigates and fixes the defect
-that feature leaves behind, against a LIVE local deployment with nothing faked. Full notes:
+cross-service feature onto a real k3s ephemeral environment, investigates and fixes the defect that
+feature leaves behind, and finally files an issue as an OUTSIDE reporter and asserts the platform
+delivered it and CLOSED it, against a LIVE local deployment with nothing faked. Full notes:
 [`README.md`](./README.md).
 
 **Entry:** `acceptance/*.acceptance.ts` via
@@ -15,7 +16,8 @@ carrying the steps and commands that fix it.
 that `.env`. Its rule is **resolve rather than ask**: the workspace from `GET /api/v1/me`, the owner
 from the VCS connection, the preset from the library joined against the model catalog, the cluster
 from the kubeconfig (through `@cat-factory/cli`'s own `readApiServerCommand`/`readTokenCommand`, so
-the namespace and secret name are not restated here). What it asks is the API token and the two
+the namespace and secret name are not restated here). What it asks is the two tokens nothing can mint (the API key, and the
+REPORTER token spec 04 files with, whose provider page it opens prefilled) plus the two
 repository names, and it then ADOPTS each one (`POST /api/v1/repos/link`, idempotent), STATING each
 attempt's outcome: an unreachable repository gets the creation page and the steps only a person can
 carry out. It never overwrites a value without naming it, carries unmanaged lines over byte for byte,
@@ -61,14 +63,15 @@ every CI lane.
 
 **Where things live**
 
-| File                          | What                                                                                               |
-| ----------------------------- | -------------------------------------------------------------------------------------------------- |
-| `acceptance/00-preflight`     | Reports each prerequisite as its own test. Creates nothing.                                        |
-| `acceptance/01-adopt-…`       | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.   |
-| `acceptance/02-feature-…`     | `pl_build` across both services; environment / CI / merge evidence.                                |
-| `acceptance/03-investigate-…` | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                   |
-| `src/`                        | The harness, plus `configure`. Per-file roles are tabled in the README.                            |
-| `test/`                       | Unit tests for the pure logic (config, gate, ledger, journal, status, evidence, waits, configure). |
+| File                           | What                                                                                               |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `acceptance/00-preflight`      | Reports each prerequisite as its own test. Creates nothing.                                        |
+| `acceptance/01-adopt-…`        | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.   |
+| `acceptance/02-feature-…`      | `pl_build` across both services; environment / CI / merge evidence.                                |
+| `acceptance/03-investigate-…`  | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                   |
+| `acceptance/04-issue-intake-…` | An issue filed as the REPORTER, delivered from its `ticket` link, and closed by the writeback.     |
+| `src/`                         | The harness, plus `configure`. Per-file roles are tabled in the README.                            |
+| `test/`                        | Unit tests for the pure logic (config, gate, ledger, journal, status, evidence, waits, configure). |
 
 **The rules the specs are written to** (each expanded in the README, and each the reason a
 particular file exists):
@@ -105,6 +108,17 @@ by fixing the bug.
 `test/evidence.test.ts` describe one specific off-by-one (page 2 repeats item 10, last page short).
 Edit the pagination rules and that trace changes, so the bug report has to change with them or the
 investigator is handed a symptom the code does not produce.
+
+**Spec 04 files its issue OUTSIDE the platform, and that is the point.** The reporter holds
+`ACCEPTANCE_VCS_TOKEN` and talks to the provider's REST API (`src/vcsIssues.ts`), because an issue the
+platform's own credential created and closed proves only that the credential works. The client is
+provider-KEYED and `gitlab` is null with its reason stated (no `/api/v1` read publishes which instance
+a connection talks to), so a GitLab workspace is refused by `issue-credential` rather than filed
+somewhere invented. Two traps: the FILING is recorded in the ledger the moment it returns, since no
+`/api/v1` read can hand an issue back and a re-filed one leaves the first open forever; and a closed
+issue ALONE is not evidence, because a provider closes one itself when a merged pull request's text
+carries `Closes #12` and that path posts no comment, which is why `checkIssueWriteback` grades the
+close together with two distinct comments naming the pull request.
 
 **Every workspace-scoped call goes through the published SDK**, setup included: the repository list,
 ADOPTING one, backing a service with one, the cluster connection, a service's `provisioning`, the

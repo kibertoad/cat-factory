@@ -89,6 +89,15 @@ const SURFACE = {
   listPublicRiskPolicies: { group: 'riskPolicies', method: 'list' },
   listPublicModelPresets: { group: 'modelPresets', method: 'list' },
 
+  // ---- The workspace's tracker writeback disposition ----------------------------------------
+  // A `tracker` group with `getWriteback`/`updateWriteback` rather than a `trackerWriteback` group
+  // with `get`/`update`: the resource is the workspace's TRACKER configuration, of which the
+  // writeback disposition is the half `/api/v1` publishes today. The filing selection (which
+  // tracker raises a tech-debt ticket, and that vendor's target) is the sibling this leaves room
+  // for, and it would be `tracker.getSettings` beside these rather than a second group.
+  getPublicTrackerWriteback: { group: 'tracker', method: 'getWriteback' },
+  updatePublicTrackerWriteback: { group: 'tracker', method: 'updateWriteback' },
+
   // ---- Notifications --------------------------------------------------------------------
   listPublicNotifications: { group: 'notifications', method: 'list' },
   actPublicNotification: { group: 'notifications', method: 'act' },
@@ -309,6 +318,8 @@ export const GROUP_DOCS = {
   models:
     'The models a run in this workspace could actually dispatch to, and why an unavailable one is unavailable: unconfigured, or refused by the account model-family policy. Those two need opposite fixes.',
   vcs: "The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup.",
+  tracker:
+    "What this workspace does to a task's LINKED tracker issue as its pull request progresses: comment when it opens, comment and close the issue when it merges, and post a headless run's parked review findings so the reporter can answer where they filed. The write MERGES, so turning one action on leaves the other two as they were. It is the writeback half of the workspace's tracker configuration; the filing selection (which tracker a tech-debt ticket is raised on) is not published yet.",
   riskPolicies:
     'The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset.',
   modelPresets:

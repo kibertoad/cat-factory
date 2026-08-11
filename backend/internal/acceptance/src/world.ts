@@ -68,6 +68,27 @@ export type RunRecord = {
   answeredKinds: readonly string[]
 }
 
+/**
+ * The issue spec 04 filed on the provider, as the reporter.
+ *
+ * The one thing a pass creates that is NOT on the deployment, which is why it is recorded with its
+ * whole address rather than an id: nothing in `/api/v1` can hand it back, so a resumed pass that
+ * lost this record would file a SECOND issue and deliver that instead, leaving the first open
+ * forever with the platform's own comment on it.
+ *
+ * `provider` rides along because it decides which client can read the issue back (`vcsIssues.ts`),
+ * and a workspace whose connection moved provider mid-pass must not be asked for a GitHub issue on
+ * a GitLab host.
+ */
+export type IssueRecord = {
+  provider: string
+  owner: string
+  repo: string
+  number: number
+  /** The canonical web URL: what was filed, and the `ticket.ref` the task was linked through. */
+  url: string
+}
+
 export type World = {
   /** Groups everything one pass created, and names its ledger. */
   runId: string
@@ -92,6 +113,10 @@ export type World = {
   featureFrontend: RunRecord | null
   /** Spec 03: the bug report filed against the shipped feature. */
   bugfix: RunRecord | null
+  /** Spec 04: the issue filed on the provider, before any of it reached the platform. */
+  intakeIssue: IssueRecord | null
+  /** Spec 04: the run that delivered that issue, filed as a task linked to it. */
+  issueDelivery: RunRecord | null
 }
 
 export function emptyWorld(runId: string): World {
@@ -104,6 +129,8 @@ export function emptyWorld(runId: string): World {
     featureBackend: null,
     featureFrontend: null,
     bugfix: null,
+    intakeIssue: null,
+    issueDelivery: null,
   }
 }
 
@@ -265,7 +292,25 @@ export function coerceWorld(value: unknown): World | null {
     featureBackend: coerceRun(record.featureBackend),
     featureFrontend: coerceRun(record.featureFrontend),
     bugfix: coerceRun(record.bugfix),
+    intakeIssue: coerceIssue(record.intakeIssue),
+    issueDelivery: coerceRun(record.issueDelivery),
   }
+}
+
+function coerceIssue(value: unknown): IssueRecord | null {
+  const record = asRecord(value)
+  if (!record) return null
+  const { provider, owner, repo, number, url } = record
+  if (
+    typeof provider !== 'string' ||
+    typeof owner !== 'string' ||
+    typeof repo !== 'string' ||
+    typeof number !== 'number' ||
+    typeof url !== 'string'
+  ) {
+    return null
+  }
+  return { provider, owner, repo, number, url }
 }
 
 function coerceService(value: unknown): ServiceRecord | null {

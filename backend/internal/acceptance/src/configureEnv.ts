@@ -18,6 +18,7 @@ import type { PrReportRunProvider } from '@cat-factory/sdk'
 export const SECRET_KEYS: ReadonlySet<string> = new Set([
   'CAT_FACTORY_API_KEY',
   'ACCEPTANCE_K3S_TOKEN',
+  'ACCEPTANCE_VCS_TOKEN',
 ])
 
 /** What one managed variable becomes, and where its value came from. */
@@ -234,4 +235,33 @@ export function describeMerge(merge: EnvMerge, path: string): readonly string[] 
     lines.push(`  left alone (not managed here): ${merge.preserved.join(', ')}`)
   }
   return lines
+}
+
+/**
+ * Where the operator mints the REPORTER token, prefilled, or null when this platform cannot say.
+ *
+ * The sibling of {@link REPO_CREATION_URL}, and the same `Record` over the provider union for the
+ * same reason: a third provider fails to compile here rather than sending someone to GitHub's
+ * settings for a token their host has never heard of.
+ *
+ * GitHub's CLASSIC token form takes `description` and `scopes` as query parameters, which is what
+ * makes a prefilled link possible at all: the fine-grained form
+ * (`/settings/personal-access-tokens/new`) accepts neither, so a link to it would be a link to an
+ * empty page with the choices still to make. A fine-grained token IS the better credential here
+ * (Issues read+write on one repository, versus classic `repo` across everything the account can
+ * see), so the caller offers this link and says that in the same breath rather than either choosing
+ * for the operator or pretending the narrow option cannot be prefilled for a reason of ours.
+ *
+ * `repo` and not `public_repo`: a private target repository is the normal case for an acceptance
+ * pass, and `public_repo` cannot see one at all. GitLab is null for the reason its repository link
+ * is (`vcsIssues.ts` states it): nothing publishes which instance to send the operator to.
+ */
+export const REPORTER_TOKEN_URL: Record<PrReportRunProvider, (note: string) => string | null> = {
+  github: (note) => {
+    const url = new URL('https://github.com/settings/tokens/new')
+    url.searchParams.set('description', note)
+    url.searchParams.set('scopes', 'repo')
+    return url.href
+  },
+  gitlab: () => null,
 }

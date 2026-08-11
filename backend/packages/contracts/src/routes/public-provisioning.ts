@@ -10,10 +10,12 @@ import {
   publicEnvironmentConnectionViewSchema,
   publicModelPresetListSchema,
   publicRiskPolicyListSchema,
+  publicTrackerWritebackSettingsSchema,
   publicVcsConnectionViewSchema,
   publicWiredModelListSchema,
   testPublicEnvironmentConnectionSchema,
   updatePublicServiceSchema,
+  updatePublicTrackerWritebackSchema,
 } from '../public-provisioning.js'
 import { publicServiceSchema } from '../public-api.js'
 import { publicRepoSchema } from '../public-board.js'
@@ -260,5 +262,42 @@ export const listPublicModelPresetsContract = withMinScope(
     method: 'get',
     pathResolver: () => '/api/v1/model-presets',
     responsesByStatusCode: { 200: publicModelPresetListSchema, ...errorResponses },
+  }),
+)
+
+// ---- the workspace's tracker writeback disposition ---------------------------
+
+/**
+ * What this workspace does to a task's linked tracker issue as its pull request progresses.
+ *
+ * Worth reading before a caller files a ticket-linked task, because it is what decides whether the
+ * issue the work came from ever hears about the outcome. It also keeps two states apart that a
+ * caller cannot otherwise tell apart: a disposition somebody CHOSE, and the deployment defaults a
+ * workspace that has never opened the panel runs on (`updatedAt: null`).
+ */
+export const getPublicTrackerWritebackContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/tracker/writeback',
+    responsesByStatusCode: { 200: publicTrackerWritebackSettingsSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * Change this workspace's writeback disposition, one action at a time if that is all it decides.
+ *
+ * `admin` on this file's rule, and here the stronger argument applies: it is workspace-wide
+ * configuration, so a caller enabling `resolveOnMerge` changes what happens to every other task's
+ * ticket on the board too. That is precisely why it MERGES rather than replacing, and why the read
+ * beside it reports `updatedAt`: a caller can see it is about to overwrite somebody's choice.
+ */
+export const updatePublicTrackerWritebackContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'patch',
+    pathResolver: () => '/api/v1/tracker/writeback',
+    requestBodySchema: updatePublicTrackerWritebackSchema,
+    responsesByStatusCode: { 200: publicTrackerWritebackSettingsSchema, ...errorResponses },
   }),
 )

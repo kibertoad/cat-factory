@@ -1,3 +1,4 @@
+import { DEFAULT_TRACKER_WRITEBACK } from '@cat-factory/contracts'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { LinearTeam } from '~/types/domain'
@@ -16,9 +17,7 @@ export const useTrackerStore = defineStore('tracker', () => {
     tracker: null,
     jiraProjectKey: null,
     linearTeamId: null,
-    writebackCommentOnPrOpen: false,
-    writebackResolveOnMerge: false,
-    writebackQuestionsOnPark: false,
+    ...DEFAULT_TRACKER_WRITEBACK,
     updatedAt: 0,
   })
 
@@ -30,9 +29,7 @@ export const useTrackerStore = defineStore('tracker', () => {
       tracker: null,
       jiraProjectKey: null,
       linearTeamId: null,
-      writebackCommentOnPrOpen: false,
-      writebackResolveOnMerge: false,
-      writebackQuestionsOnPark: false,
+      ...DEFAULT_TRACKER_WRITEBACK,
       updatedAt: 0,
     }
   }

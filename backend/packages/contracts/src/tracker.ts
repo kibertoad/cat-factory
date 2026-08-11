@@ -22,20 +22,23 @@ export const trackerSettingsSchema = v.object({
   linearTeamId: v.nullable(v.string()),
   /**
    * Writeback: when a task's PR opens, post a comment on the task's linked tracker
-   * issue(s). Per-task overridable via `Block.trackerCommentOnPrOpen`. Default off.
+   * issue(s). Per-task overridable via `Block.trackerCommentOnPrOpen`; the default a
+   * workspace that has set nothing runs on is {@link DEFAULT_TRACKER_WRITEBACK}.
    */
   writebackCommentOnPrOpen: v.boolean(),
   /**
    * Writeback: when a task's PR merges, comment + close the linked tracker issue(s)
    * as resolved (GitHub closes natively; Jira transitions to its Done category).
-   * Per-task overridable via `Block.trackerResolveOnMerge`. Default off.
+   * Per-task overridable via `Block.trackerResolveOnMerge`; default
+   * {@link DEFAULT_TRACKER_WRITEBACK}.
    */
   writebackResolveOnMerge: v.boolean(),
   /**
    * Writeback: when a HEADLESS run's requirements review parks with open findings, post
    * them — each with its stable finding id — as a comment on the task's linked tracker
    * issue(s), so the loop is answerable from where the work was requested. Per-task
-   * overridable via `Block.trackerQuestionsOnPark`. Default off.
+   * overridable via `Block.trackerQuestionsOnPark`; default
+   * {@link DEFAULT_TRACKER_WRITEBACK}.
    *
    * Deliberately scoped to runs whose `ExecutionInstance.intakeOrigin` is HEADLESS
    * (`isHeadlessIntake`: a `/api/v1` start or a per-ticket tracker dispatch): a task started
@@ -47,7 +50,46 @@ export const trackerSettingsSchema = v.object({
 })
 export type TrackerSettings = v.InferOutput<typeof trackerSettingsSchema>
 
-/** Set a workspace's issue-tracker selection. */
+/** The three writeback actions, as they are spelled on a workspace's settings row. */
+export type TrackerWritebackFlags = Pick<
+  TrackerSettings,
+  'writebackCommentOnPrOpen' | 'writebackResolveOnMerge' | 'writebackQuestionsOnPark'
+>
+
+/**
+ * What each writeback action does for a workspace that has never set one, and what an omitted
+ * field on a wholesale PUT resets to.
+ *
+ * **ON, and that is a deliberate change of stance** (it was off for all three). The action only
+ * ever touches an issue a task is LINKED to, and nothing links one by accident: a link arrives by
+ * an operator importing an issue, by the recurring intake picking one up, or by a headless caller
+ * filing a task with `ticket`. Every one of those is a request to work the issue where it was
+ * filed, so leaving the loop half-closed by default meant the common outcome was a merged pull
+ * request and an issue still sitting open, with nothing on it saying the work had been done. The
+ * writeback is what makes the tracker, rather than this platform's own board, the place the
+ * reporter can keep watching.
+ *
+ * ONE constant rather than a literal per reader, because four readers have to agree about it: the
+ * settings service (what an absent row reports, and what an omitted PUT field resets to), the
+ * writeback service (what it does when no row exists), and the SPA's store (what the toggles show
+ * before a row does). They disagreed here once already, and the failure is silent both ways round:
+ * a reader defaulting off never posts and logs nothing, and one defaulting on closes issues a panel
+ * is drawing as off.
+ */
+export const DEFAULT_TRACKER_WRITEBACK: TrackerWritebackFlags = {
+  writebackCommentOnPrOpen: true,
+  writebackResolveOnMerge: true,
+  writebackQuestionsOnPark: true,
+}
+
+/**
+ * Set a workspace's issue-tracker selection.
+ *
+ * A WHOLESALE replace: an omitted writeback flag resets to {@link DEFAULT_TRACKER_WRITEBACK}
+ * rather than keeping what the row held. The SPA's panel sends all three every time, which is what
+ * makes that safe there; a caller sending one field alone wants
+ * `PATCH /api/v1/tracker/settings`, which merges.
+ */
 export const putTrackerSettingsSchema = v.object({
   tracker: v.nullable(trackerKindSchema),
   jiraProjectKey: v.optional(v.nullable(v.pipe(v.string(), v.trim()))),

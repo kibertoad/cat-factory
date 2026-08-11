@@ -491,3 +491,47 @@ What a consumer NOTICES, beyond the two new methods:
 - **The link's `owner` accepts a namespace PATH.** A GitLab project can live under nested groups, so
   its owner reads `group/subgroup`, which is what the available read publishes; the adopt takes back
   exactly what it was given.
+
+1.45.0: two new operations, no change to anything already published, so a consumer built against
+1.44.0 reads and writes exactly what it did before. `GET /api/v1/tracker/writeback` reports what a
+task's LINKED tracker issue hears as its pull request opens, merges, or parks a requirements review,
+and `PATCH /api/v1/tracker/writeback` changes it.
+
+They close the last gap in the ticket-driven loop this surface otherwise supports end to end. A
+caller has been able to file a task FROM a ticket since 1.30.0 (`ticket` on the create), and the
+platform comments on that issue and closes it when the work merges, but WHETHER it does was
+workspace configuration reachable only from the app. So the deployment shape that most needs the loop
+closed, one with nobody in the SPA at all, was the one that could neither read the disposition nor
+change it, and a caller had no way to tell "this deployment leaves tickets open" from "the writeback
+is broken".
+
+What a consumer NOTICES, beyond the two new methods:
+
+- **The published shape is the WRITEBACK half of the workspace's tracker settings, not the whole
+  row.** The rest of that row is the FILING selection (which tracker the tech-debt recurring pipeline
+  raises its ticket on, plus that vendor's target), which is a separate decision with its own
+  cross-field rules and is not what writeback keys off: the writeback follows each linked issue's own
+  source, so a workspace with no filing tracker selected still writes back to the GitHub issue a task
+  was filed from. Publishing both together would invite the reading that one gates the other. The
+  path is `/tracker/writeback` rather than `/tracker/settings` so the filing half can be added beside
+  it later, additively.
+- **The write MERGES, unlike the internal PUT it goes through.** An action a caller omits keeps its
+  stored value. That is a real difference in behaviour rather than a convenience: the app's panel can
+  replace the row wholesale because it has just rendered all three toggles, where a caller acting on
+  one decision cannot be expected to restate a row it never read, and a replace would silently reset
+  the other two to their defaults.
+- **`updatedAt` is nullable, and null means nobody has chosen.** The values alongside it are then the
+  deployment's defaults rather than anyone's decision, which is what a caller needs before
+  overwriting a board it shares. It is null rather than the `0` the internal read spells an absent
+  row as, because an epoch timestamp is a value a client formats and compares, and every one of those
+  readings is "configured in 1970".
+- **An empty patch is a no-op that does NOT stamp `updatedAt`.** Probing the endpoint cannot make the
+  defaults look chosen.
+- **The defaults themselves changed in this release, and that is a behaviour change rather than a
+  surface one.** All three writeback actions are now ON for a workspace that has never configured
+  them, where all three were off. It is not a `/api/v1` break (nothing published said what they
+  were), and it IS a change a deployment can notice: a board that never opened the issue-tracker
+  panel now closes a linked ticket when its task's pull request merges, and comments on it twice on
+  the way. The actions only ever touch an issue a task is LINKED to, and nothing links one by
+  accident, which is the reasoning behind the flip; a deployment that wants the old behaviour turns
+  it off with one call to the new operation.
