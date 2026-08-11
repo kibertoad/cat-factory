@@ -93,6 +93,54 @@ export function isPersonalCredentialState(state: PresetAvailability): boolean {
 }
 
 /**
+ * The preset a pass is PINNED to, with the catalog row its base model resolves to, or `null` when
+ * either is missing.
+ *
+ * Generic in both rows so the caller keeps the fields this join does not read. The up-front unlock
+ * names the model and its provider to the operator, and narrowing the return to
+ * `PresetRow`/`ModelRow` would send it back to re-find what this already found.
+ */
+export function pinnedModel<P extends PresetRow, M extends ModelRow>(
+  presets: readonly P[],
+  models: readonly M[],
+  presetId: string,
+): { preset: P; model: M } | null {
+  const preset = presets.find((row) => row.presetId === presetId)
+  const model = preset ? models.find((row) => row.modelId === preset.baseModelId) : undefined
+  return preset && model ? { preset, model } : null
+}
+
+/**
+ * The pinned pair as the surfaces that NAME it to an operator read it.
+ *
+ * Two fields beyond the join's own: the up-front unlock prompt states which preset and which model
+ * it is about to spend the operator's personal subscription on, and a prompt that named neither
+ * would be asking for a password on behalf of nothing.
+ */
+export type PinnedPreset = {
+  preset: { name: string }
+  model: ModelRow & { label: string; provider: string }
+}
+
+/**
+ * Whether a pass on the pinned model will be asked for the operator's PERSONAL password.
+ *
+ * A BOOLEAN over a model, and the third state a caller needs ("we could not tell") is the absence of
+ * a model to ask about, which is where it is produced and where it is therefore decided:
+ * `readPinnedPreset` answering `null`. Stated as a three-valued answer here instead, it was decided
+ * twice, once in this function and once in a `|| !pinned` guard at the one call site, and the second
+ * of those was unreachable.
+ *
+ * The signal is `personalSubscription` ALONE, never `available`. A selectable personal-subscription
+ * model is the case that produced this: the catalog reports the model dispatchable for this token and
+ * the dispatch still answers `428`, because what opens the credential is the password. Reading
+ * `available` here would ask for nothing in precisely the pass that needs it.
+ */
+export function needsPersonalPassword(model: ModelRow): boolean {
+  return model.personalSubscription === true
+}
+
+/**
  * Build the per-preset verdict once, then ask it per row: the sets are computed a single time
  * rather than per preset, so a 40-preset menu does not rebuild them 40 times.
  */

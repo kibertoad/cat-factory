@@ -48,7 +48,12 @@ import {
 import type { DeploymentApi } from './deploymentApi.ts'
 import type { AcceptanceConfig } from './config.ts'
 import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3s.ts'
-import { shellQuoted } from './operatorText.ts'
+import {
+  envAssignment,
+  perPersonPrefixInvocation,
+  resumeInvocation,
+  shellQuoted,
+} from './operatorText.ts'
 import type { Prerequisite, PrerequisiteVerdict, Remedy, RemedyCommand } from './preflight.ts'
 import { baseUrlStep } from './probeFailure.ts'
 import { usablePresets } from './presets.ts'
@@ -184,14 +189,14 @@ const KEY_REMEDIES: Record<
     steps: [
       `The key names workspace ${identity.workspaceId}; ACCEPTANCE_WORKSPACE_ID names ` +
         `${config.workspaceId}. Decide which board this pass belongs to, then move the other one.`,
-      'To keep the key, point the suite at the board the key already names (the export below).',
+      'To keep the key, point the suite at the board the key already names (the command below).',
       'To keep the board, mint a token on it: in the SPA, Integrations, "API access tokens", ' +
-        'Create a token with scope "Full access", then export it as CAT_FACTORY_API_KEY. The ' +
+        'Create a token with scope "Full access", then set it as CAT_FACTORY_API_KEY. The ' +
         'secret is shown once and cannot be recovered.',
     ],
     commands: [
       {
-        run: `export ACCEPTANCE_WORKSPACE_ID=${identity.workspaceId}`,
+        run: envAssignment('ACCEPTANCE_WORKSPACE_ID', identity.workspaceId),
         purpose: 'point the suite at the board this key is already bound to',
       },
       publicApiRead(config, '/me', 'confirm which workspace and scope the key now names'),
@@ -233,7 +238,7 @@ const ISSUE_CREDENTIAL_PROBLEMS: Record<IssueCredentialFault, (repo: string) => 
 
 const ISSUE_CREDENTIAL_STEPS: Record<IssueCredentialFault, (repo: string) => readonly string[]> = {
   unauthenticated: () => [
-    'Mint a new token and export it as ACCEPTANCE_VCS_TOKEN. A token scope cannot be widened in ' +
+    'Mint a new token and set it as ACCEPTANCE_VCS_TOKEN. A token scope cannot be widened in ' +
       'place, and an expired one cannot be renewed.',
     'GitHub classic: the `repo` scope. Fine-grained: "Issues: Read and write" on the target ' +
       'repository, which is the narrower and better choice.',
@@ -425,7 +430,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           {
             steps: [
               'Mint the token again in the app under Integrations → API access tokens with ' +
-                '"Runs as" set to yourself, and export it as CAT_FACTORY_API_KEY.',
+                '"Runs as" set to yourself, and set it as CAT_FACTORY_API_KEY.',
               'The pass then asks for your personal password once, at the moment a run needs it, ' +
                 'and stores it nowhere: not in .env, not in the ledger, not in a log line.',
               'Adding a provider key would also work and is the wrong fix here: it would pay per ' +
@@ -570,7 +575,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
                       'the person this key was minted by. A system token may not spend one, which ' +
                       'is the whole of the problem: the deployment needs no change.',
                     'Mint the token again under Integrations → API access tokens with "Runs as" ' +
-                      'set to yourself, and export it as CAT_FACTORY_API_KEY. The pass then asks ' +
+                      'set to yourself, and set it as CAT_FACTORY_API_KEY. The pass then asks ' +
                       'for your personal password once, when a run needs it, and stores it nowhere.',
                   ]
                 : [
@@ -668,11 +673,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
             `this workspace cannot reach`,
         )
         steps.push(
-          `Either point the suite at the connected account (the export below), or re-connect the ` +
+          `Either point the suite at the connected account (the command below), or re-connect the ` +
             `workspace to '${config.repoOwner}' under Integrations.`,
         )
         commands.push({
-          run: `export ACCEPTANCE_REPO_OWNER=${connection.accountLogin}`,
+          run: envAssignment('ACCEPTANCE_REPO_OWNER', connection.accountLogin),
           purpose: 'adopt the repositories under the account already connected',
         })
       }
@@ -877,7 +882,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
             ],
             commands: [
               {
-                run: 'ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance',
+                run: resumeInvocation('latest'),
                 purpose: 'resume the most recent pass instead of starting a second one',
               },
               repoRead,
@@ -1146,11 +1151,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
               purpose: 'show the most recent pass and its run id, without touching the deployment',
             },
             {
-              run: 'ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance',
+              run: resumeInvocation('latest'),
               purpose: 'resume the most recent pass instead of starting a second one',
             },
             {
-              run: `export ACCEPTANCE_NAME_PREFIX="${config.namePrefix}-$(whoami)"`,
+              run: perPersonPrefixInvocation(config.namePrefix),
               purpose: 'take a per-person prefix, so two people share one board without colliding',
             },
           ],
@@ -1201,7 +1206,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
                 {
                   run: "kubectl -n cat-factory get secret cat-factory-token -o jsonpath='{.data.token}' | base64 -d",
                   purpose:
-                    'print the current ServiceAccount token, to re-export as ACCEPTANCE_K3S_TOKEN',
+                    'print the current ServiceAccount token, to set again as ACCEPTANCE_K3S_TOKEN',
                 },
                 {
                   run: 'npx @cat-factory/cli k3s',
@@ -1237,7 +1242,10 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
               ],
               commands: [
                 {
-                  run: `export ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE='{{namespace}}.127.0.0.1.nip.io'`,
+                  run: envAssignment(
+                    'ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE',
+                    '{{namespace}}.127.0.0.1.nip.io',
+                  ),
                   purpose: 'use the documented default, which renders from {{namespace}} alone',
                 },
               ],

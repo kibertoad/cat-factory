@@ -52,13 +52,45 @@ than as a missing provider. Read the ROW, never the response's `excludesUserScop
 is about models omitted ENTIRELY (locally-run endpoints), so labelling from it calls every unwired
 model invisible and sends an operator to re-mint a token that will change nothing. `src/presets.ts`
 owns the three-way verdict both commands share. `src/personalUnlock.ts` holds the password for the
-process and nothing else writes it down, which is why it is asked for LAZILY (on the first `428`, so
-a provider-key workspace is never prompted) and why the header rides EVERY request through the
-client's `fetch` seam rather than being attached at the call that first needed it: answering a park
-re-mints the run's activation server-side, so a pass needs it for hours after the start. Traps:
-writing it beside `CAT_FACTORY_API_KEY` would collapse a two-factor credential into one file, and the
-prompt reads the CONTROLLING TERMINAL rather than `process.stdin`, which under vitest's forked
-workers is a pipe and would have made the prompt unaskable in the one place it is needed.
+process and nothing else writes it down, and the header rides EVERY request through the client's
+`fetch` seam rather than being attached at the call that first needed it: answering a park re-mints
+the run's activation server-side, so a pass needs it for hours after the start.
+
+**Asked ONCE per pass, in `acceptance/globalSetup.ts`.** Vitest isolates every spec file in its own
+module graph and its own worker process, so a holder built in `fixtures.ts` cannot outlive the file
+that built it: asked lazily on the first `428`, a pass is asked once per FILE that starts or answers a
+run, four times, each prompt drawn over a live reporter. `globalSetup` runs in the main process before
+any worker exists, asks only when the pinned preset's base model reports `personalSubscription` (so a
+provider-key workspace still sees nothing), and hands the value to each worker through `provide` /
+`inject`, which is RPC and not a file. The hook is WIRING; every judgement it makes lives in
+`src/personalPasswordAsk.ts`, where it is unit-tested, because every one of them is a degradation.
+Traps: `test.env` is NOT applied in that process (hence `src/envFile.ts`, read by the vitest config
+and the hook alike); the verdict reads `personalSubscription` and never `available`, because a
+selectable personal-subscription model is exactly the case that still answers `428`; a catalog it
+cannot read asks later rather than not at all, because the preflight owns diagnosing an unreachable
+deployment; and NOTHING here may throw, since it runs before the first prerequisite is evaluated and
+before a journal line exists, so a refusal thrown from it is the operator's entire output. The one
+exception is a person pressing Ctrl-C (`PersonalPasswordDeclined`), which stops the pass because it
+is a decision rather than a limit of where the pass is running.
+
+Traps in the prompt itself: writing the password beside `CAT_FACTORY_API_KEY` would collapse a
+two-factor credential into one file; it reads the CONTROLLING TERMINAL rather than `process.stdin`,
+which under vitest's forked workers is a pipe; and that device is opened READ-WRITE on Windows
+(`consoleDevice`), because `SetConsoleMode` writes to the console input buffer. Opened `r`, `CONIN$`
+reads fine and refuses raw mode with `EPERM` on a machine with a console right there, which is why the
+prompt never once appeared on Windows. A console-less process cannot open `CONIN$` at all, so the
+no-terminal refusal belongs on the OPEN, and the raw-mode failure is its OWN refusal naming its own
+cause (a pty emulating a console without its modes), never "no terminal": that wording sent an
+operator in a JetBrains terminal to go find one, and its remedies are per PLATFORM, since a `/dev/tty`
+that will not enter raw mode is an ordinary container. The verdict on that switch is the stream's
+`isRaw`, never "did not throw": Node reports the failure by EMITTING `error`, so on the
+`process.stdin` fallback anything else already listening turns it into a quiet return, and a
+success read off that would take the password with echo ON. Releasing it is `releaseTerminal` and it
+may not throw, since it runs both on a refusal and at the instant a typed password is accepted: the
+descriptor a `ReadStream` was constructed with is closed by DESTROYING the stream, so a `closeSync`
+beside it is an `EBADF` that replaces the refusal on one path and hangs the prompt on the other. Same
+rule, same reason, at the end of the read: the promise SETTLES before the trailing newline is
+written, or a dead console handle strands it and echo is never put back.
 
 **Every task the suite files pins `ACCEPTANCE_MODEL_PRESET`**, through the one door
 (`filePinnedTask`), so a pass runs on the model it says it ran on rather than on whatever the
