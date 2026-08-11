@@ -279,14 +279,26 @@ person's subscription, and only their personal password opens it. Two consequenc
   states are kept separate rather than collapsed into "user-scoped".
 
 - **The pass asks for your personal password at the terminal**, once, at the first call that needs
-  it — not at `configure` time, and never for a workspace running on a provider API key. It is held
+  it, not at `configure` time, and never for a workspace running on a provider API key. It is held
   in the process's memory and written NOWHERE: not the `.env`, not the ledger, not the journal. That
   is deliberate rather than an omission, since a copy beside `CAT_FACTORY_API_KEY` would put both
-  halves of a two-factor credential in one file. A resumed pass asks again. The prompt opens the
-  CONTROLLING TERMINAL (`/dev/tty`, `CONIN$` on Windows) rather than reading stdin, which the suite's
-  own test worker does not own; run the pass from an interactive shell, and note that no variable or
-  file can supply the password instead. See
+  halves of a two-factor credential in one file. A resumed pass asks again. No variable or file can
+  supply it instead. See
   [`individual-subscription-usage.md` §7](../../docs/individual-subscription-usage.md).
+- **So run the pass from an INTERACTIVE terminal**, with the ordinary invocation above: nothing
+  about the command changes, and there is no separate mode for this. Under the hood the prompt opens
+  the CONTROLLING TERMINAL (`/dev/tty`, `CONIN$` on Windows) for reading and `CONOUT$` for writing,
+  never `process.stdout`/`stdin`, and both halves of that are what make it work under vitest at all:
+  a worker is forked with PIPED stdio, so `stdin.isTTY` is undefined there and a stdin prompt could
+  never ask, while the reporter owning that worker's stdout would swallow a printed one. A console is
+  inherited by child processes independently of stdio, so the pnpm and vitest layers between your
+  shell and the spec cost nothing.
+- **A pass with no console REFUSES at that first dispatch**, naming the two ways out (run it
+  interactively, or pin a preset whose model resolves to a provider API key). That covers CI, a
+  daemon, `nohup`, and an agent's detached background shell. Windows opens `CONIN$` even with no
+  console attached, so the refusal comes from the raw-mode switch rather than from the open; before
+  it was translated, that arrived as a bare `Error: setRawMode EPERM` (errno -4048), which named
+  neither the password nor either remedy.
 
 **The repositories**
 

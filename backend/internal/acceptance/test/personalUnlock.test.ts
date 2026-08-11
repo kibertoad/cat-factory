@@ -1,6 +1,7 @@
+import type { ReadStream } from 'node:tty'
 import { CatFactoryCredentialRequiredError, CatFactoryConflictError } from '@cat-factory/sdk'
 import { describe, expect, it, vi } from 'vitest'
-import { createPersonalUnlock, withPersonalUnlock } from '../src/personalUnlock.ts'
+import { createPersonalUnlock, enterRawMode, withPersonalUnlock } from '../src/personalUnlock.ts'
 
 // The unlock exists so a pass can run on the operator's OWN subscription without the password
 // living anywhere but this process. What is worth pinning is therefore not the prompt's cosmetics
@@ -137,5 +138,52 @@ describe('withPersonalUnlock', () => {
       .mockResolvedValueOnce('started')
 
     await expect(withPersonalUnlock(unlock, 'Starting', call)).resolves.toBe('started')
+  })
+})
+
+describe('enterRawMode', () => {
+  const fakeTerminal = (setRawMode: (raw: boolean) => void) =>
+    ({ setRawMode }) as unknown as ReadStream
+
+  it('leaves a real terminal in raw mode', () => {
+    const calls: boolean[] = []
+    const cleanup = vi.fn()
+
+    enterRawMode(
+      fakeTerminal((raw) => calls.push(raw)),
+      cleanup,
+    )
+    expect(calls).toEqual([true])
+    expect(cleanup).not.toHaveBeenCalled()
+  })
+
+  // A console-less process opens `CONIN$` and fails HERE, so this is the refusal an operator running
+  // the pass from CI, a daemon or a detached shell actually receives. Bare, it reached them as
+  // `setRawMode EPERM`, which names neither the password nor either way out.
+  it('refuses a device that opens and then cannot be read without echo, naming both ways out', () => {
+    const eperm = Object.assign(new Error('setRawMode EPERM'), { code: 'EPERM', errno: -4048 })
+    const cleanup = vi.fn()
+
+    let thrown: unknown
+    try {
+      enterRawMode(
+        fakeTerminal(() => {
+          throw eperm
+        }),
+        cleanup,
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(Error)
+    const message = (thrown as Error).message
+    expect(message).toContain('no terminal to ask on')
+    expect(message).toContain('interactive shell')
+    expect(message).toContain('provider API key')
+    // The errno is the only part worth reading when the failure is NOT a missing console.
+    expect((thrown as Error).cause).toBe(eperm)
+    // The fds it opened are released, so a refused prompt does not leak the console handle.
+    expect(cleanup).toHaveBeenCalledTimes(1)
   })
 })

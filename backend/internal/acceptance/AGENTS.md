@@ -58,7 +58,10 @@ client's `fetch` seam rather than being attached at the call that first needed i
 re-mints the run's activation server-side, so a pass needs it for hours after the start. Traps:
 writing it beside `CAT_FACTORY_API_KEY` would collapse a two-factor credential into one file, and the
 prompt reads the CONTROLLING TERMINAL rather than `process.stdin`, which under vitest's forked
-workers is a pipe and would have made the prompt unaskable in the one place it is needed.
+workers is a pipe and would have made the prompt unaskable in the one place it is needed. A device
+that OPENED is not yet a terminal: Windows opens `CONIN$` with no console attached, so the
+no-terminal refusal has to fire on the RAW-MODE switch (`enterRawMode`) or it reaches a headless
+operator as a bare `setRawMode EPERM`.
 
 **Every task the suite files pins `ACCEPTANCE_MODEL_PRESET`**, through the one door
 (`filePinnedTask`), so a pass runs on the model it says it ran on rather than on whatever the

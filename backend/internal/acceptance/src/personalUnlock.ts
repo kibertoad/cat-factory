@@ -144,8 +144,10 @@ function stillLocked(what: string, error: CatFactoryCredentialRequiredError): Er
  * controlling terminal cannot be fed from a pipe, a file or a shell variable at all, so the
  * "nothing persisted" property is now structural instead of a check.
  *
- * THROWS when there is no terminal to reach at all (CI, a daemon), naming what to do instead. A
- * nullable return would only move that same refusal to the one call site.
+ * THROWS when there is no terminal to reach at all (CI, a daemon), or one that cannot be switched
+ * to raw mode, naming what to do instead. A nullable return would only move that same refusal to
+ * the one call site. Raw mode is entered HERE rather than at the read, because being readable
+ * without echo is what this function promises and opening the device does not establish it.
  */
 function openTerminal(): { input: ReadStream; write: (text: string) => void; close: () => void } {
   const path = process.platform === 'win32' ? '\\\\.\\CONIN$' : '/dev/tty'
@@ -155,6 +157,7 @@ function openTerminal(): { input: ReadStream; write: (text: string) => void; clo
     // straight from a shell (`pnpm status`) has one even where `/dev/tty` is unavailable.
     if (!process.stdin.isTTY) throw noTerminal()
     const input = process.stdin as unknown as ReadStream
+    enterRawMode(input, () => input.pause())
     return {
       input,
       write: (text) => process.stderr.write(text),
@@ -169,6 +172,11 @@ function openTerminal(): { input: ReadStream; write: (text: string) => void; clo
   // devices; POSIX can write back down the one it read from.
   const outFd = process.platform === 'win32' ? tryOpen('\\\\.\\CONOUT$', 'w') : tryOpen(path, 'w')
   const input = new ReadStream(fd)
+  enterRawMode(input, () => {
+    input.destroy()
+    closeSync(fd)
+    if (outFd !== null) closeSync(outFd)
+  })
   return {
     input,
     write: (text) => {
@@ -192,8 +200,32 @@ function tryOpen(path: string, flags: string): number | null {
   }
 }
 
-/** The refusal when there is no terminal at all: what to do instead, and why not an env var. */
-function noTerminal(): Error {
+/**
+ * Switch a terminal to raw mode, or refuse the way {@link openTerminal} promises to.
+ *
+ * Opening the device is not proof anything can be read from it. A process with NO CONSOLE attached
+ * opens `CONIN$` on Windows perfectly happily, so the missing-terminal guard above passes and the
+ * refusal lands here instead, as `EPERM`. Left bare that reached the operator as
+ * `Error: setRawMode EPERM` (errno -4048), which names neither the password it was trying to ask
+ * for nor either way out, in the one situation where a person has to change how they invoked the
+ * pass: CI, a daemon, `nohup`, or an agent's detached background shell. The cause stays attached,
+ * because an `EPERM` is the interesting half when the failure is something else entirely.
+ *
+ * Exported for the test: a terminal that opens and then refuses raw mode cannot be produced from a
+ * unit test on either platform, and the property worth pinning is that the operator is told which
+ * two things fix it.
+ */
+export function enterRawMode(input: ReadStream, cleanup: () => void): void {
+  try {
+    input.setRawMode(true)
+  } catch (error) {
+    cleanup()
+    throw noTerminal({ cause: error })
+  }
+}
+
+/** The refusal when there is no usable terminal: what to do instead, and why not an env var. */
+function noTerminal(options?: { cause?: unknown }): Error {
   return new Error(
     'This pass needs your personal password to unlock the subscription its model runs on, but ' +
       'this process has no terminal to ask on.\n' +
@@ -201,6 +233,7 @@ function noTerminal(): Error {
       'from a variable or a file: it is the second factor protecting the stored credential, ' +
       'and a copy on disk would defeat it.\n' +
       '  To run unattended instead, pin a preset whose model resolves to a provider API key.',
+    options,
   )
 }
 
@@ -209,13 +242,12 @@ function noTerminal(): Error {
  *
  * Raw mode read character by character rather than `readline`'s private `_writeToOutput` override:
  * the same effect through the documented API. See {@link openTerminal} for why the terminal is
- * opened rather than taken from `process.stdin`.
+ * opened rather than taken from `process.stdin`, and why it arrives already in raw mode.
  */
 async function readSecretFromTty(prompt: string): Promise<string> {
   const terminal = openTerminal()
   const input = terminal.input
   terminal.write(prompt)
-  input.setRawMode(true)
   input.resume()
   input.setEncoding('utf8')
   return new Promise<string>((resolve, reject) => {
