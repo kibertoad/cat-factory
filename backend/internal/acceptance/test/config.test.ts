@@ -16,6 +16,7 @@ const COMPLETE = {
   ACCEPTANCE_K3S_API_SERVER: 'https://127.0.0.1:6443',
   ACCEPTANCE_K3S_TOKEN: 'sa-token',
   ACCEPTANCE_K3S_INSECURE: 'true',
+  ACCEPTANCE_VCS_TOKEN: 'reporter-token',
 } as const
 
 function expectOk(env: Record<string, string | undefined>) {
@@ -94,6 +95,17 @@ describe('resolveConfig', () => {
         90 * 60 * 1000,
       )
     }
+  })
+
+  it("defaults the reporter's API base to GitHub's, and strips a trailing slash from an override", () => {
+    // The one variable with a knowable wrong answer rather than an absent one: an Enterprise Server
+    // API is not at api.github.com, and nothing in /api/v1 publishes where it is.
+    expect(expectOk(COMPLETE).vcs.apiBaseUrl).toBe('https://api.github.com')
+    const enterprise = expectOk({
+      ...COMPLETE,
+      ACCEPTANCE_VCS_API_BASE: 'https://github.acme.internal/api/v3/',
+    })
+    expect(enterprise.vcs.apiBaseUrl).toBe('https://github.acme.internal/api/v3')
   })
 
   it('applies the defaults an operator does not have to think about', () => {

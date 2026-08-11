@@ -666,9 +666,12 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   trackerSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
-    // The tracker-settings editor persists its config. Member-level, workspace-scoped — completes
-    // the read+write surface (`get` was exposed for the board load).
-    put: { scope: { kind: 'workspace', arg: 0 } },
+    // The tracker-settings editor persists its config, and `PATCH /api/v1/tracker/writeback`
+    // persists the writeback half of the same row. Member-level, workspace-scoped, and it completes
+    // the read+write surface (`get` was exposed for the board load). One method rather than two
+    // because the merge belongs in the store: routing a load and a replace over RPC would put a
+    // network hop inside the read-modify-write this method exists to avoid.
+    merge: { scope: { kind: 'workspace', arg: 0 } },
   },
   notificationRepository: {
     listOpen: { scope: { kind: 'workspace', arg: 0 } },

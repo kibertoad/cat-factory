@@ -6,7 +6,7 @@
 // to rebuild, and it is also why each file re-reads the ledger on construction rather than
 // trusting an object a previous file left behind.
 
-import type { CatFactoryClient } from '@cat-factory/sdk'
+import type { CatFactoryClient, PrReportRunProvider } from '@cat-factory/sdk'
 import { DeploymentApi } from '../src/deploymentApi.ts'
 import { type AcceptanceConfig, requireConfig } from '../src/config.ts'
 import { Journal } from '../src/journal.ts'
@@ -19,6 +19,7 @@ import {
 } from '../src/preflight.ts'
 import { PREREQUISITES } from '../src/prerequisites.ts'
 import { createClient } from '../src/publicApi.ts'
+import { type IssueApi, ISSUE_APIS } from '../src/vcsIssues.ts'
 import { resolveRunId, WorldStore } from '../src/world.ts'
 
 export type Harness = {
@@ -114,6 +115,7 @@ export function preflightReport(): Promise<PreflightReport> {
       adoptedServiceIds: [world.value.backend, world.value.frontend].flatMap((record) =>
         record ? [record.serviceId] : [],
       ),
+      issueApiFor: (provider) => issueApiFor(config, provider),
     },
     {
       // What every probe here reaches, so a thrown one is described against it rather than as
@@ -139,6 +141,21 @@ export function preflightReport(): Promise<PreflightReport> {
 export async function assertPrerequisites(): Promise<void> {
   const failure = formatPreflightFailure(await preflightReport())
   if (failure) throw new Error(failure)
+}
+
+/**
+ * The reporter's issue client for a provider, or null when this suite cannot address that provider.
+ *
+ * The ONE construction site, shared by the `issue-credential` gate and spec 04, so the gate probes
+ * with the same credential and against the same base the spec files with. Two builders would let a
+ * pass pass its gate and then file somewhere else.
+ */
+export function issueApiFor(
+  config: AcceptanceConfig,
+  provider: PrReportRunProvider,
+): IssueApi | null {
+  const build = ISSUE_APIS[provider]
+  return build ? build({ token: config.vcs.token, apiBaseUrl: config.vcs.apiBaseUrl }) : null
 }
 
 /** Board titles, derived so the ledger, the specs and the board cannot disagree about them. */

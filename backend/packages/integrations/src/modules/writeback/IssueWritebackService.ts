@@ -1,3 +1,4 @@
+import { DEFAULT_TRACKER_WRITEBACK } from '@cat-factory/contracts'
 import {
   type Block,
   type Clock,
@@ -135,7 +136,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
   async onPullRequestOpened(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void> {
     const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
     const enabled = resolveWritebackFlag(
-      settings?.writebackCommentOnPrOpen ?? false,
+      settings?.writebackCommentOnPrOpen ?? DEFAULT_TRACKER_WRITEBACK.writebackCommentOnPrOpen,
       block.trackerCommentOnPrOpen,
     )
     if (!enabled) return
@@ -155,7 +156,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
   async onPullRequestMerged(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void> {
     const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
     const enabled = resolveWritebackFlag(
-      settings?.writebackResolveOnMerge ?? false,
+      settings?.writebackResolveOnMerge ?? DEFAULT_TRACKER_WRITEBACK.writebackResolveOnMerge,
       block.trackerResolveOnMerge,
     )
     if (!enabled) return
@@ -220,7 +221,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     if (REVIEW_QUESTION_POLICIES[post.subject].optIn) {
       const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
       const enabled = resolveWritebackFlag(
-        settings?.writebackQuestionsOnPark ?? false,
+        settings?.writebackQuestionsOnPark ?? DEFAULT_TRACKER_WRITEBACK.writebackQuestionsOnPark,
         block.trackerQuestionsOnPark,
       )
       if (!enabled) return empty

@@ -39,6 +39,26 @@ export type RepoNames = {
   frontend: string
 }
 
+/**
+ * The credential the suite files spec 04's issue with, as an OUTSIDE reporter.
+ *
+ * Deliberately NOT the workspace's own VCS connection: the platform's credential closing an issue
+ * the platform's credential filed proves only that the credential works. Spec 04's premise is that
+ * somebody with no relationship to this deployment opens an issue, so the reporter holds a token of
+ * its own, and there is no `/api/v1` operation for either half (nor should there be: filing an issue
+ * is not something this product does for you). See `vcsIssues.ts`.
+ */
+export type VcsReporterConfig = {
+  /** A provider token that may read the target repository and open an issue on it. */
+  token: string
+  /**
+   * The provider's REST base. Defaults to GitHub's; an Enterprise Server host is
+   * `https://<host>/api/v3`, which nothing in `/api/v1` publishes, so it is configured rather
+   * than derived.
+   */
+  apiBaseUrl: string
+}
+
 export type AcceptanceConfig = {
   /** Backend origin serving `/api/v1`, plus the two unauthenticated deployment root reads. */
   baseUrl: string
@@ -79,6 +99,7 @@ export type AcceptanceConfig = {
    */
   modelPresetId: string
   cluster: ClusterConfig
+  vcs: VcsReporterConfig
   /** Where the resumable ledger lives. Relative paths resolve against the package directory. */
   stateDir: string
   /**
@@ -117,6 +138,12 @@ const REQUIRED: readonly Requirement[] = [
   {
     name: 'ACCEPTANCE_FRONTEND_REPO',
     purpose: 'name of the empty repository the frontend service adopts; you create it',
+  },
+  {
+    name: 'ACCEPTANCE_VCS_TOKEN',
+    purpose:
+      "provider token the suite files spec 04's issue with, as an outside reporter would " +
+      '(GitHub classic: `repo`; fine-grained: Issues read+write on the target repository)',
   },
   { name: 'ACCEPTANCE_K3S_API_SERVER', purpose: 'kube-apiserver URL, e.g. https://127.0.0.1:6443' },
   {
@@ -205,6 +232,14 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
           trimmed(env.ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE) ?? '{{namespace}}.127.0.0.1.nip.io',
         namespaceTemplate:
           trimmed(env.ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) ?? 'cf-acc-{{pullNumber}}',
+      },
+      vcs: {
+        token: required(env, 'ACCEPTANCE_VCS_TOKEN'),
+        // GitHub's public REST base, which is right for every github.com deployment and wrong in
+        // exactly one knowable way (Enterprise Server), so it is overridable rather than assumed.
+        apiBaseUrl: stripTrailingSlash(
+          trimmed(env.ACCEPTANCE_VCS_API_BASE) ?? 'https://api.github.com',
+        ),
       },
       stateDir: trimmed(env.ACCEPTANCE_STATE_DIR) ?? '.acceptance',
       // 90 minutes. A `pl_build` run with a design pass, a container coder, two testers and a

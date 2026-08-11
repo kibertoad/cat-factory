@@ -331,7 +331,7 @@ describe('settings, preset & schedule management surface (workspace-scoped write
   // workspace; void writes just resolve.
   const WRITES: Array<{ repo: string; method: string; args: unknown[]; echoes?: boolean }> = [
     { repo: 'workspaceSettingsRepository', method: 'upsert', args: [{ storeAgentContext: true }] },
-    { repo: 'trackerSettingsRepository', method: 'put', args: [{}] },
+    { repo: 'trackerSettingsRepository', method: 'merge', args: [{}, {}, 1], echoes: true },
     { repo: 'serviceFragmentDefaultsRepository', method: 'set', args: [['frag_1']] },
     { repo: 'riskPolicyRepository', method: 'get', args: ['preset_1'], echoes: true },
     { repo: 'riskPolicyRepository', method: 'remove', args: ['preset_1'] },

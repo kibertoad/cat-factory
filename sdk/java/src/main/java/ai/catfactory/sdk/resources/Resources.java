@@ -25,6 +25,7 @@ public abstract class Resources {
     private final EnvironmentsClient environments;
     private final ModelsClient models;
     private final VcsClient vcs;
+    private final TrackerClient tracker;
     private final RiskPoliciesClient riskPolicies;
     private final ModelPresetsClient modelPresets;
     private final WebhookClient webhook;
@@ -48,6 +49,7 @@ public abstract class Resources {
         this.environments = new EnvironmentsClient(transport);
         this.models = new ModelsClient(transport);
         this.vcs = new VcsClient(transport);
+        this.tracker = new TrackerClient(transport);
         this.riskPolicies = new RiskPoliciesClient(transport);
         this.modelPresets = new ModelPresetsClient(transport);
         this.webhook = new WebhookClient(transport);
@@ -113,6 +115,11 @@ public abstract class Resources {
     /** The workspace's source-control connection: which account it talks to, how it authenticates, and whether it may create repositories and write workflow files. Both permissions are enforced by the provider at push time, so reading them beats discovering one missing halfway through an automated setup. */
     public VcsClient vcs() {
         return vcs;
+    }
+
+    /** What this workspace does to a task's LINKED tracker issue as its pull request progresses: comment when it opens, comment and close the issue when it merges, and post a headless run's parked review findings so the reporter can answer where they filed. The write MERGES, so turning one action on leaves the other two as they were. It is the writeback half of the workspace's tracker configuration; the filing selection (which tracker a tech-debt ticket is raised on) is not published yet. */
+    public TrackerClient tracker() {
+        return tracker;
     }
 
     /** The risk policies a task can pin, including which is the workspace default: what decides whether a run can land its pull request without a person, and how many attempts its CI fixer, requirement rounds and release watch are given. Broader than merging, which is why it is not called a merge preset. */
