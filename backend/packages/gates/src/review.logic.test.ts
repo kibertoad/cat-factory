@@ -1,6 +1,8 @@
 import type {
   Block,
+  GateHelperJobResult,
   GateStepState,
+  PipelineStep,
   PullRequestReviewSnapshot,
   RaiseNotificationInput,
   ReviewThread,
@@ -977,5 +979,176 @@ describe('humanReviewGate: the grace window and the comment cursor', () => {
     const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
     expect((await gate.probe('ws', 'b', gs)).status).toBe('pass')
     expect(gs.requiredApprovingReviewCount).toBeUndefined()
+  })
+})
+
+describe('humanReviewGate: onHelperComplete, the rounds that resolve NOTHING', () => {
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
+
+  /** A step parked mid-gate with `handed` threads stashed for the fixer round that just ended. */
+  const stepWith = (gate: Partial<GateStepState>) =>
+    ({
+      agentKind: 'human-review',
+      gate: { phase: 'working', attempts: 1, maxAttempts: 1, ...gate },
+    }) as unknown as PipelineStep
+
+  const complete = async (
+    gate: ReturnType<typeof humanReviewGate>,
+    step: PipelineStep,
+    result: GateHelperJobResult,
+  ) =>
+    gate.onHelperComplete!({
+      workspaceId: 'ws',
+      instance: {} as never,
+      block: { id: 'b' } as never,
+      step,
+      result,
+    })
+
+  // Every case here ends the same way — the stash is dropped and NOTHING is resolved — and each
+  // arrives by a different route. Resolving on any of them posts an "addressed" reply on feedback
+  // nobody addressed, and an approved PR then advances past it.
+  it('drops the stash without resolving when the FIXER FAILED', async () => {
+    const resolved: string[] = []
+    let probed = false
+    // The head DID advance, which is what makes this case worth asserting: progress on the branch
+    // is not evidence that a failed round addressed anything, and a gate that looked only at the
+    // sha would resolve on someone else's push.
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => {
+        probed = true
+        return snapshot({ headSha: 'sha-new' })
+      },
+      resolveThreads: async (_ws, _b, ids) => void resolved.push(...ids),
+    })
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'failed',
+      error: 'the fixer crashed',
+    })
+    expect(resolved).toEqual([])
+    expect(probed).toBe(false)
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('returns early when the round was handed NO threads', async () => {
+    let probed = false
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => {
+        probed = true
+        return snapshot({ headSha: 'sha-new' })
+      },
+      resolveThreads: async () => {},
+    })
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: [] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
+    })
+    // Not merely harmless: the head read is a network call, and there is nothing it could inform.
+    expect(probed).toBe(false)
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('drops the stash when the review provider is no longer wired', async () => {
+    // The gate is a pass-through with no provider, so a deployment that unwired one between the
+    // dispatch and the completion has no way to confirm anything. Retaining the ids would leave
+    // the probe reconciling threads forever against a provider that is not there.
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
+    })
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('does NOT resolve when the head read failed, so an outage cannot hide feedback', async () => {
+    // The one case where the fixer may genuinely have pushed and we cannot tell. The safe reading
+    // of "unknown" is the one that leaves the human's threads open: a wrong guess the other way
+    // marks a reviewer's feedback addressed on the strength of a 502.
+    const resolved: string[] = []
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => {
+        throw new Error('502 from GitHub')
+      },
+      resolveThreads: async (_ws, _b, ids) => void resolved.push(...ids),
+    })
+    const step = stepWith({ headSha: 'sha-old', pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
+    })
+    expect(resolved).toEqual([])
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+
+  it('resolves a round whose dispatch recorded NO head, since there is nothing to compare', async () => {
+    // `headSha` is absent on a gate state written before the dispatch recorded one. The comparison
+    // is then skipped rather than treated as "unchanged": read as no-progress, a legitimate fixer
+    // round would never resolve anything and the gate would re-dispatch forever.
+    const resolved: string[] = []
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ headSha: 'sha-new' }),
+      resolveThreads: async (_ws, _b, ids) => void resolved.push(...ids),
+    })
+    const step = stepWith({ pendingThreadIds: ['T9'] })
+    await complete(humanReviewGate(stubGateContext({}, providerRegistry)), step, {
+      state: 'done',
+      result: { output: 'fixed' },
+    })
+    expect(resolved).toEqual(['T9'])
+    expect(step.gate?.pendingThreadIds).toBeNull()
+  })
+})
+
+describe('humanReviewGate: onExhausted', () => {
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
+
+  // The budget is effectively unbounded, so this is a defensive path — which is exactly why it
+  // needs a test: nothing else would ever notice it raising a card with `undefined` in the title,
+  // and the whole reason it exists is to make a misconfiguration surface instead of stalling.
+  it('raises a human-review card naming the task, and fails the gate with a reason', async () => {
+    const raised: RaiseNotificationInput[] = []
+    const ctx = stubGateContext(
+      { raiseNotification: async (_ws, input) => void raised.push(input) },
+      providerRegistry,
+    )
+    const result = await humanReviewGate(ctx).onExhausted({
+      workspaceId: 'ws',
+      instance: { id: 'ex_1', pipelineName: 'Ship it' } as never,
+      block: { id: 'blk_1', title: 'Login', pullRequest: { url: 'https://host/pr/7' } } as never,
+      step: {} as never,
+      summary: undefined,
+    })
+    expect(raised[0]?.type).toBe('human_review')
+    expect(raised[0]?.title).toBe('Human review needed for "Login"')
+    expect(raised[0]?.blockId).toBe('blk_1')
+    expect(raised[0]?.executionId).toBe('ex_1')
+    expect(raised[0]?.payload).toEqual({ prUrl: 'https://host/pr/7' })
+    expect(result.error).toBe('Human review did not complete.')
+  })
+
+  it('omits the PR link from the card when the task never opened one', async () => {
+    const raised: RaiseNotificationInput[] = []
+    const ctx = stubGateContext(
+      { raiseNotification: async (_ws, input) => void raised.push(input) },
+      providerRegistry,
+    )
+    await humanReviewGate(ctx).onExhausted({
+      workspaceId: 'ws',
+      instance: { id: 'ex_1' } as never,
+      block: { id: 'blk_1', title: 'Login' } as never,
+      step: {} as never,
+      summary: undefined,
+    })
+    // An empty payload, never `{ prUrl: undefined }`: the SPA renders the key's presence as a link.
+    expect(raised[0]?.payload).toEqual({})
+    expect(Object.keys(raised[0]?.payload ?? {})).toEqual([])
   })
 })

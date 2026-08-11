@@ -1,3 +1,4 @@
+import { MAX_BINARY_PIXEL_EXTENT } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   ASSET_STORAGE_CAPABILITY,
@@ -481,5 +482,171 @@ describe('renderBinaryOutputBrief', () => {
       unresolvedContextIds: [],
     })
     expect(brief).toContain(`does not advertise the \`${ASSET_STORAGE_CAPABILITY}\` capability`)
+  })
+})
+
+describe('parseBinaryOutputDeclaration: entries that are not artifacts at all', () => {
+  const known = { services: ['asset-store'], generators: ['retro-diffusion'] }
+
+  // `typeof null === 'object'`, so the guard's first clause is the only thing between a model that
+  // wrote a trailing `null` and a property read. This parse's whole contract is to COUNT what it
+  // could not read, and a throw here loses the artifacts that WERE declared beside it.
+  it('counts a null entry as invalid rather than throwing away the whole declaration', () => {
+    const parsed = parseBinaryOutputDeclaration(
+      declaration(JSON.stringify([null, { service: 'asset-store', location: 'icons/a.png' }])),
+      known,
+    )
+    expect(parsed.invalidEntries).toBe(1)
+    expect(parsed.stored).toHaveLength(1)
+  })
+
+  it('counts a nested array and a bare string as invalid', () => {
+    const parsed = parseBinaryOutputDeclaration(
+      declaration(JSON.stringify([[{ service: 'asset-store', location: 'a.png' }], 'a.png'])),
+      known,
+    )
+    expect(parsed.stored).toEqual([])
+    expect(parsed.invalidEntries).toBe(2)
+  })
+
+  it('drops a null `dimensions` without losing the artifact', () => {
+    // The same guard one level down, where the disposition is the opposite: a corrupt measurement
+    // costs the size line, never the record, because the identity fields are intact.
+    const parsed = parseBinaryOutputDeclaration(
+      declaration(
+        JSON.stringify([{ service: 'asset-store', location: 'icons/a.png', dimensions: null }]),
+      ),
+      known,
+    )
+    expect(parsed.stored[0]?.location).toBe('icons/a.png')
+    expect(parsed.stored[0]?.dimensions).toBeUndefined()
+    expect(parsed.invalidEntries).toBe(0)
+  })
+
+  it('accepts a pixel extent at each end of the schema bounds and refuses just past them', () => {
+    // Read back at the SAME bounds the write boundary enforces: a dimension the schema would have
+    // refused must not arrive through the declaration instead.
+    const dims = (dimensions: unknown) =>
+      parseBinaryOutputDeclaration(
+        declaration(JSON.stringify([{ service: 'asset-store', location: 'a.png', dimensions }])),
+        known,
+      ).stored[0]?.dimensions
+
+    expect(dims({ width: 1, height: 1 })).toEqual({ width: 1, height: 1 })
+    expect(dims({ width: MAX_BINARY_PIXEL_EXTENT, height: MAX_BINARY_PIXEL_EXTENT })).toEqual({
+      width: MAX_BINARY_PIXEL_EXTENT,
+      height: MAX_BINARY_PIXEL_EXTENT,
+    })
+    expect(dims({ width: MAX_BINARY_PIXEL_EXTENT + 1, height: 1 })).toBeUndefined()
+    expect(dims({ width: 1, height: MAX_BINARY_PIXEL_EXTENT + 1 })).toBeUndefined()
+    // A non-integer is not a small rounding problem: it is a number no raster has.
+    expect(dims({ width: 96.5, height: 96 })).toBeUndefined()
+  })
+
+  it('trims the identity fields, so a padded location addresses the same file', () => {
+    const parsed = parseBinaryOutputDeclaration(
+      declaration(
+        JSON.stringify([
+          { service: '  Asset-Store  ', location: ' icons/a.png ', generator: ' Retro-Diffusion ' },
+        ]),
+      ),
+      known,
+    )
+    expect(parsed.stored[0]).toMatchObject({
+      service: 'asset-store',
+      location: 'icons/a.png',
+      generator: 'retro-diffusion',
+    })
+    expect(parsed.unknownGenerators).toEqual([])
+  })
+
+  it('refuses an over-long location, because a truncated address is a wrong one', () => {
+    const parsed = parseBinaryOutputDeclaration(
+      declaration(
+        JSON.stringify([{ service: 'asset-store', location: `icons/${'x'.repeat(600)}.png` }]),
+      ),
+      known,
+    )
+    expect(parsed.stored).toEqual([])
+    expect(parsed.invalidEntries).toBe(1)
+  })
+
+  it('keeps a display field that fits exactly as written, with no marker', () => {
+    const parsed = parseBinaryOutputDeclaration(
+      declaration(
+        JSON.stringify([
+          { service: 'asset-store', location: 'a.png', description: '  A potion icon.  ' },
+        ]),
+      ),
+      known,
+    )
+    expect(parsed.stored[0]?.description).toBe('A potion icon.')
+  })
+})
+
+describe('describeBinaryOutputConfigIssues: one issue versus several', () => {
+  it('states a single issue inline, and names the ROLE the id was selected as', () => {
+    const storage = describeBinaryOutputConfigIssues('illustrator', [
+      { problem: 'unknown_service', serviceId: 'gone', role: 'storage' },
+    ])
+    expect(storage).toContain(
+      "'gone' (selected as storage target) is not in the workspace's catalog",
+    )
+    expect(storage).not.toContain('\n  - ')
+
+    // The role is what sends the reader to the right field of the step, and the two are edited in
+    // different places: a context id reported as the storage target is a wrong instruction.
+    const context = describeBinaryOutputConfigIssues('illustrator', [
+      { problem: 'unknown_service', serviceId: 'gone', role: 'context' },
+    ])
+    expect(context).toContain("'gone' (selected as generation context)")
+  })
+})
+
+describe('renderBinaryOutputBrief: the scope section', () => {
+  it('states an empty scope as its own case rather than as an empty list', () => {
+    // Both halves must be empty for this to be true. A step whose only context id was unresolved
+    // has a scope somebody configured, and telling its agent the task description is the whole
+    // scope would hide the gap it should report.
+    const brief = renderBinaryOutputBrief({
+      config: { storageServiceId: 'asset-store' },
+      storage: view(),
+      contextServices: [],
+      unresolvedContextIds: [],
+    })
+    expect(brief).toContain('No context service is selected')
+
+    const unresolvedOnly = renderBinaryOutputBrief({
+      config: { storageServiceId: 'asset-store', contextServiceIds: ['gone'] },
+      storage: view(),
+      contextServices: [],
+      unresolvedContextIds: ['gone'],
+    })
+    expect(unresolvedOnly).not.toContain('No context service is selected')
+    expect(unresolvedOnly).toContain('which the catalog does not contain')
+  })
+
+  it('inflects the unresolved-context sentence for one id and for several', () => {
+    const brief = (unresolvedContextIds: string[]) =>
+      renderBinaryOutputBrief({
+        config: { storageServiceId: 'asset-store', contextServiceIds: unresolvedContextIds },
+        storage: view(),
+        contextServices: [],
+        unresolvedContextIds,
+      })
+    expect(brief(['gone'])).toContain('Do not guess at its API')
+    const several = brief(['gone', 'also-gone'])
+    expect(several).toContain('`gone`, `also-gone`')
+    expect(several).toContain('Do not guess at their API')
+  })
+
+  it('says nothing about the storage capability when the service advertises it', () => {
+    const brief = renderBinaryOutputBrief({
+      config: { storageServiceId: 'asset-store' },
+      storage: view(),
+      contextServices: [],
+      unresolvedContextIds: [],
+    })
+    expect(brief).not.toContain('does not advertise')
   })
 })

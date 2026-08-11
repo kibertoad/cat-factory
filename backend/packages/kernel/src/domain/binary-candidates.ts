@@ -310,7 +310,7 @@ export function renderBinaryCandidateChoiceSection(state: BinaryCandidateStepSta
   const discarded = choice.discarded.flatMap((id) => byId.get(id) ?? [])
   if (discarded.length > 0) {
     lines.push(
-      `- DISCARD the ${discarded.length} candidate${discarded.length === 1 ? '' : 's'} that were not kept, and remove the staged file${discarded.length === 1 ? '' : 's'} where the storage service allows it: ${discarded.map((c) => `\`${c.location}\``).join(', ')}. If it does not, say so in your report rather than leaving it unsaid.`,
+      `- DISCARD the ${discarded.length} candidate${discarded.length === 1 ? '' : 's'} the person did not keep, and remove the staged file${discarded.length === 1 ? '' : 's'} where the storage service allows it: ${discarded.map((c) => `\`${c.location}\``).join(', ')}. If it does not, say so in your report rather than leaving it unsaid.`,
     )
   }
   if (choice.note) {

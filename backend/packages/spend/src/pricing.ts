@@ -374,6 +374,15 @@ export function estimateCost(pricing: SpendPricing, ref: ModelRef, usage: AgentT
  * is applied only when it is a non-negative number; a missing/invalid value leaves that
  * tier uncapped. Shared by the Node and Cloudflare config loaders so both runtimes read
  * `BUDGET_MAX_MONTHLY_PER_ACCOUNT` / `BUDGET_MAX_MONTHLY_PER_USER` identically.
+ *
+ * What the key's ABSENCE means is the whole contract of an overlay, since a caller spreads it over
+ * the configured pricing: a present key holding `undefined` erases the deployment's own cap. So
+ * the tests check `Object.keys`, which is the only assertion that can see the difference.
+ *
+ * The `!= null` looks redundant beside `Number.isFinite` (false for anything that is not a number)
+ * and at runtime it is: mutating it away changes no behaviour, which is why the mutation report
+ * lists it as a survivor nothing can kill. It stands for the TYPECHECKER, which does not treat
+ * `Number.isFinite` as a narrowing guard, so the `>= 0` beside it needs the null check to compile.
  */
 export function budgetCapsOverlay(
   accountCap: number | undefined,
