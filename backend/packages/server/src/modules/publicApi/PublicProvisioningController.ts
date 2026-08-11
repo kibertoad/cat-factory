@@ -42,12 +42,13 @@ import type {
   ModelPresetsModule,
   RiskPoliciesModule,
 } from '@cat-factory/orchestration'
-import { NotFoundError, UnavailableError } from '@cat-factory/kernel'
+import { NotFoundError, RateLimitedError, UnavailableError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
+import { GitHubApiError, githubApiStatus } from '../../github/githubHttpHelpers.js'
 import { resolveWorkspaceModelCatalog } from '../models/workspaceCatalog.js'
 import { toPublicRepo, toPublicService } from './boardProjection.js'
 import { authorizeOrThrow } from './publicApiAuth.js'
@@ -302,6 +303,51 @@ export function toPublicAvailableRepo(repo: GitHubAvailableRepo): PublicAvailabl
 }
 
 /**
+ * Re-raise a PROVIDER failure as the refusal it actually is, or propagate it untouched.
+ *
+ * The two adopt routes are the only ones on this surface that reach the provider on the request path,
+ * so they are the only ones that can fail for a reason that is neither the caller's fault nor the
+ * platform's: a token the provider has revoked, or a rate limit. Left bare, both arrive as a `500`
+ * `internal`, which tells a headless caller to report a platform fault and file a bug about a
+ * credential only they can replace. It is also the difference between two answers a setup script acts
+ * on differently: a rejected credential is not "your repository does not exist", and a rate limit is
+ * the one failure here that IS worth retrying.
+ *
+ * Anything else propagates. A provider that is down, or a bug in this platform, is a `500`, and
+ * dressing either as a connection problem would send an operator to re-mint a working token.
+ */
+export function asVcsRefusal(error: unknown): unknown {
+  const status = githubApiStatus(error)
+  if (status === undefined) return error
+  // A PRIMARY rate-limit exhaustion is reported as a 403, so the flag decides rather than the status:
+  // a permission denial and an exhausted budget are the same number from GitHub.
+  if (error instanceof GitHubApiError && error.rateLimited) {
+    return new RateLimitedError(
+      "The source-control provider is rate-limiting this workspace's credential. Retry later.",
+      'vcs_rate_limited',
+    )
+  }
+  if (status === 401 || status === 403) {
+    return new UnavailableError(
+      "The source-control provider rejected this workspace's credential, so what it can reach " +
+        'cannot be read. Re-connect the workspace (an app installation may have been removed, a ' +
+        'token revoked or expired) and try again.',
+      'vcs_credential_rejected',
+    )
+  }
+  return error
+}
+
+/** Run one provider-reaching call, mapping its failures through {@link asVcsRefusal}. */
+async function throughVcs<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (error) {
+    throw asVcsRefusal(error)
+  }
+}
+
+/**
  * Adopting a repository that already exists: what it can reach, and linking one by name.
  *
  * Both routes go through the SAME sync-service methods the app's own repo picker calls, which is what
@@ -316,7 +362,10 @@ function registerRepoAdoptionRoutes(app: Hono<AppEnv>): void {
     const auth = await authorizeOrThrow(c, listPublicAvailableReposContract.minScope)
     const github = requireRepoLinking(c)
     const { q } = c.req.valid('query')
-    const repos = await github.syncService.listAvailableRepos(auth.workspaceId, (q === undefined ? {} : { q }))
+    const repos = await github.syncService.listAvailableRepos(
+      auth.workspaceId,
+      q === undefined ? {} : { q },
+    )
     // No viewer token is passed, and that is not an omission: a key authenticates as the WORKSPACE,
     // so the only repositories in scope are the ones its connection reaches. `personal` therefore
     // reports false throughout, which the contract states rather than leaving a caller to infer from
@@ -330,7 +379,9 @@ function registerRepoAdoptionRoutes(app: Hono<AppEnv>): void {
     const auth = await authorizeOrThrow(c, linkPublicRepoContract.minScope)
     const github = requireRepoLinking(c)
     const { owner, name } = c.req.valid('json')
-    const linked = await github.syncService.linkRepoBySlug(auth.workspaceId, owner, name)
+    const linked = await throughVcs(() =>
+      github.syncService.linkRepoBySlug(auth.workspaceId, owner, name),
+    )
     // One reason for two causes, because this read genuinely cannot tell them apart: a repository
     // that does not exist and one the workspace's credential is not granted are the same 404 from the
     // provider. The contract names both, so a caller renders the pair rather than picking one.

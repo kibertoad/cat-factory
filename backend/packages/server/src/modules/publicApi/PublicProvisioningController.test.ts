@@ -6,9 +6,11 @@ import type {
   GitHubConnection,
   ServiceProvisioning,
 } from '@cat-factory/contracts'
-import { UnavailableError } from '@cat-factory/kernel'
+import { RateLimitedError, UnavailableError } from '@cat-factory/kernel'
+import { GitHubApiError } from '../../github/githubHttpHelpers.js'
 import type { ServerContainer } from '../../http/env.js'
 import {
+  asVcsRefusal,
   readVcsConnection,
   toBlockPatch,
   toPublicAvailableRepo,
@@ -299,5 +301,41 @@ describe('toPublicAvailableRepo', () => {
   it('falls back to `github` for a row with no provider, as every other read does', () => {
     expect(toPublicAvailableRepo(reachable()).provider).toBe('github')
     expect(toPublicAvailableRepo(reachable({ provider: 'gitlab' })).provider).toBe('gitlab')
+  })
+})
+
+describe('asVcsRefusal', () => {
+  // The adopt pair is the only place on this surface that reaches the provider on the request path,
+  // so it is the only place a failure can be neither the caller's fault nor the platform's. Each
+  // branch here is a wrong answer that would otherwise look right: a revoked token reported as an
+  // internal fault sends a headless caller to file a platform bug about a credential only they can
+  // replace, and a rate limit reported as anything but retryable stops a setup script for good.
+
+  it('re-raises a rejected credential as a 503 naming the connection, not an internal fault', () => {
+    for (const status of [401, 403]) {
+      const refusal = asVcsRefusal(new GitHubApiError(status, 'Bad credentials'))
+      expect(refusal).toBeInstanceOf(UnavailableError)
+      expect((refusal as UnavailableError).details).toMatchObject({
+        reason: 'vcs_credential_rejected',
+      })
+    }
+  })
+
+  it('reads the rate-limit FLAG rather than the status, which GitHub reports as 403', () => {
+    // A primary rate-limit exhaustion and a permission denial are the same number, so status alone
+    // would tell a caller to re-mint a token that is working perfectly and will work again shortly.
+    const refusal = asVcsRefusal(new GitHubApiError(403, 'rate limit exceeded', true))
+    expect(refusal).toBeInstanceOf(RateLimitedError)
+    expect((refusal as RateLimitedError).details).toMatchObject({ reason: 'vcs_rate_limited' })
+  })
+
+  it('propagates everything else, so a provider outage stays a 500', () => {
+    // The refusals above are claims about the workspace's credential. A 500 from the provider, or a
+    // bug in this platform, is not one, and dressing either as a connection problem would send an
+    // operator to replace a credential that is fine.
+    const outage = new GitHubApiError(502, 'Bad gateway')
+    expect(asVcsRefusal(outage)).toBe(outage)
+    const bug = new TypeError('undefined is not a function')
+    expect(asVcsRefusal(bug)).toBe(bug)
   })
 })

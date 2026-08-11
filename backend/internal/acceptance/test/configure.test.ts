@@ -209,7 +209,12 @@ describe('configure', () => {
     expect(printed).toContain('replaced: CAT_FACTORY_BASE_URL')
     expect(printed).toContain('left alone (not managed here): ACCEPTANCE_K3S_CA_PEM')
   })
+})
 
+// The repository half, which is where this command does its one WRITE. Its own block because the
+// adopt is a different question from the file: whether the workspace ends up holding what the
+// operator named, and what it says when it cannot.
+describe('configure: adopting the repositories', () => {
   it('ADOPTS each repository itself rather than asking anyone to link it', async () => {
     // The point of the whole flow: linking is a call, so the command makes it. An operator who names
     // two reachable repositories is asked for nothing and told what happened.
@@ -479,7 +484,11 @@ describe('configure', () => {
     expect(printed).toContain('repo_service_homed_elsewhere')
     expect(printed).not.toContain('cf-acc-catalog-api is adopted by this workspace')
   })
+})
 
+// The cluster pair, whose rule is the opposite of every other value here: the STORED one wins over
+// what the kubeconfig currently says.
+describe('configure: the cluster', () => {
   it('normalizes the wildcard bind address k3d writes into the kubeconfig', async () => {
     // `cat-factory k3s` pipes the same read through `normalizeApiServerUrl` because `0.0.0.0` is not
     // dialable; writing it unchanged fails `cluster-connection` against an address nothing listens on.

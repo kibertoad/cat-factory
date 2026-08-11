@@ -962,8 +962,8 @@ deployment actually has.
 | -------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
 | `POST /api/v1/repos/bootstrap`               | `admin` | Create a repository and adapt it with the bootstrapper agent. `201` with a job to poll.                         |
 | `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                             |
-| `GET /api/v1/repos/available`                | `admin` | The repositories your connection can REACH, linked or not. `?q=owner/name` point-reads one.                      |
-| `POST /api/v1/repos/link`                    | `admin` | Adopt a reachable repository by `owner`/`name`. Idempotent `200`; `404 repo_not_reachable` otherwise.            |
+| `GET /api/v1/repos/available`                | `admin` | The repositories your connection can REACH, linked or not. `?q=owner/name` point-reads one.                     |
+| `POST /api/v1/repos/link`                    | `admin` | Adopt a reachable repository by `owner`/`name`. Idempotent `200`; `404 repo_not_reachable` otherwise.           |
 | `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`. |
 | `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                 |
 | `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                  |
@@ -1030,6 +1030,20 @@ reachability, where a name search can miss an exact slug), a substring to search
 Each call reaches the provider, so it is a setup-time read rather than one to poll. `personal` is
 always `false` here: a key authenticates as the WORKSPACE, so a repository only somebody's personal
 token reaches is not reachable by a key at all.
+
+**These two are the only operations on this surface that reach the provider while you wait**, so they
+are the only ones that can fail for a reason that is neither yours nor the platform's, and each has its
+own answer rather than a `500`:
+
+- `503` `details.reason: vcs_credential_rejected` — the provider refused the workspace's credential
+  (an installation removed, a token revoked or expired). Re-connect the workspace; retrying will not
+  help, and it is emphatically not "your repository does not exist".
+- `429` `details.reason: vcs_rate_limited` — the provider is rate-limiting the credential. This is the
+  one failure here worth retrying. It is read off the rate-limit flag rather than the status, because
+  GitHub reports a primary limit as a `403`, which is also what a permission denial looks like.
+
+A provider outage, or a fault in the platform, stays a `500`: dressing either as a connection problem
+would send an operator to replace a credential that is working.
 
 #### Bootstrapping a repository
 

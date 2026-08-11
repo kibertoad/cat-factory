@@ -467,3 +467,9 @@ What a consumer NOTICES, beyond the two new methods:
   authenticates as the WORKSPACE: a repository only somebody's personal token reaches is not reachable
   by a key at all. It is stated rather than omitted so a caller comparing this list against what a
   colleague sees in the app knows why the two can differ.
+- **Two new `details.reason` values ride along**, on these operations only: `vcs_credential_rejected`
+  (503, the provider refused the workspace's credential) and `vcs_rate_limited` (429, worth retrying).
+  These are the first two operations on the surface that reach the provider while a caller waits, so
+  they are the first that could fail for a reason that is neither the caller's nor the platform's;
+  without them both arrived as a `500 internal`, which tells a headless caller to report a platform
+  fault about a credential only they can replace.
