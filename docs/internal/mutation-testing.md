@@ -35,6 +35,15 @@ The PR trigger is scoped to the flow's own files (this workflow, the shared conf
 any package's `stryker.config.mjs`). It exists because `workflow_dispatch` only works once a workflow
 is on the default branch, so a change to the flow could otherwise be proven only after merging it.
 
+**The mutating step writes NOTHING to the job summary, and its `GITHUB_STEP_SUMMARY` is redirected to
+a throwaway file to keep it that way.** Vitest's `github-actions` reporter is a default whenever
+`GITHUB_ACTIONS` is set and it appends every failing test to the job summary, and under Stryker the
+suite runs once per mutant, where a failing run is a KILLED mutant, i.e. the outcome being hoped for.
+Kernel's ~7,200 mutants produced 1,193k of that, past GitHub's 1,024k ceiling, so the runner aborted
+the upload and annotated a green nightly with an `##[error]`: a standing red herring beside the one
+place a real below-floor failure gets read. Anything that genuinely belongs in the summary goes in a
+step of its own, which is what the score row already is.
+
 ### Do not run it locally
 
 A run is minutes of CPU per package even on a large machine, and local development is slow enough
@@ -114,6 +123,13 @@ and 174 more were killed, so the total gained 2.8 points while the covered score
 extra 29 kills are the part worth noticing: they landed in modules that ALREADY had tests, because
 exercising a seam end to end reaches code its own file's suite drives past.
 
+**A mutant is located by its COLUMN RANGE, not its line.** Stryker mutates every sub-expression, so
+one `if (a != null && (b == null || c > b))` carries a dozen mutants at the same line number and a
+per-line reading of the report mixes them up: three "survivors at line 240" in `forecast.logic.ts`
+read as an unpinned fold, and were in fact one mutant per operand of a condition whose whole-clause
+mutants were all killed. Group by `location.start.column` before concluding anything, and read the
+`replacement` against the exact slice it replaces.
+
 **Read the report's PER-FILE undetected counts, not the headline score, when deciding what to
 work on.** They rank the work differently, and they also say which disposition applies: a file
 whose count is nearly all `NoCoverage` wants a test file, while a high `Survived` count on a
@@ -126,6 +142,34 @@ named-step lowering, version defaulting, the seed's structural invariants) is wh
 holding.
 
 `Ignored`, `CompileError` and `RuntimeError` are excluded from both denominators.
+
+### Two dispositions besides "write a test"
+
+**A PROSE mutant is usually meant to survive.** Kernel's agent-facing renderers are mostly string
+literals, and Stryker mutates each one: `binary-generators.ts` alone carries ~100 undetected
+`StringLiteral` mutants inside instruction paragraphs. Killing them means asserting shipped copy
+phrase by phrase, which buys score and charges every future wording edit a test failure. What the
+tests assert instead is the DISPOSITION (does this line appear, for this input, and not for its
+neighbour), probed by one short distinctive fragment. So when triaging a renderer, filter the report
+to the mutators that state behaviour (`ConditionalExpression`, `LogicalOperator`, `EqualityOperator`,
+`OptionalChaining`, `BlockStatement`, `MethodExpression`) and read the count that remains: for that
+file it was 118, not 217.
+
+**An EQUIVALENT mutant cannot be killed, and chasing it damages the suite.** Spend is the worked
+example: at 97.73% all nine of its survivors are provably behaviour-preserving. `burnRatePerDay <= 0`
+→ `false` still returns null, because the arithmetic below it divides by zero and `Infinity < periodEnd`
+is false. `>` → `>=` assigns a value already equal to the accumulator. `windowFirstSeenAt == null`
+→ `false` leaves `Math.max(windowStart, null)`, which is `windowStart` for any real timestamp. The
+two that looked like dead code (`accountCap != null` beside a `Number.isFinite` that is false for
+anything not a number) were removed to prove it, and the TYPECHECK failed: `Number.isFinite` is not a
+narrowing guard, so the null check is load-bearing for `tsc` and inert at runtime. That comment now
+lives in `pricing.ts`, which is where the next person will look.
+
+The rule this leaves: **a floor may still rise on a package at its ceiling, but the score must not be
+the reason to write a test.** A test written to kill an equivalent mutant has to be type-hostile
+(casting `undefined` through a `number | null`) or has to pin an input the domain cannot produce, and
+both are worse than the survivor. Record the finding instead, and raise the floor to lock in what is
+real.
 
 ### The floor is a ratchet
 

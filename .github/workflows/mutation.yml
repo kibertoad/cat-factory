@@ -115,9 +115,10 @@ jobs:
       # `stryker run` exits non-zero when the score falls below the package's floor, which is the
       # signal this workflow exists to produce: a red job here means a change landed tests that
       # cover code without pinning its behaviour.
+      #
       # `GITHUB_STEP_SUMMARY` is redirected to a throwaway file for THIS step only. Stryker runs the
       # package's vitest suite once per mutant, and vitest's `github-actions` reporter (a default
-      # whenever `GITHUB_ACTIONS` is set) appends every failing test to the job summary — which for
+      # whenever `GITHUB_ACTIONS` is set) appends every failing test to the job summary, which for
       # a mutation run is every KILLED mutant, i.e. the successful outcome. Kernel's ~7,200 mutants
       # produced 1,193k of it, past GitHub's 1,024k ceiling, so the runner ABORTED the upload and
       # annotated a green nightly with an `##[error]`: a standing red herring beside the one place a

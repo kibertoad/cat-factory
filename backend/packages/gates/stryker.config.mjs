@@ -9,6 +9,9 @@ import { defineMutationConfig } from '../../../scripts/stryker-base.mjs'
 // public seam a deployment uses and has its own suite, so it is behaviour rather than a barrel.
 export default defineMutationConfig({
   mutate: ['src/**/*.ts', '!src/**/*.test.ts'],
-  // Measured 88.17% total / 91.99% covered over 651 mutants, less the two-point margin.
-  minimumScore: 86,
+  // Measured 90.78% total / 92.06% covered over 651 mutants, less the two-point margin. The total
+  // moved 2.6 points on ONE function's worth of tests: `onHelperComplete`'s four
+  // resolve-nothing rounds took the package's `NoCoverage` from 27 to 9 without the covered score
+  // moving at all, which is the asymmetry docs/internal/mutation-testing.md describes.
+  minimumScore: 88,
 })

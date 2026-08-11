@@ -308,7 +308,7 @@ describe('renderBinaryGeneratorSection: the generation-option instructions', () 
 
   // Each option is rendered by its own `if`, so each needs both verdicts asserted: an option that
   // is stated when it was never asked for is as wrong as one silently dropped, and a step's
-  // options are the only place these values exist — the artifact carries no trace of them.
+  // options are the only place these values exist: the artifact carries no trace of them.
   const cases: { option: string; generation: BinaryGenerationOptions; marker: string }[] = [
     {
       option: 'negativePrompt',

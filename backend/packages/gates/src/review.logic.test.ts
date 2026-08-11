@@ -1008,7 +1008,7 @@ describe('humanReviewGate: onHelperComplete, the rounds that resolve NOTHING', (
       result,
     })
 
-  // Every case here ends the same way — the stash is dropped and NOTHING is resolved — and each
+  // Every case here ends the same way (the stash is dropped and NOTHING is resolved), and each
   // arrives by a different route. Resolving on any of them posts an "addressed" reply on feedback
   // nobody addressed, and an approved PR then advances past it.
   it('drops the stash without resolving when the FIXER FAILED', async () => {
@@ -1110,7 +1110,7 @@ describe('humanReviewGate: onExhausted', () => {
     providerRegistry = defaultProviderRegistry()
   })
 
-  // The budget is effectively unbounded, so this is a defensive path — which is exactly why it
+  // The budget is effectively unbounded, so this is a defensive path, which is exactly why it
   // needs a test: nothing else would ever notice it raising a card with `undefined` in the title,
   // and the whole reason it exists is to make a misconfiguration surface instead of stalling.
   it('raises a human-review card naming the task, and fails the gate with a reason', async () => {

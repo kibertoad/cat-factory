@@ -950,7 +950,7 @@ describe('describeCapability', () => {
 
 describe('binaryGeneratorSelectionIssues: a step with no binary-output config at all', () => {
   // The three states the initiative doc keeps apart: no declaration, an empty declaration, and an
-  // unknown id. This is the FIRST, and it reaches both entry points as `undefined` — every read
+  // unknown id. This is the FIRST, and it reaches both entry points as `undefined`: every read
   // here goes through `config?.`, so dropping one optional chain is not a wrong verdict but a
   // `TypeError` thrown out of run admission.
   it('resolves an absent config into an empty selection rather than throwing', () => {
