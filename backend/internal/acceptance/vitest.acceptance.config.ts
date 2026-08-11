@@ -1,12 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { parseEnv } from 'node:util'
 import { defineConfig } from 'vitest/config'
+import { envFile } from './src/envFile.ts'
 
 // The acceptance suite: real agents against a live deployment. NOT part of `test:run`, so no CI
 // lane can reach it (see `vitest.config.ts` for the other half of that split).
 //
-// Four settings carry the whole shape of this suite:
+// Five settings carry the whole shape of this suite:
 //
 //   - **`fileParallelism: false` and one worker.** The specs form ONE narrative (spec 02 ships
 //     the feature spec 03 then files a bug against) and they share a repository, a workspace and
@@ -29,9 +27,13 @@ import { defineConfig } from 'vitest/config'
 //     "CAT_FACTORY_BASE_URL is required" while the operator was looking at the line that sets it.
 //     Eight variables, one of them an API key and one a ServiceAccount token, are more than
 //     anyone wants to re-export per shell.
+//   - **`globalSetup`, which asks for the personal password.** It runs in the MAIN process, before
+//     any worker exists and before the reporter draws a line, which is the only place in this suite
+//     a prompt can be both asked once and read. See `acceptance/globalSetup.ts`.
 export default defineConfig({
   test: {
     env: envFile(import.meta.dirname),
+    globalSetup: ['acceptance/globalSetup.ts'],
     include: ['acceptance/**/*.acceptance.ts'],
     fileParallelism: false,
     maxWorkers: 1,
@@ -45,23 +47,3 @@ export default defineConfig({
     reporters: ['verbose'],
   },
 })
-
-/**
- * The `.env` beside this config, with anything already EXPORTED left alone.
- *
- * `test.env` writes straight into the worker's `process.env`, so a file value would otherwise
- * clobber the shell rather than default it, and a one-off
- * `ACCEPTANCE_RUN_ID=latest pnpm … acceptance` would silently resume nothing. The shell winning is
- * also what keeps a committed default honest: the file states the setup, the invocation states the
- * exception. Absent means absent, so a blank line in the file stays blank and `resolveConfig`
- * reports it as unset rather than as a malformed value.
- */
-function envFile(dir: string): Record<string, string> {
-  const path = join(dir, '.env')
-  if (!existsSync(path)) return {}
-  const parsed = parseEnv(readFileSync(path, 'utf8'))
-  const entries = Object.entries(parsed).filter(
-    ([key, value]) => typeof value === 'string' && process.env[key] === undefined,
-  )
-  return Object.fromEntries(entries) as Record<string, string>
-}

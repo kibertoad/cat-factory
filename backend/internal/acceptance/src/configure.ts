@@ -553,7 +553,7 @@ async function resolvePreset(
       'A preset below runs on a subscription that IS connected for this token’s owner, and this ' +
         'token is a SYSTEM token, which may not spend it. Nothing is missing from the deployment.\n' +
         '  Mint the token again in the app under Integrations → API access tokens with "Runs as" ' +
-        'set to yourself, and export it as CAT_FACTORY_API_KEY. The pass then asks for your ' +
+        'set to yourself, and set it as CAT_FACTORY_API_KEY. The pass then asks for your ' +
         'personal password once, at the moment a run needs it, and never stores it.',
     )
   }
@@ -780,8 +780,10 @@ function buildEntries(input: {
       comment: [
         'Acceptance suite (@cat-factory/acceptance), written by `run configure`.',
         'Gitignored: it holds an API token and a cluster credential.',
-        'A variable exported in the shell WINS over this file, so a one-off',
-        '`ACCEPTANCE_RUN_ID=latest pnpm … acceptance` resumes without editing anything.',
+        'A variable set in the shell WINS over this file, so a one-off resume needs',
+        'no edit here: `pnpm --filter @cat-factory/acceptance run status` prints the',
+        'resume command for the shell you are holding. An ACCEPTANCE_RUN_ID line',
+        'ADDED to this file resumes every later pass until it is removed again.',
         'Backend origin serving /api/v1.',
       ],
       key: 'CAT_FACTORY_BASE_URL',

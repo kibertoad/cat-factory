@@ -7,9 +7,11 @@
 // trusting an object a previous file left behind.
 
 import type { CatFactoryClient, PrReportRunProvider } from '@cat-factory/sdk'
+import { inject } from 'vitest'
 import { DeploymentApi } from '../src/deploymentApi.ts'
 import { type AcceptanceConfig, requireConfig } from '../src/config.ts'
 import { Journal } from '../src/journal.ts'
+import { resumeInvocation } from '../src/operatorText.ts'
 import { createPersonalUnlock, type PersonalUnlock } from '../src/personalUnlock.ts'
 import {
   formatPreflightFailure,
@@ -33,7 +35,8 @@ export type Harness = {
   journal: Journal
   /**
    * The pass's personal-subscription unlock, held for the life of the process and written nowhere.
-   * Handed to `fileAndDrive`; the client already carries whatever it holds onto every request.
+   * Handed to `fileAndDrive`; the client already carries whatever it holds onto every request. Its
+   * value comes from `globalSetup`'s single ask when there was one to make.
    */
   unlock: PersonalUnlock
 }
@@ -53,11 +56,14 @@ function currentHarness(): Harness {
   const config = requireConfig(process.env)
   const runId = resolveRunId(process.env, config.stateDir)
   const world = new WorldStore(config.stateDir, runId)
-  // Built empty: nothing is asked for until a call is refused for want of it, so a workspace whose
-  // models come from a provider API key never sees a prompt. Memoised with the harness rather than
-  // per spec FILE by accident — each vitest file gets its own module graph, so a pass that spends
-  // three specs is asked at most once per FILE that actually starts or answers a run.
-  const unlock = createPersonalUnlock()
+  // Seeded from the ONE ask in `globalSetup`, which runs in the main process: this module graph is
+  // per spec FILE, so a password collected here could never be reached by the next spec, and asking
+  // lazily was asking once per file that starts or answers a run. The supplier is still consulted
+  // lazily, so a provider-key workspace (nothing provided, no call ever refused) reaches no prompt
+  // at all, and a pass whose need could not be read up front falls back to the terminal at the
+  // dispatch that discovers it.
+  const supplied = inject('personalPassword')
+  const unlock = createPersonalUnlock(supplied === undefined ? undefined : async () => supplied)
   cached = {
     config,
     unlock,
@@ -67,13 +73,15 @@ function currentHarness(): Harness {
     journal: new Journal(world.dir, runId),
   }
   // Printed on every spec file's first use because an operator whose run dies in spec 03 needs
-  // this value to resume and has no other way to recover it.
+  // this value to resume and has no other way to recover it. Which makes it the MOST printed
+  // command this suite has, and therefore the one that may least be spelled for a shell the
+  // operator is not holding: `resumeInvocation` renders it for the one that will receive it.
   console.log(
     `\nacceptance run ${runId} against ${config.baseUrl}\n` +
       `  ledger:  ${world.path}\n` +
       `  journal: ${cached.journal.path}\n` +
       `  watch:   pnpm --filter @cat-factory/acceptance run status ${runId}\n` +
-      `  resume:  ACCEPTANCE_RUN_ID=${runId}\n`,
+      `  resume:  ${resumeInvocation(runId)}\n`,
   )
   return cached
 }
