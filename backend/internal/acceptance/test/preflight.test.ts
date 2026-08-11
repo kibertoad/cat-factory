@@ -81,11 +81,45 @@ describe('runPreflight', () => {
     expect(formatPreflightFailure(report)).toContain('ECONNREFUSED')
   })
 
+  it('reads the whole cause chain of a thrown probe, not undici’s contentless wrapper', async () => {
+    // The regression this pins is the one the gate actually shipped with: a deployment that was not
+    // running reported `the check threw: fetch failed`, which is the SAME string a DNS typo and an
+    // untrusted certificate produce, under a remedy listing all three. Shaped exactly as undici
+    // throws it, because the informative link is the one hanging off `.cause`.
+    const report = await runPreflight(
+      [
+        {
+          id: 'health',
+          what: 'nothing',
+          disposition: 'required',
+          check: () =>
+            Promise.reject(
+              new TypeError('fetch failed', {
+                cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8787'), {
+                  code: 'ECONNREFUSED',
+                }),
+              }),
+            ),
+        },
+      ],
+      undefined,
+      { probe: { subject: 'the cat-factory backend', target: 'http://127.0.0.1:8787' } },
+    )
+    const failure = formatPreflightFailure(report) ?? ''
+    expect(failure).toContain('connect ECONNREFUSED 127.0.0.1:8787')
+    // The classified cause reaches the SUMMARY line, which is the only part the streamed
+    // one-per-prerequisite output prints.
+    expect(failure).toContain('could not connect (refused)')
+    // And the remedy is now the one for THIS cause, naming the address, rather than three guesses.
+    expect(failure).toContain('Nothing is listening at http://127.0.0.1:8787')
+    expect(failure).not.toContain('scoped below')
+  })
+
   it('reports each result as it lands, so a slow probe is not a silent one', async () => {
     const seen: string[] = []
-    await runPreflight([prerequisite('a', 'required', satisfied)], undefined, (result) =>
-      seen.push(result.id),
-    )
+    await runPreflight([prerequisite('a', 'required', satisfied)], undefined, {
+      onResult: (result) => seen.push(result.id),
+    })
     expect(seen).toEqual(['a'])
   })
 })

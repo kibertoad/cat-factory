@@ -201,7 +201,12 @@ else imports its **ports** and domain types from here.
   than a hand-built `{ ok: false, message }` a localized surface cannot render. `unknown` is a real
   member, and it yields NO hint: a guessed remedy for an unrecognised failure sends the operator
   somewhere wrong. Classification walks the chain INNERMOST-first, because the outer links are
-  generic wrappers whose own codes would mask the specific cause underneath.
+  generic wrappers whose own codes would mask the specific cause underneath. **`connectionFailureHint`**
+  is the same per-cause remedy for a cause the CALLER classified, and it exists for the one thing the
+  walk cannot see: a client that already converted its own deadline into a typed error whose abort
+  marker is NAMED `AbortError` (the SDK's `CatFactoryTimeoutError`), which the walk therefore reads as
+  a cancelled request. The caller supplies the class; the sentence stays this module's, because a copy
+  written at that call site is one release behind by construction.
 - `shared/initiator-pat-gate.ts`: **`createInitiatorPatGate`**, the two-tier `allowInitiatorPat`
   policy: may a RUN authenticate as its initiator's own personal access token instead of the
   deployment credential? Effective = the ACCOUNT permits AND the WORKSPACE permits, and the tiers

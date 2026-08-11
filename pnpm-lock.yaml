@@ -64,6 +64,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
       '@cat-factory/sdk':
         specifier: workspace:*
         version: link:../../../sdk/typescript

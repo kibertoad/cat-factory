@@ -822,6 +822,7 @@ export {
   MAX_LOGGED_ERROR_CHAIN_CHARS,
 } from './shared/error-chain.logic.js'
 export {
+  connectionFailureHint,
   connectionFailureResult,
   describeConnectionFailure,
   type ConnectionFailureCause,
