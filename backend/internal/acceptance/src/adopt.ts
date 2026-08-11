@@ -105,9 +105,9 @@ export function repoBlocker(
  *
  * The suite's own use of `POST /api/v1/repos/link`, and the reason a hand-written `.env` needs no
  * trip through the app: linking is idempotent, so calling it is also the cheapest way to ASK whether
- * the connection can reach the repository at all. A 404 is the one refusal that matters here and it
- * covers two causes on purpose (no such repository, or a credential not granted it), which is why the
- * message carries both rather than picking one.
+ * the connection can reach the repository at all. One refusal matters here and it covers two causes
+ * on purpose (no such repository, or a credential not granted it), which is why the message carries
+ * both rather than picking one.
  *
  * Any other failure propagates untouched. A 503 from an unwired module and a 500 from a provider
  * outage are facts about the DEPLOYMENT, and dressing either as "create the repository" would send an
@@ -121,9 +121,32 @@ async function linkRepo(options: AdoptOptions): Promise<ListPublicReposResponseR
     journal.say('milestone', `linked ${slug} to the workspace (it was reachable but not adopted)`)
     return linked
   } catch (error) {
-    if (!(error instanceof CatFactoryNotFoundError)) throw error
+    if (!isRepoUnreachable(error)) throw error
     throw new Error(unreachableRepoMessage(repoOwner, repoName))
   }
+}
+
+/**
+ * Whether a failed link means the connection cannot REACH the repository.
+ *
+ * Read off `details.reason`, not off the 404 alone. The status is shared by an answer that means
+ * something else entirely: a deployment predating this endpoint has no route mounted at
+ * `/api/v1/repos/link`, and Hono's unmatched-route 404 arrives at the SDK as the same class. Told
+ * apart by status, that reads as "the repository does not exist" and sends an operator to create one
+ * they already have, over and over, which is exactly the loop this whole module exists to end.
+ *
+ * `repo_not_reachable` is the surface's own vocabulary and its stability is what makes this safe to
+ * branch on; anything else with that status propagates, and the caller reports it as the deployment
+ * fault it is.
+ */
+export function isRepoUnreachable(error: unknown): boolean {
+  if (!(error instanceof CatFactoryNotFoundError)) return false
+  const details: unknown = error.details
+  return (
+    typeof details === 'object' &&
+    details !== null &&
+    (details as { reason?: unknown }).reason === 'repo_not_reachable'
+  )
 }
 
 /**

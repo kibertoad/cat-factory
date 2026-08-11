@@ -51,6 +51,31 @@ const slugField = v.pipe(
   v.minLength(1),
   v.maxLength(100),
 )
+/**
+ * A repository OWNER, which is a slug on GitHub and a `/`-separated namespace PATH on GitLab.
+ *
+ * Separate from {@link slugField} because a GitLab project can live under nested groups, and its
+ * owner is then `group/subgroup`: the value the available-repos read publishes and the one a caller
+ * feeds straight back into the adopt. Refusing the slash there made a nested-group project
+ * unadoptable through this surface at all, with no id-taking alternative to fall back on.
+ *
+ * Still segment-by-segment the same character set, and no empty segment, so it stays a name rather
+ * than a path expression: no `.` or `..` segment, no leading, trailing or doubled separator.
+ */
+const repoOwnerField = v.pipe(
+  v.string(),
+  v.trim(),
+  v.regex(
+    /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/,
+    "Only letters, digits, '.', '_', '-' and '/' between segments are allowed",
+  ),
+  v.check(
+    (value) => !value.split('/').some((segment) => segment === '.' || segment === '..'),
+    "No path segment may be '.' or '..'",
+  ),
+  v.minLength(1),
+  v.maxLength(255),
+)
 const descriptionField = v.pipe(v.string(), v.maxLength(2000))
 const instructionsField = v.pipe(v.string(), v.maxLength(8000))
 const labelField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))
@@ -175,9 +200,12 @@ export type PublicBootstrapJob = v.InferOutput<typeof publicBootstrapJobSchema>
  * against), this one lists what COULD be. `linked` is the join between them.
  *
  * A small projection, like every other shape here: enough to recognise a repository, decide whether
- * to adopt it, and name it in the adopt call. `serviceId` and `linkedElsewhere` are deliberately
- * absent rather than nullable, because both are facts about a LINKED repository's board and an
- * unlinked repository has no answer to give; read them off `GET /api/v1/repos` once it is linked.
+ * to adopt it, and name it in the adopt call. It carries `serviceId` and `linkedElsewhere` for the
+ * same reason `GET /api/v1/repos` does, and derived by the same account-scoped judgement: whether a
+ * repository is SPOKEN FOR is the question a caller asks immediately after "can I reach it", and the
+ * answer does not depend on this workspace having linked it. A repository already backing a service
+ * on another board of the account is unusable here, so a discovery read that could not say so would
+ * green-light an adopt whose next call fails.
  */
 export const publicAvailableRepoSchema = v.object({
   /** The provider's id for the repo, as `GET /api/v1/repos` reports it once linked. */
@@ -190,8 +218,29 @@ export const publicAvailableRepoSchema = v.object({
   private: v.boolean(),
   /** Whether THIS workspace already links it, i.e. whether it appears in `GET /api/v1/repos`. */
   linked: v.boolean(),
-  /** Whether it is flagged as hosting several services. Always false until it is linked. */
+  /**
+   * Whether it is flagged as hosting several services.
+   *
+   * A board-owned flag carried on the linked projection, so an unlinked repository answers false
+   * because nobody has flagged it, not because it was examined. `linked` is what says which of the
+   * two this is.
+   */
   monorepo: v.boolean(),
+  /**
+   * The service on THIS board that the repository already backs, or null.
+   *
+   * Null means "no service here holds it", which is not the same as free: read it with
+   * `linkedElsewhere`, exactly as on `GET /api/v1/repos`.
+   */
+  serviceId: v.nullable(v.string()),
+  /**
+   * True when a service homed on ANOTHER board of this account already backs it, so
+   * `POST /api/v1/services` will refuse it here.
+   *
+   * That service's id is withheld rather than reported, because it names a block this key cannot
+   * read. The flag is what stops the withholding reading as availability.
+   */
+  linkedElsewhere: v.boolean(),
   /**
    * True when it is reachable only through the SIGNED-IN USER's own token rather than the
    * workspace's connection.
@@ -207,6 +256,20 @@ export type PublicAvailableRepo = v.InferOutput<typeof publicAvailableRepoSchema
 
 export const publicAvailableRepoListSchema = v.object({
   repos: v.array(publicAvailableRepoSchema),
+  /**
+   * True when a provider read behind this list stopped at a cap, so repositories the connection can
+   * reach are missing from `repos`.
+   *
+   * Published because an absent row is the one observation this read exists to make actionable, and
+   * a capped browse produces an absent row for a repository that exists, is reachable, and would
+   * link fine. Without this flag those two are the same answer, and a caller told "one that does not
+   * exist appears in neither read" would conclude the wrong one.
+   *
+   * A point-read (`q=owner/name`) is never truncated: it resolves the exact slug directly, which is
+   * why it is the authoritative way to ask about ONE repository, and why a truncated browse is a
+   * reason to narrow the query rather than to give up.
+   */
+  truncated: v.boolean(),
 })
 export type PublicAvailableRepoList = v.InferOutput<typeof publicAvailableRepoListSchema>
 
@@ -223,8 +286,12 @@ export type PublicAvailableRepoList = v.InferOutput<typeof publicAvailableRepoLi
  * reach several owners and a request that guessed one would silently adopt a look-alike.
  */
 export const linkPublicRepoSchema = v.object({
-  /** The account (user or organisation) the repository lives under. */
-  owner: slugField,
+  /**
+   * The account the repository lives under, exactly as `GET /api/v1/repos/available` reports it:
+   * a user or organisation on GitHub, and on GitLab a namespace PATH, which may name a group and
+   * its subgroups (`group/subgroup`).
+   */
+  owner: repoOwnerField,
   /** The repository's name, matched case-insensitively as both providers treat it. */
   name: slugField,
 })

@@ -1,4 +1,4 @@
-import type { GitHubRepo, GroupCacheHandle } from '@cat-factory/kernel'
+import type { GitHubRepo, GroupCacheHandle, Paged } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { GitHubSyncService, type GitHubSyncServiceDependencies } from './GitHubSyncService.js'
 
@@ -56,7 +56,11 @@ interface SearchCall {
 
 function makeService(
   items: GitHubRepo[],
-  opts: { getRepo?: (ref: { owner: string; repo: string }) => Promise<GitHubRepo> } = {},
+  opts: {
+    getRepo?: (ref: { owner: string; repo: string }) => Promise<GitHubRepo>
+    /** What the browse-all leg reports about its own page cap. */
+    browseTruncated?: boolean
+  } = {},
 ): { service: GitHubSyncService; searches: SearchCall[]; pointReads: string[] } {
   const searches: SearchCall[] = []
   const pointReads: string[] = []
@@ -71,7 +75,7 @@ function makeService(
     },
     githubClient: {
       // Browse-all path (blank query).
-      listInstallationRepos: async () => ({ items }),
+      listInstallationRepos: async () => ({ items, truncated: opts.browseTruncated === true }),
       // Realtime search path: model the server-side `owner/name` match a query takes.
       searchInstallationRepos: async (
         installationId: number,
@@ -97,10 +101,13 @@ function makeService(
   return { service: new GitHubSyncService(deps), searches, pointReads }
 }
 
+/** The default fixture service, for a spec that asserts one thing about an ordinary listing. */
+const service0 = (): GitHubSyncService => makeService(REPOS).service
+
 describe('GitHubSyncService.listAvailableRepos', () => {
   it('returns every accessible repo when no query is given (browse-all)', async () => {
     const { service, searches } = makeService(REPOS)
-    const result = await service.listAvailableRepos('ws')
+    const { repos: result } = await service.listAvailableRepos('ws')
     expect(result.map((r) => r.githubId)).toEqual([1, 2, 3, 4])
     // Browse-all must NOT hit the realtime search path.
     expect(searches).toHaveLength(0)
@@ -108,30 +115,61 @@ describe('GitHubSyncService.listAvailableRepos', () => {
 
   it('searches server-side, scoped to the installation account, for a query', async () => {
     const { service, searches } = makeService(REPOS)
-    const result = await service.listAvailableRepos('ws', { q: 'api' })
+    const { repos: result } = await service.listAvailableRepos('ws', { q: 'api' })
     // Matches `acme/api-gateway` and `globex/API-client`, not `web-app`/`billing`.
     expect(result.map((r) => r.githubId).sort()).toEqual([1, 3])
     expect(searches).toEqual([
-      { installationId: 1, query: 'api', opts: { owner: 'acme', ownerType: 'Organization' } },
+      {
+        installationId: 1,
+        query: 'api',
+        // The result cap is passed rather than defaulted, because it doubles as the only signal a
+        // search can give about having stopped short.
+        opts: { owner: 'acme', ownerType: 'Organization', limit: 50 },
+      },
     ])
   })
 
   it('matches on the owner segment too', async () => {
     const { service } = makeService(REPOS)
-    const result = await service.listAvailableRepos('ws', { q: 'globex' })
+    const { repos: result } = await service.listAvailableRepos('ws', { q: 'globex' })
     expect(result.map((r) => r.githubId).sort()).toEqual([3, 4])
+  })
+
+  it('reports a browse that stopped at the page cap, so an absence is not read as unreachable', async () => {
+    // The failure this exists for: a wide installation exceeds the enumeration cap, so a repository
+    // that exists and links fine is simply missing from the rows. Without the flag, a caller told
+    // "one that does not exist appears in neither read" concludes the wrong one.
+    const { service } = makeService(REPOS, { browseTruncated: true })
+    const listing = await service.listAvailableRepos('ws')
+    expect(listing.truncated).toBe(true)
+    expect(listing.repos).toHaveLength(4)
+  })
+
+  it('reports a complete browse as complete', async () => {
+    expect((await service0().listAvailableRepos('ws')).truncated).toBe(false)
+  })
+
+  it('reports a search that exactly filled its cap, where "all" and "more" look the same', async () => {
+    // The count IS the only signal a search can give, which is why the service chooses the cap
+    // rather than leaving it to the adapter's default.
+    const many = Array.from({ length: 50 }, (_, i) => repo(100 + i, 'acme', `svc-${i}`))
+    const { service } = makeService(many)
+    expect((await service.listAvailableRepos('ws', { q: 'svc' })).truncated).toBe(true)
+    // One fewer, and the same search is the whole answer.
+    const { service: fewer } = makeService(many.slice(0, 49))
+    expect((await fewer.listAvailableRepos('ws', { q: 'svc' })).truncated).toBe(false)
   })
 
   it('treats a blank/whitespace query as browse-all, not a search', async () => {
     const { service, searches } = makeService(REPOS)
-    const result = await service.listAvailableRepos('ws', { q: '   ' })
+    const { repos: result } = await service.listAvailableRepos('ws', { q: '   ' })
     expect(result).toHaveLength(4)
     expect(searches).toHaveLength(0)
   })
 
   it('returns an empty list when the query matches nothing', async () => {
     const { service } = makeService(REPOS)
-    const result = await service.listAvailableRepos('ws', { q: 'nonexistent' })
+    const { repos: result } = await service.listAvailableRepos('ws', { q: 'nonexistent' })
     expect(result).toEqual([])
   })
 
@@ -146,7 +184,7 @@ describe('GitHubSyncService.listAvailableRepos', () => {
         throw new Error('HTTP 404')
       },
     })
-    const result = await service.listAvailableRepos('ws', {
+    const { repos: result } = await service.listAvailableRepos('ws', {
       q: 'https://github.com/acme/internal-tool/tree/main/docs',
     })
     expect(result.map((r) => r.githubId)).toEqual([9])
@@ -155,7 +193,7 @@ describe('GitHubSyncService.listAvailableRepos', () => {
       {
         installationId: 1,
         query: 'acme/internal-tool',
-        opts: { owner: 'acme', ownerType: 'Organization' },
+        opts: { owner: 'acme', ownerType: 'Organization', limit: 50 },
       },
     ])
     expect(pointReads).toEqual(['acme/internal-tool'])
@@ -168,14 +206,14 @@ describe('GitHubSyncService.listAvailableRepos', () => {
         throw new Error('HTTP 404')
       },
     })
-    const result = await service.listAvailableRepos('ws', { q: 'acme/api-gateway' })
+    const { repos: result } = await service.listAvailableRepos('ws', { q: 'acme/api-gateway' })
     // Search substring-matches repo 1 too; the merged list holds it once.
     expect(result.map((r) => r.githubId)).toEqual([1])
   })
 
   it('falls back to the search results when the point-read 404s', async () => {
     const { service, pointReads } = makeService(REPOS)
-    const result = await service.listAvailableRepos('ws', { q: 'acme/api-gateway' })
+    const { repos: result } = await service.listAvailableRepos('ws', { q: 'acme/api-gateway' })
     expect(pointReads).toEqual(['acme/api-gateway'])
     expect(result.map((r) => r.githubId)).toEqual([1])
   })
@@ -190,7 +228,7 @@ interface AccessCalls {
 function makePatService(opts: {
   appRepos: GitHubRepo[]
   personal?: { items: GitHubRepo[]; truncated?: boolean } | (() => never)
-  viewerReposCache?: GroupCacheHandle<GitHubRepo[]>
+  viewerReposCache?: GroupCacheHandle<Paged<GitHubRepo>>
 }): { service: GitHubSyncService; access: AccessCalls; enumerations: () => number } {
   const access: AccessCalls = { replace: [], record: [] }
   const personal = opts.personal
@@ -239,7 +277,10 @@ describe('GitHubSyncService.listAvailableRepos — personal PAT expansion', () =
       appRepos: [REPOS[0]!],
       personal: { items: personalRepos },
     })
-    const result = await service.listAvailableRepos('ws', { userId: 'usr_a', userToken: 'tok' })
+    const { repos: result } = await service.listAvailableRepos('ws', {
+      userId: 'usr_a',
+      userToken: 'tok',
+    })
     expect(result.filter((r) => r.personal).map((r) => r.githubId)).toEqual([10, 11])
     // Blank browse-all → the full accessible set is REPLACED (fail-closed cache refresh).
     expect(access.replace).toEqual([{ userId: 'usr_a', count: 2 }])
@@ -253,7 +294,10 @@ describe('GitHubSyncService.listAvailableRepos — personal PAT expansion', () =
         throw new Error('401 bad credentials')
       },
     })
-    const result = await service.listAvailableRepos('ws', { userId: 'usr_a', userToken: 'tok' })
+    const { repos: result } = await service.listAvailableRepos('ws', {
+      userId: 'usr_a',
+      userToken: 'tok',
+    })
     // The App repo still renders; no personal repos; nothing recorded.
     expect(result.map((r) => r.githubId)).toEqual([1])
     expect(access.replace).toHaveLength(0)
@@ -275,7 +319,7 @@ describe('GitHubSyncService.listAvailableRepos — personal PAT expansion', () =
       appRepos: [],
       personal: { items: personalRepos },
     })
-    const result = await service.listAvailableRepos('ws', {
+    const { repos: result } = await service.listAvailableRepos('ws', {
       q: 'scratch',
       userId: 'usr_a',
       userToken: 'tok',
@@ -291,7 +335,7 @@ describe('GitHubSyncService.listAvailableRepos — viewer-repos cache', () => {
   const personalRepos = [repo(10, 'me', 'content-type-app-engine'), repo(11, 'me', 'scratch')]
 
   it('enumerates once and serves later keystrokes from the cache', async () => {
-    const viewerReposCache = makeCache<GitHubRepo[]>()
+    const viewerReposCache = makeCache<Paged<GitHubRepo>>()
     const { service, enumerations } = makePatService({
       appRepos: [],
       personal: { items: personalRepos },
@@ -299,8 +343,8 @@ describe('GitHubSyncService.listAvailableRepos — viewer-repos cache', () => {
     })
     const user = { userId: 'usr_a', userToken: 'tok' }
 
-    const first = await service.listAvailableRepos('ws', { q: 'con', ...user })
-    const second = await service.listAvailableRepos('ws', { q: 'content-type', ...user })
+    const { repos: first } = await service.listAvailableRepos('ws', { q: 'con', ...user })
+    const { repos: second } = await service.listAvailableRepos('ws', { q: 'content-type', ...user })
 
     // Both keystrokes filter the SAME cached enumeration in memory — one GitHub walk, not two.
     expect(first.map((r) => r.githubId)).toEqual([10])
@@ -309,7 +353,7 @@ describe('GitHubSyncService.listAvailableRepos — viewer-repos cache', () => {
   })
 
   it('scopes the cache per user (a different viewer re-enumerates)', async () => {
-    const viewerReposCache = makeCache<GitHubRepo[]>()
+    const viewerReposCache = makeCache<Paged<GitHubRepo>>()
     const { service, enumerations } = makePatService({
       appRepos: [],
       personal: { items: personalRepos },
@@ -321,7 +365,7 @@ describe('GitHubSyncService.listAvailableRepos — viewer-repos cache', () => {
   })
 
   it('caches nothing on a transient enumeration failure (next keystroke retries)', async () => {
-    const viewerReposCache = makeCache<GitHubRepo[]>()
+    const viewerReposCache = makeCache<Paged<GitHubRepo>>()
     let calls = 0
     const { service } = makePatService({
       // An App repo that matches the query, so the degrade-to-App-only is observable.
@@ -336,17 +380,17 @@ describe('GitHubSyncService.listAvailableRepos — viewer-repos cache', () => {
     })
     const user = { q: 'content', userId: 'usr_a', userToken: 'tok' }
 
-    const first = await service.listAvailableRepos('ws', user)
+    const { repos: first } = await service.listAvailableRepos('ws', user)
     // Degrades to App-only, and the failure is NOT cached...
     expect(first.map((r) => r.githubId)).toEqual([1])
-    const second = await service.listAvailableRepos('ws', user)
+    const { repos: second } = await service.listAvailableRepos('ws', user)
     // ...so the next keystroke re-enumerates and now finds the personal repo.
     expect(second.filter((r) => r.personal).map((r) => r.githubId)).toEqual([10])
     expect(calls).toBe(2)
   })
 
   it('drops the cached enumeration for a user when invalidated (PAT change)', async () => {
-    const viewerReposCache = makeCache<GitHubRepo[]>()
+    const viewerReposCache = makeCache<Paged<GitHubRepo>>()
     const { service, enumerations } = makePatService({
       appRepos: [],
       personal: { items: personalRepos },
@@ -457,5 +501,20 @@ describe('GitHubSyncService.linkRepoBySlug', () => {
   it('answers null for a name nothing reaches, which the caller reports as a refusal', async () => {
     const { service } = makeLinker(REPOS)
     expect(await service.linkRepoBySlug('ws', 'acme', 'nonexistent')).toBeNull()
+  })
+
+  it('answers a repository this workspace ALREADY links, even when nothing reaches it now', async () => {
+    // The idempotency the endpoint promises, against the case that breaks it: a repository the
+    // workspace links but the connection no longer surfaces (a personal repo adopted through
+    // somebody's own token, or an App grant since narrowed). Resolving only through the provider
+    // answered a 404 for a repository `GET /api/v1/repos` lists, which tells a re-running setup
+    // script to go and create one that exists.
+    const { service, linked } = makeLinker([])
+    const held = { ...REPOS[0]!, linkedVia: 'user_pat' as const }
+    linked.push(held)
+    const result = await service.linkRepoBySlug('ws', 'ACME', 'API-Gateway')
+    expect(result?.githubId).toBe(held.githubId)
+    // And nothing was re-projected: the row it answered with is the one already there.
+    expect(linked).toEqual([held])
   })
 })

@@ -2100,20 +2100,24 @@ var ListDebugToolCallsResponseToolCallBodiesValues = []ListDebugToolCallsRespons
 
 // ListPublicAvailableReposResponse is the `ListPublicAvailableReposResponse` wire model.
 type ListPublicAvailableReposResponse struct {
-	Repos []ListPublicAvailableReposResponseRepo `json:"repos"`
+	Repos     []ListPublicAvailableReposResponseRepo `json:"repos"`
+	Truncated bool                                   `json:"truncated"`
 }
 
 // ListPublicAvailableReposResponseRepo is the `ListPublicAvailableReposResponseRepo` wire model.
 type ListPublicAvailableReposResponseRepo struct {
-	DefaultBranch string              `json:"defaultBranch"`
-	Linked        bool                `json:"linked"`
-	Monorepo      bool                `json:"monorepo"`
-	Name          string              `json:"name"`
-	Owner         string              `json:"owner"`
-	Personal      bool                `json:"personal"`
-	Private       bool                `json:"private"`
-	Provider      PrReportRunProvider `json:"provider"`
-	RepoID        float64             `json:"repoId"`
+	DefaultBranch   string              `json:"defaultBranch"`
+	Linked          bool                `json:"linked"`
+	LinkedElsewhere bool                `json:"linkedElsewhere"`
+	Monorepo        bool                `json:"monorepo"`
+	Name            string              `json:"name"`
+	Owner           string              `json:"owner"`
+	Personal        bool                `json:"personal"`
+	Private         bool                `json:"private"`
+	Provider        PrReportRunProvider `json:"provider"`
+	RepoID          float64             `json:"repoId"`
+	// ServiceID always present; nil when the server has no value for it.
+	ServiceID *string `json:"serviceId"`
 }
 
 // ListPublicJobsResponse is the `ListPublicJobsResponse` wire model.

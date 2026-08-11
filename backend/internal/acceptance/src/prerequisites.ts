@@ -31,7 +31,9 @@
 
 import type {
   CatFactoryClient,
+  ListPublicAvailableReposResponseRepo,
   ListPublicModelPresetsResponsePreset,
+  ListPublicReposResponseRepo,
   ListPublicWiredModelsResponseModel,
 } from '@cat-factory/sdk'
 import {
@@ -121,6 +123,18 @@ function describeAvailablePresets(
  * to `describeKeyProblem` then fails to compile here instead of quietly falling through to a
  * remedy written for a different problem.
  */
+/**
+ * The fields both repository reads publish about whether a repository is spoken for.
+ *
+ * A structural type over the two SDK row shapes rather than a union of them: `GET /api/v1/repos`
+ * and `GET /api/v1/repos/available` answer this from the SAME account-scoped judgement, so the gate
+ * applies one rule to both populations and gains nothing from knowing which read a row came from.
+ */
+type RepoRowWithUse = Pick<
+  ListPublicReposResponseRepo & ListPublicAvailableReposResponseRepo,
+  'owner' | 'name' | 'serviceId' | 'linkedElsewhere' | 'monorepo'
+>
+
 const KEY_REMEDIES: Record<
   KeyProblem['code'],
   (identity: PublicIdentity, config: AcceptanceConfig) => Remedy
@@ -526,14 +540,14 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // enumeration truncates at its cap and a name search can miss an exact slug. At most two calls,
       // and only for what the first read did not answer.
       const unlisted = found.filter((entry) => !entry.repo)
-      const reachable: { owner: string; name: string }[] = []
+      const reachable: ListPublicAvailableReposResponseRepo[] = []
       const unreachable: typeof unlisted = []
       for (const entry of unlisted) {
         const { repos: exact } = await client.repos.listAvailable({
           q: `${config.repoOwner}/${entry.name}`,
         })
         const hit = findRepo(exact, config.repoOwner, entry.name)
-        if (hit) reachable.push({ owner: hit.owner, name: hit.name })
+        if (hit) reachable.push(hit)
         else unreachable.push(entry)
       }
 
@@ -543,9 +557,14 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         // match `someone-else/foo`), which is the one observation that separates a typo in
         // ACCEPTANCE_REPO_OWNER from a credential that reaches nothing at all.
         const nearby: { owner: string; name: string }[] = []
+        // Whether the SERVER capped any of those searches, which is not the same as this message's
+        // own display cap: a truncated search means the look-alike hunt itself was incomplete, so
+        // "reached no repositories at all" would be a stronger claim than what was observed.
+        let searchCapped = false
         for (const entry of unreachable) {
-          const { repos: byName } = await client.repos.listAvailable({ q: entry.name })
+          const { repos: byName, truncated } = await client.repos.listAvailable({ q: entry.name })
           nearby.push(...byName.map((repo) => ({ owner: repo.owner, name: repo.name })))
+          searchCapped ||= truncated
         }
         const seen = nearby.filter(
           (repo) => !unreachable.some((entry) => sameRepo(repo, config.repoOwner, entry.name)),
@@ -560,7 +579,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
             `GET /api/v1/repos/available finds ${unreachable.length === 1 ? 'it' : 'them'}, and a ` +
             `repository that does not exist answers exactly as one the credential is not granted. ` +
             `Searching the ${unreachable.length === 1 ? 'name' : 'names'} alone reached ` +
-            `${describeVisibleRepos(seen)}`,
+            `${describeVisibleRepos(seen)}` +
+            (searchCapped
+              ? `. That search stopped at the provider's cap, so it is not a complete list of what ` +
+                `the connection can see; the point-read above is what settles reachability`
+              : ''),
           {
             steps: [
               ...unreachableRepoSteps(
@@ -585,12 +608,20 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         )
       }
 
-      // The LINKED rows only, which is the population the three checks below can speak about: a
-      // repository nobody has adopted yet has no `serviceId` to be spoken for and no monorepo flag to
-      // be set, so it is reachable-and-free by construction. Narrowed through a predicate rather than
-      // asserted with `!`, so a row that stopped being present renders as absent rather than as
-      // `undefined/undefined` inside the verdict a reader would rely on.
-      const resolved = found.flatMap((entry) => (entry.repo ? [entry.repo] : []))
+      // Both populations, because both can be spoken for. A repository this workspace has not
+      // adopted is NOT free by construction: `linkedElsewhere` is an ACCOUNT-scoped judgement, so a
+      // repository already backing a service on another board of the account answers it whether or
+      // not this board links it, and the create refuses it either way. Treating "unlinked" as
+      // "available" let exactly that case through the gate, to be caught mid-pass by the adopt's own
+      // `repo_service_homed_elsewhere` refusal, after the run this gate exists to precede.
+      //
+      // The two row shapes carry the same fields for this (`serviceId`, `linkedElsewhere`,
+      // `monorepo`), which is what lets one judgement cover them: `repoBlocker` is generic over
+      // exactly that pair. Narrowed through a predicate rather than asserted with `!`, so a row that
+      // stopped being present renders as absent rather than as `undefined/undefined` inside the
+      // verdict a reader would rely on.
+      const adopted = found.flatMap((entry) => (entry.repo ? [entry.repo] : []))
+      const resolved: RepoRowWithUse[] = [...adopted, ...reachable]
 
       // A repository this workspace can SEE but cannot back a service with. Checked before the
       // ledger comparison below because neither cause has anything to do with which pass this is:
@@ -667,15 +698,15 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // would mean one provider round-trip per row on every call. What a non-empty target actually
       // costs is a scaffold run that builds on top of whatever is there, which is a strange result
       // rather than a failure, so the honest disposition is to say the probe cannot see it.
-      const mine = resolved.filter((repo) => repo.serviceId && owned.has(repo.serviceId))
+      const mine = adopted.filter((repo) => repo.serviceId && owned.has(repo.serviceId))
       // The two populations are reported separately, because they are two different states of the
       // setup and only one of them has been through the checks above: an ADOPTED repository was read
       // with its links and flags, where a merely reachable one is a promise that spec 01 will link it.
       const linkedNote =
-        resolved.length > 0
-          ? `${resolved.map((repo) => `${repo.owner}/${repo.name}`).join(' and ')} ` +
+        adopted.length > 0
+          ? `${adopted.map((repo) => `${repo.owner}/${repo.name}`).join(' and ')} ` +
             (mine.length > 0
-              ? `${mine.length === resolved.length ? 'are both' : `include ${mine.length}`} backed by ` +
+              ? `${mine.length === adopted.length ? 'are both' : `include ${mine.length}`} backed by ` +
                 `a service this pass's own ledger names`
               : 'are adopted and back no service yet')
           : ''

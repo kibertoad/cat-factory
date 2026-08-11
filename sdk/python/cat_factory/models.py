@@ -4490,6 +4490,7 @@ class ListPublicAvailableReposResponse:
     """`ListPublicAvailableReposResponse`, as carried on the wire."""
 
     repos: list[ListPublicAvailableReposResponseRepo]
+    truncated: bool
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -4499,9 +4500,10 @@ class ListPublicAvailableReposResponse:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicAvailableReposResponse":
         """Decode a `ListPublicAvailableReposResponse` from its JSON object."""
-        known = {"repos"}
+        known = {"repos", "truncated"}
         return cls(
             repos=[ListPublicAvailableReposResponseRepo.from_dict(item) for item in data.get("repos") or []],
+            truncated=data.get("truncated"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -4509,6 +4511,7 @@ class ListPublicAvailableReposResponse:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["repos"] = [_encode(item) for item in self.repos]
+        out["truncated"] = self.truncated
         return out
 
 
@@ -4518,6 +4521,7 @@ class ListPublicAvailableReposResponseRepo:
 
     default_branch: str
     linked: bool
+    linked_elsewhere: bool
     monorepo: bool
     name: str
     owner: str
@@ -4525,6 +4529,8 @@ class ListPublicAvailableReposResponseRepo:
     private: bool
     provider: PrReportRunProvider
     repo_id: float
+    #: Always present; ``None`` when the server has no value for it.
+    service_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -4534,10 +4540,11 @@ class ListPublicAvailableReposResponseRepo:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicAvailableReposResponseRepo":
         """Decode a `ListPublicAvailableReposResponseRepo` from its JSON object."""
-        known = {"defaultBranch", "linked", "monorepo", "name", "owner", "personal", "private", "provider", "repoId"}
+        known = {"defaultBranch", "linked", "linkedElsewhere", "monorepo", "name", "owner", "personal", "private", "provider", "repoId", "serviceId"}
         return cls(
             default_branch=data.get("defaultBranch"),
             linked=data.get("linked"),
+            linked_elsewhere=data.get("linkedElsewhere"),
             monorepo=data.get("monorepo"),
             name=data.get("name"),
             owner=data.get("owner"),
@@ -4545,6 +4552,7 @@ class ListPublicAvailableReposResponseRepo:
             private=data.get("private"),
             provider=_enum(PrReportRunProvider, data.get("provider")),
             repo_id=data.get("repoId"),
+            service_id=data.get("serviceId"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -4553,6 +4561,7 @@ class ListPublicAvailableReposResponseRepo:
         out: dict[str, Any] = dict(self.extra)
         out["defaultBranch"] = self.default_branch
         out["linked"] = self.linked
+        out["linkedElsewhere"] = self.linked_elsewhere
         out["monorepo"] = self.monorepo
         out["name"] = self.name
         out["owner"] = self.owner
@@ -4560,6 +4569,7 @@ class ListPublicAvailableReposResponseRepo:
         out["private"] = self.private
         out["provider"] = _encode(self.provider)
         out["repoId"] = self.repo_id
+        out["serviceId"] = self.service_id
         return out
 
 

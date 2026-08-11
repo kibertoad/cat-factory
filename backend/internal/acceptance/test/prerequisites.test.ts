@@ -301,6 +301,7 @@ describe('target-repos', () => {
         list: async () => ({ repos: linked }),
         listAvailable: async ({ q }: { q?: string }) => ({
           repos: reachable.filter((row) => !q || `${row.owner}/${row.name}`.includes(q)),
+          truncated: false,
         }),
       },
     }) as unknown as CatFactoryClient
@@ -427,6 +428,31 @@ describe('target-repos', () => {
     })
     expect(verdict.problem).toContain('ANOTHER board')
     expect(verdict.remedy.steps.join('\n')).toContain('repo_service_homed_elsewhere')
+  })
+
+  it('refuses a reachable-but-unadopted repository whose service is homed elsewhere', async () => {
+    // The hole that opened when "unlinked" started meaning "spec 01 will link it": `linkedElsewhere`
+    // is an ACCOUNT-scoped judgement, so it is true for a repository this board has not adopted, and
+    // `POST /api/v1/services` refuses it either way. Judging only the LINKED rows green-lit exactly
+    // this case, and the pass then died on the adopt, after the gate that exists to precede it.
+    const verdict = await refusal('target-repos', {
+      client: client(
+        [repo('cf-acc-catalog-web')],
+        [repo('cf-acc-catalog-api', { linkedElsewhere: true })],
+      ),
+    })
+    expect(verdict.problem).toContain('ANOTHER board')
+    expect(verdict.problem).toContain('cf-acc-catalog-api')
+  })
+
+  it('refuses a reachable-but-unadopted repository already backing a service on THIS board', async () => {
+    const verdict = await refusal('target-repos', {
+      client: client(
+        [repo('cf-acc-catalog-web')],
+        [repo('cf-acc-catalog-api', { serviceId: 'blk_9' })],
+      ),
+    })
+    expect(verdict.problem).toContain('blk_9')
   })
 
   it('refuses a monorepo, which backs a service only with a subdirectory', async () => {

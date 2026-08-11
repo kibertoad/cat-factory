@@ -1,6 +1,6 @@
 import { CatFactoryNotFoundError, type CatFactoryClient } from '@cat-factory/sdk'
 import { describe, expect, it, vi } from 'vitest'
-import { adoptRepoAsService, findRepo, repoBlocker } from '../src/adopt.ts'
+import { adoptRepoAsService, findRepo, isRepoUnreachable, repoBlocker } from '../src/adopt.ts'
 import type { Journal } from '../src/journal.ts'
 
 // The join between a configured repository name and a board service, and every way it can refuse.
@@ -216,5 +216,30 @@ describe('adoptRepoAsService', () => {
       /linked to service blk_gone, which GET \/api\/v1\/services no longer lists/,
     )
     expect(create).not.toHaveBeenCalled()
+  })
+})
+
+describe('isRepoUnreachable', () => {
+  it('recognises the documented reason, which is what the remedy is written for', () => {
+    expect(isRepoUnreachable(notReachable())).toBe(true)
+  })
+
+  it('does NOT read a bare 404 as a missing repository', () => {
+    // The failure this test pins: a deployment older than the endpoint has no route mounted at
+    // `/api/v1/repos/link`, and Hono's unmatched-route 404 reaches the SDK as the same class with no
+    // reason at all. Classified on status alone it read as "create the repository", which sent an
+    // operator to create one they already had, in a loop this module exists to end.
+    const unmounted = new CatFactoryNotFoundError({
+      status: 404,
+      code: 'unknown',
+      message: '404 Not Found',
+      requestId: 'req_2',
+      body: {},
+    })
+    expect(isRepoUnreachable(unmounted)).toBe(false)
+  })
+
+  it('does not claim anything about a failure of another class', () => {
+    expect(isRepoUnreachable(new Error('socket hang up'))).toBe(false)
   })
 })

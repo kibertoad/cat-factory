@@ -10,6 +10,7 @@ import type {
   LinkedDocumentRefreshOutcome,
   Logger,
   ModelPresetCacheValue,
+  Paged,
   ResolvedAccountSettings,
   ResolvedCatalogEntry,
   RiskPolicyCacheValue,
@@ -832,7 +833,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     options,
     tracker,
   )
-  const viewerRepos = buildGroupCache<GitHubRepo[]>(
+  const viewerRepos = buildGroupCache<Paged<GitHubRepo>>(
     'viewer-repos',
     profile.viewerRepos,
     options,

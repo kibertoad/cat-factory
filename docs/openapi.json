@@ -12875,6 +12875,9 @@
                           "linked": {
                             "type": "boolean"
                           },
+                          "linkedElsewhere": {
+                            "type": "boolean"
+                          },
                           "monorepo": {
                             "type": "boolean"
                           },
@@ -12899,6 +12902,16 @@
                           },
                           "repoId": {
                             "type": "number"
+                          },
+                          "serviceId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -12910,15 +12923,21 @@
                           "private",
                           "linked",
                           "monorepo",
+                          "serviceId",
+                          "linkedElsewhere",
                           "personal"
                         ],
                         "type": "object"
                       },
                       "type": "array"
+                    },
+                    "truncated": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "repos"
+                    "repos",
+                    "truncated"
                   ],
                   "type": "object"
                 }
@@ -13453,9 +13472,9 @@
                     "type": "string"
                   },
                   "owner": {
-                    "maxLength": 100,
+                    "maxLength": 255,
                     "minLength": 1,
-                    "pattern": "^[A-Za-z0-9_.-]+$",
+                    "pattern": "^[A-Za-z0-9_.-]+(?:\\/[A-Za-z0-9_.-]+)*$",
                     "type": "string"
                   }
                 },

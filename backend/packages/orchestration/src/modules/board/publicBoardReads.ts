@@ -20,9 +20,15 @@ import { serviceOf } from './board.logic.js'
 // BLOCK id (`serviceId` in the wire contract) and always exclude the headless `internal` anchors,
 // exactly as the board snapshot does.
 
-/** A repository the workspace can back a service with, and the service already backing it. */
-export interface PublicRepoOption {
-  repo: GitHubRepo
+/**
+ * Whether a repository is already spoken for, and by what.
+ *
+ * Its own type rather than fields on {@link PublicRepoOption}, because the same judgement is owed
+ * about a repository this workspace has NOT linked: that one has no projection row to carry it, and
+ * a second derivation is how the discovery read and the list come to disagree about whether a
+ * repository is free.
+ */
+export interface RepoUse {
   /**
    * The frame block id of the WHOLE-REPO service this repository already backs ON THIS BOARD, or
    * null.
@@ -42,6 +48,14 @@ export interface PublicRepoOption {
    * both facts, and steered a caller straight into the refusal.
    */
   linkedElsewhere: boolean
+}
+
+/** That verdict per provider repo id, for a batch of repositories asked about at once. */
+export type RepoUseByRepoId = ReadonlyMap<number, RepoUse>
+
+/** A repository the workspace can back a service with, and the service already backing it. */
+export interface PublicRepoOption extends RepoUse {
+  repo: GitHubRepo
 }
 
 export interface PublicBoardReadsDeps {
@@ -103,6 +117,45 @@ export class PublicBoardReads {
     if (!this.deps.repoProjectionRepository) return []
     const repos = await this.deps.repoProjectionRepository.list(workspaceId)
     if (repos.length === 0) return []
+    const use = await this.repoUse(workspaceId)
+    return repos.map((repo) => ({ repo, ...use(repo.githubId) }))
+  }
+
+  /**
+   * The same judgement, for repositories this workspace has NOT linked.
+   *
+   * Its own entry point rather than a second derivation, because the two reads that answer "may I
+   * back a service with this repository" must agree: `GET /api/v1/repos` asks it of the linked
+   * projection, and the adoption discovery read (`GET /api/v1/repos/available`) asks it of what the
+   * connection can reach, which is a superset. A repository already backing a service elsewhere in
+   * the account is refused by the create either way, so a discovery read that could not say so would
+   * hand a caller a repository whose very next call fails.
+   *
+   * Takes the ids rather than the rows: the repositories in question have no projection row here
+   * yet, so their id is the only thing this workspace and the account's services share. An empty
+   * input asks nothing and costs nothing.
+   */
+  async describeRepoUse(workspaceId: string, repoIds: readonly number[]): Promise<RepoUseByRepoId> {
+    await this.deps.requireWorkspace(workspaceId)
+    if (repoIds.length === 0) return new Map()
+    const use = await this.repoUse(workspaceId)
+    return new Map(repoIds.map((repoId) => [repoId, use(repoId)]))
+  }
+
+  /**
+   * Build the "is this repository spoken for" verdict once, then answer it per id.
+   *
+   * Two batched reads (this board's frames, and ONE account-scoped service list), never a
+   * `getByRepo` per repository: that is the N+1 this codebase bans, and on a workspace with a
+   * hundred repositories it is a hundred queries to render one picker.
+   *
+   * The service read is ACCOUNT-scoped rather than scoped to this board's frames, because that is
+   * the population the CREATE dedupes against (`findAccountWholeRepoService`). Asking only about
+   * this board's own frames answers "no service backs this repository" for one the create will
+   * refuse, and the two have to agree: a discovery read whose whole job is to say what a caller
+   * may ask for cannot be reading a narrower table than the endpoint that decides.
+   */
+  private async repoUse(workspaceId: string): Promise<(repoId: number) => RepoUse> {
     const frames = (await this.deps.blockRepository.listByWorkspace(workspaceId)).filter(
       (block) => block.level === 'frame' && !block.internal && !block.archived,
     )
@@ -118,18 +171,17 @@ export class PublicBoardReads {
         .map((service) => [service.repoGithubId as number, service.frameBlockId]),
     )
     const visibleFrames = new Set(frames.map((frame) => frame.id))
-    return repos.map((repo) => {
-      const frameBlockId = byRepo.get(repo.githubId)
+    return (repoId) => {
+      const frameBlockId = byRepo.get(repoId)
       // A service homed on another board (one this board merely mounts, or does not mount at all)
       // is not a frame of THIS workspace, so its id is withheld: it would name a block this key
       // cannot read. `linkedElsewhere` is what stops that withholding reading as "available".
       const homedHere = frameBlockId !== undefined && visibleFrames.has(frameBlockId)
       return {
-        repo,
         serviceBlockId: homedHere ? frameBlockId : null,
         linkedElsewhere: frameBlockId !== undefined && !homedHere,
       }
-    })
+    }
   }
 
   /**

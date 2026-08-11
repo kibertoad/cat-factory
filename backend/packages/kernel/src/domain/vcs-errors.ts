@@ -81,6 +81,49 @@ export const GITHUB_SETTINGS_URLS = {
   installations: 'https://github.com/settings/installations',
 } as const
 
+/**
+ * A VCS provider answered a request with a non-2xx status, whichever provider it was.
+ *
+ * The identity a consumer ABOVE the clients branches on. `GitHubApiError` (`@cat-factory/server`)
+ * and `GitLabApiError` (`@cat-factory/gitlab`) both extend it, so a caller that classifies a
+ * provider failure (a rejected credential, an exhausted rate limit) writes ONE check rather than one
+ * per provider. That mattered the moment a public route started re-raising a provider refusal as a
+ * 503: keyed on the GitHub class alone, a GitLab deployment answered the same revoked token with a
+ * 500 telling the operator to file a platform bug, and nothing failed to compile to say so.
+ *
+ * The two subclasses stay separate classes: they carry provider-specific detail (GitHub's
+ * `rateLimited` header flag has no GitLab counterpart), and the many `instanceof GitHubApiError`
+ * checks inside the GitHub adapter are about the GitHub API specifically. What moves here is only
+ * the part every provider shares: a status, and which provider produced it.
+ */
+export class VcsApiError extends Error {
+  constructor(
+    readonly provider: VcsProvider,
+    readonly status: number,
+    message: string,
+    /**
+     * Whether the provider said the credential's quota is EXHAUSTED, where the status alone cannot
+     * say so: GitHub reports a primary rate limit as a 403, which is otherwise a permission denial.
+     * A plain 429 needs no flag, so a client that only ever reports one leaves this false.
+     */
+    readonly rateLimited = false,
+  ) {
+    super(message)
+    this.name = 'VcsApiError'
+  }
+}
+
+/**
+ * Whether a thrown value is a rate-limit refusal from a provider, by either signal.
+ *
+ * One reading of the two, because they mean the same thing to a caller and only one of them is a
+ * status: a caller that checks `status === 429` alone misses GitHub's primary limit entirely, which
+ * is the common case of the two.
+ */
+export function isVcsRateLimited(error: VcsApiError): boolean {
+  return error.rateLimited || error.status === 429
+}
+
 /** The inputs a VCS client has on hand when a request fails, used to pick the remedy. */
 export interface VcsHttpErrorContext {
   provider: VcsProvider

@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import { kubernetesUrlSourceSchema } from './environments-kubernetes.js'
 import {
+  linkPublicRepoSchema,
   publicBootstrapJobSchema,
   publicKubernetesManifestSourceSchema,
   publicKubernetesUrlSourceSchema,
@@ -140,5 +141,32 @@ describe('updatePublicServiceSchema', () => {
     expect(v.parse(updatePublicServiceSchema, { title: 'Catalog API' })).toEqual({
       title: 'Catalog API',
     })
+  })
+})
+
+describe('linkPublicRepoSchema', () => {
+  it('accepts a GitLab namespace PATH as the owner, which is what the available read publishes', () => {
+    // A GitLab project lives under nested groups, so its owner reads `group/subgroup`. Refusing the
+    // slash made a nested-group project unadoptable through this surface at all: the row the
+    // discovery read published could not be fed back into the adopt, and no id-taking alternative
+    // exists to fall back on.
+    expect(v.parse(linkPublicRepoSchema, { owner: 'group/sub', name: 'payments' })).toEqual({
+      owner: 'group/sub',
+      name: 'payments',
+    })
+    expect(v.parse(linkPublicRepoSchema, { owner: 'acme', name: 'payments' }).owner).toBe('acme')
+  })
+
+  it('refuses a path EXPRESSION, which is what separates a namespace from a traversal', () => {
+    // The reason the field is segmented rather than "a string with slashes in it": each segment is
+    // still a name, so an empty, `.` or `..` segment is refused at the boundary rather than being
+    // handed to a provider path builder to interpret.
+    for (const owner of ['/acme', 'acme/', 'acme//sub', 'acme/../other', 'acme/.', 'a b/c']) {
+      expect(() => v.parse(linkPublicRepoSchema, { owner, name: 'payments' })).toThrow()
+    }
+  })
+
+  it('still refuses a slash in the NAME, which is one segment on every provider', () => {
+    expect(() => v.parse(linkPublicRepoSchema, { owner: 'acme', name: 'a/b' })).toThrow()
   })
 })

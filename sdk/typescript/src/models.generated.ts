@@ -1040,7 +1040,7 @@ export const GET_PUBLIC_VCS_CONNECTION_RESPONSE_CONNECTION_METHOD_VALUES = ['app
 export interface LinkPublicRepoRequest {
   /** Length 1..100. */
   name: string
-  /** Length 1..100. */
+  /** Length 1..255. */
   owner: string
 }
 
@@ -1121,11 +1121,13 @@ export const LIST_DEBUG_TOOL_CALLS_RESPONSE_TOOL_CALL_BODIES_VALUES = ['stored',
 
 export interface ListPublicAvailableReposResponse {
   repos: ListPublicAvailableReposResponseRepo[]
+  truncated: boolean
 }
 
 export interface ListPublicAvailableReposResponseRepo {
   defaultBranch: string
   linked: boolean
+  linkedElsewhere: boolean
   monorepo: boolean
   name: string
   owner: string
@@ -1133,6 +1135,8 @@ export interface ListPublicAvailableReposResponseRepo {
   private: boolean
   provider: PrReportRunProvider
   repoId: number
+  /** Always present; `null` when the server has no value for it. */
+  serviceId: string | null
 }
 
 export interface ListPublicJobsResponse {

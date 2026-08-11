@@ -40,15 +40,21 @@ import type {
   EnvironmentsModule,
   GitHubModule,
   ModelPresetsModule,
+  RepoUseByRepoId,
   RiskPoliciesModule,
 } from '@cat-factory/orchestration'
-import { NotFoundError, RateLimitedError, UnavailableError } from '@cat-factory/kernel'
+import {
+  NotFoundError,
+  RateLimitedError,
+  UnavailableError,
+  VcsApiError,
+  isVcsRateLimited,
+} from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
-import { GitHubApiError, githubApiStatus } from '../../github/githubHttpHelpers.js'
 import { resolveWorkspaceModelCatalog } from '../models/workspaceCatalog.js'
 import { toPublicRepo, toPublicService } from './boardProjection.js'
 import { authorizeOrThrow } from './publicApiAuth.js'
@@ -283,8 +289,19 @@ function registerBootstrapRoutes(app: Hono<AppEnv>): void {
  * provider-specific name the neutral surface calls `repoId`) and spells two of its booleans as
  * optional-with-a-default, which a frozen surface may not. Absent becomes the stated value here so a
  * caller never has to distinguish a missing key from a false one.
+ *
+ * Whether the repository is SPOKEN FOR comes in from `use` rather than off the row, because it is a
+ * board fact rather than a provider one: the same account-scoped judgement `GET /api/v1/repos`
+ * publishes, so the two reads cannot come to disagree about whether a repository is free.
  */
-export function toPublicAvailableRepo(repo: GitHubAvailableRepo): PublicAvailableRepo {
+export function toPublicAvailableRepo(
+  repo: GitHubAvailableRepo,
+  use: RepoUseByRepoId,
+): PublicAvailableRepo {
+  // A repository no service in the account holds is free, and the absence of a verdict IS that
+  // answer rather than a missing one: the map is built from these very ids, so the only way a row
+  // is not in it is that nothing claims it.
+  const held = use.get(repo.githubId)
   return {
     repoId: repo.githubId,
     // Absent on a row from a provider-agnostic path that predates the column, which the platform
@@ -298,6 +315,8 @@ export function toPublicAvailableRepo(repo: GitHubAvailableRepo): PublicAvailabl
     private: repo.private,
     linked: repo.linked,
     monorepo: repo.isMonorepo === true,
+    serviceId: held?.serviceBlockId ?? null,
+    linkedElsewhere: held?.linkedElsewhere === true,
     personal: repo.personal === true,
   }
 }
@@ -315,13 +334,18 @@ export function toPublicAvailableRepo(repo: GitHubAvailableRepo): PublicAvailabl
  *
  * Anything else propagates. A provider that is down, or a bug in this platform, is a `500`, and
  * dressing either as a connection problem would send an operator to re-mint a working token.
+ *
+ * Keyed on kernel's provider-neutral `VcsApiError` rather than on the GitHub class: a workspace
+ * connected to GitLab reaches these routes through the same service and throws `GitLabApiError`, so
+ * a GitHub-only check would answer a revoked GitLab token with the `500` this function exists to
+ * prevent, on the deployment least able to tell that is what happened.
  */
 export function asVcsRefusal(error: unknown): unknown {
-  const status = githubApiStatus(error)
-  if (status === undefined) return error
-  // A PRIMARY rate-limit exhaustion is reported as a 403, so the flag decides rather than the status:
+  if (!(error instanceof VcsApiError)) return error
+  const status = error.status
+  // A PRIMARY rate-limit exhaustion is reported as a 403, so the flag decides as well as the status:
   // a permission denial and an exhausted budget are the same number from GitHub.
-  if (error instanceof GitHubApiError && error.rateLimited) {
+  if (isVcsRateLimited(error)) {
     return new RateLimitedError(
       "The source-control provider is rate-limiting this workspace's credential. Retry later.",
       'vcs_rate_limited',
@@ -362,15 +386,25 @@ function registerRepoAdoptionRoutes(app: Hono<AppEnv>): void {
     const auth = await authorizeOrThrow(c, listPublicAvailableReposContract.minScope)
     const github = requireRepoLinking(c)
     const { q } = c.req.valid('query')
-    const repos = await github.syncService.listAvailableRepos(
-      auth.workspaceId,
-      q === undefined ? {} : { q },
+    // Through the same provider-refusal mapping as the link beside it: this read reaches the
+    // provider on the request path too, so a revoked credential or a rate limit here is the same
+    // fact, and answering one of them as a `500` sends a caller to file a platform bug about a
+    // token only they can replace.
+    const { repos, truncated } = await throughVcs(() =>
+      // No viewer token is passed, and that is not an omission: a key authenticates as the
+      // WORKSPACE, so the only repositories in scope are the ones its connection reaches.
+      // `personal` therefore reports false throughout, which the contract states rather than
+      // leaving a caller to infer from a field that never varies.
+      github.syncService.listAvailableRepos(auth.workspaceId, q === undefined ? {} : { q }),
     )
-    // No viewer token is passed, and that is not an omission: a key authenticates as the WORKSPACE,
-    // so the only repositories in scope are the ones its connection reaches. `personal` therefore
-    // reports false throughout, which the contract states rather than leaving a caller to infer from
-    // a field that never varies.
-    return c.json({ repos: repos.map(toPublicAvailableRepo) }, 200)
+    // Whether each is already spoken for, from the SAME account-scoped judgement `GET /api/v1/repos`
+    // publishes and `POST /api/v1/services` decides on. Derived here rather than in the sync service
+    // because it is a board fact, not a provider one, and one batched read for the whole page.
+    const use = await c.get('container').boardService.describeRepoUse(
+      auth.workspaceId,
+      repos.map((repo) => repo.githubId),
+    )
+    return c.json({ repos: repos.map((repo) => toPublicAvailableRepo(repo, use)), truncated }, 200)
   })
 
   // Adopt one by name, so a headless setup never has to open the app. Idempotent: a repository this

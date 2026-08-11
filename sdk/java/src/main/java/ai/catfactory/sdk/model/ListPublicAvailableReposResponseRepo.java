@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
  * The {@code ListPublicAvailableReposResponseRepo} wire model.
  * @param defaultBranch the {@code defaultBranch} field.
  * @param linked the {@code linked} field.
+ * @param linkedElsewhere the {@code linkedElsewhere} field.
  * @param monorepo the {@code monorepo} field.
  * @param name the {@code name} field.
  * @param owner the {@code owner} field.
@@ -18,12 +19,15 @@ import org.jspecify.annotations.Nullable;
  * @param isPrivate the {@code private} field.
  * @param provider the {@code provider} field.
  * @param repoId the {@code repoId} field.
+ * @param serviceId Always present; {@code null} when the server has no value for it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ListPublicAvailableReposResponseRepo(
     @JsonProperty("defaultBranch") String defaultBranch,
 
     @JsonProperty("linked") Boolean linked,
+
+    @JsonProperty("linkedElsewhere") Boolean linkedElsewhere,
 
     @JsonProperty("monorepo") Boolean monorepo,
 
@@ -37,7 +41,10 @@ public record ListPublicAvailableReposResponseRepo(
 
     @JsonProperty("provider") PrReportRunProvider provider,
 
-    @JsonProperty("repoId") Double repoId
+    @JsonProperty("repoId") Double repoId,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("serviceId") @Nullable String serviceId
 ) {
 
     /** A new builder for {@link ListPublicAvailableReposResponseRepo}. */
@@ -54,6 +61,7 @@ public record ListPublicAvailableReposResponseRepo(
     public static final class Builder {
         private @Nullable String defaultBranch;
         private @Nullable Boolean linked;
+        private @Nullable Boolean linkedElsewhere;
         private @Nullable Boolean monorepo;
         private @Nullable String name;
         private @Nullable String owner;
@@ -61,6 +69,7 @@ public record ListPublicAvailableReposResponseRepo(
         private @Nullable Boolean isPrivate;
         private @Nullable PrReportRunProvider provider;
         private @Nullable Double repoId;
+        private @Nullable String serviceId;
 
         /** Set {@code defaultBranch}. */
         public Builder defaultBranch(@Nullable String defaultBranch) {
@@ -71,6 +80,12 @@ public record ListPublicAvailableReposResponseRepo(
         /** Set {@code linked}. */
         public Builder linked(@Nullable Boolean linked) {
             this.linked = linked;
+            return this;
+        }
+
+        /** Set {@code linkedElsewhere}. */
+        public Builder linkedElsewhere(@Nullable Boolean linkedElsewhere) {
+            this.linkedElsewhere = linkedElsewhere;
             return this;
         }
 
@@ -116,9 +131,15 @@ public record ListPublicAvailableReposResponseRepo(
             return this;
         }
 
+        /** Set {@code serviceId}. */
+        public Builder serviceId(@Nullable String serviceId) {
+            this.serviceId = serviceId;
+            return this;
+        }
+
         /** Build the {@link ListPublicAvailableReposResponseRepo}. */
         public ListPublicAvailableReposResponseRepo build() {
-            return new ListPublicAvailableReposResponseRepo(defaultBranch, linked, monorepo, name, owner, personal, isPrivate, provider, repoId);
+            return new ListPublicAvailableReposResponseRepo(defaultBranch, linked, linkedElsewhere, monorepo, name, owner, personal, isPrivate, provider, repoId, serviceId);
         }
     }
 }

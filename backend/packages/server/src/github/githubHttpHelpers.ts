@@ -3,6 +3,8 @@
 // base64/timestamp/`Link`-header parsing) shared by the REST methods, with no coupling
 // to the client's dependencies or `this`, so they live cleanly on their own.
 
+import { VcsApiError } from '@cat-factory/kernel'
+
 /** Derive `{owner, repo, number}` from an issue's `html_url`, or null if it doesn't match. */
 export function parseIssueHtmlUrl(
   url: string,
@@ -81,11 +83,16 @@ export const MAX_PAGES = 10
  * Lives with the shared HTTP helpers rather than on the client that throws it, because several
  * modules now classify off it (`reconcileStaleRepos`, the branch-protection probe) and the
  * client is at its size budget. `FetchGitHubClient` re-exports it, so existing importers are
- * unaffected and `instanceof` stays authoritative — there is exactly one class.
+ * unaffected and `instanceof` stays authoritative: there is exactly one class.
+ *
+ * A subclass of kernel's `VcsApiError`, which is what a consumer above the adapters branches on: a
+ * caller asking "did the provider refuse this" must get the same answer on a GitLab deployment, and
+ * only the base class can give it one. Checking this class stays right for anything asking about
+ * the GitHub API specifically.
  */
-export class GitHubApiError extends Error {
+export class GitHubApiError extends VcsApiError {
   constructor(
-    readonly status: number,
+    status: number,
     message: string,
     /**
      * Whether the response was rate-limited (`x-ratelimit-remaining: 0`). GitHub reports a
@@ -94,9 +101,9 @@ export class GitHubApiError extends Error {
      * classify the two differently. Retained here so the signal is available structurally
      * instead of only baked into the human message.
      */
-    readonly rateLimited = false,
+    rateLimited = false,
   ) {
-    super(message)
+    super('github', status, message, rateLimited)
     this.name = 'GitHubApiError'
   }
 }
@@ -104,4 +111,51 @@ export class GitHubApiError extends Error {
 /** The HTTP status of a GitHub API failure, or undefined for any other error shape. */
 export function githubApiStatus(error: unknown): number | undefined {
   return error instanceof GitHubApiError ? error.status : undefined
+}
+
+/** One fetched page of a `Link`-paginated GitHub listing, as the client's request helper returns it. */
+export interface PaginatedPage {
+  status: number
+  json: unknown
+  /** Absolute URL of the next page, if any. */
+  next?: string
+}
+
+/**
+ * Walk a `Link`-paginated listing to the page cap, reporting whether it stopped with more to fetch.
+ *
+ * A free function over a `fetchPage` callback rather than a client method, for the reason every
+ * other helper here is: the walk needs nothing from the client but the ability to make one request,
+ * so keeping it beside `MAX_PAGES` (the cap it enforces) puts the loop and its bound in one place
+ * and leaves the client file to the REST methods.
+ *
+ * `truncated` is the fact a PUBLISHING caller owes its reader: a repository missing because the
+ * enumeration stopped and one the credential cannot reach are opposite answers, and by the time the
+ * items are a bare array the difference is gone. A walk that ended on the caller's own `stop`
+ * predicate, or on a `304 Not Modified`, is NOT truncated: it found what it came for.
+ */
+export async function walkPages<T>(
+  start: string,
+  fetchPage: (url: string) => Promise<PaginatedPage>,
+  map: (json: unknown) => T[],
+  stop?: (page: T[]) => boolean,
+): Promise<{ items: T[]; truncated: boolean }> {
+  const all: T[] = []
+  let url: string | undefined = start
+  let stopped = false
+  for (let page = 0; url && page < MAX_PAGES; page++) {
+    const response = await fetchPage(url)
+    if (response.status === 304) {
+      stopped = true
+      break
+    }
+    const mapped = map(response.json)
+    all.push(...mapped)
+    if (stop?.(mapped)) {
+      stopped = true
+      break
+    }
+    url = response.next
+  }
+  return { items: all, truncated: !stopped && url !== undefined }
 }

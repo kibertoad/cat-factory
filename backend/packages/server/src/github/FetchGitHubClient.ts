@@ -55,7 +55,6 @@ import {
   ACCEPT,
   API_VERSION,
   GitHubApiError,
-  MAX_PAGES,
   PER_PAGE,
   USER_AGENT,
   decodeBase64Utf8,
@@ -64,6 +63,7 @@ import {
   parseGitHubTime,
   parseIssueHtmlUrl,
   parseNextLink,
+  walkPages,
 } from './githubHttpHelpers.js'
 
 // Re-exported so every existing importer keeps resolving it from the client it is thrown by;
@@ -234,15 +234,17 @@ export class FetchGitHubClient implements GitHubClient {
 
   async listInstallationRepos(installationId: number): Promise<Paged<GitHubRepo>> {
     const syncedAt = this.deps.clock.now()
-    const items = await this.paginate<GitHubRepo>(
+    // Paged rather than flattened: a wide installation exceeds the page cap, and the callers that
+    // SHOW this list (the picker, the public available-repos read) have to say so rather than let a
+    // repository beyond the window read as one the installation was never granted.
+    return walkPages<GitHubRepo>(
       `/installation/repositories?per_page=${PER_PAGE}`,
-      { installationId },
+      (url) => this.request(url, { installationId }),
       (json) => {
         const repos = (json as { repositories?: gp.GhRepoPayload[] }).repositories ?? []
         return repos.map((r) => gp.toRepoProjection(r, installationId, syncedAt))
       },
     )
-    return { items }
   }
 
   async searchInstallationRepos(
@@ -1261,17 +1263,8 @@ export class FetchGitHubClient implements GitHubClient {
     map: (json: unknown) => T[],
     stop?: (page: T[]) => boolean,
   ): Promise<T[]> {
-    const all: T[] = []
-    let url: string | undefined = path
-    for (let page = 0; url && page < MAX_PAGES; page++) {
-      const response: GitHubResponse = await this.request(url, opts)
-      if (response.status === 304) break
-      const mapped = map(response.json)
-      all.push(...mapped)
-      if (stop?.(mapped)) break
-      url = response.next
-    }
-    return all
+    const { items } = await walkPages(path, (url) => this.request(url, opts), map, stop)
+    return items
   }
 
   private async request(pathOrUrl: string, opts: RequestOptions): Promise<GitHubResponse> {

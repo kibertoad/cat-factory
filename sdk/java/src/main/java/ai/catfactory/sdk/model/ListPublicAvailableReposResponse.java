@@ -11,10 +11,13 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code ListPublicAvailableReposResponse} wire model.
  * @param repos the {@code repos} field.
+ * @param truncated the {@code truncated} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ListPublicAvailableReposResponse(
-    @JsonProperty("repos") List<ListPublicAvailableReposResponseRepo> repos
+    @JsonProperty("repos") List<ListPublicAvailableReposResponseRepo> repos,
+
+    @JsonProperty("truncated") Boolean truncated
 ) {
 
     /** A new builder for {@link ListPublicAvailableReposResponse}. */
@@ -30,6 +33,7 @@ public record ListPublicAvailableReposResponse(
      */
     public static final class Builder {
         private @Nullable List<ListPublicAvailableReposResponseRepo> repos;
+        private @Nullable Boolean truncated;
 
         /** Set {@code repos}. */
         public Builder repos(@Nullable List<ListPublicAvailableReposResponseRepo> repos) {
@@ -37,9 +41,15 @@ public record ListPublicAvailableReposResponse(
             return this;
         }
 
+        /** Set {@code truncated}. */
+        public Builder truncated(@Nullable Boolean truncated) {
+            this.truncated = truncated;
+            return this;
+        }
+
         /** Build the {@link ListPublicAvailableReposResponse}. */
         public ListPublicAvailableReposResponse build() {
-            return new ListPublicAvailableReposResponse(repos);
+            return new ListPublicAvailableReposResponse(repos, truncated);
         }
     }
 }

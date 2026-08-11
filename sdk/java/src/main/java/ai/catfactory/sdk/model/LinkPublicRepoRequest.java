@@ -10,14 +10,14 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code LinkPublicRepoRequest} wire model.
  * @param name Length 1..100.
- * @param owner Length 1..100.
+ * @param owner Length 1..255.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record LinkPublicRepoRequest(
     /** Length 1..100. */
     @JsonProperty("name") String name,
 
-    /** Length 1..100. */
+    /** Length 1..255. */
     @JsonProperty("owner") String owner
 ) {
 

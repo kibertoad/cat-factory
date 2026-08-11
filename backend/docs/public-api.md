@@ -958,18 +958,18 @@ group is how a caller gets there without a browser: create the repository or ADO
 exists, connect the cluster, tell a service where its manifests live, and read back what the
 deployment actually has.
 
-| Method / path                                | Scope   | Behaviour                                                                                                       |
-| -------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/repos/bootstrap`               | `admin` | Create a repository and adapt it with the bootstrapper agent. `201` with a job to poll.                         |
-| `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                             |
-| `GET /api/v1/repos/available`                | `admin` | The repositories your connection can REACH, linked or not. `?q=owner/name` point-reads one.                     |
-| `POST /api/v1/repos/link`                    | `admin` | Adopt a reachable repository by `owner`/`name`. Idempotent `200`; `404 repo_not_reachable` otherwise.           |
-| `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`. |
-| `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                 |
-| `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                  |
-| `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                 |
-| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the workspace default. Pin one as `riskPolicyId`.                         |
-| `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                        |
+| Method / path                                | Scope   | Behaviour                                                                                                                    |
+| -------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/repos/bootstrap`               | `admin` | Create a repository and adapt it with the bootstrapper agent. `201` with a job to poll.                                      |
+| `GET /api/v1/repos/bootstrap/:jobId`         | `admin` | Poll one bootstrap. `404 bootstrap_job_not_found` for a job outside your workspace.                                          |
+| `GET /api/v1/repos/available`                | `admin` | The repositories your connection can REACH, linked or not. `?q=owner/name` point-reads one; `truncated` marks a capped list. |
+| `POST /api/v1/repos/link`                    | `admin` | Adopt a reachable repository by `owner`/`name`. Idempotent `200`; `404 repo_not_reachable` otherwise.                        |
+| `POST /api/v1/environments/connections/test` | `admin` | Probe a candidate cluster connection, persisting nothing. A refusal by the cluster is a `200` with `ok: false`.              |
+| `POST /api/v1/environments/connections`      | `admin` | Bind environment provisioning to a cluster. Idempotent: re-connecting replaces.                                              |
+| `GET /api/v1/models`                         | `admin` | The models a run here could dispatch to, with `available` and `policyBlocked`.                                               |
+| `GET /api/v1/vcs/connection`                 | `admin` | The source-control connection and what it may do. `connection: null` when nothing is connected.                              |
+| `GET /api/v1/risk-policies`                  | `admin` | The risk policies, including which is the workspace default. Pin one as `riskPolicyId`.                                      |
+| `GET /api/v1/model-presets`                  | `admin` | The model presets, including which is the workspace default. Pin one as `modelPresetId`.                                     |
 
 **The five reads are `admin` rather than `read`, unlike `/repos` and `/pipelines`.** The difference
 is what they name: those name board CONTENT, where these name what the DEPLOYMENT has wired,
@@ -988,7 +988,9 @@ listing the library would hand a `write` key, by typo, exactly what `admin` gate
 GET /api/v1/repos/available?q=acme/payments-api
 { "repos": [ { "repoId": 40123, "provider": "github", "owner": "acme", "name": "payments-api",
                "defaultBranch": "main", "private": true, "linked": false,
-               "monorepo": false, "personal": false } ] }
+               "monorepo": false, "serviceId": null, "linkedElsewhere": false,
+               "personal": false } ],
+  "truncated": false }
 
 POST /api/v1/repos/link
 { "owner": "acme", "name": "payments-api" }
@@ -1016,8 +1018,26 @@ reach several owners, and a request that guessed would silently adopt a look-ali
 
 **Idempotent, answering `200` either way.** Adopting a repository your workspace already links returns
 the same row rather than refusing, because the caller that needs this most is a setup script re-running
-itself. What the row does report is whether the repository is spoken for (`serviceId`,
-`linkedElsewhere`), which is the question you ask next.
+itself. That holds even for a repository your connection can no longer reach (a personal repository
+adopted through someone's own token, or an App grant since narrowed): it is resolved from what your
+workspace links before the provider is consulted at all, so a re-run never answers `404` for a
+repository `GET /api/v1/repos` still lists.
+
+**Both rows answer whether the repository is SPOKEN FOR**, from one account-scoped judgement:
+`serviceId` names the service holding it on your board, and `linkedElsewhere` says a service on
+another board of the account holds it, in which case `POST /api/v1/services` refuses it. The
+available read publishes both for the same reason the repos list does, and a repository you have not
+linked is not free by construction: read the pair before adopting, not after.
+
+**`truncated` on the available read says the list is a PREFIX.** A wide connection exceeds the page
+and search caps behind it, so a reachable repository can be missing from `repos` simply because the
+walk stopped. Without that flag it would be indistinguishable from a repository that does not exist,
+which is the very confusion this read exists to remove. A point-read (`?q=owner/name`) resolves the
+exact slug directly and is therefore authoritative about that one repository either way: it is the
+right follow-up to a truncated browse.
+
+**The owner may be a namespace PATH.** GitLab projects live under nested groups, so a row's `owner`
+can read `group/subgroup`, and the link accepts exactly what the available read published.
 
 `404` with `details.reason: repo_not_reachable` covers two causes deliberately: a repository that does
 not exist under that owner, and one your credential is not granted (an app installation must include

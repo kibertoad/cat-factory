@@ -29,13 +29,10 @@ import {
   readTokenCommand,
   runCommand,
 } from '@cat-factory/cli'
-import {
-  CatFactoryClient,
-  CatFactoryNotFoundError,
-  type PrReportRunProvider,
-} from '@cat-factory/sdk'
+import { CatFactoryClient, type PrReportRunProvider } from '@cat-factory/sdk'
 import {
   blockedRepoMessage,
+  isRepoUnreachable,
   repoBlocker,
   unreachableRepoSteps,
   type VcsAccessMethod,
@@ -723,11 +720,12 @@ export function connectDeployment(baseUrl: string, apiKey: string): ConfigureCli
           },
         }
       } catch (error) {
-        // The ONE status this command turns into a value. `repo_not_reachable` is the documented
-        // reason, and it is matched on the STATUS rather than the reason string because the status is
-        // what the surface promises; anything else is a deployment fault and belongs to the caller's
-        // three-state read.
-        if (error instanceof CatFactoryNotFoundError) return { status: 'unreachable' }
+        // The ONE status this command turns into a value, recognised by `details.reason` rather than
+        // by the 404 alone: a deployment predating this endpoint answers an unmatched route with the
+        // same status, and reading that as "the repository does not exist" would send an operator to
+        // create one they already have. `adopt.ts` owns the test, because the gate, the adopt and
+        // this command have to agree about which failure is a person's to fix.
+        if (isRepoUnreachable(error)) return { status: 'unreachable' }
         throw error
       }
     },
