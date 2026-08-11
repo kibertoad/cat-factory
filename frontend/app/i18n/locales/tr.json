@@ -149,6 +149,7 @@
       "archiveFailed": "Hizmet arşivlenemedi",
       "restoreFailed": "Hizmet geri yüklenemedi",
       "moveRefused": {
+        "relaxes_run_oversight": "Bu görevi taşıdığın yerde bir çalıştırma, bir kişiyi beklemek yerine kendi inceleme kontrol noktalarını kendisi yanıtlıyor; burada geçerli olan birleştirme ilkesi ise bunu yapmıyor. Taşıması için bir çalışma alanı yöneticisine başvur.",
         "relaxes_role_sandbox": "Bu görevin çalıştırmaları şu anki yerinde rolün için yalıtılmış, taşıdığın yerde geçerli olacak birleştirme ilkesi ise değil. Taşıması için bir çalışma alanı yöneticisine başvur.",
         "relaxes_role_submission_allowlist": "Taşıdığın yerdeki birleştirme ilkesi, burada sana kapalı olan değişiklik türlerini birleştirmene izin verirdi. Taşıması için bir çalışma alanı yöneticisine başvur.",
         "relaxes_role_class_rule": "Taşıdığın yerdeki birleştirme ilkesi, burada incelemekle yükümlü olduğun değişiklikleri otomatik birleştiriyor. Taşıması için bir çalışma alanı yöneticisine başvur."
@@ -3121,6 +3122,8 @@
       "default": "Varsayılan",
       "makeDefault": "Varsayılan yap",
       "deleteDefaultBlocked": "Varsayılan ilke silinemez",
+      "deleteUnattendedDefaultBlocked": "Gözetimsiz çalıştırmaların varsayılan ilkesi silinemez",
+      "deleteBothDefaultsBlocked": "Bu ilke hem uygulama içi hem de gözetimsiz varsayılan olduğu için silinemez",
       "deletePreset": "İlkeyi sil",
       "field": {
         "maxComplexity": "Maks. karmaşıklık %",
@@ -3199,6 +3202,14 @@
         "redundant": "Etkisi yok: bu ilke zaten en az bu kadar katı.",
         "alreadyStrictest": "Zaten her zaman inceleniyor",
         "baseHint": "Bu ilke her kategori için puanları karşılaştırır, bu yüzden bir rol bir kategoriyi yalnızca inceleme zorunluluğuna kadar sıkılaştırabilir."
+      },
+      "unattendedDefault": "Gözetimsiz varsayılan",
+      "makeUnattendedDefault": "Gözetimsiz çalıştırmalar için varsayılan yap (API, takip sistemi, zamanlama)",
+      "makeUnattendedDefaultShort": "Gözetimsiz varsayılan",
+      "autonomy": {
+        "label": "Gözetimsiz çalıştırmaları bir kişiyi beklemeden tamamla",
+        "unattendedHint": "Otomatik bir döngü pes ettiğinde (yeniden çalışma sınırındaki bir companion, geçiş sınırındaki bir inceleme, ayıklanmamış takip maddeleri), çalıştırma durmak yerine kayda geçirilerek devam eder. Hattın istediği kapılar, örneğin insan testi, inceleme ve onay, çalıştırmayı yine durdurur.",
+        "attendedHint": "Otomatik bir döngü pes ettiğinde çalıştırma durur ve birinin seçim yapmasını bekler. Birinin izlediği bir pano için doğrudur; API üzerinden başlatılan bir çalıştırma süresiz bekler."
       }
     },
     "observabilityConnection": {
@@ -6704,6 +6715,7 @@
       "workspaceDefaultCaption": "Bu görev kendine bir ilke seçmediği için uygulanır.",
       "noneHint": "Yapılandırılmış risk ilkesi yok. Her pull request insan incelemesini bekler.",
       "refused": {
+        "relaxes_run_oversight": "Rolün için kullanılamaz: bu ilke, bir çalıştırmanın bir kişiyi beklemek yerine kendi inceleme kontrol noktalarını kendisinin yanıtlamasına izin verir. Bir çalışma alanı yöneticisi bunu değiştirebilir.",
         "relaxes_role_sandbox": "Rolün için kullanılamaz: bu görevin çalışmaları yalıtılmış çalışır ve bu ilke birleştirmelerine izin verirdi. Bir çalışma alanı yöneticisi bunu değiştirebilir.",
         "relaxes_role_submission_allowlist": "Rolün için kullanılamaz: bu ilke, bu görevde sana kapalı olan değişiklik türlerini birleştirmene izin verirdi. Bir çalışma alanı yöneticisi bunu değiştirebilir.",
         "relaxes_role_class_rule": "Rolün için kullanılamaz: bu ilke, bu görevde incelemen gereken değişiklikleri otomatik birleştirir. Bir çalışma alanı yöneticisi bunu değiştirebilir."

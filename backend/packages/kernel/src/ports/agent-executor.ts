@@ -669,6 +669,40 @@ export interface AgentRunContext {
     comments?: { quotedSource?: string; body: string }[]
   }
   /**
+   * The rounds this step's companion loop has ALREADY been through, oldest first — the memory
+   * that turns a repeated grading into a ratchet instead of independent draws.
+   *
+   * Both sides of the loop receive it, framed by `role`:
+   *  - `grader` (the companion itself): every verdict it has given so far. Without this it
+   *    re-grades a revised document with no idea what it asked for last time, so it cannot tell
+   *    "they fixed it" from "they never touched it", spends each round's attention on a fresh
+   *    subset, and returns a score drawn from the same distribution however much improved. That
+   *    is what makes a rework budget buy nothing, and it is the question the budget is spent to
+   *    answer. The JUDGE bucket has had this from the start (`JudgeSubject.previousFindings`);
+   *    this is the companion bucket catching up.
+   *  - `producer` (the step being reworked): the EARLIER rounds only, because the current one is
+   *    already in {@link revision} in the "here is what to fix" framing. It stops a producer from
+   *    regressing on a point raised two rounds ago, which nothing else tells it about.
+   *
+   * Absent on the first grading of a step, on every non-companion step, and on the human
+   * "request changes" path (one person's review is not a loop with a history).
+   */
+  priorReview?: {
+    role: 'grader' | 'producer'
+    /** The bar every round was judged against, so a score in the list is readable. */
+    threshold: number
+    /** How many automatic rework rounds this loop may still spend; 0 ⇒ this is the last. */
+    roundsRemaining: number
+    rounds: {
+      /** 1-based, in the order they happened. */
+      round: number
+      rating: number
+      passed: boolean
+      summary: string
+      comments?: { quotedSource?: string; body: string }[]
+    }[]
+  }
+  /**
    * The initiative context a run carries, resolved by the engine from the block's `initiatives`
    * entity. Two shapes:
    *  - An initiative-LEVEL (planning) run carries the FULL planning context: the interviewer's

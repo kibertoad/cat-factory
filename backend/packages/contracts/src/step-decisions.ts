@@ -82,6 +82,18 @@ export const companionVerdictSchema = v.object({
   passed: v.boolean(),
   /** The companion's challenge / justification (its assessment summary). */
   feedback: v.string(),
+  /**
+   * The per-item challenges this round anchored (the assessment's own `comments`).
+   *
+   * Stored, rather than left to the summary alone, because the verdict list is what a LATER round
+   * is shown: a companion re-grades a document it has already reviewed, and the question worth
+   * spending a rework budget on is "was what I asked for done", which it cannot answer against a
+   * summary that named none of the specific asks. The producer is handed the same list for the
+   * mirror-image reason — so it cannot regress on a point raised two rounds ago and forgotten.
+   *
+   * Absent on a round that anchored nothing, and on every verdict written before this existed.
+   */
+  comments: v.optional(v.array(stepReviewCommentSchema)),
 })
 export type CompanionVerdict = v.InferOutput<typeof companionVerdictSchema>
 

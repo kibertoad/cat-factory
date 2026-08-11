@@ -6,6 +6,7 @@ import {
   FRAGMENT_ADHERENCE_GUIDANCE,
   REVIEW_SUMMARY_LAYOUT,
 } from './shared.js'
+import { anchoredQualityScale } from './review-rounds.js'
 
 // System prompt for a companion agent, parameterised by the producer kind it
 // reviews. The companion returns a single overall quality rating (0..1) plus prose
@@ -24,8 +25,14 @@ export function companionSystemPrompt(
     `preceding ${def.targets.join(' / ')} step. Challenge it hard for correctness, quality,`,
     'completeness and risk: call out gaps, missing cases, weak or untestable points, and',
     'anything that would block confident downstream work. Then give a SINGLE overall quality',
-    'rating between 0 and 1 (1 = excellent and complete, 0 = unusable). Be a fair but demanding',
-    'critic — do not rubber-stamp.',
+    'rating between 0 and 1. Be a fair but demanding critic: do not rubber-stamp, and do not',
+    'hunt for something to say when the work is sound.',
+    '',
+    // The SAME anchors the judge bucket scores on. Unanchored, "rate this 0..1" produces a
+    // number drawn from the model's priors rather than from the work, which is what made a
+    // rework loop's scores wander instead of climb: the step's `threshold` can only mean
+    // something if two consecutive rounds mean the same thing by 0.8.
+    anchoredQualityScale('the standard for this deliverable'),
     // A container-backed companion gets a real, read-only checkout of the producer's PR
     // branch. Reviewing the producer's summary reply alone is worthless — judge the ACTUAL
     // artifact: open and read the changed files / the full committed document and whatever

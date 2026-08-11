@@ -19,6 +19,7 @@ import type {
   RequirementConcernLevel,
   RequirementReview,
   ResolveRunRepoContext,
+  RunAutonomy,
   RunInitiatorScope,
   StepGating,
   StepResolverRegistry,
@@ -46,6 +47,7 @@ import type { PrVerificationReportController } from './PrVerificationReportContr
 import type { RalphController } from './RalphController.js'
 import type { ReviewGateController, ReviewKind } from './ReviewGateController.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { StepGraph } from './StepGraph.js'
 import type { TesterController } from './TesterController.js'
 import type { VisualConfirmationController } from './VisualConfirmationController.js'
@@ -76,6 +78,8 @@ type ResolvedRiskPolicy = {
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
   forkDecision?: StepGating | null
+  /** Whether the run answers its own automatic-loop caps (the follow-up gate reads it). */
+  autonomy?: RunAutonomy
 }
 
 /** Collaborators + leaf dependencies the {@link RunDispatcher} needs. */
@@ -168,7 +172,11 @@ export interface RunDispatcherDeps {
     modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   /** Resolve a task's merge preset (stays on the engine, shared with the merge subgraph). */
-  resolveRiskPolicy: (workspaceId: string, block: Block) => Promise<ResolvedRiskPolicy>
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<ResolvedRiskPolicy>
   /** Whether a resolved model id incurs metered monetary cost (the start gate's predicate). */
   modelIdIsMetered: (id: string | undefined, caps: ProviderCapabilities) => boolean
 }

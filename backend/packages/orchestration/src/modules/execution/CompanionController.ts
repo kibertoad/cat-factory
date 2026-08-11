@@ -5,7 +5,9 @@ import type {
   Block,
   ExecutionInstance,
   IdGenerator,
+  Logger,
   PipelineStep,
+  RunAutonomy,
 } from '@cat-factory/kernel'
 import {
   type CompanionAssessment,
@@ -20,6 +22,7 @@ import { extractJson } from '../requirements/requirements.logic.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import { resolvesOwnCaps, type RunPolicyScope } from './policy-types.js'
 import { buildStepApproval } from './stepApproval.js'
 import { recordInlineToolServers } from './step-fold.logic.js'
 import type { StepGraph } from './StepGraph.js'
@@ -86,6 +89,18 @@ export interface CompanionControllerDeps {
   stateMachine: RunStateMachine
   /** The pure step mutators (start/finish/park a step + the companion rework loop). */
   stepGraph: StepGraph
+  /**
+   * The run's risk policy, read for ONE decision here: whether the rework cap parks for a person
+   * or is answered by policy ({@link CompanionController.settlesCapUnattended}). Structurally
+   * typed to the one field it reads, so this collaborator stays independent of the merge module.
+   */
+  resolveRiskPolicy: (
+    workspaceId: string,
+    block: Block,
+    run: RunPolicyScope,
+  ) => Promise<{ autonomy?: RunAutonomy }>
+  /** Facade logger; absent in tests, where the cap decision is asserted off the step instead. */
+  logger?: Logger
   /**
    * Infer + persist the block's `technical` label from the spec phase when the
    * spec-companion converges. Both signals are read off the persisted steps — the
@@ -313,8 +328,26 @@ export class CompanionController {
     // companion's latest feedback; the `exceeded` flag + the parked approval gate let the
     // SPA render the three choices (resolved via `resolveCompanionExceeded`).
     if (companion.attempts >= companion.maxAttempts) {
-      companion.exceeded = true
       step.companion = companion
+      // …unless the run's policy says nobody is coming. `proceed` is one of the three choices the
+      // gate offers a person, and it is the only one an unattended policy may take on their
+      // behalf: `extra-round` spends model calls on a loop that has already failed to converge,
+      // and `stop-reset` throws away the run. Deliberately routed through the PASS branch, which
+      // is what "accept the producer's current output" means everywhere else — so a companion step
+      // the pipeline ALSO gated still raises its human approval gate here, exactly as it does when
+      // the companion clears the bar on its own.
+      if (await this.settlesCapUnattended(workspaceId, instance, block, step, companion)) {
+        return this.resolvePassedCompanion({
+          workspaceId,
+          instance,
+          step,
+          block,
+          isFinalStep,
+          producerIndex,
+          assessment,
+        })
+      }
+      companion.exceeded = true
       await this.deps.stateMachine.raiseDecisionRequired(workspaceId, instance)
       return this.deps.stateMachine.parkStepOnDecision(
         workspaceId,
@@ -371,11 +404,17 @@ export class CompanionController {
     const passed = firstBatch && hasComments ? false : rating >= companion.threshold
     // Append this cycle's standardized verdict (the same shape the requirements-rework
     // gate stores) so the whole correction sequence is visible, not just the latest.
+    //
+    // The anchored COMMENTS ride along, and that is what makes the list usable as MEMORY rather
+    // than only as a display record: the next round shows this back to the companion, and "was
+    // what I asked for done" is unanswerable against a summary that named none of the asks (see
+    // `companion-review-context.ts`). Empty is left absent rather than stored as `[]`.
     companion.verdicts.push({
       rating,
       threshold: companion.threshold,
       passed,
       feedback,
+      ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
     })
     step.companion = companion
     step.output = feedback || result.output || ''
@@ -394,6 +433,40 @@ export class CompanionController {
         : undefined
     }
     return passed
+  }
+
+  /**
+   * Whether the run's policy answers this companion's rework cap for itself.
+   *
+   * Reads the policy at the moment the cap is REACHED rather than at run start, matching every
+   * other policy read in the engine: an operator who moves a task onto an attended policy while it
+   * is working gets the park, and one who moves it the other way stops waiting on it.
+   *
+   * It STAMPS `capSettledByPolicy` rather than only logging, because the alternative is a run that
+   * looks like it passed a bar it never met. The last `verdicts` entry already says the producer
+   * was below the bar; without the stamp, a step that advanced anyway is indistinguishable from
+   * one whose companion simply stopped grading, and the step is where whoever reviews the
+   * resulting pull request looks.
+   */
+  private async settlesCapUnattended(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    block: Block,
+    step: PipelineStep,
+    companion: NonNullable<PipelineStep['companion']>,
+  ): Promise<boolean> {
+    const policy = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
+    if (!resolvesOwnCaps(policy)) return false
+    companion.capSettledByPolicy = true
+    this.deps.logger?.info('companion rework cap settled by policy', {
+      workspaceId,
+      runId: instance.id,
+      blockId: block.id,
+      agentKind: step.agentKind,
+      attempts: companion.attempts,
+      threshold: companion.threshold,
+    })
+    return true
   }
 
   /**

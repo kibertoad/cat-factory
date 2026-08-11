@@ -631,7 +631,9 @@ export class StepDecisionController {
   ): Promise<void> {
     const role = instance?.initiatedByRole
     if (!role) return
-    const preset = await this.deps.mergePolicy.resolve(workspaceId, block)
+    const preset = await this.deps.mergePolicy.resolve(workspaceId, block, {
+      intakeOrigin: instance?.intakeOrigin,
+    })
     if (!submissionAllowlistForRole(preset.submissionClassesByRole, role)) return
     const changeClass = await this.deps.mergePolicy.classifyChangeClass(workspaceId, block)
     if (submissionAllowedForRole(preset.submissionClassesByRole, role, changeClass)) return

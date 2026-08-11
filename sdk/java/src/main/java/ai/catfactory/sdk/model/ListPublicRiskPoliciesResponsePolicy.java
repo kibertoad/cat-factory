@@ -11,9 +11,11 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code ListPublicRiskPoliciesResponsePolicy} wire model.
  * @param autoMergeEnabled the {@code autoMergeEnabled} field.
+ * @param autonomy the {@code autonomy} field.
  * @param ciMaxAttempts the {@code ciMaxAttempts} field.
  * @param dryRunRoles the {@code dryRunRoles} field.
  * @param isDefault the {@code isDefault} field.
+ * @param isUnattendedDefault the {@code isUnattendedDefault} field.
  * @param name the {@code name} field.
  * @param policyId the {@code policyId} field.
  * @param submissionRestrictedRoles the {@code submissionRestrictedRoles} field.
@@ -22,11 +24,15 @@ import org.jspecify.annotations.Nullable;
 public record ListPublicRiskPoliciesResponsePolicy(
     @JsonProperty("autoMergeEnabled") Boolean autoMergeEnabled,
 
+    @JsonProperty("autonomy") ListPublicRiskPoliciesResponsePolicyAutonomy autonomy,
+
     @JsonProperty("ciMaxAttempts") Double ciMaxAttempts,
 
     @JsonProperty("dryRunRoles") List<ListPublicRiskPoliciesResponsePolicyDryRunRole> dryRunRoles,
 
     @JsonProperty("isDefault") Boolean isDefault,
+
+    @JsonProperty("isUnattendedDefault") Boolean isUnattendedDefault,
 
     @JsonProperty("name") String name,
 
@@ -48,9 +54,11 @@ public record ListPublicRiskPoliciesResponsePolicy(
      */
     public static final class Builder {
         private @Nullable Boolean autoMergeEnabled;
+        private @Nullable ListPublicRiskPoliciesResponsePolicyAutonomy autonomy;
         private @Nullable Double ciMaxAttempts;
         private @Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> dryRunRoles;
         private @Nullable Boolean isDefault;
+        private @Nullable Boolean isUnattendedDefault;
         private @Nullable String name;
         private @Nullable String policyId;
         private @Nullable List<ListPublicRiskPoliciesResponsePolicyDryRunRole> submissionRestrictedRoles;
@@ -58,6 +66,12 @@ public record ListPublicRiskPoliciesResponsePolicy(
         /** Set {@code autoMergeEnabled}. */
         public Builder autoMergeEnabled(@Nullable Boolean autoMergeEnabled) {
             this.autoMergeEnabled = autoMergeEnabled;
+            return this;
+        }
+
+        /** Set {@code autonomy}. */
+        public Builder autonomy(@Nullable ListPublicRiskPoliciesResponsePolicyAutonomy autonomy) {
+            this.autonomy = autonomy;
             return this;
         }
 
@@ -76,6 +90,12 @@ public record ListPublicRiskPoliciesResponsePolicy(
         /** Set {@code isDefault}. */
         public Builder isDefault(@Nullable Boolean isDefault) {
             this.isDefault = isDefault;
+            return this;
+        }
+
+        /** Set {@code isUnattendedDefault}. */
+        public Builder isUnattendedDefault(@Nullable Boolean isUnattendedDefault) {
+            this.isUnattendedDefault = isUnattendedDefault;
             return this;
         }
 
@@ -99,7 +119,7 @@ public record ListPublicRiskPoliciesResponsePolicy(
 
         /** Build the {@link ListPublicRiskPoliciesResponsePolicy}. */
         public ListPublicRiskPoliciesResponsePolicy build() {
-            return new ListPublicRiskPoliciesResponsePolicy(autoMergeEnabled, ciMaxAttempts, dryRunRoles, isDefault, name, policyId, submissionRestrictedRoles);
+            return new ListPublicRiskPoliciesResponsePolicy(autoMergeEnabled, autonomy, ciMaxAttempts, dryRunRoles, isDefault, isUnattendedDefault, name, policyId, submissionRestrictedRoles);
         }
     }
 }

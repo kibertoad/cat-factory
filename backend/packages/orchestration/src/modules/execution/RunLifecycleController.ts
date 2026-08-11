@@ -38,6 +38,7 @@ import { descendantIds } from '../board/board.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunAdmission } from './RunAdmission.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { RunStartOptions } from './runStartOptions.js'
 
 /**
@@ -84,6 +85,7 @@ export interface RunLifecycleDeps {
   resolveDryRunRoles?: (
     workspaceId: string,
     block: Block,
+    run: RunPolicyScope,
   ) => Promise<readonly WorkspaceRole[] | undefined>
   requireWorkspace: (workspaceId: string) => Promise<unknown>
   requireBlock: (workspaceId: string, id: string) => Promise<Block>
@@ -354,7 +356,11 @@ export class RunLifecycleController {
     const { mode, notes } = await settleRunModeForStart({
       requested: options.mode,
       role: options.initiatedByRole,
-      loadDryRunRoles: async () => await this.deps.resolveDryRunRoles?.(workspaceId, block),
+      // The run does not exist yet, so the scope comes from the intake this start declared —
+      // the same value the instance below is stamped with, and the reason the two cannot
+      // disagree is that they are read from one variable.
+      loadDryRunRoles: async () =>
+        await this.deps.resolveDryRunRoles?.(workspaceId, block, { intakeOrigin }),
       baseNotes: frontendRun?.notes ?? [],
       logger: this.deps.logger ?? noopLogger,
       fields: { workspaceId, executionId, blockId },

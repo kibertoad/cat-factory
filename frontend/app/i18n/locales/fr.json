@@ -149,6 +149,7 @@
       "archiveFailed": "Impossible d'archiver le service",
       "restoreFailed": "Impossible de restaurer le service",
       "moveRefused": {
+        "relaxes_run_oversight": "Là où tu déplaces cette tâche, une exécution répond elle-même à ses points de contrôle au lieu de s’arrêter pour une personne, ce que la politique de fusion en vigueur ici ne fait pas. Demande à l’administration de l’espace de travail de la déplacer.",
         "relaxes_role_sandbox": "Les exécutions de cette tâche sont isolées pour votre rôle là où elle se trouve, et la politique de fusion qui la régirait à destination ne l’est pas. Demandez à une administration de l’espace de travail de la déplacer.",
         "relaxes_role_submission_allowlist": "La politique de fusion à destination vous laisserait fusionner des types de changement dont vous êtes privé ici. Demandez à une administration de l’espace de travail de la déplacer.",
         "relaxes_role_class_rule": "La politique de fusion à destination fusionne automatiquement des changements que vous devez relire ici. Demandez à une administration de l’espace de travail de la déplacer."
@@ -2979,6 +2980,8 @@
       "default": "Par défaut",
       "makeDefault": "Définir par défaut",
       "deleteDefaultBlocked": "La politique par défaut ne peut pas être supprimée",
+      "deleteUnattendedDefaultBlocked": "La politique par défaut des exécutions sans surveillance ne peut pas être supprimée",
+      "deleteBothDefaultsBlocked": "Cette politique est à la fois le défaut dans l’app et le défaut sans surveillance, elle ne peut donc pas être supprimée",
       "deletePreset": "Supprimer la politique",
       "field": {
         "maxComplexity": "Complexité max %",
@@ -3057,6 +3060,14 @@
         "redundant": "Sans effet : cette politique est déjà au moins aussi stricte.",
         "alreadyStrictest": "Déjà toujours relu",
         "baseHint": "Cette politique compare les scores pour chaque catégorie : un rôle ne peut donc durcir une catégorie que jusqu'à la revue obligatoire."
+      },
+      "unattendedDefault": "Par défaut sans surveillance",
+      "makeUnattendedDefault": "Définir par défaut pour les exécutions sans surveillance (API, tracker, planification)",
+      "makeUnattendedDefaultShort": "Défaut sans surveillance",
+      "autonomy": {
+        "label": "Terminer les exécutions sans surveillance sans attendre une personne",
+        "unattendedHint": "Quand une boucle automatique abandonne (un companion à sa limite de reprises, une revue à sa limite de passes, des suivis non triés), l'exécution continue en le consignant au lieu de s'arrêter. Les points de contrôle demandés par le pipeline, comme le test humain, la revue et l'approbation, arrêtent toujours l'exécution.",
+        "attendedHint": "Quand une boucle automatique abandonne, l'exécution s'arrête et attend un choix. Adapté à un tableau que quelqu'un surveille ; une exécution lancée via l'API attend indéfiniment."
       }
     },
     "observabilityConnection": {
@@ -6704,6 +6715,7 @@
       "workspaceDefaultCaption": "Appliquée parce que cette tâche ne choisit aucune politique.",
       "noneHint": "Aucune politique de risque configurée. Chaque pull request attend une revue humaine.",
       "refused": {
+        "relaxes_run_oversight": "Indisponible pour ton rôle : cette politique laisse une exécution répondre elle-même à ses points de contrôle au lieu de s’arrêter pour une personne. L’administration de l’espace de travail peut le changer.",
         "relaxes_role_sandbox": "Indisponible pour votre rôle : les exécutions de cette tâche sont isolées, et cette politique les laisserait fusionner. Un administrateur de l’espace de travail peut le changer.",
         "relaxes_role_submission_allowlist": "Indisponible pour votre rôle : cette politique vous laisserait fusionner des types de changement dont cette tâche vous prive. Un administrateur de l’espace de travail peut le changer.",
         "relaxes_role_class_rule": "Indisponible pour votre rôle : cette politique fusionne automatiquement des changements que vous devez relire sur cette tâche. Un administrateur de l’espace de travail peut le changer."

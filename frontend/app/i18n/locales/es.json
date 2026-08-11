@@ -149,6 +149,7 @@
       "archiveFailed": "No se pudo archivar el servicio",
       "restoreFailed": "No se pudo restaurar el servicio",
       "moveRefused": {
+        "relaxes_run_oversight": "Donde estás moviendo esta tarea, una ejecución responde por sí misma a sus puntos de revisión en lugar de detenerse para una persona, y la política de fusión que la rige aquí no lo hace. Pide a la administración del espacio de trabajo que la mueva.",
         "relaxes_role_sandbox": "Las ejecuciones de esta tarea están aisladas para tu rol donde está ahora, y la política de fusión que la regiría donde la mueves no lo está. Pide a una administración del espacio de trabajo que la mueva.",
         "relaxes_role_submission_allowlist": "La política de fusión del destino te dejaría fusionar tipos de cambio que aquí tienes vedados. Pide a una administración del espacio de trabajo que la mueva.",
         "relaxes_role_class_rule": "La política de fusión del destino fusiona automáticamente cambios que aquí debes revisar. Pide a una administración del espacio de trabajo que la mueva."
@@ -2979,6 +2980,8 @@
       "default": "Predeterminado",
       "makeDefault": "Hacer predeterminado",
       "deleteDefaultBlocked": "La política predeterminada no se puede eliminar",
+      "deleteUnattendedDefaultBlocked": "No se puede eliminar la política predeterminada para ejecuciones sin supervisión",
+      "deleteBothDefaultsBlocked": "Esta política es a la vez la predeterminada en la aplicación y la que no tiene supervisión, así que no se puede eliminar",
       "deletePreset": "Eliminar política",
       "field": {
         "maxComplexity": "Complejidad máx. %",
@@ -3057,6 +3060,14 @@
         "redundant": "Sin efecto: esta política ya es igual de estricta o más.",
         "alreadyStrictest": "Ya se revisa siempre",
         "baseHint": "Esta política compara las puntuaciones en todas las categorías, así que un rol solo puede endurecer una categoría hasta exigir revisión."
+      },
+      "unattendedDefault": "Predeterminada sin supervisión",
+      "makeUnattendedDefault": "Convertir en predeterminada para ejecuciones sin supervisión (API, tracker, programación)",
+      "makeUnattendedDefaultShort": "Predeterminada sin supervisión",
+      "autonomy": {
+        "label": "Completar las ejecuciones sin supervisión sin esperar a una persona",
+        "unattendedHint": "Cuando un bucle automático se rinde (un companion en su límite de reintentos, una revisión en su límite de pasadas, seguimientos sin triar), la ejecución continúa dejando constancia en lugar de detenerse. Las puertas que pide la pipeline, como pruebas manuales, revisión y aprobación, siguen deteniendo la ejecución.",
+        "attendedHint": "Cuando un bucle automático se rinde, la ejecución se detiene y espera a que alguien elija. Adecuado para un tablero que alguien está mirando; una ejecución iniciada por la API espera indefinidamente."
       }
     },
     "observabilityConnection": {
@@ -6704,6 +6715,7 @@
       "workspaceDefaultCaption": "Se aplica porque esta tarea no elige una política propia.",
       "noneHint": "No hay ninguna política de riesgo configurada. Cada pull request espera una revisión humana.",
       "refused": {
+        "relaxes_run_oversight": "No disponible para tu rol: esta política deja que una ejecución responda por sí misma a sus puntos de revisión en lugar de detenerse para una persona. La administración del espacio de trabajo puede cambiarlo.",
         "relaxes_role_sandbox": "No disponible para tu rol: las ejecuciones de esta tarea están en un entorno aislado y esta política permitiría fusionarlas. Un administrador del espacio de trabajo puede cambiarlo.",
         "relaxes_role_submission_allowlist": "No disponible para tu rol: esta política te permitiría fusionar tipos de cambio que esta tarea te restringe. Un administrador del espacio de trabajo puede cambiarlo.",
         "relaxes_role_class_rule": "No disponible para tu rol: esta política fusiona automáticamente cambios que tú debes revisar en esta tarea. Un administrador del espacio de trabajo puede cambiarlo."

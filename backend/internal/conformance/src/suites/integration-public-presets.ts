@@ -72,7 +72,12 @@ export function definePublicPresetConformance(harness: ConformanceHarness): void
         presets: { presetId: string; baseModelId: string; isDefault: boolean }[]
       }>('GET', '/api/v1/model-presets', undefined, admin)
       const policies = await app.call<{
-        policies: { policyId: string; isDefault: boolean }[]
+        policies: {
+          policyId: string
+          isDefault: boolean
+          isUnattendedDefault: boolean
+          autonomy: string
+        }[]
       }>('GET', '/api/v1/risk-policies', undefined, admin)
 
       expect(presets.status).toBe(200)
@@ -85,6 +90,15 @@ export function definePublicPresetConformance(harness: ConformanceHarness): void
       expect(presets.body.presets.length).toBeGreaterThan(0)
       expect(presets.body.presets.filter((preset) => preset.isDefault)).toHaveLength(1)
       expect(policies.body.policies.filter((policy) => policy.isDefault)).toHaveLength(1)
+      // The SECOND default, and the one a key-authenticated caller's own runs resolve. Asserted
+      // separately from `isDefault` for the reason the seed test asserts them separately: a
+      // facade whose seeding wrote only the in-app flag leaves every run this API starts on
+      // `FALLBACK_RISK_POLICY`, which auto-merges nothing, and the totals would still come to one.
+      const unattended = policies.body.policies.filter((policy) => policy.isUnattendedDefault)
+      expect(unattended).toHaveLength(1)
+      // And it is a policy that can actually finish without a person, which is the whole reason a
+      // second default exists rather than one shared row.
+      expect(unattended[0]!.autonomy).toBe('unattended')
       for (const preset of presets.body.presets) expect(preset.baseModelId).not.toBe('')
     })
 

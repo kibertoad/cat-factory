@@ -69,6 +69,16 @@ export const followUpItemSchema = v.object({
    * loop-back, so the next Coder completion does not send it back again. Absent until sent.
    */
   sentToCoder: v.optional(v.boolean()),
+  /**
+   * True when this item was `dismissed` by the run's risk policy rather than by a person
+   * (`autonomy: 'unattended'`, on a run nothing was watching). Absent on every human decision.
+   *
+   * Recorded because the two dismissals mean opposite things to whoever reads the step later: one
+   * is somebody deciding the loose end is not worth acting on, the other is nobody having looked
+   * at it. Collapsing them would turn the item list of an unattended run into a claim that every
+   * follow-up was triaged.
+   */
+  dismissedByPolicy: v.optional(v.boolean()),
   /** Canonical external id of the filed ticket (e.g. "owner/repo#123"), when `filed`. */
   ticketExternalId: v.optional(v.nullable(v.string())),
   /** URL of the filed ticket, when `filed`. */

@@ -1013,13 +1013,24 @@ export const riskPolicies = pgTable(
     submission_classes_by_role: text('submission_classes_by_role').notNull().default('{}'),
     // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
     version: integer('version'),
+    // Whether a run under this policy answers the parks its own automatic loops raise when they
+    // give up (`attended` | `unattended`; see `runAutonomySchema`). Defaults to the historical
+    // behaviour, which is to stop for a person.
+    autonomy: text('autonomy').notNull().default('attended'),
     is_default: integer('is_default').notNull().default(0),
+    // The workspace's default for a run NOTHING is watching (the public API, a tracker dispatch,
+    // a schedule fire). Independent of `is_default`: one row may hold both, and each scope has
+    // exactly one holder.
+    is_unattended_default: integer('is_unattended_default').notNull().default(0),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     // Fast lookup of a workspace's default preset (mirrors idx_merge_presets_default).
     index('idx_merge_presets_default').on(t.workspace_id, t.is_default),
+    // The same lookup for the unattended scope, which the engine resolves on every gate
+    // evaluation of an API-started run (mirrors idx_merge_presets_unattended_default).
+    index('idx_merge_presets_unattended_default').on(t.workspace_id, t.is_unattended_default),
   ],
 )
 

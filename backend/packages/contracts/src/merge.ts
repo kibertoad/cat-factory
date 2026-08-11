@@ -364,10 +364,57 @@ export const mergeAssessmentSchema = v.object({
 export type MergeAssessment = v.InferOutput<typeof mergeAssessmentSchema>
 
 /**
+ * How a policy answers a park that one of the engine's AUTOMATIC quality loops raised.
+ *
+ * The platform stops a run on a person for two structurally different reasons, and only one of
+ * them is a judgement call somebody asked for:
+ *
+ *  - a step whose whole PURPOSE is to consult a human (a `requiresApproval` gate, `human-test`,
+ *    visual confirmation, the human/PR review gate, a brainstorm or interview, the fork choice,
+ *    the pre-dispatch input gate). Somebody put it in the pipeline, or a policy asked for it.
+ *  - a loop that ran out of BUDGET without converging (a companion at its rework cap, an
+ *    iterative review at its pass cap) or that produced items nobody triaged (the Coder's
+ *    follow-ups). Nobody asked to be interrupted here; the run stopped because the automation
+ *    gave up, and every one of these parks already offers a person a documented "proceed anyway".
+ *
+ * `attended` (every policy before this existed) parks on both. `unattended` takes the "proceed
+ * anyway" answer for the SECOND class only, records that policy took it, and never touches the
+ * first: a pipeline that asks for a human still gets one. That is the whole distinction, and it
+ * is why this is a policy field rather than a per-gate toggle — a deployment that starts its work
+ * over the API has nobody in the app to answer a cap, and a run parked there waits forever.
+ */
+export const runAutonomySchema = v.picklist(['attended', 'unattended'])
+export type RunAutonomy = v.InferOutput<typeof runAutonomySchema>
+
+/**
+ * WHICH of a workspace's two default policies a run resolves when its task pinned none.
+ *
+ * `interactive` is a run somebody started in the app and is watching; `unattended` is one nothing
+ * is watching, whatever surface dispatched it. The mapping from a run's `IntakeOrigin` to this is
+ * `riskPolicyDefaultScopeFor` in `run-provenance.ts`, deliberately its own `Record` rather than a
+ * reuse of `isHeadlessIntake`: that predicate answers "is there a stable place to hold a
+ * CONVERSATION", which a schedule fire fails for reasons that have nothing to do with whether
+ * anyone is watching it run.
+ */
+export const riskPolicyDefaultScopeSchema = v.picklist(['interactive', 'unattended'])
+export type RiskPolicyDefaultScope = v.InferOutput<typeof riskPolicyDefaultScopeSchema>
+
+/**
+ * Every scope, for the readers that must answer about ALL of them (the board's policy-selection
+ * guard judges a move against each, because a task can be started either way).
+ *
+ * Read off the picklist's OWN options rather than restated, so a third scope cannot appear in one
+ * place and be missed in the other.
+ */
+export const RISK_POLICY_DEFAULT_SCOPES: readonly RiskPolicyDefaultScope[] =
+  riskPolicyDefaultScopeSchema.options
+
+/**
  * A named, per-workspace merge policy: the upper bounds (0..1) a PR's assessment
- * must stay within to auto-merge, plus the CI-fixer attempt budget. Exactly one
- * preset per workspace is the default (`isDefault`), used by any task that has not
- * picked one explicitly.
+ * must stay within to auto-merge, plus the CI-fixer attempt budget. A workspace carries TWO
+ * defaults, one per {@link riskPolicyDefaultScopeSchema}: `isDefault` governs a task somebody
+ * started in the app, `isUnattendedDefault` one nothing is watching. Either is used by any task
+ * that has not picked a policy explicitly.
  */
 export const riskPolicySchema = v.object({
   id: v.string(),
@@ -477,8 +524,23 @@ export const riskPolicySchema = v.object({
    * A role with no entry is unrestricted, so `{}` is the identity. Empty on the built-ins.
    */
   submissionClassesByRole: submissionClassesByRoleSchema,
-  /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
+  /**
+   * Whether a run governed by this policy answers its own automatic-loop caps
+   * ({@link runAutonomySchema}). `attended` on every built-in but the unattended default.
+   */
+  autonomy: runAutonomySchema,
+  /**
+   * The workspace's fallback preset for a run somebody started IN THE APP, used by tasks that
+   * pick none. Exactly one per workspace is true.
+   */
   isDefault: v.boolean(),
+  /**
+   * The workspace's fallback preset for a run nothing is watching (the public API, a tracker
+   * dispatch, a schedule fire), used by tasks that pick none. Exactly one per workspace is true,
+   * and it may be the same row as `isDefault`: a deployment that wants one posture everywhere
+   * flags one policy both ways.
+   */
+  isUnattendedDefault: v.boolean(),
   /**
    * Monotonic seed version for a BUILT-IN preset (`seedRiskPolicies()` assigns it). When the
    * current catalog version for this id exceeds the persisted copy's `version`, the SPA offers
@@ -528,8 +590,12 @@ export const createRiskPolicySchema = v.object({
   dryRunRoles: v.optional(dryRunRolesSchema, []),
   /** Per-role allowlist of landable change classes; absent ⇒ every role is unrestricted. */
   submissionClassesByRole: v.optional(submissionClassesByRoleSchema, {}),
-  /** Make this the workspace default (demotes the previous default). */
+  /** Whether this policy answers its own automatic-loop caps; absent ⇒ it parks for a person. */
+  autonomy: v.optional(runAutonomySchema, 'attended'),
+  /** Make this the workspace's in-app default (demotes the previous one). */
   isDefault: v.optional(v.boolean(), false),
+  /** Make this the workspace's unattended default (demotes the previous one). */
+  isUnattendedDefault: v.optional(v.boolean(), false),
 })
 export type CreateRiskPolicyInput = v.InferOutput<typeof createRiskPolicySchema>
 
@@ -558,7 +624,9 @@ export const updateRiskPolicySchema = v.object({
   dryRunRoles: v.optional(dryRunRolesSchema),
   /** Replaces the whole map, so un-scoping a role is a plain omission (never an empty array). */
   submissionClassesByRole: v.optional(submissionClassesByRoleSchema),
+  autonomy: v.optional(runAutonomySchema),
   isDefault: v.optional(v.boolean()),
+  isUnattendedDefault: v.optional(v.boolean()),
 })
 export type UpdateRiskPolicyInput = v.InferOutput<typeof updateRiskPolicySchema>
 

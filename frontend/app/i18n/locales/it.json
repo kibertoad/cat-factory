@@ -527,6 +527,8 @@
       "default": "Predefinito",
       "makeDefault": "Imposta come predefinito",
       "deleteDefaultBlocked": "Il criterio predefinito non puo essere eliminato",
+      "deleteUnattendedDefaultBlocked": "La policy predefinita per le esecuzioni non presidiate non può essere eliminata",
+      "deleteBothDefaultsBlocked": "Questa policy è sia la predefinita in-app sia quella non presidiata, quindi non può essere eliminata",
       "deletePreset": "Elimina criterio",
       "field": {
         "maxComplexity": "Complessita max %",
@@ -601,6 +603,14 @@
         "redundant": "Nessun effetto: questo criterio è già almeno altrettanto severo.",
         "alreadyStrictest": "Già sempre in revisione",
         "baseHint": "Questo criterio confronta i punteggi per ogni categoria, quindi un ruolo può restringere una categoria solo fino alla revisione obbligatoria."
+      },
+      "unattendedDefault": "Predefinita non presidiata",
+      "makeUnattendedDefault": "Imposta come predefinita per le esecuzioni non presidiate (API, tracker, pianificazione)",
+      "makeUnattendedDefaultShort": "Predefinita non presidiata",
+      "autonomy": {
+        "label": "Completare le esecuzioni non presidiate senza attendere una persona",
+        "unattendedHint": "Quando un ciclo automatico si arrende (un companion al suo limite di rilavorazioni, una revisione al suo limite di passaggi, follow-up non smistati), l'esecuzione prosegue lasciandone traccia invece di fermarsi. I varchi richiesti dalla pipeline, come test manuale, revisione e approvazione, fermano comunque l'esecuzione.",
+        "attendedHint": "Quando un ciclo automatico si arrende, l'esecuzione si ferma e attende una scelta. Adatto a una board che qualcuno sta guardando; un'esecuzione avviata via API attende all'infinito."
       }
     },
     "observabilityConnection": {
@@ -2852,6 +2862,7 @@
       "archiveFailed": "Impossibile archiviare il servizio",
       "restoreFailed": "Impossibile ripristinare il servizio",
       "moveRefused": {
+        "relaxes_run_oversight": "Dove stai spostando questa attività, un’esecuzione risponde da sola ai propri punti di controllo invece di fermarsi per una persona, mentre la policy di merge che la governa qui non lo fa. Chiedi all’amministrazione dello spazio di lavoro di spostarla.",
         "relaxes_role_sandbox": "Le esecuzioni di questa attività sono isolate per il tuo ruolo dove si trova ora, mentre il criterio di merge che la governerebbe a destinazione non lo è. Chiedi a un’amministrazione dello spazio di lavoro di spostarla.",
         "relaxes_role_submission_allowlist": "Il criterio di merge a destinazione ti permetterebbe di unire tipi di modifica che qui ti sono preclusi. Chiedi a un’amministrazione dello spazio di lavoro di spostarla.",
         "relaxes_role_class_rule": "Il criterio di merge a destinazione unisce automaticamente modifiche che qui devi revisionare. Chiedi a un’amministrazione dello spazio di lavoro di spostarla."
@@ -6837,6 +6848,7 @@
       "workspaceDefaultCaption": "Si applica perche questa attivita non sceglie un criterio proprio.",
       "noneHint": "Nessun criterio di rischio configurato. Ogni pull request attende una revisione umana.",
       "refused": {
+        "relaxes_run_oversight": "Non disponibile per il tuo ruolo: questa policy lascia che un’esecuzione risponda da sola ai propri punti di controllo invece di fermarsi per una persona. L’amministrazione dello spazio di lavoro può modificarlo.",
         "relaxes_role_sandbox": "Non disponibile per il tuo ruolo: le esecuzioni di questa attività sono isolate e questo criterio ne consentirebbe il merge. Un amministratore dello spazio di lavoro può cambiarlo.",
         "relaxes_role_submission_allowlist": "Non disponibile per il tuo ruolo: questo criterio ti permetterebbe di unire tipi di modifica che questa attività ti preclude. Un amministratore dello spazio di lavoro può cambiarlo.",
         "relaxes_role_class_rule": "Non disponibile per il tuo ruolo: questo criterio unisce automaticamente modifiche che devi revisionare in questa attività. Un amministratore dello spazio di lavoro può cambiarlo."

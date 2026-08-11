@@ -21,6 +21,7 @@ import {
   PLATFORM_IS_NOT_THE_PRODUCT,
   REVIEW_SUMMARY_LAYOUT,
 } from './prompts/shared.js'
+import { PRIOR_ROUNDS_DIRECTIVE, renderPriorReviewRounds } from './prompts/review-rounds.js'
 import {
   customTaskTypeSection,
   environmentSection,
@@ -307,7 +308,56 @@ export function userPromptFor(
   // "respond with ONLY a JSON object" is the shape), and both wrappers append. Folded in earlier,
   // a revision re-run would end on the reviewer's feedback and an inline run on a context-file
   // dump, leaving the reply-shape instruction buried mid-prompt.
-  return withSuffix(withInjectedContext(withRevision(prompt, context), context, opts), suffix)
+  return withSuffix(
+    withInjectedContext(withPriorReview(withRevision(prompt, context), context), context, opts),
+    suffix,
+  )
+}
+
+/**
+ * Append the rounds this step's companion loop has already been through.
+ *
+ * ONE site, deliberately, and it is what makes the memory arrive for every companion rather than
+ * for whichever one somebody wired: `userPromptFor` is the single prompt assembly both surfaces
+ * go through, so an inline companion (`architect-companion`, `spec-companion`), a
+ * container-backed one (`reviewer`, `doc-reviewer`) and a companion a DEPLOYMENT registered all
+ * receive it on the same terms, as does the producer being reworked.
+ *
+ * Applied AFTER {@link withRevision} so a producer reads the current round's asks first (that is
+ * the work) and the older rounds after it (that is the thing not to regress on). `context.role`
+ * decides the framing, since the two sides need opposite instructions from the same data.
+ */
+function withPriorReview(prompt: string, context: AgentRunContext): string {
+  const prior = context.priorReview
+  if (!prior?.rounds.length) return prompt
+  const grading = prior.role === 'grader'
+  const lines = [
+    prompt,
+    '',
+    grading
+      ? `You have already reviewed earlier revisions of this work ${prior.rounds.length} time(s), ` +
+        `against a bar of ${prior.threshold.toFixed(2)}. Your own previous verdicts:`
+      : `This work has been through ${prior.rounds.length} review round(s) before the feedback ` +
+        `above. Everything previously raised, so you do not undo a fix or drop an open point:`,
+    ...renderPriorReviewRounds(prior.rounds),
+    '',
+    grading
+      ? PRIOR_ROUNDS_DIRECTIVE
+      : 'Keep every earlier point that was already addressed addressed. Where an earlier point ' +
+        'is still open, deal with it in this revision too, not only the feedback above.',
+  ]
+  // How much rope is left, stated to the GRADER only. A producer told "this is the last round"
+  // optimises for the grader rather than for the work; a grader that knows it is holding the run
+  // has the context to weigh a marginal call, which is the call this loop keeps getting wrong.
+  if (grading) {
+    lines.push(
+      prior.roundsRemaining > 0
+        ? `${prior.roundsRemaining} automatic rework round(s) remain after this one.`
+        : 'This is the LAST automatic round: below the bar, the run stops for a person or ' +
+            "proceeds on this work under the run's risk policy. Rate what is actually there.",
+    )
+  }
+  return lines.join('\n')
 }
 
 /** Append a kind's closing task instructions ({@link buildBaseUserPrompt}'s `suffix`), if any. */

@@ -20,6 +20,7 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { RunPolicyScope } from './policy-types.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { renderQualityFeedbackForTester } from './testerQuality.logic.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
@@ -94,6 +95,7 @@ export interface TesterControllerDeps {
   resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
+    run: RunPolicyScope,
   ) => Promise<{ ciMaxAttempts: number; maxTesterQualityIterations: number }>
   /** The async instance/block spine (container reclaim, instance persist + emit). */
   stateMachine: RunStateMachine
@@ -149,7 +151,7 @@ export class TesterController {
     }
     if (!step.test) {
       const preset = block
-        ? await this.deps.resolveRiskPolicy(workspaceId, block)
+        ? await this.deps.resolveRiskPolicy(workspaceId, block, instance)
         : DEFAULT_RISK_POLICY
       step.test = {
         phase: 'testing',
