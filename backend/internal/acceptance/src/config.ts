@@ -47,10 +47,10 @@ export type RepoNames = {
 }
 
 /**
- * The credential the suite files spec 04's issue with, as an OUTSIDE reporter.
+ * The credential the suite files scenario 04's issue with, as an OUTSIDE reporter.
  *
  * Deliberately NOT the workspace's own VCS connection: the platform's credential closing an issue
- * the platform's credential filed proves only that the credential works. Spec 04's premise is that
+ * the platform's credential filed proves only that the credential works. Scenario 04's premise is that
  * somebody with no relationship to this deployment opens an issue, so the reporter holds a token of
  * its own, and there is no `/api/v1` operation for either half (nor should there be: filing an issue
  * is not something this product does for you). See `vcsIssues.ts`.
@@ -77,7 +77,7 @@ export type VcsReporterConfig = {
 export type BoardConfig = {
   /** Backend origin serving `/api/v1`, plus the two unauthenticated deployment root reads. */
   baseUrl: string
-  /** A public-API key at `admin` (spec 03 answers a human gate, so it must also carry `decide`). */
+  /** A public-API key at `admin` (scenario 03 answers a human gate, so it must also carry `decide`). */
   apiKey: string
   /**
    * The workspace the key is bound to.
@@ -121,7 +121,7 @@ export type AcceptanceConfig = BoardConfig & {
   cluster: ClusterConfig
   vcs: VcsReporterConfig
   /**
-   * Ceiling for ONE pipeline run, in ms. Not a vitest timeout: it is the deadline the run-waiter
+   * Ceiling for ONE pipeline run, in ms. Not a whole-scenario timeout: it is the deadline the run-waiter
    * grades against, so exceeding it reports which step was still working (see `deadline.ts`).
    */
   runBudgetMs: number
@@ -146,7 +146,7 @@ const BOARD_REQUIRED: readonly Requirement[] = [
   { name: 'CAT_FACTORY_BASE_URL', purpose: 'backend origin, e.g. http://127.0.0.1:8787' },
   {
     name: 'CAT_FACTORY_API_KEY',
-    purpose: "public-API key (cf_live_…) scoped 'admin'; spec 03 also needs 'decide'",
+    purpose: "public-API key (cf_live_…) scoped 'admin'; scenario 03 also needs 'decide'",
   },
   {
     name: 'ACCEPTANCE_WORKSPACE_ID',
@@ -178,7 +178,7 @@ const REPORTER_REQUIRED: readonly Requirement[] = [
   {
     name: 'ACCEPTANCE_VCS_TOKEN',
     purpose:
-      "provider token the suite files spec 04's issue with, as an outside reporter would, and " +
+      "provider token the suite files scenario 04's issue with, as an outside reporter would, and " +
       'that `reset --purge-repos` empties the two repositories with (GitHub classic: `repo` plus ' +
       '`workflow`; fine-grained: Contents, Issues and Workflows read+write on both repositories). ' +
       'The workflow permission is not optional for the purge: a scaffolded repository holds a ' +
@@ -252,7 +252,7 @@ export function resolveBoardConfig(env: EnvRecord): BoardConfigResolution {
  * Resolve the suite's configuration, collecting EVERY problem rather than throwing on the first.
  *
  * Pure over `env` so the refusal is testable. `requireConfig` is the thin caller that turns a
- * refusal into the error the specs see.
+ * refusal into the error the scenarios see.
  *
  * Built ON the board half rather than beside it, so a variable is named in exactly one table and a
  * pass and a cleanup cannot come to disagree about which board they are pointed at. The board
@@ -357,8 +357,8 @@ export function resolveReporterConfig(env: EnvRecord): ReporterConfigResolution 
  * Where a pass keeps its ledger and journal, from the environment alone.
  *
  * Separate from `resolveConfig` because two callers need it WITHOUT the rest: the status CLI, which
- * takes no API key and no cluster, and `globalSetup`, which resolves the pass's run id before the
- * preflight exists to report a half-configured deployment. Both had the default spelled out again;
+ * takes no API key and no cluster, and `runAcceptance.ts`, which resolves the pass's run id before
+ * the preflight exists to report a half-configured deployment. Both had the default spelled out again;
  * a third spelling of `.acceptance` is a state directory an operator cannot find.
  */
 export function stateDirFrom(env: EnvRecord): string {

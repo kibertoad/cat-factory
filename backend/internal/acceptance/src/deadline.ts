@@ -1,14 +1,15 @@
 // Waiting, with the failure message the wait is actually for.
 //
-// The rule this file exists to enforce: **a wait that expires must say what it last saw.** A bare
-// vitest timeout on a real pipeline run reports "test timed out after 5400000ms", which is true
+// The rule this file exists to enforce: **a wait that expires must say what it last saw.** An
+// anonymous timeout on a real pipeline run reports "timed out after 5400000ms", which is true
 // and tells an operator nothing: the run could be parked on a decision nobody answered, stuck
 // behind an unwired deploy runner, or simply slower than the budget. All three need different
 // fixes and only the last observation distinguishes them.
 //
-// So every wait here carries a `describe` that renders the CURRENT observation, the expiry
-// message is built from the last one, and the suite's vitest timeout is disabled
-// (`vitest.acceptance.config.ts`) precisely so this is the thing that fires first.
+// So every wait here carries a `describe` that renders the CURRENT observation, and the expiry
+// message is built from the last one. This is the suite's ONLY clock: the vitest timeout that used
+// to sit over it was disabled precisely so this fired first, and `scenarioRunner.ts` deliberately
+// introduced no replacement.
 
 /** What one poll saw: either the value the caller wanted, or a description of what it got. */
 export type Probe<T> = () => Promise<ProbeResult<T>>

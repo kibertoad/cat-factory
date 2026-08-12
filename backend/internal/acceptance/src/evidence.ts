@@ -1,4 +1,4 @@
-// What the specs actually assert on.
+// What the scenarios actually assert on.
 //
 // **The rule: assert on evidence the PLATFORM computed, never on prose an agent wrote.** An
 // acceptance test that greps a coder's final reply for "fixed the off-by-one" is testing the
@@ -92,9 +92,9 @@ export function checkEphemeralEnvironment(report: PrVerificationReport): Check[]
  * that may or may not answer is worse in a bug report than no URL at all: an investigator who gets
  * a connection refused concludes the reporter's environment is the fault and stops looking.
  *
- * This is the shape of the trap it exists to close. Spec 02 asserts `teardown === 'confirmed'` for
+ * This is the shape of the trap it exists to close. Scenario 02 asserts `teardown === 'confirmed'` for
  * both feature runs, so every URL those reports hold is dead by construction, and reading one off
- * a `ready` entry sent spec 03's investigator to a host that answers nothing while the honest
+ * a `ready` entry sent scenario 03's investigator to a host that answers nothing while the honest
  * "reproduce locally" fallback could never fire.
  */
 export function retainedEnvironmentUrl(report: PrVerificationReport): string | null {

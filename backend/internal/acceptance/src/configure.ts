@@ -153,7 +153,7 @@ export type ConfigureClient = {
 export type ConfigureDeps = {
   io: Io
   shell: HostShell
-  /** The `.env` beside `vitest.acceptance.config.ts`. Absent reads as null, not as an error. */
+  /** The `.env` at the package root. Absent reads as null, not as an error. */
   envPath: string
   readFile: (path: string) => string | null
   writeFile: (path: string, text: string) => void
@@ -661,7 +661,7 @@ async function resolveReporterToken(
     if (!replace) return input.stored
   }
   io.info(
-    `Spec 04 files an issue on ${slug} as an OUTSIDE reporter would, then checks that the platform ` +
+    `Scenario 04 files an issue on ${slug} as an OUTSIDE reporter would, then checks that the platform ` +
       "delivered it and closed it. That needs a provider token of its own: the workspace's own " +
       'connection is the credential under test, so using it would make the test circular.',
   )
@@ -684,7 +684,7 @@ async function resolveReporterToken(
         'below. Set ACCEPTANCE_VCS_API_BASE too if its API is not at https://api.github.com.',
     )
   }
-  return io.secret("Reporter token (files spec 04's issue)")
+  return io.secret("Reporter token (files scenario 04's issue)")
 }
 
 /**
@@ -826,8 +826,8 @@ function buildEntries(input: {
     },
     {
       comment: [
-        'Provider token spec 04 files its issue with, as an OUTSIDE reporter: the',
-        'workspace connection is what that spec tests, so it cannot be the same',
+        'Provider token scenario 04 files its issue with, as an OUTSIDE reporter: the',
+        'workspace connection is what that scenario tests, so it cannot be the same',
         'credential. Needs Issues read+write on the backend repository.',
         'Set ACCEPTANCE_VCS_API_BASE as well on GitHub Enterprise Server',
         '(https://<host>/api/v3).',

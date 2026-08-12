@@ -116,7 +116,7 @@ export async function driveRun(options: DriveOptions & { runId: string }): Promi
  *
  * `done` is a strong claim on a pipeline carrying a `merger`: the platform reaches it only when
  * the pull request ACTUALLY merged, so this is also the assertion that the feature is on the
- * default branch for the next spec to file a bug against.
+ * default branch for the next scenario to file a bug against.
  */
 export function requireRunDone(run: PublicRun, context: string): PublicRun {
   if (run.status === 'done') return run

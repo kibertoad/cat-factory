@@ -22,13 +22,17 @@
 // Setting `process.exitCode` and letting the process end on its own flushes what was written.
 
 import { rmSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { PrReportRunProvider } from '@cat-factory/sdk'
 import { type BoardConfig, resolveBoardConfig, resolveReporterConfig } from './config.ts'
 import { envFile } from './envFile.ts'
-import { describeThrown, resetInvocation } from './operatorText.ts'
-import { latestPointerPath, listPasses, readLatestPointer, resolveStateDir } from './passFiles.ts'
+import { describeThrown, resetInvocation, scrubbed } from './operatorText.ts'
+import {
+  latestPointerPath,
+  listPasses,
+  packageRoot,
+  readLatestPointer,
+  resolveStateDir,
+} from './passFiles.ts'
 import {
   formatProviderPlan,
   formatProviderReport,
@@ -66,9 +70,9 @@ async function run(): Promise<number> {
 
   // The same `.env` the pass itself runs from, with the shell winning over the file (`envFile.ts`
   // owns that rule). Read here rather than left to `process.env` because that file IS where an
-  // operator's configuration lives: vitest loads it as `test.env` for the specs, and a cleanup that
+  // operator's configuration lives: the pass reads it the same way (`envFile.ts`), and a cleanup that
   // only saw the shell would refuse a perfectly configured checkout with six missing variables.
-  const env = { ...envFile(resolve(dirname(fileURLToPath(import.meta.url)), '..')), ...process.env }
+  const env = { ...envFile(packageRoot), ...process.env }
 
   const resolution = resolveBoardConfig(env)
   if (!resolution.ok) {
@@ -140,7 +144,7 @@ async function run(): Promise<number> {
   const client = resetClient(sdk)
 
   console.log(
-    `reset against ${config.baseUrl} (workspace ${config.workspaceId})\n` +
+    `reset against ${scrubbed(config.baseUrl)} (workspace ${config.workspaceId})\n` +
       `  repositories: ${config.repoOwner}/${config.repos.backend}, ` +
       `${config.repoOwner}/${config.repos.frontend}\n` +
       `  name prefix:  ${config.namePrefix}\n` +
@@ -215,7 +219,7 @@ async function planPurge(
       { owner: config.repoOwner, repo: config.repos.frontend },
     ],
     // Only the passes this reset is REMOVING: an issue belonging to a pass whose files are being
-    // kept is one somebody may still resume, and closing it would settle a spec 04 the resumed pass
+    // kept is one somebody may still resume, and closing it would settle a scenario 04 the resumed pass
     // is still waiting on.
     ledgerIssues: ledgerIssuesOf(passes, removing),
     // The same issues from the other side, because DISCOVERY cannot tell them apart: a kept pass's
@@ -343,7 +347,7 @@ async function providerClients(
  *
  * Taken twice from opposite sides: the passes being REMOVED name what may be closed, and the passes
  * being KEPT name what may not, because somebody may still resume them and closing their issue would
- * settle the spec-04 gate they are waiting on. One function for both, so the two lists cannot come to
+ * settle the scenario-04 gate they are waiting on. One function for both, so the two lists cannot come to
  * disagree about what a ledger's issue is.
  */
 function ledgerIssuesOf(

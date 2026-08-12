@@ -40,7 +40,7 @@ describe('pinnedModel', () => {
 
   it('answers null for a preset whose base model the catalog does not carry', () => {
     // The preset outlived its model. `model-preset` reports that with the catalog listed; here it is
-    // only "cannot tell", which is what keeps this hook from diagnosing what a spec diagnoses better.
+    // only "cannot tell", which is what keeps this hook from diagnosing what a scenario diagnoses better.
     expect(pinnedModel([preset('mdp_1', 'gone')], [model('m')], 'mdp_1')).toBeNull()
   })
 })

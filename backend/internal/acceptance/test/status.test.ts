@@ -65,7 +65,7 @@ describe('summarisePass', () => {
 
   it('re-opens a phase a later pass entered again, rather than leaving it done', () => {
     // The journal accumulates across attempts at one run id, so this is what the status command
-    // shows all day on a resumed pass: a spec that finished yesterday, was re-entered this
+    // shows all day on a resumed pass: a scenario that finished yesterday, was re-entered this
     // morning and is working now would otherwise render `done` under yesterday's message.
     const status = summarise({
       events: [
@@ -86,7 +86,7 @@ describe('summarisePass', () => {
   })
 
   it('re-opens a phase that finished and then kept writing', () => {
-    // Spec 02 finishes a phase per service, so this is the ordinary shape rather than an edge:
+    // Scenario 02 finishes a phase per service, so this is the ordinary shape rather than an edge:
     // between the two, the phase is working and must not read as done.
     const status = summarise({
       events: [
@@ -116,7 +116,7 @@ describe('summarisePass', () => {
 
   it('reports a phase whose start line it never saw', () => {
     // A journal is read mid-write and across resumes, so a phase can be present only through its
-    // observations. Dropping it would report a working spec as absent, which is the opposite fact.
+    // observations. Dropping it would report a working scenario as absent, which is the opposite fact.
     const status = summarise({ events: [event({ phase: '03-bugfix', message: 'still going' })] })
     expect(status.phases).toHaveLength(1)
     expect(status.phases[0]?.phase).toBe('03-bugfix')
@@ -175,8 +175,8 @@ describe('summarisePass', () => {
     expect(formatPassStatus(summarise({}), formatDuration)).not.toContain('Reported issue')
   })
 
-  it("reports a scaffold run, since spec 01's work is now a run like any other", () => {
-    // The ledger slot spec 01 gained when it stopped bootstrapping: a pass that died mid-scaffold is
+  it("reports a scaffold run, since scenario 01's work is now a run like any other", () => {
+    // The ledger slot scenario 01 gained when it stopped bootstrapping: a pass that died mid-scaffold is
     // exactly the one someone runs `status` on, and a report that listed only the feature runs would
     // say "nothing started" about an afternoon of work.
     const world: World = {

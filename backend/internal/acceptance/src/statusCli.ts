@@ -1,24 +1,41 @@
 // `pnpm --filter @cat-factory/acceptance run status`: read a pass without disturbing it.
 //
-// Deliberately NOT a vitest spec and deliberately not part of the suite: it opens no connection
+// Deliberately not part of the pass: it opens no connection
 // to the deployment, creates nothing, and reads only the two files a pass writes. That is what
 // makes it safe to run against a pass that is currently going, which is the only time anyone
 // wants it.
 //
-// It also does not need the suite's configuration. `ACCEPTANCE_STATE_DIR` is the only variable it
-// honours, so an operator can ask where a pass got to without holding an API key.
+// It also does not need the suite's configuration. `ACCEPTANCE_STATE_DIR` and `ACCEPTANCE_RUN_ID`
+// are the only variables it honours, so an operator can ask where a pass got to without holding an
+// API key.
+//
+// **It reads them the same way the pass does**, which is the whole of `envFile.ts`'s reason to be a
+// shared module: the `.env` beside `package.json` first, with the shell winning over it. Read off
+// `process.env` alone, this command disagreed with the pass about WHERE the passes are the moment
+// `ACCEPTANCE_STATE_DIR` lived in the file (which is the form the README recommends, since it needs
+// no shell dialect at all), and the disagreement is silent in the worst direction: the pass prints
+// `watch: … run status <runId>` as the command to paste, and pasting it answered "No acceptance
+// pass found" about a pass that was running right then.
 
 import { readJournal } from './journal.ts'
 import { stateDirFrom } from './config.ts'
 import { formatDuration } from './deadline.ts'
-import { findMostRecentPass, passPaths, readLatestRunId, resolveStateDir } from './passFiles.ts'
+import { envFile } from './envFile.ts'
+import {
+  findMostRecentPass,
+  packageRoot,
+  passPaths,
+  readLatestRunId,
+  resolveStateDir,
+} from './passFiles.ts'
 import { formatPassStatus, summarisePass } from './status.ts'
 import { emptyWorld, readWorld } from './world.ts'
 
-const stateDir = resolveStateDir(stateDirFrom(process.env))
+const env = { ...envFile(packageRoot), ...process.env }
+const stateDir = resolveStateDir(stateDirFrom(env))
 // Collapsed to `undefined` rather than left as an empty string: a blank argument or a blank
 // `ACCEPTANCE_RUN_ID` is someone naming no pass, and reading it as a run id looks for `.json`.
-const requested = process.argv[2]?.trim() || process.env.ACCEPTANCE_RUN_ID?.trim() || undefined
+const requested = process.argv[2]?.trim() || env.ACCEPTANCE_RUN_ID?.trim() || undefined
 // Three questions, and only the middle one is the `latest` pointer. Named, it is that pass; asked
 // for `latest`, it is the pass worth RESUMING (the most recent to record a fact); asked for nothing,
 // it is the pass that ran LAST, which is usually the attempt the reader just watched fail and which

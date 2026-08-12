@@ -38,7 +38,7 @@ export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
  * header and is never asked for a password.
  *
  * Takes the two fields it addresses rather than the whole config, so a command that holds only the
- * BOARD half (`reset`) drives the same client the specs do instead of a second one built beside it.
+ * BOARD half (`reset`) drives the same client the scenarios do instead of a second one built beside it.
  */
 export function createClient(
   config: Pick<AcceptanceConfig, 'baseUrl' | 'apiKey'>,
@@ -114,7 +114,7 @@ export function filePinnedTask(
  * misleading face: a key bound to a DIFFERENT workspace than `ACCEPTANCE_WORKSPACE_ID` (the pass
  * then creates its repositories and services on that workspace's board while every assertion
  * about THIS one answers 404, which reads as a broken deployment), and a key below `admin`
- * (spec 01 creates services and spec 03 answers a human gate, so a `write` key gets a third of
+ * (scenario 01 creates services and scenario 03 answers a human gate, so a `write` key gets a third of
  * the way and refuses).
  *
  * A returned value rather than a throw, because the prerequisite gate reports it as one verdict
@@ -145,7 +145,7 @@ export function describeKeyProblem(
     }
   }
   // The ladder is INCLUSIVE, so this is the rung test the contract asks for, not an equality
-  // check: `admin` is the top and is what spec 01 (create a service) and spec 03 (answer the
+  // check: `admin` is the top and is what scenario 01 (create a service) and scenario 03 (answer the
   // clarity gate, which needs `decide`) between them require.
   if (identity.scope !== 'admin') {
     return {

@@ -8,6 +8,7 @@ import {
   scrubbed,
   shellFlavour,
   shellQuoted,
+  thrownLocation,
 } from '../src/operatorText.ts'
 
 // Each of these is pinned here because each has exactly one edge case that undoes the point of it: a
@@ -35,6 +36,74 @@ describe('describeThrown', () => {
   it('reports a non-Error throw as itself, which is a fact worth having', () => {
     expect(describeThrown('the pool is closed')).toBe('the pool is closed')
     expect(describeThrown(null)).toBe('null')
+  })
+})
+
+describe('thrownLocation', () => {
+  it('answers the FRAMES, whatever the message did', () => {
+    // The message is cut off the front by its own CONTENT, never by counting lines: a stack begins
+    // with as many lines as the message has, and this suite's refusals routinely run to twenty, so
+    // anything that assumed one line would print the refusal a second time.
+    const error = new Error('a refusal\nwith numbered steps\n  1. do this\n  2. then this')
+    const location = thrownLocation(error)
+
+    expect(location).not.toBeNull()
+    expect(location).not.toContain('numbered steps')
+    // Frames, plus at most the note the cap adds; nothing of the message.
+    for (const line of location?.split('\n') ?? []) {
+      expect(line.trim()).toMatch(/^(at |… \d+ more frame)/)
+    }
+  })
+
+  it('does not lift a line of the MESSAGE out as though it were a frame', () => {
+    // The reason the message is cut by content rather than scanned past. These refusals are numbered
+    // remedies, pasted command blocks and provider error bodies folded into the chain, so an
+    // indented line beginning `at ` is ordinary prose. Read as a frame it is rendered under the
+    // failure as a location that does not exist, AND printed twice, having already appeared in the
+    // message immediately above.
+    const error = new Error(
+      'the cluster refused the ServiceAccount:\n' +
+        '    at least one binding is missing\n' +
+        '  1. kubectl auth can-i --list',
+    )
+
+    const location = thrownLocation(error)
+
+    expect(location).not.toContain('at least one binding')
+    expect(location).toMatch(/at \S+/)
+  })
+
+  it('falls back to the whole stack when the stack does not carry the message', () => {
+    // A subclass that rebuilt its own stack, or a hand-assembled one: there is no message region to
+    // cut, so every `at ` line is a frame and the previous behaviour is the right one.
+    const error = Object.assign(new Error('rebuilt'), {
+      stack: ['SomethingElse: different text', '    at frame0', '    at frame1'].join('\n'),
+    })
+
+    expect(thrownLocation(error)).toContain('at frame0')
+  })
+
+  it('caps the frames and SAYS what it dropped', () => {
+    // The tail of a stack is Node's own module machinery; a reader who assumed the shown frames were
+    // all of it would conclude the throw happened at top level.
+    const error = new Error('deep')
+    error.stack = [
+      'Error: deep',
+      ...Array.from({ length: 9 }, (_, at) => `    at frame${at}`),
+    ].join('\n')
+
+    const location = thrownLocation(error, 4)
+
+    expect(location).toContain('at frame3')
+    expect(location).not.toContain('at frame4')
+    expect(location).toContain('5 more frame(s)')
+  })
+
+  it('says nothing for a value that has no stack to speak of', () => {
+    // A thrown string, or an error a test hand-built: the caller prints the message alone rather than
+    // an empty section under it.
+    expect(thrownLocation('the pool is closed')).toBeNull()
+    expect(thrownLocation(Object.assign(new Error('no stack'), { stack: undefined }))).toBeNull()
   })
 })
 

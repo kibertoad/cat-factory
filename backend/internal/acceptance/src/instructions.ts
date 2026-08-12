@@ -5,10 +5,10 @@
 //
 // ## Where the defect comes from, and why it is planted in the SPECIFICATION
 //
-// Spec 03 can only investigate a bug that spec 02 actually shipped, so something has to put one
+// Scenario 03 can only investigate a bug that scenario 02 actually shipped, so something has to put one
 // there. The obvious approach (telling the coder to write a bug) does not survive the pipeline:
 // `pl_build` runs a `reviewer` step against the implementation, and a deliberate defect inside one
-// service is exactly what a reviewer is for. It would be caught, the run would bounce, and spec 03
+// service is exactly what a reviewer is for. It would be caught, the run would bounce, and scenario 03
 // would arrive to find nothing wrong. An acceptance suite whose premise the product correctly
 // destroys is not a test of anything.
 //
@@ -21,8 +21,8 @@
 // worth more demonstrating the product against a realistic defect than against a contrived one.
 //
 // The consequence for the assertions, stated here because it is easy to misread as a weakness:
-// **spec 02 asserts that the DELIVERY MACHINERY worked, never that the product is defect-free.**
-// By construction it is not. See `acceptance/02-feature-with-defect.acceptance.ts`.
+// **scenario 02 asserts that the DELIVERY MACHINERY worked, never that the product is defect-free.**
+// By construction it is not. See `src/scenarios/featureWithDefect.ts`.
 
 import { MANIFEST_DIR } from './k3s.ts'
 
@@ -30,12 +30,12 @@ import { MANIFEST_DIR } from './k3s.ts'
  * The board titles a pass's two service frames take, derived from its name prefix.
  *
  * Beside the descriptions because they are the same authoring decision (what the two frames are
- * CALLED and what they are), and in `src/` rather than in `acceptance/fixtures.ts` because three
- * readers need it and only one of them is a spec: the `board-titles` prerequisite, which refuses a
- * fresh pass whose titles a previous one took, and `reset`, which finds those frames again in order
- * to delete them. A CLI cannot import the fixtures module at all (it builds the whole harness and
- * calls vitest's `inject`), so a second copy of the rule would have been the alternative, and two
- * spellings of a title is a frame the cleanup silently cannot see.
+ * CALLED and what they are), and its own module rather than part of the harness because three
+ * readers need it and only one of them is a scenario: the `board-titles` prerequisite, which refuses
+ * a fresh pass whose titles a previous one took, and `reset`, which finds those frames again in
+ * order to delete them. `reset` builds no harness at all (it needs the BOARD half of the config and
+ * neither a cluster nor a ledger), so a second copy of the rule would have been the alternative, and
+ * two spellings of a title is a frame the cleanup silently cannot see.
  *
  * `ACCEPTANCE_NAME_PREFIX` is what makes two operators able to share one board, so the prefix is
  * the whole of the variation here.
@@ -47,7 +47,7 @@ export function serviceTitles(prefix: string): { backend: string; frontend: stri
 /**
  * What each adopted service IS, in one sentence, for the frame's `description`.
  *
- * Part of this file rather than of the spec because it is a brief like the others: a service frame's
+ * Part of this file rather than of the scenario because it is a brief like the others: a service frame's
  * description is what kernel's `describeOwnService` lifts into `AgentRunContext.ownService`, so this
  * text reaches EVERY agent the suite runs (CLAUDE.md: "a step's prompt names the service the work
  * belongs to"). A pass marker in this field told each coder, tester and reviewer that the system
@@ -82,7 +82,7 @@ export const SERVICE_DESCRIPTIONS: Record<'backend' | 'frontend', string> = {
  * environment's URL from the same `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` it hands the engine
  * (`k3s.ts`), so a brief naming a different host ships manifests serving one name behind a URL
  * built from another: an environment that never answers, on a deployment whose only fault was
- * overriding a documented variable. Nothing would fail: spec 02 asserts the URL sits under the
+ * overriding a documented variable. Nothing would fail: scenario 02 asserts the URL sits under the
  * configured suffix, and it would.
  */
 function manifestBrief(servicePort: number, ingressHostTemplate: string): string {
@@ -181,7 +181,7 @@ Document the 1-based offset prominently in the README, including the worked exam
  * is the whole mechanism.
  *
  * The trace it produces against the 1-based backend, which is what the bug report describes and
- * what makes the defect subtle enough to survive spec 02's testers: page 1 asks for offset 0,
+ * what makes the defect subtle enough to survive scenario 02's testers: page 1 asks for offset 0,
  * which the backend CLAMPS to 1 and answers items 1-10, so the first page is accidentally right.
  * Page 2 asks for offset 10 and gets items 10-19, repeating item 10. Nothing is ever missing,
  * which is why a smoke check of the first page passes.
@@ -203,7 +203,7 @@ Cover the offset arithmetic and the button states with unit tests.`.trim()
 }
 
 /**
- * The bug report spec 03 files.
+ * The bug report scenario 03 files.
  *
  * Written as a REPORTER would write it: the observed symptom, how to see it, and nothing else. No
  * root cause, no file names, no mention of pagination arithmetic or of two conventions: supplying
@@ -238,23 +238,23 @@ ${where}`.trim()
 }
 
 /**
- * The issue spec 04 files on the provider, as an outside reporter.
+ * The issue scenario 04 files on the provider, as an outside reporter.
  *
  * Written as an issue rather than as a task description, because that is what it is: it lands on a
  * repository through the provider's own API and the platform has to make sense of it AS FOUND
  * (`GET /api/v1/repos` never sees it; the task is filed with `ticket`, and every agent step then
  * re-reads the live issue as context).
  *
- * Two rules shape what it asks for, and both are about keeping spec 04 a test of the INTAKE loop
- * rather than a second test of the delivery machinery specs 02 and 03 already cover:
+ * Two rules shape what it asks for, and both are about keeping scenario 04 a test of the INTAKE loop
+ * rather than a second test of the delivery machinery scenarios 02 and 03 already cover:
  *
  *   - **Small, and orthogonal to the shipped contract.** It tightens input VALIDATION on
  *     `GET /items` and changes nothing about a valid request, so it cannot disturb the paging
- *     contract spec 03 has just settled between the two services. A feature that moved that
- *     contract would make a spec 04 failure unreadable: nobody could tell an intake bug from a
+ *     contract scenario 03 has just settled between the two services. A feature that moved that
+ *     contract would make a scenario 04 failure unreadable: nobody could tell an intake bug from a
  *     regression in the thing before it.
  *   - **Complete enough not to park.** The pipeline's requirements review parks a run that has to
- *     ask a question, which spec 03 exists to exercise and which here would only slow the loop
+ *     ask a question, which scenario 03 exists to exercise and which here would only slow the loop
  *     down, so the expected behaviour is stated flatly: which input, which status, which message
  *     shape, and what must NOT change.
  *

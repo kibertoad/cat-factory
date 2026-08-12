@@ -8,13 +8,16 @@ investigate and fix it, and then file an issue as an OUTSIDE reporter and watch 
 it and close it.
 
 **Never run in CI**, and structurally cannot be: `test:run` (the task CI runs) points at
-`vitest.config.ts`, which collects only this package's own unit tests. The acceptance specs live
-under `acceptance/` behind a second config that nothing but the `acceptance` script names.
+`vitest.config.ts`, which collects `test/**/*.test.ts` only, this package's own unit tests. The
+scenarios are not tests at all as far as any runner is concerned; they are modules a plain Node
+entry point walks.
 
-**The specs are on their way OFF vitest**, which they use as a shell while switching off almost
-everything it does. In-flight initiative, with the evidence and what must survive the swap:
-[`acceptance-suite-standalone-runner.md`](../../../docs/initiatives/acceptance-suite-standalone-runner.md).
-Nothing in this README describes that end state yet; the unit tests under `test/` are not affected.
+**There is no test framework here.** The pass is `node src/runAcceptance.ts`: five scenarios in one
+process, in the order `src/scenarios/index.ts` lists them, stopping at the first failure, asserting
+with `node:assert/strict`. It used to be five vitest spec files with almost everything vitest does
+switched off, and the parts that could not be switched off (a module graph per file, a reporter that
+owned the console) cost a `globalSetup` hook, an RPC channel and a custom sequencer. Design record:
+[ADR 0057](../../docs/adr/0057-acceptance-standalone-runner.md).
 
 ```sh
 pnpm --filter @cat-factory/acceptance run configure   # assemble the .env, once
@@ -37,33 +40,39 @@ deterministic. That is why it is a hand-run acceptance pass rather than a lane.
 
 ## The scenarios
 
-Five spec files, run in order. Each spec's output is the next one's input.
+Five scenarios, run in order, in one process. Each one's output is the next one's input.
 
-That order is PINNED, by a sequencer keyed on the file name (`src/specOrder.ts`). It is not a
-formatting convention and `fileParallelism: false` does not supply it: that setting stops two specs
-running at once, which is a different property. Vitest's default sequencer reorders the files it is
-handed from a cache of the previous run (failed first, then longest-duration first), so paired with
-`bail: 1` the slowest spec of the last pass ran FIRST, failed in milliseconds on a ledger key nothing
-had written yet, and stopped the pass before the spec that writes it had started. What that looks
-like from outside is the LAST spec failing in a pass where nothing else ran, under a message telling
-you to run the suite from the start.
+That order is the ARRAY in `src/scenarios/index.ts`, walked by `src/scenarioRunner.ts`. It is worth
+saying only because it used to need a custom vitest sequencer: the default one reorders the files it
+is handed from a cache of the previous run (failed first, then longest-duration first), so paired
+with `bail: 1` the slowest spec of the last pass ran FIRST, failed in milliseconds on a ledger key
+nothing had written yet, and stopped the pass before the spec that writes it had started. What that
+looked like from outside was the LAST spec failing in a pass where nothing else ran, under a message
+telling you to run the suite from the start.
 
-| Spec                       | What it does                                                                                                                                                       |
+| Scenario                   | What it does                                                                                                                                                       |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `00-preflight`             | Reports every prerequisite as its own named test. Creates nothing. The GATE runs in each spec, so a resumed pass cannot skip it.                                   |
+| `00-preflight`             | Reports every prerequisite as its own named step. Creates nothing. The GATE runs before each of the others, so a resumed pass cannot skip it.                      |
 | `01-adopt-and-scaffold`    | Connects the k3s engine, backs a service with each of your two repositories, declares each one's manifest source, then scaffolds both through `pl_build`.          |
 | `02-feature-with-defect`   | Ships a paginated catalog across both services on `pl_build`. Asserts the environment came up on the cluster, CI gated it, the merge resolved, the namespace went. |
 | `03-investigate-and-fix`   | Files the resulting bug as a report, runs `pl_bugfix`, answers its `clarity-review` human gate over `/api/v1`, and asserts a red-then-green reproduction proof.    |
 | `04-issue-intake-to-close` | Files an issue on the backend repository as an outside reporter, files a task FROM it, delivers it on `pl_build`, and asserts the platform CLOSED the issue.       |
+
+**What the pass prints**, since no reporter does it now: the run id and the resume command, then each
+scenario with its steps as they start and how long each took, then the failure in full where there is
+one, then a summary naming which scenario broke, at which step, and that the ones after it did not
+run. It exits 1 for a failed scenario and 2 for a pass that refused to START (an unconfigured
+checkout, a `latest` that names no pass, a ledger belonging to another pass, a declined password),
+because only the first leaves real state behind and only the first is worth resuming.
 
 ### You create the two repositories; the suite adopts them
 
 Repository creation is the one setup step the suite cannot perform. A PAT connection reports
 `canCreateRepos: false` for every workspace, and the App path creates only under
 `/orgs/{org}/repos`, so a personal account was never a supported target either: on the deployment
-shape this README offers first, spec 01 could not run at all.
+shape this README offers first, scenario 01 could not run at all.
 
-So you create two empty repositories, name them in the `.env`, and spec 01 backs a board service
+So you create two empty repositories, name them in the `.env`, and scenario 01 backs a board service
 with each (`POST /api/v1/services` takes a `repoId`, which is where one comes from) and then
 scaffolds both through `pl_build` from the same briefs the bootstrapper agent used to be handed.
 Each one is an ordinary pipeline run, which is why an interrupted scaffold resumes exactly as an
@@ -89,10 +98,10 @@ connection cannot reach is absent exactly as a non-existent one is, so both `run
 
 ### The defect is planted in the SPECIFICATION, not in the code
 
-Spec 03 can only investigate a bug spec 02 actually shipped, so something has to put one there.
+Scenario 03 can only investigate a bug scenario 02 actually shipped, so something has to put one there.
 Telling the coder to write a bug does not survive the pipeline: `pl_build` runs a `reviewer` step,
 and a deliberate defect inside one service is exactly what a reviewer is for. It would be caught,
-the run would bounce, and spec 03 would find nothing wrong.
+the run would bounce, and scenario 03 would find nothing wrong.
 
 So the defect is a **contract mismatch between the two briefs**: the backend's says `offset` counts
 from 1, the frontend's says it counts from 0. Each service is implemented faithfully, reviewed
@@ -104,14 +113,14 @@ bug there is.
 The symptom it produces, which is what the bug report describes: page 1 lists items 1–10, page 2
 starts at item 10 again, and the last page is short.
 
-The consequence, stated because it is easy to misread as a gap: **spec 02 asserts the delivery
+The consequence, stated because it is easy to misread as a gap: **scenario 02 asserts the delivery
 machinery worked, never that the product is defect-free.** By construction it is not. The claim
-that the product is right is spec 03's, and it is settled by fixing the bug rather than by
+that the product is right is scenario 03's, and it is settled by fixing the bug rather than by
 asserting it away.
 
-### The reporter in spec 04 is a stranger, and holds its own credential
+### The reporter in scenario 04 is a stranger, and holds its own credential
 
-Spec 04's premise is that somebody who has never heard of cat-factory opens an issue on a repository,
+Scenario 04's premise is that somebody who has never heard of cat-factory opens an issue on a repository,
 and the platform picks it up, delivers it and closes it. That is the loop a headless deployment runs
 on, and every part of it is invisible to a task filed with a `description`: the ticket import, the
 linked issue every agent step re-reads as context, and the writeback.
@@ -136,17 +145,18 @@ can leave. Both edges are on by default and the `tracker-writeback` prerequisite
 workspace turned either off, so the count is deterministic rather than hopeful.
 
 **What the issue asks for is deliberately small and orthogonal**: tighter validation of one query
-parameter on the catalog API, which changes nothing about a valid request. The claim of the spec is
-the LOOP, not the feature, and a change that moved the paging contract spec 03 has just settled would
-make a spec 04 failure unreadable. `src/instructions.ts` carries the issue text and that reasoning.
+parameter on the catalog API, which changes nothing about a valid request. The claim of the scenario is
+the LOOP, not the feature, and a change that moved the paging contract scenario 03 has just settled would
+make a scenario 04 failure unreadable. `src/instructions.ts` carries the issue text and that reasoning.
 
 ## Prerequisites
 
 A local cat-factory that can really do the work, and a cluster to deploy onto.
 
 **Most of this list is CHECKED, and checked before anything is created.** `src/prerequisites.ts`
-probes each condition below, every spec runs the whole gate in its `beforeAll`, and a pass that
-would fail is refused with every unsatisfied prerequisite and its remedy in one message. That
+probes each condition below, the runner runs the whole gate before every scenario that spends
+anything, and a pass that would fail is refused with every unsatisfied prerequisite and its remedy in
+one message. That
 matters because each of these otherwise surfaces between fifteen and ninety minutes in, wearing a
 failure that names something else: an unwired model looks like a broken dispatcher, a connection
 without workflow permission looks like a repository whose CI never fires, and a preset that holds
@@ -210,7 +220,7 @@ of it, one release behind.
 | `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                                                                                                                                              |
 | `target-repos`       | yes     | Both named repositories are REACHABLE (linked already, or point-read through `/repos/available`) AND adoptable: no monorepo, nothing homed on another board, and any existing service link is one this pass's own ledger names. |
 | `issue-credential`   | yes     | `ACCEPTANCE_VCS_TOKEN` can reach the backend repository and open an issue on it (which needs its Issues feature switched on).                                                                                                   |
-| `tracker-writeback`  | yes     | The workspace comments on a linked tracker issue when a pull request opens AND closes it when the pull request merges: spec 04's whole claim.                                                                                   |
+| `tracker-writeback`  | yes     | The workspace comments on a linked tracker issue when a pull request opens AND closes it when the pull request merges: scenario 04's whole claim.                                                                               |
 | `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                                                                                                                                             |
 | `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                                                                                        |
 | `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                                                                             |
@@ -226,7 +236,7 @@ Three things it deliberately does NOT check, because none is knowable from where
 - **Whether an unreachable repository was never created, or exists and is not granted.** A provider
   answers those identically, so the refusal names both rather than picking one.
 - **Whether the wired model can actually build a small service.** A model that cannot scaffold a
-  Fastify app fails spec 01 for reasons that are not the platform's. This suite is not a model
+  Fastify app fails scenario 01 for reasons that are not the platform's. This suite is not a model
   benchmark and does not grade one.
 - **Whether a container runtime is available to the agent jobs.** Nothing short of dispatching a
   job answers it.
@@ -236,7 +246,7 @@ service a repository backs ON THIS BOARD. A whole-repo service homed on another 
 account has no id this workspace-scoped surface can hand back, so it answers `serviceId: null` **with
 `linkedElsewhere: true`**, and `POST /api/v1/services` then refuses it
 (`reason: repo_service_homed_elsewhere`). `target-repos` reads the flag, so that arrives as a refusal
-with a remedy rather than as a 409 out of spec 01's first adopt. An existing link on this board is
+with a remedy rather than as a 409 out of scenario 01's first adopt. An existing link on this board is
 compared against the ledger's own service ids, not against "is this a resume at all": a ledger holding
 only the backend service cannot vouch for the frontend repository.
 
@@ -262,6 +272,14 @@ really merged. A preset that holds everything for a person is correctly configur
 this suite. What the gate cannot settle is a preset's `dryRunRoles`: the public API does not
 report which workspace role a key's runs are admitted under, so a non-empty list is STATED as a
 caveat rather than graded, which is the honest disposition for an answer the probe cannot reach.
+
+**The machine you run the suite from**
+
+- **Node 24 or newer**, which is the repository's floor (root `package.json`, `engines.node`) and
+  this package's too. The four commands below are `node src/<entry>.ts`, run by Node's own type
+  stripping with no flag, so an older Node does not fail a prerequisite: it fails to LOAD, with
+  `ERR_UNKNOWN_FILE_EXTENSION: Unknown file extension ".ts"` and nothing else to go on. Anything
+  below 24 is unsupported rather than degraded.
 
 **The deployment**
 
@@ -295,21 +313,22 @@ person's subscription, and only their personal password opens it. Two consequenc
   states are kept separate rather than collapsed into "user-scoped".
 
 - **The pass asks for your personal password at the terminal**, once for the WHOLE pass, before the
-  first spec runs, and never for a workspace running on a provider API key. It is held in memory and
+  first scenario runs, and never for a workspace running on a provider API key. It is held in memory and
   written NOWHERE: not the `.env`, not the ledger, not the journal, not an environment variable. That
   is deliberate rather than an omission, since a copy beside `CAT_FACTORY_API_KEY` would put both
   halves of a two-factor credential in one file. A resumed pass asks again. No variable or file can
   supply it instead. See
   [`individual-subscription-usage.md` §7](../../docs/individual-subscription-usage.md).
-- **Asked up front because vitest isolates every spec file.** Each file gets its own module graph, in
-  its own worker process, so a password collected in spec 01 cannot be reached from spec 02: asked at
-  the first call that needs one, a pass is asked four times, each prompt drawn over a reporter that is
-  redrawing the same lines. `acceptance/globalSetup.ts` asks once in the main process, before any
-  worker exists and before a test line is printed, and hands the value to each worker over vitest's
-  RPC channel. It only asks when the pinned preset's base model reports `personalSubscription`, so a
-  provider-key workspace sees no prompt; when the catalog cannot be read, it says so and leaves the
-  ask at the first dispatch that needs it, exactly as before.
-- **That hook can only ever DELAY the ask, never end the pass**, and the one exception is a person.
+- **Asked up front because a person is at the terminal at the START of a pass and by design not
+  twenty minutes in.** One process could now hold the answer from whenever it was first needed, so the
+  ask is up front for that reason alone rather than for the one it was written for: under vitest a
+  password collected in spec 01 could not be reached from spec 02, so asking lazily was asking four
+  times, each prompt drawn over a reporter redrawing the same lines. It only asks when the pinned
+  preset's base model reports `personalSubscription`, so a provider-key workspace sees no prompt; when
+  the catalog cannot be read, it says so and leaves the ask at the first dispatch that needs it. What
+  it never does is hand the password back as a value: the prompt fills the holder that rides every
+  request (`src/personalUnlock.ts`), which is what makes "written nowhere" a property of the code.
+- **That ask can only ever DELAY the prompt, never end the pass**, and the one exception is a person.
   It runs before the first prerequisite is evaluated and before a journal line exists, so anything it
   threw would be the operator's whole output: no "your key names another workspace", no "the pinned
   preset's model is unwired", no ledger. A terminal it cannot ask on is therefore printed and
@@ -319,17 +338,16 @@ person's subscription, and only their personal password opens it. Two consequenc
   about the command changes, and there is no separate mode for this. Under the hood the prompt opens
   the CONTROLLING TERMINAL for reading (`/dev/tty`, `CONIN$` on Windows) and writes the prompt back
   down it (`CONOUT$` on Windows, the device it read from on POSIX) rather than through this process's
-  own stdio, and both halves of that are what make it work under vitest at all: a worker is forked
-  with PIPED stdio, so `stdin.isTTY` is undefined there and a stdin prompt could never ask, while the
-  reporter owning that worker's stdout would swallow a printed one. A console is inherited by child
-  processes independently of stdio, so the pnpm and vitest layers between your shell and the spec
-  cost nothing. Where that terminal cannot be opened at all, `process.stdin` is the fallback IF it
-  happens to be one (which is what a plain `run status` from a shell gets) and the prompt goes to
-  stderr; a process with neither refuses.
+  own stdio. That was written for vitest, whose workers are forked with PIPED stdio, and it is KEPT
+  because the layer that decides this process's stdio is still there: `pnpm --filter … run` sits
+  between your shell and the script, and a `| tee pass.log` sits outside both. A console is inherited
+  by child processes independently of stdio, so those layers cost it nothing. Where that terminal
+  cannot be opened at all, `process.stdin` is the fallback IF it happens to be one and the prompt goes
+  to stderr; a process with neither refuses.
 - **A pass with no console REFUSES at that first dispatch**, naming the two ways out (run it
   interactively, or pin a preset whose model resolves to a provider API key). That covers CI, a
   daemon, `nohup`, and an agent's detached background shell, all of which cannot open the console
-  device at all. The up-front hook meets the same refusal earlier and prints it rather than throwing
+  device at all. The up-front ask meets the same refusal earlier and prints it rather than throwing
   it, so what stops such a pass is the dispatch, with everything the preflight found already on
   screen.
 - **On Windows the console input buffer is opened READ-WRITE**, and that is not a detail: turning
@@ -405,30 +423,30 @@ It never overwrites a value without saying so: an existing value becomes the pro
 summary names every key it replaced, and anything in the file it does not manage (a pasted
 `ACCEPTANCE_K3S_CA_PEM`, say) is carried over byte for byte. Neither token is ever printed back.
 
-| Variable                               | Required | What it is                                                                                                                                                                                                                                                                                                                                     |
-| -------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves `/api/v1` and the deployment root reads.                                                                                                                                                                                                                                                  |
-| `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (spec 03 also needs the `decide` rung it includes).                                                                                                                                                                                                                                                        |
-| `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                                                                                                                                                                                                                                                                |
-| `ACCEPTANCE_REPO_OWNER`                | yes      | The owner both repositories live under. `GET /api/v1/vcs/connection` reports it.                                                                                                                                                                                                                                                               |
-| `ACCEPTANCE_BACKEND_REPO`              | yes      | Name of the empty repository the backend service adopts. **You create it; the suite adopts it.**                                                                                                                                                                                                                                               |
-| `ACCEPTANCE_FRONTEND_REPO`             | yes      | Name of the empty repository the frontend adopts. Must differ from the backend's.                                                                                                                                                                                                                                                              |
-| `ACCEPTANCE_VCS_TOKEN`                 | yes      | Provider token spec 04 files its issue with, as an outside reporter, and `reset --purge-repos` empties the repositories with. Classic GitHub: `repo` (plus `workflow` for the purge). Fine-grained: "Issues: Read and write" on the backend repository (plus "Contents" and "Workflows" read+write on both, for the purge). Never the API key. |
-| `ACCEPTANCE_VCS_API_BASE`              | no       | The provider's REST base, default `https://api.github.com`. GitHub Enterprise Server is `https://<host>/api/v3`, which no `/api/v1` read publishes.                                                                                                                                                                                            |
-| `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                                                                                                                                                                                                                                                                  |
-| `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                                                                                                                                                                                                                                                               |
-| `ACCEPTANCE_K3S_CA_PEM`                | one of   | The cluster CA in PEM. Wins over the insecure flag when both are set.                                                                                                                                                                                                                                                                          |
-| `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                                                                                                                                                                                                                                                                            |
-| `ACCEPTANCE_MODEL_PRESET`              | no       | Preset id pinned on every task, default `mdp_claude` (the built-in Claude preset). `configure` offers the library as a menu, so the id never has to be typed.                                                                                                                                                                                  |
-| `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS. Also the host the scaffold briefs ask each service's Ingress to serve, so overriding it moves both halves together.                                                                                                                                                              |
-| `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                                                                                                                                                                                                                                                               |
-| `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Prefixes the board frames and tasks, not the repositories. Set it per-person when a board is shared.                                                                                                                                                                                                                         |
-| `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a vitest timeout; see below.                                                                                                                                                                                                                                                                              |
-| `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                                                                                                                                                                                                                                                               |
-| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass that recorded a fact. Unset starts a new one. The one variable normally set per invocation, so see the shell forms below.                                                                                                                                                         |
+| Variable                               | Required | What it is                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves `/api/v1` and the deployment root reads.                                                                                                                                                                                                                                                      |
+| `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (scenario 03 also needs the `decide` rung it includes).                                                                                                                                                                                                                                                        |
+| `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                                                                                                                                                                                                                                                                    |
+| `ACCEPTANCE_REPO_OWNER`                | yes      | The owner both repositories live under. `GET /api/v1/vcs/connection` reports it.                                                                                                                                                                                                                                                                   |
+| `ACCEPTANCE_BACKEND_REPO`              | yes      | Name of the empty repository the backend service adopts. **You create it; the suite adopts it.**                                                                                                                                                                                                                                                   |
+| `ACCEPTANCE_FRONTEND_REPO`             | yes      | Name of the empty repository the frontend adopts. Must differ from the backend's.                                                                                                                                                                                                                                                                  |
+| `ACCEPTANCE_VCS_TOKEN`                 | yes      | Provider token scenario 04 files its issue with, as an outside reporter, and `reset --purge-repos` empties the repositories with. Classic GitHub: `repo` (plus `workflow` for the purge). Fine-grained: "Issues: Read and write" on the backend repository (plus "Contents" and "Workflows" read+write on both, for the purge). Never the API key. |
+| `ACCEPTANCE_VCS_API_BASE`              | no       | The provider's REST base, default `https://api.github.com`. GitHub Enterprise Server is `https://<host>/api/v3`, which no `/api/v1` read publishes.                                                                                                                                                                                                |
+| `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                                                                                                                                                                                                                                                                      |
+| `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                                                                                                                                                                                                                                                                   |
+| `ACCEPTANCE_K3S_CA_PEM`                | one of   | The cluster CA in PEM. Wins over the insecure flag when both are set.                                                                                                                                                                                                                                                                              |
+| `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                                                                                                                                                                                                                                                                                |
+| `ACCEPTANCE_MODEL_PRESET`              | no       | Preset id pinned on every task, default `mdp_claude` (the built-in Claude preset). `configure` offers the library as a menu, so the id never has to be typed.                                                                                                                                                                                      |
+| `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS. Also the host the scaffold briefs ask each service's Ingress to serve, so overriding it moves both halves together.                                                                                                                                                                  |
+| `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                                                                                                                                                                                                                                                                   |
+| `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Prefixes the board frames and tasks, not the repositories. Set it per-person when a board is shared.                                                                                                                                                                                                                             |
+| `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a whole-scenario timeout; see below.                                                                                                                                                                                                                                                                          |
+| `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                                                                                                                                                                                                                                                                   |
+| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass that recorded a fact. Unset starts a new one. The one variable normally set per invocation, so see the shell forms below.                                                                                                                                                             |
 
-They live in a **`.env` beside `vitest.acceptance.config.ts`** (gitignored, and read by that
-config: vitest does not pick one up on its own). A variable set in the shell wins over the file, so
+They live in a **`.env` at this package's root** (gitignored, and read by `src/envFile.ts`: nothing
+applies one for a Node entry point on its own). A variable set in the shell wins over the file, so
 the file states the setup and the invocation states the exception.
 
 **Every variable can be set either way, and the file is the one form that needs no shell dialect.**
@@ -445,8 +463,9 @@ $env:ACCEPTANCE_RUN_ID = 'latest'; try { pnpm --filter @cat-factory/acceptance r
 **PowerShell has no inline environment prefix**, so the POSIX form is not merely unidiomatic there,
 it reads the assignment as the command NAME and fails with `CommandNotFoundException`. Every command
 this suite PRINTS with a variable in it is rendered for the shell that will RECEIVE it (the banner
-every spec file opens with, the resume in two prerequisite remedies, the line the status report ends
-with, the per-person prefix, and the three remedies whose whole fix is one value), so a pasted remedy
+the pass opens with, the resume in two prerequisite remedies, the closing words of a failed pass, the
+line the status report ends with, the per-person prefix, and the three remedies whose whole fix is one
+value), so a pasted remedy
 runs where it was read. The shell, not the platform: on Windows that is PowerShell unless `SHELL` or
 `MSYSTEM` is set, which is how a Git Bash or MSYS operator gets the POSIX form. `cmd.exe` reads as
 PowerShell and is a known limit rather than a decision: nothing in the environment separates the two
@@ -499,11 +518,14 @@ poll interval is ten seconds and whose journal has been silent for twenty minute
 is dead or detached, and nothing else distinguishes those from "still working".
 
 The command opens no connection to the deployment, creates nothing, and needs no API key, so it is
-safe to run against a pass that is currently going.
+safe to run against a pass that is currently going. It does read the same `.env` the pass does, for
+`ACCEPTANCE_STATE_DIR` and `ACCEPTANCE_RUN_ID` only: read off the shell alone it would look for the
+passes somewhere the pass never wrote them, and the command it would be disagreeing with is the
+`watch:` line the pass itself printed for the operator to paste.
 
 ## Resuming
 
-A full pass costs an afternoon and real spend, so it is written to be resumed. Every spec records
+A full pass costs an afternoon and real spend, so it is written to be resumed. Every scenario records
 what it created in a ledger under `ACCEPTANCE_STATE_DIR`, re-reads it on start, and re-checks it
 against the deployment rather than trusting it.
 
@@ -520,11 +542,11 @@ $env:ACCEPTANCE_RUN_ID = 'latest'; try { pnpm --filter @cat-factory/acceptance r
 Or the `ACCEPTANCE_RUN_ID` line in the `.env`, which needs no dialect at all; see
 [Configuration](#configuration) for what each form costs.
 
-The run id is settled ONCE per pass, in `acceptance/globalSetup.ts`, and handed to every spec.
-It cannot be resolved per spec: vitest gives each spec file its own module graph, so an id minted
-there is an id per FILE, and the id is the ledger's key. That is the shape this replaced, and it
-made a fresh pass structurally unable to finish: five specs opened five ledgers a second apart,
-spec 02 could not read the two services spec 01 had just adopted, and `status` had five journals to
+The run id is settled ONCE per pass, by `src/runAcceptance.ts` before any scenario exists, and
+handed to the harness every scenario shares. It may not be resolved per scenario, because the id is
+the ledger's KEY: minted per file (which is what vitest's module-graph-per-spec-file forced) it made
+a fresh pass structurally unable to finish, with five ledgers opened a second apart, scenario 02
+unable to read the two services scenario 01 had just adopted, and `status` left with five journals to
 choose between.
 
 `latest` resolves through a pointer written when a pass records its first FACT, not when it opens
@@ -552,15 +574,15 @@ What a resumed pass does with each thing it finds:
 Every one of those states is recorded the moment it is entered rather than when it completes, so
 the window a crash can land in is as small as the ledger write. The one thing recorded that is not
 an id is the set of decision kinds the suite ANSWERED, because a settled decision is
-indistinguishable afterwards from one nobody had to make, and spec 03's claim that it drove a human
+indistinguishable afterwards from one nobody had to make, and scenario 03's claim that it drove a human
 gate over `/api/v1` has to survive the process that made it. It travels with the TASK it was
 recorded against and no further: a task the board no longer has is re-filed as new work, and
-inheriting the deleted run's answers would let spec 03 claim it drove a gate the replacement run
+inheriting the deleted run's answers would let scenario 03 claim it drove a gate the replacement run
 never reached.
 
 **Nothing is cleaned up on failure.** The run, its pull request and any provisioned namespace are
 left in place to be inspected, and the failure message says so. Successful passes reclaim their
-namespaces through the pipeline's own `disposer`, which spec 02 asserts.
+namespaces through the pipeline's own `disposer`, which scenario 02 asserts.
 
 ## Starting over: `reset`
 
@@ -624,7 +646,7 @@ Six things about it are decisions rather than details:
   branches and open pull requests included, and no `/api/v1` call can empty them, so a fresh pass
   scaffolds ON TOP of that (`target-repos` says outright that it cannot see whether a repository is
   empty). Any OTHER repository a deleted frame backed is named too, since under `--all` the configured
-  pair is a fraction of what was emptied. An issue spec 04 filed stays open, because it was the
+  pair is a fraction of what was emptied. An issue scenario 04 filed stays open, because it was the
   reporter's and never the platform's.
   Per-PR cluster namespaces are untouched. A cleared board is not a fresh one, and the report says so
   rather than reading as "everything is clean".
@@ -637,7 +659,7 @@ precisely because one of them has moved on.
 
 The two leftovers above are the two things an `admin` key structurally cannot reclaim: the tree a
 scaffold run pushed, and an issue filed by the REPORTER, which was never the platform's to close.
-`--purge-repos` reclaims both, using `ACCEPTANCE_VCS_TOKEN` (the same credential spec 04 files with).
+`--purge-repos` reclaims both, using `ACCEPTANCE_VCS_TOKEN` (the same credential scenario 04 files with).
 It is a separate flag from `--all`, on a different axis: `--all` says how much of the BOARD to clear,
 this says whether to touch the provider at all. Without the variable it refuses, naming it, and
 changes nothing.
@@ -708,13 +730,15 @@ the next pass will be refused over. That includes the case where nothing was ref
 deleted: a clear whose only blocker is an unfreeable repository would otherwise exit 0 under "Done. A
 fresh pass can start" onto a board that earns the identical refusal on the next attempt.
 
-## The rules these specs are written to
+## The rules these scenarios are written to
 
 Five, and each is load-bearing.
 
 **0. Refuse before spending, say everything that is wrong, and say how to fix each one.** The gate
-above runs in every spec rather than only in spec 00, because a resumed pass starts wherever it
-stopped and a check only the first file runs is a check the resume path skips. Everything it knows
+above runs before every scenario rather than only in scenario 00, because a resumed pass starts
+wherever it stopped and a check only the first one runs is a check the resume path skips. It is also
+re-evaluated each time rather than cached: a pass takes an afternoon, and a workspace that went over
+budget during the feature runs is worth refusing before the next scenario spends. Everything it knows
 is reported together: this suite's unit of feedback is an afternoon, so learning about the second
 problem tomorrow costs a day per problem. The same arithmetic is why a refusal carries the steps
 and commands rather than a description of them, and why they are rendered from what the probe read.
@@ -741,9 +765,10 @@ very answers it gave, while the run still reaches `done` and the ledger still re
 answered. A review parked at its ITERATION CAP (`exceeded`) is refused rather than pushed past,
 for the same reason a `fork` is: the choice belongs to a person.
 
-**3. A wait that expires must say what it last saw.** The vitest timeout is disabled on purpose so
-that `src/deadline.ts` fires first: "timed out after 5400000ms" is true and useless, where "step 3
-`coder` was still working, 4/9 subtasks" separates a parked run from a wedged one from a slow one.
+**3. A wait that expires must say what it last saw.** `src/deadline.ts` owns every wait and the
+runner deliberately introduces no timeout of its own (the vitest one was disabled for the same
+reason): "timed out after 5400000ms" is true and useless, where "step 3 `coder` was still working,
+4/9 subtasks" separates a parked run from a wedged one from a slow one.
 A wait whose last observation is itself GRADED may hand it back instead of throwing, and
 `waitForIssueSettled` is the one that does: the checks render each claim with its own detail, which
 is more than the single line an expiry message carries. What is banned is ending a wait with
@@ -775,23 +800,25 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 
 | Path                         | What                                                                                                                                                                                                                             |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `acceptance/*.acceptance.ts` | The five specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                                                  |
-| `acceptance/globalSetup.ts`  | The two facts settled once for the whole pass, in the main process before any worker exists: the RUN ID, and the personal-password ask (the real config, client and terminal).                                                   |
-| `src/specOrder.ts`           | The order the specs run in, pinned to the file name, and why vitest's default sequencer cannot be left to decide it. Pure; unit-tested.                                                                                          |
-| `src/personalPasswordAsk.ts` | What that ask decides, and what it does when it cannot: degrade and continue, except for a person declining. Unit-tested.                                                                                                        |
+| `src/runAcceptance.ts`       | `pnpm run acceptance`. Settles the run id and the password, builds the harness, drives the scenarios, owns what an operator reads and the exit code.                                                                             |
+| `src/scenarioRunner.ts`      | The driver: order, bail, the per-step report, the summary, the exit code. Pure over its seams; unit-tested.                                                                                                                      |
+| `src/scenarios/index.ts`     | The ORDER, as an array. What the vitest sequencer used to be. Unit-tested against each id's own numeric prefix, so a scenario added out of place fails a test rather than a live pass.                                           |
+| `src/scenarios/*.ts`         | The five scenarios themselves, one per file, each a factory over the harness.                                                                                                                                                    |
+| `src/harness.ts`             | What every scenario is handed, built once per pass, plus the prerequisite gate the driver runs before each of them.                                                                                                              |
+| `src/personalPasswordAsk.ts` | What the up-front ask decides, and what it does when it cannot: degrade and continue, except for a person declining. Unit-tested.                                                                                                |
 | `src/config.ts`              | Environment → config in two halves (a BOARD, and what it takes to RUN a pass on one), reporting every problem at once. Pure; unit-tested.                                                                                        |
-| `src/envFile.ts`             | The `.env` beside the vitest config, read the same way by the config and by `globalSetup`. Pure.                                                                                                                                 |
-| `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                                                              |
+| `src/envFile.ts`             | The `.env` at the package root, read the same way by all four commands. Pure.                                                                                                                                                    |
+| `src/preflight.ts`           | The prerequisite vocabulary, runner, refusal, and the pass's GATE, which is where the report scenario's evaluation is handed to the gate seconds behind it rather than made twice. Pure; unit-tested.                            |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                                                           |
 | `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                                                      |
 | `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Unit-tested; reads the ambient shell unless a dialect is passed. |
 | `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested.                                  |
 | `src/presets.ts`             | The one preset-to-catalog join `configure`, `model-preset` and the up-front unlock share. Pure; unit-tested.                                                                                                                     |
 | `src/world.ts`               | The resumable ledger: what a pass created, and what a ledger says.                                                                                                                                                               |
-| `src/passFiles.ts`           | Where a pass's files live, which passes a state directory holds, and the `latest` pointer.                                                                                                                                       |
+| `src/passFiles.ts`           | Where a pass's files live, which passes a state directory holds, the `latest` pointer, and the ONE spelling of the package root all four commands resolve their `.env` against.                                                  |
 | `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                                                   |
 | `src/status.ts`              | Ledger + journal → "where is this pass". Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.                                                                                                    |
-| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                                                                                                                                                                         |
+| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else, finding them through the same `.env` the pass does.                                                                                                                     |
 | `src/reset.ts`               | Starting over: which frames a clear targets (this configuration's two questions, a named pass, or `--all`), the order the deletes go in, what it refuses to remove, and what it cannot reclaim. Driven by seams; unit-tested.    |
 | `src/resetCli.ts`            | `pnpm run reset`. Supplies the real clients and file removals, parses the positional and the three flags, owns the exit code.                                                                                                    |
 | `src/providerPurge.ts`       | `--purge-repos`: composing the issue and repository halves into one plan, one apply and one report. Unit-tested through its two halves.                                                                                          |
@@ -805,7 +832,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/resume.ts`              | File a task, or adopt / re-attach to what a previous pass left.                                                                                                                                                                  |
 | `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.                                                                                                                                                        |
 | `src/decisions.ts`           | The two kinds this suite answers, what is answerable NOW, and the refusals.                                                                                                                                                      |
-| `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                                                                                                                                                                    |
+| `src/evidence.ts`            | The report reductions the scenarios assert on. Pure; unit-tested.                                                                                                                                                                |
 | `src/instructions.ts`        | The briefs, the two frame titles, the reporter's issue, and the reasoning behind the planted defect.                                                                                                                             |
 | `src/vcsIssues.ts`           | The reporter's own client: filing an issue on the provider and reading it back, provider-keyed. The one thing here that is not the platform.                                                                                     |
 | `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                                                           |

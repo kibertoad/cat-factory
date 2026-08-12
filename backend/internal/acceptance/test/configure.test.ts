@@ -780,7 +780,7 @@ describe('configure: the reporter token', () => {
   })
 
   it('says why the workspace’s own connection cannot be reused for it', async () => {
-    // The reason is the whole design of spec 04, and an operator who does not know it will paste the
+    // The reason is the whole design of scenario 04, and an operator who does not know it will paste the
     // API token or the App's credential here and get a test that proves nothing.
     const { io } = await run({ script: { secrets: [TOKEN] } })
     expect(io.output.join('\n')).toContain('circular')

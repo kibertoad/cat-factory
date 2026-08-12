@@ -1,4 +1,4 @@
-// Spec 04's two halves that are not a pipeline run: getting the reporter's issue filed exactly once
+// Scenario 04's two halves that are not a pipeline run: getting the reporter's issue filed exactly once
 // across attempts, and grading what the platform did to it afterwards.
 //
 // It sits beside `resume.ts` and `evidence.ts` on purpose, and copies their rules rather than

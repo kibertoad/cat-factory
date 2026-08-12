@@ -1,14 +1,14 @@
-// The LEDGER: what previous specs in this acceptance run already built.
+// The LEDGER: what previous scenarios in this acceptance run already built.
 //
 // Why a file rather than module state: one full pass costs real model spend and the better part
-// of an afternoon, and the specs form a chain (03 files a bug against the feature 02 shipped
+// of an afternoon, and the scenarios form a chain (03 files a bug against the feature 02 shipped
 // into the repositories 01 scaffolded). A crash in 03 must not mean re-scaffolding two
-// repositories and re-shipping a feature. So each spec RECORDS what it created and each spec
+// repositories and re-shipping a feature. So each one RECORDS what it created and each one
 // starts by asking whether its own output already exists; a re-run against the same
 // `ACCEPTANCE_RUN_ID` resumes at the first unfinished step.
 //
 // It is deliberately a dumb append-of-facts, not a state machine. The authority on what exists
-// is the deployment, and every spec re-reads it (the ledger holds ids, never statuses); the
+// is the deployment, and every scenario re-reads it (the ledger holds ids, never statuses); the
 // ledger's only job is to remember which ids to re-read.
 //
 // This file owns what a ledger SAYS. Where it lives, what else a pass leaves beside it and which
@@ -29,7 +29,7 @@ import {
 export type ServiceRecord = {
   /** The board block id of the service frame, which `/api/v1` addresses as a `serviceId`. */
   blockId: string
-  /** The same frame as `/api/v1` names it. Identical value; both spellings appear in the specs. */
+  /** The same frame as `/api/v1` names it. Identical value; both spellings appear in the scenarios. */
   serviceId: string
   /**
    * `owner/name`, as `GET /api/v1/repos` reports the adopted repository.
@@ -53,7 +53,7 @@ export type RunRecord = {
    * The one entry here that is not an id, and the exception is deliberate: every other field
    * names something the DEPLOYMENT can be re-asked about, but "the suite answered a
    * `clarity-review` gate over /api/v1" is a fact about what the suite DID, and a settled
-   * decision is indistinguishable afterwards from one that never had to be made. Spec 03 asserts
+   * decision is indistinguishable afterwards from one that never had to be made. Scenario 03 asserts
    * on it, so a resumed pass that adopts a finished run would otherwise report the human-gate
    * path as never exercised when it was exercised yesterday.
    */
@@ -61,7 +61,7 @@ export type RunRecord = {
 }
 
 /**
- * The issue spec 04 filed on the provider, as the reporter.
+ * The issue scenario 04 filed on the provider, as the reporter.
  *
  * The one thing a pass creates that is NOT on the deployment, which is why it is recorded with its
  * whole address rather than an id: nothing in `/api/v1` can hand it back, so a resumed pass that
@@ -87,9 +87,9 @@ export type World = {
   backend: ServiceRecord | null
   frontend: ServiceRecord | null
   /**
-   * Spec 01's two scaffold runs, one per service.
+   * Scenario 01's two scaffold runs, one per service.
    *
-   * Ordinary `pl_build` runs like spec 02's, so they resume the same way rather than through a
+   * Ordinary `pl_build` runs like scenario 02's, so they resume the same way rather than through a
    * bootstrap job id: a pass interrupted mid-scaffold re-attaches to the live run. Recorded
    * separately from `featureBackend`/`featureFrontend` because they are separate pull requests
    * against the same repository, and adopting one for the other would skip a whole phase.
@@ -97,17 +97,17 @@ export type World = {
   scaffoldBackend: RunRecord | null
   scaffoldFrontend: RunRecord | null
   /**
-   * Spec 02, per service. Two records rather than one because the planted mismatch has two halves
-   * and spec 02 asserts the ephemeral-environment evidence of EACH: collapsing them would make
+   * Scenario 02, per service. Two records rather than one because the planted mismatch has two halves
+   * and scenario 02 asserts the ephemeral-environment evidence of EACH: collapsing them would make
    * the second run's report unreadable, which is the one that carries the frontend's environment.
    */
   featureBackend: RunRecord | null
   featureFrontend: RunRecord | null
-  /** Spec 03: the bug report filed against the shipped feature. */
+  /** Scenario 03: the bug report filed against the shipped feature. */
   bugfix: RunRecord | null
-  /** Spec 04: the issue filed on the provider, before any of it reached the platform. */
+  /** Scenario 04: the issue filed on the provider, before any of it reached the platform. */
   intakeIssue: IssueRecord | null
-  /** Spec 04: the run that delivered that issue, filed as a task linked to it. */
+  /** Scenario 04: the run that delivered that issue, filed as a task linked to it. */
   issueDelivery: RunRecord | null
 }
 
@@ -129,11 +129,12 @@ export function emptyWorld(runId: string): World {
 /**
  * The run id for this pass: `ACCEPTANCE_RUN_ID` when set, else a fresh one.
  *
- * **Resolved ONCE per pass, in the main process** (`acceptance/globalSetup.ts`), and handed to the
- * workers. Never called from a spec: vitest gives every spec FILE its own module graph, so a minted
- * id is per file, and the id is the KEY to the ledger the files pass facts through. Called there,
- * five specs opened five ledgers a second apart, spec 02 could not read the services spec 01 had
- * just adopted, and the pass left five journals for `status` to pick one of.
+ * **Resolved ONCE per pass**, by `src/runAcceptance.ts` before a scenario exists, and handed to
+ * `buildHarness`. Never called from a scenario: it is the KEY to the ledger the scenarios pass facts
+ * through, so a pass has exactly one or it has none. Under vitest that was a `globalSetup` hook
+ * feeding an RPC channel, because a spec file was a module graph of its own and an id minted in one
+ * was an id per FILE: five scenarios opened five ledgers a second apart, 02 could not read the
+ * services 01 had just adopted, and the pass left five journals for `status` to pick one of.
  *
  * Setting it is how a re-run RESUMES rather than starting a second pass. The literal `latest`
  * resolves through the pointer the previous pass wrote, because the id an operator needs is
@@ -162,26 +163,6 @@ export function resolveRunId(
   // Seconds granularity, no separators: it names this pass's ledger and journal files, so it has
   // to be safe in a filename on every platform an operator runs this from.
   return new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
-}
-
-/**
- * The run id a worker was handed, or a refusal naming who was supposed to hand it over.
- *
- * A spec may not resolve one for itself (see `resolveRunId`), and the failure of doing so is
- * invisible: every file works, each against a ledger of its own, and the pass fails four specs later
- * with "the ledger has no 'backend'". So the absence is a REFUSAL rather than a fallback to minting
- * one, which is exactly the shape that regressed.
- */
-export function requirePassRunId(injected: string | undefined): string {
-  const runId = injected?.trim()
-  if (runId) return runId
-  throw new Error(
-    `This spec was not handed the pass's run id. It comes from acceptance/globalSetup.ts, which ` +
-      `resolves it once in the main process and provides it to every worker: check that ` +
-      `vitest.acceptance.config.ts still names that hook in 'globalSetup'. It is deliberately not ` +
-      `minted here, because vitest gives each spec file its own module graph and a per-file run id ` +
-      `is a per-file ledger, which no other spec can read.`,
-  )
 }
 
 /** One OTHER pass on disk, and which of the asked-about services its ledger names. */
@@ -304,13 +285,63 @@ export class WorldStore {
     const value = this.#world[key]
     if (value === null || value === undefined) {
       throw new Error(
-        `The ledger has no '${String(key)}' for run ${this.#paths.runId}. The spec that records ` +
+        `The ledger has no '${String(key)}' for run ${this.#paths.runId}. The scenario that records ` +
           `it has not passed yet. Run the suite from the start, or set ACCEPTANCE_RUN_ID to a ` +
           `pass that got further. Ledger: ${this.#paths.ledgerPath}`,
       )
     }
     return value as NonNullable<World[K]>
   }
+}
+
+/**
+ * What each ledger slot IS, which is the question `recordsFacts` turns on.
+ *
+ * `created` is a thing that exists outside this process because the pass made it: a board service,
+ * a run, an issue on the provider. `bookkeeping` is anything else the ledger carries about the pass
+ * itself, which is evidence of nothing having been created.
+ */
+type LedgerSlot = 'created' | 'bookkeeping'
+
+/**
+ * Every slot a ledger holds, classified, EXHAUSTIVE over `World` by construction.
+ *
+ * The `satisfies` is the point: a field added to `World` fails to compile until it is named here,
+ * so the classification cannot silently acquire a fifth state ("we never decided"). Scanning the
+ * whole object instead read every non-null value as a created thing, which is right for today's
+ * ledger and wrong the moment one carries something that is not one: a `startedAt` or a `notes`
+ * would compile, pass every test, and from then on report EVERY pass (including a fresh attempt a
+ * prerequisite refused before anything existed) as having created something.
+ */
+const LEDGER_SLOTS = {
+  backend: 'created',
+  frontend: 'created',
+  scaffoldBackend: 'created',
+  scaffoldFrontend: 'created',
+  featureBackend: 'created',
+  featureFrontend: 'created',
+  bugfix: 'created',
+  intakeIssue: 'created',
+  issueDelivery: 'created',
+} satisfies Record<Exclude<keyof World, 'runId'>, LedgerSlot>
+
+/**
+ * Whether this pass has recorded a FACT: anything at all on the deployment or the provider.
+ *
+ * The one rule behind two answers that must never disagree. `status` uses it to decide whether the
+ * pass it is reporting on is the one worth resuming, and the pass itself uses it to decide what its
+ * closing words may claim: "everything it created is still there to inspect" is instructions for an
+ * operator whose run is half-finished, and a lie to the far commoner one whose attempt a prerequisite
+ * refused before anything was created. It is also the rule the `latest` pointer follows, which is why
+ * a refused attempt never claims it.
+ *
+ * `!= null` rather than `!== null`: a slot a hand-edited ledger left `undefined` is an absent
+ * record, and reading it as a present one is the same lie in the same direction.
+ */
+export function recordsFacts(world: World): boolean {
+  return Object.entries(LEDGER_SLOTS).some(
+    ([key, slot]) => slot === 'created' && world[key as keyof World] != null,
+  )
 }
 
 /**
@@ -336,7 +367,7 @@ export function readWorld(path: string): World | null {
   }
 }
 
-/** Narrow parsed JSON to a `World`, or null. Total, so a hand-edited ledger cannot crash a spec. */
+/** Narrow parsed JSON to a `World`, or null. Total, so a hand-edited ledger cannot crash a scenario. */
 export function coerceWorld(value: unknown): World | null {
   if (typeof value !== 'object' || value === null) return null
   const record = value as Record<string, unknown>

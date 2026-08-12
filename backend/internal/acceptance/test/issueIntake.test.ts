@@ -30,7 +30,7 @@ function api(overrides: Partial<IssueApi> = {}): IssueApi {
     file: async () => ({ number: 7, url: 'https://github.com/acme/catalog-api/issues/7' }),
     read: async () => state({}),
     // The purge half of the client (`issuePurge.ts`). Intake never reaches these, and they throw
-    // rather than answering empty so a spec that starts calling one fails here rather than reading
+    // rather than answering empty so a scenario that starts calling one fails here rather than reading
     // a fabricated "no issues".
     listOpen: async () => {
       throw new Error('the intake must not LIST issues')

@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   advisoryNotes,
   blockingResults,
+  createPrerequisiteGate,
   formatPreflightFailure,
   formatPreflightLine,
   formatPrerequisiteFailure,
   formatRemedy,
+  type PreflightReport,
   type Prerequisite,
+  type PrerequisiteResult,
   type PrerequisiteVerdict,
   runPreflight,
 } from '../src/preflight.ts'
@@ -178,7 +181,7 @@ describe('formatPreflightFailure', () => {
   })
 
   it('carries the commands into the refusal, which is the only place a resumed pass reads', async () => {
-    // A pass resumed into spec 02 never runs spec 00, so this one string is the whole report.
+    // A pass resumed into scenario 02 never runs scenario 00, so this one string is the whole report.
     // Losing the commands here would leave the instructions readable only on a fresh pass.
     const report = await runPreflight([prerequisite('a', 'required', unsatisfied)], undefined)
     expect(formatPreflightFailure(report)).toContain('curl -sS http://127.0.0.1:8787/health')
@@ -246,7 +249,7 @@ describe('formatPreflightLine', () => {
 })
 
 describe('the registry', () => {
-  it('gives every prerequisite a distinct id, which spec 00 names its tests from', () => {
+  it('gives every prerequisite a distinct id, which scenario 00 names its tests from', () => {
     const ids = PREREQUISITES.map((prerequisite) => prerequisite.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
@@ -263,5 +266,91 @@ describe('the registry', () => {
     // the pass an hour later belongs on the required side however awkward that is.
     const advisory = PREREQUISITES.filter((entry) => entry.disposition === 'advisory')
     expect(advisory.map((entry) => entry.id)).toEqual(['pipeline-catalog'])
+  })
+})
+
+describe('createPrerequisiteGate', () => {
+  // Freshness is rule 0: a pass takes an afternoon, so a workspace that goes over budget between two
+  // scenarios must be refused before the next one spends. The single exception is the seam between
+  // the preflight REPORT and the first gated scenario, which are the same evaluation twice with
+  // nothing in between (~14 duplicate round trips, every verdict line printed to the operator twice,
+  // and two copies of each entry in the journal `status` reduces).
+
+  function report(...results: readonly PrerequisiteResult[]): PreflightReport {
+    return { results }
+  }
+
+  const green = report({
+    id: 'a',
+    what: 'what a guarantees',
+    disposition: 'required',
+    verdict: satisfied,
+  })
+  const red = report({
+    id: 'a',
+    what: 'what a guarantees',
+    disposition: 'required',
+    verdict: unsatisfied,
+  })
+
+  function counting(next: () => PreflightReport): {
+    gate: ReturnType<typeof createPrerequisiteGate>
+    evaluations: () => number
+  } {
+    let evaluations = 0
+    const gate = createPrerequisiteGate(async () => {
+      evaluations += 1
+      return next()
+    })
+    return { gate, evaluations: () => evaluations }
+  }
+
+  it('evaluates for itself when nothing was offered', async () => {
+    const { gate, evaluations } = counting(() => green)
+
+    await gate.assert()
+
+    expect(evaluations()).toBe(1)
+  })
+
+  it('consumes the report the preflight scenario just paid for, rather than repeating it', async () => {
+    const { gate, evaluations } = counting(() => green)
+
+    await gate.evaluate()
+    await gate.assert()
+
+    expect(evaluations()).toBe(1)
+  })
+
+  it('offers it EXACTLY once, so the next scenario is gated on a fresh read', async () => {
+    // The gate after the first is separated from it by a scenario that spent an afternoon, which is
+    // precisely the one that must not reuse anything.
+    const { gate, evaluations } = counting(() => green)
+
+    await gate.evaluate()
+    await gate.assert()
+    await gate.assert()
+    await gate.assert()
+
+    expect(evaluations()).toBe(3)
+  })
+
+  it('does not leave a refused report standing for whatever asks next', async () => {
+    // A gate that threw and left its report behind would answer the NEXT scenario from a reading
+    // that already refused, which is a stale verdict in both directions.
+    const answers = [red, green]
+    const { gate, evaluations } = counting(() => answers.shift() ?? green)
+
+    await gate.evaluate()
+    await expect(gate.assert()).rejects.toThrow(/not ready for an acceptance pass/)
+    await gate.assert()
+
+    expect(evaluations()).toBe(2)
+  })
+
+  it('throws the WHOLE refusal, which is what an operator acts on', async () => {
+    const { gate } = counting(() => red)
+
+    await expect(gate.assert()).rejects.toThrow(/wire the thing/)
   })
 })

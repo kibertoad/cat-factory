@@ -10,18 +10,16 @@
 // nothing there, and it writes exactly one file.
 
 import { readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { createConsoleIo, createNodeShell } from '@cat-factory/cli'
 import { configure, connectDeployment } from './configure.ts'
-
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+import { packageRoot } from './passFiles.ts'
 
 const outcome = await configure({
   io: createConsoleIo(),
   shell: createNodeShell(),
-  // Beside `vitest.acceptance.config.ts`, which is the only thing that reads it: that config loads
-  // the file into `test.env`, since vitest does not pick one up on its own.
+  // At the package root, which is where every command that needs it looks (`envFile.ts`): nothing
+  // applies a `.env` for a Node entry point on its own.
   envPath: join(packageRoot, '.env'),
   readFile: (path) => {
     try {

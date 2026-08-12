@@ -5,10 +5,12 @@ import { describe, expect, it } from 'vitest'
 import { readLatestRunId } from '../src/passFiles.ts'
 import {
   coerceWorld,
+  emptyWorld,
   findPassesNaming,
   readWorld,
-  requirePassRunId,
+  recordsFacts,
   resolveRunId,
+  type World,
   WorldStore,
 } from '../src/world.ts'
 
@@ -44,21 +46,6 @@ describe('resolveRunId', () => {
     // The two intents are opposite: someone asking to continue must never be handed a fresh pass
     // that bootstraps two repositories and spends real money.
     expect(() => resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, scratch())).toThrow(/names no/)
-  })
-})
-
-describe('requirePassRunId', () => {
-  it('takes the id the pass was given', () => {
-    expect(requirePassRunId('20260811151012')).toBe('20260811151012')
-  })
-
-  it('refuses an absent one rather than minting a ledger no other spec can read', () => {
-    // The regression this guards: resolved per spec FILE, five specs opened five ledgers and the
-    // chain between them became five one-spec passes, which surfaces four specs later as "the
-    // ledger has no 'backend'". A fallback here is what made that silent.
-    for (const missing of [undefined, '', '   ']) {
-      expect(() => requirePassRunId(missing)).toThrow(/globalSetup/)
-    }
   })
 })
 
@@ -187,9 +174,9 @@ describe('WorldStore', () => {
     expect(new WorldStore(dir, 'run-2').value.frontend).toBeNull()
   })
 
-  it('names the missing record and how to recover when a spec reads one too early', () => {
+  it('names the missing record and how to recover when a scenario reads one too early', () => {
     const store = new WorldStore(scratch(), 'run-1')
-    // The message is the deliverable: this fires when someone runs spec 03 alone, and "cannot
+    // The message is the deliverable: this fires when someone runs scenario 03 alone, and "cannot
     // read properties of null" would send them into the harness instead of at the ledger.
     expect(() => store.require('backend')).toThrow(/ACCEPTANCE_RUN_ID/)
     expect(() => store.require('backend')).toThrow(/backend/)
@@ -272,7 +259,7 @@ describe('coerceWorld', () => {
     expect(world?.scaffoldFrontend).toBeNull()
   })
 
-  it('drops a ledger written before spec 01 stopped bootstrapping, rather than half-reading it', () => {
+  it('drops a ledger written before scenario 01 stopped bootstrapping, rather than half-reading it', () => {
     // Internals are not kept backwards compatible (CLAUDE.md), and this is the shape that proves it
     // costs nothing: an old ledger's `bootstrapJobs` is simply not read, and the pass starts fresh
     // instead of re-attaching to a job id no endpoint answers any more.
@@ -308,5 +295,42 @@ describe('coerceWorld: the reported issue', () => {
     ]) {
       expect(coerceWorld({ runId: 'r', intakeIssue: broken })?.intakeIssue).toBeNull()
     }
+  })
+})
+
+describe('recordsFacts', () => {
+  // The one rule behind three answers that must never disagree: whether the `latest` pointer is
+  // claimed, whether `status` advises a resume, and whether a failed pass's closing words may say
+  // "everything it created is still there to inspect". The commonest failure in this suite is a
+  // prerequisite refusing a FRESH attempt, which by construction created nothing, and every one of
+  // those three is a lie about state that does not exist if this answers true for it.
+
+  it('is false for a pass that created nothing', () => {
+    expect(recordsFacts(emptyWorld('20260812T1200'))).toBe(false)
+  })
+
+  it('is true for any created thing, and covers EVERY slot a ledger can hold', () => {
+    // Driven off the ledger's own shape rather than a list restated here, so a slot added to `World`
+    // and forgotten in the classification fails HERE instead of silently reporting a pass that
+    // adopted a repository (or filed an issue) as having created nothing.
+    const empty = emptyWorld('20260812T1200')
+    const slots = Object.keys(empty).filter((key) => key !== 'runId')
+
+    expect(slots.length).toBeGreaterThan(0)
+    for (const slot of slots) {
+      expect(recordsFacts({ ...empty, [slot]: { anything: true } })).toBe(true)
+    }
+  })
+
+  it('reads an UNDEFINED slot as absent, exactly as a null one', () => {
+    // A hand-edited or older ledger can hold either, and reading one of them as a present record is
+    // the same lie in the same direction.
+    const world = { ...emptyWorld('20260812T1200'), backend: undefined } as unknown as World
+
+    expect(recordsFacts(world)).toBe(false)
+  })
+
+  it('ignores the run id, which every ledger has and no pass created', () => {
+    expect(recordsFacts({ ...emptyWorld('20260812T1200'), runId: 'a-named-pass' })).toBe(false)
   })
 })

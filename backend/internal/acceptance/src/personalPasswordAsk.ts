@@ -1,11 +1,11 @@
 // The ONE up-front personal-password ask: what it decides, and what it does when it cannot.
 //
-// `acceptance/globalSetup.ts` is the wiring; every judgement is here, because every judgement it
+// `src/runAcceptance.ts` is the wiring; every judgement is here, because every judgement it
 // makes is a DEGRADATION, and a degradation nothing tests is a degradation that quietly becomes an
-// abort. This hook runs before the first prerequisite has been evaluated and before a single journal
+// abort. This runs before the first prerequisite has been evaluated and before a single journal
 // line has been written, so anything it throws is the operator's WHOLE output: no "your key names a
 // different workspace", no "the pinned preset's model is unwired", no ledger, no journal. The
-// preflight owns diagnosing a deployment, and it cannot own it from behind a hook that refused first.
+// preflight owns diagnosing a deployment, and it cannot own it from behind an ask that refused first.
 //
 // So: three things can go wrong here, and two of them answer the same way. A deployment that cannot
 // be read and a terminal that cannot be asked on both leave the ask exactly where it lived before
@@ -21,10 +21,17 @@ import { PersonalPasswordDeclined } from './personalUnlock.ts'
 export type PersonalPasswordAskDeps = {
   /** The pinned preset with its catalog row. THROWS when the deployment could not be read. */
   readPinned: () => Promise<PinnedPreset | null>
-  /** Ask the operator, naming why. Rejects when there is no terminal to ask on. */
-  readSecret: (reason: string) => Promise<string>
-  /** Hand the password to every worker, for the pass that is about to start. */
-  provide: (password: string) => void
+  /**
+   * Ask the operator, naming why, and HOLD what they type. Rejects when there is no terminal to ask
+   * on.
+   *
+   * One seam rather than a read paired with a hand-over, which is what this was under vitest: the
+   * password had to come back as a value so `provide` could send it down an RPC channel to each
+   * worker. In one process the holder is the same closure the lazy ask fills
+   * (`personalUnlock.ts`'s `obtain`), so nothing has to carry a copy and the suite no longer has a
+   * function that hands a password back at all.
+   */
+  hold: (reason: string) => Promise<void>
   /** What the operator reads while this happens. */
   log: (message: string) => void
 }
@@ -33,14 +40,13 @@ export type PersonalPasswordAskDeps = {
  * Ask once, or say why it did not.
  *
  * Rejects for exactly one cause: {@link PersonalPasswordDeclined}. Everything else it can meet is
- * reported and returned from, which is what keeps this hook incapable of ending a pass that the
+ * reported and returned from, which is what keeps this incapable of ending a pass that the
  * preflight has not yet had a chance to describe.
  */
 export async function askForPersonalPassword(deps: PersonalPasswordAskDeps): Promise<void> {
   const pinned = await readPinned(deps)
   if (!pinned || !needsPersonalPassword(pinned.model)) return
-  const password = await ask(deps, promptReason(pinned))
-  if (password !== null) deps.provide(password)
+  await ask(deps, promptReason(pinned))
 }
 
 /**
@@ -67,19 +73,19 @@ async function readPinned(deps: PersonalPasswordAskDeps): Promise<PinnedPreset |
 }
 
 /**
- * The password, or `null` with the refusal stated and the pass left to continue.
+ * Ask and hold, or state the refusal and leave the pass to continue.
  *
- * The refusal is printed rather than thrown, and what it costs is one prompt drawn over the reporter
- * later instead of one drawn cleanly now. What throwing cost was the entire preflight: a pass in an
+ * The refusal is printed rather than thrown, and what it costs is one prompt drawn mid-pass later
+ * instead of one drawn cleanly now. What throwing cost was the entire preflight: a pass in an
  * MSYS window, a container without a tty, or an agent's detached shell ended here with a message
  * about console modes and nothing about the deployment it never reached.
  *
  * A DECLINED prompt is re-thrown, because it is the one answer that is a person's decision rather
  * than a limit of where the pass is running.
  */
-async function ask(deps: PersonalPasswordAskDeps, reason: string): Promise<string | null> {
+async function ask(deps: PersonalPasswordAskDeps, reason: string): Promise<void> {
   try {
-    return await deps.readSecret(reason)
+    await deps.hold(reason)
   } catch (error) {
     if (error instanceof PersonalPasswordDeclined) throw error
     deps.log(
@@ -88,7 +94,6 @@ async function ask(deps: PersonalPasswordAskDeps, reason: string): Promise<strin
         'the password, the same ask (or this same refusal) arrives there, after everything the ' +
         'preflight found has been printed.',
     )
-    return null
   }
 }
 

@@ -1,7 +1,7 @@
-// RESUMING a spec that files work: adopt what a previous pass started, rather than filing it again.
+// RESUMING a scenario that files work: adopt what a previous pass started, rather than filing it again.
 //
-// The ledger has always remembered what a pass created, and spec 01 has always re-read the board
-// before bootstrapping. The specs that FILE WORK did not: each one created a task and started a
+// The ledger has always remembered what a pass created, and scenario 01 has always re-read the board
+// before bootstrapping. The scenarios that FILE WORK did not: each one created a task and started a
 // run unconditionally, so a pass interrupted forty minutes into `pl_build` re-filed the same
 // feature on the next attempt. That is the most expensive failure this suite can have. It spends
 // the whole run again, and it does something worse than waste money: two runs against one
@@ -55,7 +55,7 @@ export type FileAndDriveResult = DriveResult & {
   /**
    * Every decision kind answered on this run, INCLUDING those a previous attempt answered.
    *
-   * The claim spec 03 makes is "this suite answered a human gate over the public API", and that
+   * The claim scenario 03 makes is "this suite answered a human gate over the public API", and that
    * claim is not weakened by the answering having happened before the process restarted. Reading
    * it off `answered` alone would report a resumed pass as never having exercised the gate.
    */
@@ -81,7 +81,7 @@ export async function fileAndDrive(options: FileAndDriveOptions): Promise<FileAn
   const adopted: Adoption = existing?.taskId ? await adopt(options, existing) : { kind: 'gone' }
   // Carried only onto work the ledger's own task still names. On the `gone` path the recorded task
   // is being re-filed, and its predecessor's gate answers are a fact about a run the board no
-  // longer has: inheriting them would let spec 03 claim it drove the clarity gate on a run that
+  // longer has: inheriting them would let scenario 03 claim it drove the clarity gate on a run that
   // never reached it, which is the one claim the ledger carries this set to make.
   const carried = adopted.kind === 'gone' ? [] : (existing?.answeredKinds ?? [])
   if (adopted.kind === 'settled') {

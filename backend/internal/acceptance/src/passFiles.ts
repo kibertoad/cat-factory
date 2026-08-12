@@ -17,7 +17,17 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+/**
+ * This package's own root, which is where every entry point looks for the `.env` and where a
+ * relative `ACCEPTANCE_STATE_DIR` resolves against.
+ *
+ * Exported because it was spelled out four times: here, and once in each of the three CLIs that
+ * read an `.env` nothing applies for them. A layout change found in three of the four places
+ * leaves the fourth reading a file that is not there, which surfaces as a perfectly configured
+ * checkout refused with the whole missing-variable list. Same reason this module owns the rest of
+ * the layout: one answer, because several readers need it.
+ */
+export const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 const LEDGER_SUFFIX = '.json'
 const JOURNAL_SUFFIX = '.journal.jsonl'

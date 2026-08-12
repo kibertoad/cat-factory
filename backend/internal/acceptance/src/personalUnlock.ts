@@ -91,25 +91,6 @@ function checked(entered: string): string {
 }
 
 /**
- * Ask for the password and RETURN it: the up-front ask, for `acceptance/globalSetup.ts`.
- *
- * The one function here that hands the password out rather than sealing it in a closure, and it earns
- * that because of how vitest is shaped. Every spec file gets its OWN module graph even under one
- * worker, so a holder built in spec 01 cannot be reached from spec 02, and asking lazily is asking
- * once per FILE that starts or answers a run: four prompts a pass, each drawn over a live reporter
- * that is redrawing the same lines. `globalSetup` runs in the main process before any of that, asks
- * once, and hands the value to each worker over vitest's RPC channel.
- *
- * What that costs is honest and bounded: the password now sits in the main process's memory as well
- * as each worker's. What it does NOT cost is the property the design actually protects, which is that
- * no copy is ever written down: not the `.env`, not the ledger, not the journal, not a log line, and
- * not an environment variable a child process would inherit.
- */
-export async function readPersonalPassword(reason: string): Promise<string> {
-  return checked(await readSecretFromTty(promptFor(reason)))
-}
-
-/**
  * Run a call that may need the personal subscription, asking for the password if the deployment
  * says one is needed, then retrying ONCE.
  *
@@ -168,14 +149,17 @@ function stillLocked(what: string, error: CatFactoryCredentialRequiredError): Er
  * The terminal to ask on: the process's CONTROLLING terminal, opened directly, with `process.stdin`
  * as the fallback when it happens to be one.
  *
- * `process.stdin` alone is not enough, and this is the whole reason this indirection exists. The
- * pass runs under vitest, whose worker processes are forked with PIPED stdio, so `stdin.isTTY` is
- * undefined there and a prompt built on it could never ask anything — the one path this feature
- * exists for would have thrown "stdin is not a terminal" at the first start, on every run, while a
- * terminal sat right there. Opening `/dev/tty` (`CONIN$` on Windows) is how every other password
- * prompt solves this, and it is STRONGER than the stdin check it replaces rather than weaker: a
- * controlling terminal cannot be fed from a pipe, a file or a shell variable at all, so the
- * "nothing persisted" property is now structural instead of a check.
+ * `process.stdin` alone is not enough, and this is the whole reason this indirection exists. It was
+ * written for vitest, whose worker processes are forked with PIPED stdio, so `stdin.isTTY` was
+ * undefined there and a prompt built on it could never ask anything: the one path this feature exists
+ * for threw "stdin is not a terminal" at the first start, on every run, while a terminal sat right
+ * there. **The runner is now a plain Node script and the reason survives**, because the layer that
+ * forks is still there: `pnpm --filter … run acceptance` decides what this process's stdio is, and a
+ * package manager is free to pipe it. Opening `/dev/tty` (`CONIN$` on Windows) is how every other
+ * password prompt solves this, and it is STRONGER than the stdin check it replaces rather than
+ * weaker: a controlling terminal cannot be fed from a pipe, a file or a shell variable at all, so the
+ * "nothing persisted" property is structural instead of a check. A console is inherited by child
+ * processes independently of stdio, so the pnpm layer costs it nothing either way.
  *
  * THROWS when there is no terminal to reach at all (CI, a daemon), or one that cannot be switched
  * to raw mode, naming what to do instead, and those are two different refusals because they need
@@ -206,9 +190,10 @@ function openTerminal(): { input: ReadStream; write: (text: string) => void; clo
     enterRawMode(input, close)
     return { input, write: (text) => process.stderr.write(text), close }
   }
-  // Prompt down the same terminal where possible, so it cannot be swallowed by the test reporter
-  // that owns this worker's stdout. Windows reads and writes the console through two different
-  // devices; POSIX can write back down the one it read from.
+  // Prompt down the same terminal where possible, so it cannot be swallowed by whatever owns this
+  // process's stdout (a test reporter, when this was a vitest worker; a pnpm log prefix now, or a
+  // `tee` an operator started an afternoon-long pass under). Windows reads and writes the console
+  // through two different devices; POSIX can write back down the one it read from.
   const outFd =
     process.platform === 'win32' ? tryOpen('\\\\.\\CONOUT$', 'w') : tryOpen(device.path, 'w')
   const input = new ReadStream(fd)
@@ -299,7 +284,7 @@ function tryOpen(path: string, flags: string): number | null {
  * Node's `setRawMode` reports a failure by EMITTING `'error'` on the stream and returning normally;
  * it throws only because an emitted `'error'` with no listener is what Node turns into a throw. So on
  * the `process.stdin` fallback path, where anything else in the process may already be listening (a
- * `readline` interface, vitest's own watch-mode key handling), the failure arrives as a quiet return
+ * `readline` interface, a debugger's key handling), the failure arrives as a quiet return
  * with echo still ON, and a try/catch alone would then read the password into the scrollback: the one
  * thing this whole file exists to prevent, failing silently rather than refusing. The listener below
  * is what makes that failure visible no matter who else is listening, and `isRaw` is what makes the

@@ -2,7 +2,7 @@
 // and reading back what the platform did to it.
 //
 // Every other call the suite makes goes through the published SDK, because the platform is what is
-// under test. This file is the opposite by design. Spec 04's premise is that somebody who has never
+// under test. This file is the opposite by design. Scenario 04's premise is that somebody who has never
 // heard of cat-factory opens an issue on a repository, and the platform picks it up, delivers it and
 // closes it. If the platform filed that issue itself the test would be circular: an issue it created
 // through a credential it holds, closed through the same credential, proves the credential works.
@@ -52,7 +52,7 @@ export type IssueState = {
 }
 
 /**
- * Whether the reporter credential can do the one thing spec 04 needs of it.
+ * Whether the reporter credential can do the one thing scenario 04 needs of it.
  *
  * Four verdicts rather than a boolean, because they have four different fixes and a provider
  * answers three of them with statuses a caller must not blur: a token this provider does not know
@@ -122,9 +122,9 @@ export type IssueApiOptions = {
 /**
  * The repository the reporter files on, and the ONE place that decides which one it is.
  *
- * The BACKEND repository, because that is the service spec 04's issue is about and the one whose
+ * The BACKEND repository, because that is the service scenario 04's issue is about and the one whose
  * frame the task is filed under. Shared with the `issue-credential` prerequisite so the gate probes
- * the repository the spec will actually use: probing the other one would pass a pass that then
+ * the repository the scenario will actually use: probing the other one would pass a pass that then
  * cannot file.
  */
 export function issueTarget(config: AcceptanceConfig): IssueTarget {
@@ -164,7 +164,7 @@ export const UNSUPPORTED_PROVIDER_REASON: Record<PrReportRunProvider, readonly s
   gitlab: [
     'A GitLab issue lives on the INSTANCE, and no /api/v1 read publishes which instance this ' +
       "workspace's connection talks to, so the suite has no base URL to file against.",
-    'What is missing is one configured URL rather than a client: the reporter half of spec 04 is ' +
+    'What is missing is one configured URL rather than a client: the reporter half of scenario 04 is ' +
       'four REST calls. Adding ACCEPTANCE_VCS_API_BASE support for GitLab, plus the client, is the ' +
       'change that unblocks it.',
     'Until then, run the pass against a GitHub-connected workspace.',

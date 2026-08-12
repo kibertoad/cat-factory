@@ -92,7 +92,7 @@ describe('renderEnvironmentHost', () => {
 })
 
 describe('hostSuffix', () => {
-  it('keeps only the fixed tail, which is all a spec can honestly assert', () => {
+  it('keeps only the fixed tail, which is all a scenario can honestly assert', () => {
     expect(hostSuffix('{{namespace}}.127.0.0.1.nip.io')).toBe('.127.0.0.1.nip.io')
     expect(hostSuffix('{{branch}}.{{namespace}}.preview.example.com')).toBe('.preview.example.com')
   })

@@ -1,12 +1,13 @@
 import { defineConfig } from 'vitest/config'
 
 // The harness's OWN unit tests, and nothing else. This is the config `test:run` uses, so it is
-// the one CI runs: it must stay infra-free, which is why `acceptance/` is deliberately outside
-// the include. Vitest's default include would collect `acceptance/*.acceptance.ts` and start
-// spending real money against a deployment CI does not have.
+// the one CI runs, and it must stay infra-free.
 //
-// The acceptance suite is `vitest.acceptance.config.ts`, reachable only through
-// `pnpm --filter @cat-factory/acceptance run acceptance`.
+// **`src/` is deliberately outside the include**, which is what keeps this suite out of CI now that
+// the acceptance scenarios live there rather than behind a second vitest config. They are plain
+// modules a plain Node entry point walks (`src/runAcceptance.ts`), so nothing collects them by
+// accident; what would put real model spend and a cluster requirement into a CI lane is widening
+// this include to `**/*.test.ts` and adding a test file under `src/`. Tests go in `test/`.
 export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],

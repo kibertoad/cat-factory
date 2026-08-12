@@ -16,7 +16,7 @@ import {
 // pinned here is that each reduction FAILS on the shapes the platform uses to say "this did not
 // happen", since those are the ones a naive `status === 'reported'` check would wave through.
 
-/** A minimal report with every section absent; specs override the one section under test. */
+/** A minimal report with every section absent; scenarios override the one section under test. */
 function report(overrides: Partial<PrVerificationReport> = {}): PrVerificationReport {
   return {
     version: 7,
