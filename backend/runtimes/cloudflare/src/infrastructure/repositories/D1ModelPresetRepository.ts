@@ -79,23 +79,34 @@ export class D1ModelPresetRepository implements ModelPresetRepository {
     return row ? rowToPreset(row) : null
   }
 
-  async upsert(workspaceId: string, preset: ModelPreset): Promise<void> {
+  upsert(workspaceId: string, preset: ModelPreset): Promise<void> {
+    return this.upsertMany(workspaceId, [preset])
+  }
+
+  async upsertMany(workspaceId: string, presets: ModelPreset[]): Promise<void> {
+    if (presets.length === 0) return
     // Demote + upsert run in ONE batch so the single-default invariant can never be
     // observed broken (zero or two defaults) by a concurrent reader or a partial
-    // failure — matching the Drizzle mirror's transaction. Promoting this preset to
-    // default demotes any other default in the same atomic step.
+    // failure, matching the Drizzle mirror's transaction. A promoted preset demotes any
+    // other default in the same atomic step; over a batch, "any other" means every row
+    // outside the batch, since a member's own flag is written by its own INSERT.
     const statements = []
-    if (preset.isDefault) {
+    if (presets.some((p) => p.isDefault)) {
+      const placeholders = presets.map(() => '?').join(', ')
       statements.push(
         this.db
-          .prepare(`UPDATE model_presets SET is_default = 0 WHERE workspace_id = ? AND id <> ?`)
-          .bind(workspaceId, preset.id),
+          .prepare(
+            `UPDATE model_presets SET is_default = 0
+               WHERE workspace_id = ? AND id NOT IN (${placeholders})`,
+          )
+          .bind(workspaceId, ...presets.map((p) => p.id)),
       )
     }
-    statements.push(
-      this.db
-        .prepare(
-          `INSERT INTO model_presets
+    for (const preset of presets) {
+      statements.push(
+        this.db
+          .prepare(
+            `INSERT INTO model_presets
              (workspace_id, id, name, base_model_id, overrides, is_default, version,
               provider_preference, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -106,19 +117,20 @@ export class D1ModelPresetRepository implements ModelPresetRepository {
              is_default = excluded.is_default,
              version = excluded.version,
              provider_preference = excluded.provider_preference`,
-        )
-        .bind(
-          workspaceId,
-          preset.id,
-          preset.name,
-          preset.baseModelId,
-          JSON.stringify(preset.overrides),
-          preset.isDefault ? 1 : 0,
-          preset.version ?? null,
-          serializeProviderPreferenceColumn(preset.providerPreference),
-          preset.createdAt,
-        ),
-    )
+          )
+          .bind(
+            workspaceId,
+            preset.id,
+            preset.name,
+            preset.baseModelId,
+            JSON.stringify(preset.overrides),
+            preset.isDefault ? 1 : 0,
+            preset.version ?? null,
+            serializeProviderPreferenceColumn(preset.providerPreference),
+            preset.createdAt,
+          ),
+      )
+    }
     await this.db.batch(statements)
   }
 

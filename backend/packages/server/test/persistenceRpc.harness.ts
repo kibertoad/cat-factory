@@ -275,6 +275,8 @@ function buildBoardConfigRepos() {
       list: async (ws: string) => [{ ws }],
       getDefault: async (ws: string) => ({ ws }),
       upsert: async () => undefined,
+      // The batched built-in seed a workspace's FIRST board load writes through.
+      upsertMany: async () => undefined,
       get: async (ws: string) => ({ ws }),
       remove: async () => undefined,
     },

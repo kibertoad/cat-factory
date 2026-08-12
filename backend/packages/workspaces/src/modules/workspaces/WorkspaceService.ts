@@ -507,7 +507,9 @@ export class WorkspaceService {
     const modelPresetCatalogVersions = Object.fromEntries(
       modelPresetCatalog.map((p) => [p.id, p.version]),
     )
-    const modelPresetCatalogNames = Object.fromEntries(modelPresetCatalog.map((p) => [p.id, p.name]))
+    const modelPresetCatalogNames = Object.fromEntries(
+      modelPresetCatalog.map((p) => [p.id, p.name]),
+    )
     return {
       workspace,
       blocks,

@@ -563,8 +563,8 @@ async function loadSnapshotSlices(
     sharedStacks,
     // The workspace's model presets (the model→agent mapping library a task picks
     // from), so the board renders the Model Configuration settings + the per-task
-    // preset picker on load. `list` seeds the built-in presets (Kimi K2.7 default +
-    // GLM-5.2) on first read.
+    // preset picker on load. `list` seeds the built-in catalog on first read (the members
+    // are `seedModelPresets()`; which one is the DEFAULT is this facade's choice).
     modelPresets,
     // The workspace's consensus-group library (the estimate-gated panels a pipeline step
     // escalates to), so the builder's per-step tier picker and the settings editor render

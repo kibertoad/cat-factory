@@ -419,6 +419,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // (a write the board-load read triggers), the same member-level workspace-scoped write as
     // `riskPolicyRepository.upsert` above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
+    // The batched form of that same seed: ONE call writing the whole built-in catalog. Routed
+    // beside `upsert` rather than instead of it, because the editor still writes single rows, and
+    // an unrouted method here would fail a mothership-mode node's FIRST board load rather than
+    // merely a settings screen.
+    upsertMany: { scope: { kind: 'workspace', arg: 0 } },
     // The model-preset library editor's read-one + delete, the mirror of the merge-preset
     // management pair above. Member-level, workspace-scoped.
     get: { scope: { kind: 'workspace', arg: 0 } },

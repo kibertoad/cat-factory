@@ -51,7 +51,7 @@ import {
   parseRunLifecycleEvents,
   serializeProviderPreferenceColumn,
 } from '@cat-factory/server'
-import { and, desc, eq, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, lte, notInArray, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   accountSettings,
@@ -246,8 +246,13 @@ export class DrizzleModelPresetRepository implements ModelPresetRepository {
     return rows[0] ? rowToModelPreset(rows[0]) : null
   }
 
-  async upsert(workspaceId: string, preset: ModelPreset): Promise<void> {
-    const values = {
+  upsert(workspaceId: string, preset: ModelPreset): Promise<void> {
+    return this.upsertMany(workspaceId, [preset])
+  }
+
+  async upsertMany(workspaceId: string, presets: ModelPreset[]): Promise<void> {
+    if (presets.length === 0) return
+    const values = presets.map((preset) => ({
       workspace_id: workspaceId,
       id: preset.id,
       name: preset.name,
@@ -257,33 +262,40 @@ export class DrizzleModelPresetRepository implements ModelPresetRepository {
       version: preset.version ?? null,
       provider_preference: serializeProviderPreferenceColumn(preset.providerPreference),
       created_at: preset.createdAt,
-    }
+    }))
     // Demote + upsert run in one transaction so the single-default invariant can never
     // be observed broken (zero or two defaults) by a concurrent reader or partial failure.
+    // Over a batch the demote spares every member, since each member's own flag is written
+    // by its own row (the D1 mirror's `id NOT IN (...)`).
     await this.db.transaction(async (tx) => {
-      if (preset.isDefault) {
+      if (presets.some((p) => p.isDefault)) {
         await tx
           .update(modelPresets)
           .set({ is_default: 0 })
           .where(
             and(
               eq(modelPresets.workspace_id, workspaceId),
-              sql`${modelPresets.id} <> ${preset.id}`,
+              notInArray(
+                modelPresets.id,
+                presets.map((p) => p.id),
+              ),
             ),
           )
       }
+      // `excluded.*` rather than the single row's literals: one statement inserts the whole
+      // batch, so each conflicting row has to take ITS own incoming values.
       await tx
         .insert(modelPresets)
         .values(values)
         .onConflictDoUpdate({
           target: [modelPresets.workspace_id, modelPresets.id],
           set: {
-            name: values.name,
-            base_model_id: values.base_model_id,
-            overrides: values.overrides,
-            is_default: values.is_default,
-            version: values.version,
-            provider_preference: values.provider_preference,
+            name: sql`excluded.name`,
+            base_model_id: sql`excluded.base_model_id`,
+            overrides: sql`excluded.overrides`,
+            is_default: sql`excluded.is_default`,
+            version: sql`excluded.version`,
+            provider_preference: sql`excluded.provider_preference`,
           },
         })
     })
