@@ -1051,6 +1051,28 @@ export function isModelUsable(id: string | undefined | null, caps: ProviderCapab
 }
 
 /**
+ * The routes a catalog model DECLARES, as the provider labels an operator would recognise
+ * (`['OpenRouter', 'ChatGPT (Codex)']`). Empty for an id the catalog does not ship, whose route is
+ * whatever runner or gateway it was named for.
+ *
+ * A refusal over an unusable model owes the routes that WOULD make it usable, and only the catalog
+ * knows them. "Add an API key for the provider" is the misattribution itself for a
+ * subscription-or-gateway-only model (`gpt-5.6-sol`, `claude-opus`): that vendor sells a key no
+ * route here accepts, so an operator following the generic remedy buys one and hits the same
+ * refusal. Derived from the handlers rather than a second label table, which would drift.
+ */
+export function declaredModelRouteLabels(
+  id: string | undefined | null,
+  caps: ProviderCapabilities,
+): string[] {
+  const model = getSelectableModel(id)
+  if (!model) return []
+  return MODEL_FLAVORS.filter((flavor) => FLAVOR_HANDLERS[flavor].declared(model)).map(
+    (flavor) => FLAVOR_HANDLERS[flavor].build(model, caps).providerLabel,
+  )
+}
+
+/**
  * The effective variant a model resolves to for a capability set: the most preferred flavour
  * the capabilities make USABLE, else the most preferred one the model merely DECLARES, so
  * callers always get a ref to show/run (selectability is reported separately by

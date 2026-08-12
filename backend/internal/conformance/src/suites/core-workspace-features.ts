@@ -2,9 +2,11 @@ import { allPullRequests } from '@cat-factory/contracts'
 import {
   type Block,
   type ExecutionInstance,
+  MODEL_PRESET_SEED_IDS,
   type ModelPreset,
   type Notification,
   type Pipeline,
+  seedModelPresets,
   type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -938,22 +940,39 @@ function registerNotificationAndPresetTests(harness: ConformanceHarness): void {
       const { call, createWorkspace } = harness.makeApp()
       const { workspace } = await createWorkspace()
 
-      // A fresh workspace is lazily seeded with the built-in catalog: Kimi K2.7 (the
-      // Cloudflare-runnable default in the conformance harnesses, everything Kimi), GLM-5.2,
-      // Claude Opus 5 and GPT-5.6 Sol. Each built-in carries its catalog version.
+      // A fresh workspace is lazily seeded with the WHOLE built-in catalog: one row per
+      // `seedModelPresets()` entry, each carrying that entry's name, base model and catalog
+      // version, in catalog order (the seed stamps `createdAt` by that order and `list` sorts on
+      // it). Derived from the catalog rather than spot-checked member by member, because the
+      // population grows: a pinned count re-broke on every shipped built-in while naming nothing
+      // about what the seed got wrong, and the member added last was always the one with no
+      // row-level assertion. This is also what covers `upsertMany` on both facades, the one batch
+      // the whole seed is written through.
+      const catalog = seedModelPresets()
       const initial = await call<ModelPreset[]>('GET', `/workspaces/${workspace.id}/model-presets`)
       expect(initial.status).toBe(200)
       const seeded = initial.body
-      expect(seeded.length).toBeGreaterThanOrEqual(4)
-      const def = seeded.find((p) => p.isDefault)
-      expect(def?.baseModelId).toBe('kimi-k2.7')
-      expect(def?.version).toBe(1)
-      expect(seeded.some((p) => p.baseModelId === 'glm')).toBe(true)
-      // The Claude-only built-in ships in the catalog (default only in local mode; here it's
-      // present but non-default since the conformance harnesses seed with Kimi as the default).
-      const claude = seeded.find((p) => p.id === 'mdp_claude')
-      expect(claude?.baseModelId).toBe('claude-opus')
-      expect(claude?.isDefault).toBe(false)
+      expect(
+        seeded.map((p) => ({
+          id: p.id,
+          name: p.name,
+          baseModelId: p.baseModelId,
+          version: p.version,
+        })),
+      ).toEqual(
+        catalog.map((s) => ({
+          id: s.id,
+          name: s.name,
+          baseModelId: s.baseModelId,
+          version: s.version,
+        })),
+      )
+      // Exactly one default, and WHICH one is the deployment's own choice: the conformance
+      // harnesses seed Kimi, so every other built-in (Claude, which local mode defaults to, and
+      // GPT) is present and non-default.
+      expect(seeded.filter((p) => p.isDefault).map((p) => p.id)).toEqual([
+        MODEL_PRESET_SEED_IDS.kimi,
+      ])
 
       // Create a new preset with a per-agent override and promote it to default.
       const created = await call<ModelPreset>('POST', `/workspaces/${workspace.id}/model-presets`, {
@@ -994,17 +1013,21 @@ function registerNotificationAndPresetTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const base = `/workspaces/${wsId}/model-presets`
 
-      // The snapshot ships the built-in catalog versions so the SPA can offer a reseed.
-      const snap = await call<{ modelPresetCatalogVersions?: Record<string, number> }>(
-        'GET',
-        `/workspaces/${wsId}`,
+      // The snapshot ships the built-in catalog versions so the SPA can offer a reseed, plus the
+      // companion NAME map: the advisory that offers to ADD a built-in has no stored row to take a
+      // name off, and without this channel the SPA humanises the id ("Chatgpt" for GPT-5.6 Sol).
+      // Both derived from the same `seedModelPresets()` read the facade builds them from, so
+      // shipping a built-in needs no edit here and a facade that drops either map still fails.
+      const snap = await call<{
+        modelPresetCatalogVersions?: Record<string, number>
+        modelPresetCatalogNames?: Record<string, string>
+      }>('GET', `/workspaces/${wsId}`)
+      expect(snap.body.modelPresetCatalogVersions).toMatchObject(
+        Object.fromEntries(seedModelPresets().map((p) => [p.id, p.version])),
       )
-      expect(snap.body.modelPresetCatalogVersions).toMatchObject({
-        mdp_kimi: 1,
-        mdp_glm: 1,
-        mdp_claude: 2,
-        mdp_chatgpt: 1,
-      })
+      expect(snap.body.modelPresetCatalogNames).toMatchObject(
+        Object.fromEntries(seedModelPresets().map((p) => [p.id, p.name])),
+      )
 
       // Seed, then drift a built-in (rename + change its base model). Reseed must restore the
       // canonical definition + version while preserving the user's default + ordering.

@@ -26,5 +26,5 @@ and is selectable, then fails on the first agent step of whichever run picked it
 derived from the catalog rather than hand-listed, so a rename breaks a test instead of a live run.
 
 The `acceptance-suite-operator-setup` initiative tracker is retired into
-[ADR 0055](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0055-acceptance-suite-operator-setup.md),
+[ADR 0056](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0056-acceptance-suite-operator-setup.md),
 its committed scope now complete.

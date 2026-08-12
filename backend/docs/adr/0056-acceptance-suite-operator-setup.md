@@ -1,4 +1,4 @@
-# ADR 0055: Operator-runnable acceptance setup
+# ADR 0056: Operator-runnable acceptance setup
 
 - **Status:** Accepted (implemented)
 - **Date:** 2026-08-12
@@ -150,6 +150,18 @@ blocker verdict so the gate cannot green-light a pass whose first adopt would 40
 half is separate and needs the LEDGER's service ids: the first shape took
 `hasAdoptedServices: Boolean(backend ?? frontend)`, which answers true for BOTH repositories once
 either service is adopted.
+
+**An OpenAI API key does not run the GPT built-in, and the refusal has to say so.** `openai` is a
+first-class poolable provider with its own onboarding copy ("create a new secret key"), and
+`OPENAI_API_KEY` is a reserved platform variable, so the obvious reading of the old
+`providers_unconfigured` remedy ("add an API key for the provider") is a `platform.openai.com`
+secret. For `gpt-5.6-sol` that buys nothing: its routes are OpenRouter and a Codex subscription,
+which is the whole point of the rejected `direct` route above. Left generic, the refusal sent an
+operator to buy a key and returned them to the same 409, so `declaredModelRouteLabels` now derives
+each unusable model's DECLARED routes from the catalog and the message names them (`gpt-5.6-sol
+(needs OpenRouter or ChatGPT (Codex))`). That fixes the misattribution for every
+subscription-or-gateway-only model rather than for this preset alone; `details.models` still carries
+the bare ids the SPA and the four SDK clients read.
 
 **A model being in the catalog is not a model being available**, and per-user model wiring is
 invisible to an API key. A deployment whose humans all run on personal subscriptions or local

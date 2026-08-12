@@ -9,6 +9,7 @@ import {
   type ProviderCapabilities,
   SUBSCRIPTION_VENDORS,
   contextWindowFor,
+  declaredModelRouteLabels,
   effectiveCatalog,
   effectiveCatalogWith,
   getSelectableModel,
@@ -230,6 +231,32 @@ describe('isModelUsable', () => {
         ),
       ).toBe(false)
     })
+  })
+})
+
+describe('declaredModelRouteLabels', () => {
+  it('names every route the model declares, in the flavour order', () => {
+    // `gpt-5.6-sol` is the built-in `mdp_chatgpt` preset's base model, and its route pair is what
+    // the run-start refusal has to name: an OpenAI API key is NOT among them (no `direct` route,
+    // ADR 0056), so the generic "add an API key for the provider" remedy cannot fix this model.
+    expect(declaredModelRouteLabels('gpt-5.6-sol', caps())).toEqual([
+      'OpenRouter',
+      SUBSCRIPTION_VENDORS.codex.label,
+    ])
+  })
+
+  it('answers what the model DECLARES, not what the capabilities make usable', () => {
+    // Deliberately the declared walk: the refusal it feeds fires precisely when nothing is usable,
+    // so a usable-only answer would be empty exactly when the remedy is needed.
+    expect(declaredModelRouteLabels('gpt-5.6-sol', caps({ cloudflareEnabled: true }))).toEqual(
+      declaredModelRouteLabels('gpt-5.6-sol', caps({ subscriptionVendors: new Set(['codex']) })),
+    )
+  })
+
+  it('is empty for an id the catalog does not ship', () => {
+    expect(declaredModelRouteLabels('not-a-model', caps())).toEqual([])
+    expect(declaredModelRouteLabels('ollama:gemma3', caps())).toEqual([])
+    expect(declaredModelRouteLabels(undefined, caps())).toEqual([])
   })
 })
 

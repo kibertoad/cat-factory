@@ -376,6 +376,21 @@ export const workspaceSnapshotSchema = v.object({
    */
   modelPresetCatalogVersions: v.optional(v.record(v.string(), v.number())),
   /**
+   * The catalog's own NAME per built-in model-preset id, built from the same `seedModelPresets()`
+   * read as `modelPresetCatalogVersions`: the `pipelineCatalogNames` companion, for the same
+   * reason and with the same one moment of use.
+   *
+   * A NEW built-in has no stored row to take a name off, and that is exactly the state the startup
+   * advisory offers to fix. Without this the SPA humanised the id, which reads acceptably for the
+   * three built-ins whose ids ARE their names (`mdp_kimi` to "Kimi") and wrongly for the first one
+   * where it is not: `mdp_chatgpt` was offered as "Chatgpt" on every board seeded before it
+   * shipped, a name for the product's GPT-5.6 Sol preset that appears nowhere else in the UI.
+   *
+   * Keyed identically to the versions map rather than a superset, unlike the pipeline pair: a model
+   * preset has no INTERNAL tier to withhold, so the two maps span the same ids by construction.
+   */
+  modelPresetCatalogNames: v.optional(v.record(v.string(), v.string())),
+  /**
    * The workspace's initiatives (long-running multi-task bodies of work, each
    * anchored to an `initiative`-level block). Carried in the snapshot so the
    * board renders initiative cards + trackers on load. Attached by the facade
