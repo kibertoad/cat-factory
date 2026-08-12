@@ -515,12 +515,37 @@ export const createPublicTaskSchema = v.object({
    * pin any policy its workspace holds, which is the same authority it already had by editing one.
    */
   riskPolicyId: v.optional(presetPinSchema),
+  /**
+   * The pipeline this task runs, from `GET /api/v1/pipelines`. Omitted ⇒ the task type's own
+   * default where it has one (a `document` task is created on the document pipeline), else nothing
+   * is pinned and the start call decides.
+   *
+   * Pinning it AT CREATION is what lets a caller file a task now and have somebody start it later,
+   * from the board or from `POST /tasks/:taskId/start` with an empty body, and still get the chain
+   * the filer chose. Without it the choice had to be repeated on every start, and a task filed by an
+   * integration and started from the app silently ran whatever that board defaults to.
+   *
+   * Unlike `modelPresetId` / `riskPolicyId`, an id nothing defines is NOT refused here: it is
+   * refused when the task is STARTED, with the same `404` the board gets, because a pipeline id is
+   * resolved rather than defaulted (`PipelineService.resolveForRun`). The distinction is worth
+   * knowing rather than tidying away: a dangling PRESET pin falls back to the workspace default and
+   * runs, which is why that one has to be caught at the write; a dangling pipeline pin can start
+   * nothing, so the failure is loud on its own and arrives at the door that has a picker.
+   */
+  pipelineId: v.optional(presetPinSchema),
 })
 export type CreatePublicTaskInput = v.InferOutput<typeof createPublicTaskSchema>
 
 /**
- * Start (run) a task. `pipelineId` is optional — it falls back to the task's pinned
- * pipeline; a task with neither is rejected with `pipeline_required`.
+ * Start (run) a task. `pipelineId` is optional — it falls back to the task's pinned pipeline, then,
+ * for a key that satisfies `decide`, to the workspace's default pipeline for a run nothing is
+ * watching (`Pipeline.isUnattendedDefault`, the seeded `pl_unattended`). A task with none of those
+ * is rejected with `pipeline_required`.
+ *
+ * The scope condition on that last rung is deliberate rather than incidental: the seeded rung
+ * reaches a human test and a human PR review on a risky task, and a key that cannot answer a park
+ * would be handed a `pipeline_requires_decide_scope` refusal about a pipeline it never picked. A
+ * `write` key therefore keeps exactly its former behaviour and is told the thing it can act on.
  */
 export const startPublicTaskSchema = v.object({
   pipelineId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))),
@@ -745,10 +770,39 @@ export const publicPipelineSchema = v.object({
    * can be driven end-to-end with no interactive user; others may park awaiting input.
    */
   headlessStartable: v.boolean(),
+  /**
+   * Whether THIS row is what `POST /tasks/:taskId/start` runs for your key when neither the call
+   * nor the task names a pipeline. The same answer as {@link publicPipelineListSchema}'s
+   * `unattendedDefaultPipelineId`, matched against this row.
+   *
+   * At most one row carries it, and NO row does in two cases that read alike here and differ
+   * entirely: the workspace released its default (the start call then refuses with
+   * `pipeline_required`), or the default resolves to a rung this list does not carry. Read the
+   * list-level field to tell them apart.
+   */
+  unattendedDefault: v.boolean(),
 })
 export type PublicPipeline = v.InferOutput<typeof publicPipelineSchema>
 
-export const publicPipelineListSchema = v.object({ pipelines: v.array(publicPipelineSchema) })
+export const publicPipelineListSchema = v.object({
+  pipelines: v.array(publicPipelineSchema),
+  /**
+   * The pipeline `POST /tasks/:taskId/start` runs for your key when neither the call nor the task
+   * names one, or `null` when that call would refuse with `pipeline_required`.
+   *
+   * Exposed because the alternative is a caller unable to find out what an empty start body does:
+   * omitting `pipelineId` is the ordinary way to use that route, and "whatever the workspace
+   * decided" is only a usable contract if the decision is readable. Stated at the LIST level rather
+   * than only as a per-row flag because the resolution has a rung the list cannot show: a workspace
+   * that never adopted the catalog's declared rung still resolves it (and adopts it on that first
+   * start), so every row would report `false` while empty start bodies kept working.
+   *
+   * Answered for the key that asked. A key below the `decide` scope cannot answer the human doors
+   * the seeded rung reaches, so no default is offered to it and this reads `null`: the same rule the
+   * start route applies, from the same resolution, so the two can never disagree.
+   */
+  unattendedDefaultPipelineId: v.nullable(v.string()),
+})
 export type PublicPipelineList = v.InferOutput<typeof publicPipelineListSchema>
 
 // ---------------------------------------------------------------------------

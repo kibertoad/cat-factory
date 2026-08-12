@@ -46,9 +46,15 @@ export const PROMPT_VERSIONS = {
   // reorders each prompt so the role text precedes the platform-enforced directives — the split a
   // per-workspace override crosses. Every prompt in the flow bumps together for the same reason
   // the scope boundary does: an agent that keeps inventing a subject undoes the two that don't.
-  'requirement-review': { id: 'requirement-review', version: 5, text: REVIEW_SYSTEM_PROMPT },
+  // v6 / v5 on the reviewer and the Writer: the two-GROUP split is now something a person sees and
+  // an unwatched run acts on, so both halves of it are stated in the prompts. The reviewer is told
+  // that `autoAnswerable` decides WHO answers (and that a false positive is the invisible mistake);
+  // the Writer additionally grades each suggestion with a `confidence` the unattended auto-answer
+  // floor compares against. The rework prompt is unchanged and keeps v4: it folds settled answers
+  // into a document and never sees either judgement.
+  'requirement-review': { id: 'requirement-review', version: 6, text: REVIEW_SYSTEM_PROMPT },
   'requirement-rework': { id: 'requirement-rework', version: 4, text: REWORK_SYSTEM_PROMPT },
-  'requirement-writer': { id: 'requirement-writer', version: 4, text: WRITER_SYSTEM_PROMPT },
+  'requirement-writer': { id: 'requirement-writer', version: 5, text: WRITER_SYSTEM_PROMPT },
   // v2 across the clarity + brainstorm prompts: same `NO_ASSUMED_PRODUCT` addition and the same
   // role/directives split.
   'clarity-review': { id: 'clarity-review', version: 2, text: CLARITY_REVIEW_SYSTEM_PROMPT },

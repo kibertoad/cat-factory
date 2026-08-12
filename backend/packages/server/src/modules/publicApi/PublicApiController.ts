@@ -22,7 +22,6 @@ import {
   updatePublicTaskContract,
   type ExecutionInstance,
   type PublicJob,
-  type PublicPipeline,
   type PublicApiScope,
   type PublicRun,
 } from '@cat-factory/contracts'
@@ -53,15 +52,18 @@ import type { AppEnv } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { keyInitiatorRole } from '../../http/runAdmission.js'
 import { authorize } from './publicApiAuth.js'
+import {
+  startPipelineIdFor,
+  toPublicPipeline,
+  unattendedDefaultPipelineIdFor,
+} from './pipelineSelection.js'
 import { toPublicService, toPublicTask } from './boardProjection.js'
 import { createTaskWithAttachments, taskCreationDeps } from './taskCreation.js'
 import { resolveTaskTypeFieldsPatch } from './taskTypeFields.js'
 import {
   type AdmissiblePipelineShape,
-  type AdmissionRegistries,
   admissionRegistries,
   publicRunParkSurfaces,
-  isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
   parkingRefusalMessage,
   PUBLIC_JOB_CANCEL_PATH,
@@ -211,32 +213,6 @@ function toPublicRun(
           ? { code: execution.failure.kind, message: execution.failure.message }
           : { code: 'run_failed', message: 'The run failed' }
         : null,
-  }
-}
-
-/**
- * Project an internal pipeline onto the external pipeline resource: its id/name, the enabled
- * step chain (in order), and the two headless-relevant flags a caller needs to choose a
- * `pipelineId` for `start` — `public` (job-startable via `POST /jobs`) and `headlessStartable` (safe to
- * run with no interactive user). Archived pipelines are filtered out by the caller.
- */
-function toPublicPipeline(
-  pipeline: {
-    id: string
-    name: string
-    agentKinds: string[]
-    enabled?: boolean[]
-    gates?: boolean[]
-    public?: boolean
-  },
-  registries: AdmissionRegistries,
-): PublicPipeline {
-  return {
-    pipelineId: pipeline.id,
-    name: pipeline.name,
-    steps: pipeline.agentKinds.filter((_, i) => pipeline.enabled?.[i] !== false),
-    public: pipeline.public === true,
-    headlessStartable: isHeadlessInlinePipeline(pipeline, registries),
   }
 }
 
@@ -859,9 +835,10 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
         409,
       )
     }
-    // The pipeline to run: the request's, else the task's pinned pipeline. A task with
-    // neither can't be started headlessly (there is no run-time picker for an API caller).
-    const pipelineId = c.req.valid('json').pipelineId ?? found.block.pipelineId
+    const pipelineId = await startPipelineIdFor(container, auth, {
+      requested: c.req.valid('json').pipelineId,
+      pinned: found.block.pipelineId,
+    })
     if (!pipelineId) {
       return c.json(
         {
@@ -1274,11 +1251,18 @@ function registerPipelineRoutes(app: Hono<AppEnv>): void {
     }
     const container = c.get('container')
     const pipelines = await container.pipelineService.list(gate.auth.workspaceId)
+    // Resolved ONCE for the whole listing, and reported in its own right: the rung an empty start
+    // body runs need not be a row this list carries (the catalog rung a workspace never adopted is
+    // exactly that case), so a per-row flag alone cannot state the answer.
+    const unattendedDefaultPipelineId = await unattendedDefaultPipelineIdFor(container, gate.auth)
     return c.json(
       {
         pipelines: pipelines
           .filter((p) => !p.archived)
-          .map((p) => toPublicPipeline(p, admissionRegistries(container))),
+          .map((p) =>
+            toPublicPipeline(p, admissionRegistries(container), unattendedDefaultPipelineId),
+          ),
+        unattendedDefaultPipelineId,
       },
       200,
     )

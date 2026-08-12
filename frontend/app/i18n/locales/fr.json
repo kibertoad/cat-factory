@@ -3068,6 +3068,10 @@
         "label": "Terminer les exécutions sans surveillance sans attendre une personne",
         "unattendedHint": "Quand une boucle automatique abandonne (un companion à sa limite de reprises, une revue à sa limite de passes, des suivis non triés), l'exécution continue en le consignant au lieu de s'arrêter. Les points de contrôle demandés par le pipeline, comme le test humain, la revue et l'approbation, arrêtent toujours l'exécution.",
         "attendedHint": "Quand une boucle automatique abandonne, l'exécution s'arrête et attend un choix. Adapté à un tableau que quelqu'un surveille ; une exécution lancée via l'API attend indéfiniment."
+      },
+      "autoAnswer": {
+        "label": "Confiance minimale pour une réponse automatique (%)",
+        "hint": "Le degré de certitude que le Requirement Writer doit atteindre pour qu'un run sans surveillance conserve sa réponse suggérée au lieu de s'arrêter. Seuls les constats jugés traitables sans product owner sont éligibles."
       }
     },
     "observabilityConnection": {
@@ -4948,7 +4952,17 @@
       "binaryComparison": "Comparer les candidats avant livraison",
       "binaryPerGenerator": "Candidats par intégration",
       "binaryMultiSelect": "Autoriser à en conserver plusieurs",
-      "binaryComparisonUnreachable": "Cette étape ne peut produire qu’un candidat par sujet : il n’y aurait rien à comparer et le seul serait conservé sans être présenté. Sélectionnez une deuxième intégration ou augmentez le nombre de candidats par intégration."
+      "binaryComparisonUnreachable": "Cette étape ne peut produire qu’un candidat par sujet : il n’y aurait rien à comparer et le seul serait conservé sans être présenté. Sélectionnez une deuxième intégration ou augmentez le nombre de candidats par intégration.",
+      "scopeDefault": {
+        "interactive": "Défaut dans l'application",
+        "interactiveHint": "Ce qu'exécute une tâche lancée depuis le tableau lorsqu'elle ne fixe aucun pipeline.",
+        "unattended": "Défaut sans surveillance",
+        "unattendedHint": "Ce qu'exécute un run que personne ne surveille (API, ticket, planification) quand la tâche ne fixe aucun pipeline.",
+        "claimInteractive": "Définir comme défaut dans l'application",
+        "releaseInteractive": "Ne plus être le défaut dans l'application",
+        "claimUnattended": "Définir comme défaut sans surveillance",
+        "releaseUnattended": "Ne plus être le défaut sans surveillance"
+      }
     },
     "progress": {
       "status": {
@@ -5396,6 +5410,17 @@
       "reReview": "Impossible de relire les exigences",
       "proceed": "Impossible de continuer",
       "resolveReview": "Impossible de résoudre la revue"
+    },
+    "findingClass": {
+      "judgement": "Votre décision requise",
+      "judgementHint": "Un choix métier, produit ou de domaine, ou une information que le relecteur n'avait pas. Vous seul pouvez trancher.",
+      "practice": "Traitable par la pratique",
+      "practiceHint": "Tranché par la pratique établie, la stack déjà utilisée ou le contexte fourni. Prérempli : gardez-le ou modifiez-le."
+    },
+    "confidence": {
+      "high": "Confiance élevée",
+      "medium": "Confiance moyenne",
+      "low": "Confiance faible"
     }
   },
   "clarity": {

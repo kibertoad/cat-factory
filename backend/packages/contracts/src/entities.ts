@@ -1035,6 +1035,27 @@ export const pipelineSchema = v.object({
    * Absent / false ⇒ an ordinary, offered pipeline.
    */
   internal: v.optional(v.boolean()),
+  /**
+   * This pipeline is the workspace's default for a run somebody started IN THE APP, used by a
+   * task that pinned none. At most one row per workspace carries it.
+   *
+   * OPTIONAL, and absent on every seeded workspace, which is the difference from the risk-policy
+   * flag of the same name: the interactive scope already HAS an answer (the SPA's interface-mode
+   * rung, then catalog order — see `defaultBuildPipelineId`), so seeding a row here would
+   * silently overrule the adaptive rung an advanced-mode board resolves today. Absent therefore
+   * means "no operator has stated one", not "there is no default".
+   */
+  isDefault: v.optional(v.boolean()),
+  /**
+   * This pipeline is the workspace's default for a run NOTHING IS WATCHING (the public API, a
+   * tracker dispatch, a schedule fire), used by a task that pinned none. At most one row per
+   * workspace carries it, and it may be the same row as {@link isDefault}: a deployment that
+   * wants one shape everywhere flags one pipeline both ways.
+   *
+   * Seeded on `pl_unattended`, because this scope had NO answer before it existed: a headless
+   * start naming no pipeline against a task pinning none was a `pipeline_required` refusal.
+   */
+  isUnattendedDefault: v.optional(v.boolean()),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 

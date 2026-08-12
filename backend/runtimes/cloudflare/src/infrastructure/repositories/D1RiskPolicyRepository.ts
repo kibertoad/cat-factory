@@ -3,7 +3,7 @@ import type {
   ClassRulesByRole,
   MergeClassRules,
   RiskPolicy,
-  RiskPolicyDefaultScope,
+  RunDefaultScope,
   RequirementConcernLevel,
   StepGating,
   SubmissionClassesByRole,
@@ -34,6 +34,7 @@ interface RiskPolicyRow {
   submission_classes_by_role: string | null
   version: number | null
   autonomy: string | null
+  min_auto_answer_confidence: number
   is_default: number
   is_unattended_default: number
   created_at: number
@@ -76,6 +77,7 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
     // must not be read back as that member. Anything unrecognised is `attended`, which is the
     // posture that stops for a person — never a licence this row cannot be shown to have granted.
     autonomy: row.autonomy === 'unattended' ? 'unattended' : 'attended',
+    minAutoAnswerConfidence: row.min_auto_answer_confidence,
     isDefault: row.is_default === 1,
     isUnattendedDefault: row.is_unattended_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
@@ -84,7 +86,7 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
 }
 
 /** The column one default scope is stored in; the ONE place that mapping lives on this facade. */
-const DEFAULT_COLUMN: Record<RiskPolicyDefaultScope, 'is_default' | 'is_unattended_default'> = {
+const DEFAULT_COLUMN: Record<RunDefaultScope, 'is_default' | 'is_unattended_default'> = {
   interactive: 'is_default',
   unattended: 'is_unattended_default',
 }
@@ -121,7 +123,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
     return results.map(rowToPreset)
   }
 
-  async getDefault(workspaceId: string, scope: RiskPolicyDefaultScope): Promise<RiskPolicy | null> {
+  async getDefault(workspaceId: string, scope: RunDefaultScope): Promise<RiskPolicy | null> {
     // The column name is interpolated from a `Record` over a CLOSED picklist, never from a caller
     // string: there is no value of `scope` the type admits that is not one of the two literals.
     const row = await this.db
@@ -178,9 +180,10 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
             judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
-            submission_classes_by_role, version, autonomy, is_default, is_unattended_default,
+            submission_classes_by_role, version, autonomy, min_auto_answer_confidence,
+            is_default, is_unattended_default,
             created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -203,6 +206,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            submission_classes_by_role = excluded.submission_classes_by_role,
            version = excluded.version,
            autonomy = excluded.autonomy,
+           min_auto_answer_confidence = excluded.min_auto_answer_confidence,
            is_default = excluded.is_default,
            is_unattended_default = excluded.is_unattended_default`,
       )
@@ -230,6 +234,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         JSON.stringify(preset.submissionClassesByRole ?? {}),
         preset.version ?? null,
         preset.autonomy,
+        preset.minAutoAnswerConfidence,
         preset.isDefault ? 1 : 0,
         preset.isUnattendedDefault ? 1 : 0,
         preset.createdAt,

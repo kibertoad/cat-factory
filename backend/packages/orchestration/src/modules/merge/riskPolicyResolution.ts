@@ -2,7 +2,7 @@ import type {
   GroupCacheHandle,
   RiskPolicy,
   RiskPolicyCacheValue,
-  RiskPolicyDefaultScope,
+  RunDefaultScope,
 } from '@cat-factory/kernel'
 import type { RiskPolicyRepository } from '@cat-factory/kernel'
 import { FALLBACK_RISK_POLICY } from '@cat-factory/kernel'
@@ -34,7 +34,7 @@ import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
  */
 export type RiskPolicyTarget =
   | { kind: 'picked'; id: string }
-  | { kind: 'default'; scope: RiskPolicyDefaultScope }
+  | { kind: 'default'; scope: RunDefaultScope }
 
 /** Reads one preset row, possibly through a cache slice or a preloaded library. */
 export type RiskPolicyRead = (
@@ -87,7 +87,7 @@ export function cachedRiskPolicyRead(
  */
 export function preloadedRiskPolicyRead(library: readonly RiskPolicy[]): RiskPolicyRead {
   const byId = new Map(library.map((preset) => [preset.id, preset]))
-  const defaults: Record<RiskPolicyDefaultScope, RiskPolicy | null> = {
+  const defaults: Record<RunDefaultScope, RiskPolicy | null> = {
     interactive: library.find((preset) => preset.isDefault) ?? null,
     unattended: library.find((preset) => preset.isUnattendedDefault) ?? null,
   }
@@ -117,7 +117,7 @@ export async function resolveRiskPolicy(input: {
    * different rows with different postures and a caller that has not decided which kind of run it
    * is resolving for has not finished asking the question.
    */
-  scope: RiskPolicyDefaultScope
+  scope: RunDefaultScope
   read?: RiskPolicyRead
 }): Promise<ResolvedRunRiskPolicy> {
   const { repository, workspaceId, riskPolicyId, scope } = input

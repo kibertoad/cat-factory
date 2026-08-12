@@ -14,8 +14,11 @@ import {
   orderFindings,
   reconcileFindingOrder,
   type FindingAttention,
+  type FindingClass,
   type OrderedFinding,
 } from './RequirementsReviewWindow.logic'
+import { recommendationConfidenceBand } from '@cat-factory/contracts'
+import type { RecommendationConfidenceBand } from '@cat-factory/contracts'
 import type {
   RecommendationSource,
   RequirementRecommendation,
@@ -191,6 +194,49 @@ const STATUS_LABELS = computed<Record<ReviewItemStatus, string>>(() => ({
   recommend_requested: t('requirements.itemStatus.recommend_requested'),
 }))
 
+// The two GROUPS the reviewer sorts its findings into, which is the window's top-level structure:
+// what only this person can decide, and what practice can answer. Each section says what its group
+// IS rather than only naming it, because the distinction is what tells the reader which half of the
+// list is theirs — and, on an unwatched run, which half the platform may answer without them.
+const CLASS_LABELS = computed<Record<FindingClass, string>>(() => ({
+  judgement: t('requirements.findingClass.judgement'),
+  practice: t('requirements.findingClass.practice'),
+}))
+const CLASS_HINTS = computed<Record<FindingClass, string>>(() => ({
+  judgement: t('requirements.findingClass.judgementHint'),
+  practice: t('requirements.findingClass.practiceHint'),
+}))
+const CLASS_LABEL_COLOR = {
+  judgement: 'text-amber-300',
+  practice: 'text-sky-300',
+} as const satisfies Record<FindingClass, string>
+
+// How sure the Writer says it is. Shown on every suggestion, because the confidence is what an
+// unattended run compares against its policy floor: a reader deciding whether to keep a
+// pre-filled answer is looking at the same number the platform used to decide not to ask them.
+// A suggestion the Writer did not grade renders NO badge rather than a "low" one — unreported and
+// unsure are different facts (see `recommendationConfidenceBand`).
+const CONFIDENCE_COLOR = {
+  high: 'success',
+  medium: 'warning',
+  low: 'error',
+} as const satisfies Record<RecommendationConfidenceBand, string>
+const CONFIDENCE_LABELS = computed<Record<RecommendationConfidenceBand, string>>(() => ({
+  high: t('requirements.confidence.high'),
+  medium: t('requirements.confidence.medium'),
+  low: t('requirements.confidence.low'),
+}))
+/** The band a recommendation's grade falls in, or null when it reported none. */
+function confidenceBandOf(
+  rec: RequirementRecommendation | undefined,
+): RecommendationConfidenceBand | null {
+  return rec ? recommendationConfidenceBand(rec.confidence) : null
+}
+/** The grade as a percentage for the badge's tooltip, or null when ungraded. */
+function confidencePercent(rec: RequirementRecommendation | undefined): string | null {
+  return rec?.confidence == null ? null : `${Math.round(rec.confidence * 100)}%`
+}
+
 // Answers auto-save: there is no explicit "save" button. The textarea is pre-seeded with
 // the recorded reply (see the watch below); editing and blurring persists it. Persist only
 // when the trimmed draft actually differs from what's already recorded, so blurring an
@@ -365,24 +411,37 @@ watch(
   },
   { immediate: true },
 )
-const orderedFindings = computed<{ item: RequirementReviewItem; attention: FindingAttention }[]>(
-  () => {
-    const byId = new Map((review.value?.items ?? []).map((item) => [item.id, item]))
-    return reconcileFindingOrder(desiredOrder.value, pinnedOrder.value).flatMap((entry) => {
-      const item = byId.get(entry.id)
-      return item ? [{ item, attention: entry.attention }] : []
-    })
-  },
-)
-// Label the buckets only once the list actually spans more than one — on a fresh review every
-// finding is outstanding, and a lone "Needs your reaction" heading over all of them is noise.
-const attentionGroupsShown = computed(
-  () => new Set(orderedFindings.value.map((entry) => entry.attention)).size > 1,
-)
-function startsAttentionGroup(index: number): boolean {
-  if (!attentionGroupsShown.value) return false
+const orderedFindings = computed<
+  { item: RequirementReviewItem; attention: FindingAttention; group: FindingClass }[]
+>(() => {
+  const byId = new Map((review.value?.items ?? []).map((item) => [item.id, item]))
+  return reconcileFindingOrder(desiredOrder.value, pinnedOrder.value).flatMap((entry) => {
+    const item = byId.get(entry.id)
+    return item ? [{ item, attention: entry.attention, group: entry.group }] : []
+  })
+})
+// The GROUP heading is shown whenever the list spans both groups, which is the point of the split:
+// a reader has to be able to see where "yours to decide" ends. A review entirely in one group needs
+// no heading, because then the whole list is that group.
+function startsFindingGroup(index: number): boolean {
   const entries = orderedFindings.value
-  return index === 0 || entries[index - 1]?.attention !== entries[index]?.attention
+  if (new Set(entries.map((entry) => entry.group)).size < 2) return false
+  return index === 0 || entries[index - 1]?.group !== entries[index]?.group
+}
+// The attention sub-heading is shown only inside a group that spans more than one bucket, so the
+// two levels of heading cannot both appear on a review where they would say the same thing (a fresh
+// review is all outstanding; a pre-answered practice group is all settled).
+function startsAttentionGroup(index: number): boolean {
+  const entries = orderedFindings.value
+  const here = entries[index]
+  if (!here) return false
+  if (entries.filter((entry) => entry.group === here.group).length < 2) return false
+  const spansBuckets =
+    new Set(entries.filter((entry) => entry.group === here.group).map((entry) => entry.attention))
+      .size > 1
+  if (!spansBuckets) return false
+  const previous = entries[index - 1]
+  return !previous || previous.group !== here.group || previous.attention !== here.attention
 }
 const ATTENTION_LABELS = computed<Record<FindingAttention, string>>(() => ({
   action: t('requirements.group.action'),
@@ -740,7 +799,20 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             @focusin="onFindingFocusIn"
             @focusout="onFindingFocusOut"
           >
-            <template v-for="({ item, attention }, index) in orderedFindings" :key="item.id">
+            <template v-for="({ item, attention, group }, index) in orderedFindings" :key="item.id">
+              <div v-if="startsFindingGroup(index)" class="pt-2" data-testid="requirements-group">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="text-xs font-semibold uppercase tracking-wide"
+                    :class="CLASS_LABEL_COLOR[group]"
+                    :data-finding-group="group"
+                  >
+                    {{ CLASS_LABELS[group] }}
+                  </span>
+                  <span class="h-px flex-1 bg-slate-700" />
+                </div>
+                <p class="mt-0.5 text-[11px] text-slate-500">{{ CLASS_HINTS[group] }}</p>
+              </div>
               <div v-if="startsAttentionGroup(index)" class="flex items-center gap-2 pt-1">
                 <span
                   class="text-[11px] font-semibold uppercase tracking-wide"
@@ -869,6 +941,20 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           >
                             {{ GROUNDING_LABELS[autoDefaults.get(item.id)!.groundedIn!] }}
                           </UBadge>
+                          <!-- The Writer's own grade, which is a different question from where the
+                                 answer came from: it is what an unwatched run compares against its
+                                 policy floor, so it is also what tells a reader how hard this
+                                 pre-filled answer was to be sure of. -->
+                          <UBadge
+                            v-if="confidenceBandOf(autoDefaults.get(item.id))"
+                            size="xs"
+                            variant="outline"
+                            :color="CONFIDENCE_COLOR[confidenceBandOf(autoDefaults.get(item.id))!]"
+                            :title="confidencePercent(autoDefaults.get(item.id)) ?? undefined"
+                            data-testid="requirements-confidence"
+                          >
+                            {{ CONFIDENCE_LABELS[confidenceBandOf(autoDefaults.get(item.id))!] }}
+                          </UBadge>
                         </div>
                         <UTextarea
                           v-model="drafts[item.id]"
@@ -926,6 +1012,17 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                               :color="GROUNDING_COLOR[rec.groundedIn]"
                             >
                               {{ GROUNDING_LABELS[rec.groundedIn] }}
+                            </UBadge>
+                            <UBadge
+                              v-if="confidenceBandOf(rec)"
+                              size="xs"
+                              variant="outline"
+                              class="ms-1.5"
+                              :color="CONFIDENCE_COLOR[confidenceBandOf(rec)!]"
+                              :title="confidencePercent(rec) ?? undefined"
+                              data-testid="requirements-confidence"
+                            >
+                              {{ CONFIDENCE_LABELS[confidenceBandOf(rec)!] }}
                             </UBadge>
                             <!-- The Writer's suggested answer — agent prose, so it takes the
                                  measure like the finding's own question above it. -->

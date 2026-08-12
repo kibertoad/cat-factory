@@ -11,10 +11,15 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PublicPipelineList} wire model.
  * @param pipelines the {@code pipelines} field.
+ * @param unattendedDefaultPipelineId Always present; {@code null} when the server has no value for
+ * it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicPipelineList(
-    @JsonProperty("pipelines") List<PublicPipeline> pipelines
+    @JsonProperty("pipelines") List<PublicPipeline> pipelines,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("unattendedDefaultPipelineId") @Nullable String unattendedDefaultPipelineId
 ) {
 
     /** A new builder for {@link PublicPipelineList}. */
@@ -30,6 +35,7 @@ public record PublicPipelineList(
      */
     public static final class Builder {
         private @Nullable List<PublicPipeline> pipelines;
+        private @Nullable String unattendedDefaultPipelineId;
 
         /** Set {@code pipelines}. */
         public Builder pipelines(@Nullable List<PublicPipeline> pipelines) {
@@ -37,9 +43,15 @@ public record PublicPipelineList(
             return this;
         }
 
+        /** Set {@code unattendedDefaultPipelineId}. */
+        public Builder unattendedDefaultPipelineId(@Nullable String unattendedDefaultPipelineId) {
+            this.unattendedDefaultPipelineId = unattendedDefaultPipelineId;
+            return this;
+        }
+
         /** Build the {@link PublicPipelineList}. */
         public PublicPipelineList build() {
-            return new PublicPipelineList(pipelines);
+            return new PublicPipelineList(pipelines, unattendedDefaultPipelineId);
         }
     }
 }

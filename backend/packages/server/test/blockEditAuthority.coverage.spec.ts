@@ -232,8 +232,8 @@ describe('the /api/v1 task surface lowers its preset pins by name', () => {
   it('admits no OTHER internal write field through the same spread', () => {
     // Whatever the two schemas share is lowered by the spread, so the overlap IS the decision.
     // Derived from the schemas themselves rather than listed, so a public field added tomorrow
-    // that happens to collide with an internal knob (`pipelineId`, `agentConfig`, `epicId`, …)
-    // fails here instead of shipping as an undeclared capability.
+    // that happens to collide with an internal knob (`agentConfig`, `epicId`, …) fails here
+    // instead of shipping as an undeclared capability.
     const overlap = (publicKeys: string[], internalKeys: string[]) =>
       publicKeys.filter((key) => internalKeys.includes(key)).sort()
     const create = overlap(
@@ -247,7 +247,20 @@ describe('the /api/v1 task surface lowers its preset pins by name', () => {
     // `title`/`description` (+ `taskType` at creation, `autoStartDependents` on the patch) are the
     // authored input both surfaces have always shared; the two pins are what 1.43.0 added. Nothing
     // else may join them without a decision made here.
-    expect(create).toEqual(['description', 'modelPresetId', 'riskPolicyId', 'taskType', 'title'])
+    //
+    // `pipelineId` at CREATION is the decision 1.50.0 made, and it is deliberately create-only: a
+    // caller files a task and lets somebody start it later, from the board or from an empty start
+    // body, and still gets the chain the filer chose. It is NOT on the patch, because re-pointing a
+    // task's pipeline after the fact is a board judgement about work already described, and the
+    // start call already takes a `pipelineId` for the one run a caller wants to redirect.
+    expect(create).toEqual([
+      'description',
+      'modelPresetId',
+      'pipelineId',
+      'riskPolicyId',
+      'taskType',
+      'title',
+    ])
     expect(update).toEqual([
       'autoStartDependents',
       'description',

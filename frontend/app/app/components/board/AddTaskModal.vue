@@ -429,6 +429,9 @@ function defaultPipelineIdFor(type: TaskTypeChoice): string {
   const preset =
     custom?.defaultPipelineId ??
     DEFAULT_PIPELINE_FOR_TYPE[type] ??
+    // The workspace's own declared in-app default, ahead of the interface-mode rung, so this form
+    // and the task card's plain Start still cannot disagree (see `declaredDefaultId`).
+    pipelines.declaredDefaultId('interactive') ??
     defaultBuildPipelineId(uiMode.isAdvanced)
   return pipelines.pipelines.some((p) => p.id === preset) ? preset : ''
 }

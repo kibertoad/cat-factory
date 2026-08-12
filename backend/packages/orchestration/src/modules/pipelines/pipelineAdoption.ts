@@ -1,4 +1,4 @@
-import { seedPipelines } from '@cat-factory/kernel'
+import { declaredDefaultPipelineId, seedPipelines } from '@cat-factory/kernel'
 import type {
   Logger,
   OperationalMetrics,
@@ -35,6 +35,12 @@ import { noopLogger } from '@cat-factory/kernel'
  * organizational metadata a workspace owns (`labels` / `archived`, written by `organize`) when it
  * already holds a copy. Shared by `PipelineService.reseed` and adoption so "adopting" and
  * "reseeding" cannot produce different rows for the same catalog entry.
+ *
+ * The two DEFAULT claims state what the STORE holds, never what the catalog declares, because
+ * `setDefault` owns those columns and `update` deliberately does not write them: a reseed of a rung
+ * an operator RELEASED must not re-announce it as the workspace's default, and one they promoted
+ * must not read as released. A workspace with no copy at all has answered nothing, which is the
+ * separate question {@link insertedCatalogRow} asks.
  */
 export function adoptedCatalogRow(seed: Pipeline, existing?: Pipeline | null): Pipeline {
   const labels = existing?.labels ?? seed.labels
@@ -42,6 +48,37 @@ export function adoptedCatalogRow(seed: Pipeline, existing?: Pipeline | null): P
     ...seed,
     ...(labels && labels.length ? { labels } : { labels: undefined }),
     ...(existing?.archived ? { archived: true } : { archived: undefined }),
+    isDefault: existing?.isDefault ? true : undefined,
+    isUnattendedDefault: existing?.isUnattendedDefault ? true : undefined,
+  }
+}
+
+/**
+ * The row a workspace's FIRST copy of a catalog pipeline is: {@link adoptedCatalogRow} plus the
+ * catalog's own default claims, for each scope the workspace has not already answered.
+ *
+ * The claim has to travel with this insert, and it has to be conditional, for two reasons that pull
+ * against each other. `defaultPipelineIdForScope` consults the catalog rung only while the
+ * workspace holds NO row for it, so an adoption that dropped the claim would make the first headless
+ * start work and the second answer `pipeline_required`, the board silently losing the default it
+ * had just run on. But a workspace that already declared its own holder has answered, and the
+ * partial unique index keeps one holder per scope: carrying the seed's claim there is both an
+ * override nobody asked for and a constraint violation the composite-key `ON CONFLICT` does not
+ * cover, so a reseed or a run that merely PINS `pl_unattended` would fail on the raw error.
+ *
+ * Takes the workspace's whole row set rather than a per-scope holder id, because the question is
+ * asked once per insert and reading it per scope would be the same list twice.
+ */
+export function insertedCatalogRow(seed: Pipeline, stored: readonly Pipeline[]): Pipeline {
+  const row = adoptedCatalogRow(seed)
+  return {
+    ...row,
+    isDefault:
+      seed.isDefault && !declaredDefaultPipelineId(stored, 'interactive') ? true : undefined,
+    isUnattendedDefault:
+      seed.isUnattendedDefault && !declaredDefaultPipelineId(stored, 'unattended')
+        ? true
+        : undefined,
   }
 }
 
@@ -136,10 +173,17 @@ export function createPipelineAdoption(deps: PipelineAdoptionDependencies): Pipe
       return adoptable
     },
     async adoptForRun(workspaceId, pipelineId) {
-      const stored = await deps.pipelineRepository.get(workspaceId, pipelineId)
-      if (stored) return stored
-      const seed = catalogEntry(pipelineId)
-      if (!seed) return null
+      const existing = await deps.pipelineRepository.get(workspaceId, pipelineId)
+      if (existing) return existing
+      const definition = catalogEntry(pipelineId)
+      if (!definition) return null
+      // The workspace's rows are read only on the MISS, which is once per (board, pipeline) for the
+      // life of the board: what the insert needs from them is which default scopes the workspace
+      // has already answered, and the hot path stays the point read above.
+      const seed = insertedCatalogRow(
+        definition,
+        await deps.pipelineRepository.listByWorkspace(workspaceId),
+      )
       await deps.pipelineRepository.insertIfAbsent(workspaceId, seed)
       // Logged AND counted, for the two different questions. The line answers "what happened to
       // this board"; the counter answers "how many boards are still behind the shipped catalog",

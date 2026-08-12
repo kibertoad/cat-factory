@@ -611,6 +611,10 @@
         "label": "Unbeaufsichtigte Läufe ohne Wartezeit auf eine Person abschließen",
         "unattendedHint": "Wenn eine automatische Schleife aufgibt (ein Companion an seinem Überarbeitungslimit, eine Prüfung an ihrem Durchlauflimit, unbearbeitete Folgepunkte), läuft der Durchlauf nachvollziehbar weiter statt anzuhalten. Von der Pipeline angeforderte Gates wie manuelles Testen, Review und Freigabe halten den Durchlauf weiterhin an.",
         "attendedHint": "Wenn eine automatische Schleife aufgibt, hält der Durchlauf an und wartet auf eine Entscheidung. Richtig für ein Board, das jemand beobachtet; ein über die API gestarteter Durchlauf wartet unbegrenzt."
+      },
+      "autoAnswer": {
+        "label": "Mindestzuversicht für Auto-Antworten (%)",
+        "hint": "Wie sicher der Requirement Writer sein muss, damit ein unbeobachteter Lauf seinen Vorschlag übernimmt statt auf eine Person zu warten. Infrage kommen nur Befunde, die der Reviewer ohne Product Owner für beantwortbar hielt."
       }
     },
     "observabilityConnection": {
@@ -4509,7 +4513,17 @@
       "binaryComparison": "Kandidaten vor der Lieferung vergleichen",
       "binaryPerGenerator": "Kandidaten pro Integration",
       "binaryMultiSelect": "Mehrere behalten erlauben",
-      "binaryComparisonUnreachable": "Dieser Schritt kann nur einen Kandidaten pro Motiv erzeugen, es gäbe also nichts zu vergleichen und der einzige würde ungefragt behalten. Wähle eine zweite Integration oder erhöhe die Anzahl der Kandidaten pro Integration."
+      "binaryComparisonUnreachable": "Dieser Schritt kann nur einen Kandidaten pro Motiv erzeugen, es gäbe also nichts zu vergleichen und der einzige würde ungefragt behalten. Wähle eine zweite Integration oder erhöhe die Anzahl der Kandidaten pro Integration.",
+      "scopeDefault": {
+        "interactive": "Standard in der App",
+        "interactiveHint": "Was eine vom Board gestartete Aufgabe ausführt, wenn sie keine eigene Pipeline festlegt.",
+        "unattended": "Standard ohne Aufsicht",
+        "unattendedHint": "Was ein Lauf ohne Beobachter ausführt (API, Ticket, Zeitplan), wenn die Aufgabe keine Pipeline festlegt.",
+        "claimInteractive": "Als Standard in der App festlegen",
+        "releaseInteractive": "Nicht mehr Standard in der App",
+        "claimUnattended": "Als Standard ohne Aufsicht festlegen",
+        "releaseUnattended": "Nicht mehr Standard ohne Aufsicht"
+      }
     },
     "progress": {
       "status": {
@@ -4794,6 +4808,17 @@
       "reReview": "Die Anforderungen konnten nicht erneut geprüft werden",
       "proceed": "Es konnte nicht fortgefahren werden",
       "resolveReview": "Die Prüfung konnte nicht abgeschlossen werden"
+    },
+    "findingClass": {
+      "judgement": "Ihre Entscheidung nötig",
+      "judgementHint": "Eine Geschäfts-, Produkt- oder Domänenentscheidung oder etwas, das dem Reviewer nicht mitgeteilt wurde. Nur Sie können das klären.",
+      "practice": "Aus der Praxis beantwortbar",
+      "practiceHint": "Durch etablierte Praxis, den bereits genutzten Stack oder den vorliegenden Kontext geklärt. Vorbefüllt zum Übernehmen oder Ändern."
+    },
+    "confidence": {
+      "high": "Hohe Zuversicht",
+      "medium": "Mittlere Zuversicht",
+      "low": "Geringe Zuversicht"
     }
   },
   "bootstrap": {

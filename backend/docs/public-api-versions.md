@@ -676,3 +676,44 @@ waits indefinitely. Under `unattended` the platform takes the documented "procee
 of those and records that it did. It never covers a gate the PIPELINE asked for: a human-test step,
 a review gate or an approval gate stops the run under either value, which is what keeps the field a
 statement about waiting rather than about oversight.
+
+## 1.50.0
+
+1.50.0, not 1.49.1: additive fields on each side of the pipeline question. `POST
+/api/v1/services/:serviceId/tasks` accepts `pipelineId`, and `GET /api/v1/pipelines` reports both
+`unattendedDefaultPipelineId` (on the list) and a per-row `unattendedDefault`. No existing field
+changes meaning, so a consumer built against 1.49.0 keeps parsing and keeps behaving unchanged.
+
+**Read the LIST-level field, not the per-row flag, to learn what an empty start body runs.** The two
+carry the same answer where the answer is a row this list holds, and they part company where it is
+not: a workspace that has never adopted the catalog's declared rung still resolves it (and adopts it
+on that first start), so every row reports `unattendedDefault: false` while empty start bodies work.
+The per-row flag exists for the ordinary case of marking which listed rung it is; only
+`unattendedDefaultPipelineId` distinguishes "the workspace released its default" (`null`, and the
+start call refuses) from "the default is a rung not in this list". Both are answered for the KEY that
+asked, from the same resolution the start route runs, so a report and a start can never disagree.
+
+One BEHAVIOUR change rides with them, and it turns a refusal into a run rather than the reverse:
+`POST /api/v1/tasks/:taskId/start` with no `pipelineId`, against a task that pinned none, used to
+answer `400 pipeline_required`. For a key that satisfies `decide` it now resolves the workspace's
+default pipeline for a run nothing is watching and starts it. The refusal survives whenever no such
+default resolves, so the error code is not retired and a client branching on it still needs to.
+
+**A `write` key sees no change at all**, and that is a decision rather than an oversight. The seeded
+default rung reaches a human test and a human PR review on a risky task, which
+`pipeline_requires_decide_scope` rightly withholds from a caller that cannot answer a park — so
+offering it there would trade an actionable "pass a pipelineId" for a 403 about a pipeline the caller
+never picked. The scope that gains the fallback is the one that can answer what it starts.
+
+That is worth stating as a change rather than filing under "it works now", because a `decide` caller
+depending on the 400 as a validation signal (checking that a task is startable by trying it) will
+now start work. The check that does not start anything is `GET /api/v1/tasks/:taskId`, which reports
+the task's own pinned pipeline, plus `GET /api/v1/pipelines` for what an empty body would resolve.
+
+`pipelineId` at creation is what makes the pairing usable: a caller that files a task now and lets
+somebody start it later, from the board or from an empty start body, previously had to repeat its
+pipeline choice on the start call, and a task filed by an integration and started from the app ran
+whatever that board defaults to. Unlike `modelPresetId` / `riskPolicyId`, an id nothing defines is
+NOT refused at creation: a dangling preset pin falls back to a default and runs, which is why that
+one has to be caught at the write, while a dangling pipeline pin can start nothing and so refuses
+loudly on its own at the start call.

@@ -409,6 +409,19 @@ export type ClonePipelineInput = v.InferOutput<typeof clonePipelineSchema>
 export const organizePipelineSchema = v.object({
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
   archived: v.optional(v.boolean()),
+  /**
+   * Claim (or release) this pipeline as the workspace's default for a run somebody started in the
+   * app. Promoting demotes whichever row held it; `false` releases it, leaving the scope with no
+   * declared default (the interface-mode rung answers again).
+   *
+   * On THIS body rather than {@link createPipelineSchema} / {@link updatePipelineSchema} because
+   * the two rungs a workspace most wants as defaults are BUILT-INS, which reject a structural
+   * edit: a default is selection metadata, exactly like a label or the archive flag. One door for
+   * both scopes, so "which pipeline is the default" is never two writes that can disagree.
+   */
+  isDefault: v.optional(v.boolean()),
+  /** The same claim for a run nothing is watching (see {@link isDefault}). */
+  isUnattendedDefault: v.optional(v.boolean()),
 })
 export type OrganizePipelineInput = v.InferOutput<typeof organizePipelineSchema>
 

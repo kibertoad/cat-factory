@@ -193,26 +193,7 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
     expect(created.status).toBe(201)
     const auth = { authorization: `Bearer ${created.body.secret}` }
 
-    // Pipeline discovery: the public inline pipeline is public + headless-startable; a
-    // container pipeline (pl_simple) is listed but neither. Closes the "start demands a
-    // pipelineId, nothing lists them" gap.
-    const pipelines = await call<{
-      pipelines: {
-        pipelineId: string
-        steps: string[]
-        public: boolean
-        headlessStartable: boolean
-      }[]
-    }>('GET', '/api/v1/pipelines', undefined, auth)
-    expect(pipelines.status).toBe(200)
-    const byId = new Map(pipelines.body.pipelines.map((p) => [p.pipelineId, p]))
-    const breakdown = byId.get('pl_initiative_breakdown')
-    expect(breakdown?.public).toBe(true)
-    expect(breakdown?.headlessStartable).toBe(true)
-    expect(breakdown && breakdown.steps.length > 0).toBe(true)
-    const quick = byId.get('pl_simple')
-    expect(quick).toBeTruthy()
-    expect(quick?.headlessStartable).toBe(false)
+    await assertPipelineDiscovery(call, wsId, auth)
 
     // Create a task under a fresh service frame (via the dev-open session board route).
     const frame = await call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
@@ -1428,4 +1409,59 @@ function registerPublicApiListTests(harness: ConformanceHarness): void {
     // A missing / non-service target still 404s (the guard survives the move to a paged read).
     expect((await call('GET', `/api/v1/services/nope/tasks`, undefined, auth)).status).toBe(404)
   })
+}
+
+/**
+ * PIPELINE DISCOVERY: what a key may start, and what an empty start body would run for it.
+ *
+ * Its own function rather than more statements in the lifecycle test, which the max-statements
+ * ratchet caps. It is also the cohesive half: everything here is a READ of the catalog through one
+ * key, where the rest of that test drives one task through its lifecycle.
+ */
+async function assertPipelineDiscovery(
+  call: ReturnType<ConformanceHarness['makeApp']>['call'],
+  wsId: string,
+  auth: { authorization: string },
+): Promise<void> {
+  interface PublicPipelineList {
+    pipelines: {
+      pipelineId: string
+      steps: string[]
+      public: boolean
+      headlessStartable: boolean
+      unattendedDefault: boolean
+    }[]
+    unattendedDefaultPipelineId: string | null
+  }
+  // Pipeline discovery: the public inline pipeline is public + headless-startable; a
+  // container pipeline (pl_simple) is listed but neither. Closes the "start demands a
+  // pipelineId, nothing lists them" gap.
+  const pipelines = await call<PublicPipelineList>('GET', '/api/v1/pipelines', undefined, auth)
+  expect(pipelines.status).toBe(200)
+  const byId = new Map(pipelines.body.pipelines.map((p) => [p.pipelineId, p]))
+  const breakdown = byId.get('pl_initiative_breakdown')
+  expect(breakdown?.public).toBe(true)
+  expect(breakdown?.headlessStartable).toBe(true)
+  expect(breakdown && breakdown.steps.length > 0).toBe(true)
+  const quick = byId.get('pl_simple')
+  expect(quick).toBeTruthy()
+  expect(quick?.headlessStartable).toBe(false)
+
+  // What an EMPTY start body runs, answered for the key that asked and by the SAME resolution the
+  // start route uses. This key is below `decide`, which is exactly the case where the start route
+  // withholds the default, so reporting one would send a caller confidently into a 400.
+  expect(pipelines.body.unattendedDefaultPipelineId).toBeNull()
+  expect(pipelines.body.pipelines.filter((p) => p.unattendedDefault)).toHaveLength(0)
+
+  const decider = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+    label: 'decider',
+    scope: 'decide',
+  })
+  const forDecider = await call<PublicPipelineList>('GET', '/api/v1/pipelines', undefined, {
+    authorization: `Bearer ${decider.body.secret}`,
+  })
+  expect(forDecider.body.unattendedDefaultPipelineId).toBe('pl_unattended')
+  expect(
+    forDecider.body.pipelines.filter((p) => p.unattendedDefault).map((p) => p.pipelineId),
+  ).toEqual(['pl_unattended'])
 }

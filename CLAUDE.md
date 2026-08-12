@@ -731,11 +731,10 @@ Trap: it is not a cheap reviewer, so it never scores prose or infers intent and 
 names an input no model could have acted on either. Doc:
 [`pre-dispatch-input-gate.md`](./docs/initiatives/pre-dispatch-input-gate.md).
 
-**Requirements review**: the FIRST step of the default pipelines, an inline iterative loop
-(review → answer → incorporate → re-review) that settles the PRODUCT layer only. Traps: a parked run
-waits indefinitely by design (never add a timeout); the reviewer must be TOLD what system the work is
-about, and a derived subject never displaces the requester's words. Doc:
-[`requirements-review.md`](./backend/docs/requirements-review.md).
+**Requirements review**: an inline iterative loop (review → answer → incorporate → re-review) settling the
+PRODUCT layer only, its findings sorted into the two groups that decide WHO answers. Traps: a parked run
+waits indefinitely by design (never a timeout); the reviewer must be TOLD what system the work is about, and
+a derived subject never displaces it. Doc: [`requirements-review.md`](./backend/docs/requirements-review.md).
 
 **Inbound tracker webhooks**: HMAC over the RAW body before any parse, ack 202, hand off through
 `gateways.trackerWebhook`; unconfigured FAILS CLOSED. Traps: push never replaces the `bug-intake`
@@ -815,10 +814,11 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
 - **Merge track record** persists each decision best-effort. Trap: an unreadable diff yields `unknown`,
   which never matches a rule, so a VCS outage cannot change policy.
   [ADR 0046](./backend/docs/adr/0046-merge-track-record.md).
-- **Whether a run WAITS is policy too**: `autonomy` says whether the parks the engine's loops raise WHEN
-  THEY GIVE UP are answered on the record; a workspace holds TWO defaults for it. Traps: never a park the
-  PIPELINE asked for; a new give-up park picks a side; a grader re-scoring with no memory of its own asks
-  never converges. [ADR 0053](./backend/docs/adr/0053-unattended-run-autonomy.md).
+- **Whether a run WAITS is policy too**: `autonomy` answers the parks the engine's loops raise WHEN THEY
+  GIVE UP, on the record; a workspace holds TWO defaults for it AND for its pipeline, scoped by
+  `runDefaultScopeFor(intakeOrigin)`. Traps: never a park the PIPELINE asked for; a new give-up park picks
+  a side; a review's QUESTIONS settle only where a SECOND, independent judgement agrees.
+  [ADR 0053](./backend/docs/adr/0053-unattended-run-autonomy.md), [ADR 0054](./backend/docs/adr/0054-per-scope-pipeline-defaults.md).
 - **Notifications** (`NotificationChannel`) and run-lifecycle events (`RunLifecycleSink`) are built together
   by `buildNotificationWebhookSupport` onto ONE registered endpoint and the ONE `signedDelivery.ts`
   retry/SSRF/signature core. Traps: the started edge is exactly-once via `handOffLiveRun` (announced LAST,

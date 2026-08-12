@@ -5,6 +5,7 @@ import type {
   ExecutionInstance,
   ExecutionStatus,
   Pipeline,
+  RunDefaultScope,
   Workspace,
   WorkspaceAccessMode,
 } from '../domain/types.js'
@@ -241,6 +242,27 @@ export interface PipelineRepository {
   insertIfAbsent(workspaceId: string, pipeline: Pipeline): Promise<void>
   /** Overwrite an existing pipeline in place (preserving its catalog order). */
   update(workspaceId: string, pipeline: Pipeline): Promise<void>
+  /**
+   * Claim (`claimed`) or release this pipeline as the workspace's default for `scope`, demoting
+   * whichever row held that scope first.
+   *
+   * Its OWN method rather than two fields on {@link update}, because the two writes are different
+   * kinds of thing. `update` overwrites one row's structure and is refused on a built-in; the
+   * default flags are selection metadata, are the only pipeline write a built-in accepts, and
+   * touch a SECOND row (the incumbent). Folding them into `update` would mean every ordinary edit
+   * carried the demotion of a scope it said nothing about.
+   *
+   * The demote and the promote land as one transaction (a `batch` on D1), for the reason
+   * `RiskPolicyRepository.upsert` does: run loose, a demote that commits before a failed promote
+   * leaves the scope with NO holder, and "the operator un-set their default" is a state no caller
+   * asked for. Releasing a flag nothing holds, or claiming one this row already holds, is a no-op.
+   */
+  setDefault(
+    workspaceId: string,
+    id: string,
+    scope: RunDefaultScope,
+    claimed: boolean,
+  ): Promise<void>
   delete(workspaceId: string, id: string): Promise<void>
 }
 

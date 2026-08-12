@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   findingAttention,
+  findingClass,
   orderFindings,
   reconcileFindingOrder,
   type FindingRecommendationState,
@@ -21,6 +22,7 @@ const item = (
   id: string,
   status: RequirementReviewItem['status'],
   severity: RequirementReviewItem['severity'] = 'medium',
+  autoAnswerable?: boolean,
 ): RequirementReviewItem => ({
   id,
   category: 'question',
@@ -29,6 +31,7 @@ const item = (
   detail: `detail for ${id}`,
   status,
   reply: null,
+  ...(autoAnswerable === undefined ? {} : { autoAnswerable }),
   createdAt: 0,
   updatedAt: 0,
 })
@@ -98,11 +101,37 @@ describe('orderFindings', () => {
     expect(order(items).map((entry) => entry.id)).toEqual(['low-open', 'high-handled'])
   })
 
-  it('tags each entry with the bucket its position came from', () => {
+  it('tags each entry with the buckets its position came from', () => {
     const items = [item('a', 'open'), item('b', 'dismissed')]
     expect(order(items)).toEqual([
-      { id: 'a', attention: 'action' },
-      { id: 'b', attention: 'settled' },
+      { id: 'a', attention: 'action', group: 'judgement' },
+      { id: 'b', attention: 'settled', group: 'judgement' },
+    ])
+  })
+
+  // The GROUP is the primary key, ahead of attention: the two groups have different audiences, so
+  // each is its own list ordered by what is left in it, rather than one list interleaving work the
+  // reader owns with work the platform may already have answered.
+  it('puts the judgement group ahead of the practice group, settled or not', () => {
+    const items = [
+      item('practice-open', 'open', 'high', true),
+      item('judgement-settled', 'answered', 'low', false),
+    ]
+    expect(order(items).map((entry) => entry.id)).toEqual(['judgement-settled', 'practice-open'])
+  })
+
+  it('keeps attention ordering INSIDE each group', () => {
+    const items = [
+      item('practice-settled', 'answered', 'high', true),
+      item('practice-open', 'open', 'low', true),
+      item('judgement-settled', 'answered', 'high', false),
+      item('judgement-open', 'open', 'low', false),
+    ]
+    expect(order(items).map((entry) => entry.id)).toEqual([
+      'judgement-open',
+      'judgement-settled',
+      'practice-open',
+      'practice-settled',
     ])
   })
 
@@ -111,10 +140,23 @@ describe('orderFindings', () => {
   })
 })
 
+describe('findingClass', () => {
+  it('reads the reviewer classification', () => {
+    expect(findingClass({ autoAnswerable: true })).toBe('practice')
+    expect(findingClass({ autoAnswerable: false })).toBe('judgement')
+  })
+
+  // An unclassified finding (a reviewer pass predating the flag, or a garbled reply) lands in the
+  // group that asks a person, matching how the contract and the engine both read it.
+  it('reads an unclassified finding as needing a person', () => {
+    expect(findingClass({})).toBe('judgement')
+  })
+})
+
 describe('reconcileFindingOrder', () => {
   const desired: OrderedFinding[] = [
-    { id: 'a', attention: 'action' },
-    { id: 'b', attention: 'settled' },
+    { id: 'a', attention: 'action', group: 'judgement' },
+    { id: 'b', attention: 'settled', group: 'judgement' },
   ]
 
   it('falls back to the computed order when nothing is pinned', () => {
@@ -124,21 +166,21 @@ describe('reconcileFindingOrder', () => {
   it('holds the pinned order while it covers the same findings', () => {
     // `b` has since been answered and would now sink, but the pin keeps the list still.
     const pinned: OrderedFinding[] = [
-      { id: 'b', attention: 'action' },
-      { id: 'a', attention: 'action' },
+      { id: 'b', attention: 'action', group: 'judgement' },
+      { id: 'a', attention: 'action', group: 'judgement' },
     ]
     expect(reconcileFindingOrder(desired, pinned)).toBe(pinned)
   })
 
   it('drops a pin that no longer covers every finding, so a new one can never be hidden', () => {
-    const pinned: OrderedFinding[] = [{ id: 'a', attention: 'action' }]
+    const pinned: OrderedFinding[] = [{ id: 'a', attention: 'action', group: 'judgement' }]
     expect(reconcileFindingOrder(desired, pinned)).toEqual(desired)
   })
 
   it('drops a pin naming a finding the review no longer has', () => {
     const pinned: OrderedFinding[] = [
-      { id: 'a', attention: 'action' },
-      { id: 'gone', attention: 'action' },
+      { id: 'a', attention: 'action', group: 'judgement' },
+      { id: 'gone', attention: 'action', group: 'judgement' },
     ]
     expect(reconcileFindingOrder(desired, pinned)).toEqual(desired)
   })

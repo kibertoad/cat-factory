@@ -6,9 +6,14 @@ import {
   seedPipelines,
 } from '@cat-factory/kernel'
 import type { Pipeline, PipelineRepository } from '@cat-factory/kernel'
-import { adoptedCatalogRow, createPipelineAdoption } from './pipelineAdoption.js'
+import {
+  adoptedCatalogRow,
+  createPipelineAdoption,
+  insertedCatalogRow,
+} from './pipelineAdoption.js'
 
 const WS = 'ws_1'
+const UNATTENDED_ID = 'pl_unattended'
 
 /** A store whose `insertIfAbsent` is first-write-wins, matching both real repositories. */
 function repo(store = new Map<string, Pipeline>()) {
@@ -22,6 +27,15 @@ function repo(store = new Map<string, Pipeline>()) {
       if (!store.has(p.id)) store.set(p.id, p)
     },
     update: async (_ws, p) => void store.set(p.id, p),
+    setDefault: async (_ws, id, scope, claimed) => {
+      const field = scope === 'unattended' ? 'isUnattendedDefault' : 'isDefault'
+      const target = store.get(id)
+      if (!target) return
+      // A RELEASE clears the named row only; a PROMOTE demotes every incumbent first (see the port).
+      if (!claimed) return void store.set(id, { ...target, [field]: undefined })
+      for (const [key, row] of store) store.set(key, { ...row, [field]: undefined })
+      store.set(id, { ...target, [field]: true })
+    },
     delete: async (_ws, id) => void store.delete(id),
   }
   return { repository, store, inserts }
@@ -187,5 +201,59 @@ describe('pipelineAdoption', () => {
     expect(kept.labels).toEqual(['mine'])
     expect(kept.archived).toBe(true)
     expect(kept.agentKinds).toEqual(seed.agentKinds)
+  })
+
+  // The two default claims are `setDefault`'s to write, so a rebuilt row states what the STORE
+  // holds. Carrying the catalog's own claim across an UPDATE would re-announce a rung the operator
+  // had released, on a write path (`update`) that does not touch those columns at all.
+  it('states the stored default claims on a rebuilt row, never the catalog’s', () => {
+    const seed = seedPipelines().find((p) => p.id === UNATTENDED_ID)!
+    expect(seed.isUnattendedDefault).toBe(true)
+    expect(adoptedCatalogRow(seed).isUnattendedDefault).toBeUndefined()
+    expect(
+      adoptedCatalogRow(seed, { ...seed, isUnattendedDefault: undefined }).isUnattendedDefault,
+    ).toBeUndefined()
+    expect(
+      adoptedCatalogRow(seed, { ...seed, isUnattendedDefault: true }).isUnattendedDefault,
+    ).toBe(true)
+  })
+
+  // A FIRST copy is the one insert that may carry the claim, and only where the workspace has not
+  // answered the scope. `defaultPipelineIdForScope` stops consulting the catalog once a row exists,
+  // so dropping it unconditionally would make the first headless start work and the second refuse.
+  it('carries the catalog claim into a workspace that declared no holder', () => {
+    const seed = seedPipelines().find((p) => p.id === UNATTENDED_ID)!
+    expect(insertedCatalogRow(seed, []).isUnattendedDefault).toBe(true)
+  })
+
+  // And drops it where the workspace HAS one: the partial unique index keeps a single holder per
+  // scope, and `insertIfAbsent` conflicts only on `(workspace_id, id)`, so the claim would surface
+  // as a raw constraint error on a plain reseed or on a run that merely PINS this rung.
+  it('drops the catalog claim where the workspace already declared a holder', () => {
+    const seed = seedPipelines().find((p) => p.id === UNATTENDED_ID)!
+    const mine = { ...seed, id: 'pl_mine', isUnattendedDefault: true }
+    expect(insertedCatalogRow(seed, [mine]).isUnattendedDefault).toBeUndefined()
+  })
+
+  it('adopts a pinned rung without disturbing the workspace’s own default', async () => {
+    const mine: Pipeline = {
+      id: 'pl_mine',
+      name: 'Mine',
+      purpose: 'build',
+      agentKinds: ['coder'],
+      isUnattendedDefault: true,
+    } as Pipeline
+    const store = new Map<string, Pipeline>([['pl_mine', mine]])
+    const { repository, inserts } = repo(store)
+    const adoption = createPipelineAdoption({
+      pipelineRepository: repository,
+      operationalMetrics: createOperationalMetricsCollector(),
+    })
+    const adopted = await adoption.adoptForRun(WS, UNATTENDED_ID)
+    expect(adopted?.id).toBe(UNATTENDED_ID)
+    expect(inserts).toEqual([UNATTENDED_ID])
+    expect([...store.values()].filter((p) => p.isUnattendedDefault).map((p) => p.id)).toEqual([
+      'pl_mine',
+    ])
   })
 })

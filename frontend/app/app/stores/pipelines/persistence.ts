@@ -112,16 +112,45 @@ export function createPipelinePersistence(
     return updated
   }
 
-  /** Set a pipeline's organizational metadata (labels / archive). Works on built-ins too. */
-  async function organize(id: string, body: { labels?: string[]; archived?: boolean }) {
+  /**
+   * Set a pipeline's organizational metadata (labels / archive / the two default claims). Works on
+   * built-ins too, which is the whole reason the default claims live on this call: the rungs a
+   * workspace most wants as its defaults are built-in, and a built-in refuses a structural edit.
+   *
+   * Promoting one row DEMOTES another, and the response names only the winner. So the incumbent is
+   * released LOCALLY before the winner is upserted: a targeted edit of the two rows that changed,
+   * rather than a full re-read (which this store has no door for — it hydrates from the workspace
+   * snapshot) and rather than upserting the winner alone, which would leave two rows claiming the
+   * same default on screen until the next snapshot.
+   */
+  async function organize(
+    id: string,
+    body: {
+      labels?: string[]
+      archived?: boolean
+      isDefault?: boolean
+      isUnattendedDefault?: boolean
+    },
+  ) {
     const updated = await api.organizePipeline(useWorkspaceStore().requireId(), id, body)
+    if (body.isDefault !== undefined) releaseOtherClaims(id, 'isDefault')
+    if (body.isUnattendedDefault !== undefined) releaseOtherClaims(id, 'isUnattendedDefault')
     upsertPipeline(updated)
     return updated
+  }
+
+  /** Drop `field` from every row but `id`, mirroring what the store just did server-side. */
+  function releaseOtherClaims(id: string, field: 'isDefault' | 'isUnattendedDefault') {
+    ctx.pipelines.value = ctx.pipelines.value.map((pipeline) =>
+      pipeline.id === id || pipeline[field] !== true ? pipeline : { ...pipeline, [field]: false },
+    )
   }
 
   const archive = (id: string) => organize(id, { archived: true })
   const unarchive = (id: string) => organize(id, { archived: false })
   const setLabels = (id: string, labels: string[]) => organize(id, { labels })
+  const setDefault = (id: string, scope: 'interactive' | 'unattended', claimed: boolean) =>
+    organize(id, scope === 'unattended' ? { isUnattendedDefault: claimed } : { isDefault: claimed })
 
   return {
     saveDraft,
@@ -132,5 +161,6 @@ export function createPipelinePersistence(
     archive,
     unarchive,
     setLabels,
+    setDefault,
   }
 }

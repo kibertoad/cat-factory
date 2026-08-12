@@ -6,7 +6,7 @@ import type {
   RiskPolicyCacheValue,
   RiskPolicyRepository,
 } from '@cat-factory/kernel'
-import { riskPolicyDefaultScopeFor } from '@cat-factory/contracts'
+import { runDefaultScopeFor } from '@cat-factory/contracts'
 import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
 import { cachedRiskPolicyRead, resolveRiskPolicy } from '../merge/riskPolicyResolution.js'
 import type { ResolvedRunRiskPolicy, RunPolicyScope } from './policy-types.js'
@@ -58,7 +58,7 @@ export class RunMergePolicy {
    * It takes the RUN and not just the block because a workspace has two defaults and only the run
    * says which one applies: a task pinning nothing is governed by the in-app policy when somebody
    * started it in the app and by the unattended one when nothing is watching
-   * (`riskPolicyDefaultScopeFor`). The block alone cannot answer that, and answering it from the
+   * (`runDefaultScopeFor`). The block alone cannot answer that, and answering it from the
    * block alone is what left an API-started run parked on a cap nobody would come to.
    *
    * Reads through the `riskPolicy` cache slice when wired: the row is slow-moving admin config
@@ -75,7 +75,7 @@ export class RunMergePolicy {
       repository: this.deps.riskPolicyRepository,
       workspaceId,
       riskPolicyId: block.riskPolicyId,
-      scope: riskPolicyDefaultScopeFor(run.intakeOrigin),
+      scope: runDefaultScopeFor(run.intakeOrigin),
       read: cachedRiskPolicyRead(this.deps.riskPolicyCache, workspaceId),
     })
   }

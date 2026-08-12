@@ -88,6 +88,10 @@ interface Draft {
   // up, rather than stopping for a person. Edited as a switch because the vocabulary is two-valued
   // and the OFF state is the historical behaviour.
   unattended: boolean
+  // The confidence floor an unattended run's auto-answered requirements finding must clear, as a
+  // PERCENT (the numbers above are edited the same way). Only read while `unattended` is on, which
+  // is why the field is rendered inside that block rather than beside the other budgets.
+  minAutoAnswerConfidence: number
   // Per-change-class auto-merge rules. An OMITTED class means "use the score ceilings above",
   // so `{}` is the identity — the editor stores `thresholds` as an omission for that reason.
   classRules: MergeClassRules
@@ -136,6 +140,7 @@ function toDraft(p: RiskPolicy): Draft {
     maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
     autoMergeEnabled: p.autoMergeEnabled,
     unattended: p.autonomy === 'unattended',
+    minAutoAnswerConfidence: Math.round(p.minAutoAnswerConfidence * 100),
     classRules: { ...p.classRules },
     classRulesByRole: { ...p.classRulesByRole },
     dryRunRoles: [...p.dryRunRoles],
@@ -196,6 +201,7 @@ async function save(p: RiskPolicy) {
       maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
       autoMergeEnabled: d.autoMergeEnabled,
       autonomy: d.unattended ? 'unattended' : 'attended',
+      minAutoAnswerConfidence: d.minAutoAnswerConfidence / 100,
       classRules: d.classRules,
       classRulesByRole: d.classRulesByRole,
       dryRunRoles: d.dryRunRoles,
@@ -277,6 +283,7 @@ const draft = reactive<Draft>({
   // A new policy parks on its own caps, matching every built-in but the unattended default: a
   // licence to answer them is a posture somebody grants, never one a blank form assumes.
   unattended: false,
+  minAutoAnswerConfidence: 80,
   // The create row authors the numbers only. Class and role rules start at their identity and
   // are edited on the saved preset, where each rule can be shown beside the base rule (and the
   // track record) it narrows — neither reads as anything on a policy that does not exist yet.
@@ -305,6 +312,7 @@ async function create() {
       maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
       autoMergeEnabled: draft.autoMergeEnabled,
       autonomy: draft.unattended ? 'unattended' : 'attended',
+      minAutoAnswerConfidence: draft.minAutoAnswerConfidence / 100,
       classRules: draft.classRules,
       forkDecision: forkGating(draft),
     })
@@ -520,6 +528,25 @@ async function create() {
               : t('settings.riskPolicy.autonomy.attendedHint')
           "
         />
+        <!-- Shown only while the posture is on, because that is the only state that reads it: a
+             floor on an attended policy would be a control over a decision this policy never makes.
+             It is not hidden as an "advanced override" — it is inert, which is a different thing. -->
+        <label v-if="drafts[p.id]!.unattended" class="mt-3 block">
+          <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+            {{ t('settings.riskPolicy.autoAnswer.label') }}
+          </span>
+          <UInput
+            v-model.number="drafts[p.id]!.minAutoAnswerConfidence"
+            type="number"
+            min="0"
+            max="100"
+            size="sm"
+            data-testid="risk-policy-auto-answer-floor"
+          />
+          <span class="mt-1 block text-[11px] text-slate-500">
+            {{ t('settings.riskPolicy.autoAnswer.hint') }}
+          </span>
+        </label>
       </div>
 
       <div class="mt-3 flex items-center justify-between gap-3">

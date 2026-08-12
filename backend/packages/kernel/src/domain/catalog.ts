@@ -1,4 +1,8 @@
-import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from '@cat-factory/contracts'
+import {
+  DEFAULT_JUDGE_MAX_BOUNCES,
+  DEFAULT_JUDGE_MIN_SCORE,
+  DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
+} from '@cat-factory/contracts'
 import type {
   BlockType,
   ClassRulesByRole,
@@ -112,6 +116,9 @@ export const DEFAULT_RISK_POLICY = {
   // historical behaviour, and the right one for a board somebody is looking at. The unattended
   // counterpart is `UNATTENDED_RISK_POLICY_ID` (see `RISK_POLICY_SEEDS`).
   autonomy: 'attended',
+  // Inert here (it is read only under `unattended`), and carried anyway so the two seeds differ in
+  // the fields they MEAN to differ in rather than in which ones they mention.
+  minAutoAnswerConfidence: DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
 } as const
 
 /**
@@ -218,6 +225,8 @@ export interface RiskPolicySeed {
   submissionClassesByRole: SubmissionClassesByRole
   /** Whether a run under this policy answers its own automatic-loop caps. */
   autonomy: RunAutonomy
+  /** Confidence floor an unattended run's auto-answered review finding must clear. */
+  minAutoAnswerConfidence: number
   /** The workspace's fallback preset for an IN-APP run. Exactly one is true. */
   isDefault: boolean
   /** The workspace's fallback preset for a run nothing is watching. Exactly one is true. */
@@ -270,6 +279,7 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
     submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
     autonomy: DEFAULT_RISK_POLICY.autonomy,
+    minAutoAnswerConfidence: DEFAULT_RISK_POLICY.minAutoAnswerConfidence,
     isDefault: true,
     isUnattendedDefault: false,
     // NOT bumped for the two fields above. A version bump is an ADVISORY that a workspace should
@@ -282,18 +292,25 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // column that arrived beside it.
     version: 6,
   },
-  // The UNATTENDED default: `Balanced` with one thing changed, and the fact that it is one thing
-  // is the design. A run started over the API, dispatched from a ticket or fired by a schedule has
-  // nobody in the app, so the parks an automatic loop raises when it gives up (a companion at its
-  // rework cap, an iterative review at its pass cap, untriaged Coder follow-ups) stop it for
-  // somebody who is not coming. This policy answers those itself, on the record, and changes
-  // NOTHING about what may land: the same ceilings, the same class rules, the same role scoping.
+  // The UNATTENDED default. A run started over the API, dispatched from a ticket or fired by a
+  // schedule has nobody in the app, so the parks an automatic loop raises when it gives up (a
+  // companion at its rework cap, an iterative review at its pass cap, untriaged Coder follow-ups)
+  // stop it for somebody who is not coming. This policy answers those itself, on the record.
   //
-  // Deliberately not more permissive than `Balanced` anywhere else. A seed may decide that an
-  // unwatched run should not wait forever on an automation budget, because waiting was never the
-  // answer anybody wanted there; it may NOT decide that an unwatched run gets to merge a change
-  // an operator's own thresholds would have held. A deployment that wants that widens the
-  // ceilings itself, having seen its own track record.
+  // It changes NOTHING about what may land: the same ceilings, the same class rules, the same role
+  // scoping. That restraint is the decision, not an omission. A seed may decide that an unwatched
+  // run should not wait forever on an automation budget, because waiting was never the answer
+  // anybody wanted there; it may NOT decide that an unwatched run gets to merge a change an
+  // operator's own thresholds would have held. A deployment that wants that widens the ceilings
+  // itself, having seen its own track record.
+  //
+  // What it does narrow is the LOOP BUDGETS whose exhaustion `autonomy: 'unattended'` answers.
+  // Spending six reviewer passes to reach a verdict policy will settle as `proceed` buys the run
+  // nothing but tokens and wall-clock, and a wandering companion rating is exactly the loop ADR
+  // 0053 found does not converge. Every one of the three below is a park this policy resolves; the
+  // budgets it does NOT touch are the ones whose exhaustion is a genuine failure a person has to
+  // see (`ciMaxAttempts` above all: cutting it would raise `ci_failed` SOONER, which is one more
+  // park, not one fewer).
   {
     id: UNATTENDED_RISK_POLICY_ID,
     name: 'Unattended delivery',
@@ -301,14 +318,19 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     maxRisk: DEFAULT_RISK_POLICY.maxRisk,
     maxImpact: DEFAULT_RISK_POLICY.maxImpact,
     ciMaxAttempts: DEFAULT_RISK_POLICY.ciMaxAttempts,
-    maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
+    // Three reviewer passes rather than six: the cap is answered by policy here, so the extra
+    // passes only delay the same `proceed` on a conversation nobody is having.
+    maxRequirementIterations: 3,
     maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
-    maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
+    maxTesterQualityIterations: 2,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
     judgeMinScore: DEFAULT_RISK_POLICY.judgeMinScore,
-    judgeMaxBounces: DEFAULT_RISK_POLICY.judgeMaxBounces,
+    // No bounce at all: a bounce re-arms the producer with the verdict's findings, and the round
+    // after it is graded by a judge whose cap this policy answers anyway. One unwatched pass and a
+    // recorded verdict beats two.
+    judgeMaxBounces: 0,
     autoMergeEnabled: DEFAULT_RISK_POLICY.autoMergeEnabled,
     // Left disabled like every other built-in, and here the reason is sharper: the fork decision
     // exists to put a CHOICE in front of a person, so a policy for runs with no person watching
@@ -319,8 +341,20 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
     submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
     autonomy: 'unattended',
+    // The one field this policy reads that `Balanced` does not: how confident the Requirement
+    // Writer must be for this run to take its suggestion as a finding's answer instead of parking.
+    minAutoAnswerConfidence: DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
     isDefault: false,
     isUnattendedDefault: true,
+    // NOT bumped for the narrowed budgets, and this is the one seed where a bump would be actively
+    // unsafe. Existing workspaces did not get this row from the catalog: the 0090 migration
+    // materialised it as a CLONE of whatever their own `is_default` row held, precisely so a
+    // workspace that had tightened `Balanced` kept its own ceilings here. Accepting a reseed
+    // restores the CATALOG's values for every field, so announcing these three narrower budgets
+    // would hand such a workspace the stock ceilings alongside them: a widening of landing
+    // authority, delivered as an advisory to adopt a tightening. New workspaces seed the narrower
+    // budgets; an existing one adopts them by editing the row, which is the only way that stays
+    // narrow-only.
     version: 1,
   },
   {
@@ -358,6 +392,7 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // A policy that routes every pull request to a human is the one place where answering a
     // companion's rework cap on its own would be incoherent.
     autonomy: 'attended',
+    minAutoAnswerConfidence: DEFAULT_RISK_POLICY.minAutoAnswerConfidence,
     isDefault: false,
     isUnattendedDefault: false,
     // Unbumped, for the reason given on `mp_balanced`: both new fields land on this row as the
@@ -401,6 +436,7 @@ export function riskPolicyFromSeed(seed: RiskPolicySeed, createdAt: number): Ris
     dryRunRoles: seed.dryRunRoles,
     submissionClassesByRole: seed.submissionClassesByRole,
     autonomy: seed.autonomy,
+    minAutoAnswerConfidence: seed.minAutoAnswerConfidence,
     isDefault: seed.isDefault,
     isUnattendedDefault: seed.isUnattendedDefault,
     version: seed.version,

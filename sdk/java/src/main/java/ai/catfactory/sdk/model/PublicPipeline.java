@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  * @param pipelineId the {@code pipelineId} field.
  * @param isPublic the {@code public} field.
  * @param steps the {@code steps} field.
+ * @param unattendedDefault the {@code unattendedDefault} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicPipeline(
@@ -26,7 +27,9 @@ public record PublicPipeline(
 
     @JsonProperty("public") Boolean isPublic,
 
-    @JsonProperty("steps") List<String> steps
+    @JsonProperty("steps") List<String> steps,
+
+    @JsonProperty("unattendedDefault") Boolean unattendedDefault
 ) {
 
     /** A new builder for {@link PublicPipeline}. */
@@ -46,6 +49,7 @@ public record PublicPipeline(
         private @Nullable String pipelineId;
         private @Nullable Boolean isPublic;
         private @Nullable List<String> steps;
+        private @Nullable Boolean unattendedDefault;
 
         /** Set {@code headlessStartable}. */
         public Builder headlessStartable(@Nullable Boolean headlessStartable) {
@@ -77,9 +81,15 @@ public record PublicPipeline(
             return this;
         }
 
+        /** Set {@code unattendedDefault}. */
+        public Builder unattendedDefault(@Nullable Boolean unattendedDefault) {
+            this.unattendedDefault = unattendedDefault;
+            return this;
+        }
+
         /** Build the {@link PublicPipeline}. */
         public PublicPipeline build() {
-            return new PublicPipeline(headlessStartable, name, pipelineId, isPublic, steps);
+            return new PublicPipeline(headlessStartable, name, pipelineId, isPublic, steps, unattendedDefault);
         }
     }
 }
