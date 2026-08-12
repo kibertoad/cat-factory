@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { type OtelConfig, getLogSink, logger, setLogSink } from '@cat-factory/server'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { type OtelConfig, getLogSink, logger, setLogLevel, setLogSink } from '@cat-factory/server'
 import { startOtelLogExport } from '../src/logExport.js'
 
 // Guards the per-facade WIRING of the OTLP log export on Node: that it gates on the config,
@@ -31,7 +31,17 @@ function capturingFetch(): { urls: string[]; bodies: string[]; fetchImpl: typeof
 }
 
 // The sink is module state in `@cat-factory/server`; leave it clean for every other suite.
-afterEach(() => setLogSink(null))
+//
+// The level is module state too, and this file is the exception to the suite-wide
+// `setLogLevel('silent')` in `test/setup/silenceLogs.ts`: the sink sits BEHIND the same level gate
+// the console destination does (one dial, not two), so a silenced suite would leave these asserting
+// on lines that were never emitted. Raise it for the duration and put it back, so no later file
+// inherits a chatty logger from this one.
+beforeEach(() => setLogLevel('info'))
+afterEach(() => {
+  setLogSink(null)
+  setLogLevel('silent')
+})
 
 describe('Node facade: OTLP log export wiring', () => {
   it('installs the sink and POSTs the buffered lines to /v1/logs on stop', async () => {

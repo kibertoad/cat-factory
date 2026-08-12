@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
-import { getLogSink, logger, setLogSink } from '@cat-factory/server'
+import { getLogSink, logger, setLogLevel, setLogSink } from '@cat-factory/server'
 import { withWorkflowLogExport } from '../src/infrastructure/workflows/logExport'
 import { ExecutionWorkflow } from '../src/infrastructure/workflows/ExecutionWorkflow'
 import { BootstrapWorkflow } from '../src/infrastructure/workflows/BootstrapWorkflow'
@@ -111,9 +111,17 @@ beforeEach(() => {
   trace.length = 0
   bodies.length = 0
   urls.length = 0
+  // Exception to the suite-wide `setLogLevel('silent')` (`test/setup/silenceLogs.ts`), for the same
+  // reason `log-export-wiring.test.ts` states: the sink is behind the same level gate, and every
+  // assertion below reads a line this file emitted. Stated rather than relied on — silenced, these
+  // would assert on lines that were never produced.
+  setLogLevel('info')
 })
 
-afterEach(() => setLogSink(null))
+afterEach(() => {
+  setLogSink(null)
+  setLogLevel('silent')
+})
 afterAll(() => vi.unstubAllGlobals())
 
 describe('withWorkflowLogExport', () => {

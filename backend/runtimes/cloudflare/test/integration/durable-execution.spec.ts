@@ -7,7 +7,7 @@ import { D1AgentRunRepository } from '../../src/infrastructure/repositories/D1Ag
 import { D1ExecutionRepository } from '../../src/infrastructure/repositories/D1ExecutionRepository'
 import { sweepStuckRuns } from '../../src/infrastructure/workflows/sweeper'
 import { buildWorkflowRuntime } from '../../src/infrastructure/workflows/runtime'
-import { makeApp } from '../helpers'
+import { buildTestContainer, makeApp } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 import { FakeWorkRunner, ThrowingAgentExecutor } from '../fakes/FakeWorkRunner'
 
@@ -65,7 +65,7 @@ async function advanceUntilHalt(
 describe('durable execution: advanceInstance', () => {
   it('advances a task run one step at a time to done', async () => {
     const wsId = await seedWorkspace()
-    const c = buildContainer(env, {
+    const c = buildTestContainer({
       agentExecutor: new FakeAgentExecutor({ confidence: 1 }),
       workRunner: new FakeWorkRunner(),
     })
@@ -90,7 +90,7 @@ describe('durable execution: advanceInstance', () => {
 
   it('reports awaiting_decision with the decision id when an agent pauses', async () => {
     const wsId = await seedWorkspace()
-    const c = buildContainer(env, {
+    const c = buildTestContainer({
       agentExecutor: new FakeAgentExecutor({ decisionOnSteps: [0], confidence: 1 }),
       workRunner: new FakeWorkRunner(),
     })
@@ -103,7 +103,7 @@ describe('durable execution: advanceInstance', () => {
 
   it('returns noop for a missing or finished run', async () => {
     const wsId = await seedWorkspace()
-    const c = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
+    const c = buildTestContainer({ agentExecutor: new FakeAgentExecutor() })
     expect((await c.executionService.advanceInstance(wsId, 'exec_nope')).kind).toBe('noop')
   })
 })
@@ -111,7 +111,7 @@ describe('durable execution: advanceInstance', () => {
 describe('durable execution: agent failure handling', () => {
   it('rethrows when rethrowAgentErrors is set (so a step can retry)', async () => {
     const { wsId, pipelineId } = await seedWorkspaceWithCompanionFreePipeline()
-    const c = buildContainer(env, {
+    const c = buildTestContainer({
       agentExecutor: new ThrowingAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -129,7 +129,7 @@ describe('durable execution: agent failure handling', () => {
     // the in-memory instance is gone. `ThrowingAgentExecutor` previews no model, which used to
     // be the exact condition under which the pre-dispatch persist was skipped.
     const { wsId, pipelineId } = await seedWorkspaceWithCompanionFreePipeline()
-    const c = buildContainer(env, {
+    const c = buildTestContainer({
       agentExecutor: new ThrowingAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -147,7 +147,7 @@ describe('durable execution: agent failure handling', () => {
 
   it('swallows the error into step output by default', async () => {
     const { wsId, pipelineId } = await seedWorkspaceWithCompanionFreePipeline()
-    const c = buildContainer(env, {
+    const c = buildTestContainer({
       agentExecutor: new ThrowingAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -165,7 +165,7 @@ describe('durable execution: agent failure handling', () => {
 describe('durable execution: failRun + retry', () => {
   it('records a structured failure, blocks the block (not pr_ready), and retries', async () => {
     const wsId = await seedWorkspace()
-    const c = buildContainer(env, {
+    const c = buildTestContainer({
       agentExecutor: new FakeAgentExecutor({ confidence: 1 }),
       workRunner: new FakeWorkRunner(),
     })
@@ -203,7 +203,7 @@ describe('durable execution: WorkRunner signalling', () => {
   it('signals start, decision resolution and cancel', async () => {
     const wsId = await seedWorkspace()
     const workRunner = new FakeWorkRunner()
-    const c = buildContainer(env, {
+    const c = buildTestContainer({
       agentExecutor: new FakeAgentExecutor({ decisionOnSteps: [0], confidence: 1 }),
       workRunner,
     })
@@ -230,7 +230,7 @@ describe('durable execution: WorkRunner signalling', () => {
 describe('durable execution: sweeper', () => {
   it('re-drives a stale run whose workflow is not alive', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, {
+    const starter = buildTestContainer({
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -260,7 +260,7 @@ describe('durable execution: sweeper', () => {
 
   it('leaves runs alone while their workflow is alive', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, {
+    const starter = buildTestContainer({
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -293,7 +293,7 @@ describe('durable execution: sweeper', () => {
 
   it('finalizes a stale run whose workflow is terminal (cannot be re-driven)', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, {
+    const starter = buildTestContainer({
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -358,7 +358,7 @@ describe('durable execution: sweeper', () => {
 
   it('fails a still-missing execution as stalled once past the hard-stall deadline', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, {
+    const starter = buildTestContainer({
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -408,7 +408,7 @@ describe('durable execution: sweeper', () => {
     // A run whose `updated_at` is hours old (e.g. after a cron outage) must still get at
     // least one re-drive before it can ever be failed `stalled`.
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, {
+    const starter = buildTestContainer({
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -463,7 +463,7 @@ describe('durable execution: sweeper', () => {
 
   it('forgets a run that recovered so its hard-stall clock restarts', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, {
+    const starter = buildTestContainer({
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -493,7 +493,7 @@ describe('durable execution: sweeper', () => {
 
   it('takes no action on a run whose instance it could not classify', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, {
+    const starter = buildTestContainer({
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -529,7 +529,7 @@ describe('durable execution: sweeper', () => {
 
   it('does not let an unclassifiable tick age the hard-stall deadline', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, {
+    const starter = buildTestContainer({
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })
@@ -572,7 +572,7 @@ describe('durable execution: sweeper', () => {
 
   it('carries a terminal instance error into the finalize reason', async () => {
     const wsId = await seedWorkspace()
-    const starter = buildContainer(env, {
+    const starter = buildTestContainer({
       agentExecutor: new FakeAgentExecutor(),
       workRunner: new FakeWorkRunner(),
     })

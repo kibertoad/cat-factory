@@ -56,7 +56,28 @@ const BASE = 'https://cat-factory.test'
 //
 // Built once rather than per `makeApp`, because the inline model resolver is memoised per `Env`
 // identity — a fresh copy per app would quietly build a fresh resolver per app.
-const envWithoutCloudflareAi: typeof env = { ...env, AI: undefined }
+//
+const testEnv: typeof env = { ...env, AI: undefined }
+
+/**
+ * Build a container the way the suite means it, for the specs that reach the engine WITHOUT going
+ * through {@link makeApp} (the durable-driver specs and the conformance harness's probes).
+ *
+ * A function rather than an exported `testEnv`, because the two halves only work as a pair and a
+ * caller that took just the env would get the wrong one silently: no binding leaves
+ * `cloudflareModelsEnabled` deriving FALSE, the run-admission provider guard then refuses every
+ * run, and the spec fails on a missing execution rather than on anything it meant to assert. Pass
+ * `cloudflareModelsEnabled: false` explicitly to exercise the unconfigured-provider path.
+ */
+export function buildTestContainer(
+  overrides: Partial<CoreDependencies> = {},
+  opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
+) {
+  return buildContainer(testEnv, overrides, {
+    cloudflareModelsEnabled: opts.cloudflareModelsEnabled ?? true,
+    gateProviders: opts.gateProviders,
+  })
+}
 
 export interface TestResponse<T = unknown> {
   status: number
@@ -126,7 +147,19 @@ export interface TestApp {
 export function makeApp(
   agentExecutor: AgentExecutor = new FakeAgentExecutor(),
   overrides: Partial<CoreDependencies> = {},
-  appOptions: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
+  appOptions: {
+    cloudflareModelsEnabled?: boolean
+    gateProviders?: GateProviderOverrides
+    /**
+     * Bind the real `[ai]` binding for this app, which is a CAPABILITY fact and not a usable
+     * model: `loadConfig`'s `cloudflareEnabled` reads the binding's presence, so the model
+     * catalog reports `cloudflare` as a route only when it is bound. For a spec asserting what
+     * the catalog REPORTS, and nothing that dials a model — the binding cannot run in this pool,
+     * so a run driven under this option rejects, and the suite now fails on that rather than
+     * counting it (see `testEnv`).
+     */
+    bindCloudflareAi?: boolean
+  } = {},
 ): TestApp {
   // Default to a no-op work runner so starting a run doesn't spawn a real
   // Cloudflare Workflows instance in the test pool (the wrangler.toml binding is
@@ -147,8 +180,8 @@ export function makeApp(
   }
   // One env for the whole app: the request path and every direct `buildContainer` below must see
   // the same provider set, or a run driven through `drive` would resolve models differently from
-  // the same run started over HTTP. See `envWithoutCloudflareAi`.
-  const appEnv = envWithoutCloudflareAi
+  // the same run started over HTTP. See `testEnv`.
+  const appEnv = appOptions.bindCloudflareAi ? env : testEnv
   // Default the Cloudflare-models flag ON, matching Node's harness verbatim: the built-in default
   // model preset points every agent kind at a Cloudflare-served model, so the run-admission guard
   // needs that provider OFFERED or no run starts. Specs exercising the unconfigured-provider path

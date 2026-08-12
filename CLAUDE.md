@@ -157,8 +157,8 @@ messages, code comments, UI copy.
 - **Multi-line git messages: bash heredoc in the Bash tool, NOT a PowerShell here-string.** The Bash tool
   is POSIX sh, so `@'…'@` leaks literal `@` characters into the commit subject. Use
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
-- **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
-  Verify pure-logic changes with `--filter=@cat-factory/orchestration`.
+- **Worker tests DO run on Windows** (this note used to say they fail on `config wrangler validation
+failed`): name the spec files, and expect one `AI bindings always access remote` warning per pool.
 - **The Postgres-backed suites need a reachable server AND `--env-mode=loose`**; a bare `[ELIFECYCLE]
 Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including how to start a cluster where no Docker daemon runs: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or

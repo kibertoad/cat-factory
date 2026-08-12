@@ -14,9 +14,8 @@ import {
   mintSession,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
-import { makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
+import { buildTestContainer, makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
 import { FakeTaskSourceProvider } from '../fakes/FakeTaskSourceProvider'
-import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
@@ -175,7 +174,7 @@ const harness: ConformanceHarness = {
       authEnabled: Boolean(sessionSecret),
       session: (user) => mintSession(sessionSecret, user),
       createWorkspaceInAccount: (accountId, ownerUserId, options) =>
-        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).workspaceService.create(
+        buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).workspaceService.create(
           { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
           ownerUserId,
           accountId,
@@ -209,7 +208,7 @@ const harness: ConformanceHarness = {
       seedService: (service) => new D1ServiceRepository({ db: env.DB }).insert(service),
       getService: (id) => new D1ServiceRepository({ db: env.DB }).get(id),
       localModelEndpoints: () => {
-        const svc = buildContainer(env, {
+        const svc = buildTestContainer({
           agentExecutor: new FakeAgentExecutor(),
         }).localModelEndpoints
         if (!svc) return undefined
@@ -221,7 +220,7 @@ const harness: ConformanceHarness = {
         }
       },
       openRouterCatalog: () => {
-        const svc = buildContainer(env, {
+        const svc = buildTestContainer({
           agentExecutor: new FakeAgentExecutor(),
         }).openRouterCatalog
         if (!svc) return undefined
@@ -231,7 +230,7 @@ const harness: ConformanceHarness = {
         }
       },
       userSecrets: () => {
-        const svc = buildContainer(env, {
+        const svc = buildTestContainer({
           agentExecutor: new FakeAgentExecutor(),
           // Thread the injected app-owned secret-kind registry (custom kinds pre-registered by
           // the suite) so the probe's service describes them by reference, like the main build.
@@ -252,21 +251,21 @@ const harness: ConformanceHarness = {
       // instance, and a rebuilt container's default registry declares nothing to resolve.
       toolServerDispatch: () =>
         makeToolServerDispatchProbe(
-          buildContainer(env, {
+          buildTestContainer({
             agentExecutor: new FakeAgentExecutor(),
             ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
           }),
         ),
       packageRegistries: () => {
-        const svc = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
-          .packageRegistries?.service
+        const svc = buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).packageRegistries
+          ?.service
         if (!svc) return undefined
         return {
           resolveForDispatch: (workspaceId: string) => svc.resolveForDispatch(workspaceId),
         }
       },
       userSettings: () => {
-        const svc = buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).userSettings
+        const svc = buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).userSettings
           ?.service
         if (!svc) return undefined
         return {
@@ -279,12 +278,12 @@ const harness: ConformanceHarness = {
       // executor override skips the strict container-executor selection (the identity
       // layer never touches the agent runner).
       onboarding: () =>
-        makeOnboardingProbe(buildContainer(env, { agentExecutor: new FakeAgentExecutor() })),
+        makeOnboardingProbe(buildTestContainer({ agentExecutor: new FakeAgentExecutor() })),
       executionRepository: () =>
-        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).executionRepository,
+        buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).executionRepository,
       requirementReviewRepository: () => new D1RequirementReviewRepository({ db: env.DB }),
       agentRunRepository: () =>
-        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
+        buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
       blockRepository: () => new D1BlockRepository({ db: env.DB }),
       workspaceRepository: () => new D1WorkspaceRepository({ db: env.DB }),
       workspaceMemberRepository: () => new D1WorkspaceMemberRepository({ db: env.DB }),
