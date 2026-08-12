@@ -640,6 +640,34 @@ describe('target-repos', () => {
     expect(commandsOf(verdict.remedy)).toEqual(
       expect.arrayContaining([resumeInvocation('pass-a'), resumeInvocation('pass-b')]),
     )
+    // …and so is a CLEAR per pass, which is the half that used to name only the most recent one.
+    // A reset takes ONE named pass, so a single command left pass-a's ledger behind under a step
+    // that said "clear all of it and start clean", and the next attempt was refused again.
+    expect(commandsOf(verdict.remedy)).toEqual(
+      expect.arrayContaining([
+        resetInvocation({ runId: 'pass-a' }),
+        resetInvocation({ runId: 'pass-a', apply: true }),
+        resetInvocation({ runId: 'pass-b' }),
+        resetInvocation({ runId: 'pass-b', apply: true }),
+      ]),
+    )
+    expect(verdict.remedy.steps.join('\n')).toContain('once per owning pass')
+  })
+
+  it('names the ARCHIVED-here reading too, since the board read cannot tell it from another board', async () => {
+    // `linkedElsewhere` is computed against the frames this board VISIBLY lists, and an archived
+    // frame is not one of them, so a service archived HERE answers exactly like one homed on
+    // somebody else's board. Naming only the second sends an operator to a board that does not
+    // exist, and the fix for the first (restore or delete it in the app) is never printed.
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { linkedElsewhere: true }),
+        repo('cf-acc-catalog-web'),
+      ]),
+    })
+    const steps = verdict.remedy.steps.join('\n')
+    expect(steps).toContain('ARCHIVED')
+    expect(steps).toContain('releases the repository projection')
   })
 
   it('allows the link the LEDGER names, on a resumed pass', async () => {

@@ -163,13 +163,28 @@ describe('resetInvocation', () => {
     )
   })
 
-  it('needs no shell dialect, unlike a resume, because it sets no variable', () => {
-    // Stated as a test because the temptation is to give it a `flavour` parameter for symmetry with
-    // `resumeInvocation`. There is nothing to spell differently: pnpm forwards the positional and the
-    // flag identically in both shells, and a parameter nothing branches on is one a caller has to
-    // thread through for no reason.
+  it('sets no variable, so an ordinary run id needs no dialect and is printed bare', () => {
+    // Unlike a resume, which spells `VAR=value command` differently per shell: pnpm forwards the
+    // positional and the flag identically in both, so a minted id (a timestamp) reads as itself.
     expect(resetInvocation({ runId: 'latest' })).not.toContain('$env:')
     expect(resetInvocation({ runId: 'latest' })).not.toContain('export ')
+    expect(resetInvocation({ runId: '20260809175530' }, 'powershell')).toBe(
+      'pnpm --filter @cat-factory/acceptance run reset 20260809175530',
+    )
+  })
+
+  it('QUOTES a run id that is not one shell word, in the dialect the operator is holding', () => {
+    // A pass is identified by its FILE NAME and a hand-named one is supported ('friday-rerun' is
+    // `passFiles.ts`'s own example), so a space is representable. Bare, the printed remedy is
+    // refused by its own parser ("'friday' and 'rerun' both name a pass"), and a quote breaks the
+    // pasted line outright: a command that does not parse is worse than no command, which is the
+    // rule `shellQuoted` exists for.
+    expect(resetInvocation({ runId: 'friday rerun', apply: true }, 'posix')).toBe(
+      "pnpm --filter @cat-factory/acceptance run reset 'friday rerun' --yes",
+    )
+    // POSIX has no escape inside single quotes; PowerShell DOUBLES the quote instead.
+    expect(resetInvocation({ runId: "o'clock" }, 'posix')).toContain(`'o'\\''clock'`)
+    expect(resetInvocation({ runId: "o'clock" }, 'powershell')).toContain(`'o''clock'`)
   })
 })
 

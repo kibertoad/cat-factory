@@ -566,6 +566,10 @@ files of the passes that named those frames. Until this existed the third branch
 remedy ("delete the service frame that holds this one") was the one instruction a HEADLESS operator
 could not carry out headlessly, because deleting a service was an app act.
 
+Only the UNFINISHED tasks get a delete call of their own, which is what the frame delete's refusal
+counts; the finished ones go with the frame, which cascades its whole subtree. The preview names them
+all, because they all disappear.
+
 **`--all` is a whole-board clear**, for when the point is an empty board rather than one refusal. It
 targets every frame `GET /api/v1/services` lists, whatever backs it and whatever it is called, and
 every pass in the state directory. The two questions below are deliberately narrow (they answer the two
@@ -575,7 +579,7 @@ while debugging. None of those blocks the next pass, which is why no refusal pri
 still a preview by default, the plan still names every frame and task, and the plan states the scope
 outright, because a board holding one pass renders an identical list either way.
 
-Five things about it are decisions rather than details:
+Six things about it are decisions rather than details:
 
 - **It previews by default.** The bare form changes nothing and names every frame, task and file, since
   the board may be one two people share. `--yes` is the whole of the opt-in; `pnpm` forwards both the
@@ -586,15 +590,21 @@ Five things about it are decisions rather than details:
   cleared `ACCEPTANCE_STATE_DIR`), which is the case with no other way out. Naming a pass ADDS whatever
   its ledger holds, so a frame this `.env` no longer points at is reachable too, and `--all` replaces
   the question entirely with "everything the board lists".
-- **Under `--all`, every pass on disk goes with the board.** That follows from what was deleted rather
-  than from the flag being the widest: with no frames left, a kept file is a run id `status` still lists
-  and `latest` may still resolve to, and resuming it opens a ledger whose frames no longer exist. It is
+- **Under `--all`, every pass on disk goes with the board**, and so does the `latest` pointer, even
+  when it names a pass no ledger backs any more. That follows from what was deleted rather than from
+  the flag being the widest: with no frames left, a kept file is a run id `status` still lists and
+  `latest` may still resolve to, and resuming it opens a ledger whose frames no longer exist. It is
   also the only branch that reaches a refused attempt's files, since a ledger that is absent or
   malformed names no frame for the others to match on.
 - **It keeps a pass's files whenever a frame that ledger names survives**, whether the delete was
   refused or the plan never targeted it. The ledger is the only thing mapping a leftover frame back to
   a run id, so removing it would strand that frame with no pass for the next refusal to name and no id
-  to resume.
+  to resume. A repository it could not FREE keeps every ledger in the plan for the same reason one
+  step further out: the frame still holding that repository is one no read here can name at all, so
+  no ledger can be matched to it and one of them holds the id that reaches it.
+- **The preview lists a pass under "to remove" or under "KEPT", never both**, decided by that same
+  rule. Everything it keys on but a REFUSED frame is known before anything runs, and a plan that
+  named files the apply then keeps would misstate an outcome it had already computed.
 - **It states what it cannot reclaim.** The two repositories keep whatever a previous pass scaffolded,
   branches and open pull requests included, and no `/api/v1` call can empty them, so a fresh pass
   scaffolds ON TOP of that (`target-repos` says outright that it cannot see whether a repository is
@@ -608,11 +618,20 @@ It needs the deployment, the key, the two repository names and the state directo
 reporter token, because those belong to RUNNING a pass. An operator resetting is often doing so
 precisely because one of them has moved on.
 
-Two refusals it declines to paper over: a repository whose service is homed on ANOTHER board of the
-account has no id a workspace-scoped key can delete, and a frame still holding an unfinished task is
-refused by the platform (`422 service_has_unfinished_tasks`) rather than deleted with the work in it.
+Two refusals it declines to paper over. A repository whose service this workspace cannot name has no
+id to delete, and `GET /api/v1/repos` answers that way for TWO states with opposite fixes: the
+service is homed on ANOTHER board of the account, or it is a frame on THIS board that has been
+ARCHIVED (an archived frame is not listed, so nothing holds an id for it). Both readings are printed,
+because no `/api/v1` read tells them apart, and the archived one is fixed in the app: restore or
+delete the frame, which is what releases the repository projection. The other refusal is the
+platform's own: a frame still holding an unfinished task answers `422 service_has_unfinished_tasks`
+rather than being deleted with the work in it, and that refusal happens before anything is torn
+down, so it changes nothing.
+
 Both are reported with the steps, and the command exits non-zero, because the board still holds what
-the next pass will be refused over.
+the next pass will be refused over. That includes the case where nothing was refused and nothing was
+deleted: a clear whose only blocker is an unfreeable repository would otherwise exit 0 under "Done. A
+fresh pass can start" onto a board that earns the identical refusal on the next attempt.
 
 ## The rules these specs are written to
 

@@ -47,7 +47,10 @@ function fake(
   options: {
     repos?: readonly { name: string; serviceId?: string | null; linkedElsewhere?: boolean }[]
     services?: readonly { serviceId: string; title: string }[]
+    /** Unfinished tasks per frame: the ones the frame delete would refuse over. */
     tasks?: Readonly<Record<string, readonly string[]>>
+    /** Finished ones, which the frame delete cascades and this command never calls about. */
+    doneTasks?: Readonly<Record<string, readonly string[]>>
     /** Service ids whose delete refuses, and the reason the surface publishes for each. */
     refuseService?: Readonly<Record<string, string | null>>
     /** Task ids whose delete throws something other than a 404. */
@@ -79,8 +82,18 @@ function fake(
           linkedElsewhere: repo.linkedElsewhere ?? false,
         })),
       services: async () => options.services ?? [],
-      tasks: async (serviceId) =>
-        (options.tasks?.[serviceId] ?? []).map((taskId) => ({ taskId, title: `task ${taskId}` })),
+      tasks: async (serviceId) => [
+        ...(options.tasks?.[serviceId] ?? []).map((taskId) => ({
+          taskId,
+          title: `task ${taskId}`,
+          done: false,
+        })),
+        ...(options.doneTasks?.[serviceId] ?? []).map((taskId) => ({
+          taskId,
+          title: `task ${taskId}`,
+          done: true,
+        })),
+      ],
       deleteTask: async (taskId) => {
         calls.push(`task:${taskId}`)
         if ((options.goneTask ?? []).includes(taskId)) throw notFound('Task')
@@ -157,7 +170,8 @@ function input(overrides: Partial<Parameters<typeof planReset>[1]> = {}) {
     namedRunId: null,
     all: false,
     passes: [],
-    latest: { runId: null, path: '/state/latest.json' },
+    // No pointer FILE, which is a different state from one naming nothing: see `readLatestPointer`.
+    latest: null,
     ...overrides,
   }
 }
@@ -258,9 +272,10 @@ describe('planReset', () => {
     expect(plan.frames[0]?.title).toBeNull()
   })
 
-  it('states a repository homed on another board as unfreeable rather than as nothing to do', async () => {
-    // `serviceId: null` with `linkedElsewhere` is a frame no workspace-scoped key can address. Read
-    // as "available", the reset reports success and the next pass earns the same refusal.
+  it('states a repository it cannot free as unfreeable rather than as nothing to do', async () => {
+    // `serviceId: null` with `linkedElsewhere` is a frame no workspace-scoped key can address, and
+    // TWO states answer that way: homed on another board, or archived here. Read as "available",
+    // the reset reports success and the next pass earns the same refusal.
     const f = fake({
       repos: [{ name: 'catalog-api', serviceId: null, linkedElsewhere: true }],
       services: [],
@@ -271,6 +286,8 @@ describe('planReset', () => {
     expect(plan.frames).toEqual([])
     expect(plan.stuck.map((entry) => entry.slug)).toEqual(['acme/catalog-api'])
     expect(plan.stuck[0]?.steps.join(' ')).toContain('repo_service_homed_elsewhere')
+    // Both readings, because this read cannot tell them apart and their fixes are opposite.
+    expect(plan.stuck[0]?.steps.join(' ')).toContain('ARCHIVED')
   })
 
   it('names the pointer only when it names a pass in the plan', async () => {
@@ -291,6 +308,29 @@ describe('planReset', () => {
 
     expect(mine.pointer).toEqual({ runId: 'mine', path: '/state/latest.json' })
     expect(theirs.pointer).toBeNull()
+  })
+
+  it('takes a DANGLING pointer under --all, which is the scope that clears the directory', async () => {
+    // A pointer whose ledger someone removed by hand (or a malformed one) names no pass, so no
+    // branch keyed on a planned pass reaches it, and it outlives every file `--all` deletes.
+    // `ACCEPTANCE_RUN_ID=latest` then resolves against a state directory with no ledgers at all,
+    // which is the same "fresh pass wearing a finished pass's run id" the removal exists against.
+    const f = fake({ repos: [{ name: 'catalog-api' }], services: [] })
+    const dangling = { runId: null, path: '/state/latest.json' }
+
+    const whole = await planReset(f.client, input({ all: true, latest: dangling }))
+    const narrow = await planReset(f.client, input({ latest: dangling }))
+
+    expect(whole.pointer).toEqual(dangling)
+    expect(narrow.pointer).toBeNull()
+  })
+
+  it('names no pointer when the state directory holds no pointer FILE', async () => {
+    // "Absent" and "names nothing" are different states, and only the second is a file to remove:
+    // announcing a removal for a file that was never there is the preview misstating its outcome.
+    const f = fake({ repos: [{ name: 'catalog-api' }], services: [] })
+
+    expect((await planReset(f.client, input({ all: true, latest: null }))).pointer).toBeNull()
   })
 
   it('takes every frame the board lists under --all, whatever backs it or calls it', async () => {
@@ -413,6 +453,29 @@ describe('applyReset', () => {
     expect(report.frames[0]?.outcome).toEqual({ status: 'deleted' })
     expect(report.frames[0]?.deletedTasks).toEqual(['blk_t1', 'blk_t2'])
     expect(resetSucceeded(report)).toBe(true)
+  })
+
+  it('calls about the UNFINISHED tasks only, since the frame delete cascades the rest', async () => {
+    // What the individual deletes are FOR is the frame delete's guard, which counts only unfinished
+    // work. A finished pass leaves dozens of `done` tasks per frame, and each delete costs the
+    // deployment two whole-board reads for something the one frame delete does anyway.
+    const f = fake({
+      repos: [{ name: 'catalog-api', serviceId: 'blk_api' }],
+      services: [{ serviceId: 'blk_api', title: TITLES.backend }],
+      tasks: { blk_api: ['blk_open'] },
+      doneTasks: { blk_api: ['blk_done1', 'blk_done2'] },
+    })
+    const plan = await planFor(f)
+
+    // The PLAN still names every task, because they all disappear and the preview says what does.
+    expect(plan.frames[0]?.tasks.map((task) => task.taskId)).toEqual([
+      'blk_open',
+      'blk_done1',
+      'blk_done2',
+    ])
+    const report = await applyReset(f.client, f.files, plan)
+    expect(f.calls).toEqual(['task:blk_open', 'service:blk_api'])
+    expect(report.frames[0]?.deletedTasks).toEqual(['blk_open'])
   })
 
   it('finishes one frame before starting the next, rather than deleting every task first', async () => {
@@ -573,6 +636,46 @@ describe('applyReset', () => {
     expect(report.pointerRemoved).toBe(true)
   })
 
+  it('KEEPS every ledger while a repository it cannot free is still held, and FAILS', async () => {
+    // The frame holding an unfreeable repository is one no read here can name (archived, or homed
+    // elsewhere: the same row either way), so no ledger can be matched to it and the only safe
+    // disposition is that one of them holds the run id that reaches it. And the reset FAILS: with
+    // nothing refused and nothing deleted it would otherwise exit 0 under "Done. A fresh pass can
+    // start" onto a board that earns the identical refusal on the next attempt.
+    const f = fake({
+      repos: [
+        { name: 'catalog-api', serviceId: null, linkedElsewhere: true },
+        { name: 'catalog-web', serviceId: 'blk_web' },
+      ],
+      services: [{ serviceId: 'blk_web', title: TITLES.frontend }],
+    })
+    const plan = await planFor(f, {
+      passes: [ledger('p1', { frontend: 'blk_web' })],
+      latest: { runId: 'p1', path: '/state/latest.json' },
+    })
+
+    const report = await applyReset(f.client, f.files, plan)
+
+    expect(report.frames[0]?.outcome).toEqual({ status: 'deleted' })
+    expect(f.removed).toEqual([])
+    expect(report.passes[0]?.kept).toContain('acme/catalog-api')
+    expect(report.pointerRemoved).toBe(false)
+    expect(resetSucceeded(report)).toBe(false)
+  })
+
+  it('removes a DANGLING pointer under --all, which no pass can be stranded by', async () => {
+    const f = fake({ repos: [{ name: 'catalog-api' }], services: [] })
+    const plan = await planFor(f, {
+      all: true,
+      latest: { runId: null, path: '/state/latest.json' },
+    })
+
+    const report = await applyReset(f.client, f.files, plan)
+
+    expect(f.removed).toEqual(['/state/latest.json'])
+    expect(report.pointerRemoved).toBe(true)
+  })
+
   it('reports only the files that were there, since a pass routinely has one', async () => {
     const f = fake({
       repos: [{ name: 'catalog-api', serviceId: 'blk_api' }],
@@ -598,11 +701,13 @@ describe('the rendered plan and report', () => {
           { kind: 'backs-repo', slug: 'acme/catalog-api' },
           { kind: 'named-by-pass', runId: 'p1' },
         ],
-        tasks: [{ taskId: 'blk_t1', title: 'Ship the catalog' }],
+        tasks: [{ taskId: 'blk_t1', title: 'Ship the catalog', done: false }],
         absent: false,
       },
     ],
-    stuck: [{ slug: 'acme/catalog-web', steps: ['it is homed elsewhere'] }],
+    // Empty in the base fixture: a stuck repository KEEPS every pass's files, which is its own
+    // rendering, so a fixture carrying one could not also show the removal list.
+    stuck: [],
     unlinked: [],
     passes: [
       {
@@ -618,16 +723,38 @@ describe('the rendered plan and report', () => {
   }
 
   it('names every frame, its reasons, its tasks and the files, before anything is deleted', () => {
-    const text = formatResetPlan(plan)
+    const text = formatResetPlan({
+      ...plan,
+      stuck: [{ slug: 'acme/catalog-web', steps: ['it is homed elsewhere'] }],
+    })
     expect(text).toContain("blk_api 'cf-acc Catalog API'")
     expect(text).toContain("because it backs 'acme/catalog-api'")
     expect(text).toContain("because it is named by pass p1's ledger")
     expect(text).toContain('task blk_t1: Ship the catalog')
-    expect(text).toContain('/state/p1.json')
-    expect(text).toContain('/state/latest.json')
     // Both halves a reset cannot do are printed with the preview, not only with the outcome.
     expect(text).toContain('acme/catalog-web')
     expect(text).toContain('the repositories keep their content')
+  })
+
+  it('lists a pass under REMOVE or KEPT by the rule the apply will use, never both', () => {
+    // The preview is this command's stated safety property, so listing files under "to remove"
+    // that the apply then keeps misstates an outcome the plan has already computed. Everything the
+    // retention rule keys on but a REFUSED frame is known here.
+    const text = formatResetPlan(plan)
+    expect(text).toContain('Local pass files to remove (1 pass(es))')
+    expect(text).toContain('/state/p1.json')
+    expect(text).toContain("The 'latest' pointer names p1, so it goes too")
+    expect(text).not.toContain('Local pass files KEPT')
+
+    const stranded = formatResetPlan({
+      ...plan,
+      passes: [{ ...(plan.passes[0] as (typeof plan.passes)[number]), unreclaimed: ['blk_web'] }],
+    })
+    expect(stranded).toContain('Local pass files KEPT (1 pass(es))')
+    expect(stranded).toContain('blk_web is still on the board')
+    expect(stranded).not.toContain('Local pass files to remove')
+    // …and the pointer stays with the pass whose files stay, or `latest` outlives its ledger.
+    expect(stranded).not.toContain('so it goes too')
   })
 
   it('says outright when there is nothing on the board to clear', () => {
@@ -688,12 +815,18 @@ describe('the rendered plan and report', () => {
       ],
       passes: [{ runId: 'p1', removed: [], kept: 'blk_api could not be deleted' }],
       pointerRemoved: false,
-      stuck: plan.stuck,
+      stuck: [{ slug: 'acme/catalog-web', steps: ['it is homed elsewhere'] }],
+      // Restated by the OUTCOME and not only by the preview: `--yes` is a separate invocation and
+      // the one every printed remedy ends with, so a report that dropped this reads as a clean
+      // board to the only person who ran it.
+      unlinked: ['acme/catalog-mobile'],
       leftovers: plan.leftovers,
     })
     expect(text).toContain('REFUSED [service_has_unfinished_tasks]')
     expect(text).toContain('task blk_t1 could NOT be deleted: boom')
     expect(text).toContain('KEPT, because blk_api could not be deleted')
+    expect(text).toContain('Not linked to this workspace')
+    expect(text).toContain('acme/catalog-mobile')
     expect(text).toContain('the repositories keep their content')
   })
 })

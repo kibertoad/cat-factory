@@ -114,9 +114,12 @@ it PREVIEWS by default and `--yes` is the whole opt-in; it targets what the CONF
 (the two repositories' frames, this prefix's titles) rather than a ledger, since the state with no
 other way out is the state whose ledger is gone, and NAMING a pass adds whatever its ledger holds; it
 KEEPS a pass's files whenever any frame that ledger names is still on the board (refused, or never
-targeted), because the ledger is the only map from a leftover frame back to a run id; and it STATES
-what no key reclaims (the repositories keep their content, a reporter-filed issue stays open, cluster
-namespaces are untouched), so a cleared board never reads as a fresh one.
+targeted) OR a repository could not be freed, because the ledger is the only map from a leftover
+frame back to a run id and an unfreeable repository is held by a frame no read here can name at all;
+and it STATES what no key reclaims (the repositories keep their content, a reporter-filed issue stays
+open, cluster namespaces are untouched), so a cleared board never reads as a fresh one. The PREVIEW
+runs that same retention rule, so it never lists files the apply will keep, and anything unfreeable
+is a non-zero exit even when nothing was refused.
 
 **`--all` is a THIRD target beside those two, not a wider reading of them**: every frame
 `GET /api/v1/services` lists plus every pass in the state directory, for the frames the narrow

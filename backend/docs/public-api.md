@@ -638,9 +638,11 @@ answers to branch on rather than retry:
 
 - **`422`, `reason: service_has_unfinished_tasks`.** A frame holding a task that has not finished is
   refused, because deleting one discards work in flight along with its history. `details` carries
-  `unfinishedTasks`, the count. Deleting those tasks first is the caller saying it means it; the app's
-  other option is archiving, which this surface does not publish, so a service you want to keep and
-  hide is one to handle in the app.
+  `unfinishedTasks`, the count. The refusal is decided BEFORE anything is torn down, so a `422`
+  leaves the frame, its tasks and their runs exactly as they were: retrying it changes nothing, and
+  the runs still going are still yours to stop or resume. Deleting those tasks first is the caller
+  saying it means it; the app's other option is archiving, which this surface does not publish, so a
+  service you want to keep and hide is one to handle in the app.
 - **`404` for an ARCHIVED service.** Every per-service endpoint here addresses exactly the population
   `GET /api/v1/services` reports, and an archived frame is absent from it. Restore it in the app if
   you meant to delete it after all.

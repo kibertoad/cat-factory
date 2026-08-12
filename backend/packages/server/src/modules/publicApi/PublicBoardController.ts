@@ -107,11 +107,10 @@ function registerProvisioningRoutes(app: Hono<AppEnv>): void {
     return c.json(toPublicService(block), 201)
   })
 
-  // Delete a service, its subtree and the run history under it: the same teardown-then-remove
-  // sequence the app's own delete runs (`BoardController` remove), including its guard. The
-  // teardown FIRST kills every container and durable driver under the frame, so deleting a service
-  // whose task is mid-run never orphans a container that would idle until its watchdog, and it
-  // hands back the board list it loaded so the remove reuses it.
+  // Delete a service, its subtree and the run history under it: the same refuse-tear-down-remove
+  // sequence the app's own delete runs (`BoardController` remove). The teardown kills every
+  // container and durable driver under the frame, so deleting a service whose task is mid-run
+  // never orphans a container that would idle until its watchdog.
   //
   // Resolved through `getService`, so a frame in another workspace, a task id, a headless run
   // anchor and an ARCHIVED frame are all ABSENT rather than forbidden: the population this route
@@ -120,19 +119,19 @@ function registerProvisioningRoutes(app: Hono<AppEnv>): void {
   // surface, which is honest rather than incidental (restoring one is an app act too), and it is
   // the state a caller reaches by archiving instead of deleting.
   //
-  // The unfinished-work refusal is NOT restated here. It belongs to `removeBlock`, which is the
-  // only layer that can see the subtree it judges, and it arrives as a `ValidationError` carrying
-  // the `reason` a caller branches on.
+  // The unfinished-work refusal is not written here either: `assertRemovable` is `removeBlock`'s
+  // own guard, run FIRST because the teardown between them is irreversible, and it hands back the
+  // board list both later steps reuse. A 422 out of this route therefore means nothing happened.
   buildHonoRoute(app, deletePublicServiceContract, async (c) => {
     const auth = await authorizeOrThrow(c, deletePublicServiceContract.minScope)
     const container = c.get('container')
     const { serviceId } = c.req.valid('param')
     const service = await container.boardService.getService(auth.workspaceId, serviceId)
     if (!service) throw new NotFoundError('Service', serviceId, { reason: 'service_not_found' })
-    const preloaded = await container.executionService.teardownForBlockTree(
-      auth.workspaceId,
-      serviceId,
-    )
+    const preloaded = await container.boardService.assertRemovable(auth.workspaceId, serviceId)
+    await container.executionService.teardownForBlockTree(auth.workspaceId, serviceId, {
+      preloaded,
+    })
     await container.boardService.removeBlock(auth.workspaceId, serviceId, { preloaded })
     return c.body(null, 204)
   })

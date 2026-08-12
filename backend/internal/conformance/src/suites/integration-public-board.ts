@@ -15,7 +15,19 @@ import { mintPublicApiKey } from './shared.js'
 //
 // See backend/docs/public-api.md and backend/docs/adr/0050-public-api-headless-completeness.md.
 
+/**
+ * Three groups, three functions: the sequence a caller PROVISIONS a board with, then the two task
+ * relationships that outlive a create call. Split because each is a cohesive read of one surface
+ * and the suite is written to a per-function line budget, not because the harness needs three.
+ */
 export function definePublicBoardConformance(harness: ConformanceHarness): void {
+  defineServiceProvisioning(harness)
+  defineTaskDependencies(harness)
+  defineTaskDocuments(harness)
+}
+
+/** Raising a service, filing work under it, and taking it back down. */
+function defineServiceProvisioning(harness: ConformanceHarness): void {
   describe('public API: board provisioning', () => {
     it('creates a service headlessly and files a task under it', async () => {
       // The gap this closes: `/api/v1` could list services and file work under one, and nothing
@@ -76,6 +88,20 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
         { title: 'Work in flight' },
         admin,
       )
+      // A run under that task, seeded through the facade's own store because the work this
+      // refusal protects is not the block, it is the HISTORY: the delete path tears every run
+      // under the subtree down (container, durable driver, row) before it removes anything, so a
+      // guard that fired one step later would answer 422 about a board it had already emptied.
+      await app.executionRepository().upsert(workspace.id, {
+        id: 'exec_in_flight',
+        blockId: task.body.taskId,
+        pipelineId: 'pl_simple',
+        pipelineName: 'Simple build',
+        steps: [{ agentKind: 'coder', state: 'working', progress: 0, decision: null }],
+        currentStep: 0,
+        status: 'running',
+        initiatedBy: null,
+      })
 
       // The guard, and the reason it is a REFUSAL rather than a cascade: deleting the frame would
       // discard that task and its history with no way back. The `reason` is what a headless caller
@@ -88,16 +114,20 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       )
       expect(refused.status).toBe(422)
       expect(refused.body.error.details?.reason).toBe('service_has_unfinished_tasks')
-      // Nothing happened: the refusal is not a partial delete that took the tasks with it.
+      // Nothing happened: the refusal is not a partial delete that took the tasks with it, and
+      // the run it named is still there to be resumed or stopped on purpose.
       expect(
         (await app.call('GET', `/api/v1/tasks/${task.body.taskId}`, undefined, admin)).status,
       ).toBe(200)
+      expect(await app.executionRepository().get(workspace.id, 'exec_in_flight')).not.toBeNull()
 
       // The caller that means it clears the work first. That pair IS the reclaim sequence a headless
       // setup runs, which is why both halves are driven here rather than asserted separately.
       expect(
         (await app.call('DELETE', `/api/v1/tasks/${task.body.taskId}`, undefined, admin)).status,
       ).toBe(204)
+      // …and THAT is where the history goes: the same teardown, run by the call that meant it.
+      expect(await app.executionRepository().get(workspace.id, 'exec_in_flight')).toBeNull()
       const deleted = await app.call('DELETE', `/api/v1/services/${serviceId}`, undefined, admin)
       expect(deleted.status).toBe(204)
 
@@ -178,7 +208,10 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       ).toBe(403)
     })
   })
+}
 
+/** The ordering edges between two tasks, which converge rather than toggle. */
+function defineTaskDependencies(harness: ConformanceHarness): void {
   describe('public API: task dependencies', () => {
     it('declares an ordering, reads it back, and converges on a repeat', async () => {
       const app = harness.makeApp()
@@ -304,7 +337,10 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       expect(reread.body.autoStartDependents).toBe(true)
     })
   })
+}
 
+/** Specs attached to a task that already exists. */
+function defineTaskDocuments(harness: ConformanceHarness): void {
   describe('public API: a task’s documents after it exists', () => {
     it('attaches, lists and detaches a spec that arrived after the task', async () => {
       // Before this, editing a task's corpus headlessly meant deleting the task and filing it

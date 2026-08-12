@@ -178,10 +178,13 @@ export function resumeInvocation(runId: string, flavour: ShellFlavour = shellFla
  * deletes service frames, tasks and run history on a board somebody may share, so the reading an
  * operator does before the deletion is part of the design rather than caution (see `reset.ts`).
  *
- * Not a shell-dialect question at all, unlike {@link resumeInvocation}: no variable is being set, so
- * the same text works in every shell. It lives here anyway because it is a pasteable command, and
- * the one thing this module owns completely is that a command is spelled in ONE place: the reset is
- * named by two prerequisite remedies, the README and the command's own output.
+ * No variable is being set, unlike {@link resumeInvocation}, so the command needs no dialect of its
+ * own until a value goes into it. A run id is a FILE NAME and a hand-named pass is supported
+ * ('friday-rerun' is `passFiles.ts`'s own example), so one holding a space renders a command whose
+ * own parser refuses it ("'friday' and 'rerun' both name a pass") and one holding a quote breaks
+ * the pasted line outright. So an id that is not a plain word is QUOTED, for the shell the operator
+ * is holding; an ordinary one is printed bare, because a minted id is a timestamp and a remedy that
+ * quotes what needs no quoting reads as a command with something odd about it.
  *
  * A NAMED pass widens what is cleared to whatever that pass's ledger holds, which is the form worth
  * printing beside a resume: the two are the same decision (continue this pass, or clear it) and an
@@ -194,13 +197,19 @@ export function resumeInvocation(runId: string, flavour: ShellFlavour = shellFla
  */
 export function resetInvocation(
   options: { runId?: string; all?: boolean; apply?: boolean } = {},
+  flavour: ShellFlavour = shellFlavour(),
 ): string {
   return [
     RESET_INVOCATION,
-    ...(options.runId ? [options.runId] : []),
+    ...(options.runId ? [asOneWord(options.runId, flavour)] : []),
     ...(options.all ? ['--all'] : []),
     ...(options.apply ? ['--yes'] : []),
   ].join(' ')
+}
+
+/** A value that is already ONE shell word, or the dialect's quoting of one that is not. */
+function asOneWord(value: string, flavour: ShellFlavour): string {
+  return /^[\w.-]+$/.test(value) ? value : DIALECTS[flavour].literal(value)
 }
 
 /**

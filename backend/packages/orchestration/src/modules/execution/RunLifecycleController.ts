@@ -710,12 +710,24 @@ export class RunLifecycleController {
    * orphans a container or a Workflows instance. Best-effort and silent: the board
    * delete that follows emits the coarse refresh, so no per-run event is needed.
    *
-   * Returns the workspace block list it loaded so the immediately-following `removeBlock`
+   * Returns the workspace block list it used so the immediately-following `removeBlock`
    * can reuse it instead of re-listing the whole board (this teardown deletes only run
    * records, never blocks, so the list is still current) — see {@link PreloadedBlocks}.
+   *
+   * `opts.preloaded` is the same reuse in the other direction: the delete path's preflight
+   * (`BoardService.assertRemovable`, which must run BEFORE anything here is torn down) has
+   * already listed the board, so the whole sequence still costs ONE read. Reused only when it
+   * was loaded for the workspace being torn down, exactly as `removeBlock` reuses it.
    */
-  async teardownForBlockTree(workspaceId: string, rootId: string): Promise<PreloadedBlocks> {
-    const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
+  async teardownForBlockTree(
+    workspaceId: string,
+    rootId: string,
+    opts: { preloaded?: PreloadedBlocks } = {},
+  ): Promise<PreloadedBlocks> {
+    const blocks =
+      opts.preloaded && opts.preloaded.workspaceId === workspaceId
+        ? opts.preloaded.blocks
+        : await this.deps.blockRepository.listByWorkspace(workspaceId)
     // Resolve every run in one query and index by block id, rather than a per-block
     // getByBlock (N+1) over the whole subtree.
     const runsByBlock = new Map(
