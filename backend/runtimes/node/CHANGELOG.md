@@ -1,5 +1,28 @@
 # @cat-factory/node-server
 
+## 0.201.2
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+  - @cat-factory/agents@0.126.8
+  - @cat-factory/caching@0.20.8
+  - @cat-factory/consensus@0.16.8
+  - @cat-factory/eks@0.1.312
+  - @cat-factory/gates@0.10.39
+  - @cat-factory/gitlab@0.20.9
+  - @cat-factory/integrations@0.160.6
+  - @cat-factory/observability-langfuse@0.10.83
+  - @cat-factory/observability-otel@0.19.3
+  - @cat-factory/orchestration@0.263.2
+  - @cat-factory/prompt-fragments@1.0.63
+  - @cat-factory/provider-bedrock@0.7.460
+  - @cat-factory/provider-cloudflare@0.7.461
+  - @cat-factory/provider-s3@0.2.380
+  - @cat-factory/server@0.278.2
+  - @cat-factory/spend@0.15.81
+
 ## 0.201.1
 
 ### Patch Changes

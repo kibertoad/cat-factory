@@ -1,5 +1,13 @@
 # @cat-factory/acceptance
 
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+  - @cat-factory/cli@0.12.0
+
 ## 0.1.10
 
 ### Patch Changes
