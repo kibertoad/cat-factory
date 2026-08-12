@@ -1266,7 +1266,10 @@ const { toggleArchive, toggleDefault, edit, removePipeline, clone } = usePipelin
                 >
                   <!-- The two DEFAULT claims, advanced-tier (see `toggleDefault`). An archived
                          pipeline is not offered either: the backend refuses a hidden row as a
-                         default, and a control that can only fail is worse than no control. -->
+                         default, and a control that can only fail is worse than no control. Safe
+                         to hide rather than a way to strand a claim, because the same rule refuses
+                         ARCHIVING a row that still holds one: a hidden row never holds a default,
+                         so there is never one here to release. -->
                   <template v-if="uiMode.isAdvanced && !p.archived && !p.internal">
                     <UButton
                       :icon="p.isDefault ? 'i-lucide-star' : 'i-lucide-star-off'"

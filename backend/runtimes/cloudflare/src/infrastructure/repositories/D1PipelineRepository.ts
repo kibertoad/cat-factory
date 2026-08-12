@@ -132,20 +132,25 @@ export class D1PipelineRepository implements PipelineRepository {
     claimed: boolean,
   ): Promise<void> {
     const column = PIPELINE_DEFAULT_COLUMN[scope]
-    // ONE `batch`, which D1 runs as a single implicit transaction, mirroring the Drizzle
-    // repository's explicit `db.transaction`: a demote that committed before a failed promote would
-    // leave the scope with no holder at all, which is a state no caller asked for. The demote drops
-    // EVERY holder rather than the one row that should be there, which is what heals a workspace
-    // whose rows predate the partial unique index.
-    const demote = this.db
-      .prepare(`UPDATE pipelines SET ${column} = NULL WHERE workspace_id = ? AND ${column} = 1`)
-      .bind(workspaceId)
     if (!claimed) {
-      await demote.run()
+      // A RELEASE names one row and clears that row only. Widening it to every holder would make
+      // releasing a flag this row does not hold clear the row that DOES — the port's "no-op" turned
+      // into a silent repoint of what every headless start resolves.
+      await this.db
+        .prepare(`UPDATE pipelines SET ${column} = NULL WHERE workspace_id = ? AND id = ?`)
+        .bind(workspaceId, id)
+        .run()
       return
     }
+    // ONE `batch`, which D1 runs as a single implicit transaction, mirroring the Drizzle
+    // repository's explicit `db.transaction`: a demote that committed before a failed promote would
+    // leave the scope with no holder at all, which is a state no caller asked for. The PROMOTE's
+    // demote drops EVERY holder rather than the incumbent alone, which is what heals a workspace
+    // whose rows predate the partial unique index.
     await this.db.batch([
-      demote,
+      this.db
+        .prepare(`UPDATE pipelines SET ${column} = NULL WHERE workspace_id = ? AND ${column} = 1`)
+        .bind(workspaceId),
       this.db
         .prepare(`UPDATE pipelines SET ${column} = 1 WHERE workspace_id = ? AND id = ?`)
         .bind(workspaceId, id),

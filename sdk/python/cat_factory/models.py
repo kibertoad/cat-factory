@@ -9492,6 +9492,8 @@ class PublicPipelineList:
     """`PublicPipelineList`, as carried on the wire."""
 
     pipelines: list[PublicPipeline]
+    #: Always present; ``None`` when the server has no value for it.
+    unattended_default_pipeline_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -9501,9 +9503,10 @@ class PublicPipelineList:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPipelineList":
         """Decode a `PublicPipelineList` from its JSON object."""
-        known = {"pipelines"}
+        known = {"pipelines", "unattendedDefaultPipelineId"}
         return cls(
             pipelines=[PublicPipeline.from_dict(item) for item in data.get("pipelines") or []],
+            unattended_default_pipeline_id=data.get("unattendedDefaultPipelineId"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -9511,6 +9514,7 @@ class PublicPipelineList:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["pipelines"] = [_encode(item) for item in self.pipelines]
+        out["unattendedDefaultPipelineId"] = self.unattended_default_pipeline_id
         return out
 
 

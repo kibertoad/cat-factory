@@ -295,8 +295,10 @@ export type RequirementRecommendation = v.InferOutput<typeof requirementRecommen
  *   - it was answered by an AUTO recommendation whose reported confidence clears `floor`, which is
  *     only ever the group the reviewer itself judged answerable without a product owner.
  *
- * Anything else — an open finding, one awaiting a recommendation, one auto-answered at or below the
- * floor — means a person is still needed, and the run parks exactly as it always did. ADR 0053 put
+ * Anything else (an open finding, one awaiting a recommendation, one auto-answered BELOW the floor)
+ * means a person is still needed, and the run parks exactly as it always did. The floor itself
+ * clears (see {@link clearsAutoAnswerFloor}): an operator naming `0.8` is naming the grade they
+ * accept, not the first one above it. ADR 0053 put
  * it as the rule this function has to keep: inventing a product judgement is the one thing an
  * unattended policy may never do. The narrowing that makes this compatible with it is that the
  * reviewer sorted its own findings into two groups first, and this only ever looks at one of them.

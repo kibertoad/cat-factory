@@ -771,20 +771,38 @@ export const publicPipelineSchema = v.object({
    */
   headlessStartable: v.boolean(),
   /**
-   * Whether this pipeline is the workspace's DEFAULT for a run nothing is watching — what
-   * `POST /tasks/:taskId/start` runs when neither the call nor the task names one.
+   * Whether THIS row is what `POST /tasks/:taskId/start` runs for your key when neither the call
+   * nor the task names a pipeline. The same answer as {@link publicPipelineListSchema}'s
+   * `unattendedDefaultPipelineId`, matched against this row.
    *
-   * Exposed because the alternative is a caller unable to find out what an empty start body does:
-   * omitting `pipelineId` is the ordinary way to use that route, and "whatever the workspace
-   * decided" is only a usable contract if the decision is readable. At most one row carries it, and
-   * none does on a workspace that released it (the start call then refuses with
-   * `pipeline_required`).
+   * At most one row carries it, and NO row does in two cases that read alike here and differ
+   * entirely: the workspace released its default (the start call then refuses with
+   * `pipeline_required`), or the default resolves to a rung this list does not carry. Read the
+   * list-level field to tell them apart.
    */
   unattendedDefault: v.boolean(),
 })
 export type PublicPipeline = v.InferOutput<typeof publicPipelineSchema>
 
-export const publicPipelineListSchema = v.object({ pipelines: v.array(publicPipelineSchema) })
+export const publicPipelineListSchema = v.object({
+  pipelines: v.array(publicPipelineSchema),
+  /**
+   * The pipeline `POST /tasks/:taskId/start` runs for your key when neither the call nor the task
+   * names one, or `null` when that call would refuse with `pipeline_required`.
+   *
+   * Exposed because the alternative is a caller unable to find out what an empty start body does:
+   * omitting `pipelineId` is the ordinary way to use that route, and "whatever the workspace
+   * decided" is only a usable contract if the decision is readable. Stated at the LIST level rather
+   * than only as a per-row flag because the resolution has a rung the list cannot show: a workspace
+   * that never adopted the catalog's declared rung still resolves it (and adopts it on that first
+   * start), so every row would report `false` while empty start bodies kept working.
+   *
+   * Answered for the key that asked. A key below the `decide` scope cannot answer the human doors
+   * the seeded rung reaches, so no default is offered to it and this reads `null`: the same rule the
+   * start route applies, from the same resolution, so the two can never disagree.
+   */
+  unattendedDefaultPipelineId: v.nullable(v.string()),
+})
 export type PublicPipelineList = v.InferOutput<typeof publicPipelineListSchema>
 
 // ---------------------------------------------------------------------------

@@ -40,9 +40,14 @@ function pipelineRepo(store = new Map<string, Pipeline>()): PipelineRepository {
     update: async (_ws, p) => void store.set(p.id, p),
     setDefault: async (_ws, id, scope, claimed) => {
       const field = scope === 'unattended' ? 'isUnattendedDefault' : 'isDefault'
-      for (const [key, row] of store) store.set(key, { ...row, [field]: undefined })
       const target = store.get(id)
-      if (claimed && target) store.set(id, { ...target, [field]: true })
+      if (!target) return
+      // A RELEASE clears the named row only; a PROMOTE demotes every incumbent first. Both stores
+      // draw that line, and a fake that demoted on the release too would hide the very bug the
+      // conformance suite pins (releasing a flag one row does not hold clearing the row that does).
+      if (!claimed) return void store.set(id, { ...target, [field]: undefined })
+      for (const [key, row] of store) store.set(key, { ...row, [field]: undefined })
+      store.set(id, { ...target, [field]: true })
     },
     delete: async (_ws, id) => void store.delete(id),
   }
@@ -765,5 +770,123 @@ describe('PipelineService — the per-scope default pipeline', () => {
     const organized = await svc.organize(WS, 'pl_a', { labels: ['x'] })
     expect(organized.labels).toEqual(['x'])
     expect(await svc.defaultPipelineIdForScope(WS, 'interactive')).toBe('pl_a')
+  })
+})
+
+describe('PipelineService — an archived pipeline may never keep a default claim', () => {
+  function service(store: Map<string, Pipeline>) {
+    return new PipelineService({
+      workspaceRepository: workspaceRepo(),
+      pipelineRepository: pipelineRepo(store),
+      idGenerator,
+    } as PipelineServiceDependencies)
+  }
+
+  function stored(id: string, over: Partial<Pipeline> = {}): Pipeline {
+    return { id, name: id, purpose: 'build', agentKinds: ['coder'], ...over } as Pipeline
+  }
+
+  // The rule was enforced only on the way IN. Archiving a holder left the claim standing on a row
+  // the library hides and the builder offers no release control for, so it went on answering every
+  // headless start with nothing an operator could see or change.
+  it('refuses to archive a row that still holds a claim', async () => {
+    const store = new Map<string, Pipeline>([
+      ['pl_a', stored('pl_a', { isUnattendedDefault: true })],
+    ])
+    const svc = service(store)
+    await expect(svc.organize(WS, 'pl_a', { archived: true })).rejects.toThrow(ValidationError)
+    expect(await svc.defaultPipelineIdForScope(WS, 'unattended')).toBe('pl_a')
+  })
+
+  // Refused BEFORE the row write: judged afterwards, this answered 422 with the archive already
+  // applied, which is a refusal that did half the work it refused.
+  it('leaves the archive unapplied when it refuses', async () => {
+    const store = new Map<string, Pipeline>([
+      ['pl_a', stored('pl_a', { isUnattendedDefault: true })],
+    ])
+    await expect(service(store).organize(WS, 'pl_a', { archived: true })).rejects.toThrow(
+      ValidationError,
+    )
+    expect(store.get('pl_a')?.archived).toBeFalsy()
+  })
+
+  it('leaves nothing applied when a promotion that archives is refused', async () => {
+    const store = new Map<string, Pipeline>([['pl_a', stored('pl_a')]])
+    await expect(
+      service(store).organize(WS, 'pl_a', { archived: true, isDefault: true }),
+    ).rejects.toThrow(ValidationError)
+    expect(store.get('pl_a')?.archived).toBeFalsy()
+  })
+
+  // Releasing the claim in the same request is the way through, which is what the refusal names.
+  it('archives a holder that releases the claim in the same request', async () => {
+    const store = new Map<string, Pipeline>([
+      ['pl_a', stored('pl_a', { isUnattendedDefault: true })],
+    ])
+    const svc = service(store)
+    const organized = await svc.organize(WS, 'pl_a', { archived: true, isUnattendedDefault: false })
+    expect(organized.archived).toBe(true)
+    expect(organized.isUnattendedDefault).toBeFalsy()
+  })
+
+  it('un-archives a row that holds nothing, and archives a plain one', async () => {
+    const store = new Map<string, Pipeline>([
+      ['pl_a', stored('pl_a', { archived: true })],
+      ['pl_b', stored('pl_b')],
+    ])
+    const svc = service(store)
+    await expect(svc.organize(WS, 'pl_a', { archived: false })).resolves.toBeDefined()
+    await expect(svc.organize(WS, 'pl_b', { archived: true })).resolves.toBeDefined()
+  })
+})
+
+describe('PipelineService — reseeding a rung the workspace never held', () => {
+  const UNATTENDED_ID = 'pl_unattended'
+
+  function service(store: Map<string, Pipeline>) {
+    return new PipelineService({
+      workspaceRepository: workspaceRepo(),
+      pipelineRepository: pipelineRepo(store),
+      idGenerator,
+    } as PipelineServiceDependencies)
+  }
+
+  function stored(id: string, over: Partial<Pipeline> = {}): Pipeline {
+    return { id, name: id, purpose: 'build', agentKinds: ['coder'], ...over } as Pipeline
+  }
+
+  // Materialising the catalog's declared rung into a workspace that has NEVER answered the scope
+  // carries the claim, or `defaultPipelineIdForScope` would stop consulting the catalog and the
+  // board would silently lose the default it had been running on.
+  it('carries the catalog claim into a workspace that declared none', async () => {
+    const store = new Map<string, Pipeline>()
+    const svc = service(store)
+    const reseeded = await svc.reseed(WS, UNATTENDED_ID)
+    expect(reseeded.isUnattendedDefault).toBe(true)
+    expect(await svc.defaultPipelineIdForScope(WS, 'unattended')).toBe(UNATTENDED_ID)
+  })
+
+  // And drops it where the workspace HAS answered: the seed's claim would both overrule an operator
+  // and violate the partial unique index, which the composite-key `ON CONFLICT` does not cover.
+  it('drops the catalog claim where the workspace already declared a holder', async () => {
+    const store = new Map<string, Pipeline>([
+      ['pl_mine', stored('pl_mine', { isUnattendedDefault: true })],
+    ])
+    const svc = service(store)
+    const reseeded = await svc.reseed(WS, UNATTENDED_ID)
+    expect(reseeded.isUnattendedDefault).toBeFalsy()
+    expect(await svc.defaultPipelineIdForScope(WS, 'unattended')).toBe('pl_mine')
+  })
+
+  // Reseeding a rung the workspace DOES hold states what the store holds, never what the catalog
+  // declares: `update` does not write the flags, so re-announcing the seed's claim on a rung an
+  // operator released would be a value nothing wrote.
+  it('reports the stored claim when the row already exists', async () => {
+    const store = new Map<string, Pipeline>([
+      [UNATTENDED_ID, stored(UNATTENDED_ID, { builtin: true, isUnattendedDefault: undefined })],
+    ])
+    const svc = service(store)
+    expect((await svc.reseed(WS, UNATTENDED_ID)).isUnattendedDefault).toBeFalsy()
+    expect(await svc.defaultPipelineIdForScope(WS, 'unattended')).toBeNull()
   })
 })

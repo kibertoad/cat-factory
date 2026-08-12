@@ -508,7 +508,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: true,
     description: 'List the workspace\'s pipelines\n\nList the pipelines in the key’s workspace — id/name/steps plus whether each is public and safe to run headlessly — so a caller can pick a pipelineId to start a task with.\n\nCalls `GET /api/v1/pipelines` (operation `listPublicPipelines`).',
     inputSchema: {"type":"object","properties":{},"additionalProperties":false},
-    outputSchema: {"type":"object","properties":{"pipelines":{"type":"array","items":{"type":"object","properties":{"headlessStartable":{"type":"boolean"},"name":{"type":"string"},"pipelineId":{"type":"string"},"public":{"type":"boolean"},"steps":{"type":"array","items":{"type":"string"}},"unattendedDefault":{"type":"boolean"}}}}}},
+    outputSchema: {"type":"object","properties":{"pipelines":{"type":"array","items":{"type":"object","properties":{"headlessStartable":{"type":"boolean"},"name":{"type":"string"},"pipelineId":{"type":"string"},"public":{"type":"boolean"},"steps":{"type":"array","items":{"type":"string"}},"unattendedDefault":{"type":"boolean"}}}},"unattendedDefaultPipelineId":{"anyOf":[{"type":"string"},{"type":"null"}]}}},
     invoke: (client, args) => client.pipelines.list(),
   },
   {

@@ -4198,6 +4198,8 @@ type PublicPipeline struct {
 // PublicPipelineList is the `PublicPipelineList` wire model.
 type PublicPipelineList struct {
 	Pipelines []PublicPipeline `json:"pipelines"`
+	// UnattendedDefaultPipelineID always present; nil when the server has no value for it.
+	UnattendedDefaultPipelineID *string `json:"unattendedDefaultPipelineId"`
 }
 
 // PublicPrReviewDecision is the `PublicPrReviewDecision` wire model.

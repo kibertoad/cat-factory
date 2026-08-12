@@ -64,8 +64,11 @@ must agree before anything is folded.
 **Under `attended`, nothing about the review changes.** A suggestion there is a draft a person is
 about to read, so grading it changes nothing about who decides.
 
-Two `/api/v1` additions (`pipelineId` on task creation, `unattendedDefault` on `GET /pipelines`),
-OpenAPI `1.50.0`, plus one behaviour change worth reading before upgrading: `POST
+Two `/api/v1` additions (`pipelineId` on task creation, and on `GET /pipelines` both a per-row
+`unattendedDefault` and the list-level `unattendedDefaultPipelineId` that is the one to read: the
+resolution has a rung the list cannot show, so a per-row flag alone reports `false` everywhere on a
+workspace whose empty start bodies work). OpenAPI `1.50.0`, plus one behaviour change worth reading
+before upgrading: `POST
 /tasks/:taskId/start` with an empty body now STARTS a run for a key that satisfies `decide`, where it
 used to answer `400 pipeline_required`. A `write` key sees no change, deliberately — the seeded rung
 reaches a human test and a human PR review, so offering it to a caller that cannot answer a park

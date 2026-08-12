@@ -58,6 +58,31 @@ The write door is `organizePipelineSchema` — the body that already carries lab
 flag, and the only pipeline write a BUILT-IN accepts. That is not a convenience: the two rungs a
 workspace most wants as defaults are built-ins, and a default is selection metadata, not structure.
 
+**A claim is written by `setDefault` and by nothing else, and the two directions are not the same
+statement.** A PROMOTE demotes every holder of that scope before claiming, which is also what heals a
+workspace whose rows predate the partial unique index. A RELEASE names one row and clears that row
+only. Sharing the promote's demote with the release reads as a tidy simplification and is a silent
+repoint: releasing a flag a row does not hold would clear whichever row actually answers every
+headless start. Nothing else writes the columns, so `update` (an edit, a reseed) cannot un-promote a
+rung an operator chose, and a rebuilt catalog row states what the STORE holds rather than what the
+catalog declares.
+
+**An ARCHIVED or INTERNAL row may never hold a claim, and that is an invariant rather than an
+entry check.** Archiving hides a rung from the library and `internal` withholds one, so either
+answering every headless start is the concealed-setting failure: a default nobody can see in the
+place they would go to change it. Enforced against the row a request WOULD leave behind and against
+the claims it would leave held, so both ways in are refused (promoting a hidden row, and hiding a
+holder), field order in the body never changes the answer, and releasing the claim in the same
+request is the way to archive a holder. Refused BEFORE the row write: judged after it, `{ archived:
+true, isDefault: true }` answered 422 with the archive already applied.
+
+**The catalog's own claim survives an ADOPTION only where the workspace has not answered the
+scope.** The first copy of a catalog rung has to carry the claim, or the ladder below stops
+consulting the catalog and a board silently loses the default it had been running on between its
+first headless start and its second. It equally may not carry it where the workspace declared its own
+holder: that is an override nobody asked for, and a partial-unique-index violation the row-scoped
+`ON CONFLICT` does not swallow, on a plain reseed or on a run that merely PINS the rung.
+
 **Only the UNATTENDED scope is seeded.** The interactive scope ships with no flagged row, so its
 resolution is byte-for-byte what it is today (the interface-mode rung, then catalog order) and a
 declared default outranks that when an operator sets one. The asymmetry is the point: the in-app
@@ -167,8 +192,14 @@ the door that has a picker.
   `1.50.0`; see `public-api-versions.md` for what a caller that used the 400 as a validation probe
   should read instead.
 - `PipelineRepository` gains `setDefault`, mirrored D1 ⇄ Drizzle with a partial unique index on each
-  facade and a run-level conformance assertion: one holder per scope, the scopes independent, and a
-  release leaving the scope genuinely empty (which, unlike the risk-policy library, is a legal state).
+  facade and a run-level conformance assertion: one holder per scope, the scopes independent, a
+  release leaving the scope genuinely empty (which, unlike the risk-policy library, is a legal state),
+  and a release on a NON-holder leaving the holder alone.
+- `GET /api/v1/pipelines` answers what an empty start body runs at the LIST level
+  (`unattendedDefaultPipelineId`) as well as per row, because the resolution has a rung the list
+  cannot show. Both come from the one function the start route resolves through, so a report and a
+  start can never disagree, and both are answered for the KEY that asked (below `decide`, no default
+  is offered and none is reported).
 - `riskPolicyDefaultScopeFor` → `runDefaultScopeFor`, and its vocabulary moves from `merge.ts` to
   `run-provenance.ts`. Internal rename, no wire change.
 - A FIFTH thing an unattended policy may decide has to answer the test ADR 0053 opened with, plus one

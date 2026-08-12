@@ -873,3 +873,123 @@ describe('ReviewGateController — the QUESTIONS an unattended run answers for i
     expect(k.kind.incorporate).not.toHaveBeenCalled()
   })
 })
+
+describe('ReviewGateController — settling a SECOND batch of practice-level findings', () => {
+  const UNATTENDED: ReviewPreset = {
+    maxRequirementIterations: 3,
+    maxRequirementConcernAllowed: 'none',
+    autonomy: 'unattended',
+    minAutoAnswerConfidence: 0.8,
+  }
+
+  function graded(id: string, confidence: number) {
+    return {
+      item: { id, status: 'answered', reply: `answer for ${id}`, title: id, detail: 'd' },
+      rec: {
+        auto: true,
+        status: 'accepted',
+        sourceFinding: { title: id, detail: 'd', itemId: id },
+        confidence,
+      },
+    }
+  }
+
+  // The loop's whole reason to exist is a re-review that surfaces a FRESH batch of practice-level
+  // findings, and the order of operations is what nearly killed it: `reReview` returns its snapshot,
+  // and only then does the Writer's auto-recommendation pass grade the new findings on the row. A
+  // cycle that re-checked the pre-grading snapshot saw every fresh finding as ungraded, cleared no
+  // floor, and parked the run on exactly the batch it had just proved it could settle.
+  it('re-reads after the auto-recommendation pass, so cycle 2 sees the grades', async () => {
+    const deps = fakeDeps({ resolveRiskPolicy: vi.fn(async () => UNATTENDED) })
+    const ctrl = new ReviewGateController(deps)
+    const k = fakeKind()
+    const first = graded('itm_1', 0.9)
+    const second = graded('itm_2', 0.9)
+    k.set(review({ status: 'ready', items: [first.item], recommendations: [first.rec] } as never))
+
+    let passes = 0
+    // The reviewer's own snapshot: the fresh finding is still OPEN and carries no suggestion, which
+    // is the only state it can be in before the Writer has run against it.
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      passes += 1
+      const next =
+        passes === 1
+          ? review({
+              status: 'ready',
+              items: [{ id: 'itm_2', status: 'open', title: 'itm_2', detail: 'd' }],
+              iteration: 2,
+            } as never)
+          : review({ status: 'incorporated', iteration: 3 } as never)
+      k.set(next)
+      return next
+    })
+    // The Writer's pass: it answers every open finding the reviewer marked answerable and grades
+    // each answer, rewriting the persisted row the reviewer's snapshot was taken from.
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      if (passes !== 1) return
+      k.set(
+        review({
+          status: 'ready',
+          items: [second.item],
+          recommendations: [second.rec],
+          iteration: 2,
+        } as never),
+      )
+    })
+
+    const s = step()
+    const inst = instance([s, step({ agentKind: 'architect' })])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'continue' })
+    // TWO folds: the second is the batch that used to park the run.
+    expect(k.kind.incorporate).toHaveBeenCalledTimes(2)
+    expect(deps.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+    expect(s.autoAnsweredByPolicy).toBe(true)
+  })
+
+  // The re-read must not turn a genuine park into a fold: when the Writer leaves the fresh batch
+  // ungraded (a garbled reply, an outage), the reloaded row still shows no grade and the run parks.
+  it('still parks when the auto-recommendation pass grades nothing', async () => {
+    const deps = fakeDeps({ resolveRiskPolicy: vi.fn(async () => UNATTENDED) })
+    const ctrl = new ReviewGateController(deps)
+    const k = fakeKind()
+    const first = graded('itm_1', 0.9)
+    k.set(review({ status: 'ready', items: [first.item], recommendations: [first.rec] } as never))
+    let reviewed = false
+    ;(k.kind.reReview as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      reviewed = true
+      const next = review({
+        status: 'ready',
+        items: [{ id: 'itm_2', status: 'open', title: 'itm_2', detail: 'd' }],
+        iteration: 2,
+      } as never)
+      k.set(next)
+      return next
+    })
+    // An UNGRADED suggestion clears no floor above zero, so a garbled Writer reply parks the run.
+    ;(k.kind.autoRecommend as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      if (!reviewed) return
+      k.set(
+        review({
+          status: 'ready',
+          items: [{ id: 'itm_2', status: 'answered', reply: 'a', title: 'itm_2', detail: 'd' }],
+          recommendations: [
+            {
+              auto: true,
+              status: 'accepted',
+              sourceFinding: { title: 'itm_2', detail: 'd', itemId: 'itm_2' },
+              confidence: null,
+            },
+          ],
+          iteration: 2,
+        } as never),
+      )
+    })
+
+    const s = step()
+    const inst = instance([s])
+    const result = await ctrl.evaluate(k.kind, 'ws', inst, s, BLOCK, false)
+    expect(result).toEqual({ kind: 'awaiting_decision', decisionId: 'appr_1' })
+    expect(k.kind.incorporate).toHaveBeenCalledTimes(1)
+  })
+})

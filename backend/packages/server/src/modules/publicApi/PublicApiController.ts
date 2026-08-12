@@ -16,14 +16,12 @@ import {
   listPublicServiceTasksContract,
   listPublicServicesContract,
   retryPublicTaskContract,
-  runDefaultScopeFor,
   startPublicTaskContract,
   stopPublicTaskContract,
   UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
   updatePublicTaskContract,
   type ExecutionInstance,
   type PublicJob,
-  type PublicPipeline,
   type PublicApiScope,
   type PublicRun,
 } from '@cat-factory/contracts'
@@ -50,19 +48,22 @@ import {
   unlockIsUnavailable,
 } from './personalUnlock.js'
 import { headlessActRefusal, notificationActEffect } from '../notifications/notificationActions.js'
-import type { AppEnv, ServerContainer } from '../../http/env.js'
+import type { AppEnv } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { keyInitiatorRole } from '../../http/runAdmission.js'
 import { authorize } from './publicApiAuth.js'
+import {
+  startPipelineIdFor,
+  toPublicPipeline,
+  unattendedDefaultPipelineIdFor,
+} from './pipelineSelection.js'
 import { toPublicService, toPublicTask } from './boardProjection.js'
 import { createTaskWithAttachments, taskCreationDeps } from './taskCreation.js'
 import { resolveTaskTypeFieldsPatch } from './taskTypeFields.js'
 import {
   type AdmissiblePipelineShape,
-  type AdmissionRegistries,
   admissionRegistries,
   publicRunParkSurfaces,
-  isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
   parkingRefusalMessage,
   PUBLIC_JOB_CANCEL_PATH,
@@ -212,67 +213,6 @@ function toPublicRun(
           ? { code: execution.failure.kind, message: execution.failure.message }
           : { code: 'run_failed', message: 'The run failed' }
         : null,
-  }
-}
-
-/**
- * The pipeline a headless START runs: the request's, else the task's pinned pipeline, else the
- * workspace's default for a run NOTHING IS WATCHING (`runDefaultScopeFor('public-api')`). `null`
- * when the workspace declares none of the three, which is this surface's documented
- * `pipeline_required` refusal — a caller here has no run-time picker, so inventing a rung for it
- * would run work nobody chose — and `null` for a `write` key whatever the workspace declares (see
- * the scope check below).
- *
- * The scope rung is what makes the headless door land on a headless-shaped pipeline rather than on
- * whatever an in-app board happens to default to: the seeded `pl_unattended` holds no requirements
- * conversation and reaches its human doors only by measured risk. Resolved HERE rather than inside
- * `ExecutionService.start`, so the refusal stays with the surface that documents it.
- */
-async function startPipelineIdFor(
-  container: ServerContainer,
-  auth: { workspaceId: string; scope: PublicApiScope },
-  named: { requested?: string | undefined; pinned?: string | undefined },
-): Promise<string | null> {
-  if (named.requested) return named.requested
-  if (named.pinned) return named.pinned
-  // A default the CALLER could not answer is not a usable default for that caller. The seeded rung
-  // reaches a human test and a human PR review on a risky task, which `unanswerableParkRefusal`
-  // rightly withholds from a plain `write` key — so resolving it here would trade this surface's
-  // actionable "pass a pipelineId" for a 403 about a pipeline the caller never picked. A `write`
-  // key therefore keeps exactly its previous behaviour, and only a `decide` key gains the fallback.
-  if (!scopeSatisfies(auth.scope, 'decide')) return null
-  return container.pipelineService.defaultPipelineIdForScope(
-    auth.workspaceId,
-    runDefaultScopeFor('public-api'),
-  )
-}
-
-/**
- * Project an internal pipeline onto the external pipeline resource: its id/name, the enabled
- * step chain (in order), the two headless-relevant flags a caller needs to choose a `pipelineId`
- * for `start` — `public` (job-startable via `POST /jobs`) and `headlessStartable` (safe to run with
- * no interactive user) — and whether it is what an empty start body resolves. Archived pipelines
- * are filtered out by the caller.
- */
-function toPublicPipeline(
-  pipeline: {
-    id: string
-    name: string
-    agentKinds: string[]
-    enabled?: boolean[]
-    gates?: boolean[]
-    public?: boolean
-    isUnattendedDefault?: boolean
-  },
-  registries: AdmissionRegistries,
-): PublicPipeline {
-  return {
-    pipelineId: pipeline.id,
-    name: pipeline.name,
-    steps: pipeline.agentKinds.filter((_, i) => pipeline.enabled?.[i] !== false),
-    public: pipeline.public === true,
-    headlessStartable: isHeadlessInlinePipeline(pipeline, registries),
-    unattendedDefault: pipeline.isUnattendedDefault === true,
   }
 }
 
@@ -1311,11 +1251,18 @@ function registerPipelineRoutes(app: Hono<AppEnv>): void {
     }
     const container = c.get('container')
     const pipelines = await container.pipelineService.list(gate.auth.workspaceId)
+    // Resolved ONCE for the whole listing, and reported in its own right: the rung an empty start
+    // body runs need not be a row this list carries (the catalog rung a workspace never adopted is
+    // exactly that case), so a per-row flag alone cannot state the answer.
+    const unattendedDefaultPipelineId = await unattendedDefaultPipelineIdFor(container, gate.auth)
     return c.json(
       {
         pipelines: pipelines
           .filter((p) => !p.archived)
-          .map((p) => toPublicPipeline(p, admissionRegistries(container))),
+          .map((p) =>
+            toPublicPipeline(p, admissionRegistries(container), unattendedDefaultPipelineId),
+          ),
+        unattendedDefaultPipelineId,
       },
       200,
     )

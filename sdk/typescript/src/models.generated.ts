@@ -2292,6 +2292,8 @@ export interface PublicPipeline {
 
 export interface PublicPipelineList {
   pipelines: PublicPipeline[]
+  /** Always present; `null` when the server has no value for it. */
+  unattendedDefaultPipelineId: string | null
 }
 
 export interface PublicPrReviewDecision {

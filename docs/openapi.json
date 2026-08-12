@@ -3845,10 +3845,21 @@
               "$ref": "#/components/schemas/PublicPipeline"
             },
             "type": "array"
+          },
+          "unattendedDefaultPipelineId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "pipelines"
+          "pipelines",
+          "unattendedDefaultPipelineId"
         ],
         "type": "object"
       },

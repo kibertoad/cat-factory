@@ -181,15 +181,24 @@ export class DrizzlePipelineRepository implements PipelineRepository {
     claimed: boolean,
   ): Promise<void> {
     const field = PIPELINE_DEFAULT_COLUMN[scope]
+    if (!claimed) {
+      // A RELEASE names one row and clears that row only. Widening it to every holder would make
+      // releasing a flag this row does not hold clear the row that DOES — the port's "no-op" turned
+      // into a silent repoint of what every headless start resolves.
+      await this.db
+        .update(pipelines)
+        .set({ [field]: null })
+        .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, id)))
+      return
+    }
     // Demote + promote in one transaction, so no reader ever sees the scope with no holder (see
-    // the port's contract). The demote drops EVERY holder rather than the one row that should be
-    // there, which is what heals a workspace whose rows predate the partial unique index.
+    // the port's contract). The demote drops EVERY holder rather than the incumbent alone, which is
+    // what heals a workspace whose rows predate the partial unique index.
     await this.db.transaction(async (tx) => {
       await tx
         .update(pipelines)
         .set({ [field]: null })
         .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines[field], 1)))
-      if (!claimed) return
       await tx
         .update(pipelines)
         .set({ [field]: 1 })

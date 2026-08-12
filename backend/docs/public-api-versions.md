@@ -679,10 +679,19 @@ statement about waiting rather than about oversight.
 
 ## 1.50.0
 
-1.50.0, not 1.49.1: two additive fields, one on each side of the pipeline question. `POST
-/api/v1/services/:serviceId/tasks` accepts `pipelineId`, and `GET /api/v1/pipelines` reports
-`unattendedDefault`. No existing field changes meaning, so a consumer built against 1.49.0 keeps
-parsing and keeps behaving unchanged.
+1.50.0, not 1.49.1: additive fields on each side of the pipeline question. `POST
+/api/v1/services/:serviceId/tasks` accepts `pipelineId`, and `GET /api/v1/pipelines` reports both
+`unattendedDefaultPipelineId` (on the list) and a per-row `unattendedDefault`. No existing field
+changes meaning, so a consumer built against 1.49.0 keeps parsing and keeps behaving unchanged.
+
+**Read the LIST-level field, not the per-row flag, to learn what an empty start body runs.** The two
+carry the same answer where the answer is a row this list holds, and they part company where it is
+not: a workspace that has never adopted the catalog's declared rung still resolves it (and adopts it
+on that first start), so every row reports `unattendedDefault: false` while empty start bodies work.
+The per-row flag exists for the ordinary case of marking which listed rung it is; only
+`unattendedDefaultPipelineId` distinguishes "the workspace released its default" (`null`, and the
+start call refuses) from "the default is a rung not in this list". Both are answered for the KEY that
+asked, from the same resolution the start route runs, so a report and a start can never disagree.
 
 One BEHAVIOUR change rides with them, and it turns a refusal into a run rather than the reverse:
 `POST /api/v1/tasks/:taskId/start` with no `pipelineId`, against a task that pinned none, used to

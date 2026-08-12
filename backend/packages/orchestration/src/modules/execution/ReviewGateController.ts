@@ -371,7 +371,8 @@ export class ReviewGateController {
    * operator asking for the ungraded behaviour explicitly.
    *
    * Re-READS rather than taking the caller's snapshot, because the auto-recommendation pass that
-   * runs immediately before it has just rewritten the row this decision is about.
+   * runs immediately before it has just rewritten the row this decision is about. Each cycle's own
+   * snapshot comes from `runIncorporationCycle`, which owes the same guarantee for the same reason.
    *
    * The loop is bounded by the review's OWN pass budget: each cycle spends one reviewer pass, and
    * `disposeReview` turns the last of them into `exceeded`, which `settleCapUnattended` then answers
@@ -596,8 +597,16 @@ export class ReviewGateController {
     await kind.emit(workspaceId, reviewed)
     // A re-review can surface fresh findings; pre-answer the auto-answerable ones just like the
     // first pass, so the human only ever hand-answers the genuine business decisions.
+    //
+    // Re-READ when that pass ran, because it rewrote the very row this returns: `reviewed` was
+    // snapshotted before it, so it shows the fresh findings still OPEN and carrying no grades.
+    // Handing that back reads as "nothing was auto-answerable this round" to every caller, and the
+    // unattended settle loop, whose whole job is to fold a SECOND batch of practice-level findings,
+    // would park on the batch it had just answered.
     if (reviewed.status === 'ready' && autoRecommendEnabled) {
-      await this.maybeAutoRecommend(kind, workspaceId, blockId)
+      if (await this.maybeAutoRecommend(kind, workspaceId, blockId)) {
+        return this.currentReview(kind, workspaceId, blockId)
+      }
     }
     return reviewed
   }
