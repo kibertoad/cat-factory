@@ -1,5 +1,16 @@
 # @cat-factory/server
 
+## 0.278.2
+
+### Patch Changes
+
+- Updated dependencies [7d1477c]
+  - @cat-factory/kernel@0.292.2
+  - @cat-factory/agents@0.126.8
+  - @cat-factory/integrations@0.160.6
+  - @cat-factory/orchestration@0.263.2
+  - @cat-factory/spend@0.15.81
+
 ## 0.278.1
 
 ### Patch Changes
