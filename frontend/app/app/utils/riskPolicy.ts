@@ -1,5 +1,28 @@
-import { WORKSPACE_ROLES } from '@cat-factory/contracts'
+import { RISK_POLICY_NAME_MAX_LENGTH, WORKSPACE_ROLES } from '@cat-factory/contracts'
 import type { RiskPolicy, WorkspaceRole } from '~/types/merge'
+
+/**
+ * The name a CLONE of an inherited policy is created under, guaranteed to satisfy the contract's
+ * length limit.
+ *
+ * The label is composed here because the backend does not localize prose, which puts the contract's
+ * ceiling on this side of the wire too: a source name near the limit plus whatever the locale's
+ * template adds is over it, and the clone action then failed with a 422 against a name the operator
+ * had no field to shorten. The SOURCE name is what gets trimmed rather than the composed string, so
+ * the copy marker (the informative half) always survives.
+ *
+ * `compose` is passed in rather than `t` so this stays a pure function with no i18n dependency.
+ */
+export function riskPolicyCopyName(sourceName: string, compose: (name: string) => string): string {
+  const full = compose(sourceName)
+  if (full.length <= RISK_POLICY_NAME_MAX_LENGTH) return full
+  // What the template itself costs, so the trim leaves room for it rather than guessing.
+  const overhead = full.length - sourceName.length
+  const room = Math.max(1, RISK_POLICY_NAME_MAX_LENGTH - overhead)
+  // The final slice is the backstop for a template long enough to blow the budget on its own,
+  // where no source name would fit: better a truncated label than an action that cannot be used.
+  return compose(sourceName.slice(0, room).trimEnd()).slice(0, RISK_POLICY_NAME_MAX_LENGTH)
+}
 
 /**
  * The three axes a `merger` agent scores a pull request on. Presentation order is

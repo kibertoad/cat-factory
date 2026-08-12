@@ -25,4 +25,9 @@ export type {
   RiskPolicy,
   CreateRiskPolicyInput,
   UpdateRiskPolicyInput,
+  // The two tiers a policy can be stored at, the merged library entry a board picks from, and one
+  // account policy a board is hiding (ADR 0055).
+  RiskPolicyTier,
+  RiskPolicyLibraryEntry,
+  RiskPolicySuppression,
 } from '@cat-factory/contracts'

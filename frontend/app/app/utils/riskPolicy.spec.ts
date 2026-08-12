@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { RiskPolicy } from '~/types/merge'
+import { RISK_POLICY_NAME_MAX_LENGTH } from '@cat-factory/contracts'
 import {
   RISK_POLICY_AXES,
   RISK_POLICY_CEILING_FIELD,
   riskPolicyCeilings,
+  riskPolicyCopyName,
   rolePolicySummary,
 } from '~/utils/riskPolicy'
 
@@ -99,5 +101,31 @@ describe('rolePolicySummary', () => {
   it('does not also report an allowlist for a role the policy sandboxes', () => {
     const p = policy({ dryRunRoles: ['member'], submissionClassesByRole: { member: ['docs'] } })
     expect(rolePolicySummary(p)).toEqual({ sandboxed: ['member'], narrowed: [], scoped: [] })
+  })
+})
+
+describe('riskPolicyCopyName', () => {
+  // The template the SPA actually uses for the clone action.
+  const copy = (name: string) => `${name} (copy)`
+
+  it('leaves a name with room to spare alone', () => {
+    expect(riskPolicyCopyName('Balanced', copy)).toBe('Balanced (copy)')
+  })
+
+  it('keeps the copy marker by trimming the SOURCE name, not the result', () => {
+    // 58 chars, so ' (copy)' would put the composed name 5 over the 60-char contract limit. The
+    // clone action was simply unavailable for such a policy: a 422 against a name with no field to
+    // edit. The marker is the informative half, so the source name is what gives way.
+    const long = 'Balanced posture for revenue services with schema review!!'
+    expect(long.length).toBe(58)
+    const composed = riskPolicyCopyName(long, copy)
+    expect(composed.length).toBeLessThanOrEqual(RISK_POLICY_NAME_MAX_LENGTH)
+    expect(composed.endsWith('(copy)')).toBe(true)
+    expect(long.startsWith(composed.slice(0, composed.indexOf(' (copy)')))).toBe(true)
+  })
+
+  it('still answers within the limit when the template alone would blow the budget', () => {
+    const verbose = (name: string) => `${name} ${'x'.repeat(RISK_POLICY_NAME_MAX_LENGTH)}`
+    expect(riskPolicyCopyName('Balanced', verbose).length).toBe(RISK_POLICY_NAME_MAX_LENGTH)
   })
 })

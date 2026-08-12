@@ -12,7 +12,8 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { requireCapability, requireUser } from '../../http/guards.js'
+import { requireCapability } from '../../http/guards.js'
+import { mountAccountMembership } from '../../http/accountAccess.js'
 
 /** Resolve the skill-library module or send a 503 when unconfigured. */
 function requireLibrary<E extends AppEnv>(c: Context<E>): SkillLibraryModule {
@@ -46,9 +47,7 @@ export function skillLibraryController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
   const accountId = <E extends AppEnv>(c: Context<E>) => param(c, 'accountId')
 
-  app.use('/skills', accountGuard)
-  app.use('/skill-sources', accountGuard)
-  app.use('/skill-sources/*', accountGuard)
+  mountAccountMembership(app, ['/skills', '/skill-sources'], 'Sign in to manage the skill library')
 
   // ---- the account skill catalog ------------------------------------------
 
@@ -87,12 +86,4 @@ export function skillLibraryController(): Hono<AppEnv> {
   })
 
   return app
-}
-
-/** Guard an account-scoped request: require sign-in + membership (404 otherwise). */
-async function accountGuard(c: Context<AppEnv>, next: () => Promise<void>) {
-  const user = requireUser(c, 'Sign in to manage the skill library')
-  // requireMember throws NotFoundError (→ 404) when the user isn't a member.
-  await c.get('container').accountService.requireMember(param(c, 'accountId'), user.id)
-  await next()
 }

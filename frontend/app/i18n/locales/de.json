@@ -116,7 +116,8 @@
         "team": "Team & Zugriff",
         "fragments": "Kontextfragmente",
         "skills": "Skills",
-        "foundational": "Basisdienste"
+        "foundational": "Basisdienste",
+        "riskPolicies": "Risikorichtlinien"
       }
     },
     "infrastructure": {
@@ -559,7 +560,11 @@
         "created": "Richtlinie erstellt",
         "createFailed": "Richtlinie konnte nicht erstellt werden",
         "defaultFailed": "Standard konnte nicht festgelegt werden",
-        "deleteFailed": "Richtlinie konnte nicht gelöscht werden"
+        "deleteFailed": "Richtlinie konnte nicht gelöscht werden",
+        "cloned": "Richtlinie in dieses Board geklont",
+        "cloneFailed": "Richtlinie konnte nicht geklont werden",
+        "hideFailed": "Richtlinie konnte nicht ausgeblendet werden",
+        "unhideFailed": "Richtlinie konnte nicht wiederhergestellt werden"
       },
       "forkDecision": {
         "label": "Implementierungs-Weichenentscheidung",
@@ -615,6 +620,32 @@
       "autoAnswer": {
         "label": "Mindestzuversicht für Auto-Antworten (%)",
         "hint": "Wie sicher der Requirement Writer sein muss, damit ein unbeobachteter Lauf seinen Vorschlag übernimmt statt auf eine Person zu warten. Infrage kommen nur Befunde, die der Reviewer ohne Product Owner für beantwortbar hielt."
+      },
+      "tier": {
+        "account": "Vom Konto",
+        "accountHint": "Für das gesamte Konto definiert. Jedes Board erbt sie; nur eine Kontoadministration kann sie ändern."
+      },
+      "own": {
+        "heading": "Richtlinien dieses Boards"
+      },
+      "inherited": {
+        "heading": "Vom Konto geerbt",
+        "hint": "Für alle Boards dieses Kontos gültig. Klone eine Richtlinie, um hier eine Kopie zu bearbeiten, oder blende sie aus, damit keine Aufgabe dieses Boards sie wählen kann.",
+        "clone": "Ins Board klonen",
+        "cloneHint": "Diese Richtlinie ins Board kopieren, wo du ihre Grenzwerte bearbeiten kannst.",
+        "copyName": "{name} (Kopie)",
+        "hide": "Ausblenden",
+        "hideHint": "Diese Richtlinie auf diesem Board nicht mehr anbieten. Du kannst sie später wiederherstellen."
+      },
+      "hidden": {
+        "heading": "Ausgeblendete Kontorichtlinien",
+        "restore": "Wiederherstellen",
+        "withdrawn": "Vom Konto nicht mehr definiert",
+        "loadFailed": "Diese Liste konnte nicht geladen werden, daher kann eine Richtlinie ausgeblendet sein, ohne hier zu erscheinen."
+      },
+      "confirmHide": {
+        "title": "Diese Richtlinie ausblenden?",
+        "body": "„{name}“ wird auf diesem Board nicht mehr angeboten; Aufgaben mit dieser Auswahl fallen auf die Board-Standardrichtlinie zurück. Du kannst sie später wiederherstellen."
       }
     },
     "observabilityConnection": {
@@ -2847,6 +2878,12 @@
         "load": "Das Prüfprotokoll konnte nicht geladen werden.",
         "loadMore": "Ältere Einträge konnten nicht geladen werden"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Merge-Haltungen für alle Boards dieses Kontos. Jedes Board erbt sie schreibgeschützt und kann eine klonen, um eine Kopie zu bearbeiten, oder sie ausblenden. Welche Richtlinie eine Aufgabe ohne Auswahl regelt, wird pro Board festgelegt.",
+      "empty": "Noch keine kontoweiten Risikorichtlinien. Boards nutzen ihre eigenen Bibliotheken, bis du eine hinzufügst.",
+      "loadFailed": "Kontorichtlinien konnten nicht geladen werden",
+      "confirmDelete": "„{name}“ wird von allen Boards dieses Kontos zurückgezogen. Aufgaben mit dieser Auswahl fallen auf den Standard ihres Boards zurück."
     }
   },
   "board": {
@@ -5780,7 +5817,9 @@
         "document_already_linked": "Dokument bereits angehängt",
         "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden",
         "submission_not_allowed": "Zusammenführen für diesen Lauf nicht erlaubt",
-        "webhook_limit_reached": "Webhook-Limit erreicht"
+        "webhook_limit_reached": "Webhook-Limit erreicht",
+        "risk_policy_inherited": "Diese Richtlinie gehört zum Konto",
+        "risk_policy_not_inherited": "Diese Richtlinie gehört zu diesem Board"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -5819,7 +5858,9 @@
         "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
         "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt.",
         "submission_not_allowed": "Die Merge-Richtlinie dieser Aufgabe erlaubt der Rolle, die diesen Lauf gestartet hat, diese Änderungsart nicht zusammenzuführen. Jemand mit einer passenden Rolle kann es tun, oder ein Admin erweitert die Richtlinie in der Merge-Vorlage.",
-        "webhook_limit_reached": "Für diesen Workspace ist bereits die maximale Anzahl ausgehender Webhooks registriert. Entfernen Sie einen nicht mehr benötigten und registrieren Sie diesen erneut."
+        "webhook_limit_reached": "Für diesen Workspace ist bereits die maximale Anzahl ausgehender Webhooks registriert. Entfernen Sie einen nicht mehr benötigten und registrieren Sie diesen erneut.",
+        "risk_policy_inherited": "Sie gilt für alle Boards des Kontos und kann daher nicht von hier geändert werden. Klone sie in dieses Board und bearbeite die Kopie.",
+        "risk_policy_not_inherited": "Sie ist bereits die eigene Richtlinie dieses Boards: bearbeite sie direkt oder lösche sie, wenn sie nicht mehr angeboten werden soll."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

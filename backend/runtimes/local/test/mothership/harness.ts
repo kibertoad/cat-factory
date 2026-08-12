@@ -20,6 +20,7 @@ import {
 import {
   type CoreRepositories,
   type DrizzleDb,
+  DrizzleAccountRiskPolicyRepository,
   DrizzleDocInterviewRepository,
   DrizzleAccountSettingsRepository,
   DrizzleDocumentRepository,
@@ -562,6 +563,7 @@ export function makeMothershipConformanceApp(
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
+    accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,
     getService,
     ...containerServiceProbes(container),

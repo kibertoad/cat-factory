@@ -332,6 +332,34 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The ACCOUNT tier of that same library (ADR 0055). Org state by definition — one library shared
+  // by every board in the account — so `remote`, and the whole surface is proxied because a
+  // mothership-mode node both READS it on the run path and EDITS it: the engine resolves a task
+  // pinning an inherited policy through `get`, the board merge through `list`, and the account
+  // settings editor through the writes. Leaving the reads off would make an inherited pin resolve
+  // to nothing and fall silently back to the board default, which is a merge posture nobody chose.
+  //
+  // Account-scoped on arg 0, and member-level like the board tier: the account routes guard on
+  // MEMBERSHIP rather than admin (the same rule the account-tier fragment library uses), so the
+  // machine token's account scope is the same check the HTTP path makes, not a weaker one. There is
+  // no sealed secret on these rows, so the `accountRepository` reasoning that keeps admin writes
+  // mothership-internal does not apply.
+  accountRiskPolicyRepository: {
+    list: { scope: { kind: 'account', arg: 0 } },
+    get: { scope: { kind: 'account', arg: 0 } },
+    listByIds: { scope: { kind: 'account', arg: 0 } },
+    upsert: { scope: { kind: 'account', arg: 0 } },
+    remove: { scope: { kind: 'account', arg: 0 } },
+  },
+  // Which inherited policies a BOARD hides. Workspace-scoped and member-level like the board's own
+  // library, and `list` is on the run path for the same reason as the account reads above: it is
+  // half of the precedence, so a node that could not read it would resolve a policy its own editor
+  // says is hidden.
+  riskPolicySuppressionRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    add: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // The merge TRACK RECORD is the evidence side of the same merge policy, and every one of its
   // methods takes the workspaceId as arg0 — so the whole surface is proxied, workspace-scoped and
   // member-level exactly like the preset library above. It has to be: `MergeResolver` reads the

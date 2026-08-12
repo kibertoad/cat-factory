@@ -7,6 +7,7 @@ import {
   latestPointerPath,
   listPasses,
   passPaths,
+  readLatestPointer,
   readLatestRunId,
   resolveStateDir,
   writeLatestPointer,
@@ -120,5 +121,18 @@ describe('the latest pointer', () => {
     expect(readLatestRunId(dir)).toBeNull()
     writeFileSync(latestPointerPath(dir), JSON.stringify({ ledger: 'x' }), 'utf8')
     expect(readLatestRunId(dir)).toBeNull()
+  })
+
+  it('tells an ABSENT pointer from one that names nothing, which a cleanup has to act on', () => {
+    // A resume treats the two alike and is right to; a cleanup does not. A pointer naming nothing
+    // is a FILE, and it is exactly the file that outlives every ledger in the directory and then
+    // resolves `ACCEPTANCE_RUN_ID=latest` onto a state directory with no pass in it. Collapsing
+    // the two would have `reset` announce removing a file that was never there.
+    const dir = scratch()
+    expect(readLatestPointer(dir)).toBeNull()
+    writeFileSync(latestPointerPath(dir), 'not json', 'utf8')
+    expect(readLatestPointer(dir)).toEqual({ path: latestPointerPath(dir), runId: null })
+    writeLatestPointer(passPaths(dir, 'run-1'))
+    expect(readLatestPointer(dir)).toEqual({ path: latestPointerPath(dir), runId: 'run-1' })
   })
 })

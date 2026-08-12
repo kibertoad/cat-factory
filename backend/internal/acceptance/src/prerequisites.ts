@@ -51,6 +51,7 @@ import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3
 import {
   envAssignment,
   perPersonPrefixInvocation,
+  resetInvocation,
   resumeInvocation,
   shellQuoted,
 } from './operatorText.ts'
@@ -169,6 +170,65 @@ function statusRead(runId?: string): RemedyCommand {
         run: command,
         purpose: 'show the pass that ran last and its run id, without touching the deployment',
       }
+}
+
+/**
+ * "Clear it and start over", as a step plus the two commands that do it.
+ *
+ * The other half of {@link resumeTheOwningPass}, and the half that was not a command until
+ * `DELETE /api/v1/services/{serviceId}` existed: "delete the service frame that holds this one" was
+ * an app act, so the one way out of this refusal that a HEADLESS pass could act on headlessly was the
+ * one that continues somebody else's work. Both remedies now name a command, which is the whole point
+ * of the pair: an operator chooses between continuing the pass and clearing it, rather than between
+ * an instruction and a browser.
+ *
+ * The PREVIEW is offered first, and that ordering is the safety property rather than politeness: the
+ * apply deletes service frames, their tasks and their run history on a board two people may share,
+ * and the preview names every one of them. What it cannot reclaim (the repositories' contents above
+ * all) it states, which is why this step does not promise a board that looks freshly created.
+ *
+ * EVERY owning pass is named, one invocation each, for the same reason {@link resumeTheOwningPass}
+ * emits one resume per owner: a reset clears ONE named pass plus what this configuration points at,
+ * so a single command over a two-pass board leaves the other pass's ledger behind and the operator
+ * who followed the printed "clear all of it" is refused again by the frame it still maps.
+ */
+function clearAndStartOver(owners: readonly PassOwnership[]): {
+  step: string
+  commands: readonly RemedyCommand[]
+} {
+  const scope =
+    owners.length > 1
+      ? `Run it once per owning pass (${owners.map((pass) => pass.runId).join(', ')}): a reset ` +
+        `clears one named pass plus what this configuration points at, so one invocation would ` +
+        `leave the others' ledgers naming frames that are gone.`
+      : `It prints what it would do and changes nothing until --yes.`
+  return {
+    step:
+      `Or CLEAR it and start clean: the reset below deletes the service frames this configuration ` +
+      `would adopt (with their tasks and run history) and the local files of the passes that name ` +
+      `them, over the same /api/v1 key this suite already holds. ${scope} It states what no key can ` +
+      `reclaim: the two repositories keep whatever a previous pass scaffolded, so a fresh pass ` +
+      `builds on top of that unless you empty them yourself.`,
+    commands:
+      owners.length === 0
+        ? [
+            {
+              run: resetInvocation(),
+              purpose: 'show what a reset would delete, without touching anything',
+            },
+            { run: resetInvocation({ apply: true }), purpose: 'carry that out' },
+          ]
+        : owners.flatMap((pass) => [
+            {
+              run: resetInvocation({ runId: pass.runId }),
+              purpose: `show what clearing pass ${pass.runId} would delete, without touching anything`,
+            },
+            {
+              run: resetInvocation({ runId: pass.runId, apply: true }),
+              purpose: `carry that out for ${pass.runId}`,
+            },
+          ]),
+  }
 }
 
 /**
@@ -918,10 +978,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
 
       // A repository this workspace can SEE but cannot back a service with. Checked before the
       // ledger comparison below because neither cause has anything to do with which pass this is:
-      // `linkedElsewhere` is a service homed on another board (whose id this surface deliberately
-      // withholds, so `serviceId` is null and reading only that field reads it as available), and a
-      // monorepo needs a subdirectory this suite does not configure. `adopt.ts` refuses the same two
-      // for the same reasons, and owns the wording.
+      // `linkedElsewhere` is a service whose id this surface deliberately withholds (so `serviceId`
+      // is null and reading only that field reads it as available), and a monorepo needs a
+      // subdirectory this suite does not configure. `adopt.ts` refuses the same two for the same
+      // reasons, and owns the wording, including the fact that `linkedElsewhere` covers TWO states
+      // with opposite fixes: homed on another board, or ARCHIVED here.
       const blocked = resolved.flatMap((repo) => {
         const blocker = repoBlocker(repo)
         return blocker ? [{ slug: `${repo.owner}/${repo.name}`, blocker }] : []
@@ -932,7 +993,8 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
             .map(({ slug, blocker }) =>
               blocker === 'monorepo'
                 ? `'${slug}' is registered as a MONOREPO`
-                : `'${slug}' already backs a service homed on ANOTHER board of this account`,
+                : `'${slug}' already backs a service this workspace cannot name (homed on ` +
+                  `ANOTHER board of this account, or ARCHIVED here)`,
             )
             .join(', ')}, so POST /api/v1/services cannot back a frame with it`,
           {
@@ -958,7 +1020,9 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           : [],
       )
       if (taken.length > 0) {
-        const owning = resumeTheOwningPass(passesNaming(taken.map((entry) => entry.serviceId)))
+        const owners = passesNaming(taken.map((entry) => entry.serviceId))
+        const owning = resumeTheOwningPass(owners)
+        const clearing = clearAndStartOver(owners)
         return unsatisfied(
           `${taken.map((entry) => `'${entry.slug}' already backs service ${entry.serviceId}`).join(', ')}` +
             `, which this pass's ledger does not name` +
@@ -971,10 +1035,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           {
             steps: [
               owning.step,
-              'Otherwise point ACCEPTANCE_BACKEND_REPO / ACCEPTANCE_FRONTEND_REPO at two fresh ' +
-                'empty repositories, or delete the service frame that holds this one.',
+              clearing.step,
+              'Or point ACCEPTANCE_BACKEND_REPO / ACCEPTANCE_FRONTEND_REPO at two fresh empty ' +
+                'repositories, which leaves this board as it stands.',
             ],
-            commands: [...owning.commands, repoRead],
+            commands: [...owning.commands, ...clearing.commands, repoRead],
           },
         )
       }
@@ -1221,11 +1286,11 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       }
       // The frames' own ids, which is how a TITLE reaches a ledger: the ledger records service ids
       // and never titles, so the pass to resume is found through what the board just answered.
-      const owning = resumeTheOwningPass(
-        passesNaming(
-          services.flatMap((service) => (taken.includes(service.title) ? [service.serviceId] : [])),
-        ),
+      const owners = passesNaming(
+        services.flatMap((service) => (taken.includes(service.title) ? [service.serviceId] : [])),
       )
+      const owning = resumeTheOwningPass(owners)
+      const clearing = clearAndStartOver(owners)
       return unsatisfied(
         `this board already has ${taken.map((title) => `'${title}'`).join(' and ')}, but this ` +
           `pass’s ledger names no services. A fresh pass would raise a SECOND frame under the ` +
@@ -1237,7 +1302,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
               `'${config.namePrefix}'), which renames every service frame and task this pass ` +
               'creates. The repository names are ACCEPTANCE_BACKEND_REPO / ' +
               'ACCEPTANCE_FRONTEND_REPO and move separately.',
-            'Otherwise delete the leftover frames from the board and re-run.',
+            clearing.step,
           ],
           commands: [
             ...owning.commands,
@@ -1245,6 +1310,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
               run: perPersonPrefixInvocation(config.namePrefix),
               purpose: 'take a per-person prefix, so two people share one board without colliding',
             },
+            ...clearing.commands,
           ],
         },
       )

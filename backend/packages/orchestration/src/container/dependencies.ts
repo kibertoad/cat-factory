@@ -144,7 +144,9 @@ import type {
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
+  AccountRiskPolicyRepository,
   RiskPolicyRepository,
+  RiskPolicySuppressionRepository,
   RunInitiatorScope,
   RunLifecycleSink,
   RunRepoContext,
@@ -1266,8 +1268,21 @@ export interface CoreDependencies {
   packageRegistryConnectionRepository?: PackageRegistryConnectionRepository
   /** Seals registry tokens at rest (domain tag 'cat-factory:package-registries'). */
   packageRegistrySecretCipher?: SecretCipher
-  /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
+  /** A board's OWN risk policies: the built-in catalog copied in at creation, plus what it authored. */
   riskPolicyRepository?: RiskPolicyRepository
+  /**
+   * The ACCOUNT-tier risk policy library (ADR 0055): postures authored once for a whole account,
+   * which every board under it inherits read-only and may clone or hide. Absent ⇒ nothing is
+   * inherited and every board's library is exactly its own rows, which is the behaviour before the
+   * tier existed.
+   */
+  accountRiskPolicyRepository?: AccountRiskPolicyRepository
+  /**
+   * Which inherited account policies a board HIDES. Absent ⇒ a board hides nothing, which offers a
+   * posture rather than silently withdrawing one: the direction where a facade mid-migration can
+   * only show too much, never resolve a policy its own editor called hidden.
+   */
+  riskPolicySuppressionRepository?: RiskPolicySuppressionRepository
   /**
    * Optional: persistence for the merge track record (one row per merge decision — change class,
    * merger scores, reviewer-effort tag, outcome — plus the per-class SQL rollups). Absent ⇒ the

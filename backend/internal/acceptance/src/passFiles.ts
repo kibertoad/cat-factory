@@ -138,11 +138,29 @@ export function findMostRecentPass(stateDir: string): string | null {
   return newest?.runId ?? null
 }
 
-/** The run id the most recent pass to record a fact wrote, or null. Total: unreadable is "none". */
-export function readLatestRunId(stateDir: string): string | null {
+/** The `latest` pointer FILE and what it names, or null when there is no such file. */
+export type LatestPointer = {
+  path: string
+  /** The pass it resolves to, or null when the file is malformed or names nothing. */
+  runId: string | null
+}
+
+/**
+ * The `latest` pointer as it stands on disk.
+ *
+ * Three states rather than two, which is why this is not {@link readLatestRunId} with a path
+ * bolted on: no pointer at all, a pointer naming a pass, and a pointer naming NOTHING (malformed,
+ * hand-edited, or left behind by a ledger someone removed). A resume treats the last two alike and
+ * is right to; a CLEANUP does not, because a dangling pointer is exactly the file that outlives
+ * every pass in the directory and then resolves `ACCEPTANCE_RUN_ID=latest` onto a state directory
+ * with no ledgers at all. Collapsing "absent" into it would have the reset announce removing a
+ * file that was never there.
+ */
+export function readLatestPointer(stateDir: string): LatestPointer | null {
+  const path = latestPointerPath(stateDir)
   let raw: string
   try {
-    raw = readFileSync(latestPointerPath(stateDir), 'utf8')
+    raw = readFileSync(path, 'utf8')
   } catch {
     // silent-catch-ok: no pointer is the normal state before any pass has recorded a fact.
     return null
@@ -150,11 +168,16 @@ export function readLatestRunId(stateDir: string): string | null {
   try {
     const parsed: unknown = JSON.parse(raw)
     const runId = (parsed as { runId?: unknown } | null)?.runId
-    return typeof runId === 'string' && runId.length > 0 ? runId : null
+    return { path, runId: typeof runId === 'string' && runId.length > 0 ? runId : null }
   } catch {
     // silent-catch-ok: a malformed pointer is discarded, exactly as a malformed ledger is.
-    return null
+    return { path, runId: null }
   }
+}
+
+/** The run id the most recent pass to record a fact wrote, or null. Total: unreadable is "none". */
+export function readLatestRunId(stateDir: string): string | null {
+  return readLatestPointer(stateDir)?.runId ?? null
 }
 
 /**

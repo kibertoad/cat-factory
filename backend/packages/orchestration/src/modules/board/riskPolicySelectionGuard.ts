@@ -5,7 +5,7 @@ import type {
   RiskPolicySelectionRefusal,
 } from '@cat-factory/contracts'
 import { refuseRiskPolicySelection, RUN_DEFAULT_SCOPES } from '@cat-factory/contracts'
-import type { RiskPolicy, RiskPolicyRepository } from '@cat-factory/kernel'
+import type { RiskPolicy, WorkspaceRiskPolicyReader } from '@cat-factory/kernel'
 import { ForbiddenError } from '@cat-factory/kernel'
 import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
 import { preloadedRiskPolicyRead, resolveRiskPolicy } from '../merge/riskPolicyResolution.js'
@@ -139,7 +139,12 @@ const MOVE_REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
 }
 
 export function createRiskPolicySelectionGuard(deps: {
-  riskPolicyRepository?: RiskPolicyRepository
+  /**
+   * The board's merged library (ADR 0055). The guard judges a MOVE against the policy actually in
+   * force on either side, and an inherited account policy is as much in force as a local one, so
+   * reading the workspace tier alone would let a task move onto a wider posture unjudged.
+   */
+  riskPolicyReader?: WorkspaceRiskPolicyReader
 }): RiskPolicySelectionGuard {
   /**
    * A resolver for every policy in force in ONE workspace, off ONE query.
@@ -157,15 +162,14 @@ export function createRiskPolicySelectionGuard(deps: {
    * wider landing authority is exactly the escalation this guard exists to catch.
    */
   const openLibrary = async (workspaceId: string) => {
-    const library: readonly RiskPolicy[] =
-      (await deps.riskPolicyRepository?.list(workspaceId)) ?? []
+    const library: readonly RiskPolicy[] = (await deps.riskPolicyReader?.list(workspaceId)) ?? []
     const read = preloadedRiskPolicyRead(library)
     return (
       riskPolicyId: string | null | undefined,
       scope: RunDefaultScope,
     ): Promise<ResolvedRunRiskPolicy> =>
       resolveRiskPolicy({
-        repository: deps.riskPolicyRepository,
+        repository: deps.riskPolicyReader,
         workspaceId,
         riskPolicyId,
         scope,

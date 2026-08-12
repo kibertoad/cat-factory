@@ -290,11 +290,28 @@ export interface AppCaches {
    * on every gate evaluation (per review/tester/human-test/visual gate action and per merge
    * resolve). Wrapped ({@link RiskPolicyCacheValue}) so a picked-preset miss (deleted id falling
    * through to the default) or an unseeded workspace's null default caches as a value rather than
-   * a re-loaded null. Coherence is invalidation-driven: every `RiskPolicyService` write
-   * (create/update/remove/reseed + the lazy first-use seed) drops the workspace group after the
-   * write commits, so a preset edit is visible on the very next gate. Pass-through on the Worker's
-   * isolate-safe profile (our own mutable D1 state, no cross-isolate bus), so it caches only on the
-   * Node/local facades.
+   * a re-loaded null.
+   *
+   * Coherence is invalidation-driven, and since ADR 0055 there are TWO tiers of write with two
+   * different blast radii:
+   *
+   * - **A board's own write** (`RiskPolicyService` create/update/remove/reseed/clone, the two
+   *   suppression writes, and the lazy first-use seed) drops that WORKSPACE GROUP after the write
+   *   commits, so a preset edit — or an inherited policy being hidden — is visible on the very next
+   *   gate.
+   * - **An ACCOUNT-tier write** (`AccountRiskPolicyService` create/update/remove) drops the WHOLE
+   *   slice, because one account policy is inherited by every board under it and enumerating those
+   *   boards would be a read per invalidation. Over-invalidation is always safe; reading this slice
+   *   as workspace-grouped-only is not, since an account write dropping one group would leave every
+   *   other board in the account resolving the old posture until the TTL lapsed.
+   *
+   * Pass-through on the Worker's isolate-safe profile (our own mutable D1 state, no cross-isolate
+   * bus), so it caches only on the Node/local facades.
+   *
+   * The merged LIBRARY LIST is deliberately not cached here. Its readers are the board snapshot and
+   * the two selection guards, and a guard is an admission decision, which is the last place to want
+   * a stale-by-a-TTL answer (see `riskPolicyResolution.ts`); the list is instead kept to the round
+   * trips it took before the account tier existed.
    */
   riskPolicy: GroupCacheHandle<RiskPolicyCacheValue>
   /**

@@ -56,6 +56,9 @@ export function shellQuoted(value: string): string {
 /** The command that runs a pass, in one place, so a printed remedy cannot drift from the README. */
 const ACCEPTANCE_INVOCATION = 'pnpm --filter @cat-factory/acceptance run acceptance'
 
+/** Same, for the command that clears a board back to "before any pass ran" (`src/reset.ts`). */
+const RESET_INVOCATION = 'pnpm --filter @cat-factory/acceptance run reset'
+
 /** Which shell will RECEIVE the text. It decides every spelling in the table below. */
 export type ShellFlavour = 'posix' | 'powershell'
 
@@ -166,6 +169,47 @@ const DIALECTS: Record<ShellFlavour, Dialect> = {
 export function resumeInvocation(runId: string, flavour: ShellFlavour = shellFlavour()): string {
   const shell = DIALECTS[flavour]
   return shell.assignFor('ACCEPTANCE_RUN_ID', shell.literal(runId), ACCEPTANCE_INVOCATION)
+}
+
+/**
+ * The invocation that CLEARS a board, in the two forms it is offered in.
+ *
+ * `apply: false` is the preview, which is what a remedy printed by a refusal offers first: this
+ * deletes service frames, tasks and run history on a board somebody may share, so the reading an
+ * operator does before the deletion is part of the design rather than caution (see `reset.ts`).
+ *
+ * No variable is being set, unlike {@link resumeInvocation}, so the command needs no dialect of its
+ * own until a value goes into it. A run id is a FILE NAME and a hand-named pass is supported
+ * ('friday-rerun' is `passFiles.ts`'s own example), so one holding a space renders a command whose
+ * own parser refuses it ("'friday' and 'rerun' both name a pass") and one holding a quote breaks
+ * the pasted line outright. So an id that is not a plain word is QUOTED, for the shell the operator
+ * is holding; an ordinary one is printed bare, because a minted id is a timestamp and a remedy that
+ * quotes what needs no quoting reads as a command with something odd about it.
+ *
+ * A NAMED pass widens what is cleared to whatever that pass's ledger holds, which is the form worth
+ * printing beside a resume: the two are the same decision (continue this pass, or clear it) and an
+ * operator choosing between them should not have to work out the second command's arguments.
+ *
+ * `all` is the widest form and no remedy prints it: it clears every frame the board lists, so it is
+ * something an operator asks for rather than something a refusal suggests. It is rendered here
+ * because the command's own output has to offer it back (the preview names what it previewed, and a
+ * printed apply that dropped the flag would delete a different set than the one just read).
+ */
+export function resetInvocation(
+  options: { runId?: string; all?: boolean; apply?: boolean } = {},
+  flavour: ShellFlavour = shellFlavour(),
+): string {
+  return [
+    RESET_INVOCATION,
+    ...(options.runId ? [asOneWord(options.runId, flavour)] : []),
+    ...(options.all ? ['--all'] : []),
+    ...(options.apply ? ['--yes'] : []),
+  ].join(' ')
+}
+
+/** A value that is already ONE shell word, or the dialect's quoting of one that is not. */
+function asOneWord(value: string, flavour: ShellFlavour): string {
+  return /^[\w.-]+$/.test(value) ? value : DIALECTS[flavour].literal(value)
 }
 
 /**

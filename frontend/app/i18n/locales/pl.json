@@ -595,7 +595,9 @@
         "document_already_linked": "Dokument jest już załączony",
         "dry_run_not_mergeable": "Uruchomienia próbnego nie można scalić",
         "submission_not_allowed": "Scalanie niedozwolone dla tego uruchomienia",
-        "webhook_limit_reached": "Osiągnięto limit webhooków"
+        "webhook_limit_reached": "Osiągnięto limit webhooków",
+        "risk_policy_inherited": "Ta zasada należy do konta",
+        "risk_policy_not_inherited": "Ta zasada należy do tej tablicy"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -634,7 +636,9 @@
         "document_already_linked": "Ten dokument jest załączony do innego zadania. Najpierw odłącz go tam albo załącz osobną kopię.",
         "dry_run_not_mergeable": "Ten pull request pochodzi z uruchomienia próbnego, więc nie można go tutaj scalić. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali.",
         "submission_not_allowed": "Polityka scalania tego zadania nie pozwala roli, która rozpoczęła to uruchomienie, scalić tego typu zmiany. Może to zrobić osoba o odpowiedniej roli albo administrator może rozszerzyć politykę w ustawieniu scalania.",
-        "webhook_limit_reached": "Ta przestrzeń robocza ma już zarejestrowaną maksymalną liczbę wychodzących webhooków. Usuń jeden, którego już nie potrzebujesz, a następnie zarejestruj ten ponownie."
+        "webhook_limit_reached": "Ta przestrzeń robocza ma już zarejestrowaną maksymalną liczbę wychodzących webhooków. Usuń jeden, którego już nie potrzebujesz, a następnie zarejestruj ten ponownie.",
+        "risk_policy_inherited": "Jest wspólna dla wszystkich tablic konta, więc nie można jej tu zmienić. Sklonuj ją do tej tablicy i edytuj kopię.",
+        "risk_policy_not_inherited": "To już własna zasada tej tablicy: edytuj ją bezpośrednio albo usuń, jeśli nie ma być dłużej oferowana."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -2596,6 +2600,12 @@
         "load": "Nie udało się wczytać dziennika audytu.",
         "loadMore": "Nie udało się wczytać starszych wpisów"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Postawy scalania wspólne dla wszystkich tablic tego konta. Każda tablica dziedziczy je tylko do odczytu i może sklonować jedną, aby edytować kopię, albo ją ukryć. To, która zasada obowiązuje zadanie bez wyboru, ustawia się per tablica.",
+      "empty": "Brak zasad ryzyka na poziomie konta. Tablice korzystają z własnych bibliotek, dopóki którejś nie dodasz.",
+      "loadFailed": "Nie udało się wczytać zasad ryzyka konta",
+      "confirmDelete": "„{name}” zostanie wycofana ze wszystkich tablic tego konta. Zadania, które ją wybrały, wrócą do zasady domyślnej swojej tablicy."
     }
   },
   "mcpAuthorize": {
@@ -2715,7 +2725,8 @@
         "team": "Zespół i dostęp",
         "fragments": "Fragmenty kontekstu",
         "skills": "Umiejętności",
-        "foundational": "Usługi fundamentalne"
+        "foundational": "Usługi fundamentalne",
+        "riskPolicies": "Zasady ryzyka"
       }
     },
     "providerConnection": {
@@ -3010,7 +3021,11 @@
         "created": "Zasada utworzona",
         "createFailed": "Nie można utworzyć zasady",
         "defaultFailed": "Nie można ustawić jako domyślne",
-        "deleteFailed": "Nie można usunąć zasady"
+        "deleteFailed": "Nie można usunąć zasady",
+        "cloned": "Zasada sklonowana do tej tablicy",
+        "cloneFailed": "Nie udało się sklonować zasady",
+        "hideFailed": "Nie udało się ukryć zasady",
+        "unhideFailed": "Nie udało się przywrócić zasady"
       },
       "autoMergeOnHint": "Scalaj automatycznie, gdy mieści się w limitach zasady.",
       "autoMergeOffHint": "Zawsze kieruj PR do recenzji człowieka.",
@@ -3072,6 +3087,32 @@
       "autoAnswer": {
         "label": "Minimalna pewność automatycznej odpowiedzi (%)",
         "hint": "Jak pewny musi być Requirement Writer, aby nienadzorowany przebieg zachował podpowiedzianą odpowiedź zamiast zatrzymać się na człowieku. Kwalifikują się tylko uwagi uznane przez recenzenta za rozstrzygalne bez product ownera."
+      },
+      "tier": {
+        "account": "Z konta",
+        "accountHint": "Zdefiniowana dla całego konta. Każda tablica ją dziedziczy; zmienić może ją tylko administracja konta."
+      },
+      "own": {
+        "heading": "Zasady tej tablicy"
+      },
+      "inherited": {
+        "heading": "Odziedziczone z konta",
+        "hint": "Wspólne dla wszystkich tablic tego konta. Sklonuj zasadę, aby edytować jej kopię tutaj, albo ukryj ją, by żadne zadanie na tej tablicy nie mogło jej wybrać.",
+        "clone": "Sklonuj do tablicy",
+        "cloneHint": "Skopiuj tę zasadę do tablicy, gdzie możesz edytować jej limity.",
+        "copyName": "{name} (kopia)",
+        "hide": "Ukryj",
+        "hideHint": "Przestań oferować tę zasadę na tej tablicy. Możesz ją później przywrócić."
+      },
+      "hidden": {
+        "heading": "Ukryte zasady konta",
+        "restore": "Przywróć",
+        "withdrawn": "Konto już jej nie definiuje",
+        "loadFailed": "Nie udało się wczytać tej listy, więc jakaś zasada może być ukryta, choć nie widać jej tutaj."
+      },
+      "confirmHide": {
+        "title": "Ukryć tę zasadę?",
+        "body": "„{name}” nie będzie oferowana na tej tablicy, a zadania, które ją wybrały, wrócą do domyślnej zasady tablicy. Możesz ją później przywrócić."
       }
     },
     "observabilityConnection": {

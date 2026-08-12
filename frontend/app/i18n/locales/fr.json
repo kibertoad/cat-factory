@@ -595,7 +595,9 @@
         "document_already_linked": "Document déjà joint",
         "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée",
         "submission_not_allowed": "Fusion non autorisée pour cette exécution",
-        "webhook_limit_reached": "Limite de webhooks atteinte"
+        "webhook_limit_reached": "Limite de webhooks atteinte",
+        "risk_policy_inherited": "Cette politique appartient au compte",
+        "risk_policy_not_inherited": "Cette politique appartient à ce tableau"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -634,7 +636,9 @@
         "document_already_linked": "Ce document est joint à une autre tâche. Détachez-le d'abord, ou joignez-en une copie distincte.",
         "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera.",
         "submission_not_allowed": "La politique de fusion de cette tâche n'autorise pas le rôle qui a lancé cette exécution à fusionner ce type de changement. Un coéquipier dont le rôle le permet peut le faire, ou un admin peut élargir la politique dans le préréglage de fusion.",
-        "webhook_limit_reached": "Cet espace de travail a déjà enregistré le nombre maximal de webhooks sortants. Supprimez-en un dont vous n’avez plus besoin, puis enregistrez celui-ci à nouveau."
+        "webhook_limit_reached": "Cet espace de travail a déjà enregistré le nombre maximal de webhooks sortants. Supprimez-en un dont vous n’avez plus besoin, puis enregistrez celui-ci à nouveau.",
+        "risk_policy_inherited": "Elle est partagée par tous les tableaux du compte et ne peut donc pas être modifiée ici. Clonez-la vers ce tableau et modifiez la copie.",
+        "risk_policy_not_inherited": "C'est déjà la politique propre à ce tableau : modifiez-la directement, ou supprimez-la si vous ne voulez plus qu'elle soit proposée."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -2596,6 +2600,12 @@
         "load": "Le journal d’audit n’a pas pu être chargé.",
         "loadMore": "Impossible de charger les entrées plus anciennes"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Postures de fusion partagées par tous les tableaux de ce compte. Chaque tableau en hérite en lecture seule et peut en cloner une pour modifier une copie, ou la masquer. La politique qui régit une tâche sans choix se définit par tableau.",
+      "empty": "Aucune politique de risque du compte pour l'instant. Les tableaux utilisent leurs propres bibliothèques jusqu'à ce que vous en ajoutiez une.",
+      "loadFailed": "Impossible de charger les politiques de risque du compte",
+      "confirmDelete": "« {name} » sera retirée de tous les tableaux de ce compte. Les tâches qui l'avaient choisie repasseront à la politique par défaut de leur tableau."
     }
   },
   "mcpAuthorize": {
@@ -2715,7 +2725,8 @@
         "team": "Équipe et accès",
         "fragments": "Fragments de contexte",
         "skills": "Compétences",
-        "foundational": "Services fondamentaux"
+        "foundational": "Services fondamentaux",
+        "riskPolicies": "Politiques de risque"
       }
     },
     "providerConnection": {
@@ -3010,7 +3021,11 @@
         "created": "Politique créée",
         "createFailed": "Impossible de créer la politique",
         "defaultFailed": "Impossible de définir par défaut",
-        "deleteFailed": "Impossible de supprimer la politique"
+        "deleteFailed": "Impossible de supprimer la politique",
+        "cloned": "Politique clonée vers ce tableau",
+        "cloneFailed": "Impossible de cloner la politique",
+        "hideFailed": "Impossible de masquer la politique",
+        "unhideFailed": "Impossible de rétablir la politique"
       },
       "autoMergeOnHint": "Fusionner automatiquement si dans les limites de la politique.",
       "autoMergeOffHint": "Toujours envoyer la PR en revue humaine.",
@@ -3072,6 +3087,32 @@
       "autoAnswer": {
         "label": "Confiance minimale pour une réponse automatique (%)",
         "hint": "Le degré de certitude que le Requirement Writer doit atteindre pour qu'un run sans surveillance conserve sa réponse suggérée au lieu de s'arrêter. Seuls les constats jugés traitables sans product owner sont éligibles."
+      },
+      "tier": {
+        "account": "Du compte",
+        "accountHint": "Définie pour tout le compte. Chaque tableau en hérite ; seule une administration du compte peut la modifier."
+      },
+      "own": {
+        "heading": "Politiques de ce tableau"
+      },
+      "inherited": {
+        "heading": "Héritées du compte",
+        "hint": "Partagées par tous les tableaux de ce compte. Clonez-en une pour en modifier une copie ici, ou masquez-la afin qu'aucune tâche de ce tableau ne puisse la choisir.",
+        "clone": "Cloner vers le tableau",
+        "cloneHint": "Copier cette politique dans le tableau, où vous pourrez modifier ses limites.",
+        "copyName": "{name} (copie)",
+        "hide": "Masquer",
+        "hideHint": "Ne plus proposer cette politique sur ce tableau. Vous pourrez la rétablir plus tard."
+      },
+      "hidden": {
+        "heading": "Politiques du compte masquées",
+        "restore": "Rétablir",
+        "withdrawn": "Plus définie par le compte",
+        "loadFailed": "Cette liste n'a pas pu être chargée : une politique peut donc être masquée sans figurer ici."
+      },
+      "confirmHide": {
+        "title": "Masquer cette politique ?",
+        "body": "« {name} » ne sera plus proposée sur ce tableau et les tâches qui l'avaient choisie repasseront à la politique par défaut du tableau. Vous pourrez la rétablir plus tard."
       }
     },
     "observabilityConnection": {

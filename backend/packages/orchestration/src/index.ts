@@ -165,6 +165,16 @@ export {
   RiskPolicyService,
   type RiskPolicyServiceDependencies,
 } from './modules/merge/RiskPolicyService.js'
+// The ACCOUNT tier of the same library, and the merged read every policy consumer holds (ADR 0055).
+export {
+  AccountRiskPolicyService,
+  type AccountRiskPolicyServiceDependencies,
+} from './modules/merge/AccountRiskPolicyService.js'
+export {
+  WorkspaceRiskPolicyLibrary,
+  createWorkspaceRiskPolicyLibrary,
+  type WorkspaceRiskPolicyLibraryDeps,
+} from './modules/merge/WorkspaceRiskPolicyLibrary.js'
 export {
   MergeTrackRecordService,
   type MergeTrackRecordServiceDependencies,

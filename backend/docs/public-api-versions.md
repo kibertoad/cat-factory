@@ -717,3 +717,28 @@ whatever that board defaults to. Unlike `modelPresetId` / `riskPolicyId`, an id 
 NOT refused at creation: a dangling preset pin falls back to a default and runs, which is why that
 one has to be caught at the write, while a dangling pipeline pin can start nothing and so refuses
 loudly on its own at the start call.
+
+## 1.51.0
+
+1.51.0, not 1.50.1: one additive endpoint, `DELETE /api/v1/services/{serviceId}` (`admin`), which
+deletes a service frame, its subtree and the run history recorded under it. Nothing existing changes
+shape or meaning, so a consumer built against 1.50.0 parses and behaves identically.
+
+**It closes the last board write with no headless door.** A key authenticates on `/api/v1` alone, so
+until now a caller that could provision its own keys, adopt a repository, raise a service and file
+work against it still had to ask a person to take one down. Whoever provisions a board is also
+whoever has to reclaim it.
+
+Two answers a caller has to branch on rather than retry:
+
+- **`422` with `details.reason: 'service_has_unfinished_tasks'`** is the app's own guard, reached
+  through the same service method. A frame holding a task that has not finished is refused rather
+  than deleted, because deleting one discards work in flight along with its history. The caller that
+  means it deletes those tasks first (`DELETE /api/v1/tasks/{taskId}`, which stops a live run) and
+  calls this again; the alternative on the app side is archiving, which this surface does not offer.
+- **`404` for an ARCHIVED service**, which is the same population rule every per-service endpoint
+  here follows: an archived frame is absent from `GET /api/v1/services`, so it is absent here too. A
+  caller that archived instead of deleting has to restore it in the app first.
+
+A run under the frame is stopped and its container killed before anything is removed, so a delete
+during a live run never leaves a container idling until its watchdog.

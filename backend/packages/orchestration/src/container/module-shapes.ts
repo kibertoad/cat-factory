@@ -17,6 +17,8 @@ import type { InitiativeService } from '../modules/initiative/InitiativeService.
 import type { KaizenService } from '../modules/kaizen/KaizenService.js'
 import type { MergeTrackRecordService } from '../modules/merge/MergeTrackRecordService.js'
 import type { RiskPolicyService } from '../modules/merge/RiskPolicyService.js'
+import type { AccountRiskPolicyService } from '../modules/merge/AccountRiskPolicyService.js'
+import type { WorkspaceRiskPolicyLibrary } from '../modules/merge/WorkspaceRiskPolicyLibrary.js'
 import type { NotificationService } from '../modules/notifications/NotificationService.js'
 import type { NotificationSettingsService } from '../modules/notifications/NotificationSettingsService.js'
 import type { PreviewService } from '../modules/preview/PreviewService.js'
@@ -115,9 +117,18 @@ export interface SlackModule {
   memberMappingService: SlackMemberMappingService
 }
 
-/** The merge-preset feature's service, present only when its repository is wired. */
+/**
+ * The risk-policy feature, present only when the board-tier repository is wired.
+ *
+ * `service` is the board tier (its own library, plus the clone/hide it does against what it
+ * inherits); `accountService` is the ACCOUNT tier and is present only where that repository is
+ * wired too; `library` is the merged read (ADR 0055) every other consumer holds — the engine's
+ * resolution, both board guards and the snapshot — so all of them answer one precedence.
+ */
 export interface RiskPoliciesModule {
   service: RiskPolicyService
+  accountService?: AccountRiskPolicyService
+  library: WorkspaceRiskPolicyLibrary
 }
 
 /**

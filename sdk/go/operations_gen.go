@@ -542,8 +542,9 @@ func (s *JobsService) Stream(ctx context.Context, id string) (*EventStream, erro
 }
 
 // ServicesService the workspace's board services, the frames tasks are created under: list them, create one
-// (optionally backed by a repository), or patch one, including declaring where the manifests for
-// its per-run environments are read from.
+// (optionally backed by a repository), patch one (including declaring where the manifests for its
+// per-run environments are read from), or delete one with everything under it. The delete refuses
+// a service holding unfinished tasks rather than discarding work in flight.
 type ServicesService struct {
 	client *Client
 }
@@ -570,6 +571,25 @@ func (s *ServicesService) Create(ctx context.Context, body *CreatePublicServiceR
 		return nil, err
 	}
 	return &out, nil
+}
+
+// Delete delete a service and everything under it
+// Delete a board service, its modules and tasks, and the run history recorded under them. The
+// inverse of the create, and the one board write with no headless counterpart before it: a key
+// authenticates on `/api/v1` only, so a caller that provisions services (an environment rebuilt
+// per test pass, a repository retired, a frame raised against the wrong repository) had to ask a
+// person to clean them up. Any run still going under the frame is stopped and its container
+// killed first, so nothing is left idling. A service holding UNFINISHED tasks is refused with
+// `422 service_has_unfinished_tasks` rather than discarding work in flight: delete those tasks
+// first (`DELETE /api/v1/tasks/{taskId}`) if that is what you mean. An ARCHIVED service is not
+// addressable here, exactly as it is absent from `GET /api/v1/services`. Requires an `admin` key.
+// DELETE /api/v1/services/{serviceId} (operation deletePublicService).
+func (s *ServicesService) Delete(ctx context.Context, serviceID string) error {
+	req := requestSpec{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/api/v1/services/%s", pathEscape(serviceID)),
+	}
+	return s.client.requestNoContent(ctx, req)
 }
 
 // List list the workspace's services

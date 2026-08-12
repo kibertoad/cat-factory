@@ -43,7 +43,7 @@ import type {
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
   RiskPolicyCacheValue,
-  RiskPolicyRepository,
+  WorkspaceRiskPolicyReader,
   RunInitiatorScope,
   RunLifecycleSink,
   StepResolverRegistry,
@@ -504,8 +504,12 @@ export interface ExecutionServiceDependencies {
    * Optional: resolves a task's merge threshold preset (auto-merge ceilings + the
    * CI-fixer attempt budget). Absent → the built-in `FALLBACK_RISK_POLICY`, which auto-merges
    * nothing: an engine with no preset library configured lands no pull request on its own.
+   *
+   * The board's merged LIBRARY (`WorkspaceRiskPolicyLibrary`), so a task pinning a policy its
+   * account defines resolves the posture the picker offered rather than falling silently back to
+   * the board default (ADR 0055).
    */
-  riskPolicyRepository?: RiskPolicyRepository
+  riskPolicyReader?: WorkspaceRiskPolicyReader
   /**
    * Optional: the {@link AppCaches.riskPolicy} slice — read-through for `resolveRiskPolicy`
    * so the slow-moving merge-preset row isn't re-fetched on every gate evaluation. Absent →

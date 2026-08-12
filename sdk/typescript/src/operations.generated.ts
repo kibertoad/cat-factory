@@ -294,7 +294,7 @@ export class JobsResource {
   }
 }
 
-/** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), or patch one, including declaring where the manifests for its per-run environments are read from. */
+/** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), patch one (including declaring where the manifests for its per-run environments are read from), or delete one with everything under it. The delete refuses a service holding unfinished tasks rather than discarding work in flight. */
 export class ServicesResource {
   readonly #transport: Transport
 
@@ -312,6 +312,19 @@ export class ServicesResource {
       method: 'POST',
       path: `/api/v1/services`,
       body,
+      options,
+    })
+  }
+
+  /**
+   * Delete a service and everything under it
+   * Delete a board service, its modules and tasks, and the run history recorded under them. The inverse of the create, and the one board write with no headless counterpart before it: a key authenticates on `/api/v1` only, so a caller that provisions services (an environment rebuilt per test pass, a repository retired, a frame raised against the wrong repository) had to ask a person to clean them up. Any run still going under the frame is stopped and its container killed first, so nothing is left idling. A service holding UNFINISHED tasks is refused with `422 service_has_unfinished_tasks` rather than discarding work in flight: delete those tasks first (`DELETE /api/v1/tasks/{taskId}`) if that is what you mean. An ARCHIVED service is not addressable here, exactly as it is absent from `GET /api/v1/services`. Requires an `admin` key.
+   * `DELETE /api/v1/services/{serviceId}` — operation `deletePublicService`.
+   */
+  delete(serviceId: string, options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'DELETE',
+      path: `/api/v1/services/${encodePathSegment(serviceId)}`,
       options,
     })
   }
@@ -2093,7 +2106,7 @@ export class KeysResource {
 export abstract class CatFactoryResources {
   /** Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one. */
   readonly jobs: JobsResource
-  /** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), or patch one, including declaring where the manifests for its per-run environments are read from. */
+  /** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), patch one (including declaring where the manifests for its per-run environments are read from), or delete one with everything under it. The delete refuses a service holding unfinished tasks rather than discarding work in flight. */
   readonly services: ServicesResource
   /** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
   readonly spec: SpecResource
