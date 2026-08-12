@@ -14,7 +14,7 @@ export default defineConfig({
       // module drags coverage down and trips the ratchet — the point of the floor.
       all: true,
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.test.ts', 'src/index.ts'],
+      exclude: ['src/**/*.test.ts', 'src/**/*.fixtures.ts', 'src/index.ts'],
       reporter: ['text-summary'],
       // Pinned to the current measured coverage (floored to whole percents so a deterministic
       // recount can't trip it): statements 16.68% / branches 15.98% / functions 11.68% /

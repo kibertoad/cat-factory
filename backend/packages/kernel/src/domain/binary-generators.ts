@@ -526,6 +526,12 @@ function generationOptionLines(
     }
   }
   if (generation.negativePrompt) lines.push(`- Negative prompt: ${generation.negativePrompt}`)
+  // `!== undefined` rather than a truthiness check, and the two numeric options differ on whether
+  // that is load-bearing. `seed` accepts 0 (`minValue(0)`), so a falsy read would silently drop the
+  // one seed a run is most likely to have been pinned to, and a test pins that. `upscale` starts at
+  // 2 (`binaryUpscaleFactorSchema`), so there is no producible value the two readings disagree
+  // about: its mutant is EQUIVALENT and is left alive on purpose, since killing it would take an
+  // input the schema refuses. `requiredBinaryCapabilities` in contracts reads both the same way.
   if (generation.seed !== undefined) {
     lines.push(
       `- Seed: ${generation.seed}. Send it on every call so this run can be reproduced; vary it only where you are explicitly asked for several candidates of one subject.`,
