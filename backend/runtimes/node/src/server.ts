@@ -419,7 +419,7 @@ export interface StartOptions {
   cachesProfile?: Partial<AppCachesProfile>
   /**
    * The catalog id of the built-in model preset a fresh workspace is seeded with as its
-   * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A deploy-app wrapper passes this to
+   * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude,chatgpt}`). A deploy-app wrapper passes this to
    * change the out-of-the-box default without editing library code, e.g.
    * `start({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude })`. Forwarded to
    * `buildNodeContainer` (and, via the local facade's builder, to `buildLocalContainer`).

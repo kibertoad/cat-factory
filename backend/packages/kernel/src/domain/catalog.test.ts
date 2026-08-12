@@ -13,6 +13,7 @@ import {
   seedRiskPolicies,
   type ModelPresetSeed,
 } from './catalog.js'
+import { MODEL_CATALOG } from './models.js'
 
 // The catalog's DATA is data; what is worth pinning is the small amount of logic around it: the
 // seed copies two writers both depend on being identical, the `createdAt` stamping that decides
@@ -167,6 +168,25 @@ describe('seedModelPresets', () => {
   it('names a fallback default preset that is actually in the catalog', () => {
     expect(DEFAULT_MODEL_PRESET.id).toBe(DEFAULT_MODEL_PRESET_ID)
     expect(DEFAULT_MODEL_PRESETS.map((p) => p.id)).toContain(DEFAULT_MODEL_PRESET_ID)
+  })
+
+  it('pins every built-in to a model MODEL_CATALOG actually ships, base and override alike', () => {
+    // The one failure mode nothing else here can see. A preset's `baseModelId` is a plain string
+    // matched against the catalog at DISPATCH, so a built-in naming a model that was renamed or
+    // dropped typechecks, seeds, lists, and is selectable, then fails on the first agent step of
+    // whichever run picked it. Derived from MODEL_CATALOG rather than from a hand-listed set, so a
+    // catalog rename breaks this instead of a live run, and adding a built-in needs no edit here.
+    const catalogIds = new Set(MODEL_CATALOG.map((entry) => entry.id))
+    for (const preset of DEFAULT_MODEL_PRESETS) {
+      expect(catalogIds, `preset ${preset.id} pins a base model no catalog entry has`).toContain(
+        preset.baseModelId,
+      )
+      for (const [kind, modelId] of Object.entries(preset.overrides)) {
+        expect(catalogIds, `preset ${preset.id} overrides ${kind} with an unknown model`).toContain(
+          modelId,
+        )
+      }
+    }
   })
 })
 

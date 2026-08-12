@@ -284,21 +284,22 @@ describe('agent-context run-path + lazy-seed surface (workspace-scoped)', () => 
 
   // The lazy default-preset seeds a board load triggers (`*PresetService` ensure-default writes).
   // They return void, so assert they forward in scope and are scope-rejected out of scope.
-  const SEED_WRITES: Array<{ repo: string; method: string }> = [
-    { repo: 'riskPolicyRepository', method: 'upsert' },
-    { repo: 'modelPresetRepository', method: 'upsert' },
+  const SEED_WRITES: Array<{ repo: string; method: string; arg: unknown }> = [
+    { repo: 'riskPolicyRepository', method: 'upsert', arg: { id: 'p_1' } },
+    { repo: 'modelPresetRepository', method: 'upsert', arg: { id: 'p_1' } },
+    // The BATCHED model-preset seed, whose payload is an array rather than a row: it is the call a
+    // first board load actually makes, so an unrouted one fails the load itself.
+    { repo: 'modelPresetRepository', method: 'upsertMany', arg: [{ id: 'p_1' }] },
   ]
-  for (const { repo, method } of SEED_WRITES) {
+  for (const { repo, method, arg } of SEED_WRITES) {
     it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
-      await expect(
-        remoteRegistry()[repo]![method]!('ws_in', { id: 'p_1' }),
-      ).resolves.toBeUndefined()
+      await expect(remoteRegistry()[repo]![method]!('ws_in', arg)).resolves.toBeUndefined()
     })
 
     it(`rejects ${repo}.${method} for an out-of-scope workspace (404)`, async () => {
-      await expect(remoteRegistry()[repo]![method]!('ws_out', { id: 'p_1' })).rejects.toMatchObject(
-        { code: 'not_found' },
-      )
+      await expect(remoteRegistry()[repo]![method]!('ws_out', arg)).rejects.toMatchObject({
+        code: 'not_found',
+      })
     })
   }
 })

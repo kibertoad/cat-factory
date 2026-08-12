@@ -417,7 +417,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     agedScope: 'helper',
   },
   // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
-  // `upsert` were already remotely callable — so the whole model-preset repo is remote.
+  // `upsert`/`upsertMany` (the batched built-in seed a first board load writes through) were
+  // already remotely callable — so the whole model-preset repo is remote.
   modelPresetRepository: {},
   // `set` is now allow-listed (the fragment-defaults editor); `get` was already remote.
   serviceFragmentDefaultsRepository: {},

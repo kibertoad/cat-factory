@@ -13,6 +13,7 @@ import type {
 import {
   ConflictError,
   type ConnectionTestResult,
+  declaredModelRouteLabels,
   isAllowedByFamilyPolicy,
   isModelUsable,
   isModelUsableInline,
@@ -928,10 +929,18 @@ export class RunAdmission {
       )
     }
     if (unconfigured.size > 0) {
+      // Name the routes each model DECLARES rather than "add an API key for the provider": a
+      // subscription-or-gateway-only model (`gpt-5.6-sol`, `claude-opus`) has a vendor that sells a
+      // key no route accepts, so the generic remedy sends an operator to buy one and land back on
+      // this same refusal. `details.models` stays the bare ids the SPA and the SDKs read.
+      const named = [...unconfigured].map((id) => {
+        const routes = declaredModelRouteLabels(id, caps)
+        return routes.length > 0 ? `${id} (needs ${routes.join(' or ')})` : id
+      })
       throw new ConflictError(
-        `This pipeline uses models with no configured provider: ${[...unconfigured].join(', ')}. ` +
-          'Add an API key for the provider, connect a subscription, or enable Cloudflare AI ' +
-          'before starting.',
+        `This pipeline uses models with no configured provider: ${named.join(', ')}. ` +
+          'Configure one of the routes named above (an API key, a connected subscription, or ' +
+          'Cloudflare AI) before starting.',
         'providers_unconfigured',
         { models: [...unconfigured] },
       )

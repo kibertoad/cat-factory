@@ -99,8 +99,8 @@ The named app schemas (`telemetry` / `sandbox` / `provisioning`) are fixed and n
 
 ## Choosing the default model preset
 
-Every workspace's model-preset library is seeded on first use with three built-ins
-(Kimi K2.7, GLM-5.2, Claude Opus 5); the Node facade marks **Kimi K2.7** as the
+Every workspace's model-preset library is seeded on first use with four built-ins
+(Kimi K2.7, GLM-5.2, Claude Opus 5, GPT-5.6 Sol); the Node facade marks **Kimi K2.7** as the
 default because it runs on the bare Cloudflare AI baseline. To ship a different
 out-of-the-box default, pass `defaultModelPresetId` to `start()`: the entry (`src/main.ts`)
 is yours to edit:
@@ -114,7 +114,8 @@ start({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude }).catch((err: unknow
 })
 ```
 
-`MODEL_PRESET_SEED_IDS` is re-exported from the library (`.kimi` / `.glm` / `.claude`), so
+`MODEL_PRESET_SEED_IDS` is re-exported from the library (`.kimi` / `.glm` / `.claude` /
+`.chatgpt`), so
 you don't need a direct `@cat-factory/kernel` import. This is a **deployment-level fact**
 resolved at composition time, not an env var: the same programmatic seam as the
 `agentKindRegistry` option. It applies only at the **first** seed of a workspace, so a

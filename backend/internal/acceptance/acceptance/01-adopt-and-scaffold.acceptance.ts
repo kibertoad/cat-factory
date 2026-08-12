@@ -10,7 +10,7 @@
 // hand and adopting them needs no platform change at all (`POST /api/v1/services` already backs a
 // service by `repoId`), and it drops the one prerequisite no configuration could satisfy. The
 // bootstrapper agent is therefore no longer this spec's subject; `pl_build` is, from the same
-// briefs. Decision record: `docs/initiatives/acceptance-suite-operator-setup.md`.
+// briefs. Decision record: `backend/docs/adr/0056-acceptance-suite-operator-setup.md`.
 //
 // **Why two services rather than one.** The defect spec 03 hunts lives BETWEEN a backend and a
 // frontend (see `src/instructions.ts`), so there have to be two repositories for it to live

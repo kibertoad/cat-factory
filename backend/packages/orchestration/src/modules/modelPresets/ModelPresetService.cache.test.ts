@@ -29,10 +29,17 @@ function fakeRepo(): ModelPresetRepository & { reads: number } {
       return [...rows.values()].find((p) => p.isDefault) ?? null
     },
     list: async () => [...rows.values()],
-    upsert: async (_ws: string, preset: ModelPreset) => {
-      // Single-default invariant (matches the real repo): promoting one demotes the rest.
-      if (preset.isDefault) for (const p of rows.values()) p.isDefault = false
-      rows.set(preset.id, { ...preset })
+    upsert: async (ws: string, preset: ModelPreset) => {
+      await repo.upsertMany(ws, [preset])
+    },
+    upsertMany: async (_ws: string, presets: ModelPreset[]) => {
+      // Single-default invariant (matches the real repos): a promoted member demotes every row
+      // outside the batch, and each member's own flag stands.
+      const ids = new Set(presets.map((p) => p.id))
+      if (presets.some((p) => p.isDefault)) {
+        for (const [id, p] of rows) if (!ids.has(id)) p.isDefault = false
+      }
+      for (const preset of presets) rows.set(preset.id, { ...preset })
     },
     remove: async (_ws: string, id: string) => {
       rows.delete(id)

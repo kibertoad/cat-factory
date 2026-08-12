@@ -76,9 +76,9 @@ in `wrangler.toml`).
 
 ## Choosing the default model preset
 
-Every workspace's model-preset library is seeded on first use with three built-ins
-(Kimi K2.7, GLM-5.2, Claude Opus 5); the Worker marks **Kimi K2.7** the default (it runs
-on the bare Cloudflare AI binding). The library API already accepts an override: the app
+Every workspace's model-preset library is seeded on first use with four built-ins
+(Kimi K2.7, GLM-5.2, Claude Opus 5, GPT-5.6 Sol); the Worker marks **Kimi K2.7** the
+default (it runs on the bare Cloudflare AI binding). The library API already accepts an override: the app
 builder reads `defaultModelPresetId` off `createApp`'s `overrides`
 (a `Partial<CoreDependencies>`):
 
@@ -99,7 +99,7 @@ own [`backend/runtimes/cloudflare/src/index.ts`](../../backend/runtimes/cloudfla
 as the template (it builds the app exactly this way and defines the full handler) and add
 `defaultModelPresetId` to the `overrides` it already passes.
 
-`MODEL_PRESET_SEED_IDS` (`.kimi` / `.glm` / `.claude`) is re-exported from the library, so
+`MODEL_PRESET_SEED_IDS` (`.kimi` / `.glm` / `.claude` / `.chatgpt`) is re-exported from the library, so
 you don't need a direct `@cat-factory/kernel` import. The override applies only at the
 **first** seed of a workspace, so a user's later manual default choice is always preserved.
 Most deployments keep the stock one-line re-export and leave the default at Kimi.

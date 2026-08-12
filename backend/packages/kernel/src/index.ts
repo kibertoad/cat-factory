@@ -162,6 +162,7 @@ export {
   resolveModelRef,
   isModelUsable,
   isModelUsableInline,
+  declaredModelRouteLabels,
   nativeVendorForRef,
   runsOnSubscriptionHarness,
   subscriptionVendorForRef,
