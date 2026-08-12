@@ -237,7 +237,12 @@ describe('per-block model selection', () => {
 
   describe('catalog endpoint', () => {
     it('serves the effective catalog, validating against the contract', async () => {
-      const app = makeApp()
+      // `bindCloudflareAi`: the projection this compares against is built from `noKeys`, whose
+      // `cloudflareEnabled: true` is the deployment baseline a real Worker has — and the app's own
+      // half of that fact comes from the `[ai]` binding's PRESENCE, which the pool otherwise
+      // leaves unbound so nothing can dial a model that could only reject. This test reads the
+      // catalog and never runs a step, so it is the one place that wants the binding there.
+      const app = makeApp(undefined, {}, { bindCloudflareAi: true })
       const res = await app.call<ModelOption[]>('GET', '/models')
       expect(res.status).toBe(200)
       expect(() => v.parse(modelCatalogSchema, res.body)).not.toThrow()

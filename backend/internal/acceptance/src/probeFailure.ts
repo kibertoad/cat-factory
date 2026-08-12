@@ -379,14 +379,19 @@ export function describeProbeFailure(
  * `beforeAll` so a resumed pass reaches it with services adopted and pull requests open, and telling
  * that operator a re-run starts clean is how they start a second pass that `board-titles` then
  * refuses.
+ *
+ * It names the ID and never `latest`, which it used to offer as an equivalent. The pointer follows
+ * the most recent pass to record a FACT, and this failure is reached from every spec's `beforeAll`,
+ * including the first one of a pass that has recorded none: exactly when the two name different
+ * passes, and following `latest` there resumes an older half-built one instead.
  */
 function buildRemedy(steps: readonly string[], reachTarget: string | undefined): Remedy {
   return {
     steps: [
       ...steps,
       'Fix that, then re-run the suite. A pass that has already created things resumes when ' +
-        'ACCEPTANCE_RUN_ID is set to the run id printed above this failure (or to `latest`), in ' +
-        'the shell or in the `.env`; only a pass that created nothing yet starts clean.',
+        'ACCEPTANCE_RUN_ID is set to the run id printed above this failure, in the shell or in ' +
+        'the `.env`; only a pass that created nothing yet starts clean.',
     ],
     ...(reachTarget
       ? {

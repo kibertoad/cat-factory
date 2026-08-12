@@ -5,12 +5,6 @@ import {
   FakeEnvConfigRepairer,
   FakeRepoBootstrapper,
   RecordingEventPublisher,
-  defineCacheSuite,
-  defineConformanceSuite,
-  defineMergeTrackRecordSuite,
-  defineReviewFrictionSuite,
-  defineWorkspaceAccessSuite,
-  defineWorkspaceRbacSuite,
   makeIncorporatedClarityReview,
   makeReadyClarityReview,
   makeIncorporatedReview,
@@ -20,9 +14,8 @@ import {
   mintSession,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
-import { makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
+import { buildTestContainer, makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
 import { FakeTaskSourceProvider } from '../fakes/FakeTaskSourceProvider'
-import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
@@ -38,10 +31,16 @@ import { D1AccountSettingsRepository } from '../../src/infrastructure/repositori
 import { D1AccountRiskPolicyRepository } from '../../src/infrastructure/repositories/D1AccountRiskPolicyRepository'
 import { D1TaskRepository } from '../../src/infrastructure/repositories/D1TaskRepository'
 
-// Run the shared cross-runtime conformance suite against the Cloudflare Worker
-// facade (the real Hono app over a real local D1, inside workerd). The Node
-// facade runs the identical suite over real Postgres — together they mandate
-// feature parity: a behavioural difference fails the same assertion in one runtime.
+// The Cloudflare Worker's {@link ConformanceHarness}: the real Hono app over a real local D1,
+// inside workerd. The Node facade builds the same harness over real Postgres — together they
+// mandate feature parity: a behavioural difference fails the same assertion in one runtime.
+//
+// A MODULE, not a spec: the suite groups run as sibling `conformance.*.spec.ts` files that each
+// import this harness, mirroring the layout Node and local already use. vitest's `--shard` splits
+// by FILE COUNT (it hashes paths and slices equal counts, blind to what a file holds), so while
+// every group lived in one spec that ONE file carried 533 of this package's ~1400 tests and no
+// 3-way split could balance: its shard ran ~4x its siblings and came within 41 seconds of the
+// lane's 15-minute cap. Nine files can be distributed; one cannot be.
 
 type WorkerMakeAppOpts = Parameters<ConformanceHarness['makeApp']>[1]
 
@@ -176,7 +175,7 @@ const harness: ConformanceHarness = {
       authEnabled: Boolean(sessionSecret),
       session: (user) => mintSession(sessionSecret, user),
       createWorkspaceInAccount: (accountId, ownerUserId, options) =>
-        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).workspaceService.create(
+        buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).workspaceService.create(
           { name: options?.name ?? 'RBAC board', seed: options?.seed ?? false },
           ownerUserId,
           accountId,
@@ -210,7 +209,7 @@ const harness: ConformanceHarness = {
       seedService: (service) => new D1ServiceRepository({ db: env.DB }).insert(service),
       getService: (id) => new D1ServiceRepository({ db: env.DB }).get(id),
       localModelEndpoints: () => {
-        const svc = buildContainer(env, {
+        const svc = buildTestContainer({
           agentExecutor: new FakeAgentExecutor(),
         }).localModelEndpoints
         if (!svc) return undefined
@@ -222,7 +221,7 @@ const harness: ConformanceHarness = {
         }
       },
       openRouterCatalog: () => {
-        const svc = buildContainer(env, {
+        const svc = buildTestContainer({
           agentExecutor: new FakeAgentExecutor(),
         }).openRouterCatalog
         if (!svc) return undefined
@@ -232,7 +231,7 @@ const harness: ConformanceHarness = {
         }
       },
       userSecrets: () => {
-        const svc = buildContainer(env, {
+        const svc = buildTestContainer({
           agentExecutor: new FakeAgentExecutor(),
           // Thread the injected app-owned secret-kind registry (custom kinds pre-registered by
           // the suite) so the probe's service describes them by reference, like the main build.
@@ -253,21 +252,21 @@ const harness: ConformanceHarness = {
       // instance, and a rebuilt container's default registry declares nothing to resolve.
       toolServerDispatch: () =>
         makeToolServerDispatchProbe(
-          buildContainer(env, {
+          buildTestContainer({
             agentExecutor: new FakeAgentExecutor(),
             ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
           }),
         ),
       packageRegistries: () => {
-        const svc = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
-          .packageRegistries?.service
+        const svc = buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).packageRegistries
+          ?.service
         if (!svc) return undefined
         return {
           resolveForDispatch: (workspaceId: string) => svc.resolveForDispatch(workspaceId),
         }
       },
       userSettings: () => {
-        const svc = buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).userSettings
+        const svc = buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).userSettings
           ?.service
         if (!svc) return undefined
         return {
@@ -280,12 +279,12 @@ const harness: ConformanceHarness = {
       // executor override skips the strict container-executor selection (the identity
       // layer never touches the agent runner).
       onboarding: () =>
-        makeOnboardingProbe(buildContainer(env, { agentExecutor: new FakeAgentExecutor() })),
+        makeOnboardingProbe(buildTestContainer({ agentExecutor: new FakeAgentExecutor() })),
       executionRepository: () =>
-        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).executionRepository,
+        buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).executionRepository,
       requirementReviewRepository: () => new D1RequirementReviewRepository({ db: env.DB }),
       agentRunRepository: () =>
-        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
+        buildTestContainer({ agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
       blockRepository: () => new D1BlockRepository({ db: env.DB }),
       workspaceRepository: () => new D1WorkspaceRepository({ db: env.DB }),
       workspaceMemberRepository: () => new D1WorkspaceMemberRepository({ db: env.DB }),
@@ -300,20 +299,4 @@ const harness: ConformanceHarness = {
   },
 }
 
-defineConformanceSuite(harness)
-// Workspace-RBAC initiative (slice 2): the membership roster + access-mode persistence
-// must round-trip identically on D1 and Postgres.
-defineWorkspaceAccessSuite(harness)
-// Workspace-RBAC initiative (slice 3): the gate's resolution + viewer write floor + list
-// filtering, enforced over the real HTTP gate — identically on D1 and Postgres.
-defineWorkspaceRbacSuite(harness)
-// Opt-in review-debt friction: the four settings columns + the board's friction guard must
-// gate task creation identically on D1 and Postgres.
-defineReviewFrictionSuite(harness)
-// Merge track record: the classification → per-class rule → merge → effort tag → per-class SQL
-// rollup chain must behave identically on D1 and Postgres.
-defineMergeTrackRecordSuite(harness)
-// Caching initiative: the Worker serves the fragment catalog through the
-// ISOLATE-SAFE (pass-through) profile — coherence must hold there exactly as it
-// does through Node's live in-memory cache.
-defineCacheSuite(harness)
+export { harness }

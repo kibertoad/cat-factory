@@ -59,6 +59,24 @@ function issueApiFor(verdict: IssueCredentialVerdict): PreflightContext['issueAp
     }) satisfies IssueApi
 }
 
+/**
+ * The context every case starts from, so a new collaborator is wired into these cases ONCE rather
+ * than into three copies of the same literal.
+ *
+ * `passesNaming` answers no pass by default: what OTHER ledgers hold is the subject of a couple of
+ * cases below and irrelevant to the rest, and a default that read the real state directory would
+ * make every refusal's remedy depend on whoever last ran the suite on that machine.
+ */
+function baseContext(): Partial<PreflightContext> {
+  return {
+    config: config(),
+    serviceTitles: [],
+    adoptedServiceIds: [],
+    passesNaming: () => [],
+    issueApiFor: issueApiFor({ status: 'ready' }),
+  }
+}
+
 /** Run one prerequisite against a fake deployment and assert it refused, returning the verdict. */
 async function refusal(
   id: string,
@@ -66,13 +84,7 @@ async function refusal(
 ): Promise<Extract<PrerequisiteVerdict, { status: 'unsatisfied' }>> {
   const prerequisite = PREREQUISITES.find((entry) => entry.id === id)
   if (!prerequisite) throw new Error(`no prerequisite '${id}'`)
-  const verdict = await prerequisite.check({
-    config: config(),
-    serviceTitles: [],
-    adoptedServiceIds: [],
-    issueApiFor: issueApiFor({ status: 'ready' }),
-    ...context,
-  } as PreflightContext)
+  const verdict = await prerequisite.check({ ...baseContext(), ...context } as PreflightContext)
   if (verdict.status !== 'unsatisfied') {
     throw new Error(`expected '${id}' to refuse, got '${verdict.status}'`)
   }
@@ -84,13 +96,7 @@ async function refusal(
 async function satisfied(id: string, context: Partial<PreflightContext>): Promise<string> {
   const prerequisite = PREREQUISITES.find((entry) => entry.id === id)
   if (!prerequisite) throw new Error(`no prerequisite '${id}'`)
-  const verdict = await prerequisite.check({
-    config: config(),
-    serviceTitles: [],
-    adoptedServiceIds: [],
-    issueApiFor: issueApiFor({ status: 'ready' }),
-    ...context,
-  } as PreflightContext)
+  const verdict = await prerequisite.check({ ...baseContext(), ...context } as PreflightContext)
   if (verdict.status !== 'satisfied') {
     throw new Error(
       `expected '${id}' to pass, got '${verdict.status}': ` +
@@ -113,13 +119,7 @@ async function unreadable(
 ): Promise<Extract<PrerequisiteVerdict, { status: 'unknown' }>> {
   const prerequisite = PREREQUISITES.find((entry) => entry.id === id)
   if (!prerequisite) throw new Error(`no prerequisite '${id}'`)
-  const verdict = await prerequisite.check({
-    config: config(),
-    serviceTitles: [],
-    adoptedServiceIds: [],
-    issueApiFor: issueApiFor({ status: 'ready' }),
-    ...context,
-  } as PreflightContext)
+  const verdict = await prerequisite.check({ ...baseContext(), ...context } as PreflightContext)
   if (verdict.status !== 'unknown') {
     throw new Error(`expected '${id}' to report unknown, got '${verdict.status}'`)
   }
@@ -560,9 +560,58 @@ describe('target-repos', () => {
       ]),
     })
     expect(verdict.problem).toContain('blk_9')
+    // With no ledger naming it, the refusal says so instead of offering a resume that would continue
+    // the wrong pass. It still hands back the read that shows what backs what.
+    expect(verdict.remedy.steps[0]).toContain('No ledger')
+    expect(commandsOf(verdict.remedy)).not.toContain(resumeInvocation('latest'))
+  })
+
+  it('names the PASS whose ledger holds the service in the way, and resumes that one', async () => {
+    // The remedy `latest` replaced: the pointer names whichever pass last recorded a fact, which
+    // after one refused attempt is not the pass holding the work. The run id is also the one thing
+    // an operator cannot recover by looking at the board, which is what made the old remedy a dead
+    // end rather than merely a vague one.
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { serviceId: 'blk_9' }),
+        repo('cf-acc-catalog-web'),
+      ]),
+      passesNaming: (serviceIds) =>
+        serviceIds.includes('blk_9') ? [{ runId: '20260811151012', serviceIds: ['blk_9'] }] : [],
+    })
+    expect(verdict.remedy.steps[0]).toContain('20260811151012')
     // Compared against the renderer rather than a spelling, so this stays an assertion about WHICH
     // command is offered; `operatorText.test.ts` pins what each shell's form must be.
-    expect(commandsOf(verdict.remedy)[0]).toBe(resumeInvocation('latest'))
+    expect(commandsOf(verdict.remedy)[0]).toBe(resumeInvocation('20260811151012'))
+    // The status read beside it names that pass too. Bare, it reports whichever pass ran LAST, which
+    // in this exact situation is the refused attempt being read rather than the pass under discussion.
+    expect(commandsOf(verdict.remedy)[1]).toContain('run status 20260811151012')
+  })
+
+  it('says what resuming one pass leaves behind when the leftovers span two', async () => {
+    // "RESUME one of them" is not an instruction here: resuming the pass holding the API leaves the
+    // WEB service unowned, this same check refuses again, and naming the other pass sends the reader
+    // back to the first. So the split is stated with what each pass holds, and the choice it really
+    // leaves (continue one, clear the other's leftovers) is the thing named.
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { serviceId: 'blk_api' }),
+        repo('cf-acc-catalog-web', { serviceId: 'blk_web' }),
+      ]),
+      passesNaming: () => [
+        { runId: 'pass-a', serviceIds: ['blk_api'] },
+        { runId: 'pass-b', serviceIds: ['blk_web'] },
+      ],
+    })
+    const step = verdict.remedy.steps[0] ?? ''
+    expect(step).toContain('pass-a holds blk_api')
+    expect(step).toContain('pass-b holds blk_web')
+    expect(step).toContain('no single resume')
+    // Both are offered, since which one to continue is the operator's call and neither id is
+    // recoverable from the board.
+    expect(commandsOf(verdict.remedy)).toEqual(
+      expect.arrayContaining([resumeInvocation('pass-a'), resumeInvocation('pass-b')]),
+    )
   })
 
   it('allows the link the LEDGER names, on a resumed pass', async () => {
@@ -777,17 +826,38 @@ describe('tracker-writeback', () => {
 })
 
 describe('board-titles', () => {
+  const board = (services: readonly { title: string; serviceId?: string }[]) =>
+    ({ services: { list: async () => ({ services }) } }) as unknown as CatFactoryClient
+
   it('offers the resume before the new prefix, since resuming is what keeps the two apart', async () => {
     const verdict = await refusal('board-titles', {
-      client: {
-        services: { list: async () => ({ services: [{ title: 'cf-acc Catalog API' }] }) },
-      } as unknown as CatFactoryClient,
+      client: board([{ title: 'cf-acc Catalog API', serviceId: 'blk_api' }]),
       serviceTitles: ['cf-acc Catalog API', 'cf-acc Catalog Web'],
+      passesNaming: () => [{ runId: '20260811151012', serviceIds: ['blk_api'] }],
     })
     const commands = commandsOf(verdict.remedy)
-    expect(commands[0]).toContain('run status')
-    expect(commands[1]).toBe(resumeInvocation('latest'))
+    expect(commands[0]).toBe(resumeInvocation('20260811151012'))
+    expect(commands[1]).toContain('run status')
     expect(commands[2]).toBe(perPersonPrefixInvocation('cf-acc'))
+  })
+
+  it('reaches the owning pass through the frame ids, since a ledger records no titles', async () => {
+    // The lookup is by service id, so a title-only check has to resolve the frames the board just
+    // answered with. Asked with the wrong ids it would find nothing and quietly fall back to "no
+    // ledger names it", which reads exactly like a frame belonging to somebody else.
+    const asked: string[][] = []
+    await refusal('board-titles', {
+      client: board([
+        { title: 'cf-acc Catalog API', serviceId: 'blk_api' },
+        { title: 'someone else’s service', serviceId: 'blk_theirs' },
+      ]),
+      serviceTitles: ['cf-acc Catalog API', 'cf-acc Catalog Web'],
+      passesNaming: (serviceIds) => {
+        asked.push([...serviceIds])
+        return []
+      },
+    })
+    expect(asked).toEqual([['blk_api']])
   })
 })
 

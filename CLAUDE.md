@@ -157,8 +157,8 @@ messages, code comments, UI copy.
 - **Multi-line git messages: bash heredoc in the Bash tool, NOT a PowerShell here-string.** The Bash tool
   is POSIX sh, so `@'…'@` leaks literal `@` characters into the commit subject. Use
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
-- **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
-  Verify pure-logic changes with `--filter=@cat-factory/orchestration`.
+- **Worker tests DO run on Windows** (this note used to say they fail on `config wrangler validation
+failed`): name the spec files, and expect one `AI bindings always access remote` warning per pool.
 - **The Postgres-backed suites need a reachable server AND `--env-mode=loose`**; a bare `[ELIFECYCLE]
 Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including how to start a cluster where no Docker daemon runs: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
@@ -580,9 +580,9 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
   imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
-- `node scripts/check-doc-links.mjs`, `check-doc-anchors.mjs`, `check-shipped-doc-links.mjs`: an ordinary
-  markdown link, a doc URL built in CODE, and a shipped tarball's links each resolve to a file AND a heading.
+- `node scripts/check-doc-links.mjs`, `check-doc-anchors.mjs`, `check-shipped-doc-links.mjs`: an ordinary markdown link, a doc URL built in CODE, and a shipped tarball's links each resolve to a file AND a heading.
 - `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
+- `node scripts/check-conformance-group-parity.mjs`: every conformance group runs on every facade.
 - `node scripts/check-deploy-placeholders.mjs`: the `deploy/*` templates hold placeholders, never real ids.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.

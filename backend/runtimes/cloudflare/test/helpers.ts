@@ -39,6 +39,46 @@ import { WebCryptoSecretCipher } from '../src/infrastructure/environments/WebCry
 
 const BASE = 'https://cat-factory.test'
 
+// The pool runs with the `AI` binding UNBOUND, and that is the same posture Node's harness runs.
+//
+// `wrangler.toml` binds `[ai]`, and the binding has no local simulator, so an inline LLM call
+// inside the pool cannot succeed — it can only reject with "Binding AI needs to be run remotely"
+// once the AI SDK has finished retrying it. The product catches that and passes through, which is
+// why every assertion stayed green while the suite filed 111 unhandled rejections per run and paid
+// the retry backoffs' wall-clock (the shard carrying `conformance.spec.ts` ran ~2x its siblings).
+// Since the calls can only ever fail, having them is worth nothing and having them is not free.
+//
+// Note what this does NOT change: `cloudflareModelsEnabled` below stays ON. The two are different
+// facts and only one of them is about the binding — whether the deployment OFFERS Workers AI
+// models (the catalog + the run-admission provider guard) versus whether this process can SERVE
+// one. Node has held exactly that combination all along, on purpose: flag on so a run can start,
+// no binding so nothing is dialled. Coupling them here refused every run instead.
+//
+// Built once rather than per `makeApp`, because the inline model resolver is memoised per `Env`
+// identity — a fresh copy per app would quietly build a fresh resolver per app.
+//
+const testEnv: typeof env = { ...env, AI: undefined }
+
+/**
+ * Build a container the way the suite means it, for the specs that reach the engine WITHOUT going
+ * through {@link makeApp} (the durable-driver specs and the conformance harness's probes).
+ *
+ * A function rather than an exported `testEnv`, because the two halves only work as a pair and a
+ * caller that took just the env would get the wrong one silently: no binding leaves
+ * `cloudflareModelsEnabled` deriving FALSE, the run-admission provider guard then refuses every
+ * run, and the spec fails on a missing execution rather than on anything it meant to assert. Pass
+ * `cloudflareModelsEnabled: false` explicitly to exercise the unconfigured-provider path.
+ */
+export function buildTestContainer(
+  overrides: Partial<CoreDependencies> = {},
+  opts: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
+) {
+  return buildContainer(testEnv, overrides, {
+    cloudflareModelsEnabled: opts.cloudflareModelsEnabled ?? true,
+    gateProviders: opts.gateProviders,
+  })
+}
+
 export interface TestResponse<T = unknown> {
   status: number
   body: T
@@ -107,7 +147,19 @@ export interface TestApp {
 export function makeApp(
   agentExecutor: AgentExecutor = new FakeAgentExecutor(),
   overrides: Partial<CoreDependencies> = {},
-  appOptions: { cloudflareModelsEnabled?: boolean; gateProviders?: GateProviderOverrides } = {},
+  appOptions: {
+    cloudflareModelsEnabled?: boolean
+    gateProviders?: GateProviderOverrides
+    /**
+     * Bind the real `[ai]` binding for this app, which is a CAPABILITY fact and not a usable
+     * model: `loadConfig`'s `cloudflareEnabled` reads the binding's presence, so the model
+     * catalog reports `cloudflare` as a route only when it is bound. For a spec asserting what
+     * the catalog REPORTS, and nothing that dials a model — the binding cannot run in this pool,
+     * so a run driven under this option rejects, and the suite now fails on that rather than
+     * counting it (see `testEnv`).
+     */
+    bindCloudflareAi?: boolean
+  } = {},
 ): TestApp {
   // Default to a no-op work runner so starting a run doesn't spawn a real
   // Cloudflare Workflows instance in the test pool (the wrangler.toml binding is
@@ -126,7 +178,20 @@ export function makeApp(
     envConfigRepairRunner: new NoopEnvConfigRepairRunner(),
     ...overrides,
   }
-  const app = createApp({ overrides: coreOverrides, ...appOptions })
+  // One env for the whole app: the request path and every direct `buildContainer` below must see
+  // the same provider set, or a run driven through `drive` would resolve models differently from
+  // the same run started over HTTP. See `testEnv`.
+  const appEnv = appOptions.bindCloudflareAi ? env : testEnv
+  // Default the Cloudflare-models flag ON, matching Node's harness verbatim: the built-in default
+  // model preset points every agent kind at a Cloudflare-served model, so the run-admission guard
+  // needs that provider OFFERED or no run starts. Specs exercising the unconfigured-provider path
+  // still force it off. Passed explicitly because `appEnv` no longer carries the binding the
+  // container would otherwise derive this from.
+  const containerOptions = {
+    cloudflareModelsEnabled: appOptions.cloudflareModelsEnabled ?? true,
+    gateProviders: appOptions.gateProviders,
+  }
+  const app = createApp({ overrides: coreOverrides, ...appOptions, ...containerOptions })
 
   async function call<T>(
     method: string,
@@ -144,7 +209,7 @@ export function makeApp(
         },
         body: hasBody ? JSON.stringify(body) : undefined,
       }),
-      env,
+      appEnv,
     )
     const text = await res.text()
     return { status: res.status, body: (text ? JSON.parse(text) : null) as T }
@@ -157,7 +222,7 @@ export function makeApp(
   ): Promise<{ status: number; contentType: string | null; bytes: Uint8Array }> {
     const res = await app.fetch(
       new Request(`${BASE}${path}`, { method, headers: { ...extraHeaders } }),
-      env,
+      appEnv,
     )
     return {
       status: res.status,
@@ -177,7 +242,7 @@ export function makeApp(
   async function createOrgWorkspace(
     options: { name?: string; seed?: boolean } = {},
   ): Promise<WorkspaceSnapshot> {
-    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
+    const c = buildContainer(appEnv, coreOverrides, containerOptions)
     // The org creator must be a real users row — the accounts/memberships FKs to users(id)
     // reject a nonexistent owner. Production always mints it at login, so do the same here
     // (mirrors the conformance `makeOrgOwner` probe) instead of a phantom id.
@@ -196,7 +261,7 @@ export function makeApp(
   // local D1) means the suite exercises the production driving logic — including the
   // single `failRun` funnel — rather than a hand-rolled copy that can diverge from it.
   async function drive(workspaceId: string, maxRounds = 50): Promise<ExecutionInstance[]> {
-    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
+    const c = buildContainer(appEnv, coreOverrides, containerOptions)
     return driveWorkspace(
       c.executionService,
       workspaceId,
@@ -213,7 +278,7 @@ export function makeApp(
     pipelineId: string,
     opts?: { gates?: boolean[] },
   ): Promise<ExecutionInstance> {
-    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
+    const c = buildContainer(appEnv, coreOverrides, containerOptions)
     return c.executionService.start(workspaceId, blockId, pipelineId, {
       gatesOverride: opts?.gates,
     })
@@ -224,7 +289,7 @@ export function makeApp(
     jobId: string,
     maxPolls = 50,
   ): Promise<number> {
-    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
+    const c = buildContainer(appEnv, coreOverrides, containerOptions)
     if (!c.bootstrap) throw new Error('bootstrap module is not configured in this app')
     for (let p = 0; p < maxPolls; p++) {
       const result = await c.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
@@ -238,7 +303,7 @@ export function makeApp(
     jobId: string,
     maxPolls = 50,
   ): Promise<number> {
-    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
+    const c = buildContainer(appEnv, coreOverrides, containerOptions)
     if (!c.envConfigRepair) {
       throw new Error('env-config-repair module is not configured in this app')
     }
