@@ -226,8 +226,10 @@ class JobsResource:
 
 class ServicesResource:
     """The workspace's board services, the frames tasks are created under: list them, create
-    one (optionally backed by a repository), or patch one, including declaring where the
-    manifests for its per-run environments are read from.
+    one (optionally backed by a repository), patch one (including declaring where the
+    manifests for its per-run environments are read from), or delete one with everything
+    under it. The delete refuses a service holding unfinished tasks rather than discarding
+    work in flight.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -252,6 +254,28 @@ class ServicesResource:
             timeout=timeout,
         )
         return PublicService.from_dict(raw)
+
+    def delete(self, service_id: str, *, timeout: float | None = None) -> None:
+        """Delete a service and everything under it
+        Delete a board service, its modules and tasks, and the run history recorded under
+        them. The inverse of the create, and the one board write with no headless
+        counterpart before it: a key authenticates on `/api/v1` only, so a caller that
+        provisions services (an environment rebuilt per test pass, a repository retired, a
+        frame raised against the wrong repository) had to ask a person to clean them up. Any
+        run still going under the frame is stopped and its container killed first, so
+        nothing is left idling. A service holding UNFINISHED tasks is refused with `422
+        service_has_unfinished_tasks` rather than discarding work in flight: delete those
+        tasks first (`DELETE /api/v1/tasks/{taskId}`) if that is what you mean. An ARCHIVED
+        service is not addressable here, exactly as it is absent from `GET
+        /api/v1/services`. Requires an `admin` key.
+        `DELETE /api/v1/services/{serviceId}` (operation `deletePublicService`).
+        """
+        self._transport.request_no_content(
+            "DELETE",
+            f"/api/v1/services/{_quote(service_id)}",
+            query=None,
+            timeout=timeout,
+        )
 
     def list(self, *, timeout: float | None = None) -> PublicServiceList:
         """List the workspace's services

@@ -1307,8 +1307,12 @@ export class BoardService {
     if (target?.level === 'frame' && target.parentId === null) {
       const unfinished = unfinishedTasksUnder(blocks, id)
       if (unfinished.length > 0) {
+        // The `reason` is what makes this refusal actionable through a door with no prose to read:
+        // `DELETE /api/v1/services/{serviceId}` answers it as a 422, and the caller's next move is
+        // to delete those tasks (or archive instead), which it can only choose from the code.
         throw new ValidationError(
           `This service has ${unfinished.length} unfinished task(s); archive it instead of deleting.`,
+          { reason: 'service_has_unfinished_tasks', unfinishedTasks: unfinished.length },
         )
       }
     }

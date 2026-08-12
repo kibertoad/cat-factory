@@ -4,9 +4,9 @@ import type { ConformanceHarness } from '../harness.js'
 import { mintPublicApiKey } from './shared.js'
 
 // Cross-runtime conformance for the public BOARD-PROVISIONING surface (`GET /api/v1/repos`, the
-// adopt pair `GET /api/v1/repos/available` + `POST /api/v1/repos/link`, and
-// `POST /api/v1/services`) and for the two task relationships that outlive a create call
-// (dependency edges, attached requirements documents).
+// adopt pair `GET /api/v1/repos/available` + `POST /api/v1/repos/link`, and `POST` / `DELETE
+// /api/v1/services`) and for the two task relationships that outlive a create call (dependency
+// edges, attached requirements documents).
 //
 // What belongs HERE rather than in a unit test is the half a unit test structurally cannot see:
 // that each facade MOUNTS these routes, and that the writes land in its OWN store, so a facade
@@ -55,6 +55,66 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
       expect(task.body.serviceId).toBe(created.body.serviceId)
     })
 
+    it('deletes a service once its work is gone, and refuses one still holding unfinished tasks', async () => {
+      // The inverse of the create, and the last board write with no headless door: a key
+      // authenticates on `/api/v1` alone, so a caller that raised a service had to ask a person to
+      // take it down. What only a facade run can show is that each one MOUNTS the route and that the
+      // frame really leaves its OWN store, rather than the response merely saying so.
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace()
+      const admin = await mintPublicApiKey(app, workspace.id, 'admin', 'board')
+      const service = await app.call<{ serviceId: string }>(
+        'POST',
+        '/api/v1/services',
+        { title: 'Reclaimable' },
+        admin,
+      )
+      const serviceId = service.body.serviceId
+      const task = await app.call<PublicTask>(
+        'POST',
+        `/api/v1/services/${serviceId}/tasks`,
+        { title: 'Work in flight' },
+        admin,
+      )
+
+      // The guard, and the reason it is a REFUSAL rather than a cascade: deleting the frame would
+      // discard that task and its history with no way back. The `reason` is what a headless caller
+      // branches on, so it is asserted rather than the prose beside it.
+      const refused = await app.call<{ error: { details?: { reason?: string } } }>(
+        'DELETE',
+        `/api/v1/services/${serviceId}`,
+        undefined,
+        admin,
+      )
+      expect(refused.status).toBe(422)
+      expect(refused.body.error.details?.reason).toBe('service_has_unfinished_tasks')
+      // Nothing happened: the refusal is not a partial delete that took the tasks with it.
+      expect(
+        (await app.call('GET', `/api/v1/tasks/${task.body.taskId}`, undefined, admin)).status,
+      ).toBe(200)
+
+      // The caller that means it clears the work first. That pair IS the reclaim sequence a headless
+      // setup runs, which is why both halves are driven here rather than asserted separately.
+      expect(
+        (await app.call('DELETE', `/api/v1/tasks/${task.body.taskId}`, undefined, admin)).status,
+      ).toBe(204)
+      const deleted = await app.call('DELETE', `/api/v1/services/${serviceId}`, undefined, admin)
+      expect(deleted.status).toBe(204)
+
+      // Gone from the store, not just from the response: the list every other caller reads, and the
+      // frame's own point read (which is also what makes a second delete a 404 rather than a 204).
+      const listed = await app.call<{ services: { serviceId: string }[] }>(
+        'GET',
+        '/api/v1/services',
+        undefined,
+        admin,
+      )
+      expect(listed.body.services.map((entry) => entry.serviceId)).not.toContain(serviceId)
+      expect(
+        (await app.call('DELETE', `/api/v1/services/${serviceId}`, undefined, admin)).status,
+      ).toBe(404)
+    })
+
     it('lists repositories rather than refusing when the workspace has connected none', async () => {
       // Discovery, and the degrade rule: "you have connected no repositories" and "this deployment
       // has no VCS integration" are the same instruction to a caller (connect one), so the read
@@ -84,13 +144,19 @@ export function definePublicBoardConformance(harness: ConformanceHarness): void 
     })
 
     it('is ADMIN scope: a write key cannot create board structure', async () => {
-      // The rung this endpoint sits on, asserted rather than merely documented. `write` is what a
-      // ticket-filing integration holds, and creating services is board STRUCTURE.
+      // The rung these endpoints sit on, asserted rather than merely documented. `write` is what a
+      // ticket-filing integration holds, and creating or removing services is board STRUCTURE.
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace()
       const write = await mintPublicApiKey(app, workspace.id, 'write', 'board')
       const refused = await app.call('POST', '/api/v1/services', { title: 'Nope' }, write)
       expect(refused.status).toBe(403)
+      // The delete is refused at the same rung and BEFORE the frame is resolved, which is why a
+      // made-up id still answers 403 rather than 404: a scope refusal that leaked existence would
+      // let a `write` key enumerate the board's frames.
+      expect((await app.call('DELETE', '/api/v1/services/blk_nope', undefined, write)).status).toBe(
+        403,
+      )
       // The discovery read is the floor, so the same key still sees what it could create against.
       expect((await app.call('GET', '/api/v1/repos', undefined, write)).status).toBe(200)
       // The ADOPT pair (`/repos/available` + `/repos/link`, what makes headless setup finishable

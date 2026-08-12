@@ -5,8 +5,15 @@
 // discovered by running the suite against a half-configured box.
 //
 // **Every missing variable is reported together.** A suite that refuses on the first absent
-// name sends someone round the loop once per variable, and this one needs eight; the failure a
+// name sends someone round the loop once per variable, and this one needs nine; the failure a
 // person actually wants is the whole list plus what each is for.
+//
+// **It resolves in two halves, and which half a command needs is a fact about the command.** A
+// BOARD (the deployment, the key, the two repositories, the state directory) is what an `/api/v1`
+// caller needs; a PASS needs that plus a cluster to deploy onto, a reporter credential and a
+// per-run budget. `reset` is why the seam exists rather than being tidy: an operator clearing a
+// half-built pass off a board is often doing it because the cluster it named is gone, and a cleanup
+// that refuses until the abandoned thing is configured again is a cleanup nobody can run.
 
 /** A k3s/Kubernetes apiserver the `deployer` step provisions per-PR namespaces against. */
 export type ClusterConfig = {
@@ -59,7 +66,15 @@ export type VcsReporterConfig = {
   apiBaseUrl: string
 }
 
-export type AcceptanceConfig = {
+/**
+ * The half of the configuration that names a BOARD: the deployment, the key, the two repositories
+ * and where a pass's files live. See the header for why the split exists.
+ *
+ * The line it draws is what a command TOUCHES, not how important a variable feels: everything here
+ * is read by an `/api/v1` call against one board, and everything {@link AcceptanceConfig} adds
+ * belongs to RUNNING a pass.
+ */
+export type BoardConfig = {
   /** Backend origin serving `/api/v1`, plus the two unauthenticated deployment root reads. */
   baseUrl: string
   /** A public-API key at `admin` (spec 03 answers a human gate, so it must also carry `decide`). */
@@ -84,6 +99,11 @@ export type AcceptanceConfig = {
    */
   namePrefix: string
   repos: RepoNames
+  /** Where the resumable ledger lives. Relative paths resolve against the package directory. */
+  stateDir: string
+}
+
+export type AcceptanceConfig = BoardConfig & {
   /**
    * The model preset every task this pass files pins (`ACCEPTANCE_MODEL_PRESET`, default
    * `mdp_claude`).
@@ -100,8 +120,6 @@ export type AcceptanceConfig = {
   modelPresetId: string
   cluster: ClusterConfig
   vcs: VcsReporterConfig
-  /** Where the resumable ledger lives. Relative paths resolve against the package directory. */
-  stateDir: string
   /**
    * Ceiling for ONE pipeline run, in ms. Not a vitest timeout: it is the deadline the run-waiter
    * grades against, so exceeding it reports which step was still working (see `deadline.ts`).
@@ -117,7 +135,14 @@ type Requirement = {
   purpose: string
 }
 
-const REQUIRED: readonly Requirement[] = [
+/**
+ * What it takes to name a BOARD: the deployment, the key and the two repositories.
+ *
+ * Its own table because {@link resolveBoardConfig} is what a command that only reads and writes
+ * `/api/v1` needs, and because the two lists then cannot fall out of step with the types they fill:
+ * a variable belongs to whichever half of the config carries it.
+ */
+const BOARD_REQUIRED: readonly Requirement[] = [
   { name: 'CAT_FACTORY_BASE_URL', purpose: 'backend origin, e.g. http://127.0.0.1:8787' },
   {
     name: 'CAT_FACTORY_API_KEY',
@@ -139,6 +164,10 @@ const REQUIRED: readonly Requirement[] = [
     name: 'ACCEPTANCE_FRONTEND_REPO',
     purpose: 'name of the empty repository the frontend service adopts; you create it',
   },
+]
+
+/** What it takes to RUN a pass on that board: something to deploy onto, and someone to report as. */
+const RUN_REQUIRED: readonly Requirement[] = [
   {
     name: 'ACCEPTANCE_VCS_TOKEN',
     purpose:
@@ -156,17 +185,68 @@ export type ConfigResolution =
   | { ok: true; config: AcceptanceConfig }
   | { ok: false; problems: readonly string[] }
 
+export type BoardConfigResolution =
+  | { ok: true; config: BoardConfig }
+  | { ok: false; problems: readonly string[] }
+
+/**
+ * Resolve just the BOARD half, for a command that reads and writes `/api/v1` and nothing else.
+ *
+ * Every problem at once, exactly as {@link resolveConfig} reports its own: this is the same rule
+ * applied to a smaller list, not a laxer version of it.
+ *
+ * The repository-name collision is checked HERE rather than beside the cluster rules, because it is
+ * a fact about the two repositories a board is pointed at: `reset` resolves which frames those
+ * repositories back, so one name for both would have it plan a single frame while the operator
+ * believes two are being cleared.
+ */
+export function resolveBoardConfig(env: EnvRecord): BoardConfigResolution {
+  const problems = missing(env, BOARD_REQUIRED)
+
+  // Two services, two repositories: the planted defect lives BETWEEN them (`instructions.ts`), and
+  // one name for both would back the frontend frame with the repository the backend frame already
+  // holds, so every "cross-service" assertion afterwards would be about a single service.
+  const backendRepo = trimmed(env.ACCEPTANCE_BACKEND_REPO)
+  const frontendRepo = trimmed(env.ACCEPTANCE_FRONTEND_REPO)
+  if (backendRepo && frontendRepo && backendRepo.toLowerCase() === frontendRepo.toLowerCase()) {
+    problems.push(
+      `ACCEPTANCE_BACKEND_REPO and ACCEPTANCE_FRONTEND_REPO both name '${backendRepo}'. This ` +
+        `suite needs two repositories, because the defect it hunts exists only between them.`,
+    )
+  }
+
+  if (problems.length > 0) return { ok: false, problems }
+  return {
+    ok: true,
+    config: {
+      baseUrl: stripTrailingSlash(required(env, 'CAT_FACTORY_BASE_URL')),
+      apiKey: required(env, 'CAT_FACTORY_API_KEY'),
+      workspaceId: required(env, 'ACCEPTANCE_WORKSPACE_ID'),
+      repoOwner: required(env, 'ACCEPTANCE_REPO_OWNER'),
+      namePrefix: trimmed(env.ACCEPTANCE_NAME_PREFIX) ?? 'cf-acc',
+      repos: {
+        backend: required(env, 'ACCEPTANCE_BACKEND_REPO'),
+        frontend: required(env, 'ACCEPTANCE_FRONTEND_REPO'),
+      },
+      stateDir: stateDirFrom(env),
+    },
+  }
+}
+
 /**
  * Resolve the suite's configuration, collecting EVERY problem rather than throwing on the first.
  *
  * Pure over `env` so the refusal is testable. `requireConfig` is the thin caller that turns a
  * refusal into the error the specs see.
+ *
+ * Built ON the board half rather than beside it, so a variable is named in exactly one table and a
+ * pass and a cleanup cannot come to disagree about which board they are pointed at. The board
+ * problems are collected even when the board half is unresolvable, because reporting one half at a
+ * time is the loop this whole function exists to avoid.
  */
 export function resolveConfig(env: EnvRecord): ConfigResolution {
-  const problems: string[] = []
-  for (const { name, purpose } of REQUIRED) {
-    if (!trimmed(env[name])) problems.push(`${name} is required (${purpose})`)
-  }
+  const board = resolveBoardConfig(env)
+  const problems = [...(board.ok ? [] : board.problems), ...missing(env, RUN_REQUIRED)]
 
   const insecure = readBoolean(env.ACCEPTANCE_K3S_INSECURE)
   const caCertPem = trimmed(env.ACCEPTANCE_K3S_CA_PEM)
@@ -191,32 +271,14 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
     )
   }
 
-  // Two services, two repositories: the planted defect lives BETWEEN them (`instructions.ts`), and
-  // one name for both would back the frontend frame with the repository the backend frame already
-  // holds, so every "cross-service" assertion afterwards would be about a single service.
-  const backendRepo = trimmed(env.ACCEPTANCE_BACKEND_REPO)
-  const frontendRepo = trimmed(env.ACCEPTANCE_FRONTEND_REPO)
-  if (backendRepo && frontendRepo && backendRepo.toLowerCase() === frontendRepo.toLowerCase()) {
-    problems.push(
-      `ACCEPTANCE_BACKEND_REPO and ACCEPTANCE_FRONTEND_REPO both name '${backendRepo}'. This ` +
-        `suite needs two repositories, because the defect it hunts exists only between them.`,
-    )
-  }
-
-  if (problems.length > 0) return { ok: false, problems }
+  // `board.ok` is re-tested rather than inferred from an empty `problems`: it is what NARROWS the
+  // board config below, and a refusal that already collected its problems cannot also hand one over.
+  if (!board.ok || problems.length > 0) return { ok: false, problems }
 
   return {
     ok: true,
     config: {
-      baseUrl: stripTrailingSlash(required(env, 'CAT_FACTORY_BASE_URL')),
-      apiKey: required(env, 'CAT_FACTORY_API_KEY'),
-      workspaceId: required(env, 'ACCEPTANCE_WORKSPACE_ID'),
-      repoOwner: required(env, 'ACCEPTANCE_REPO_OWNER'),
-      namePrefix: trimmed(env.ACCEPTANCE_NAME_PREFIX) ?? 'cf-acc',
-      repos: {
-        backend: required(env, 'ACCEPTANCE_BACKEND_REPO'),
-        frontend: required(env, 'ACCEPTANCE_FRONTEND_REPO'),
-      },
+      ...board.config,
       // The built-in Claude preset, which every deployment seeds, so an operator who configured
       // nothing still names a preset that exists. It is the id `/api/v1` reports rather than a
       // friendlier `claude` alias: a second naming scheme for one preset would have to be resolved
@@ -241,7 +303,6 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
           trimmed(env.ACCEPTANCE_VCS_API_BASE) ?? 'https://api.github.com',
         ),
       },
-      stateDir: stateDirFrom(env),
       // 90 minutes. A `pl_build` run with a design pass, a container coder, two testers and a
       // real CI gate routinely takes 30–45; the budget is generous because the thing it is
       // guarding against is a run that has STOPPED, not one that is slow.
@@ -266,12 +327,23 @@ export function stateDirFrom(env: EnvRecord): string {
 export function requireConfig(env: EnvRecord = process.env): AcceptanceConfig {
   const resolution = resolveConfig(env)
   if (resolution.ok) return resolution.config
-  throw new Error(
+  throw new Error(unconfigured(resolution.problems))
+}
+
+function unconfigured(problems: readonly string[]): string {
+  return (
     `The acceptance suite is not configured. It runs against a LIVE deployment and creates real ` +
-      `repositories, so it refuses to guess.\n\n` +
-      resolution.problems.map((problem) => `  - ${problem}`).join('\n') +
-      `\n\nSee backend/internal/acceptance/README.md for a worked local setup.`,
+    `repositories, so it refuses to guess.\n\n` +
+    problems.map((problem) => `  - ${problem}`).join('\n') +
+    `\n\nSee backend/internal/acceptance/README.md for a worked local setup.`
   )
+}
+
+/** The names in a table the environment does not carry, each with what it is for. */
+function missing(env: EnvRecord, table: readonly Requirement[]): string[] {
+  return table
+    .filter(({ name }) => !trimmed(env[name]))
+    .map(({ name, purpose }) => `${name} is required (${purpose})`)
 }
 
 function required(env: EnvRecord, name: string): string {

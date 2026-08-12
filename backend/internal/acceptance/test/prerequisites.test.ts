@@ -2,7 +2,12 @@ import type { CatFactoryClient } from '@cat-factory/sdk'
 import { describe, expect, it } from 'vitest'
 import { unreachableRepoSteps } from '../src/adopt.ts'
 import type { AcceptanceConfig } from '../src/config.ts'
-import { envAssignment, perPersonPrefixInvocation, resumeInvocation } from '../src/operatorText.ts'
+import {
+  envAssignment,
+  perPersonPrefixInvocation,
+  resetInvocation,
+  resumeInvocation,
+} from '../src/operatorText.ts'
 import type { PrerequisiteVerdict, Remedy } from '../src/preflight.ts'
 import { type PreflightContext, PREREQUISITES } from '../src/prerequisites.ts'
 import type { IssueApi, IssueCredentialVerdict } from '../src/vcsIssues.ts'
@@ -588,6 +593,29 @@ describe('target-repos', () => {
     expect(commandsOf(verdict.remedy)[1]).toContain('run status 20260811151012')
   })
 
+  it('offers the RESET as the other way out, preview first and naming the same pass', async () => {
+    // Both ways out of this refusal are now commands. Before `DELETE /api/v1/services/{serviceId}`
+    // existed, "delete the service frame that holds this one" was an app act, so the only branch a
+    // headless operator could act on was the one that continues somebody else's pass.
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { serviceId: 'blk_9' }),
+        repo('cf-acc-catalog-web'),
+      ]),
+      passesNaming: () => [{ runId: '20260811151012', serviceIds: ['blk_9'] }],
+    })
+    const commands = commandsOf(verdict.remedy)
+    // The PREVIEW comes before the apply, which is the whole ordering: it deletes frames, tasks and
+    // run history on a board two operators may share.
+    const preview = commands.indexOf(resetInvocation({ runId: '20260811151012' }))
+    const apply = commands.indexOf(resetInvocation({ runId: '20260811151012', apply: true }))
+    expect(preview).toBeGreaterThanOrEqual(0)
+    expect(apply).toBe(preview + 1)
+    // And the step says what a reset cannot give back, because the repositories are the reason a
+    // cleared board is still not a fresh one.
+    expect(verdict.remedy.steps.join('\n')).toContain('repositories keep')
+  })
+
   it('says what resuming one pass leaves behind when the leftovers span two', async () => {
     // "RESUME one of them" is not an instruction here: resuming the pass holding the API leaves the
     // WEB service unowned, this same check refuses again, and naming the other pass sends the reader
@@ -839,6 +867,11 @@ describe('board-titles', () => {
     expect(commands[0]).toBe(resumeInvocation('20260811151012'))
     expect(commands[1]).toContain('run status')
     expect(commands[2]).toBe(perPersonPrefixInvocation('cf-acc'))
+    // The reset is offered LAST here, unlike in `target-repos`: a title collision on a shared board
+    // is most often two people rather than one person's leftovers, and taking a prefix of your own
+    // leaves the other pass alone where clearing the board does not.
+    expect(commands[3]).toBe(resetInvocation({ runId: '20260811151012' }))
+    expect(commands[4]).toBe(resetInvocation({ runId: '20260811151012', apply: true }))
   })
 
   it('reaches the owning pass through the frame ids, since a ledger records no titles', async () => {

@@ -14,6 +14,8 @@ under `acceptance/` behind a second config that nothing but the `acceptance` scr
 ```sh
 pnpm --filter @cat-factory/acceptance run configure   # assemble the .env, once
 pnpm --filter @cat-factory/acceptance run acceptance
+pnpm --filter @cat-factory/acceptance run status      # where is it, from another window
+pnpm --filter @cat-factory/acceptance run reset       # what starting over would delete
 ```
 
 ## What it is for
@@ -546,6 +548,54 @@ never reached.
 left in place to be inspected, and the failure message says so. Successful passes reclaim their
 namespaces through the pipeline's own `disposer`, which spec 02 asserts.
 
+## Starting over: `reset`
+
+The other way out of a refusal over leftover state, for when the work is not worth resuming:
+
+```sh
+pnpm --filter @cat-factory/acceptance run reset                       # what it WOULD delete
+pnpm --filter @cat-factory/acceptance run reset --yes                 # do it
+pnpm --filter @cat-factory/acceptance run reset 20260809175530 --yes  # …plus that pass's own state
+```
+
+It deletes the service frames this configuration would adopt, every task under them and the run
+history recorded against those tasks, over `DELETE /api/v1/services/{serviceId}` and
+`DELETE /api/v1/tasks/{taskId}` with the same key the suite already holds, and then removes the local
+files of the passes that named those frames. Until this existed the third branch of the `target-repos`
+remedy ("delete the service frame that holds this one") was the one instruction a HEADLESS operator
+could not carry out headlessly, because deleting a service was an app act.
+
+Four things about it are decisions rather than details:
+
+- **It previews by default.** The bare form changes nothing and names every frame, task and file, since
+  the board may be one two people share. `--yes` is the whole of the opt-in; `pnpm` forwards both the
+  positional and the flag, so no `--` separator is needed.
+- **It targets what the CONFIGURATION points at**, not what a ledger remembers: the two repositories'
+  frames and the frames holding this prefix's titles, which are the two things the gate refuses over.
+  That is what lets it clear state whose owning ledger is gone (another machine, another operator, a
+  cleared `ACCEPTANCE_STATE_DIR`), which is the case with no other way out. Naming a pass ADDS whatever
+  its ledger holds, so a frame this `.env` no longer points at is reachable too.
+- **It keeps a pass's files whenever a frame that ledger names survives**, whether the delete was
+  refused or the plan never targeted it. The ledger is the only thing mapping a leftover frame back to
+  a run id, so removing it would strand that frame with no pass for the next refusal to name and no id
+  to resume.
+- **It states what it cannot reclaim.** The two repositories keep whatever a previous pass scaffolded,
+  branches and open pull requests included, and no `/api/v1` call can empty them, so a fresh pass
+  scaffolds ON TOP of that (`target-repos` says outright that it cannot see whether a repository is
+  empty). An issue spec 04 filed stays open, because it was the reporter's and never the platform's.
+  Per-PR cluster namespaces are untouched. A cleared board is not a fresh one, and the report says so
+  rather than reading as "everything is clean".
+
+It needs the deployment, the key, the two repository names and the state directory: no cluster and no
+reporter token, because those belong to RUNNING a pass. An operator resetting is often doing so
+precisely because one of them has moved on.
+
+Two refusals it declines to paper over: a repository whose service is homed on ANOTHER board of the
+account has no id a workspace-scoped key can delete, and a frame still holding an unfinished task is
+refused by the platform (`422 service_has_unfinished_tasks`) rather than deleted with the work in it.
+Both are reported with the steps, and the command exits non-zero, because the board still holds what
+the next pass will be refused over.
+
 ## The rules these specs are written to
 
 Five, and each is load-bearing.
@@ -616,7 +666,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `acceptance/*.acceptance.ts` | The five specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                                                  |
 | `acceptance/globalSetup.ts`  | The two facts settled once for the whole pass, in the main process before any worker exists: the RUN ID, and the personal-password ask (the real config, client and terminal).                                                   |
 | `src/personalPasswordAsk.ts` | What that ask decides, and what it does when it cannot: degrade and continue, except for a person declining. Unit-tested.                                                                                                        |
-| `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.                                                                                                                                                        |
+| `src/config.ts`              | Environment → config in two halves (a BOARD, and what it takes to RUN a pass on one), reporting every problem at once. Pure; unit-tested.                                                                                        |
 | `src/envFile.ts`             | The `.env` beside the vitest config, read the same way by the config and by `globalSetup`. Pure.                                                                                                                                 |
 | `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                                                              |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                                                           |
@@ -629,6 +679,8 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                                                   |
 | `src/status.ts`              | Ledger + journal → "where is this pass". Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.                                                                                                    |
 | `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                                                                                                                                                                         |
+| `src/reset.ts`               | Starting over: which frames a clear targets, the order the deletes go in, what it refuses to remove, and what it cannot reclaim. Driven by seams; unit-tested.                                                                   |
+| `src/resetCli.ts`            | `pnpm run reset`. Supplies the real client and file removals, parses the two arguments, owns the exit code.                                                                                                                      |
 | `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested.                                                                                                                                                |
 | `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                                                                                                                                                                        |
 | `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.                                                                                                                                                       |
@@ -637,7 +689,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.                                                                                                                                                        |
 | `src/decisions.ts`           | The two kinds this suite answers, what is answerable NOW, and the refusals.                                                                                                                                                      |
 | `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                                                                                                                                                                    |
-| `src/instructions.ts`        | The briefs, the reporter's issue, and the reasoning behind the planted defect.                                                                                                                                                   |
+| `src/instructions.ts`        | The briefs, the two frame titles, the reporter's issue, and the reasoning behind the planted defect.                                                                                                                             |
 | `src/vcsIssues.ts`           | The reporter's own client: filing an issue on the provider and reading it back, provider-keyed. The one thing here that is not the platform.                                                                                     |
 | `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                                                           |
 | `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                                                       |

@@ -56,6 +56,9 @@ export function shellQuoted(value: string): string {
 /** The command that runs a pass, in one place, so a printed remedy cannot drift from the README. */
 const ACCEPTANCE_INVOCATION = 'pnpm --filter @cat-factory/acceptance run acceptance'
 
+/** Same, for the command that clears a board back to "before any pass ran" (`src/reset.ts`). */
+const RESET_INVOCATION = 'pnpm --filter @cat-factory/acceptance run reset'
+
 /** Which shell will RECEIVE the text. It decides every spelling in the table below. */
 export type ShellFlavour = 'posix' | 'powershell'
 
@@ -166,6 +169,30 @@ const DIALECTS: Record<ShellFlavour, Dialect> = {
 export function resumeInvocation(runId: string, flavour: ShellFlavour = shellFlavour()): string {
   const shell = DIALECTS[flavour]
   return shell.assignFor('ACCEPTANCE_RUN_ID', shell.literal(runId), ACCEPTANCE_INVOCATION)
+}
+
+/**
+ * The invocation that CLEARS a board, in the two forms it is offered in.
+ *
+ * `apply: false` is the preview, which is what a remedy printed by a refusal offers first: this
+ * deletes service frames, tasks and run history on a board somebody may share, so the reading an
+ * operator does before the deletion is part of the design rather than caution (see `reset.ts`).
+ *
+ * Not a shell-dialect question at all, unlike {@link resumeInvocation}: no variable is being set, so
+ * the same text works in every shell. It lives here anyway because it is a pasteable command, and
+ * the one thing this module owns completely is that a command is spelled in ONE place: the reset is
+ * named by two prerequisite remedies, the README and the command's own output.
+ *
+ * A NAMED pass widens what is cleared to whatever that pass's ledger holds, which is the form worth
+ * printing beside a resume: the two are the same decision (continue this pass, or clear it) and an
+ * operator choosing between them should not have to work out the second command's arguments.
+ */
+export function resetInvocation(options: { runId?: string; apply?: boolean } = {}): string {
+  return [
+    RESET_INVOCATION,
+    ...(options.runId ? [options.runId] : []),
+    ...(options.apply ? ['--yes'] : []),
+  ].join(' ')
 }
 
 /**

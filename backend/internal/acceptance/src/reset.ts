@@ -1,0 +1,644 @@
+// RESETTING a board back to "before any pass ran", so the next attempt starts clean.
+//
+// The refusal this exists for is `target-repos` (and its sibling `board-titles`): a repository that
+// already backs a service frame some earlier pass created is refused, because a fresh pass would
+// adopt work that is not its own. The remedy has always offered two ways out, RESUME the pass that
+// owns it or point the suite at fresh repositories, and a third that was not a command at all:
+// "delete the service frame that holds this one". Deleting a frame was an app act, so the one
+// instruction an operator running a HEADLESS pass could not carry out headlessly was the one that
+// starts over. `DELETE /api/v1/services/{serviceId}` closed that (see `backend/docs/public-api.md`),
+// and this is the command that uses it.
+//
+// Three rules shape it, and each is a decision rather than a style:
+//
+//   1. **It plans before it touches anything, and the plan is the default output.** This deletes
+//      real services, real tasks and real run history on a board that may be shared, so the
+//      dangerous half is opt-in (`--yes`). A reset nobody can preview is a reset nobody should run.
+//   2. **The TARGET is what this configuration would adopt, not what a ledger remembers.** The gate
+//      refuses over the board as it stands, so a reset that could only clear what a ledger names
+//      would be unable to clear the state whose owning ledger is gone: another machine, another
+//      operator, a state directory someone deleted. Which is exactly the case with no other way out.
+//   3. **What it cannot reclaim is STATED.** A reset that silently leaves two scaffolded
+//      repositories, an open issue and a cluster namespace behind reads as "the board is clean",
+//      and the next pass then scaffolds on top of a tree that is already built.
+//
+// The local files come LAST and only for a pass whose frames all went: a ledger removed while its
+// frame survives strands that frame with no pass to name, which is the state `findPassesNaming`
+// exists to keep out of the refusals.
+
+import { CatFactoryNotFoundError, CatFactoryValidationError } from '@cat-factory/sdk'
+import { blockedRepoMessage, sameRepo } from './adopt.ts'
+import type { BoardConfig } from './config.ts'
+import { serviceTitles } from './instructions.ts'
+import { describeThrown, resetInvocation } from './operatorText.ts'
+import type { World } from './world.ts'
+
+/**
+ * The command line, or the refusal naming what was passed.
+ *
+ * Here rather than in `resetCli.ts` because a CLI module is a SCRIPT: importing one to test its
+ * parser runs the whole command, deployment reads and `process.exit` included.
+ *
+ * A positional that looks like a flag is REFUSED rather than taken as a run id. `status` reads
+ * `argv[2]` as one, so a mistyped `--dry-run` there reports on a pass called `--dry-run` and answers
+ * "no such pass", which reads as a broken state directory; here the same slip is worse, because the
+ * flag being reached for is the one that decides whether anything is deleted.
+ */
+export function parseResetArgs(
+  argv: readonly string[],
+): { ok: true; runId: string | null; apply: boolean } | { ok: false; problem: string } {
+  let runId: string | null = null
+  let apply = false
+  for (const arg of argv) {
+    if (arg === '--yes' || arg === '-y') {
+      apply = true
+      continue
+    }
+    if (arg.startsWith('-')) {
+      return {
+        ok: false,
+        problem: `unknown option '${arg}'. Usage: ${resetInvocation()} [runId|latest] [--yes]`,
+      }
+    }
+    if (runId !== null) {
+      return {
+        ok: false,
+        problem:
+          `'${runId}' and '${arg}' both name a pass, and a reset clears ONE named pass plus ` +
+          `whatever this configuration points at. Run it once per pass.`,
+      }
+    }
+    runId = arg
+  }
+  return { ok: true, runId, apply }
+}
+
+/** One row of `GET /api/v1/repos`, narrowed to what decides whether a repository is spoken for. */
+export type ResetRepoRow = {
+  owner: string
+  name: string
+  serviceId: string | null
+  linkedElsewhere: boolean
+}
+
+/** One service frame, as `GET /api/v1/services` reports it. */
+export type ResetServiceRow = { serviceId: string; title: string }
+
+/** One task under a frame, as `GET /api/v1/services/:serviceId/tasks` reports it. */
+export type ResetTaskRow = { taskId: string; title: string }
+
+/**
+ * What this command needs from the deployment, narrowed to the five calls it makes.
+ *
+ * A port rather than the SDK client for the same reason `configure` has one: the whole flow is then
+ * drivable with no deployment, and a test can assert the ORDER of the writes, which is the property
+ * that matters most here (tasks before their frame) and the one an integration test would be the
+ * most expensive way to check.
+ */
+export type ResetClient = {
+  repos(): Promise<readonly ResetRepoRow[]>
+  services(): Promise<readonly ResetServiceRow[]>
+  /** Every task under a frame, across pages. */
+  tasks(serviceId: string): Promise<readonly ResetTaskRow[]>
+  deleteTask(taskId: string): Promise<void>
+  deleteService(serviceId: string): Promise<void>
+}
+
+/** One pass on disk, as the caller read it through `passFiles.ts` (the one owner of the layout). */
+export type ResetPassOnDisk = {
+  runId: string
+  ledgerPath: string
+  journalPath: string
+  /** Its ledger, or null when the file is absent or malformed (a refused attempt has none). */
+  world: World | null
+}
+
+export type ResetInput = {
+  config: BoardConfig
+  /**
+   * The pass named on the command line, or null.
+   *
+   * Its own input rather than something derived from the state directory, because naming one WIDENS
+   * the target: a pass whose ledger holds frames this configuration no longer points at (the `.env`
+   * moved on, the prefix changed) is otherwise unreachable, and clearing it is precisely what
+   * someone naming it is asking for.
+   */
+  namedRunId: string | null
+  passes: readonly ResetPassOnDisk[]
+  /** What `ACCEPTANCE_RUN_ID=latest` currently resolves to, and the file that says so. */
+  latest: { runId: string | null; path: string }
+}
+
+/** Why a frame is in the plan. Several can be true of one frame, and all of them are stated. */
+export type FrameReason =
+  | { kind: 'backs-repo'; slug: string }
+  | { kind: 'holds-title'; title: string }
+  | { kind: 'named-by-pass'; runId: string }
+
+export type PlannedFrame = {
+  serviceId: string
+  /** As the board reports it, or null for a frame only a ledger names (already gone, or archived). */
+  title: string | null
+  reasons: readonly FrameReason[]
+  tasks: readonly ResetTaskRow[]
+  /** True when `GET /api/v1/services` does not list it, so there is nothing here to delete. */
+  absent: boolean
+}
+
+/** A repository the reset cannot free, with the steps `adopt.ts` owns for it. */
+export type StuckRepo = { slug: string; steps: readonly string[] }
+
+export type PlannedPass = {
+  runId: string
+  /** The files that would go. */
+  paths: readonly string[]
+  /** The frames its ledger names, so the apply can keep its files when one survives. */
+  serviceIds: readonly string[]
+  /**
+   * The frames its ledger names that the board still LISTS and this plan does not target.
+   *
+   * The state that made this field necessary: a pass holding two services, only one of which this
+   * configuration still points at (the `.env` moved to a new repository, the prefix changed). The
+   * plan takes the one, and removing the ledger would strand the other with nothing naming its
+   * owner, which is the exact dead end `findPassesNaming` exists to keep out of the refusals: the
+   * frame earns `target-repos` again and the run id that would have resumed it was in the file just
+   * deleted. Empty by construction for a pass named on the command line, since naming one adds
+   * everything its ledger holds to the plan.
+   */
+  unreclaimed: readonly string[]
+  /**
+   * The issue its ledger records, if any.
+   *
+   * Carried on the pass rather than looked up again at report time, because deleting the ledger is
+   * what makes it unrecoverable: this is the last moment anything knows the URL.
+   */
+  issueUrl: string | null
+}
+
+export type ResetPlan = {
+  frames: readonly PlannedFrame[]
+  stuck: readonly StuckRepo[]
+  /**
+   * Configured repositories this workspace has not LINKED, so no row here says what backs them.
+   *
+   * Reported rather than passed over, because "nothing on this board backs it" and "this read cannot
+   * see it" are different facts and only the first one means a reset has nothing to do. A repository
+   * homed on another board of the account and not linked here reads identically to a fresh one from
+   * `GET /api/v1/repos`; `target-repos` is what tells those apart, by point-reading
+   * `/repos/available`, and it refuses with the steps. Saying so keeps a plan that clears nothing from
+   * reading as a board that is already clean.
+   */
+  unlinked: readonly string[]
+  passes: readonly PlannedPass[]
+  /** The `latest` pointer, when it names a pass in this plan. */
+  pointer: { runId: string; path: string } | null
+  /** What a reset does NOT reclaim, one sentence each. Never empty. */
+  leftovers: readonly string[]
+}
+
+/**
+ * What a reset WOULD do, from three reads and the state directory.
+ *
+ * The frames come from two independent questions, unioned, because the two refusals a reset answers
+ * ask different ones: `target-repos` is about a REPOSITORY that is spoken for, and `board-titles` is
+ * about a TITLE that is taken. A frame can be in the plan for either reason (a service whose
+ * repository was re-pointed keeps the title; a frame renamed by hand keeps the repository), and a
+ * plan built from one question alone leaves the other refusal firing after a reset reported success.
+ */
+export async function planReset(client: ResetClient, input: ResetInput): Promise<ResetPlan> {
+  const { config } = input
+  const [repos, services] = await Promise.all([client.repos(), client.services()])
+  const byId = new Map(services.map((service) => [service.serviceId, service]))
+
+  const reasons = new Map<string, FrameReason[]>()
+  const add = (serviceId: string, reason: FrameReason): void => {
+    const existing = reasons.get(serviceId)
+    if (existing) existing.push(reason)
+    else reasons.set(serviceId, [reason])
+  }
+
+  // The repositories this configuration adopts, and whatever backs each one today.
+  const stuck: StuckRepo[] = []
+  const unlinked: string[] = []
+  for (const name of [config.repos.backend, config.repos.frontend]) {
+    const row = repos.find((repo) => sameRepo(repo, config.repoOwner, name))
+    if (!row) {
+      unlinked.push(`${config.repoOwner}/${name}`)
+      continue
+    }
+    const slug = `${row.owner}/${row.name}`
+    if (row.serviceId) {
+      add(row.serviceId, { kind: 'backs-repo', slug })
+      continue
+    }
+    // `serviceId: null` WITH `linkedElsewhere` is a frame homed on another board, which has no id
+    // this workspace-scoped key could delete. Stated rather than skipped: it is the one blocker a
+    // reset cannot clear, and reading it as "nothing to do" is what would send an operator back
+    // round the same refusal wondering why the reset changed nothing.
+    if (row.linkedElsewhere) {
+      stuck.push({ slug, steps: blockedRepoMessage(slug, 'linked-elsewhere') })
+    }
+  }
+
+  for (const title of Object.values(serviceTitles(config.namePrefix))) {
+    for (const service of services.filter((entry) => entry.title === title)) {
+      add(service.serviceId, { kind: 'holds-title', title })
+    }
+  }
+
+  // A NAMED pass widens the target to whatever its own ledger holds. Nothing else does: the frames
+  // of a pass nobody named are already covered by the two questions above, and reaching into every
+  // ledger on disk would clear a colleague's board from a command that named nothing.
+  const named = input.passes.find((pass) => pass.runId === input.namedRunId)
+  if (named) {
+    for (const serviceId of ledgerServiceIds(named.world)) {
+      add(serviceId, { kind: 'named-by-pass', runId: named.runId })
+    }
+  }
+
+  // One task read per planned frame, sequentially: there is no by-many read on this surface and a
+  // pass has two frames, so the whole plan costs two calls and lands in a stable order. Each is
+  // already paged through by the caller's client.
+  const frames: PlannedFrame[] = []
+  for (const [serviceId, why] of reasons) {
+    const listed = byId.get(serviceId)
+    frames.push({
+      serviceId,
+      title: listed?.title ?? null,
+      reasons: why,
+      // Only a listed frame has tasks worth reading: an unlisted one answers 404 on the task list,
+      // and asking anyway would turn "already gone" into a failure the plan cannot describe.
+      tasks: listed ? await client.tasks(serviceId) : [],
+      absent: !listed,
+    })
+  }
+
+  const doomed = new Set(frames.map((frame) => frame.serviceId))
+  const passes = input.passes.flatMap((pass): PlannedPass[] => {
+    const serviceIds = ledgerServiceIds(pass.world)
+    const holdsDoomed = serviceIds.some((serviceId) => doomed.has(serviceId))
+    // A pass is in the plan when it NAMES state being deleted, or when it was named on the command
+    // line. An unrelated pass's files are left alone: they are how somebody else resumes.
+    if (!holdsDoomed && pass.runId !== input.namedRunId) return []
+    return [
+      {
+        runId: pass.runId,
+        paths: [pass.ledgerPath, pass.journalPath],
+        serviceIds,
+        unreclaimed: serviceIds.filter(
+          (serviceId) => !doomed.has(serviceId) && byId.has(serviceId),
+        ),
+        issueUrl: pass.world?.intakeIssue?.url ?? null,
+      },
+    ]
+  })
+  const latestRunId = input.latest.runId
+
+  return {
+    frames,
+    stuck,
+    unlinked,
+    passes,
+    pointer:
+      latestRunId !== null && passes.some((pass) => pass.runId === latestRunId)
+        ? { runId: latestRunId, path: input.latest.path }
+        : null,
+    leftovers: leftoversOf(config, passes),
+  }
+}
+
+/** What became of one planned frame. */
+export type FrameOutcome =
+  | { status: 'deleted' }
+  /** The board did not list it, or answered 404: someone got there first, and that is a success. */
+  | { status: 'absent' }
+  /**
+   * The deployment refused. `reason` is `details.reason` where the surface published one, which is
+   * how "it still holds unfinished work" is told from "the key is not admin" without reading prose.
+   */
+  | { status: 'refused'; reason: string | null; detail: string }
+
+export type FrameResult = {
+  serviceId: string
+  title: string | null
+  outcome: FrameOutcome
+  /** Task ids deleted under it, in order. */
+  deletedTasks: readonly string[]
+  /** Tasks that could not be deleted, each with why. */
+  failedTasks: readonly { taskId: string; detail: string }[]
+}
+
+export type PassResult = {
+  runId: string
+  /** Files actually removed. */
+  removed: readonly string[]
+  /** Why the files were KEPT, when they were. */
+  kept: string | null
+}
+
+export type ResetReport = {
+  frames: readonly FrameResult[]
+  passes: readonly PassResult[]
+  pointerRemoved: boolean
+  stuck: readonly StuckRepo[]
+  leftovers: readonly string[]
+}
+
+/** The one thing the apply needs beyond the client: removing a file, reporting whether one was there. */
+export type ResetFiles = { remove(path: string): boolean }
+
+/**
+ * Carry the plan out, reporting every outcome rather than stopping at the first failure.
+ *
+ * Tasks first, then their frame, and that order is the whole reason a reset is not one call: the
+ * frame delete REFUSES while an unfinished task is under it, deliberately, so that a caller which
+ * did not mean to discard work in flight cannot. Deleting the tasks is this command saying it means
+ * it, and each task delete also stops whatever run was going under it.
+ *
+ * A failure is collected and the reset carries on to the next frame, for the same reason the
+ * prerequisite gate reports every problem at once: an operator clearing a board wants the whole
+ * list, and a frame that refuses says nothing about the other one.
+ */
+export async function applyReset(
+  client: ResetClient,
+  files: ResetFiles,
+  plan: ResetPlan,
+): Promise<ResetReport> {
+  const frames: FrameResult[] = []
+  for (const frame of plan.frames) {
+    frames.push(await resetFrame(client, frame))
+  }
+
+  // A pass's files go only once every frame its ledger names is gone: the ones this reset refused,
+  // and the ones it never targeted (`unreclaimed`). Removed while one is still on the board, that
+  // frame has no pass to name in the refusal it will earn on the next attempt, and the resume that
+  // would have continued it is unreachable, since the id was in the file just deleted.
+  const refused = new Set(
+    frames.filter((frame) => frame.outcome.status === 'refused').map((frame) => frame.serviceId),
+  )
+  const passes: PassResult[] = plan.passes.map((pass) => {
+    const stillThere = [
+      ...pass.serviceIds.filter((serviceId) => refused.has(serviceId)),
+      ...pass.unreclaimed,
+    ]
+    if (stillThere.length > 0) {
+      return {
+        runId: pass.runId,
+        removed: [],
+        kept:
+          `${[...new Set(stillThere)].join(', ')} ${stillThere.length === 1 ? 'is' : 'are'} still ` +
+          `on the board, and this ledger is the only thing that names pass ${pass.runId} as the ` +
+          `owner`,
+      }
+    }
+    return {
+      runId: pass.runId,
+      removed: pass.paths.filter((path) => files.remove(path)),
+      kept: null,
+    }
+  })
+
+  // The pointer goes with the pass it names: left behind, `ACCEPTANCE_RUN_ID=latest` resolves to a
+  // ledger that no longer exists, which `resolveRunId` reads as a pass to CONTINUE and `WorldStore`
+  // then opens empty. That is a fresh pass wearing a finished pass's run id, and nothing about it
+  // looks wrong from the outside. Keyed on that pass's files being GONE rather than on any removal
+  // having happened, so a pointer whose pass was kept (a frame survived) keeps pointing at a resume
+  // that still works.
+  const pointer = plan.pointer
+  const pointedAt = pointer ? passes.find((pass) => pass.runId === pointer.runId) : undefined
+  const pointerRemoved = pointer !== null && pointedAt?.kept === null && files.remove(pointer.path)
+
+  return {
+    frames,
+    passes,
+    pointerRemoved,
+    stuck: plan.stuck,
+    leftovers: plan.leftovers,
+  }
+}
+
+async function resetFrame(client: ResetClient, frame: PlannedFrame): Promise<FrameResult> {
+  const base = { serviceId: frame.serviceId, title: frame.title }
+  if (frame.absent) {
+    return { ...base, outcome: { status: 'absent' }, deletedTasks: [], failedTasks: [] }
+  }
+  const deletedTasks: string[] = []
+  const failedTasks: { taskId: string; detail: string }[] = []
+  for (const task of frame.tasks) {
+    try {
+      await client.deleteTask(task.taskId)
+      deletedTasks.push(task.taskId)
+    } catch (error) {
+      // A task already gone is a success: the reset wants it absent, and a resumed attempt or a
+      // person in the app may have got there first.
+      if (error instanceof CatFactoryNotFoundError) deletedTasks.push(task.taskId)
+      else failedTasks.push({ taskId: task.taskId, detail: describeThrown(error) })
+    }
+  }
+  try {
+    await client.deleteService(frame.serviceId)
+    return { ...base, outcome: { status: 'deleted' }, deletedTasks, failedTasks }
+  } catch (error) {
+    if (error instanceof CatFactoryNotFoundError) {
+      return { ...base, outcome: { status: 'absent' }, deletedTasks, failedTasks }
+    }
+    return {
+      ...base,
+      outcome: {
+        status: 'refused',
+        reason: refusalReason(error),
+        detail: describeThrown(error),
+      },
+      deletedTasks,
+      failedTasks,
+    }
+  }
+}
+
+/**
+ * The machine-readable half of a refusal, or null.
+ *
+ * Read off `details.reason` and never inferred from the status: `422` covers every validation
+ * refusal this call can earn, and the one that has a different fix
+ * (`service_has_unfinished_tasks`, meaning a task the reset did not see is still open) is told
+ * apart only by the code.
+ */
+function refusalReason(error: unknown): string | null {
+  if (!(error instanceof CatFactoryValidationError)) return null
+  const details: unknown = error.details
+  if (typeof details !== 'object' || details === null) return null
+  const reason = (details as { reason?: unknown }).reason
+  return typeof reason === 'string' ? reason : null
+}
+
+/** The service ids one ledger names. Total: an absent or malformed ledger names none. */
+function ledgerServiceIds(world: World | null): readonly string[] {
+  if (!world) return []
+  return [world.backend, world.frontend].flatMap((service) => (service ? [service.serviceId] : []))
+}
+
+/**
+ * Whether the reset did everything it planned.
+ *
+ * A refused frame or a task that would not delete leaves the board in the state the next pass will
+ * be refused over, so it is a FAILING exit code rather than a note at the end of a report someone
+ * ran headlessly and did not read.
+ */
+export function resetSucceeded(report: ResetReport): boolean {
+  return report.frames.every(
+    (frame) => frame.outcome.status !== 'refused' && frame.failedTasks.length === 0,
+  )
+}
+
+/** The plan, as the preview an operator reads before adding `--yes`. */
+export function formatResetPlan(plan: ResetPlan): string {
+  const lines: string[] = []
+  if (plan.frames.length === 0) {
+    lines.push('No service frame on this board belongs to this configuration or the named pass.')
+  } else {
+    lines.push(`Service frames to delete (${plan.frames.length}):`)
+    for (const frame of plan.frames) {
+      lines.push(`  ${describeFrame(frame)}`)
+      for (const reason of frame.reasons) lines.push(`      because it ${describeReason(reason)}`)
+      for (const task of frame.tasks) lines.push(`      task ${task.taskId}: ${task.title}`)
+    }
+  }
+  if (plan.passes.length > 0) {
+    lines.push('', `Local pass files to remove (${plan.passes.length} pass(es)):`)
+    for (const pass of plan.passes) {
+      lines.push(`  ${pass.runId}`)
+      for (const path of pass.paths) lines.push(`      ${path}`)
+    }
+  }
+  if (plan.pointer) {
+    lines.push(
+      '',
+      `The 'latest' pointer names ${plan.pointer.runId}, so it goes too: ${plan.pointer.path}`,
+    )
+  }
+  return [
+    ...lines,
+    ...unlinkedLines(plan.unlinked),
+    ...stuckLines(plan.stuck),
+    ...leftoverLines(plan.leftovers),
+  ].join('\n')
+}
+
+/** The outcome, per frame and per pass, with everything that refused stated as such. */
+export function formatResetReport(report: ResetReport): string {
+  const lines: string[] = []
+  if (report.frames.length === 0) lines.push('No service frame needed deleting.')
+  else lines.push('Service frames:')
+  for (const frame of report.frames) {
+    lines.push(`  ${describeFrame(frame)}: ${describeOutcome(frame)}`)
+    for (const failed of frame.failedTasks) {
+      lines.push(`      task ${failed.taskId} could NOT be deleted: ${failed.detail}`)
+    }
+  }
+  if (report.passes.length > 0) {
+    lines.push('', 'Local pass files:')
+    for (const pass of report.passes) {
+      lines.push(
+        pass.kept === null
+          ? `  ${pass.runId}: removed ${pass.removed.length} file(s)${
+              pass.removed.length > 0 ? ` (${pass.removed.join(', ')})` : ''
+            }`
+          : `  ${pass.runId}: KEPT, because ${pass.kept}`,
+      )
+    }
+  }
+  if (report.pointerRemoved) lines.push('', "The 'latest' pointer was removed with its pass.")
+  return [...lines, ...stuckLines(report.stuck), ...leftoverLines(report.leftovers)].join('\n')
+}
+
+function describeFrame(frame: { serviceId: string; title: string | null }): string {
+  return `${frame.serviceId}${frame.title === null ? '' : ` '${frame.title}'`}`
+}
+
+function describeReason(reason: FrameReason): string {
+  if (reason.kind === 'backs-repo') return `backs '${reason.slug}'`
+  if (reason.kind === 'holds-title') return `holds the title '${reason.title}'`
+  return `is named by pass ${reason.runId}'s ledger`
+}
+
+function describeOutcome(frame: FrameResult): string {
+  const tasks = `${frame.deletedTasks.length} task(s) deleted`
+  if (frame.outcome.status === 'deleted') return `deleted, ${tasks}`
+  if (frame.outcome.status === 'absent') {
+    return `already gone (the board does not list it), ${tasks}`
+  }
+  const reason = frame.outcome.reason ? ` [${frame.outcome.reason}]` : ''
+  return `REFUSED${reason}: ${frame.outcome.detail}`
+}
+
+/**
+ * The configured repositories this workspace has not linked, so the plan could not ask what backs
+ * them. See {@link ResetPlan.unlinked}: printed so an empty plan is not read as a clean board.
+ */
+function unlinkedLines(unlinked: readonly string[]): readonly string[] {
+  if (unlinked.length === 0) return []
+  return [
+    '',
+    `Not linked to this workspace, so GET /api/v1/repos says nothing about what backs ` +
+      `${unlinked.length === 1 ? 'it' : 'them'}: ${unlinked.join(', ')}. Nothing here needs ` +
+      `clearing for ${unlinked.length === 1 ? 'it' : 'them'}; spec 01 adopts a reachable ` +
+      `repository itself, and if one is spoken for on ANOTHER board the target-repos gate is what ` +
+      `says so.`,
+  ]
+}
+
+/**
+ * The repositories no reset can free, with the steps for each.
+ *
+ * Printed with the PLAN and again with the REPORT, because a reset that cleared everything it could
+ * still leaves this refusal standing, and an operator reading only the outcome would re-run the pass
+ * and hit the same gate.
+ */
+function stuckLines(stuck: readonly StuckRepo[]): readonly string[] {
+  if (stuck.length === 0) return []
+  return [
+    '',
+    'This reset cannot free:',
+    ...stuck.flatMap((entry) => [`  ${entry.slug}`, ...entry.steps.map((step) => `      ${step}`)]),
+  ]
+}
+
+function leftoverLines(leftovers: readonly string[]): readonly string[] {
+  return ['', 'What a reset does NOT reclaim:', ...leftovers.map((note) => `  - ${note}`)]
+}
+
+/**
+ * What a reset leaves behind, always stated.
+ *
+ * Every entry here is something an `/api/v1` key cannot reclaim, and each one changes what the next
+ * pass does. The repositories are the load-bearing one: `target-repos` says outright that it cannot
+ * read whether a repository is EMPTY, so a board reset against two scaffolded repositories passes
+ * every prerequisite and then runs a scaffold on top of a tree that is already built.
+ */
+function leftoversOf(config: BoardConfig, passes: readonly PlannedPass[]): readonly string[] {
+  const issues = passes.flatMap((pass) =>
+    pass.issueUrl ? [`${pass.runId}: ${pass.issueUrl}`] : [],
+  )
+  return [
+    `The two repositories keep their CONTENT. ` +
+      `'${config.repoOwner}/${config.repos.backend}' and ` +
+      `'${config.repoOwner}/${config.repos.frontend}' still hold whatever a previous pass ` +
+      `scaffolded, plus its branches and open pull requests, and no /api/v1 call can empty them. ` +
+      `A fresh pass scaffolds ON TOP of that, which is a strange result rather than a failure: ` +
+      `empty them yourself (or point ACCEPTANCE_BACKEND_REPO / ACCEPTANCE_FRONTEND_REPO at two ` +
+      `fresh repositories) if you want the pass a first run would have.`,
+    ...(issues.length > 0
+      ? [
+          issues.length === 1
+            ? `The issue spec 04 filed as the REPORTER stays open on the provider, because it was ` +
+              `never the platform's to close: ${issues[0]}. Close it with the account that filed it.`
+            : `The ${issues.length} issues spec 04 filed as the REPORTER stay open on the ` +
+              `provider, because they were never the platform's to close: ${issues.join('; ')}. ` +
+              `Close them with the account that filed them.`,
+        ]
+      : []),
+    `Per-PR namespaces on the cluster (ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) are not touched. A run ` +
+      `that finished reclaimed its own; one that was killed may have left a namespace behind, and ` +
+      `only kubectl can see which.`,
+  ]
+}

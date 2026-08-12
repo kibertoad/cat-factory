@@ -3,6 +3,7 @@ import {
   describeThrown,
   envAssignment,
   perPersonPrefixInvocation,
+  resetInvocation,
   resumeInvocation,
   scrubbed,
   shellFlavour,
@@ -132,6 +133,32 @@ describe('resumeInvocation', () => {
     // the quote. A run id should never hold one, which is exactly why nothing would catch this.
     expect(resumeInvocation("it's", 'posix')).toContain(`ACCEPTANCE_RUN_ID='it'\\''s'`)
     expect(resumeInvocation("it's", 'powershell')).toContain(`$env:ACCEPTANCE_RUN_ID = 'it''s'`)
+  })
+})
+
+describe('resetInvocation', () => {
+  it('previews by default, and only deletes when the flag is asked for', () => {
+    // The default form is the one printed by a refusal, so it must be the harmless one: this deletes
+    // service frames, their tasks and their run history on a board somebody may share.
+    expect(resetInvocation()).toBe('pnpm --filter @cat-factory/acceptance run reset')
+    expect(resetInvocation({ apply: true })).toBe(
+      'pnpm --filter @cat-factory/acceptance run reset --yes',
+    )
+  })
+
+  it('carries a named pass before the flag, so the clear covers what a resume would have continued', () => {
+    expect(resetInvocation({ runId: '20260809175530', apply: true })).toBe(
+      'pnpm --filter @cat-factory/acceptance run reset 20260809175530 --yes',
+    )
+  })
+
+  it('needs no shell dialect, unlike a resume, because it sets no variable', () => {
+    // Stated as a test because the temptation is to give it a `flavour` parameter for symmetry with
+    // `resumeInvocation`. There is nothing to spell differently: pnpm forwards the positional and the
+    // flag identically in both shells, and a parameter nothing branches on is one a caller has to
+    // thread through for no reason.
+    expect(resetInvocation({ runId: 'latest' })).not.toContain('$env:')
+    expect(resetInvocation({ runId: 'latest' })).not.toContain('export ')
   })
 })
 
