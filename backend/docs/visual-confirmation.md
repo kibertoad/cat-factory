@@ -225,10 +225,21 @@ yet:
 - Publish the UI image: `docker build -f Dockerfile.ui --build-arg BASE_TAG=<v> -t
 cat-factory-executor-ui:<v> .` and wire the tag into `deploy/backend` (package.json + wrangler).
 
-**1b. Harness consumption (executor-harness image, image-bumped).** The harness must surface the
-job body's `artifactUpload` (`{ url, token }`) to the agent as the `ARTIFACT_UPLOAD_URL` /
-`ARTIFACT_UPLOAD_TOKEN` the `tester-ui` prompt already references, and provide the Playwright
-driver. No `switch(agentKind)` belongs in the container, but the env passthrough does.
+**1b. Harness consumption (executor-harness image, image-bumped): DONE.** The harness parses the
+job body's `artifactUpload` (`{ url, token }`) and surfaces it to the agent as the
+`ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN` the `tester-ui` prompt already references
+(`src/artifact-upload.ts`), registering the token for redaction first. The seam is layered on for
+every mode rather than gated on the kind: which kinds get it is the BACKEND's decision (it keys off
+the kind's declared `ui` image), so a container-side kind list would be that decision made twice.
+An unusable spec (either half missing, or a non-http transport) drops the WHOLE seam, because a URL
+with no token is an endpoint nothing can call.
+
+Deliberately NOT added to `HARNESS_BODY_CAPABILITIES`: that handshake's membership bar is "a
+missing field would make the PROMPT lie", and this prompt is explicitly conditional ("If
+`ARTIFACT_UPLOAD_URL` is NOT set, do not attempt any upload and omit `screenshots` … a human will
+capture and review the screens manually"). An older image dropping the field therefore degrades
+into exactly the manual mode described below, which is honest — so refusing the run would be a
+false accusation. The Playwright driver ships in `Dockerfile.ui`.
 
 **1c. Backend ingest seam: DONE.** `ContainerAgentExecutor` now injects `artifactUpload` into the
 `tester-ui` job body (reusing the run's existing container session token + the proxy base URL, so
@@ -237,10 +248,10 @@ container-token-authed `POST ${proxyBaseUrl}/artifacts/ingest` that stores the b
 `screenshot` artifact scoped to the token's workspace + execution. Image-allow-list + size guard +
 `nosniff` serving are shared with the workspace upload endpoint (`imageArtifacts.ts`).
 
-Until 1a + 1b land, the gate is fully usable against **manually-uploaded** reference + screenshots;
-auto-capture lights up once routing + harness passthrough are wired. The `pl_visual` pipeline still
-parks for a human regardless (manual mode), so it is safe to expose: it just won't have
-auto-captured shots until then.
+Until 1a lands, the gate is fully usable against **manually-uploaded** reference + screenshots;
+auto-capture lights up once the UI-image routing is wired (the harness half is done). The
+`pl_visual` pipeline still parks for a human regardless (manual mode), so it is safe to expose: it
+just won't have auto-captured shots until then.
 
 ### 2. Recapture-after-fix loop (enhancement)
 

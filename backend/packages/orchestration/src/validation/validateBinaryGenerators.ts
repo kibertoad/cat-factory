@@ -1,7 +1,9 @@
 import type { BinaryGeneratorRegistry } from '@cat-factory/kernel'
 import {
+  HARNESS_KINDS,
   describeFoundationalProblem,
   isAllowedMcpHttpUrl,
+  isHarnessKind,
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
 import {
@@ -170,6 +172,22 @@ function checkBinaryGeneratorDetails(definition: BinaryGeneratorDefinition): Reg
   // (judged over the capability's declarers) never sees the set at all. The accurate half is
   // unreachable, which makes this an error rather than a warning: the remedy is one capability
   // on one definition, and the deployment has already written down that the endpoint has it.
+  // The transport's one rule that needs more than the definition: whether the named CLI is a
+  // harness this build actually runs. Here rather than in the contracts schema because kernel's
+  // `HarnessKind` is the ONE list, and contracts (which kernel imports) cannot see it.
+  //
+  // An error rather than a warning, and an early one: a typo'd harness pins the step to a CLI no
+  // dispatch ever resolves, so every run selecting the integration is refused at admission with a
+  // message naming a harness that does not exist. The remedy is one string in the deployment's own
+  // code, which is exactly what boot validation is for.
+  if (definition.harness && !isHarnessKind(definition.harness)) {
+    invalid(
+      'binary_generator_unknown_harness',
+      `Generative binary integration "${definition.id}" is served by harness ` +
+        `"${definition.harness}", which is not one this build runs (${HARNESS_KINDS.join(', ')}). ` +
+        `A step selecting it could never be dispatched, so every run naming it would be refused.`,
+    )
+  }
   for (const { option, capability } of binaryAcceptsWithoutCapability(definition)) {
     invalid(
       'binary_generator_accepts_without_capability',

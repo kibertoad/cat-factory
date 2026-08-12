@@ -267,6 +267,81 @@ describe('binaryGeneratorSelectionIssues', () => {
     expect(message).toContain('no longer defines')
     expect(message).not.toContain('undefined')
   })
+
+  // The REACHABILITY axis: a harness-served integration is a tool inside ONE agent CLI, so a step
+  // whose model runs a different one has selected a generator that is not in the process at all.
+  describe('harness-transport reachability', () => {
+    const codexImages = generator({
+      id: 'codex-images',
+      name: 'Codex image generation',
+      summary: 'gpt-image-2 through the Codex CLI.',
+      transport: 'harness',
+      harness: 'codex',
+      endpoint: undefined,
+      credentials: [],
+    })
+    const selection = {
+      storageServiceId: 'asset-store',
+      generatorIds: ['codex-images'],
+      modalities: ['image'] as BinaryModality[],
+    }
+
+    it('admits the selection when the step resolves to the serving harness', () => {
+      expect(binaryGeneratorSelectionIssues(selection, [codexImages], 'codex')).toEqual([])
+    })
+
+    it('refuses it when the step resolves to a different harness', () => {
+      // The whole point of the pin: claude-code has no image tool, so this step would brief the
+      // agent on a generator it cannot call and take the failure as the model's.
+      expect(binaryGeneratorSelectionIssues(selection, [codexImages], 'claude-code')).toEqual([
+        {
+          problem: 'generator_harness_unavailable',
+          generatorId: 'codex-images',
+          requiredHarness: 'codex',
+          resolvedHarness: 'claude-code',
+        },
+      ])
+    })
+
+    it('refuses it for the default Pi harness too, which is a resolved answer and not a gap', () => {
+      expect(binaryGeneratorSelectionIssues(selection, [codexImages], 'pi')).toHaveLength(1)
+    })
+
+    it('says nothing when the harness could not be resolved', () => {
+      // The third outcome the format, capability and value axes all take. A guess here would
+      // refuse correct steps on every deployment whose catalog this build cannot resolve.
+      expect(binaryGeneratorSelectionIssues(selection, [codexImages])).toEqual([])
+    })
+
+    it('never raises it for an API-transport integration, whatever the harness', () => {
+      // An API generator is called by the agent's own code over HTTP: every CLI can do that.
+      expect(
+        binaryGeneratorSelectionIssues(
+          {
+            storageServiceId: 'asset-store',
+            generatorIds: ['retro-diffusion'],
+            modalities: ['image'],
+          },
+          [generator()],
+          'claude-code',
+        ),
+      ).toEqual([])
+    })
+
+    it('names both harnesses in the message, since the fix is the MODEL not the integration', () => {
+      const message = describeBinaryGeneratorSelectionIssues('image-generator', [
+        {
+          problem: 'generator_harness_unavailable',
+          generatorId: 'codex-images',
+          requiredHarness: 'codex',
+          resolvedHarness: 'claude-code',
+        },
+      ])
+      expect(message).toContain('codex')
+      expect(message).toContain('claude-code')
+      expect(message).not.toContain('undefined')
+    })
+  })
 })
 
 describe('resolveBinaryGeneratorSelection', () => {

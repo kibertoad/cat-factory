@@ -6,6 +6,7 @@ import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext, DesignImageUnavailableReason } from '@cat-factory/kernel'
 import {
+  BINARY_GENERATED_DIR,
   CONTEXT_BUDGET,
   estimateTokens,
   freshnessHeaderLines,
@@ -438,6 +439,28 @@ export const REFERENCE_SCREENSHOT_DIR = `${CONTEXT_DIR}/reference-screenshots`
  * constant exists twice and the copies are pinned byte-for-byte by the harness contract suite.
  */
 export const DESIGN_RENDER_DIR = `${CONTEXT_DIR}/design-renders`
+
+/**
+ * Subdirectory of {@link CONTEXT_DIR} where a HARNESS-SERVED binary generator's output is staged
+ * for the agent to pick up and store.
+ *
+ * It exists because the alternative is worse in two distinct ways. Codex writes its `image_gen`
+ * output under `$CODEX_HOME` and exposes no path for it to the model, so an agent told to "upload
+ * what you generated" has nothing to act on; and `$CODEX_HOME` is where the run's decrypted
+ * subscription credential lives, so sending the agent to look there would point a
+ * prompt-injectable process at it. The harness redirects the tool's output here instead, and this
+ * is the ONE path the brief names.
+ *
+ * Under {@link CONTEXT_DIR}, so it inherits the git exclude that keeps a not-yet-uploaded artifact
+ * out of the `git add -A` a coding run ends with. Written by the harness, which depends on no
+ * workspace package, so (like {@link CONTEXT_DIR}) the constant exists twice and the copies are
+ * pinned byte-for-byte by the harness contract suite.
+ *
+ * The subdirectory comes from kernel's own path vocabulary rather than a literal, so the brief
+ * (rendered in kernel) and the prompt (rendered here) cannot name different directories: that
+ * would leave exactly THREE copies of one path with only two of them pinned.
+ */
+export const GENERATED_BINARY_DIR = `${CONTEXT_DIR}/${BINARY_GENERATED_DIR}`
 
 /**
  * The design pictures this dispatch holds, and what became of them.

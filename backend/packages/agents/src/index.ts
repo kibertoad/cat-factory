@@ -206,6 +206,7 @@ export {
   CONTEXT_DIR,
   REFERENCE_SCREENSHOT_DIR,
   DESIGN_RENDER_DIR,
+  GENERATED_BINARY_DIR,
   designImagesSection,
 } from './agents/prompts/standard.js'
 export { toolServersSection } from './agents/prompts/capabilities.js'

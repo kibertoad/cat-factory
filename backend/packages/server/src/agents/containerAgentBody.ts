@@ -5,7 +5,11 @@ import type {
   HarnessKind,
   ModelRef,
 } from '@cat-factory/kernel'
-import { noopLogger, resolveDesignImageDelivery } from '@cat-factory/kernel'
+import {
+  dispatchNeedsHarnessGeneration,
+  noopLogger,
+  resolveDesignImageDelivery,
+} from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   CONFLICT_RESOLVER_AGENT_KIND,
@@ -238,6 +242,13 @@ export function buildCommonBody(
     // the `binary-output` trait is a deployment's own, and gating this on a built-in kind list is
     // exactly the coupling the trait exists to avoid.
     ...(generatorSecrets?.length ? { generatorSecrets } : {}),
+    // Switch on the agent CLI's OWN generation tool when this step selected a harness-served
+    // integration. Keyed off the TRANSPORT, never off a CLI name: which tool that is belongs to
+    // the harness, and admission has already refused a step whose model resolves to a CLI that
+    // does not serve the selection. Absent for every API-transport dispatch, which is exactly the
+    // prior behaviour — the tool bills the leased plan several times an ordinary turn, so it is
+    // never on by default.
+    ...(dispatchNeedsHarnessGeneration(context.binaryGenerators) ? { generateImages: true } : {}),
     ...(artifactUpload ? { artifactUpload } : {}),
     ...(referenceScreenshots ? { referenceScreenshots } : {}),
     ...(designImages ? { designImages } : {}),

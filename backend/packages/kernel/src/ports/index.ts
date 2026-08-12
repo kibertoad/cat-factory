@@ -98,7 +98,12 @@ export type {
   ModelRef,
   ModelScope,
 } from './model-provider.js'
-export { inlineModelRef, resolveScopedModelProvider } from './model-provider.js'
+export {
+  HARNESS_KINDS,
+  inlineModelRef,
+  isHarnessKind,
+  resolveScopedModelProvider,
+} from './model-provider.js'
 export type {
   TokenUsageRecord,
   ScopedSpendWindow,

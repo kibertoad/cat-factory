@@ -178,6 +178,26 @@ export function uniqueCredentialInjectionNames(
 }
 
 /**
+ * HOW an integration is reached, which decides what the rest of the definition may say.
+ *
+ * - `api` (the default, and every integration registered before this axis existed): a metered
+ *   vendor endpoint the AGENT'S OWN CODE calls, with a credential the platform injects. Everything
+ *   the original definition carried — `endpoint`, `credentials`, `contracts` — serves this case.
+ * - `harness`: the agent CLI generates it ITSELF, through a tool built into the harness the step
+ *   dispatches under (Codex's `image_gen` on a ChatGPT subscription). There is no endpoint to
+ *   call, no contract to read, and no credential to inject, because the auth is the leased
+ *   subscription the run already authenticated with.
+ *
+ * A DISCRIMINATOR rather than "an integration with no endpoint", because the two states are not
+ * the same claim and only one of them is checkable. An `api` definition that simply omitted its
+ * endpoint has said "nobody has filled this in yet"; a `harness` one has said "there is no
+ * endpoint, and here is what serves it instead". Left implicit, the second reads as the first, and
+ * the step is admitted to dispatch under a harness whose CLI has no such tool.
+ */
+export const binaryGeneratorTransportSchema = v.picklist(['api', 'harness'])
+export type BinaryGeneratorTransport = v.InferOutput<typeof binaryGeneratorTransportSchema>
+
+/**
  * A generative binary integration a deployment registers in code.
  *
  * Shaped like a foundational service on purpose — identity, prose, and API contracts in the
@@ -185,112 +205,163 @@ export function uniqueCredentialInjectionNames(
  * deployment writes one kind of definition. What it adds is what a GENERATOR has and a shared
  * service does not: the content types it produces, and the credential it needs.
  */
-export const binaryGeneratorDefinitionSchema = v.object({
-  /** Stable id, referenced by a step's `stepOptions.binaryOutput.generatorIds`. */
-  id: slug,
-  name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
-  /** One line, shown in the picker and the agent's brief. */
-  summary: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400)),
-  /**
-   * What it is good at and what it is NOT for — style, resolution/length limits, cost profile.
-   * The half a model needs to pick between two registered generators of the same modality.
-   */
-  description: v.pipe(v.string(), v.trim(), v.maxLength(20_000)),
-  /**
-   * The content types it produces. At least one: a generator that produces nothing is not a
-   * generator, and an empty list would make it match every step's requirements by vacuity.
-   */
-  modalities: v.pipe(v.array(binaryModalitySchema), v.minLength(1)),
-  /**
-   * The concrete media types it can emit (`image/png`, `audio/mpeg`), when the integration
-   * pins them down. Absent ⇒ only the coarse {@link modalities} are known, which the brief
-   * states as such rather than implying every format of that modality is available.
-   */
-  mediaTypes: v.optional(v.array(mediaTypeSchema)),
-  /**
-   * What it can be ASKED FOR while generating: a reference image, a mask edit, a seed, a
-   * transparent background (see `binary-capabilities.ts`). This is what decides which per-step
-   * generation options the builder offers, what the brief tells the agent it may send, and which
-   * option requirements admission refuses.
-   *
-   * Absent is a DOCUMENTED state and the honest default for a definition nobody has audited: it
-   * means "only the coarse facts are known", exactly as an absent {@link mediaTypes} does, so
-   * every option requirement against it is reported as unverifiable rather than refused. Declare
-   * it once the endpoint's parameters are actually known, and the step gains a real check.
-   *
-   * The vocabulary is closed and deliberately narrow: a capability belongs here only when the
-   * platform exposes something because of it. A vendor knob nobody else has stays in
-   * {@link guidance}, where a sentence can say what it does.
-   */
-  capabilities: v.optional(v.array(binaryGeneratorCapabilitySchema)),
-  /**
-   * For the options whose domain is a CLOSED SET, which values this endpoint takes: the ten
-   * aspect ratios its picklist offers, the `WxH` pairs its `size` parameter enumerates, the
-   * upscale factors it recognises (see `binary-capabilities.ts`).
-   *
-   * The capability above answers "can the request carry this at all"; this answers "will it take
-   * the value this step is asking for". Without it a step asking for `7:3` is admitted against an
-   * endpoint offering ten ratios that do not include it, generates, and comes back cropped with
-   * every downstream check passing.
-   *
-   * Absent, per option, is a DOCUMENTED state and the right one for an endpoint that renders
-   * anything it is handed, or for one nobody has audited: the option is judged exactly as it was
-   * before this field existed. Declare a set only where the endpoint genuinely has one, since a
-   * set is a refusal.
-   */
-  accepts: v.optional(binaryGeneratorAcceptsSchema),
-  /**
-   * The API's base URL. Stated to the agent so it does not have to infer one from the contract,
-   * and refused at registration unless it is `https` (or loopback) — the credential above rides
-   * this request.
-   */
-  endpoint: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2048))),
-  /**
-   * Operating notes folded into the agent's brief verbatim — polling an async job, the shape of
-   * a returned payload (base64 vs a signed URL), a rate limit worth respecting. This is where a
-   * deployment puts the knowledge that would otherwise be discovered once per run.
-   */
-  guidance: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(20_000))),
-  /**
-   * The credentials it authenticates with, by name. Absent or empty ⇒ the integration is called
-   * unauthenticated, which the brief states as such rather than leaving the agent to guess.
-   *
-   * A LIST rather than one, because a vendor account is not always one string: HTTP Basic over a
-   * key/secret pair needs both halves, and every other layer this travels through was already
-   * plural (the `ToolSecretResolver` port takes `keys`, a tool server declares `credentials`, the
-   * checklist keys its rows by `(subject, id, key)`, and the job body carries pairs). The single
-   * field was the one singular link in that chain, and it bought nothing.
-   *
-   * INJECTION NAMES must be distinct, which is what {@link uniqueCredentialInjectionNames}
-   * refuses, case-insensitively for the reason {@link comparableCredentialInjectionName} gives.
-   * The job body is keyed by the variable each value arrives as, so two entries naming one
-   * variable do not conflict loudly: one silently wins, and the integration authenticates with
-   * half of a pair.
-   */
-  credentials: v.optional(
-    v.pipe(
-      v.array(binaryGeneratorCredentialSchema),
-      // A bound rather than a considered ceiling: no authentication shape needs eight values, and
-      // a declaration that reaches it is a mistake worth naming at boot rather than a list worth
-      // resolving.
-      v.maxLength(8),
-      // Wrapped rather than passed by reference: the helper takes a `readonly` array (it is the
-      // shape every other caller holds) and valibot infers a check's input as the pipe's own
-      // mutable item type, which will not accept it.
-      v.check(
-        (credentials) => uniqueCredentialInjectionNames(credentials),
-        'each credential must arrive as its own environment variable',
+export const binaryGeneratorDefinitionSchema = v.pipe(
+  v.object({
+    /** Stable id, referenced by a step's `stepOptions.binaryOutput.generatorIds`. */
+    id: slug,
+    name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+    /** One line, shown in the picker and the agent's brief. */
+    summary: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(400)),
+    /**
+     * What it is good at and what it is NOT for — style, resolution/length limits, cost profile.
+     * The half a model needs to pick between two registered generators of the same modality.
+     */
+    description: v.pipe(v.string(), v.trim(), v.maxLength(20_000)),
+    /**
+     * The content types it produces. At least one: a generator that produces nothing is not a
+     * generator, and an empty list would make it match every step's requirements by vacuity.
+     */
+    modalities: v.pipe(v.array(binaryModalitySchema), v.minLength(1)),
+    /**
+     * The concrete media types it can emit (`image/png`, `audio/mpeg`), when the integration
+     * pins them down. Absent ⇒ only the coarse {@link modalities} are known, which the brief
+     * states as such rather than implying every format of that modality is available.
+     */
+    mediaTypes: v.optional(v.array(mediaTypeSchema)),
+    /**
+     * What it can be ASKED FOR while generating: a reference image, a mask edit, a seed, a
+     * transparent background (see `binary-capabilities.ts`). This is what decides which per-step
+     * generation options the builder offers, what the brief tells the agent it may send, and which
+     * option requirements admission refuses.
+     *
+     * Absent is a DOCUMENTED state and the honest default for a definition nobody has audited: it
+     * means "only the coarse facts are known", exactly as an absent {@link mediaTypes} does, so
+     * every option requirement against it is reported as unverifiable rather than refused. Declare
+     * it once the endpoint's parameters are actually known, and the step gains a real check.
+     *
+     * The vocabulary is closed and deliberately narrow: a capability belongs here only when the
+     * platform exposes something because of it. A vendor knob nobody else has stays in
+     * {@link guidance}, where a sentence can say what it does.
+     */
+    capabilities: v.optional(v.array(binaryGeneratorCapabilitySchema)),
+    /**
+     * For the options whose domain is a CLOSED SET, which values this endpoint takes: the ten
+     * aspect ratios its picklist offers, the `WxH` pairs its `size` parameter enumerates, the
+     * upscale factors it recognises (see `binary-capabilities.ts`).
+     *
+     * The capability above answers "can the request carry this at all"; this answers "will it take
+     * the value this step is asking for". Without it a step asking for `7:3` is admitted against an
+     * endpoint offering ten ratios that do not include it, generates, and comes back cropped with
+     * every downstream check passing.
+     *
+     * Absent, per option, is a DOCUMENTED state and the right one for an endpoint that renders
+     * anything it is handed, or for one nobody has audited: the option is judged exactly as it was
+     * before this field existed. Declare a set only where the endpoint genuinely has one, since a
+     * set is a refusal.
+     */
+    accepts: v.optional(binaryGeneratorAcceptsSchema),
+    /**
+     * The API's base URL. Stated to the agent so it does not have to infer one from the contract,
+     * and refused at registration unless it is `https` (or loopback) — the credential above rides
+     * this request.
+     */
+    endpoint: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2048))),
+    /**
+     * Operating notes folded into the agent's brief verbatim — polling an async job, the shape of
+     * a returned payload (base64 vs a signed URL), a rate limit worth respecting. This is where a
+     * deployment puts the knowledge that would otherwise be discovered once per run.
+     */
+    guidance: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(20_000))),
+    /**
+     * The credentials it authenticates with, by name. Absent or empty ⇒ the integration is called
+     * unauthenticated, which the brief states as such rather than leaving the agent to guess.
+     *
+     * A LIST rather than one, because a vendor account is not always one string: HTTP Basic over a
+     * key/secret pair needs both halves, and every other layer this travels through was already
+     * plural (the `ToolSecretResolver` port takes `keys`, a tool server declares `credentials`, the
+     * checklist keys its rows by `(subject, id, key)`, and the job body carries pairs). The single
+     * field was the one singular link in that chain, and it bought nothing.
+     *
+     * INJECTION NAMES must be distinct, which is what {@link uniqueCredentialInjectionNames}
+     * refuses, case-insensitively for the reason {@link comparableCredentialInjectionName} gives.
+     * The job body is keyed by the variable each value arrives as, so two entries naming one
+     * variable do not conflict loudly: one silently wins, and the integration authenticates with
+     * half of a pair.
+     */
+    credentials: v.optional(
+      v.pipe(
+        v.array(binaryGeneratorCredentialSchema),
+        // A bound rather than a considered ceiling: no authentication shape needs eight values, and
+        // a declaration that reaches it is a mistake worth naming at boot rather than a list worth
+        // resolving.
+        v.maxLength(8),
+        // Wrapped rather than passed by reference: the helper takes a `readonly` array (it is the
+        // shape every other caller holds) and valibot infers a check's input as the pipe's own
+        // mutable item type, which will not accept it.
+        v.check(
+          (credentials) => uniqueCredentialInjectionNames(credentials),
+          'each credential must arrive as its own environment variable',
+        ),
       ),
     ),
+    /**
+     * The integration's API contract documents, in the same formats the foundational catalog
+     * accepts. Injected as `.cat-context/` files beside the brief, so the agent calls the
+     * operations the contract declares instead of inventing them.
+     */
+    contracts: v.optional(v.array(uploadApiContractSchema)),
+    /**
+     * How the integration is reached (see {@link binaryGeneratorTransportSchema}). Absent ⇒ `api`,
+     * which is what every definition registered before this axis existed meant and still means.
+     */
+    transport: v.optional(binaryGeneratorTransportSchema),
+    /**
+     * Which agent CLI serves it, for a `harness` transport: `codex`, `claude-code`, `pi`.
+     *
+     * A free-form string here for the reason `servableHarnesses` is one — these are CLI names, not
+     * translated copy, and kernel's closed `HarnessKind` union is the ONE list worth keeping. Boot
+     * validation holds this to that union (`binary_generator_unknown_harness`), which is the layer
+     * that can actually see it; a second picklist here would be the same list maintained twice, and
+     * the SPA only ever DISPLAYS this value.
+     */
+    harness: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(64))),
+  }),
+  // The transport's own consistency, as schema checks rather than boot rules: each is a fault
+  // WITHIN one definition that needs no other definition, no registry and no runtime to see, so
+  // it belongs where the shape is stated. Boot keeps the checks that genuinely need more context
+  // (is this a real harness, do two definitions collide on one variable).
+  v.check(
+    (definition) => definition.transport !== 'harness' || Boolean(definition.harness),
+    'a harness-transport integration must name the `harness` that serves it',
   ),
-  /**
-   * The integration's API contract documents, in the same formats the foundational catalog
-   * accepts. Injected as `.cat-context/` files beside the brief, so the agent calls the
-   * operations the contract declares instead of inventing them.
-   */
-  contracts: v.optional(v.array(uploadApiContractSchema)),
-})
+  v.check(
+    (definition) => definition.transport === 'harness' || !definition.harness,
+    'only a harness-transport integration may name a `harness`',
+  ),
+  // The three API-shaped fields, refused together on a harness transport because each would be a
+  // statement about an API that does not exist. `endpoint` and `contracts` would merely mislead
+  // the brief; `credentials` is the one that BITES — the value is injected into the agent's
+  // process, so a declared credential on a harness generator is an environment variable the
+  // deployment believes authenticates something and that nothing ever reads.
+  v.check(
+    (definition) =>
+      definition.transport !== 'harness' ||
+      (!definition.endpoint && !definition.credentials?.length && !definition.contracts?.length),
+    'a harness-transport integration has no API, so it may declare no `endpoint`, `credentials` or `contracts`',
+  ),
+)
 export type BinaryGeneratorDefinition = v.InferOutput<typeof binaryGeneratorDefinitionSchema>
+
+/**
+ * Whether a definition (or the view projected from one) is served by a harness rather than an API.
+ *
+ * A helper rather than `=== 'harness'` at each site, because the field is OPTIONAL and its absence
+ * means `api`: every reader would otherwise have to remember which way the default falls, and the
+ * one that forgot would treat every pre-existing integration as harness-served.
+ */
+export function isHarnessTransport(subject: { transport?: BinaryGeneratorTransport }): boolean {
+  return subject.transport === 'harness'
+}
 
 /**
  * The ways `definition` fails {@link binaryGeneratorDefinitionSchema}, as readable lines — empty
@@ -339,6 +410,17 @@ export const registeredBinaryGeneratorSchema = v.object({
    * set, which is what turns the refusal into a fix.
    */
   accepts: v.optional(binaryGeneratorAcceptsSchema),
+  /**
+   * How it is reached, and — for a harness transport — which CLI serves it.
+   *
+   * Identity-grade like the three fields above, and here for the same reason they are: the builder
+   * has to SHOW it. A harness-served integration is only available to a step whose model resolves
+   * to that harness, and that is a constraint someone picking from a list must be able to see
+   * BEFORE the run start that would otherwise refuse it. Neither field names a credential, an
+   * endpoint or a contract, so the omissions this projection exists for are untouched.
+   */
+  transport: v.optional(binaryGeneratorTransportSchema),
+  harness: v.optional(v.string()),
 })
 export type RegisteredBinaryGenerator = v.InferOutput<typeof registeredBinaryGeneratorSchema>
 

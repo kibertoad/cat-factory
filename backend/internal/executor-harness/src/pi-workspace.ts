@@ -242,6 +242,15 @@ export interface AgentRunSpec {
    */
   mcpServers?: McpServerSpec[]
   /**
+   * Enable the codex CLI's built-in `image_gen` tool and stage its output into the checkout.
+   *
+   * Forwarded rather than decided here, exactly like {@link mcpServers}: the BACKEND is the half
+   * that resolved a harness-served binary generator for this step and knows the run is meant to
+   * generate. A run that simply asks nicely gets nothing, which is the point — the tool bills the
+   * leased plan at several times an ordinary turn.
+   */
+  generateImages?: boolean
+  /**
    * Enable proxy-backed web search: point the rpiv-web-tools SearXNG provider at the
    * backend's search proxy (`${proxyBaseUrl}/web-search`) with the session token as
    * the bearer — so the search runs server-side under the deployment's key and no
@@ -342,6 +351,11 @@ export async function runAgentInWorkspace(
       ...(spec.ambientAuth ? { ambientAuth: true } : {}),
       ...(spec.skills?.length ? { skills: spec.skills } : {}),
       ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
+      // Codex's own image tool. Passed for both subscription harnesses because the option lives on
+      // the shared run options; `runClaudeCode` ignores it, since claude-code has no such tool and
+      // (unlike an MCP server) there is nothing to report as unservable — the backend never
+      // resolves a codex-served generator onto a claude-code step, because admission refuses it.
+      ...(spec.generateImages ? { generateImages: true } : {}),
       ...(opts.agentEnv ? { extraEnv: opts.agentEnv } : {}),
       signal: opts.signal,
       // Run the SAME no-progress guard Pi gets (previously claude-code/codex had none): env

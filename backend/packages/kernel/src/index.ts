@@ -340,6 +340,7 @@ export {
 // half: the two halves import each other, so a value read across that cycle at module-init time
 // is a boot crash the typecheck cannot see (see `domain/binary-output-paths.ts`).
 export {
+  BINARY_GENERATED_DIR,
   BINARY_GENERATOR_CONTEXT_DIR,
   BINARY_OUTPUT_BRIEF_FILE,
   BINARY_OUTPUT_CONTEXT_DIR,
@@ -405,6 +406,7 @@ export {
   describeCapability,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,
+  dispatchNeedsHarnessGeneration,
   resolveBinaryGeneratorSelection,
 } from './domain/binary-generators.js'
 
