@@ -155,6 +155,7 @@ function input(overrides: Partial<Parameters<typeof planReset>[1]> = {}) {
   return {
     config: CONFIG,
     namedRunId: null,
+    all: false,
     passes: [],
     latest: { runId: null, path: '/state/latest.json' },
     ...overrides,
@@ -292,6 +293,85 @@ describe('planReset', () => {
     expect(theirs.pointer).toBeNull()
   })
 
+  it('takes every frame the board lists under --all, whatever backs it or calls it', async () => {
+    // The frames the two configured questions structurally cannot see: a pass run under a different
+    // `ACCEPTANCE_NAME_PREFIX`, and one raised by hand. Neither backs a target repository nor holds
+    // one of this prefix's titles, so neither blocks a pass and neither is reachable without `--all`.
+    const f = fake({
+      repos: [{ name: 'catalog-api', serviceId: 'blk_api' }],
+      services: [
+        { serviceId: 'blk_api', title: TITLES.backend },
+        { serviceId: 'blk_old', title: 'old-prefix Catalog Web' },
+        { serviceId: 'blk_hand', title: 'Scratch service' },
+      ],
+      tasks: { blk_old: ['blk_t9'] },
+    })
+
+    const plan = await planReset(f.client, input({ all: true }))
+
+    expect(plan.scope).toBe('whole-board')
+    expect(plan.frames.map((frame) => frame.serviceId)).toEqual(['blk_api', 'blk_old', 'blk_hand'])
+    // The frame the narrow questions already claimed keeps naming the refusal it would have earned;
+    // `whole-board` alone is what marks one no configured pass would ever have touched.
+    expect(plan.frames[0]?.reasons).toEqual([
+      { kind: 'backs-repo', slug: 'acme/catalog-api' },
+      { kind: 'holds-title', title: TITLES.backend },
+      { kind: 'whole-board' },
+    ])
+    expect(plan.frames[1]?.reasons).toEqual([{ kind: 'whole-board' }])
+    // Tasks are read for a frame `--all` alone put in the plan, or its delete refuses over them.
+    expect(plan.frames[1]?.tasks.map((task) => task.taskId)).toEqual(['blk_t9'])
+  })
+
+  it('takes every pass on disk under --all, including one whose ledger names nothing', async () => {
+    // A board with no frames left holds nothing for any ledger to map, so a file kept back is a run
+    // id `status` still lists and `latest` may still resolve to, which resumes onto frames that no
+    // longer exist. A refused attempt (no readable ledger) names no frame at all, so it is
+    // unreachable through the `holdsDoomed` branch and would survive every narrow reset.
+    const f = fake({
+      repos: [{ name: 'catalog-api' }],
+      services: [{ serviceId: 'blk_hand', title: 'Scratch service' }],
+    })
+    const refusedAttempt: ResetPassOnDisk = {
+      runId: 'p_refused',
+      ledgerPath: '/state/p_refused.json',
+      journalPath: '/state/p_refused.journal.jsonl',
+      world: null,
+    }
+
+    const narrow = await planReset(f.client, input({ passes: [refusedAttempt] }))
+    const whole = await planReset(f.client, input({ all: true, passes: [refusedAttempt] }))
+
+    expect(narrow.passes).toEqual([])
+    expect(whole.passes.map((pass) => pass.runId)).toEqual(['p_refused'])
+    // Nothing it names survives on the board, so its files go rather than being kept as a map.
+    expect(whole.passes[0]?.unreclaimed).toEqual([])
+    const report = await applyReset(f.client, f.files, whole)
+    expect(report.passes[0]?.kept).toBeNull()
+  })
+
+  it('names a repository a deleted frame backed BEYOND the configured two', async () => {
+    // Under `--all` the leftovers paragraph's two repositories are a fraction of what was emptied,
+    // and a repository whose content survives is the leftover that changes what the next pass does.
+    const f = fake({
+      repos: [
+        { name: 'catalog-api', serviceId: 'blk_api' },
+        { name: 'unrelated-svc', serviceId: 'blk_other' },
+      ],
+      services: [
+        { serviceId: 'blk_api', title: TITLES.backend },
+        { serviceId: 'blk_other', title: 'Somebody else’s service' },
+      ],
+    })
+
+    const plan = await planReset(f.client, input({ all: true }))
+
+    const notes = plan.leftovers.join('\n')
+    expect(notes).toContain('acme/unrelated-svc')
+    // The configured pair is named by the paragraph that always runs, so it is not repeated here.
+    expect(plan.leftovers[0]).not.toContain('catalog-api')
+  })
+
   it('always states what it cannot reclaim, naming the repositories and any filed issue', async () => {
     const f = fake({
       repos: [{ name: 'catalog-api', serviceId: 'blk_api' }],
@@ -332,6 +412,26 @@ describe('applyReset', () => {
     expect(f.calls).toEqual(['task:blk_t1', 'task:blk_t2', 'service:blk_api'])
     expect(report.frames[0]?.outcome).toEqual({ status: 'deleted' })
     expect(report.frames[0]?.deletedTasks).toEqual(['blk_t1', 'blk_t2'])
+    expect(resetSucceeded(report)).toBe(true)
+  })
+
+  it('finishes one frame before starting the next, rather than deleting every task first', async () => {
+    // Per-frame sequencing is what the frame delete's refusal needs: a frame whose own tasks are gone
+    // can be deleted while another frame's are still there. Batching every task first would work too
+    // and would leave a failure mid-flight having emptied frames nothing then removed.
+    const f = fake({
+      repos: [{ name: 'catalog-api', serviceId: 'blk_api' }],
+      services: [
+        { serviceId: 'blk_api', title: TITLES.backend },
+        { serviceId: 'blk_hand', title: 'Scratch service' },
+      ],
+      tasks: { blk_api: ['blk_t1'], blk_hand: ['blk_t2'] },
+    })
+
+    const report = await applyReset(f.client, f.files, await planFor(f, { all: true }))
+
+    expect(f.calls).toEqual(['task:blk_t1', 'service:blk_api', 'task:blk_t2', 'service:blk_hand'])
+    expect(report.frames.map((frame) => frame.outcome.status)).toEqual(['deleted', 'deleted'])
     expect(resetSucceeded(report)).toBe(true)
   })
 
@@ -489,6 +589,7 @@ describe('applyReset', () => {
 
 describe('the rendered plan and report', () => {
   const plan: ResetPlan = {
+    scope: 'configured',
     frames: [
       {
         serviceId: 'blk_api',
@@ -535,6 +636,29 @@ describe('the rendered plan and report', () => {
     )
   })
 
+  it('states the whole-board scope before the list, since the two render the same on one pass', () => {
+    // A board holding exactly one pass produces an identical frame list either way, so the list is
+    // not what an operator can grade a `--all --yes` on. The scope line is.
+    const whole = formatResetPlan({ ...plan, scope: 'whole-board' })
+    expect(whole).toContain('--all: the target is EVERY service frame this board lists')
+    expect(whole.indexOf('--all:')).toBeLessThan(whole.indexOf('Service frames to delete'))
+    expect(formatResetPlan(plan)).not.toContain('--all:')
+  })
+
+  it('answers an empty whole-board plan with what it actually read, not the narrow sentence', () => {
+    // "No frame belongs to this configuration" would be true and misleading: under `--all` the
+    // configuration is not what bounded the read, so the fact is that the board lists nothing.
+    const text = formatResetPlan({
+      ...plan,
+      scope: 'whole-board',
+      frames: [],
+      passes: [],
+      pointer: null,
+    })
+    expect(text).toContain('This board lists no service frame at all')
+    expect(text).not.toContain('belongs to this configuration')
+  })
+
   it('names a repository this workspace has not linked, so an empty plan is not read as a clean board', () => {
     // "Nothing on this board backs it" and "this read cannot see it" are different facts, and only
     // the first means a reset has nothing to do: an unlinked repository spoken for on ANOTHER board
@@ -579,13 +703,31 @@ describe('parseResetArgs', () => {
     expect(parseResetArgs(['--yes', '20260811151012'])).toEqual({
       ok: true,
       runId: '20260811151012',
+      all: false,
       apply: true,
     })
-    expect(parseResetArgs(['latest', '-y'])).toEqual({ ok: true, runId: 'latest', apply: true })
+    expect(parseResetArgs(['latest', '-y'])).toEqual({
+      ok: true,
+      runId: 'latest',
+      all: false,
+      apply: true,
+    })
   })
 
   it('defaults to a PREVIEW, because the argument-less form must delete nothing', () => {
-    expect(parseResetArgs([])).toEqual({ ok: true, runId: null, apply: false })
+    expect(parseResetArgs([])).toEqual({ ok: true, runId: null, all: false, apply: false })
+  })
+
+  it('reads --all as the scope and never as an apply', () => {
+    // The two flags are independent on purpose: `--all` alone is the preview of a whole-board clear,
+    // which is the form an operator reads before deciding, and it must delete nothing on its own.
+    expect(parseResetArgs(['--all'])).toEqual({ ok: true, runId: null, all: true, apply: false })
+    expect(parseResetArgs(['--all', '--yes'])).toEqual({
+      ok: true,
+      runId: null,
+      all: true,
+      apply: true,
+    })
   })
 
   it('refuses an unknown flag rather than reading it as a run id', () => {

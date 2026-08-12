@@ -186,11 +186,19 @@ export function resumeInvocation(runId: string, flavour: ShellFlavour = shellFla
  * A NAMED pass widens what is cleared to whatever that pass's ledger holds, which is the form worth
  * printing beside a resume: the two are the same decision (continue this pass, or clear it) and an
  * operator choosing between them should not have to work out the second command's arguments.
+ *
+ * `all` is the widest form and no remedy prints it: it clears every frame the board lists, so it is
+ * something an operator asks for rather than something a refusal suggests. It is rendered here
+ * because the command's own output has to offer it back (the preview names what it previewed, and a
+ * printed apply that dropped the flag would delete a different set than the one just read).
  */
-export function resetInvocation(options: { runId?: string; apply?: boolean } = {}): string {
+export function resetInvocation(
+  options: { runId?: string; all?: boolean; apply?: boolean } = {},
+): string {
   return [
     RESET_INVOCATION,
     ...(options.runId ? [options.runId] : []),
+    ...(options.all ? ['--all'] : []),
     ...(options.apply ? ['--yes'] : []),
   ].join(' ')
 }

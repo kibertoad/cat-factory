@@ -108,12 +108,17 @@ console.log(
     `${config.repoOwner}/${config.repos.frontend}\n` +
     `  name prefix:  ${config.namePrefix}\n` +
     `  state dir:    ${stateDir}\n` +
-    (namedRunId ? `  named pass:   ${namedRunId}\n` : ''),
+    (namedRunId ? `  named pass:   ${namedRunId}\n` : '') +
+    // Printed with the target rather than only in the plan, so the APPLY run's own output records
+    // what it was pointed at: the preview is a separate invocation, and this line is the only thing
+    // in a captured log that separates a whole-board clear from a configured one.
+    (parsed.all ? `  scope:        --all (EVERY service frame this board lists)\n` : ''),
 )
 
 const plan = await planReset(client, {
   config,
   namedRunId,
+  all: parsed.all,
   passes,
   latest: { runId: latestRunId, path: latestPointerPath(stateDir) },
 })
@@ -122,7 +127,13 @@ if (!parsed.apply) {
   console.log(formatResetPlan(plan))
   console.log(
     `\nNothing was changed. Run it again with --yes to carry this out:\n` +
-      `  ${resetInvocation({ ...(namedRunId ? { runId: namedRunId } : {}), apply: true })}`,
+      // Every argument this invocation carried, `--all` included: the printed command must delete
+      // exactly the set just previewed, and dropping the flag would silently narrow it back.
+      `  ${resetInvocation({
+        ...(namedRunId ? { runId: namedRunId } : {}),
+        ...(parsed.all ? { all: true } : {}),
+        apply: true,
+      })}`,
   )
   process.exit(0)
 }

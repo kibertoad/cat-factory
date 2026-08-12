@@ -556,6 +556,7 @@ The other way out of a refusal over leftover state, for when the work is not wor
 pnpm --filter @cat-factory/acceptance run reset                       # what it WOULD delete
 pnpm --filter @cat-factory/acceptance run reset --yes                 # do it
 pnpm --filter @cat-factory/acceptance run reset 20260809175530 --yes  # …plus that pass's own state
+pnpm --filter @cat-factory/acceptance run reset --all                 # every frame the board lists
 ```
 
 It deletes the service frames this configuration would adopt, every task under them and the run
@@ -565,7 +566,16 @@ files of the passes that named those frames. Until this existed the third branch
 remedy ("delete the service frame that holds this one") was the one instruction a HEADLESS operator
 could not carry out headlessly, because deleting a service was an app act.
 
-Four things about it are decisions rather than details:
+**`--all` is a whole-board clear**, for when the point is an empty board rather than one refusal. It
+targets every frame `GET /api/v1/services` lists, whatever backs it and whatever it is called, and
+every pass in the state directory. The two questions below are deliberately narrow (they answer the two
+refusals a pass earns) and a board accumulates frames neither can see: a pass run under a different
+`ACCEPTANCE_NAME_PREFIX`, one whose repositories the `.env` has since replaced, a frame raised by hand
+while debugging. None of those blocks the next pass, which is why no refusal prints the flag. It is
+still a preview by default, the plan still names every frame and task, and the plan states the scope
+outright, because a board holding one pass renders an identical list either way.
+
+Five things about it are decisions rather than details:
 
 - **It previews by default.** The bare form changes nothing and names every frame, task and file, since
   the board may be one two people share. `--yes` is the whole of the opt-in; `pnpm` forwards both the
@@ -574,7 +584,13 @@ Four things about it are decisions rather than details:
   frames and the frames holding this prefix's titles, which are the two things the gate refuses over.
   That is what lets it clear state whose owning ledger is gone (another machine, another operator, a
   cleared `ACCEPTANCE_STATE_DIR`), which is the case with no other way out. Naming a pass ADDS whatever
-  its ledger holds, so a frame this `.env` no longer points at is reachable too.
+  its ledger holds, so a frame this `.env` no longer points at is reachable too, and `--all` replaces
+  the question entirely with "everything the board lists".
+- **Under `--all`, every pass on disk goes with the board.** That follows from what was deleted rather
+  than from the flag being the widest: with no frames left, a kept file is a run id `status` still lists
+  and `latest` may still resolve to, and resuming it opens a ledger whose frames no longer exist. It is
+  also the only branch that reaches a refused attempt's files, since a ledger that is absent or
+  malformed names no frame for the others to match on.
 - **It keeps a pass's files whenever a frame that ledger names survives**, whether the delete was
   refused or the plan never targeted it. The ledger is the only thing mapping a leftover frame back to
   a run id, so removing it would strand that frame with no pass for the next refusal to name and no id
@@ -582,7 +598,9 @@ Four things about it are decisions rather than details:
 - **It states what it cannot reclaim.** The two repositories keep whatever a previous pass scaffolded,
   branches and open pull requests included, and no `/api/v1` call can empty them, so a fresh pass
   scaffolds ON TOP of that (`target-repos` says outright that it cannot see whether a repository is
-  empty). An issue spec 04 filed stays open, because it was the reporter's and never the platform's.
+  empty). Any OTHER repository a deleted frame backed is named too, since under `--all` the configured
+  pair is a fraction of what was emptied. An issue spec 04 filed stays open, because it was the
+  reporter's and never the platform's.
   Per-PR cluster namespaces are untouched. A cleared board is not a fresh one, and the report says so
   rather than reading as "everything is clean".
 
@@ -679,8 +697,8 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                                                   |
 | `src/status.ts`              | Ledger + journal → "where is this pass". Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.                                                                                                    |
 | `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                                                                                                                                                                         |
-| `src/reset.ts`               | Starting over: which frames a clear targets, the order the deletes go in, what it refuses to remove, and what it cannot reclaim. Driven by seams; unit-tested.                                                                   |
-| `src/resetCli.ts`            | `pnpm run reset`. Supplies the real client and file removals, parses the two arguments, owns the exit code.                                                                                                                      |
+| `src/reset.ts`               | Starting over: which frames a clear targets (this configuration's two questions, a named pass, or `--all`), the order the deletes go in, what it refuses to remove, and what it cannot reclaim. Driven by seams; unit-tested.    |
+| `src/resetCli.ts`            | `pnpm run reset`. Supplies the real client and file removals, parses the positional and the two flags, owns the exit code.                                                                                                       |
 | `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested.                                                                                                                                                |
 | `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                                                                                                                                                                        |
 | `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.                                                                                                                                                       |

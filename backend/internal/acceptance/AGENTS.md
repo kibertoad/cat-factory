@@ -105,7 +105,7 @@ journal into where a pass got to, opening no connection to the deployment.
 left rather than re-filing it. The README tables both.
 
 **And it is RESETTABLE, which is the other branch of every refusal over leftover state.**
-`pnpm run reset [runId|latest] [--yes]` (`src/reset.ts` + `src/resetCli.ts`) deletes the service
+`pnpm run reset [runId|latest] [--all] [--yes]` (`src/reset.ts` + `src/resetCli.ts`) deletes the service
 frames this configuration would adopt, their tasks and the run history under them, then the local
 files of the passes naming them. It exists because "delete the service frame that holds this one" was
 an app act until `DELETE /api/v1/services/{serviceId}`, so the one way out of `target-repos` an
@@ -116,7 +116,16 @@ other way out is the state whose ledger is gone, and NAMING a pass adds whatever
 KEEPS a pass's files whenever any frame that ledger names is still on the board (refused, or never
 targeted), because the ledger is the only map from a leftover frame back to a run id; and it STATES
 what no key reclaims (the repositories keep their content, a reporter-filed issue stays open, cluster
-namespaces are untouched), so a cleared board never reads as a fresh one. It needs the BOARD half of
+namespaces are untouched), so a cleared board never reads as a fresh one.
+
+**`--all` is a THIRD target beside those two, not a wider reading of them**: every frame
+`GET /api/v1/services` lists plus every pass in the state directory, for the frames the narrow
+questions structurally cannot see (a different `ACCEPTANCE_NAME_PREFIX`, repositories the `.env` has
+replaced, a frame raised by hand). None of those blocks a pass, so no refusal prints the flag. Two
+things it changes rather than widens: the PLAN states the scope outright, because a board holding one
+pass renders an identical frame list either way and the reading is the safety property; and every pass
+file goes, including a refused attempt's, because a board with no frames maps nothing and a kept file
+is a run id `latest` may still resolve to. It needs the BOARD half of
 the config only (`resolveBoardConfig`): demanding a cluster to clean up after one refuses exactly the
 operator whose cluster has moved on.
 

@@ -41,6 +41,18 @@ next refusal to name. And it STATES what no key can reclaim: the two repositorie
 previous pass scaffolded (with its branches and pull requests), a reporter-filed issue stays open, and
 per-PR cluster namespaces are untouched, so a cleared board is not a fresh one.
 
+`--all` clears the whole board rather than one configuration's share of it. The two questions the
+default asks are narrow by design (they answer the two refusals a pass earns), so a board accumulates
+frames neither can see: a pass run under a different name prefix, one whose repositories the `.env` has
+since replaced, a frame raised by hand. None of them blocks the next pass, which is why no refusal
+prints the flag and why it is an operator's request rather than a remedy. It reuses the task reads and
+deletes the surface already published (`GET /api/v1/services/{serviceId}/tasks`, whose pages it walks,
+and `DELETE /api/v1/tasks/{taskId}`), so the endpoint added here is still the only new one. Two things
+it changes rather than widens: the preview STATES the scope, because a board holding a single pass
+renders an identical frame list either way, and every pass file in the state directory goes with the
+board, a refused attempt's included, since a board with no frames left maps nothing and a file kept
+back is a run id `latest` may still resolve to.
+
 The suite's configuration now resolves in two halves, and `reset` needs only the BOARD half (the
 deployment, the key, the two repositories, the state directory). Requiring a cluster and a reporter
 token to clear a board would refuse exactly the operator whose cluster has moved on, which is who is

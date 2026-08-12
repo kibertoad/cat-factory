@@ -152,6 +152,17 @@ describe('resetInvocation', () => {
     )
   })
 
+  it('carries the scope flag too, so a printed apply deletes what the preview showed', () => {
+    // The command the preview prints back is the one an operator pastes. Dropping `--all` there would
+    // narrow the target silently, and the narrower run reports success over a different set.
+    expect(resetInvocation({ all: true })).toBe(
+      'pnpm --filter @cat-factory/acceptance run reset --all',
+    )
+    expect(resetInvocation({ runId: 'latest', all: true, apply: true })).toBe(
+      'pnpm --filter @cat-factory/acceptance run reset latest --all --yes',
+    )
+  })
+
   it('needs no shell dialect, unlike a resume, because it sets no variable', () => {
     // Stated as a test because the temptation is to give it a `flavour` parameter for symmetry with
     // `resumeInvocation`. There is nothing to spell differently: pnpm forwards the positional and the

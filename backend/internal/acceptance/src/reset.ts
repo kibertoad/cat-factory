@@ -22,6 +22,16 @@
 //      repositories, an open issue and a cluster namespace behind reads as "the board is clean",
 //      and the next pass then scaffolds on top of a tree that is already built.
 //
+// `--all` is a fourth target beside those two, not a wider reading of them: EVERY frame the board
+// lists, whatever backs it and whatever it is called. It exists because the two questions above are
+// deliberately narrow (they answer the two refusals a pass earns), and a board accumulates frames
+// they cannot see: a pass run under a different `ACCEPTANCE_NAME_PREFIX`, one whose repositories the
+// `.env` has since replaced, a frame raised by hand while debugging. None of those blocks the next
+// pass, so clearing them is housekeeping rather than a remedy, which is why no refusal prints the
+// flag. What makes it safe is what makes the default safe: the plan names every frame it would
+// delete and `--yes` is still the whole of the opt-in, so a whole-board clear takes two deliberate
+// arguments and one reading in between.
+//
 // The local files come LAST and only for a pass whose frames all went: a ledger removed while its
 // frame survives strands that frame with no pass to name, which is the state `findPassesNaming`
 // exists to keep out of the refusals.
@@ -46,18 +56,25 @@ import type { World } from './world.ts'
  */
 export function parseResetArgs(
   argv: readonly string[],
-): { ok: true; runId: string | null; apply: boolean } | { ok: false; problem: string } {
+):
+  | { ok: true; runId: string | null; all: boolean; apply: boolean }
+  | { ok: false; problem: string } {
   let runId: string | null = null
   let apply = false
+  let all = false
   for (const arg of argv) {
     if (arg === '--yes' || arg === '-y') {
       apply = true
       continue
     }
+    if (arg === '--all') {
+      all = true
+      continue
+    }
     if (arg.startsWith('-')) {
       return {
         ok: false,
-        problem: `unknown option '${arg}'. Usage: ${resetInvocation()} [runId|latest] [--yes]`,
+        problem: `unknown option '${arg}'. Usage: ${resetInvocation()} [runId|latest] [--all] [--yes]`,
       }
     }
     if (runId !== null) {
@@ -70,7 +87,7 @@ export function parseResetArgs(
     }
     runId = arg
   }
-  return { ok: true, runId, apply }
+  return { ok: true, runId, all, apply }
 }
 
 /** One row of `GET /api/v1/repos`, narrowed to what decides whether a repository is spoken for. */
@@ -124,6 +141,15 @@ export type ResetInput = {
    * someone naming it is asking for.
    */
   namedRunId: string | null
+  /**
+   * `--all`: target every frame the board lists, rather than the two questions this configuration
+   * asks.
+   *
+   * Its own field rather than a mode threaded through the two questions, because it does not widen
+   * either of them: they ask what would be REFUSED, and this asks what is THERE. Keeping them
+   * separate is what lets a frame in the plan for both reasons still state both.
+   */
+  all: boolean
   passes: readonly ResetPassOnDisk[]
   /** What `ACCEPTANCE_RUN_ID=latest` currently resolves to, and the file that says so. */
   latest: { runId: string | null; path: string }
@@ -134,6 +160,7 @@ export type FrameReason =
   | { kind: 'backs-repo'; slug: string }
   | { kind: 'holds-title'; title: string }
   | { kind: 'named-by-pass'; runId: string }
+  | { kind: 'whole-board' }
 
 export type PlannedFrame = {
   serviceId: string
@@ -176,6 +203,15 @@ export type PlannedPass = {
 }
 
 export type ResetPlan = {
+  /**
+   * Which question built the frame list: this configuration's two, or `--all`.
+   *
+   * Carried on the plan rather than left to the caller that passed the flag, because the PREVIEW is
+   * what an operator grades a whole-board clear on, and "every frame on this board" and "the frames
+   * this `.env` points at" are the same list on a board holding only one pass. A preview that cannot
+   * tell those apart reads as the narrow one, which is the reading that makes the `--yes` a surprise.
+   */
+  scope: 'configured' | 'whole-board'
   frames: readonly PlannedFrame[]
   stuck: readonly StuckRepo[]
   /**
@@ -246,9 +282,10 @@ export async function planReset(client: ResetClient, input: ResetInput): Promise
     }
   }
 
-  // A NAMED pass widens the target to whatever its own ledger holds. Nothing else does: the frames
-  // of a pass nobody named are already covered by the two questions above, and reaching into every
-  // ledger on disk would clear a colleague's board from a command that named nothing.
+  // A NAMED pass widens the target to whatever its own ledger holds. No LEDGER does anything else:
+  // the frames of a pass nobody named are already covered by the two questions above, and reaching
+  // into every ledger on disk would clear a colleague's board from a command that named nothing.
+  // (`--all` below is the other way to widen, and it reads the BOARD rather than any ledger.)
   const named = input.passes.find((pass) => pass.runId === input.namedRunId)
   if (named) {
     for (const serviceId of ledgerServiceIds(named.world)) {
@@ -256,9 +293,18 @@ export async function planReset(client: ResetClient, input: ResetInput): Promise
     }
   }
 
-  // One task read per planned frame, sequentially: there is no by-many read on this surface and a
-  // pass has two frames, so the whole plan costs two calls and lands in a stable order. Each is
-  // already paged through by the caller's client.
+  // `--all` adds whatever is left: every frame the board lists. Added LAST so a frame the two
+  // questions above already claimed keeps naming the refusal it would have earned, which is the
+  // reason worth reading; `whole-board` alone is what separates a frame no configured pass would
+  // ever have touched from one this `.env` points at.
+  if (input.all) {
+    for (const service of services) add(service.serviceId, { kind: 'whole-board' })
+  }
+
+  // One task read per planned frame, sequentially: there is no by-many read on this surface, so a
+  // configured plan costs the two calls its two frames need and a `--all` plan costs one per frame
+  // the board lists, each landing in a stable order. Each is already paged through by the caller's
+  // client, which is what keeps a frame's tail from being left under it.
   const frames: PlannedFrame[] = []
   for (const [serviceId, why] of reasons) {
     const listed = byId.get(serviceId)
@@ -279,7 +325,16 @@ export async function planReset(client: ResetClient, input: ResetInput): Promise
     const holdsDoomed = serviceIds.some((serviceId) => doomed.has(serviceId))
     // A pass is in the plan when it NAMES state being deleted, or when it was named on the command
     // line. An unrelated pass's files are left alone: they are how somebody else resumes.
-    if (!holdsDoomed && pass.runId !== input.namedRunId) return []
+    //
+    // `--all` takes every pass on disk, and that follows from what it deletes rather than from being
+    // the widest flag: a board with no frames left holds nothing for any ledger to map, so a file
+    // kept back is a run id `status` still lists and `latest` may still resolve to. `resolveRunId`
+    // reads that as a pass to CONTINUE, `WorldStore` opens it onto a board where none of its frames
+    // exist, and the result is a fresh pass wearing a finished pass's id: the same failure the
+    // pointer removal below exists against, one file up. It also takes the passes the other branches
+    // structurally cannot, since a ledger that is absent or malformed (a refused attempt) names no
+    // frames at all.
+    if (!input.all && !holdsDoomed && pass.runId !== input.namedRunId) return []
     return [
       {
         runId: pass.runId,
@@ -294,7 +349,23 @@ export async function planReset(client: ResetClient, input: ResetInput): Promise
   })
   const latestRunId = input.latest.runId
 
+  // Repositories a frame in this plan backs BEYOND the two this configuration names, read off the
+  // same `GET /api/v1/repos` rows the plan was built from. They keep their content exactly as the
+  // configured pair does, and nothing else in the report would say so: the leftovers paragraph names
+  // the pair from the `.env`, which under `--all` is a fraction of what was just emptied. Reachable
+  // in the narrow scope too, since a frame can be in the plan for its TITLE while backing some
+  // repository this `.env` never mentions.
+  const extraRepos = repos
+    .filter((repo) => repo.serviceId !== null && doomed.has(repo.serviceId))
+    .filter(
+      (repo) =>
+        !sameRepo(repo, config.repoOwner, config.repos.backend) &&
+        !sameRepo(repo, config.repoOwner, config.repos.frontend),
+    )
+    .map((repo) => `${repo.owner}/${repo.name}`)
+
   return {
+    scope: input.all ? 'whole-board' : 'configured',
     frames,
     stuck,
     unlinked,
@@ -303,7 +374,7 @@ export async function planReset(client: ResetClient, input: ResetInput): Promise
       latestRunId !== null && passes.some((pass) => pass.runId === latestRunId)
         ? { runId: latestRunId, path: input.latest.path }
         : null,
-    leftovers: leftoversOf(config, passes),
+    leftovers: leftoversOf(config, passes, extraRepos),
   }
 }
 
@@ -493,8 +564,21 @@ export function resetSucceeded(report: ResetReport): boolean {
 /** The plan, as the preview an operator reads before adding `--yes`. */
 export function formatResetPlan(plan: ResetPlan): string {
   const lines: string[] = []
+  // Stated first and unconditionally under `--all`, because the two scopes render the SAME list on a
+  // board that holds one pass, and the reading an operator does is the whole safety property.
+  if (plan.scope === 'whole-board') {
+    lines.push(
+      `--all: the target is EVERY service frame this board lists, whatever backs it and whatever ` +
+        `it is called, plus every pass in the state directory.`,
+      '',
+    )
+  }
   if (plan.frames.length === 0) {
-    lines.push('No service frame on this board belongs to this configuration or the named pass.')
+    lines.push(
+      plan.scope === 'whole-board'
+        ? 'This board lists no service frame at all, so there is nothing here to delete.'
+        : 'No service frame on this board belongs to this configuration or the named pass.',
+    )
   } else {
     lines.push(`Service frames to delete (${plan.frames.length}):`)
     for (const frame of plan.frames) {
@@ -558,7 +642,8 @@ function describeFrame(frame: { serviceId: string; title: string | null }): stri
 function describeReason(reason: FrameReason): string {
   if (reason.kind === 'backs-repo') return `backs '${reason.slug}'`
   if (reason.kind === 'holds-title') return `holds the title '${reason.title}'`
-  return `is named by pass ${reason.runId}'s ledger`
+  if (reason.kind === 'named-by-pass') return `is named by pass ${reason.runId}'s ledger`
+  return `is on this board, and --all clears every frame the board lists`
 }
 
 function describeOutcome(frame: FrameResult): string {
@@ -615,11 +700,23 @@ function leftoverLines(leftovers: readonly string[]): readonly string[] {
  * read whether a repository is EMPTY, so a board reset against two scaffolded repositories passes
  * every prerequisite and then runs a scaffold on top of a tree that is already built.
  */
-function leftoversOf(config: BoardConfig, passes: readonly PlannedPass[]): readonly string[] {
+function leftoversOf(
+  config: BoardConfig,
+  passes: readonly PlannedPass[],
+  extraRepos: readonly string[],
+): readonly string[] {
   const issues = passes.flatMap((pass) =>
     pass.issueUrl ? [`${pass.runId}: ${pass.issueUrl}`] : [],
   )
   return [
+    ...(extraRepos.length > 0
+      ? [
+          `${extraRepos.join(', ')} ${extraRepos.length === 1 ? 'backs a frame' : 'back frames'} ` +
+            `this plan deletes and ${extraRepos.length === 1 ? 'keeps its' : 'keep their'} content ` +
+            `too. The paragraph below names only the two repositories this configuration points at, ` +
+            `which is not the same set once a plan reaches frames it never adopted.`,
+        ]
+      : []),
     `The two repositories keep their CONTENT. ` +
       `'${config.repoOwner}/${config.repos.backend}' and ` +
       `'${config.repoOwner}/${config.repos.frontend}' still hold whatever a previous pass ` +
