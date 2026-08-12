@@ -32,7 +32,7 @@ export type ClusterConfig = {
  * setup step this suite cannot perform (a PAT connection reports `canCreateRepos: false`, and the
  * App path creates only under `/orgs/{org}/repos`), so the names are an input rather than a
  * `${prefix}-catalog-api-${runId}` the suite mints for itself. See
- * `docs/initiatives/acceptance-suite-operator-setup.md`.
+ * `backend/docs/adr/0055-acceptance-suite-operator-setup.md`.
  */
 export type RepoNames = {
   backend: string

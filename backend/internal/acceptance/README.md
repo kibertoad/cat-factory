@@ -52,7 +52,7 @@ with each (`POST /api/v1/services` takes a `repoId`, which is where one comes fr
 scaffolds both through `pl_build` from the same briefs the bootstrapper agent used to be handed.
 Each one is an ordinary pipeline run, which is why an interrupted scaffold resumes exactly as an
 interrupted feature run does. Decision record:
-[`docs/initiatives/acceptance-suite-operator-setup.md`](../../../docs/initiatives/acceptance-suite-operator-setup.md).
+[ADR 0055](../../docs/adr/0055-acceptance-suite-operator-setup.md).
 
 **Create them with a README and nothing else.** A scaffold run opens a pull request, which needs a
 default branch to target, and a repository with no commits has none. Content beyond that is not

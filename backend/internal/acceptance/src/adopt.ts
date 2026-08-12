@@ -3,7 +3,7 @@
 // This module replaced the bootstrap wait. Repository creation is the one setup step the suite
 // cannot perform: a PAT connection reports `canCreateRepos: false`, and the App path creates only
 // under `/orgs/{org}/repos`, so a personal account was never a supported target. The decision
-// (`docs/initiatives/acceptance-suite-operator-setup.md`) is that the operator creates the two
+// (`backend/docs/adr/0055-acceptance-suite-operator-setup.md`) is that the operator creates the two
 // repositories and the suite adopts them, which needs no platform change at all:
 // `POST /api/v1/services` already backs a service with an existing repository by `repoId`, and
 // `GET /api/v1/repos` is where a `repoId` comes from.

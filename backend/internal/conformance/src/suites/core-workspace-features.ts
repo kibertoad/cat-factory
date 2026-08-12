@@ -940,11 +940,11 @@ function registerNotificationAndPresetTests(harness: ConformanceHarness): void {
 
       // A fresh workspace is lazily seeded with the built-in catalog: Kimi K2.7 (the
       // Cloudflare-runnable default in the conformance harnesses, everything Kimi), GLM-5.2,
-      // and Claude Opus 5. Each built-in carries its catalog version.
+      // Claude Opus 5 and GPT-5.6 Sol. Each built-in carries its catalog version.
       const initial = await call<ModelPreset[]>('GET', `/workspaces/${workspace.id}/model-presets`)
       expect(initial.status).toBe(200)
       const seeded = initial.body
-      expect(seeded.length).toBeGreaterThanOrEqual(3)
+      expect(seeded.length).toBeGreaterThanOrEqual(4)
       const def = seeded.find((p) => p.isDefault)
       expect(def?.baseModelId).toBe('kimi-k2.7')
       expect(def?.version).toBe(1)
@@ -1003,6 +1003,7 @@ function registerNotificationAndPresetTests(harness: ConformanceHarness): void {
         mdp_kimi: 1,
         mdp_glm: 1,
         mdp_claude: 2,
+        mdp_chatgpt: 1,
       })
 
       // Seed, then drift a built-in (rename + change its base model). Reseed must restore the

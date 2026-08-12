@@ -512,18 +512,26 @@ export const MODEL_PRESET_SEED_IDS = {
   kimi: 'mdp_kimi',
   glm: 'mdp_glm',
   claude: 'mdp_claude',
+  chatgpt: 'mdp_chatgpt',
 } as const
 
 /**
  * The built-in model presets seeded for every workspace, using the catalog ids from
  * {@link MODEL_CATALOG}: "Kimi K2.7" (everything `kimi-k2.7`, the Cloudflare-served
- * baseline), "GLM-5.2" (everything `glm`), and "Claude Opus 5" (everything
- * `claude-opus`, run via a Claude subscription or OpenRouter). A workspace always keeps
- * at least these until the operator edits the library. WHICH one is the workspace
- * default is chosen per deployment ({@link DEFAULT_MODEL_PRESET_ID}) at first seed —
- * Cloudflare/Node default to Kimi (Cloudflare-runnable on the bare baseline), local mode
- * to Claude. To ship a new built-in (or a new version of one), add it here / bump its
- * `version`; existing workspaces are then advised to reseed.
+ * baseline), "GLM-5.2" (everything `glm`), "Claude Opus 5" (everything `claude-opus`,
+ * run via a Claude subscription or OpenRouter) and "GPT-5.6 Sol" (everything
+ * `gpt-5.6-sol`, run via a ChatGPT subscription on Codex or OpenRouter). A workspace
+ * always keeps at least these until the operator edits the library. WHICH one is the
+ * workspace default is chosen per deployment ({@link DEFAULT_MODEL_PRESET_ID}) at first
+ * seed — Cloudflare/Node default to Kimi (Cloudflare-runnable on the bare baseline),
+ * local mode to Claude. To ship a new built-in (or a new version of one), add it here /
+ * bump its `version`; existing workspaces are then advised to reseed.
+ *
+ * Each entry names a VENDOR rather than a model generation (`mdp_chatgpt`, not
+ * `mdp_gpt56sol`), so a built-in rolls its `baseModelId` forward as the vendor's flagship
+ * moves and a workspace's pin survives the move: that is what the `version` bump on
+ * `mdp_claude` below records, and pinning the generation in the ID instead would have
+ * made every such roll-forward a new preset nobody had selected.
  */
 export const DEFAULT_MODEL_PRESETS: ModelPresetSeed[] = [
   {
@@ -543,6 +551,19 @@ export const DEFAULT_MODEL_PRESETS: ModelPresetSeed[] = [
     // changed. Bumping the version surfaces the reseed advisory to workspaces still
     // holding the "Claude Opus 4.8"-named copy.
     version: 2,
+  },
+  {
+    id: MODEL_PRESET_SEED_IDS.chatgpt,
+    name: 'GPT-5.6 Sol',
+    // The OpenAI flagship tier, reached on a ChatGPT subscription through the Codex
+    // harness or pay-as-you-go through OpenRouter. Deliberately the same route shape as
+    // `mdp_claude` above, which is the reason this needs no `direct` catalog route to be
+    // a usable built-in: `effectiveVariant` walks the preference and lands on whichever
+    // of the two the workspace has, so an OpenRouter key alone makes it dispatchable to a
+    // system API key, and a subscription wins where one is connected.
+    baseModelId: 'gpt-5.6-sol',
+    overrides: {},
+    version: 1,
   },
 ]
 
