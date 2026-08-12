@@ -61,6 +61,17 @@ function issueApiFor(verdict: IssueCredentialVerdict): PreflightContext['issueAp
         throw new Error('the gate must not FILE anything')
       },
       read: async () => null,
+      // The gate probes and nothing else, so every write and every purge read refuses: a
+      // prerequisite that started closing issues would fail here rather than quietly doing it.
+      listOpen: async () => {
+        throw new Error('the gate must not LIST issues')
+      },
+      close: async () => {
+        throw new Error('the gate must not CLOSE an issue')
+      },
+      viewer: async () => {
+        throw new Error('the gate must not read the viewer')
+      },
     }) satisfies IssueApi
 }
 

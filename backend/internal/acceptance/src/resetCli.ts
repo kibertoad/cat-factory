@@ -24,11 +24,22 @@
 import { rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { type BoardConfig, resolveBoardConfig } from './config.ts'
+import { type BoardConfig, resolveBoardConfig, resolveReporterConfig } from './config.ts'
 import { envFile } from './envFile.ts'
 import { resetInvocation } from './operatorText.ts'
 import { latestPointerPath, listPasses, readLatestPointer, resolveStateDir } from './passFiles.ts'
+import {
+  formatProviderPlan,
+  formatProviderReport,
+  planProviderPurge,
+  type ProviderPurgeClients,
+  providerPurgeSucceeded,
+  runProviderPurge,
+} from './providerPurge.ts'
+import type { LedgerIssue } from './issuePurge.ts'
 import { createClient } from './publicApi.ts'
+import { REPO_CONTENT_APIS } from './repoContentApi.ts'
+import { ISSUE_APIS } from './vcsIssues.ts'
 import {
   applyReset,
   formatResetPlan,
@@ -111,6 +122,15 @@ async function run(): Promise<number> {
     return 2
   }
 
+  // Resolved BEFORE anything is read, so a `--purge-repos` with no credential refuses having
+  // changed nothing rather than clearing the board and then discovering it cannot finish the job.
+  const provider = parsed.purgeRepos ? providerClients(env) : null
+  if (provider !== null && !provider.ok) {
+    console.error(provider.problem)
+    return 2
+  }
+  const providerApis = provider?.ok === true ? provider.clients : null
+
   const client = resetClient(config)
 
   console.log(
@@ -123,7 +143,10 @@ async function run(): Promise<number> {
       // Printed with the target rather than only in the plan, so the APPLY run's own output records
       // what it was pointed at: the preview is a separate invocation, and this line is the only thing
       // in a captured log that separates a whole-board clear from a configured one.
-      (parsed.all ? `  scope:        --all (EVERY service frame this board lists)\n` : ''),
+      (parsed.all ? `  scope:        --all (EVERY service frame this board lists)\n` : '') +
+      (parsed.purgeRepos
+        ? `  scope:        --purge-repos (also close this suite's issues and EMPTY both repositories)\n`
+        : ''),
   )
 
   const plan = await planReset(client, {
@@ -132,10 +155,27 @@ async function run(): Promise<number> {
     all: parsed.all,
     passes,
     latest,
+    purgeProvider: parsed.purgeRepos,
   })
+
+  const providerPlan =
+    providerApis === null
+      ? null
+      : await planProviderPurge(providerApis, {
+          targets: [
+            { owner: config.repoOwner, repo: config.repos.backend },
+            { owner: config.repoOwner, repo: config.repos.frontend },
+          ],
+          // Only the passes this reset is REMOVING: an issue belonging to a pass whose files are
+          // being kept is one somebody may still resume, and closing it would settle a spec 04 the
+          // resumed pass is still waiting on.
+          ledgerIssues: ledgerIssuesOf(plan.passes, passes),
+          stamp: backupStamp(),
+        })
 
   if (!parsed.apply) {
     console.log(formatResetPlan(plan))
+    if (providerPlan) console.log(formatProviderPlan(providerPlan))
     console.log(
       `\nNothing was changed. Run it again with --yes to carry this out:\n` +
         // Every argument this invocation carried, `--all` included: the printed command must delete
@@ -143,6 +183,7 @@ async function run(): Promise<number> {
         `  ${resetInvocation({
           ...(namedRunId ? { runId: namedRunId } : {}),
           ...(parsed.all ? { all: true } : {}),
+          ...(parsed.purgeRepos ? { purgeRepos: true } : {}),
           apply: true,
         })}`,
     )
@@ -151,7 +192,13 @@ async function run(): Promise<number> {
 
   const report = await applyReset(client, { remove: removeFile }, plan)
   console.log(formatResetReport(report))
-  if (!resetSucceeded(report)) {
+  let providerOk = true
+  if (providerApis !== null && providerPlan !== null) {
+    const providerReport = await runProviderPurge(providerApis, providerPlan)
+    console.log(formatProviderReport(providerReport))
+    providerOk = providerPurgeSucceeded(providerReport)
+  }
+  if (!resetSucceeded(report) || !providerOk) {
     console.error(
       `\nThe reset did not finish: something above refused, or a repository it cannot free is ` +
         `still held. The board still holds state a fresh pass will be refused over, so fix what is ` +
@@ -163,6 +210,79 @@ async function run(): Promise<number> {
     `\nDone. A fresh pass can start: pnpm --filter @cat-factory/acceptance run acceptance`,
   )
   return 0
+}
+
+/**
+ * The two provider clients `--purge-repos` needs, or the refusal naming what is missing.
+ *
+ * Extracted from `run` rather than inlined, because it is the one part of this command that resolves
+ * a SECOND credential and it has three ways to refuse. Answering a discriminated result keeps the
+ * caller a single branch, and keeps the refusal text beside the resolution that produced it.
+ */
+function providerClients(
+  env: Record<string, string | undefined>,
+): { ok: true; clients: ProviderPurgeClients } | { ok: false; problem: string } {
+  const reporter = resolveReporterConfig(env)
+  if (!reporter.ok) {
+    return {
+      ok: false,
+      problem:
+        `--purge-repos is not configured.\n\n` +
+        reporter.problems.map((problem) => `  - ${problem}`).join('\n') +
+        `\n\nDrop the flag to clear the board only, which needs no provider credential.`,
+    }
+  }
+  // GitHub for every deployment this suite can run against. The tables answer null for a provider
+  // it cannot address, which is a refusal rather than a call against the wrong host: see
+  // `vcsIssues.ts` for why GitLab has no entry.
+  const issues = ISSUE_APIS.github?.(reporter.reporter) ?? null
+  const content = REPO_CONTENT_APIS.github?.(reporter.reporter) ?? null
+  if (issues === null || content === null) {
+    return {
+      ok: false,
+      problem:
+        `--purge-repos cannot address this provider's API, so the board was left untouched. Drop ` +
+        `the flag to clear the board only.`,
+    }
+  }
+  return { ok: true, clients: { issues, content } }
+}
+
+/**
+ * The issues recorded by the passes this reset is REMOVING, as the purge names them.
+ *
+ * Keyed on the plan's pass list rather than every pass on disk, for the same reason the plan itself
+ * is: an issue belonging to a pass whose files are being KEPT is one somebody may still resume, and
+ * closing it would settle the spec-04 gate that pass is waiting on.
+ */
+function ledgerIssuesOf(
+  planned: readonly { runId: string }[],
+  passes: readonly ResetPassOnDisk[],
+): readonly LedgerIssue[] {
+  const removing = new Set(planned.map((pass) => pass.runId))
+  return passes.flatMap((pass) => {
+    const issue = pass.world?.intakeIssue
+    if (!issue || !removing.has(pass.runId)) return []
+    return [
+      {
+        runId: pass.runId,
+        target: { owner: issue.owner, repo: issue.repo },
+        number: issue.number,
+        url: issue.url,
+      },
+    ]
+  })
+}
+
+/**
+ * The namespace the backup tags of ONE invocation share.
+ *
+ * A wall-clock stamp rather than a run id: a purge is not a pass and routinely runs when no ledger is
+ * left to take an id from. Its only job is to keep two purges of the same repository from colliding
+ * on a tag name, which a second-resolution stamp does.
+ */
+function backupStamp(): string {
+  return new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
 }
 
 /** The SDK, narrowed to the five calls the reset makes. */

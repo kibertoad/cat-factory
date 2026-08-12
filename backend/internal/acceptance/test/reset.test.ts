@@ -432,6 +432,32 @@ describe('planReset', () => {
     expect(notes).toContain('https://github.com/acme/x/issues/7')
     expect(notes).toContain('ACCEPTANCE_K3S_NAMESPACE_TEMPLATE')
   })
+
+  // The leftovers paragraph is the part of this output an operator takes on trust, because they
+  // cannot see the repositories from here. `--purge-repos` disproves two of its sentences, so a plan
+  // that kept printing them would be actively wrong about the one thing it is relied on for.
+  it('stops promising the repositories keep their content once the purge is running', async () => {
+    const f = fake({
+      repos: [{ name: 'catalog-api', serviceId: 'blk_api' }],
+      services: [{ serviceId: 'blk_api', title: TITLES.backend }],
+    })
+
+    const plan = await planReset(
+      f.client,
+      input({
+        purgeProvider: true,
+        passes: [
+          ledger('p1', { backend: 'blk_api', issueUrl: 'https://github.com/acme/x/issues/7' }),
+        ],
+      }),
+    )
+
+    const notes = plan.leftovers.join('\n')
+    expect(notes).not.toContain('keep their CONTENT')
+    expect(notes).not.toContain('stays open')
+    // The cluster note is untouched: no flag here reclaims a namespace, so that one is still true.
+    expect(notes).toContain('ACCEPTANCE_K3S_NAMESPACE_TEMPLATE')
+  })
 })
 
 describe('applyReset', () => {
@@ -838,28 +864,63 @@ describe('parseResetArgs', () => {
       runId: '20260811151012',
       all: false,
       apply: true,
+      purgeRepos: false,
     })
     expect(parseResetArgs(['latest', '-y'])).toEqual({
       ok: true,
       runId: 'latest',
       all: false,
       apply: true,
+      purgeRepos: false,
     })
   })
 
   it('defaults to a PREVIEW, because the argument-less form must delete nothing', () => {
-    expect(parseResetArgs([])).toEqual({ ok: true, runId: null, all: false, apply: false })
+    expect(parseResetArgs([])).toEqual({
+      ok: true,
+      runId: null,
+      all: false,
+      apply: false,
+      purgeRepos: false,
+    })
   })
 
   it('reads --all as the scope and never as an apply', () => {
     // The two flags are independent on purpose: `--all` alone is the preview of a whole-board clear,
     // which is the form an operator reads before deciding, and it must delete nothing on its own.
-    expect(parseResetArgs(['--all'])).toEqual({ ok: true, runId: null, all: true, apply: false })
+    expect(parseResetArgs(['--all'])).toEqual({
+      ok: true,
+      runId: null,
+      all: true,
+      apply: false,
+      purgeRepos: false,
+    })
     expect(parseResetArgs(['--all', '--yes'])).toEqual({
       ok: true,
       runId: null,
       all: true,
       apply: true,
+      purgeRepos: false,
+    })
+  })
+
+  // `--purge-repos` is a different AXIS from `--all`: one says how much of the board to clear, the
+  // other whether to reclaim the provider side. Neither implies the other, and neither applies on
+  // its own, so the preview of a whole-board purge is still a preview.
+  it('reads --purge-repos as its own axis, implying neither --all nor an apply', () => {
+    expect(parseResetArgs(['--purge-repos'])).toEqual({
+      ok: true,
+      runId: null,
+      all: false,
+      apply: false,
+      purgeRepos: true,
+    })
+    expect(parseResetArgs(['--all', '--purge-repos', '--yes'])).toEqual({
+      ok: true,
+      runId: null,
+      all: true,
+      apply: true,
+      purgeRepos: true,
     })
   })
 

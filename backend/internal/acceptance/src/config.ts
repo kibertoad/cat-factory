@@ -311,6 +311,43 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
   }
 }
 
+export type ReporterConfigResolution =
+  | { ok: true; reporter: VcsReporterConfig }
+  | { ok: false; problems: readonly string[] }
+
+/**
+ * Resolve JUST the reporter credential, for `reset --purge-repos`.
+ *
+ * Its own resolver rather than a reach into {@link resolveConfig}, because the whole point of the
+ * board/pass split is that a cleanup does not need a cluster: an operator emptying two fixture
+ * repositories should not be refused because the k3s token they abandoned is missing. This is the
+ * third shape that split implies (board, board + reporter, board + reporter + cluster) and it is
+ * built from the same table, so a variable is still named in exactly one place.
+ */
+export function resolveReporterConfig(env: EnvRecord): ReporterConfigResolution {
+  const token = trimmed(env.ACCEPTANCE_VCS_TOKEN)
+  if (!token) {
+    return {
+      ok: false,
+      problems: [
+        `ACCEPTANCE_VCS_TOKEN is required to purge the repositories: closing an issue the REPORTER ` +
+          `filed and rewriting a repository's contents are provider acts, and the board key cannot ` +
+          `do either. Classic GitHub token: 'repo'. Fine-grained: 'Contents: Read and write' plus ` +
+          `'Issues: Read and write' on both repositories.`,
+      ],
+    }
+  }
+  return {
+    ok: true,
+    reporter: {
+      token,
+      apiBaseUrl: stripTrailingSlash(
+        trimmed(env.ACCEPTANCE_VCS_API_BASE) ?? 'https://api.github.com',
+      ),
+    },
+  }
+}
+
 /**
  * Where a pass keeps its ledger and journal, from the environment alone.
  *

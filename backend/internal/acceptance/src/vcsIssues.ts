@@ -71,13 +71,37 @@ export type IssueCredentialVerdict =
       hint?: string
     }
 
-/** The reporter's four calls against one provider. */
+/** One open issue, as a purge needs to judge whether it is this suite's to close. */
+export type OpenIssueSummary = {
+  number: number
+  title: string
+  url: string
+  /** The account that filed it, or null when the provider reports none (a deleted user). */
+  authorLogin: string | null
+}
+
+/** The reporter's calls against one provider. */
 export type IssueApi = {
   /** Can this credential file an issue on that repository? Creates nothing. */
   probe(target: IssueTarget): Promise<IssueCredentialVerdict>
   file(target: IssueTarget, issue: { title: string; body: string }): Promise<FiledIssue>
   /** Null when the issue is gone (deleted, or transferred away), which a resume must re-file. */
   read(target: IssueTarget, number: number): Promise<IssueState | null>
+  /**
+   * Every OPEN issue on the repository, for the purge that discovers what a lost ledger no longer
+   * names (`issuePurge.ts`). Issues only: see the GitHub implementation for why that needs saying.
+   */
+  listOpen(target: IssueTarget): Promise<readonly OpenIssueSummary[]>
+  /** Close one. Idempotent at the provider, and reversible by a person, unlike a delete. */
+  close(target: IssueTarget, number: number): Promise<void>
+  /**
+   * The login this credential acts as, which is half the test for whether an issue is this suite's.
+   *
+   * A property of the CREDENTIAL rather than of a repository, so it is asked once. Null where the
+   * provider answers no login rather than throwing, which keeps "nobody to attribute" distinct from
+   * "the call failed": the caller must not read the first as evidence about authorship.
+   */
+  viewer(): Promise<string | null>
 }
 
 /** What one provider client needs: the credential, where the API lives, and how to call it. */
@@ -247,6 +271,45 @@ function createGitHubIssueApi(options: IssueApiOptions): IssueApi {
         url: body.html_url ?? '',
         comments: rows.map((row) => row.body ?? ''),
       }
+    },
+
+    async listOpen(target) {
+      // `GET /issues` returns PULL REQUESTS as well: on GitHub every pull request IS an issue, and
+      // the only thing separating them in this payload is the presence of a `pull_request` key. Left
+      // unfiltered, a purge would "close" the run's own pull requests as if they were reporter
+      // issues, which is both wrong and the kind of wrong that reads as success.
+      const response = await call(`${issuesPath(target)}?state=open&per_page=100`)
+      if (!response.ok) throw await failure(response, `listing open issues on ${slug(target)}`)
+      const rows = (await response.json()) as {
+        number?: number
+        title?: string
+        html_url?: string
+        user?: { login?: string } | null
+        pull_request?: unknown
+      }[]
+      return rows
+        .filter((row) => row.pull_request === undefined && typeof row.number === 'number')
+        .map((row) => ({
+          number: row.number as number,
+          title: row.title ?? '',
+          url: row.html_url ?? '',
+          authorLogin: row.user?.login ?? null,
+        }))
+    },
+
+    async close(target, number) {
+      const response = await call(`${issuesPath(target)}/${number}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: 'closed' }),
+      })
+      if (!response.ok) throw await failure(response, `closing ${slug(target)}#${number}`)
+    },
+
+    async viewer() {
+      const response = await call('/user')
+      if (!response.ok) throw await failure(response, 'reading the account this token acts as')
+      const body = (await response.json()) as { login?: string }
+      return typeof body.login === 'string' && body.login.length > 0 ? body.login : null
     },
   }
 }

@@ -557,6 +557,7 @@ pnpm --filter @cat-factory/acceptance run reset                       # what it 
 pnpm --filter @cat-factory/acceptance run reset --yes                 # do it
 pnpm --filter @cat-factory/acceptance run reset 20260809175530 --yes  # …plus that pass's own state
 pnpm --filter @cat-factory/acceptance run reset --all                 # every frame the board lists
+pnpm --filter @cat-factory/acceptance run reset --purge-repos         # …and the PROVIDER side too
 ```
 
 It deletes the service frames this configuration would adopt, every task under them and the run
@@ -617,6 +618,45 @@ Six things about it are decisions rather than details:
 It needs the deployment, the key, the two repository names and the state directory: no cluster and no
 reporter token, because those belong to RUNNING a pass. An operator resetting is often doing so
 precisely because one of them has moved on.
+
+### `--purge-repos`: the provider side, recoverably
+
+The two leftovers above are the two things an `admin` key structurally cannot reclaim: the tree a
+scaffold run pushed, and an issue filed by the REPORTER, which was never the platform's to close.
+`--purge-repos` reclaims both, using `ACCEPTANCE_VCS_TOKEN` (the same credential spec 04 files with).
+It is a separate flag from `--all`, on a different axis: `--all` says how much of the BOARD to clear,
+this says whether to touch the provider at all. Without the variable it refuses, naming it, and
+changes nothing.
+
+**Nothing it does is destructive, and that is the design rather than a caution.** The two
+repositories are named in a `.env`, a `.env` can name the wrong thing, and the failure worth
+engineering against is an operator emptying a repository that mattered. So:
+
+- **The emptying is an ordinary commit ON TOP of the current tip**, whose tree holds only the README.
+  The previous tip is its parent, so every prior commit stays reachable from the branch itself and one
+  `git revert` restores the tree. Moving the branch is therefore a fast-forward, and the call is made
+  with `force: false`: the API request cannot be the thing that loses a commit. The rejected
+  alternative was a parentless orphan commit, which reads as a genuinely fresh repository and makes
+  the old tree reachable from nothing. Messy history is the price, and it is the right one.
+- **Every ref is TAGGED before it is touched**, at the sha it held (`cf-acc-reset/<stamp>/<branch>`).
+  Redundant for the default branch and load-bearing for the leftover scaffold branches, which are
+  deleted: a deleted branch's commits are reachable from nothing unless something names them. A
+  branch whose backup tag did NOT land is left in place rather than deleted.
+- **The report prints the recovery command with the sha in it**, per repository. A purge that can be
+  undone but does not say how is only half the property, and the moment it is needed is the moment
+  the ledger naming the pass may already be gone.
+
+**Which issues it closes is a PAIR, and both halves matter.** An issue qualifies when the reporter
+credential authored it AND its title is one this suite files. Author alone would close a human's
+issue that happens to sit on a fixture repository; title alone would close somebody else's issue
+quoting this suite's. Everything failing either test is reported as skipped, with which half failed,
+because "we saw it and left it" and "we never looked" are different facts. Issues a removed pass's
+ledger names are closed on the ledger's word, since that is evidence of authorship on its own; an
+issue belonging to a pass whose files are KEPT is left alone, because somebody may still resume it.
+
+It does NOT guess whether a repository "looks scaffolded" before emptying it. No honest test exists
+(a scaffolded repository and a hand-built service look identical), and a wrong guess either refuses a
+legitimate reset or empties something on a hunch. Recoverability is the protection.
 
 Two refusals it declines to paper over. A repository whose service this workspace cannot name has no
 id to delete, and `GET /api/v1/repos` answers that way for TWO states with opposite fixes: the
@@ -717,7 +757,11 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/status.ts`              | Ledger + journal → "where is this pass". Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.                                                                                                    |
 | `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                                                                                                                                                                         |
 | `src/reset.ts`               | Starting over: which frames a clear targets (this configuration's two questions, a named pass, or `--all`), the order the deletes go in, what it refuses to remove, and what it cannot reclaim. Driven by seams; unit-tested.    |
-| `src/resetCli.ts`            | `pnpm run reset`. Supplies the real client and file removals, parses the positional and the two flags, owns the exit code.                                                                                                       |
+| `src/resetCli.ts`            | `pnpm run reset`. Supplies the real clients and file removals, parses the positional and the three flags, owns the exit code.                                                                                                    |
+| `src/providerPurge.ts`       | `--purge-repos`: composing the issue and repository halves into one plan, one apply and one report. Unit-tested through its two halves.                                                                                          |
+| `src/repoPurge.ts`           | Emptying a repository back to its README RECOVERABLY: what to keep, what to tag, the order the writes go in, and the recovery command. Pure; unit-tested.                                                                        |
+| `src/issuePurge.ts`          | Which issues are this suite's to close (ledger-named, plus author-and-title discovery) and which are somebody's real ones. Pure; unit-tested.                                                                                    |
+| `src/repoContentApi.ts`      | The provider calls `repoPurge.ts` plans against, provider-keyed. The one decision in it: the emptied tree is built with no `base_tree`.                                                                                          |
 | `src/configure.ts`           | `configure`'s flow: what it resolves, what it asks. Driven by seams; unit-tested.                                                                                                                                                |
 | `src/configureEnv.ts`        | The `.env` merge and the creation URL. Pure; unit-tested.                                                                                                                                                                        |
 | `src/configureCli.ts`        | `pnpm run configure`. Supplies the real terminal, shell, files and client.                                                                                                                                                       |

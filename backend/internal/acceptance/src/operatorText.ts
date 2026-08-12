@@ -196,13 +196,16 @@ export function resumeInvocation(runId: string, flavour: ShellFlavour = shellFla
  * printed apply that dropped the flag would delete a different set than the one just read).
  */
 export function resetInvocation(
-  options: { runId?: string; all?: boolean; apply?: boolean } = {},
+  options: { runId?: string; all?: boolean; purgeRepos?: boolean; apply?: boolean } = {},
   flavour: ShellFlavour = shellFlavour(),
 ): string {
   return [
     RESET_INVOCATION,
     ...(options.runId ? [asOneWord(options.runId, flavour)] : []),
     ...(options.all ? ['--all'] : []),
+    // Carried for the reason `--all` is: the command this prints must delete exactly the set just
+    // previewed, and dropping a scope flag would silently narrow it between the two invocations.
+    ...(options.purgeRepos ? ['--purge-repos'] : []),
     ...(options.apply ? ['--yes'] : []),
   ].join(' ')
 }
