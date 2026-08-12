@@ -113,9 +113,27 @@ import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
  *
  * Every component is monotonic per step, so the sum is monotonic and each re-dispatch after
  * any increment mints a strictly larger epoch — two different rounds can never collide on one id.
+ *
+ * The RE-START term (`attempts`) is what makes that true for a loop nobody added a counter for.
+ * The named counters above are each owned by one loop, so a re-dispatching loop that carries none
+ * of them left the epoch pinned at 0, and the harness answered the re-dispatch by replaying the
+ * first round's COMPLETED job: same output, same recorded usage, no model call. That is what froze
+ * a COMPANION rework loop (`architect` under `architect-companion`, `coder` under `reviewer`,
+ * `doc-writer` under `doc-reviewer`), whose round count lives on the COMPANION step's
+ * `companion.attempts` and so is not readable from the PRODUCER step being re-dispatched at all.
+ * `startStep` bumps `attempts` once per fresh attempt (it is guarded on `startedAt == null`, so a
+ * human resuming a paused step does not inflate it) and `resetStepForRerun` deliberately preserves
+ * it, which makes it the one counter that already answers "how many times has THIS step been sent".
+ * Counted from the first attempt so a step dispatched once still resolves epoch 0 and keeps the
+ * unsuffixed id. It is ADDED to the named terms rather than replacing them because the
+ * fork-decision phase dispatches TWICE within a single start, so `attempts` alone cannot separate
+ * Phase A from Phase B.
  */
 export function dispatchEpochFor(step: PipelineStep): number {
   const evictions = (step.evictionRecoveries ?? 0) + (step.transientEvictionRecoveries ?? 0)
+  // Re-starts of the step itself, whatever drove them (a companion rework round, a human
+  // "request changes", an iteration-cap extra round). See the contract note above.
+  const restarts = Math.max(0, (step.attempts ?? 1) - 1)
   // A manually RESUMED PR review counts for the same reason an eviction recovery does, and more
   // sharply: the whole point of the resume is that the previous job is WEDGED, so re-attaching to
   // it (which is what a container-reusing transport does for a known job id) would replace the
@@ -123,7 +141,10 @@ export function dispatchEpochFor(step: PipelineStep): number {
   // above, so without this term its epoch would stay 0 across every resume.
   const resumes = step.prReview?.resumeAttempts ?? 0
   const base =
-    (step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0) + evictions + resumes
+    (step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0) +
+    evictions +
+    resumes +
+    restarts
   // The optional fork-decision phase dispatches the read-only proposer on the coder step
   // BEFORE the Coder itself (Phase A then Phase B). Both dispatch on the same step, so once
   // the phase resolves (`chosen` / `single_path`) bump the epoch by one — the Phase-B Coder

@@ -21,7 +21,12 @@ import {
   PLATFORM_IS_NOT_THE_PRODUCT,
   REVIEW_SUMMARY_LAYOUT,
 } from './prompts/shared.js'
-import { PRIOR_ROUNDS_DIRECTIVE, renderPriorReviewRounds } from './prompts/review-rounds.js'
+import {
+  ACCOUNTING_REVIEW_DIRECTIVE,
+  FEEDBACK_ACCOUNTING_DIRECTIVE,
+  PRIOR_ROUNDS_DIRECTIVE,
+  renderPriorReviewRounds,
+} from './prompts/review-rounds.js'
 import {
   customTaskTypeSection,
   environmentSection,
@@ -247,9 +252,14 @@ function withRevision(prompt: string, context: AgentRunContext): string {
   const lines = [
     prompt,
     '',
-    'A human reviewed your previous proposal and requested changes. Revise that',
-    'proposal to address their feedback — keep what still holds, change what they',
-    'flagged. Do not start from scratch.',
+    // Deliberately passive about WHO reviewed: this same slice carries a human "request changes"
+    // and an automatic companion's rework round, and naming a human for the second one told the
+    // agent a person was waiting on work no person had looked at.
+    'Your previous proposal was reviewed and changes were requested. Revise that proposal to',
+    'answer the feedback: keep what still holds, change what was flagged. Do not start from',
+    'scratch.',
+    '',
+    FEEDBACK_ACCOUNTING_DIRECTIVE,
     '',
     'Your previous proposal:',
     revision.previousProposal || '(empty)',
@@ -344,8 +354,12 @@ function withPriorReview(prompt: string, context: AgentRunContext): string {
     grading
       ? PRIOR_ROUNDS_DIRECTIVE
       : 'Keep every earlier point that was already addressed addressed. Where an earlier point ' +
-        'is still open, deal with it in this revision too, not only the feedback above.',
+        'is still open, deal with it in this revision too, not only the feedback above, and ' +
+        'account for it in the same way.',
   ]
+  // Only the grader, and only here: an accounting can exist only once a round has been answered,
+  // which is exactly the condition this whole section renders under.
+  if (grading) lines.push('', ACCOUNTING_REVIEW_DIRECTIVE)
   // How much rope is left, stated to the GRADER only. A producer told "this is the last round"
   // optimises for the grader rather than for the work; a grader that knows it is holding the run
   // has the context to weigh a marginal call, which is the call this loop keeps getting wrong.

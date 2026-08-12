@@ -61,6 +61,44 @@ export const PRIOR_ROUNDS_DIRECTIVE =
   'accounted for: a rating that moved DOWN while every earlier point was addressed needs saying ' +
   'so explicitly, with what got worse.'
 
+/**
+ * What the PRODUCER side of the loop owes the round it is answering.
+ *
+ * The counterpart to {@link PRIOR_ROUNDS_DIRECTIVE}, and needed for the same reason from the other
+ * end. Told only to "revise to address the feedback", a producer silently drops the points it
+ * disagrees with or does not get to, and the reviewer cannot tell that from a point that was
+ * missed: both look like an unchanged artifact. So the next round raises them again verbatim, the
+ * one after that too, and the rework budget is spent re-sending the same list ("Still open from
+ * rounds 1-3, unchanged" on a real run) instead of converging.
+ *
+ * Disagreement is a legitimate outcome and this is what gives it a channel. A reviewer is not
+ * always right, and a producer that must ARGUE a point down is doing better work than one that
+ * complies with everything or ignores what it doubts.
+ */
+export const FEEDBACK_ACCOUNTING_DIRECTIVE =
+  'Account for EVERY point raised, one by one. Either change the work and say what you changed, ' +
+  'or, where you judge a point wrong, already handled, or out of scope, leave the work as it is ' +
+  'and say plainly why. A point you neither act on nor argue against is indistinguishable from ' +
+  'one you missed, and it will be raised again unchanged. Put that accounting IN your ' +
+  'deliverable, as a short "Response to review" section listing each point with its disposition ' +
+  'and, where you changed something, where the change is.'
+
+/**
+ * What a grader does with the accounting {@link FEEDBACK_ACCOUNTING_DIRECTIVE} asks for.
+ *
+ * Rendered only alongside the prior rounds, because that is exactly when an accounting can exist.
+ * The claim is checked against the WORK rather than believed: an accounting asserting a change the
+ * artifact does not contain is worse than the point it answers, since it would otherwise buy a
+ * rating the work did not earn.
+ */
+export const ACCOUNTING_REVIEW_DIRECTIVE =
+  'The work should carry a "Response to review" section accounting for each point you raised. ' +
+  'Read it, and hold it to the WORK: confirm a claimed change by finding it, and say so when you ' +
+  'cannot. A point argued against is settled on the argument, so accept a sound one and stop ' +
+  'raising it rather than repeating it. A point neither changed nor argued is still open. An ' +
+  'accounting that claims a change the work does not contain is a more serious finding than the ' +
+  'point it was answering, and no accounting at all where you raised points is itself a finding.'
+
 /** How much of one round's prose a rendering keeps. Generous for the latest, tight for the rest. */
 const LATEST_ROUND_CHARS = 4_000
 const EARLIER_ROUND_CHARS = 1_200

@@ -79,6 +79,43 @@ describe('dispatchEpochFor', () => {
     expect(dispatchEpochFor(review(2))).toBe(2)
   })
 
+  it('counts a re-START, so a COMPANION rework round never replays the producer’s finished job', () => {
+    // The regression this exists for. A companion loops its PRODUCER back (architect under
+    // architect-companion, coder under reviewer, doc-writer under doc-reviewer), and the round
+    // count lives on the COMPANION step's `companion.attempts`, which is not readable from the
+    // producer being re-dispatched (it carries no test/gate/ralph counter of its own). So the
+    // epoch stayed 0 every round, the harness replayed its first completed job, and the companion
+    // re-graded a byte-identical artifact: on a real run, four architect dispatches produced one
+    // container session and four identical `token_usage` rows while the rating sat at 0.76.
+    const producer = (attempts: number): PipelineStep => step({ agentKind: 'architect', attempts })
+    expect(dispatchEpochFor(producer(1))).toBe(0)
+    expect(dispatchEpochFor(producer(2))).toBe(1)
+    expect(dispatchEpochFor(producer(3))).toBe(2)
+    expect(dispatchEpochFor(producer(4))).toBe(3)
+  })
+
+  it('leaves a step dispatched once at epoch 0 whether or not `attempts` is stamped', () => {
+    // The unsuffixed-id guarantee for single-dispatch steps: a step read back before its first
+    // start carries no `attempts` at all, and one read back after it carries exactly 1.
+    expect(dispatchEpochFor(step())).toBe(0)
+    expect(dispatchEpochFor(step({ attempts: 1 }))).toBe(0)
+    expect(dispatchEpochFor(step({ attempts: 0 }))).toBe(0)
+  })
+
+  it('still separates the two fork-decision phases, which dispatch within ONE start', () => {
+    // Why the re-start term is ADDED to the named counters rather than replacing them: Phase A
+    // (the read-only proposer) and Phase B (the Coder) both dispatch on the same step under a
+    // single `startStep`, so `attempts` is 1 for both and cannot tell them apart on its own.
+    const phase = (status: 'proposing' | 'chosen'): PipelineStep =>
+      step({
+        agentKind: 'coder',
+        attempts: 1,
+        forkDecision: { status } as PipelineStep['forkDecision'],
+      })
+    expect(dispatchEpochFor(phase('proposing'))).toBe(0)
+    expect(dispatchEpochFor(phase('chosen'))).toBe(1)
+  })
+
   it('prefers the tester counter when both are present, and treats attempts 0 as 0 (not a fallthrough)', () => {
     // `??` must not fall through on a real 0 — a first-round tester step is epoch 0, never the gate count.
     expect(

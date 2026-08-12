@@ -108,6 +108,47 @@ describe('the prior-rounds fold', () => {
   })
 })
 
+describe('feedback accounting', () => {
+  // A producer told only to "address the feedback" silently drops what it disagrees with, and the
+  // reviewer cannot tell that from a point that was missed. Both sides of that get a directive.
+
+  it('makes the PRODUCER account for every point, including the ones it rejects', () => {
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        revision: { previousProposal: 'v1', feedback: 'commit to an ingress class' },
+      }),
+      registry(),
+    )
+    expect(prompt).toContain('Account for EVERY point raised')
+    // Disagreement needs a channel, or the only compliant move is to obey every point.
+    expect(prompt).toContain('leave the work as it is')
+    expect(prompt).toContain('"Response to review"')
+  })
+
+  it('does not tell the producer a HUMAN asked, since a companion round is not one', () => {
+    const prompt = userPromptFor(
+      context({ agentKind: 'architect', revision: { previousProposal: 'v1', feedback: 'f' } }),
+      registry(),
+    )
+    expect(prompt).not.toContain('A human reviewed')
+  })
+
+  it('tells the GRADER to check the accounting against the work, once rounds exist', () => {
+    const prompt = userPromptFor(
+      context({ priorReview: { role: 'grader', threshold: 0.8, roundsRemaining: 1, rounds } }),
+      registry(),
+    )
+    expect(prompt).toContain('confirm a claimed change by finding it')
+    expect(prompt).toContain('settled on the argument')
+  })
+
+  it('withholds the grader directive on the FIRST grading, where no accounting can exist yet', () => {
+    const plain = userPromptFor(context(), registry())
+    expect(plain).not.toContain('confirm a claimed change by finding it')
+  })
+})
+
 describe('the anchored scale', () => {
   it('is the SAME anchor points for the judge and the companion buckets', () => {
     // An operator sets one number per policy. Two graders that mean different things by 0.8 turn
