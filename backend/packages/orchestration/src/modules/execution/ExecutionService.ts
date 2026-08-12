@@ -323,7 +323,7 @@ export class ExecutionService {
       documentRepository,
       llmObservability,
       pullRequestMerger,
-      riskPolicyRepository,
+      riskPolicyReader,
       mergeTrackRecord,
       riskPolicyCache,
       issueWriteback,
@@ -348,7 +348,7 @@ export class ExecutionService {
     // run's merge track record when a human merges or declines), extracted as one collaborator so
     // neither concern re-accretes onto the engine.
     this.mergePolicy = new RunMergePolicy({
-      riskPolicyRepository,
+      riskPolicyReader,
       riskPolicyCache,
       mergeTrackRecord,
     })

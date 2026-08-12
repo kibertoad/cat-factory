@@ -1,4 +1,4 @@
-import type { ModelPresetRepository, RiskPolicyRepository } from '@cat-factory/kernel'
+import type { ModelPresetRepository, WorkspaceRiskPolicyReader } from '@cat-factory/kernel'
 import {
   seedModelPresets,
   seedRiskPolicies,
@@ -84,7 +84,11 @@ async function assertPinned(spec: PinnedLibrary): Promise<void> {
 
 export function createPresetPinGuard(deps: {
   modelPresetRepository?: ModelPresetRepository
-  riskPolicyRepository?: RiskPolicyRepository
+  /**
+   * The board's merged risk-policy library (ADR 0055), so a task may pin a policy its ACCOUNT
+   * defines. Reading the workspace tier alone here would refuse exactly the ids the picker offers.
+   */
+  riskPolicyReader?: WorkspaceRiskPolicyReader
 }): PresetPinGuard {
   return {
     async assertPinsExist({ homeWorkspaceId, modelPresetId, riskPolicyId }) {
@@ -104,7 +108,7 @@ export function createPresetPinGuard(deps: {
         assertPinned({
           pinned: riskPolicyId,
           workspaceId: homeWorkspaceId,
-          read: deps.riskPolicyRepository?.list.bind(deps.riskPolicyRepository),
+          read: deps.riskPolicyReader?.list.bind(deps.riskPolicyReader),
           catalog: seedRiskPolicies,
           singular: 'risk policy',
           plural: 'Risk policies',

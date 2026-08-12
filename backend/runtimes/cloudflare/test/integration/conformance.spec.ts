@@ -35,6 +35,7 @@ import { D1NotificationRepository } from '../../src/infrastructure/repositories/
 import { D1DocumentRepository } from '../../src/infrastructure/repositories/D1DocumentRepository'
 import { D1DocInterviewRepository } from '../../src/infrastructure/repositories/D1DocInterviewRepository'
 import { D1AccountSettingsRepository } from '../../src/infrastructure/repositories/D1AccountSettingsRepository'
+import { D1AccountRiskPolicyRepository } from '../../src/infrastructure/repositories/D1AccountRiskPolicyRepository'
 import { D1TaskRepository } from '../../src/infrastructure/repositories/D1TaskRepository'
 
 // Run the shared cross-runtime conformance suite against the Cloudflare Worker
@@ -294,6 +295,7 @@ const harness: ConformanceHarness = {
       taskRepository: () => new D1TaskRepository({ db: env.DB }),
       docInterviewRepository: () => new D1DocInterviewRepository({ db: env.DB }),
       accountSettingsRepository: () => new D1AccountSettingsRepository({ db: env.DB }),
+      accountRiskPolicyRepository: () => new D1AccountRiskPolicyRepository({ db: env.DB }),
     }
   },
 }

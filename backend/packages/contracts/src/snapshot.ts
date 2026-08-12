@@ -13,7 +13,7 @@ import { bootstrapJobSchema } from './bootstrap.js'
 import { envConfigRepairJobSchema } from './env-config-repair.js'
 import { environmentTestRunSchema } from './environment-test.js'
 import { notificationSchema } from './notifications.js'
-import { riskPolicySchema } from './merge.js'
+import { riskPolicyLibraryEntrySchema } from './merge.js'
 import { agentConfigCatalogSchema } from './agent-config.js'
 import { modelPresetSchema } from './model-presets.js'
 import { consensusGroupSchema } from './consensus.js'
@@ -136,10 +136,15 @@ export const workspaceSnapshotSchema = v.object({
    */
   notifications: v.optional(v.array(notificationSchema)),
   /**
-   * The workspace's merge threshold presets (the library a task picks its
-   * auto-merge policy from). Attached by the worker, so optional on the wire.
+   * The library a task picks its auto-merge policy from: the board's OWN policies merged with the
+   * ones it inherits from its account, each tagged with the tier that owns it. Attached by the
+   * facade, so optional on the wire.
+   *
+   * The MERGED library rather than the board's own rows, because this is what every picker offers
+   * and what the engine resolves a pin against: shipping only the local tier would let a board
+   * pick a policy the snapshot never mentioned, or (worse) render an inherited pin as unresolvable.
    */
-  riskPolicies: v.optional(v.array(riskPolicySchema)),
+  riskPolicies: v.optional(v.array(riskPolicyLibraryEntrySchema)),
   /**
    * The workspace's shared stacks (long-lived compose infra a consumer environment
    * attaches to over an external network — the acme-shared-services shape). Carried in

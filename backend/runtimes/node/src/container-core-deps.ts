@@ -478,6 +478,11 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
     // preset CRUD API + the merger step's threshold resolution work identically.
     riskPolicyRepository: repos.riskPolicyRepository,
+    // The ACCOUNT tier of that same library, plus which of its policies each board hides (ADR 0055).
+    // Wired unconditionally alongside the board tier, so the tier merge, the account CRUD API and a
+    // board's clone/hide behave identically on both runtimes.
+    accountRiskPolicyRepository: repos.accountRiskPolicyRepository,
+    riskPolicySuppressionRepository: repos.riskPolicySuppressionRepository,
     mergeTrackRecordRepository: repos.mergeTrackRecordRepository,
     // Shared stacks (long-lived compose infra a consumer environment attaches to). Wired
     // unconditionally like the merge presets so the CRUD API works identically on both

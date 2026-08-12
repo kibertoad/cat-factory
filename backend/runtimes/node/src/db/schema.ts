@@ -27,6 +27,11 @@ import {
 export * from './tables/identity.js'
 // The foundational-services catalog (backend/docs/adr/0031-foundational-services.md).
 export * from './tables/foundational-services.js'
+// The ACCOUNT tier of the risk-policy library plus a board's suppressions of it (ADR 0055) live
+// in `tables/risk-policies.ts` — the same cohesive-group extraction as the groups above, for the
+// same size-budget reason. The board's OWN policies stay below, beside the merge track record they
+// are judged against.
+export * from './tables/risk-policies.js'
 
 // The SETTINGS tables (the local-mode singleton, the per-user budget, the per-workspace
 // runtime policy row + its custom metadata bag, and the per-agent-kind generation knob) live

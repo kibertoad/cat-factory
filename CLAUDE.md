@@ -802,9 +802,9 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   pending sleeps, failure dispatches `ci-fixer` (which pushes back onto the SAME branch) up to
   `ciMaxAttempts` then raises `ci_failed`.
 - **`merger`** (last standard step) returns ONLY a JSON assessment; `resolveMergerStep` scores it against
-  the task's risk policy (a per-workspace library carrying the auto-merge ceilings, the budgets and
-  the per-class `classRules`) and either merges for real or raises `merge_review`. A pipeline with no
-  merger raises `pipeline_complete`, never auto-`done`.
+  the task's risk policy (an account ⊕ workspace library of ceilings, budgets and per-class `classRules`,
+  read by editor/picker/engine alike through the ONE merged `WorkspaceRiskPolicyReader`: [ADR 0055](./backend/docs/adr/0055-account-scoped-risk-policies.md))
+  and either merges for real or raises `merge_review`. No merger ⇒ `pipeline_complete`, never auto-`done`.
 - **Who started the run is part of the merge policy**, and a bar on LANDING is refused at BOTH exits
   (auto-merge AND `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin
   PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads

@@ -116,7 +116,8 @@
         "team": "Team e accesso",
         "fragments": "Frammenti di contesto",
         "skills": "Competenze",
-        "foundational": "Servizi fondamentali"
+        "foundational": "Servizi fondamentali",
+        "riskPolicies": "Criteri di rischio"
       }
     },
     "infrastructure": {
@@ -559,7 +560,11 @@
         "created": "Criterio creato",
         "createFailed": "Impossibile creare il criterio",
         "defaultFailed": "Impossibile impostare il predefinito",
-        "deleteFailed": "Impossibile eliminare il criterio"
+        "deleteFailed": "Impossibile eliminare il criterio",
+        "cloned": "Criterio clonato in questa bacheca",
+        "cloneFailed": "Impossibile clonare il criterio",
+        "hideFailed": "Impossibile nascondere il criterio",
+        "unhideFailed": "Impossibile ripristinare il criterio"
       },
       "forkDecision": {
         "label": "Decisione di biforcazione dell'implementazione",
@@ -615,6 +620,32 @@
       "autoAnswer": {
         "label": "Confidenza minima per la risposta automatica (%)",
         "hint": "Quanto deve essere sicuro il Requirement Writer perché un run non presidiato mantenga la risposta suggerita invece di fermarsi per una persona. Sono ammessi solo i rilievi che il revisore ha giudicato risolvibili senza un product owner."
+      },
+      "tier": {
+        "account": "Dall'account",
+        "accountHint": "Definita per tutto l'account. Ogni bacheca la eredita; solo un'amministrazione dell'account può modificarla."
+      },
+      "own": {
+        "heading": "Criteri di questa bacheca"
+      },
+      "inherited": {
+        "heading": "Ereditati dall'account",
+        "hint": "Condivisi con tutte le bacheche di questo account. Clona un criterio per modificarne una copia qui, oppure nascondilo così nessuna attività di questa bacheca potrà scegliolo.",
+        "clone": "Clona nella bacheca",
+        "cloneHint": "Copia questo criterio nella bacheca, dove puoi modificarne i limiti.",
+        "copyName": "{name} (copia)",
+        "hide": "Nascondi",
+        "hideHint": "Non offrire più questo criterio in questa bacheca. Potrai ripristinarlo più tardi."
+      },
+      "hidden": {
+        "heading": "Criteri dell'account nascosti",
+        "restore": "Ripristina",
+        "withdrawn": "Non più definito dall'account",
+        "loadFailed": "Non è stato possibile caricare questo elenco, quindi un criterio potrebbe essere nascosto senza comparire qui."
+      },
+      "confirmHide": {
+        "title": "Nascondere questo criterio?",
+        "body": "«{name}» non verrà più offerto in questa bacheca e le attività che lo avevano scelto torneranno al criterio predefinito della bacheca. Potrai ripristinarlo più tardi."
       }
     },
     "observabilityConnection": {
@@ -2847,6 +2878,12 @@
         "load": "Impossibile caricare il registro di controllo.",
         "loadMore": "Impossibile caricare le voci precedenti"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Posture di merge condivise da tutte le bacheche di questo account. Ogni bacheca le eredita in sola lettura e può clonarne una per modificarne una copia oppure nasconderla. Quale criterio governa un'attività che non ne ha scelto nessuno si imposta per bacheca.",
+      "empty": "Ancora nessun criterio di rischio dell'account. Le bacheche usano le proprie librerie finché non ne aggiungi uno.",
+      "loadFailed": "Impossibile caricare i criteri di rischio dell'account",
+      "confirmDelete": "«{name}» verrà ritirato da tutte le bacheche di questo account. Le attività che lo avevano scelto torneranno al criterio predefinito della loro bacheca."
     }
   },
   "board": {
@@ -5780,7 +5817,9 @@
         "document_already_linked": "Documento già allegato",
         "dry_run_not_mergeable": "Una prova non può essere unita",
         "submission_not_allowed": "Unione non consentita per questa esecuzione",
-        "webhook_limit_reached": "Limite di webhook raggiunto"
+        "webhook_limit_reached": "Limite di webhook raggiunto",
+        "risk_policy_inherited": "Questo criterio appartiene all'account",
+        "risk_policy_not_inherited": "Questo criterio appartiene a questa bacheca"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -5819,7 +5858,9 @@
         "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
         "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà.",
         "submission_not_allowed": "La politica di unione di questa attività non consente al ruolo che ha avviato l'esecuzione di unire questo tipo di modifica. Un collega il cui ruolo lo consente può farlo, oppure un amministratore può ampliare la politica nel preset di unione.",
-        "webhook_limit_reached": "Questo spazio di lavoro ha già registrato il numero massimo di webhook in uscita. Rimuovine uno che non ti serve più, poi registra di nuovo questo."
+        "webhook_limit_reached": "Questo spazio di lavoro ha già registrato il numero massimo di webhook in uscita. Rimuovine uno che non ti serve più, poi registra di nuovo questo.",
+        "risk_policy_inherited": "È condiviso con tutte le bacheche dell'account, quindi non può essere modificato da qui. Clonalo in questa bacheca e modifica la copia.",
+        "risk_policy_not_inherited": "È già il criterio proprio di questa bacheca: modificalo direttamente, oppure eliminalo se non vuoi più che venga offerto."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

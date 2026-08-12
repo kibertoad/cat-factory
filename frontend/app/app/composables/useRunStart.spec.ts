@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { nextTick, ref, type Ref } from 'vue'
 import type { Block, Pipeline } from '~/types/domain'
-import type { RiskPolicy, WorkspaceRole } from '~/types/merge'
+import type { RiskPolicyLibraryEntry, WorkspaceRole } from '~/types/merge'
 import { useBoardStore } from '~/stores/board'
 import { useExecutionStore } from '~/stores/execution'
 import { useRiskPoliciesStore } from '~/stores/riskPolicies'
@@ -14,7 +14,7 @@ import { useDryRunPolicy, useRunStart } from '~/composables/useRunStart'
 // stubbed, since neither an HTTP call nor an auth gate is what these assertions are about.
 const pipeline = { id: 'pl_build', name: 'Build' } as Pipeline
 
-const preset = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
+const preset = (over: Partial<RiskPolicyLibraryEntry> = {}): RiskPolicyLibraryEntry =>
   ({
     id: 'mp_balanced',
     name: 'Balanced',
@@ -35,9 +35,13 @@ const preset = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
     classRulesByRole: {},
     dryRunRoles: [],
     isDefault: true,
+    // The board's OWN tier: what these assertions are about is the policy the board resolves, and an
+    // inherited one resolves identically (that is the point of the merge), so the fixture states the
+    // ordinary case rather than parameterising a tier nothing here branches on.
+    tier: 'workspace',
     createdAt: 0,
     ...over,
-  }) as RiskPolicy
+  }) as RiskPolicyLibraryEntry
 
 /**
  * Seed a board governed by `policy`, signed in as `role`, and hand back the composable.
@@ -48,8 +52,8 @@ const preset = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
  */
 function setup(options: {
   role: WorkspaceRole | null
-  policy?: RiskPolicy
-  otherPolicy?: RiskPolicy
+  policy?: RiskPolicyLibraryEntry
+  otherPolicy?: RiskPolicyLibraryEntry
   advanced?: boolean
 }) {
   const start = vi.fn().mockResolvedValue(true)

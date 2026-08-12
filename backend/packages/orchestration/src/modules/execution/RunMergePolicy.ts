@@ -4,7 +4,7 @@ import type {
   GroupCacheHandle,
   ReviewEffort,
   RiskPolicyCacheValue,
-  RiskPolicyRepository,
+  WorkspaceRiskPolicyReader,
 } from '@cat-factory/kernel'
 import { runDefaultScopeFor } from '@cat-factory/contracts'
 import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
@@ -17,8 +17,12 @@ export interface RunMergePolicyDeps {
    * Optional: resolves a task's merge threshold preset (auto-merge ceilings, the per-class
    * rules, and the CI-fixer attempt budget). Absent → the built-in `FALLBACK_RISK_POLICY`, which
    * auto-merges nothing.
+   *
+   * The board's whole visible LIBRARY, which since ADR 0055 includes the account policies it
+   * inherits, not the workspace tier's own rows: a task may pin an inherited policy, and the run
+   * has to be governed by the same posture the picker offered.
    */
-  riskPolicyRepository?: RiskPolicyRepository
+  riskPolicyReader?: WorkspaceRiskPolicyReader
   /**
    * Optional: the `AppCaches.riskPolicy` slice — read-through for {@link RunMergePolicy.resolve}
    * so the slow-moving merge-preset row isn't re-fetched on every gate evaluation. Absent →
@@ -72,7 +76,7 @@ export class RunMergePolicy {
     run: RunPolicyScope,
   ): Promise<ResolvedRunRiskPolicy> {
     return resolveRiskPolicy({
-      repository: this.deps.riskPolicyRepository,
+      repository: this.deps.riskPolicyReader,
       workspaceId,
       riskPolicyId: block.riskPolicyId,
       scope: runDefaultScopeFor(run.intakeOrigin),

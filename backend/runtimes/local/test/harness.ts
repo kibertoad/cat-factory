@@ -22,6 +22,7 @@ import {
 } from '@cat-factory/conformance'
 import {
   type DrizzleDb,
+  DrizzleAccountRiskPolicyRepository,
   DrizzleDocInterviewRepository,
   DrizzleAccountSettingsRepository,
   DrizzleDocumentRepository,
@@ -559,6 +560,7 @@ export function makeConformanceApp(
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
+    accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,
     getService,
     ...containerServiceProbes(container),

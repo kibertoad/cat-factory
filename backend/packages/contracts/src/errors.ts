@@ -211,6 +211,18 @@ export const CONFLICT_REASONS = [
   // Copy that fits the first tells whoever is looking at a live park that there is nothing to
   // answer, which is the very thing they are staring at the remedy for.
   'input_gate_parked',
+  // A board tried to EDIT or DELETE a risk policy its ACCOUNT owns (ADR 0055). An inherited policy
+  // governs every board in the account, so a board-scoped write would either silently re-point work
+  // elsewhere or have to be refused; the remedy is the clone action, which leaves the board a row of
+  // its own to change. `details.presetId` names the policy, and the SPA steers to "Clone to board".
+  'risk_policy_inherited',
+  // The OPPOSITE fact, and its own reason for the same reason `foundational_service_not_inherited`
+  // is: the board asked to CLONE or HIDE a policy it already owns. Hiding is how a board opts out of
+  // something it does not own, and cloning copies a policy in from elsewhere — against the board's
+  // own row, the first is an obscure spelling of "delete" and the second of "duplicate". The two
+  // states need opposite copy ("delete it instead" against "clone it to edit it here"), so one
+  // reason could not describe both.
+  'risk_policy_not_inherited',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

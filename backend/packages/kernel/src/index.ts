@@ -879,6 +879,15 @@ export {
   type WorkspaceScopedTable,
 } from './domain/workspace-cascade.js'
 
+// The account ⊕ workspace risk-policy merge (ADR 0055): the ONE precedence the editor, every
+// picker and the engine's own resolution all read. See `domain/risk-policy-tiers.ts`.
+export {
+  describeRiskPolicySuppressions,
+  mergeRiskPolicyTiers,
+  resolveRiskPolicyTier,
+  type RiskPolicyTierInput,
+} from './domain/risk-policy-tiers.js'
+
 export {
   FINAL_SPEND_FOLD_BUDGET_MS,
   SPEND_DAY_ROLLUP_BACKFILL_MS,

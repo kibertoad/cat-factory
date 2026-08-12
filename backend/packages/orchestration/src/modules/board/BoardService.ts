@@ -32,7 +32,9 @@ import type {
   ModelPresetRepository,
   RepoProjectionRepository,
   ResolveRunRepoContext,
+  AccountRiskPolicyRepository,
   RiskPolicyRepository,
+  RiskPolicySuppressionRepository,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
   TaskRepository,
@@ -80,6 +82,7 @@ import type { PresetPinGuard } from './presetPinGuard.js'
 import { createPresetPinGuard } from './presetPinGuard.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
 import { createRiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
+import { createWorkspaceRiskPolicyLibrary } from '../merge/WorkspaceRiskPolicyLibrary.js'
 import { createSharedServiceMount } from './sharedServiceMount.js'
 import type { SharedServicePolicy } from './serviceRepoLinkage.js'
 import { resolveServiceRepoLinkage } from './serviceRepoLinkage.js'
@@ -221,6 +224,13 @@ export interface BoardServiceDependencies {
    */
   riskPolicyRepository?: RiskPolicyRepository
   /**
+   * The ACCOUNT tier of that same library (ADR 0055) and what this board hides from it, so both
+   * guards judge a task against every policy it can actually be filed against. Absent ⇒ nothing is
+   * inherited, and both read exactly the board's own rows as they did before the tier existed.
+   */
+  accountRiskPolicyRepository?: AccountRiskPolicyRepository
+  riskPolicySuppressionRepository?: RiskPolicySuppressionRepository
+  /**
    * The workspace's model-preset library, read only by the preset-PIN guard: a task's
    * `modelPresetId` decides which model every one of its agent steps runs on, and a dangling id
    * resolves to the workspace default rather than failing, so an unchecked typo is a run that
@@ -333,6 +343,8 @@ export class BoardService {
     reviewFrictionNotifications,
     resolveRunRepoContext,
     riskPolicyRepository,
+    accountRiskPolicyRepository,
+    riskPolicySuppressionRepository,
     modelPresetRepository,
     logger,
   }: BoardServiceDependencies) {
@@ -379,8 +391,18 @@ export class BoardService {
       taskTypeSuppressionRepository,
       logger: this.log,
     })
-    this.riskPolicySelection = createRiskPolicySelectionGuard({ riskPolicyRepository })
-    this.presetPins = createPresetPinGuard({ riskPolicyRepository, modelPresetRepository })
+    // Both guards judge a task against the policies actually available to its board, which since
+    // ADR 0055 means the merged library (its own rows plus the account's). Reading the workspace
+    // tier alone would refuse a pin the picker offers, and — worse for the selection guard — let a
+    // move onto an inherited, wider posture past unjudged.
+    const riskPolicyReader = createWorkspaceRiskPolicyLibrary({
+      riskPolicyRepository,
+      accountRiskPolicyRepository,
+      riskPolicySuppressionRepository,
+      workspaceRepository,
+    })
+    this.riskPolicySelection = createRiskPolicySelectionGuard({ riskPolicyReader })
+    this.presetPins = createPresetPinGuard({ riskPolicyReader, modelPresetRepository })
     // Bound callbacks rather than the service, so the narrowing depends on the two reads it
     // actually uses instead of on everything `BoardService` can do.
     this.patchNarrowing = createBlockPatchNarrowing({

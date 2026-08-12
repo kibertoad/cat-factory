@@ -1,5 +1,9 @@
 import { seedModelPresets, seedRiskPolicies } from '@cat-factory/kernel'
-import type { ModelPreset, ModelPresetRepository, RiskPolicyRepository } from '@cat-factory/kernel'
+import type {
+  ModelPreset,
+  ModelPresetRepository,
+  WorkspaceRiskPolicyReader,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { createPresetPinGuard } from './presetPinGuard.js'
 
@@ -22,17 +26,17 @@ describe('preset pin guard', () => {
   /** A library that HAS been read at least once, so it holds rows rather than the catalog. */
   const seeded = (rows: { id: string }[]) =>
     ({ list: () => Promise.resolve(rows) }) as unknown as ModelPresetRepository &
-      RiskPolicyRepository
+      WorkspaceRiskPolicyReader
 
   const guard = (over: {
     modelPresetRepository?: ModelPresetRepository
-    riskPolicyRepository?: RiskPolicyRepository
+    riskPolicyReader?: WorkspaceRiskPolicyReader
   }) => createPresetPinGuard(over)
 
   it('accepts an id the workspace holds, and refuses one it does not', async () => {
     const pins = guard({
       modelPresetRepository: seeded([AUTHORED]),
-      riskPolicyRepository: seeded(seedRiskPolicies()),
+      riskPolicyReader: seeded(seedRiskPolicies()),
     })
     await expect(
       pins.assertPinsExist({ homeWorkspaceId: WS, modelPresetId: AUTHORED.id }),
@@ -60,7 +64,7 @@ describe('preset pin guard', () => {
     // seeding here would be a write performed in order to say no.
     const pins = guard({
       modelPresetRepository: seeded([]),
-      riskPolicyRepository: seeded([]),
+      riskPolicyReader: seeded([]),
     })
     await expect(
       pins.assertPinsExist({

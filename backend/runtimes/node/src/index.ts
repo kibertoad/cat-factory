@@ -279,6 +279,9 @@ export {
   createDrizzleRepositories,
   type CoreRepositories,
   DrizzleAccountSettingsRepository,
+  // The account tier of the risk-policy library (ADR 0055), so the local facade's conformance
+  // harness can author an account policy against the real store.
+  DrizzleAccountRiskPolicyRepository,
   DrizzleLocalSettingsRepository,
   DrizzleWorkspaceSettingsRepository,
   DrizzleWorkspaceRepository,
