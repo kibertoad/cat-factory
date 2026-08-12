@@ -1,5 +1,38 @@
 # @cat-factory/acceptance
 
+## 0.1.12
+
+### Patch Changes
+
+- 10737f4: Give an acceptance pass ONE run id and stop a refused attempt from hiding the pass worth resuming.
+
+  The run id was resolved per module graph, which is per spec FILE: five specs opened five ledgers a
+  second apart, so no fact spec 01 recorded reached spec 02. It is now settled once in `globalSetup`
+  and injected, and a spec handed none refuses rather than minting its own. The `latest` pointer moves
+  to the first FACT a pass records, so an attempt refused at preflight no longer overwrites the pointer
+  to the half-built pass whose leftovers caused the refusal, and the two checks that refuse over
+  leftover state name that pass's run id instead of offering `latest`.
+
+- 10737f4: Let `status` reach a pass that recorded nothing, and give a pass one identity.
+
+  Moving the `latest` pointer to a pass's first recorded FACT made the pass an operator most often
+  asks about unreportable: an attempt a prerequisite refused writes a journal saying why and never
+  opens a ledger, so `pnpm run status` with no run id followed a pointer that named an older pass, or
+  none at all. It now reports the pass that WROTE last, and a pass that created nothing closes its
+  report by naming the pass that did rather than offering to resume itself.
+
+  A pass is also identified by its file name now: a ledger whose stored `runId` disagrees is a copied
+  or renamed file, and both `WorldStore` and `status` refuse it instead of pointing `latest` at an id
+  with no ledger. The leftover-state refusals name the owning pass per service, so leftovers spanning
+  two passes say what resuming either one leaves behind, and the `status` command they offer names
+  that pass instead of resolving to whichever ran last.
+
+- Updated dependencies [1a0b593]
+  - @cat-factory/contracts@0.302.0
+  - @cat-factory/kernel@0.293.0
+  - @cat-factory/sdk@0.39.0
+  - @cat-factory/cli@0.12.0
+
 ## 0.1.11
 
 ### Patch Changes
