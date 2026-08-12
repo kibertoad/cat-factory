@@ -1,4 +1,8 @@
-import type { AccountRiskPolicy, RiskPolicyLibraryEntry } from '@cat-factory/kernel'
+import type {
+  AccountRiskPolicy,
+  RiskPolicyLibraryEntry,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from '../harness.js'
 
@@ -230,7 +234,7 @@ export function defineCoreRiskPolicyTiersConformance(harness: ConformanceHarness
       expect(collided[0]).toMatchObject({ tier: 'workspace', maxRisk: seeded.maxRisk })
     })
 
-    it('lets a task PIN an inherited policy, and the engine resolves that policy', async () => {
+    it('lets a task PIN an inherited policy at the write door', async () => {
       const app = harness.makeApp()
       const { workspace, blocks } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
@@ -255,14 +259,54 @@ export function defineCoreRiskPolicyTiersConformance(harness: ConformanceHarness
       expect(task.status).toBe(201)
       expect(task.body.riskPolicyId).toBe('mp_inherited_pin')
 
-      // And the pin RESOLVES: hiding the policy afterwards is what proves the engine reads it
-      // through the merged view rather than off the block. A hidden pin falls back to the board's
-      // default — the same disposition a deleted local policy has — so the two reads differ.
-      const before = await library(app, wsId)
-      expect(before.find((entry) => entry.id === 'mp_inherited_pin')?.tier).toBe('account')
+      // Hiding it afterwards withdraws it from the library, so the picker stops offering it. What
+      // the ENGINE then does with the dangling pin is the next assertion's subject.
       await app.call('POST', `/workspaces/${wsId}/risk-policies/mp_inherited_pin/suppression`)
-      const after = await library(app, wsId)
-      expect(after.some((entry) => entry.id === 'mp_inherited_pin')).toBe(false)
+      expect((await library(app, wsId)).some((e) => e.id === 'mp_inherited_pin')).toBe(false)
+    })
+
+    it('governs a RUN by the inherited policy its task pinned, not by the board default', async () => {
+      // The claim this whole change rests on, and the one no HTTP read can make: that the ENGINE
+      // resolves a pin through the merged view. Driven end to end (`block.riskPolicyId` →
+      // `resolveRiskPolicy` → `MergeResolver`) because a facade that wired the account repository
+      // into the board guards but NOT into `buildExecutionService` fails nothing else here — it just
+      // hands the run a merge posture nobody chose.
+      //
+      // The account policy is human-review-only (`autoMergeEnabled: false`, the `accountPolicy`
+      // default) and the assessment is maximally mergeable, so the two outcomes are far apart: if
+      // the pin resolves, the PR waits for a person; if it does not, the board's own `mp_balanced`
+      // default auto-merges a 0/0/0 assessment and the task lands.
+      const app = harness.makeApp({
+        confidence: 1,
+        mergeAssessment: { complexity: 0, risk: 0, impact: 0, rationale: 'Trivial change.' },
+      })
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      const accountId = await app.workspaceRepository().accountOf(wsId)
+      await app
+        .accountRiskPolicyRepository()
+        .upsert(accountId!, accountPolicy({ id: 'mp_org_manual', autoMergeEnabled: false }))
+
+      const pinned = await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        riskPolicyId: 'mp_org_manual',
+      })
+      expect(pinned.status).toBe(200)
+      const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Build + merger',
+        purpose: 'build',
+        agentKinds: ['coder', 'merger'],
+      })
+      const started = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      expect(started.status).toBe(201)
+      await app.drive(wsId)
+
+      const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const task = snapshot.body.blocks.find((block) => block.id === 'task_login')
+      // Left for a human, which only the ACCOUNT policy asks for.
+      expect(task?.status).toBe('pr_ready')
+      expect(task?.status).not.toBe('done')
     })
   })
 }

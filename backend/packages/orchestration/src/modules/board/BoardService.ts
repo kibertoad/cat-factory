@@ -79,10 +79,8 @@ import type { TaskTypeFieldsPatchDeps } from './taskTypeFieldsPatch.js'
 import type { TaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import type { PresetPinGuard } from './presetPinGuard.js'
-import { createPresetPinGuard } from './presetPinGuard.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
-import { createRiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
-import { createWorkspaceRiskPolicyLibrary } from '../merge/WorkspaceRiskPolicyLibrary.js'
+import { createBoardPolicyGuards } from './boardPolicyGuards.js'
 import { createSharedServiceMount } from './sharedServiceMount.js'
 import type { SharedServicePolicy } from './serviceRepoLinkage.js'
 import { resolveServiceRepoLinkage } from './serviceRepoLinkage.js'
@@ -392,17 +390,16 @@ export class BoardService {
       logger: this.log,
     })
     // Both guards judge a task against the policies actually available to its board, which since
-    // ADR 0055 means the merged library (its own rows plus the account's). Reading the workspace
-    // tier alone would refuse a pin the picker offers, and — worse for the selection guard — let a
-    // move onto an inherited, wider posture past unjudged.
-    const riskPolicyReader = createWorkspaceRiskPolicyLibrary({
+    // ADR 0055 means the merged library (its own rows plus the account's).
+    const policyGuards = createBoardPolicyGuards({
       riskPolicyRepository,
       accountRiskPolicyRepository,
       riskPolicySuppressionRepository,
       workspaceRepository,
+      modelPresetRepository,
     })
-    this.riskPolicySelection = createRiskPolicySelectionGuard({ riskPolicyReader })
-    this.presetPins = createPresetPinGuard({ riskPolicyReader, modelPresetRepository })
+    this.riskPolicySelection = policyGuards.riskPolicySelection
+    this.presetPins = policyGuards.presetPins
     // Bound callbacks rather than the service, so the narrowing depends on the two reads it
     // actually uses instead of on everything `BoardService` can do.
     this.patchNarrowing = createBlockPatchNarrowing({

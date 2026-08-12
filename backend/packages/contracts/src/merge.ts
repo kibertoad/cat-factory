@@ -597,7 +597,23 @@ export type RiskPolicySuppression = v.InferOutput<typeof riskPolicySuppressionSc
 
 // ---- Request bodies -------------------------------------------------------
 
-const presetNameSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(60))
+/**
+ * How long a risk policy's name may be.
+ *
+ * Exported because the SPA has to AGREE about it, not merely be validated against it: cloning an
+ * inherited policy composes the copy's name client-side (the label is localized copy, and the
+ * backend does not localize prose), so the composer needs the same ceiling the schema enforces.
+ * Without it a long enough source name pushed the composed `{name} (copy)` past the limit and the
+ * clone action answered a 422 the operator had no field to act on.
+ */
+export const RISK_POLICY_NAME_MAX_LENGTH = 60
+
+const presetNameSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(RISK_POLICY_NAME_MAX_LENGTH),
+)
 const scoreSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
 const attemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(50))
 const iterationsSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20))

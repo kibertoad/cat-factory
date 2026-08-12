@@ -47,13 +47,17 @@ const { t } = useI18n()
 
 const draft = reactive(toRiskPolicyDraft(props.policy))
 
-// Re-seed the form when the stored policy changes underneath it (a save elsewhere, a snapshot
-// refresh). Keyed on the id as well as the row, so recycling this component for a different policy
+// Re-seed the form only when this row starts editing a DIFFERENT policy, so recycling the component
 // cannot leave the previous one's numbers in the fields.
+//
+// Keyed on the ID and deliberately not on the row: every store hydrate rebuilds each entry as a new
+// object, and both panels re-read after any write (`ws.refresh()` here, `store.load()` at the account
+// tier), which a coarse `board` realtime event also triggers. Watching the row identity therefore
+// re-seeded this form whenever an UNRELATED policy was saved, silently discarding whatever the
+// operator had typed into this one with nothing on screen saying so.
 watch(
-  () => props.policy,
-  (next) => Object.assign(draft, toRiskPolicyDraft(next)),
-  { deep: false },
+  () => props.policy.id,
+  () => Object.assign(draft, toRiskPolicyDraft(props.policy)),
 )
 
 const concernOptions = computed<{ value: RequirementConcernLevel; label: string }[]>(() =>

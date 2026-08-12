@@ -138,8 +138,33 @@ export class WorkspaceRiskPolicyLibrary implements WorkspaceRiskPolicyReader {
     return describeRiskPolicySuppressions(suppressedIds, named)
   }
 
-  /** Whether this board can see the account policy `id` at all (the write guards' question). */
+  /**
+   * The account policy this board actually INHERITS under `id`, or null.
+   *
+   * Suppression-aware, under exactly the precedence {@link list} and {@link get} apply, because that
+   * is what makes this the merged reader rather than a second opinion: a hidden id is absent from the
+   * library, so a guard answering off the raw account row would let a board CLONE a posture it had
+   * just opted out of, and would tell an operator editing that id that the account governs their
+   * board when the board has withdrawn it.
+   */
   async inheritedPolicy(workspaceId: string, id: string): Promise<AccountRiskPolicy | null> {
+    const [policy, suppressedIds] = await Promise.all([
+      this.accountPolicy(workspaceId, id),
+      this.suppressedIds(workspaceId),
+    ])
+    return policy && !suppressedIds.includes(id) ? policy : null
+  }
+
+  /**
+   * What the ACCOUNT defines under `id`, whether or not this board hides it.
+   *
+   * Deliberately suppression-BLIND, and its own method rather than a flag on the one above, for the
+   * single caller that needs it: hiding is idempotent, so hiding an already-hidden policy has to
+   * settle as the state it already is. Asked through {@link inheritedPolicy} that request would 404
+   * on the second click, which is a refusal reporting a failure for a board that is in exactly the
+   * state the request asked for.
+   */
+  async accountPolicy(workspaceId: string, id: string): Promise<AccountRiskPolicy | null> {
     const accountId = await this.accountOf(workspaceId)
     if (!accountId || !this.deps.accountRiskPolicyRepository) return null
     return this.deps.accountRiskPolicyRepository.get(accountId, id)

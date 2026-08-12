@@ -133,7 +133,7 @@ describe('RiskPolicyService risk-policy cache coherence', () => {
     // Boards are seeded at creation, so an empty library means one that predates that. A gate
     // can have resolved `default` on it and cached the null; the repair `list()` performs must
     // drop that warm null, or the next gate keeps reading the FALLBACK_RISK_POLICY fallback
-    // after the library exists. (Pins the `ensureSeeded` invalidation the other cases only
+    // after the library exists. (Pins the `seedOwnTier` invalidation the other cases only
     // cover transitively.)
     const repo = fakeRepo()
     const service = makeService(repo, caches.riskPolicy)

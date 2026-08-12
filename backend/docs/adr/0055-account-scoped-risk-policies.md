@@ -89,6 +89,31 @@ posture. A new id moves nothing that already exists and says what it is. The clo
 `version`, so a copy of a policy that happens to carry a built-in id is never offered a reseed that
 would overwrite it with catalog values it never came from.
 
+It does claim both DEFAULTS when it is the board's first own policy, exactly as `create` does and for
+the same reason: a scope with no default resolves `FALLBACK_RISK_POLICY`, which merges nothing. A board
+whose own tier was never materialised can reach that state through the clone action, and a copy that
+declined the claim there left it holding a perfectly good library it could land nothing through.
+
+### One merged reader means the WRITE guards read the merge too
+
+The whole point of `WorkspaceRiskPolicyLibrary` is that no consumer forms its own opinion about what a
+board can see, and a guard is a consumer. So `inheritedPolicy` (what clone copies from, and what
+`PATCH`/`DELETE` refuse on behalf of) applies the SAME suppression rule the list and the per-id
+resolution do. Reading the raw account row there would let a board clone in a posture it had just
+hidden, and would answer `risk_policy_inherited` ("clone it to edit a copy here") for an id the board
+had withdrawn.
+
+The one deliberate exception is `suppress`, which asks the suppression-BLIND question through
+`accountPolicy`: hiding is idempotent, so a second click has to settle as the state it already is
+rather than 404 on the grounds that the first one worked.
+
+### An unseeded board's built-in ids stay pinnable
+
+`presetPinGuard` reads an empty library as the catalog it is about to become, because both libraries
+materialise lazily. That emptiness question is asked of the tier the catalog gets SEEDED INTO, which
+is only ever the workspace one: asked of the merged list, a single inherited policy made it non-empty
+and switched the fallback off, refusing exactly the built-in ids the fallback exists for.
+
 ### Hiding, and deleting, leave a dangling pin alone
 
 A task that pinned a policy the board then hides (or an account then withdraws) falls back to that
@@ -131,6 +156,18 @@ the account half of a setting whose board half is listed right next to it.
   `ExecutionServiceDependencies` and the two guard factories renamed the field to `riskPolicyReader`.
 - Two new tables on both facades (D1 migration 0092 ⇄ a Drizzle migration), two new kernel ports, and
   a run-level conformance group asserting the tier merge, the collision precedence, suppression and
-  its undo, the clone, cross-account isolation and an inherited PIN resolving.
+  its undo, the clone, cross-account isolation, an inherited pin's ADMISSION, and separately that a
+  RUN is governed by the inherited policy its task pinned (driven end to end, because a facade wiring
+  the account repository into the board guards but not into the engine fails nothing else).
+- `GET /workspaces/:ws/risk-policy-suppressions` answers `503`
+  `details.reason: 'risk_policy_suppressions_unwired'` where the store is absent, matching the write
+  routes. An empty list would positively claim the board hides nothing while the next hide returned a
+  503, and "nothing hidden" and "cannot say" are different facts.
+- An ACCOUNT-tier write drops the WHOLE `riskPolicy` cache slice rather than one workspace group, since
+  one policy is inherited by every board under the account. The merged library LIST is deliberately not
+  cached: its readers are the snapshot and the two selection guards, and a guard is an admission
+  decision, which is the last place to want a stale-by-a-TTL answer. It is instead held to the round
+  trips the read took before this change, by taking the lazy-seeding check off the merged list rather
+  than paying a separate own-tier query for it.
 - A facade that wires neither new repository is a pass-through: nothing is inherited, nothing is
   hidden, and every read answers exactly the board's own rows.

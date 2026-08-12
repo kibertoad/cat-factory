@@ -21,7 +21,8 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { requireCapability, requireUser } from '../../http/guards.js'
+import { requireCapability } from '../../http/guards.js'
+import { mountAccountMembership } from '../../http/accountAccess.js'
 import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 
 type Scope = 'account' | 'workspace'
@@ -47,10 +48,10 @@ function requireSources<E extends AppEnv>(c: Context<E>) {
 }
 
 /**
- * Every TOP-LEVEL path this controller serves, at BOTH scopes: `accountGuard` is mounted on each of
- * them at the account tier and `settings.manage` at the workspace tier, so a route is authorized by
- * virtue of the resource it hangs off rather than by someone remembering to add a `use` line beside
- * it. One list for both, so neither mount can name a subset the other doesn't.
+ * Every TOP-LEVEL path this controller serves, at BOTH scopes: account membership is mounted on each
+ * of them at the account tier and `settings.manage` at the workspace tier, so a route is authorized
+ * by virtue of the resource it hangs off rather than by someone remembering to add a `use` line
+ * beside it. One list for both, so neither mount can name a subset the other doesn't.
  *
  * It is a list rather than a `use('*', …)` because this controller shares its mount with its
  * siblings: Hono registers a sub-app's `use('*')` as `<prefix>/*` on the parent, so it would also
@@ -59,9 +60,10 @@ function requireSources<E extends AppEnv>(c: Context<E>) {
  *
  * The pairing of `resource` with `resource/*` is what the enumeration existed to get right and
  * did not — `/foundational-service-suppressions` had no entry at all, leaving the account-tier
- * opt-out LIST reachable by any signed-in user for any account id. `foundationalServiceAccountGuard.spec.ts`
- * drives every route this controller registers and fails on an unguarded one, so a new resource
- * cannot repeat it; `mountWorkspacePermission` pairs them for you on the workspace side.
+ * opt-out LIST reachable by any signed-in user for any account id. Both mount helpers
+ * (`mountAccountMembership`, `mountWorkspacePermission`) now pair them for you, and
+ * `foundationalServiceAccountGuard.spec.ts` drives every route this controller registers and fails
+ * on an unguarded one, so a new resource cannot repeat it.
  */
 const GUARDED_RESOURCES = [
   '/foundational-services',
@@ -89,10 +91,7 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
   const ownerKind: FoundationalServiceOwnerKind = scope
 
   if (scope === 'account') {
-    for (const resource of GUARDED_RESOURCES) {
-      app.use(resource, accountGuard)
-      app.use(`${resource}/*`, accountGuard)
-    }
+    mountAccountMembership(app, GUARDED_RESOURCES, 'Sign in to manage foundational services')
   } else {
     mountWorkspacePermission(app, 'settings.manage', GUARDED_RESOURCES)
   }
@@ -200,12 +199,4 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
   })
 
   return app
-}
-
-/** Guard an account-scoped request: require sign-in + membership (404 otherwise). */
-async function accountGuard(c: Context<AppEnv>, next: () => Promise<void>) {
-  const user = requireUser(c, 'Sign in to manage foundational services')
-  // requireMember throws NotFoundError (→ 404) when the user isn't a member.
-  await c.get('container').accountService.requireMember(param(c, 'accountId'), user.id)
-  await next()
 }

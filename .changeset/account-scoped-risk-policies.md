@@ -34,4 +34,11 @@ Two internal breaks, both pre-1.0 surfaces:
 response shape is unchanged, and a deployment with no account policies sees exactly what it saw
 before). Editing or deleting an inherited policy answers `409` with
 `details.reason: 'risk_policy_inherited'`; cloning or hiding a board's own policy answers
-`risk_policy_not_inherited`.
+`risk_policy_not_inherited`. `GET /workspaces/:ws/risk-policy-suppressions` answers `503`
+`risk_policy_suppressions_unwired` where the store is absent, matching its write routes rather than
+claiming the board hides nothing.
+
+**Needs a catfactory.ai page before release.** This adds an operator-facing capability anyone can act
+on with no checkout (author account-wide merge postures; clone or hide an inherited one from a board),
+so per ADR 0051 it owes a website page that the repo's CI cannot see. The website PR is not open yet
+and is NOT part of this change.

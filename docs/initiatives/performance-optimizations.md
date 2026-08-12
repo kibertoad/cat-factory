@@ -667,8 +667,10 @@ per-gate repository re-read. `ExecutionService.resolveRiskPolicy` reads each pre
 `riskPolicyCache.get(...)` when wired (a `RiskPolicyCacheValue` wrapper so a deleted picked id or an
 unseeded null default caches as a value and still falls through, exactly as an uncached read would),
 and `RiskPolicyService` drops the workspace group after EVERY write path: create / update / remove /
-reseed AND the lazy first-use `ensureSeeded` (so a gate that resolved the pre-seed null default
-re-reads the seeded default, not the built-in fallback). Registered on the kernel `AppCaches`
+reseed AND the lazy first-use seed (so a gate that resolved the pre-seed null default
+re-reads the seeded default, not the built-in fallback). ADR 0055 later added the clone, the two
+suppression writes and an account tier whose writes drop the WHOLE slice; the kernel port's own doc is
+the current contract. Registered on the kernel `AppCaches`
 interface + both profiles + `createAppCaches`; pass-through (`enabled: false`) on the Worker's
 isolate-safe profile (our own mutable D1 state, no cross-isolate bus). Wired entirely inside
 `createCore` (`caches.riskPolicy` into both `ExecutionService` and `RiskPolicyService`), so BOTH

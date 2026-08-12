@@ -9,6 +9,7 @@
 // door.
 import { computed, onMounted, ref } from 'vue'
 import type { RiskPolicyLibraryEntry, UpdateRiskPolicyInput } from '~/types/merge'
+import { riskPolicyCopyName } from '~/utils/riskPolicy'
 import RiskPolicyCreateForm from '~/components/settings/RiskPolicyCreateForm.vue'
 import RiskPolicyEditorRow from '~/components/settings/RiskPolicyEditorRow.vue'
 import RiskPolicyInheritedRow from '~/components/settings/RiskPolicyInheritedRow.vue'
@@ -125,11 +126,15 @@ async function create(input: Parameters<typeof store.create>[0]) {
 /**
  * Clone an inherited policy into the board. The copy's NAME is composed here because the backend
  * does not localize prose: it defaults to the source's name, and this states in the reader's own
- * language that the row is a copy.
+ * language that the row is a copy. `riskPolicyCopyName` holds it inside the contract's length limit,
+ * which the marker would otherwise push a long source name past.
  */
 function clone(policy: RiskPolicyLibraryEntry) {
   return run(`${policy.id}:clone`, 'settings.riskPolicy.toast.cloneFailed', async () => {
-    await store.clone(policy.id, t('settings.riskPolicy.inherited.copyName', { name: policy.name }))
+    const name = riskPolicyCopyName(policy.name, (source) =>
+      t('settings.riskPolicy.inherited.copyName', { name: source }),
+    )
+    await store.clone(policy.id, name)
     toast.add({
       title: t('settings.riskPolicy.toast.cloned'),
       icon: 'i-lucide-check',

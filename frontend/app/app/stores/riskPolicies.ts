@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
-  CreateRiskPolicyInput,
   RiskPolicyLibraryEntry,
   RiskPolicySuppression,
   UpdateRiskPolicyInput,
@@ -38,8 +37,17 @@ export const useRiskPoliciesStore = defineStore('riskPolicies', () => {
    */
   const suppressions = ref<RiskPolicySuppression[]>([])
 
+  /**
+   * Adopt the server's list AS SENT, never re-sorted.
+   *
+   * `mergeRiskPolicyTiers` answers oldest-first within each tier with the ACCOUNT tier first, and
+   * both repositories order by `created_at`, so the order already carries the tier grouping every
+   * reader wants. Re-sorting the merged list by timestamp interleaved the two, which the settings
+   * panel hid by re-splitting per tier and the task picker showed as inherited and own policies
+   * shuffled together.
+   */
   function hydrate(list: RiskPolicyLibraryEntry[], versions?: Record<string, number>) {
-    presets.value = [...list].sort((a, b) => a.createdAt - b.createdAt)
+    presets.value = [...list]
     if (versions) catalogVersions.value = versions
   }
 
@@ -185,8 +193,3 @@ export const useAccountRiskPoliciesStore = defineStore('accountRiskPolicies', ()
 
   return { policies, loading, load, create, update, remove }
 })
-
-/** The create-form shape both tiers submit, so the editor states it once. */
-export type RiskPolicyCreateBody = Parameters<
-  ReturnType<typeof useRiskPoliciesStore>['create']
->[0] & { name: CreateRiskPolicyInput['name'] }

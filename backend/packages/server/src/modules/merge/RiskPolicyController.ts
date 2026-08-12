@@ -9,12 +9,12 @@ import {
   suppressRiskPolicyContract,
   updateRiskPolicyContract,
 } from '@cat-factory/contracts'
-import { UnauthorizedError } from '@cat-factory/kernel'
 import type { AccountRiskPolicyService, RiskPoliciesModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { mountAccountMembership } from '../../http/accountAccess.js'
 import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
@@ -51,19 +51,16 @@ function requireAccountRiskPolicies<E extends AppEnv>(c: Context<E>): AccountRis
  * copied into boards, so only a board has a built-in to restore.
  *
  * Workspace routes are `settings.manage` (the library is board configuration); account routes guard
- * on account membership here, exactly as the fragment library's do. Both mounts name this
- * controller's OWN paths from one list, so neither can gate a subset the other doesn't: each shared
- * prefix carries sibling controllers, and a `use('*')` inside a sub-app lands on `<prefix>/*` and
- * would authorize their routes too.
+ * on account membership, exactly as the fragment library's do. Both mounts name this controller's OWN
+ * paths from one list, so neither can gate a subset the other doesn't: each shared prefix carries
+ * sibling controllers, and a `use('*')` inside a sub-app lands on `<prefix>/*` and would authorize
+ * their routes too.
  */
 export function riskPolicyController(scope: Scope): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   if (scope === 'account') {
-    for (const resource of GUARDED_RESOURCES) {
-      app.use(resource, accountGuard)
-      app.use(`${resource}/*`, accountGuard)
-    }
+    mountAccountMembership(app, GUARDED_RESOURCES, 'Sign in to manage risk policies')
   } else {
     mountWorkspacePermission(app, 'settings.manage', GUARDED_RESOURCES)
   }
@@ -160,18 +157,4 @@ export function riskPolicyController(scope: Scope): Hono<AppEnv> {
   }
 
   return app
-}
-
-/**
- * Guard an account-scoped request: require sign-in + membership (404 otherwise).
- *
- * The sign-in floor is a hard denial rather than an allow-all, including under dev-open: unlike the
- * workspace gate, this tier never passes through anonymously, and `requireMember` throws the
- * existence-hiding 404 for a caller outside the account.
- */
-async function accountGuard(c: Context<AppEnv>, next: () => Promise<void>) {
-  const user = c.get('user')
-  if (!user) throw new UnauthorizedError('Sign in to manage risk policies')
-  await c.get('container').accountService.requireMember(param(c, 'accountId'), user.id)
-  await next()
 }
