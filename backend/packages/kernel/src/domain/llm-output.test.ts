@@ -31,6 +31,12 @@ describe('extractJson', () => {
     expect(extractJson('```\nfirst I considered the auth flow\n```\n{"a":1}')).toEqual({ a: 1 })
   })
 
+  it('reads a LATER fence, not only the first', () => {
+    expect(extractJson('```\nweighing it up\n```\nverdict:\n```json\n{"a":1}\n```')).toEqual({
+      a: 1,
+    })
+  })
+
   it('skips a bracket in the prose and finds the real value after it', () => {
     expect(extractJson('I weighed [the auth flow] and concluded: {"verdict":"pass"}')).toEqual({
       verdict: 'pass',
@@ -53,6 +59,54 @@ describe('extractJson', () => {
   it('returns the FIRST value that parses, nesting included', () => {
     expect(extractJson('{"outer":{"inner":1}} then {"second":2}')).toEqual({
       outer: { inner: 1 },
+    })
+  })
+
+  it('repairs raw control characters inside a string value', () => {
+    // A reviewer asked for a multi-line summary writes the layout and forgets the `\n` escape.
+    // The reply IS the verdict, so it is repaired rather than lost to a quoting slip.
+    expect(
+      extractJson('{"summary":"Verdict line.\n\n**Must fix**\n- a thing","rating":0.7}'),
+    ).toEqual({ summary: 'Verdict line.\n\n**Must fix**\n- a thing', rating: 0.7 })
+    expect(extractJson('{"a":"tab\there"}')).toEqual({ a: 'tab\there' })
+  })
+
+  it('prefers a strictly-parseable value over a repairable one, wherever each sits', () => {
+    // THE regression the repair invites: a span that only parses once repaired must never
+    // shadow one that parses as written, or an example shape / a prose aside becomes the
+    // verdict. Both of these read as a clean 0.0 or a schema failure if the repair is tried
+    // per candidate as the scan walks, instead of in a second pass over everything.
+    expect(
+      extractJson(
+        'Example shape:\n```\n{"rating": 0.0, "summary": "one\nline"}\n```\n' +
+          'Actual verdict:\n{"rating":0.9,"summary":"good"}',
+      ),
+    ).toEqual({ rating: 0.9, summary: 'good' })
+    expect(
+      extractJson('Notes on the field:\n{"name": "the field\nI mean"}\n\nVerdict:\n{"rating":0.4}'),
+    ).toEqual({ rating: 0.4 })
+    expect(extractJson('Consider ["the auth flow\nand tokens"] then {"rating":0.3}')).toEqual({
+      rating: 0.3,
+    })
+  })
+
+  it('keeps the fence preference when only a repair can read the reply', () => {
+    // Nothing here parses as written, so the repair pass decides — and it walks the fences
+    // before the whole reply, so the fenced verdict wins over the prose aside ahead of it.
+    expect(
+      extractJson(
+        '```\nfirst I considered [the auth flow]\n```\nNotes: {"note":"see\nbelow"}\n' +
+          '```json\n{"rating":0.9,"summary":"multi\nline"}\n```',
+      ),
+    ).toEqual({ rating: 0.9, summary: 'multi\nline' })
+  })
+
+  it('leaves structural whitespace and already-escaped text alone while repairing', () => {
+    // The newline between the two members is structure, not content: repairing must not
+    // smuggle it into a value. The escaped `\n` in the first value stays one escape, not two.
+    expect(extractJson('{\n  "a": "line\\nbreak",\n  "b": "raw\nbreak"\n}')).toEqual({
+      a: 'line\nbreak',
+      b: 'raw\nbreak',
     })
   })
 

@@ -6,7 +6,7 @@
 // ran).
 //
 // Used by `.github/workflows/mutation.yml` to build its job matrix (`--json`), and printable for
-// a human wondering what the nightly covers. Model: `docs/mutation-testing.md`.
+// a human wondering what the nightly covers. Model: `docs/internal/mutation-testing.md`.
 //
 // Usage:
 //   node scripts/mutation-targets.mjs                 # one package name per line

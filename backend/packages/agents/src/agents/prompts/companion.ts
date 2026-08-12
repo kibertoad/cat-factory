@@ -1,7 +1,11 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { companionFor, isContainerBackedCompanion } from '../kinds/companions.js'
 import type { AgentKindRegistry } from '../kinds/registry.js'
-import { FINAL_ANSWER_IN_REPLY, FRAGMENT_ADHERENCE_GUIDANCE } from './shared.js'
+import {
+  FINAL_ANSWER_IN_REPLY,
+  FRAGMENT_ADHERENCE_GUIDANCE,
+  REVIEW_SUMMARY_LAYOUT,
+} from './shared.js'
 import { anchoredQualityScale } from './review-rounds.js'
 
 // System prompt for a companion agent, parameterised by the producer kind it
@@ -114,6 +118,11 @@ export function companionSystemPrompt(
     // below. Only the code `reviewer` does this; the other companions review different artifacts.
     ...(kind === 'reviewer' ? ['Include a `fragmentAdherence` array as described below.'] : []),
     'No prose outside the JSON, no code fences.',
+    // `summary` is the whole review as far as a human is concerned: `comments` only exist when
+    // the graded output has ids to anchor to, and nothing else on the step carries the findings.
+    // So the shape of that one string is the shape of the review, and it gets said here.
+    '',
+    REVIEW_SUMMARY_LAYOUT,
     ...(kind === 'reviewer' ? ['', FRAGMENT_ADHERENCE_GUIDANCE] : []),
     '',
     FINAL_ANSWER_IN_REPLY,

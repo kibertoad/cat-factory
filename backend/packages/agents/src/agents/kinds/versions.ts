@@ -15,6 +15,7 @@ import { KAIZEN_SYSTEM_PROMPT } from '../prompts/kaizen.js'
 import { FORK_PROPOSER_SYSTEM_PROMPT } from './fork-proposer.js'
 import { FORK_CHAT_SYSTEM_PROMPT } from '../prompts/fork-decision.js'
 import { JUDGE_SYSTEM_PROMPT } from '../prompts/judge.js'
+import { isCompanionKind } from './companions.js'
 import { SPEC_WRITER_SYSTEM_PROMPT } from './spec-blueprints.js'
 
 // Versioned registry of the built-in agent system prompts. The goal is simple
@@ -90,7 +91,13 @@ export const PROMPT_VERSIONS = {
   kaizen: { id: 'kaizen', version: 1, text: KAIZEN_SYSTEM_PROMPT },
   'fork-proposer': { id: 'fork-proposer', version: 1, text: FORK_PROPOSER_SYSTEM_PROMPT },
   'fork-chat': { id: 'fork-chat', version: 1, text: FORK_CHAT_SYSTEM_PROMPT },
-  judge: { id: 'judge', version: 1, text: JUDGE_SYSTEM_PROMPT },
+  // v2: the summary is now rendered as markdown beside the `findings` list, so the prompt asks for
+  // a short whole-verdict paragraph that does NOT restate the findings. Scoring is untouched.
+  //
+  // The number is the shipped prompt's IDENTITY (what a benchmark cell and the sandbox baseline
+  // label attribute an outcome to); it does not re-key a Kaizen combo, because a judge is attached
+  // to a step and is never a step's own `agentKind`, which is what `promptVersionForKind` reads.
+  judge: { id: 'judge', version: 2, text: JUDGE_SYSTEM_PROMPT },
 } as const satisfies Record<string, VersionedPrompt>
 
 /** Ids of the prompts currently under version control. */
@@ -125,10 +132,20 @@ const NON_PHASE_PROMPT_IDS: Record<string, PromptId> = {
  * supplies it — the same two-step resolution {@link promptVersionForKind} does, hoisted out so
  * a caller that wants the `id@vN` LABEL (the prompt editor, naming the shipped revision an
  * override was forked from) doesn't have to re-derive the id from a bare version number.
+ *
+ * A COMPANION resolves to no id, and that exclusion is load-bearing rather than tidy-up:
+ * `baseSystemPromptFor` gives every companion the shared COMPANION prompt, which wins over any
+ * built-in track, so the `reviewer` (the one companion that is also listed in the standard-phase
+ * map, under `review`) does not send the `review` prompt at all. Answering `review@vN` for it named
+ * a revision of TEXT IT NEVER RUNS: the editor showed that label as the baseline an override was
+ * forked from, and a Kaizen combo re-keyed on edits to a prompt the step never saw while ignoring
+ * edits to the one it did. The companion prompt is not under version control (it is composed per
+ * kind, from the pairing's own `reviews` label), so "no number" is the honest answer until it is.
  */
 export function promptIdForKind(kind: string): PromptId | undefined {
   const direct = NON_PHASE_PROMPT_IDS[kind]
   if (direct) return direct
+  if (isCompanionKind(kind)) return undefined
   const phase = phaseForKind(kind as Parameters<typeof phaseForKind>[0])
   return phase ? PHASE_PROMPT_IDS[phase] : undefined
 }

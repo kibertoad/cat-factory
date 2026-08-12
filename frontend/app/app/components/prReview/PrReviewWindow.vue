@@ -29,6 +29,7 @@ import { activeChunkLabels, chunkReviewPercent, hasNoSlicePlan } from '~/utils/p
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -527,13 +528,13 @@ async function onDismiss(id: string): Promise<void> {
 
           <!-- The reviewer's overall assessment. Prose, so it takes the reading measure (see the
                shell's `width` prop) — this window is `full`-width. -->
-          <p
+          <div
             v-if="state?.summary"
             class="mb-3 max-w-3xl rounded-md bg-slate-800/50 px-3 py-2 text-[12px] text-slate-300"
           >
-            <span class="text-slate-500">{{ t('prReview.summaryLabel') }}</span>
-            {{ state.summary }}
-          </p>
+            <span class="mb-1 block text-slate-500">{{ t('prReview.summaryLabel') }}</span>
+            <MarkdownProse :text="state.summary" />
+          </div>
 
           <!-- Best-practice adherence: per standard folded into the reviewer's prompt, a 1..10
                rating of how well the PR adheres + the issues that standard surfaced. -->
@@ -680,12 +681,17 @@ async function onDismiss(id: string): Promise<void> {
                          bucket to `full`, so these are the three paragraphs the width would
                          otherwise have stretched furthest; the path/line row, the badges and the
                          per-finding actions are what it is actually for. -->
-                    <p
-                      class="mt-1 max-w-3xl whitespace-pre-wrap text-[12px] text-slate-300"
+                    <MarkdownProse
+                      v-if="f.detail"
+                      :text="f.detail"
+                      class="mt-1 max-w-3xl text-[12px] text-slate-300"
                       :class="isRetracted(f) ? 'line-through' : ''"
-                    >
-                      {{ f.detail }}
-                    </p>
+                    />
+                    <!-- The suggested fix is a VALUE a human copies (a patch line, a command, a
+                         path), not prose, so it stays preformatted: markdown would emphasise the
+                         `__dunder__` in an identifier, curl the quotes in a command, and drop the
+                         indentation of anything longer than a line. Same reason the CI gate's
+                         failure summary is left alone. -->
                     <p
                       v-if="f.suggestedFix"
                       class="mt-1 max-w-3xl whitespace-pre-wrap rounded-md bg-slate-800/50 px-2 py-1 text-[11px] text-slate-300"
@@ -696,10 +702,10 @@ async function onDismiss(id: string): Promise<void> {
 
                     <!-- The investigator's justification (why the finding holds up / was retracted),
                        or the reason the challenge investigation failed. -->
-                    <p
+                    <div
                       v-if="f.challenge?.justification"
                       data-testid="pr-review-finding-justification"
-                      class="mt-1.5 max-w-3xl whitespace-pre-wrap rounded-md px-2 py-1 text-[11px]"
+                      class="mt-1.5 max-w-3xl rounded-md px-2 py-1 text-[11px]"
                       :class="
                         isRetracted(f)
                           ? 'bg-rose-500/10 text-rose-200'
@@ -708,13 +714,16 @@ async function onDismiss(id: string): Promise<void> {
                             : 'bg-sky-500/10 text-sky-200'
                       "
                     >
-                      <span class="font-medium">{{
+                      <!-- A label that used to prefix its value inline now heads the block the
+                           rendered prose became, so it needs to READ as a heading line rather than
+                           as a stray word above a paragraph. -->
+                      <span class="mb-1 block font-medium">{{
                         isChallengeFailed(f)
                           ? t('prReview.challenge.failedLabel')
                           : t('prReview.challenge.verdictLabel')
                       }}</span>
-                      {{ f.challenge.justification }}
-                    </p>
+                      <MarkdownProse :text="f.challenge.justification" />
+                    </div>
 
                     <!-- Per-finding actions: Challenge + Dismiss (only while awaiting a selection). -->
                     <div

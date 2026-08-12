@@ -4,6 +4,8 @@ import type { AgentState, PipelineStep, CompanionVerdict, StepApproval } from '~
 import { subtaskIconClass } from '~/utils/pipelineRender'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
 import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
+import CopyButton from '~/components/common/CopyButton.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 // The step's metadata card body: state/timing/model/run id, the container cold-boot
 // phase, the live subtask breakdown, the LLM observability rollup, the applied
@@ -281,22 +283,35 @@ async function copyRunId() {
           {{ latestVerdict?.passed ? '≥' : '<' }} {{ pctOf(latestVerdict!.threshold) }}
         </UBadge>
       </div>
-      <ol class="mt-2 space-y-1.5">
-        <li v-for="(v, i) in companionVerdicts" :key="i" class="flex items-start gap-2 text-[12px]">
-          <span
-            class="mt-px inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-[11px] tabular-nums"
-            :class="
-              v.passed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'
-            "
-          >
-            {{ i + 1 }}
-          </span>
-          <div class="min-w-0">
+      <!-- One card per correction round: the score on its own line, then the reviewer's
+           challenge as rendered markdown. The feedback used to trail the score inside the same
+           line, which turned a multi-point review into one unreadable run of text. -->
+      <ol class="mt-2 space-y-2">
+        <li
+          v-for="(v, i) in companionVerdicts"
+          :key="i"
+          data-testid="companion-verdict"
+          class="relative rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+        >
+          <CopyButton v-if="v.feedback" :text="v.feedback" class="absolute end-1 top-1" />
+          <div class="flex items-center gap-2 text-[12px]">
+            <span
+              class="inline-flex h-4 shrink-0 items-center rounded px-1 font-mono text-[11px] tabular-nums"
+              :class="
+                v.passed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'
+              "
+            >
+              {{ i + 1 }}
+            </span>
             <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
               {{ pctOf(v.rating) }} {{ v.passed ? '≥' : '<' }} {{ pctOf(v.threshold) }}
             </span>
-            <span v-if="v.feedback" class="ms-1 text-slate-400">— {{ v.feedback }}</span>
           </div>
+          <MarkdownProse
+            v-if="v.feedback"
+            :text="v.feedback"
+            class="mt-1.5 pe-6 text-[12px] leading-relaxed text-slate-300"
+          />
         </li>
       </ol>
       <p v-if="companionVerdicts.length > 1" class="mt-1 text-[11px] text-slate-500">

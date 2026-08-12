@@ -1,5 +1,135 @@
 # @cat-factory/app
 
+## 0.266.1
+
+### Patch Changes
+
+- c09ddbe: Render a review verdict as blocks a human can skim, and ask the reviewer to write it that way.
+
+  A companion's verdict (the architect/spec/code/doc reviewers) arrives as ONE string: `comments`
+  only exist where the graded output has ids to anchor to, so everything the reviewer found lands in
+  `summary`. Unshaped, a model writes that as a single dense paragraph numbering its points inline
+  ("(1) … (2) …"), and the run panel then appended it to the score inside the same line
+  (`78% < 80% — <four hundred words>`). Nothing about that is skimmable: a reader cannot tell what
+  blocks the work from what is a nit without reading all of it.
+
+  Both halves move. `REVIEW_SUMMARY_LAYOUT` (agents, `prompts/shared.ts`) asks for a fixed skeleton,
+  a one-line verdict then `**Must fix**` / `**Should fix**` / `**Minor**` bullet groups, and is
+  carried by every companion (built-in and deployment-registered, since they share one prompt). It
+  survives a per-workspace prompt override, like the other fragments that describe how the platform
+  reads a reply rather than what it should look for. A reviewer that already reports structured
+  findings beside its summary is deliberately excluded: every judge, the `pr-reviewer` and the tester
+  have that array rendered as its own list, so the layout would make them write each point twice.
+  The SPA renders those summaries through the existing `MarkdownProse` reader instead of plain-text
+  dumps, and each companion round is now its own card rather than a continuation of the score line.
+  The same render fix reaches the reviewer prose the first markdown sweep missed: judge summary and
+  findings, best-practice adherence, the PR-review summary, findings and challenge verdicts, and the
+  tester report. It stops at the fields carrying a VALUE a human copies rather than prose (a
+  suggested fix, a gate's failure summary), which stay preformatted: markdown would emphasise the
+  `__dunder__` in a path and curl the quotes in a command.
+
+  Kernel's `extractJson` now repairs raw control characters inside a JSON string literal. A
+  multi-line summary is exactly what makes a model forget the `\n` escape, and refusing that reply
+  costs the whole verdict (a companion that returns nothing parseable fails the run) over a quoting
+  slip. The repair is a SECOND pass, run only once every candidate in the reply has been read as
+  written: a repair makes text parse that was meant to be skipped, so tried inline it would let an
+  example shape or a prose aside shadow the real verdict written after it. Fence bodies are now all
+  searched, not just the first. The harness's own reader gained the same repair (hence a runner image
+  bump), because it reads the reply FIRST and each refusal there costs a billed repair completion
+  before the engine ever sees it.
+
+  The judge prompt bumps to `judge@v2`: its summary is now rendered beside its findings, so it is
+  asked for a short whole-verdict paragraph that does not restate them. Scoring is untouched. A
+  companion kind also stops resolving to the `review` phase's prompt version — a companion runs the
+  companion prompt, so both the editor's baseline label and the sandbox baseline named a revision of
+  text the kind never sends.
+
+## 0.266.0
+
+### Minor Changes
+
+- fc4a1e4: A run nobody is watching now finishes instead of waiting on a person who is not coming, and a
+  workspace states that posture per intake rather than once for everything.
+
+  Four parks stopped an otherwise-autonomous run, and none of them is a checkpoint anybody asked for:
+  a companion at its automatic rework cap, a JUDGE at its bounce cap, an iterative review at its
+  reviewer-pass cap, and the Coder's follow-up companion holding the run while any item is undecided.
+  Each is the automation reporting that it gave up, and each already offered a person a documented
+  "proceed anyway". A run started over `/api/v1`, dispatched from a ticket or fired by a schedule had
+  nobody to offer it to, so it waited indefinitely. The headless acceptance suite found this on
+  `pl_build`, stopping on an `approval-gate` raised by `architect-companion`.
+
+  A judge's other two parks are deliberately NOT in that set — `onFail: 'park'` is a registration
+  asking for a person, and a verdict with no producing step to bounce to never got to try — so
+  `disposeJudgeVerdict` now returns a machine-readable `JudgeParkReason` instead of leaving the engine
+  to tell them apart by their prose. A review still ASKING questions parks under either posture too:
+  the answers are a product judgement, and inventing them is the one thing an unattended policy may
+  never do.
+
+  - **`RiskPolicy.autonomy`** (`attended` | `unattended`) decides which way those three go. `attended`
+    is byte-for-byte the previous behaviour and is what every existing policy, every custom one, and
+    the built-in fallback get. `unattended` takes the "proceed" answer ON THE RECORD:
+    `step.companion.capSettledByPolicy` and `followUpItem.dismissedByPolicy` say that policy decided,
+    because the last companion verdict already says the producer was below the bar and a run that
+    advanced anyway must not read like one whose companion quietly stopped grading.
+  - **It never touches a park the PIPELINE asked for.** An approval gate, a `human-test` step, visual
+    confirmation, the human/PR review gate, a brainstorm or interview, the fork choice and the input
+    gate all stop the run under either value. A companion step that is ALSO gated still raises its
+    human approval gate at the cap, because the cap settling is routed through the same pass branch a
+    converged companion takes.
+  - **A workspace now has TWO default policies.** `isDefault` governs a task somebody started in the
+    app; the new `isUnattendedDefault` governs one nothing is watching. Which applies is
+    `riskPolicyDefaultScopeFor(intakeOrigin)`, its own `Record` rather than a reuse of
+    `isHeadlessIntake` — the two disagree about `schedule`, which is not headless (its reused block
+    has no stable place to hold a clarification conversation) and is nonetheless unwatched.
+  - **A third built-in, `mp_unattended` ("Unattended delivery")**, seeded as that default. It is
+    `Balanced` with one field changed, deliberately: a seed may decide that an unwatched run should
+    not wait forever on an automation budget, and may not decide that it gets to land a change an
+    operator's own thresholds would have held.
+  - **Pinning a task to it is a permission**, not a preference. `refuseRiskPolicySelection` gained a
+    `relaxes_run_oversight` arm: `mp_unattended`'s role layer is empty, identical to `Balanced`'s, so
+    without it any member could re-point a task onto the seeded policy and remove the human
+    checkpoints their workspace's own default raises.
+  - **Every grading loop now remembers its own rounds.** `step.companion.verdicts` recorded one verdict
+    per cycle and no prompt read it, so a companion re-graded a revised document with no idea what it
+    had asked for last time — the loop resampled instead of converging, and a rework budget bought
+    nothing. Both sides of the loop now receive the rounds so far (`AgentRunContext.priorReview`,
+    folded once in `userPromptFor`, so an inline companion, a container-backed one, a
+    deployment-registered one and the producer being reworked all get it), and the 0..1 scale is
+    anchored and SHARED with the judge bucket, which had carried its previous verdict all along.
+
+  **Migration, and the one thing to check.** Both facades' migrations materialise `mp_unattended` in
+  every existing workspace as a CLONE of that workspace's own default row, with `autonomy` the only
+  field changed. Cloning, not seeding stock values: a built-in is editable in place, so a workspace
+  that tightened its `Balanced` still holds `id = 'mp_balanced'`, and writing catalog ceilings beside
+  it would hand every API-started run there a wider licence to land than its operator granted. Every
+  ceiling, budget and per-role restriction is inherited (`dryRunRoles` and `submissionClassesByRole`
+  above all). Landing authority does not move underneath anyone; what changes is that such runs stop
+  parking on the caps. A deployment that WANTS its API-started runs to keep parking re-points
+  `isUnattendedDefault` at a policy whose `autonomy` is `attended`.
+
+  `Balanced` and `Manual review only` are NOT version-bumped. Both new fields land on them as the
+  migration's column defaults, so a stored row and a freshly seeded one are identical — advising every
+  existing workspace to reseed for a zero-delta change would invite them to overwrite their own edits.
+
+  **Public API (additive, OpenAPI 1.49.0).** `GET /api/v1/risk-policies` gains `isUnattendedDefault`
+  and `autonomy`. `isDefault` keeps its exact former meaning, so nothing an existing client was told
+  becomes wrong; it was reading about the other scope. A caller predicting whether its own runs can
+  reach a terminal state unassisted should read `autonomy` on the `isUnattendedDefault` row.
+
+  **Internal break.** `RiskPolicyRepository.getDefault` takes the scope, and
+  `RunMergePolicy.resolve` / the engine's `resolveRiskPolicy` callback take the run. Both are required
+  rather than defaulted: a call site that has not decided which kind of run it is resolving for now
+  fails to compile, because the alternative reads as correct and silently hands an unwatched run the
+  in-app policy.
+
+  Design record: [ADR 0053](../backend/docs/adr/0053-unattended-run-autonomy.md).
+
+### Patch Changes
+
+- Updated dependencies [fc4a1e4]
+  - @cat-factory/contracts@0.301.0
+
 ## 0.265.0
 
 ### Minor Changes

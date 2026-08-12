@@ -12,7 +12,7 @@ name: Mutation
 #
 # It is also never expected to run on a developer's machine (see CLAUDE.md → "Run the CI guard
 # scripts locally before committing"). Model, scope and how a package joins the set:
-# docs/mutation-testing.md.
+# docs/internal/mutation-testing.md.
 
 on:
   # Nightly, off-peak. Scheduled runs only ever fire on the default branch, so this is the
@@ -85,10 +85,10 @@ jobs:
     needs: targets
     runs-on: ubuntu-latest
     # Sized off the measured runs: the small packages are ~2 minutes on a 4-vCPU runner, kernel's
-    # ~5,800 mutants are the outlier at well under an hour. Generous on purpose (this blocks
+    # ~7,300 mutants are the outlier at well under an hour. Generous on purpose (this blocks
     # nothing), but bounded so a mutant that hangs the runner cannot burn six hours. If the tail
     # gets uncomfortable, Stryker's `--incremental` is the lever, not a smaller scope: see
-    # docs/mutation-testing.md.
+    # docs/internal/mutation-testing.md.
     timeout-minutes: 120
     permissions:
       contents: read
@@ -115,9 +115,20 @@ jobs:
       # `stryker run` exits non-zero when the score falls below the package's floor, which is the
       # signal this workflow exists to produce: a red job here means a change landed tests that
       # cover code without pinning its behaviour.
+      #
+      # `GITHUB_STEP_SUMMARY` is redirected to a throwaway file for THIS step only. Stryker runs the
+      # package's vitest suite once per mutant, and vitest's `github-actions` reporter (a default
+      # whenever `GITHUB_ACTIONS` is set) appends every failing test to the job summary, which for
+      # a mutation run is every KILLED mutant, i.e. the successful outcome. Kernel's ~7,200 mutants
+      # produced 1,193k of it, past GitHub's 1,024k ceiling, so the runner ABORTED the upload and
+      # annotated a green nightly with an `##[error]`: a standing red herring beside the one place a
+      # real below-floor failure is read. Redirecting is preferred to unsetting `GITHUB_ACTIONS`,
+      # which would also cost Turbo its log grouping. Anything this step genuinely wants in the
+      # summary has to be written by a step of its own, like the score row below.
       - name: Run mutation testing
         env:
           PACKAGE: ${{ matrix.target.name }}
+          GITHUB_STEP_SUMMARY: ${{ runner.temp }}/mutation-inner-summary.md
         run: pnpm exec turbo run test:mutation --filter="$PACKAGE"
 
       # Both of these run even when the step above went red: a below-floor run still wrote a full
