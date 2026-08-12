@@ -11,6 +11,11 @@ it and close it.
 `vitest.config.ts`, which collects only this package's own unit tests. The acceptance specs live
 under `acceptance/` behind a second config that nothing but the `acceptance` script names.
 
+**The specs are on their way OFF vitest**, which they use as a shell while switching off almost
+everything it does. In-flight initiative, with the evidence and what must survive the swap:
+[`acceptance-suite-standalone-runner.md`](../../../docs/initiatives/acceptance-suite-standalone-runner.md).
+Nothing in this README describes that end state yet; the unit tests under `test/` are not affected.
+
 ```sh
 pnpm --filter @cat-factory/acceptance run configure   # assemble the .env, once
 pnpm --filter @cat-factory/acceptance run acceptance
