@@ -4,7 +4,7 @@ import type {
   RiskPolicyCacheValue,
   RunDefaultScope,
 } from '@cat-factory/kernel'
-import type { RiskPolicyRepository } from '@cat-factory/kernel'
+import type { WorkspaceRiskPolicyReader } from '@cat-factory/kernel'
 import { FALLBACK_RISK_POLICY } from '@cat-factory/kernel'
 import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
 
@@ -100,16 +100,20 @@ export function preloadedRiskPolicyRead(library: readonly RiskPolicy[]): RiskPol
 /**
  * Resolve the preset governing `riskPolicyId` in a workspace.
  *
- * An ABSENT repository is not a hole to guard: with no preset library there is nothing for a task
+ * An ABSENT reader is not a hole to guard: with no preset library there is nothing for a task
  * to point at, so every task in the deployment is governed by {@link FALLBACK_RISK_POLICY}, whose
  * role layer is empty and therefore holds nobody to anything, and which auto-merges nothing, so
  * the deployment that configured no policy lands no PR without a human.
  *
- * A wired repository answers from a library the board was seeded with at CREATION, so reaching
+ * A wired reader answers from a library the board was seeded with at CREATION, so reaching
  * the fallback is a deployment-level fact rather than a question of who had read what first.
+ *
+ * It is a `WorkspaceRiskPolicyReader` and not the workspace-tier repository, because a board's
+ * library includes the account policies it INHERITS (ADR 0055): a task may pin one, and the same
+ * merged view the picker offered has to be the one that governs the run.
  */
 export async function resolveRiskPolicy(input: {
-  repository: RiskPolicyRepository | undefined
+  repository: WorkspaceRiskPolicyReader | undefined
   workspaceId: string
   riskPolicyId: string | null | undefined
   /**

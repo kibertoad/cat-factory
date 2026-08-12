@@ -1,4 +1,8 @@
-import type { ModelPresetRepository, RiskPolicyRepository } from '@cat-factory/kernel'
+import type {
+  ModelPresetRepository,
+  RiskPolicyRepository,
+  WorkspaceRiskPolicyReader,
+} from '@cat-factory/kernel'
 import {
   seedModelPresets,
   seedRiskPolicies,
@@ -29,6 +33,12 @@ import {
  * as the catalog it is about to become. Which also keeps this a pure READ: seeding here would be a
  * write performed in order to say no.
  *
+ * That emptiness question is asked of the tier that gets SEEDED, which since ADR 0055 is no longer
+ * the whole of what a risk-policy read answers: a board's library is its own rows merged with the
+ * account policies it inherits, so one account policy made the merged list non-empty and the catalog
+ * fallback stopped applying — refusing a valid built-in id on exactly the unseeded boards the
+ * fallback exists for.
+ *
  * A repository the facade never wired is a different answer again, and a `503` rather than a
  * `422`: "no such policy" is true and useless when the library holds nothing at all and the fix is
  * to wire a module. It fires only for a caller that pinned something, since pinning nothing has no
@@ -57,6 +67,12 @@ interface PinnedLibrary {
   workspaceId: string
   /** Absent ⇒ the facade wired no such repository. */
   read?: (workspaceId: string) => Promise<{ id: string }[]>
+  /**
+   * The tier the catalog is lazily seeded INTO, when that is narrower than what `read` answers.
+   * Absent ⇒ the two are the same, which is the model-preset case. Consulted only on a miss, so the
+   * common path (a pin the library holds) still costs exactly one query.
+   */
+  seededTier?: (workspaceId: string) => Promise<{ id: string }[]>
   /** What a never-read library is about to hold, so an unseeded workspace is not a refusal. */
   catalog: () => readonly { id: string }[]
   /** The noun a person reads, and the two `details.reason` values a client branches on. */
@@ -72,8 +88,12 @@ async function assertPinned(spec: PinnedLibrary): Promise<void> {
     throw new UnavailableError(`${spec.plural} are not configured`, spec.unwiredReason)
   }
   const stored = await spec.read(spec.workspaceId)
-  const library = stored.length > 0 ? stored : spec.catalog()
-  if (library.some((row) => row.id === spec.pinned)) return
+  if (stored.some((row) => row.id === spec.pinned)) return
+  // A miss is only a refusal once the SEEDED tier is known to hold something: while it is empty the
+  // catalog is what the next read will write into it, so a built-in id names a policy that exists in
+  // every sense the caller can observe.
+  const seeded = spec.seededTier ? await spec.seededTier(spec.workspaceId) : stored
+  if (seeded.length === 0 && spec.catalog().some((row) => row.id === spec.pinned)) return
   // The available ids are deliberately NOT listed back. Both libraries are readable at `admin` and
   // pinnable at `write`, so a refusal that enumerated them would hand the lower rung, by typo,
   // exactly what the higher one gates.
@@ -84,6 +104,16 @@ async function assertPinned(spec: PinnedLibrary): Promise<void> {
 
 export function createPresetPinGuard(deps: {
   modelPresetRepository?: ModelPresetRepository
+  /**
+   * The board's merged risk-policy library (ADR 0055), so a task may pin a policy its ACCOUNT
+   * defines. Reading the workspace tier alone here would refuse exactly the ids the picker offers.
+   */
+  riskPolicyReader?: WorkspaceRiskPolicyReader
+  /**
+   * The board's OWN tier, for the lazy-seeding question alone (`seededTier` below). Beside the
+   * merged reader rather than instead of it: what a pin may NAME is the merged library, but what the
+   * built-in catalog is about to be written into is only ever this one.
+   */
   riskPolicyRepository?: RiskPolicyRepository
 }): PresetPinGuard {
   return {
@@ -104,7 +134,8 @@ export function createPresetPinGuard(deps: {
         assertPinned({
           pinned: riskPolicyId,
           workspaceId: homeWorkspaceId,
-          read: deps.riskPolicyRepository?.list.bind(deps.riskPolicyRepository),
+          read: deps.riskPolicyReader?.list.bind(deps.riskPolicyReader),
+          seededTier: deps.riskPolicyRepository?.list.bind(deps.riskPolicyRepository),
           catalog: seedRiskPolicies,
           singular: 'risk policy',
           plural: 'Risk policies',

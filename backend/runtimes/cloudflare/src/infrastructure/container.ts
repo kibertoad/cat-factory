@@ -110,6 +110,10 @@ import { D1NotificationRepository } from './repositories/D1NotificationRepositor
 import { D1InitiativeRepository } from './repositories/D1InitiativeRepository'
 import { D1MergeTrackRecordRepository } from './repositories/D1MergeTrackRecordRepository'
 import { D1RiskPolicyRepository } from './repositories/D1RiskPolicyRepository'
+import {
+  D1AccountRiskPolicyRepository,
+  D1RiskPolicySuppressionRepository,
+} from './repositories/D1AccountRiskPolicyRepository'
 import { D1SharedStackRepository } from './repositories/D1SharedStackRepository'
 import {
   D1SandboxPromptVersionRepository,
@@ -260,6 +264,10 @@ export function selectMergeLifecycleDeps(
     apiBaseUrl: env.WORKER_PUBLIC_URL?.trim() || undefined,
     notificationRepository: new D1NotificationRepository({ db }),
     riskPolicyRepository: new D1RiskPolicyRepository({ db }),
+    // The ACCOUNT tier of that library + each board's suppressions of it (ADR 0055), wired beside
+    // the board tier so the merge behaves identically on both runtimes.
+    accountRiskPolicyRepository: new D1AccountRiskPolicyRepository({ db }),
+    riskPolicySuppressionRepository: new D1RiskPolicySuppressionRepository({ db }),
     mergeTrackRecordRepository: new D1MergeTrackRecordRepository({ db }),
     // Shared stacks (long-lived compose infra a consumer environment attaches to). CRUD +
     // persistence are runtime-symmetric; the Worker never brings a stack UP (no host daemon),

@@ -36,6 +36,7 @@ import { buildNodeContainer } from '../src/container.js'
 import { type DrizzleDb, createDbClient } from '../src/db/client.js'
 import { migrate } from '../src/db/migrate.js'
 import {
+  DrizzleAccountRiskPolicyRepository,
   DrizzleClarityReviewRepository,
   DrizzleDocInterviewRepository,
   DrizzleAccountSettingsRepository,
@@ -510,6 +511,7 @@ export function makeConformanceApp(
     taskRepository: () => new DrizzleTaskRepository(db),
     docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
+    accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,
     getService,
     ...containerServiceProbes(container),

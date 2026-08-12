@@ -91,6 +91,17 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.input_gate_parked',
     descriptionKey: 'errors.conflict.description.input_gate_parked',
   },
+  // The two halves of "this policy is not yours to change" (ADR 0055). They get opposite copy on
+  // purpose: the first sends the reader to the clone action, the second to the delete, and one
+  // shared string could only describe whichever case the reader was not in.
+  risk_policy_inherited: {
+    titleKey: 'errors.conflict.title.risk_policy_inherited',
+    descriptionKey: 'errors.conflict.description.risk_policy_inherited',
+  },
+  risk_policy_not_inherited: {
+    titleKey: 'errors.conflict.title.risk_policy_not_inherited',
+    descriptionKey: 'errors.conflict.description.risk_policy_not_inherited',
+  },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',

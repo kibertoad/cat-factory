@@ -11,6 +11,7 @@ import type {
   BlockRepository,
   BoardChange,
   DocInterviewRepository,
+  AccountRiskPolicyRepository,
   AccountSettingsRepository,
   DocumentRepository,
   DeployCloneTarget,
@@ -365,6 +366,19 @@ export interface ConformanceApp {
    * admin's refusal on one runtime only.
    */
   accountSettingsRepository(): AccountSettingsRepository
+  /**
+   * The facade's ACCOUNT-tier risk policy store (ADR 0055), so the tier-merge suite can author an
+   * account policy and then assert what a BOARD in that account resolves.
+   *
+   * Seeded through the repository rather than the account HTTP route because that route requires a
+   * signed session and account membership, which the dev-open harnesses have no user for. What the
+   * suite is asserting is not the account controller (a server test covers it) but the part only a
+   * real store can answer: that each facade's account table, its board table and the suppression
+   * table compose into the SAME visible library, and that the engine resolves a task pinning an
+   * inherited policy through it. A facade whose account read mapped one column differently would
+   * hand a run a merge posture nobody chose, silently.
+   */
+  accountRiskPolicyRepository(): AccountRiskPolicyRepository
   /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim

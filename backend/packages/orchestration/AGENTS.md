@@ -129,8 +129,12 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `start`/`retry`/`restartFrom` differ only in the block patch they write between them, so the order
   across them is owned in one place rather than three. The run/step lifecycle
   reference is `docs/execution-state-machine.md`.
-- `merge/`: the merge policy + its evidence: `RiskPolicyService` (the per-workspace
-  merge-threshold preset library, including the per-class `classRules`), `MergeTrackRecordService`
+- `merge/`: the merge policy + its evidence: `RiskPolicyService` (the BOARD's policy library,
+  including the per-class `classRules`, plus its clone/hide of what it inherits),
+  `AccountRiskPolicyService` (the ACCOUNT tier) and `WorkspaceRiskPolicyLibrary` — the ONE merged
+  reader the editor, every picker and the engine's own resolution hold, so a policy the picker
+  offered is the policy the run is governed by (`backend/docs/adr/0055-account-scoped-risk-policies.md`);
+  `MergeTrackRecordService`
   (deterministic change classification + the persisted record of every merge decision, the
   reviewer-effort tag, and the per-class SQL rollups) and `externalMergeObserver` (attributing a
   PR merged directly on the provider). See CLAUDE.md → "Merge track record".

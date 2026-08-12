@@ -664,7 +664,9 @@
         "document_already_linked": "Document already attached",
         "dry_run_not_mergeable": "Dry run cannot be merged",
         "submission_not_allowed": "Merge not allowed for this run",
-        "webhook_limit_reached": "Webhook limit reached"
+        "webhook_limit_reached": "Webhook limit reached",
+        "risk_policy_inherited": "This policy belongs to the account",
+        "risk_policy_not_inherited": "This policy belongs to this board"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -706,7 +708,9 @@
         "document_already_linked": "That document is attached to another task. Detach it there first, or attach a separate copy.",
         "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge.",
         "submission_not_allowed": "This task's merge policy doesn't let the role that started this run merge this kind of change. Somebody whose role may merge it can do so, or an admin can widen the policy in the merge preset.",
-        "webhook_limit_reached": "This workspace already has the maximum number of outbound webhooks registered. Remove one you no longer need, then register this again."
+        "webhook_limit_reached": "This workspace already has the maximum number of outbound webhooks registered. Remove one you no longer need, then register this again.",
+        "risk_policy_inherited": "It is shared with every board in the account, so it cannot be changed from here. Clone it to this board and edit the copy.",
+        "risk_policy_not_inherited": "It is already this board's own policy: edit it directly, or delete it if you no longer want it offered."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -2721,6 +2725,12 @@
         "load": "The audit log could not be loaded.",
         "loadMore": "Could not load older entries"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Merge postures shared by every board in this account. Each board inherits these read-only, and can clone one to edit a copy or hide it. Which policy governs a task that picked none is set per board.",
+      "empty": "No account-wide risk policies yet. Boards run on their own libraries until you add one.",
+      "loadFailed": "Could not load account risk policies",
+      "confirmDelete": "\"{name}\" will be withdrawn from every board in this account. Tasks that picked it fall back to their board's default."
     }
   },
   "mcpAuthorize": {
@@ -2840,7 +2850,8 @@
         "team": "Team & access",
         "fragments": "Context fragments",
         "skills": "Skills",
-        "foundational": "Foundational services"
+        "foundational": "Foundational services",
+        "riskPolicies": "Risk policies"
       }
     },
     "infrastructure": {
@@ -3286,7 +3297,11 @@
         "created": "Policy created",
         "createFailed": "Could not create policy",
         "defaultFailed": "Could not set default",
-        "deleteFailed": "Could not delete policy"
+        "deleteFailed": "Could not delete policy",
+        "cloned": "Policy cloned to this board",
+        "cloneFailed": "Could not clone policy",
+        "hideFailed": "Could not hide policy",
+        "unhideFailed": "Could not restore policy"
       },
       "forkDecision": {
         "label": "Implementation-fork decision",
@@ -3351,6 +3366,32 @@
       "autoAnswer": {
         "label": "Auto-answer confidence floor (%)",
         "hint": "How sure the Requirement Writer must be for an unwatched run to keep its suggested answer instead of stopping for a person. Only findings the reviewer judged answerable without a product owner are eligible."
+      },
+      "tier": {
+        "account": "From the account",
+        "accountHint": "Defined for the whole account. Every board inherits it; only an account admin can change it."
+      },
+      "own": {
+        "heading": "This board's policies"
+      },
+      "inherited": {
+        "heading": "Inherited from the account",
+        "hint": "Shared with every board in this account. Clone one to edit a copy here, or hide it so no task on this board can pick it.",
+        "clone": "Clone to board",
+        "cloneHint": "Copy this policy into the board, where you can edit its limits.",
+        "copyName": "{name} (copy)",
+        "hide": "Hide",
+        "hideHint": "Stop offering this policy on this board. You can restore it later."
+      },
+      "hidden": {
+        "heading": "Hidden account policies",
+        "restore": "Restore",
+        "withdrawn": "No longer defined by the account",
+        "loadFailed": "This list could not be loaded, so a policy may be hidden without appearing here."
+      },
+      "confirmHide": {
+        "title": "Hide this policy?",
+        "body": "\"{name}\" will not be offered on this board, and tasks that picked it fall back to the board default. You can restore it later."
       }
     },
     "observabilityConnection": {

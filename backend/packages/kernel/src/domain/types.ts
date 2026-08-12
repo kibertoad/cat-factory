@@ -515,6 +515,12 @@ export type {
   RequirementConcernLevel,
   CreateRiskPolicyInput,
   UpdateRiskPolicyInput,
+  CloneRiskPolicyInput,
+  // The two tiers a risk policy can be stored at, the merged library entry a board picks from,
+  // and one account policy a board is hiding.
+  RiskPolicyTier,
+  RiskPolicyLibraryEntry,
+  RiskPolicySuppression,
   // Whether a policy answers a run's own automatic-loop caps, and which of a workspace's two
   // default policies a run resolves when its task pinned none.
   RunAutonomy,

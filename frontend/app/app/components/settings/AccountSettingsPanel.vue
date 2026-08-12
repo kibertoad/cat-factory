@@ -2,14 +2,15 @@
 // Account settings — a single tabbed modal for the per-account configuration, distinct
 // from Workspace settings. Hosts the team panel (members + roles, invitations, email
 // sender, account-wide API keys; org-scoped, with a create-org CTA on a personal account)
-// the account-tier prompt-fragment library, the repo-sourced skills, and the foundational-service
-// catalog (all available for every account type).
+// the account-tier prompt-fragment library, the repo-sourced skills, the foundational-service
+// catalog and the account-tier risk policies (all available for every account type).
 // Opened from the SideBar Configuration section, the account switcher and the command
 // bar; bound to the `ui` store so any surface can open it and deep-link to a tab.
 import AccountTeamSettings from '~/components/layout/AccountTeamSettings.vue'
 import AccountFragmentSettings from '~/components/layout/AccountFragmentSettings.vue'
 import AccountSkillSettings from '~/components/layout/AccountSkillSettings.vue'
 import AccountFoundationalSettings from '~/components/layout/AccountFoundationalSettings.vue'
+import AccountRiskPolicySettings from '~/components/layout/AccountRiskPolicySettings.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -47,6 +48,12 @@ const tabs = computed(() => [
     icon: 'i-lucide-boxes',
     slot: 'foundational',
   },
+  {
+    value: 'riskPolicies',
+    label: t('settings.account.tabs.riskPolicies'),
+    icon: 'i-lucide-shield-check',
+    slot: 'riskPolicies',
+  },
 ])
 </script>
 
@@ -73,6 +80,14 @@ const tabs = computed(() => [
           <!-- Key on the account for the same reason the skills tab is: a mid-modal account
                switch must remount against a fresh owner-keyed store, not the stale initial one. -->
           <AccountFoundationalSettings
+            :key="accounts.activeAccountId ?? undefined"
+            :account-id="accounts.activeAccountId"
+          />
+        </template>
+        <template #riskPolicies>
+          <!-- Keyed on the account like its siblings: a mid-modal account switch must remount
+               against a fresh account-keyed store rather than the stale initial one. -->
+          <AccountRiskPolicySettings
             :key="accounts.activeAccountId ?? undefined"
             :account-id="accounts.activeAccountId"
           />

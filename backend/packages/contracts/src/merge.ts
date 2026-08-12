@@ -545,9 +545,75 @@ export const riskPolicySchema = v.object({
 })
 export type RiskPolicy = v.InferOutput<typeof riskPolicySchema>
 
+/**
+ * Which tier a risk policy in a board's visible library is STORED at, and therefore who may edit
+ * it. `account` policies are authored once for the whole account and every board under it
+ * inherits them read-only; `workspace` policies belong to the board that holds them.
+ *
+ * There is deliberately no `builtin` member, unlike the fragment and foundational-service tiers.
+ * The built-in catalog (`seedRiskPolicies()`) is COPIED into each board at creation and reconciled
+ * against the catalog from there, so a built-in is a `workspace` row a board owns outright: it can
+ * be edited, deleted and reseeded. A tier that carried no rows would have to answer what a reseed
+ * means, and the answer is already "the row this board owns".
+ */
+export const riskPolicyTierSchema = v.picklist(['account', 'workspace'])
+export type RiskPolicyTier = v.InferOutput<typeof riskPolicyTierSchema>
+
+/**
+ * One entry of the library a board actually picks from: the merge of its own policies with the
+ * ones it inherits from its account, each carrying the tier that owns it.
+ *
+ * The tier is what every reader needs and none can re-derive: a board's editor renders an
+ * inherited policy read-only beside a clone action, and the engine resolves a task's pin through
+ * the same merged view, so a pinned account policy governs a run exactly as a local one does.
+ * A workspace row WINS over an account row of the same id, and a board's suppression drops an
+ * inherited id from this list outright (`riskPolicySuppressionSchema`).
+ */
+export const riskPolicyLibraryEntrySchema = v.object({
+  ...riskPolicySchema.entries,
+  tier: riskPolicyTierSchema,
+})
+export type RiskPolicyLibraryEntry = v.InferOutput<typeof riskPolicyLibraryEntrySchema>
+
+/**
+ * One policy a board is HIDING: an account policy id it has opted out of, so the policy loses the
+ * merge and no task on that board can pin it.
+ *
+ * A hidden id is by construction absent from the merged library, which is what makes this a
+ * separate read rather than a flag on the entry — without it, hiding would be a one-way door with
+ * nothing on screen to undo.
+ *
+ * `inherited` is the honest half: `false` says the suppression currently hides NOTHING, because
+ * the account has since deleted the policy it named. A reader must not conclude a posture is
+ * being withheld when there is none to withhold, and the name is then the id, which is the only
+ * thing left that identifies what was hidden.
+ */
+export const riskPolicySuppressionSchema = v.object({
+  id: v.string(),
+  name: v.string(),
+  inherited: v.boolean(),
+})
+export type RiskPolicySuppression = v.InferOutput<typeof riskPolicySuppressionSchema>
+
 // ---- Request bodies -------------------------------------------------------
 
-const presetNameSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(60))
+/**
+ * How long a risk policy's name may be.
+ *
+ * Exported because the SPA has to AGREE about it, not merely be validated against it: cloning an
+ * inherited policy composes the copy's name client-side (the label is localized copy, and the
+ * backend does not localize prose), so the composer needs the same ceiling the schema enforces.
+ * Without it a long enough source name pushed the composed `{name} (copy)` past the limit and the
+ * clone action answered a 422 the operator had no field to act on.
+ */
+export const RISK_POLICY_NAME_MAX_LENGTH = 60
+
+const presetNameSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(RISK_POLICY_NAME_MAX_LENGTH),
+)
 const scoreSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
 const attemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(50))
 const iterationsSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20))
@@ -628,6 +694,24 @@ export const updateRiskPolicySchema = v.object({
   isUnattendedDefault: v.optional(v.boolean()),
 })
 export type UpdateRiskPolicyInput = v.InferOutput<typeof updateRiskPolicySchema>
+
+/**
+ * Copy an INHERITED account policy into the board's own tier, so the board can edit its numbers
+ * without an account admin and without changing the posture of every other board.
+ *
+ * The copy gets a FRESH id rather than shadowing the account id. An override sharing the id reads
+ * as the same policy in every picker and on every task that pinned it, so a board editing its copy
+ * would silently re-point work that was filed against the account's posture; a new id moves nothing
+ * that already exists and says what it is.
+ *
+ * `name` is optional and defaults to the source policy's, because two policies may share a name
+ * (nothing keys off it) and the backend does not localize prose — a caller that wants the copy
+ * marked as one sends the marked name itself.
+ */
+export const cloneRiskPolicySchema = v.object({
+  name: v.optional(presetNameSchema),
+})
+export type CloneRiskPolicyInput = v.InferOutput<typeof cloneRiskPolicySchema>
 
 /** Parse-or-throw an assessment payload an agent returned (the engine validates it). */
 export function parseMergeAssessment(value: unknown): MergeAssessment {

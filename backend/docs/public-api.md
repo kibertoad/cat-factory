@@ -1289,6 +1289,12 @@ a broken bootstrap.
 it in the app; every run this API starts (and every tracker dispatch and schedule fire) resolves the
 unattended one, because nothing is watching it. A task that pins `riskPolicyId` overrides both.
 
+The list is the workspace's whole visible library, which since
+[ADR 0055](./adr/0055-account-scoped-risk-policies.md) includes the policies its ACCOUNT defines and
+the board has not hidden. Those are pinnable exactly like the board's own, and neither carries a
+default claim (an account row cannot hold one), so a caller reading `isUnattendedDefault` to find what
+an unpinned start resolves is unaffected.
+
 On that row, `autoMergeEnabled` decides whether a run can land its pull request without a person, and
 `autonomy` decides whether it can REACH that point without one. Under `attended` a run can stop on a
 judgement call this API will list under `GET /runs/{runId}/decisions` and that only a human can

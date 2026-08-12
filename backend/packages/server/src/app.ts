@@ -451,7 +451,7 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
     mount: WORKSPACE_MOUNT,
     build: () => notificationSettingsController(),
   },
-  { name: 'riskPolicy', mount: WORKSPACE_MOUNT, build: () => riskPolicyController() },
+  { name: 'riskPolicy', mount: WORKSPACE_MOUNT, build: () => riskPolicyController('workspace') },
   { name: 'mergeTrackRecord', mount: WORKSPACE_MOUNT, build: () => mergeTrackRecordController() },
   { name: 'sharedStack', mount: WORKSPACE_MOUNT, build: () => sharedStackController() },
   { name: 'preflight', mount: WORKSPACE_MOUNT, build: () => preflightController() },
@@ -511,13 +511,14 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'slack', mount: WORKSPACE_MOUNT, build: () => slackController() },
 ]
 
-/** The per-account API, in registration order (the account tiers of the two library surfaces). */
+/** The per-account API, in registration order (the account tiers of the shared library surfaces). */
 export const ACCOUNT_CONTROLLERS: readonly ControllerEntry[] = [
   {
     name: 'fragmentLibrary',
     mount: ACCOUNT_MOUNT,
     build: () => fragmentLibraryController('account'),
   },
+  { name: 'riskPolicy', mount: ACCOUNT_MOUNT, build: () => riskPolicyController('account') },
   { name: 'skillLibrary', mount: ACCOUNT_MOUNT, build: () => skillLibraryController() },
   {
     name: 'foundationalService',

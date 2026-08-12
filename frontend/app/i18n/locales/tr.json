@@ -595,7 +595,9 @@
         "document_already_linked": "Belge zaten ekli",
         "dry_run_not_mergeable": "Prova çalışması birleştirilemez",
         "submission_not_allowed": "Bu çalışma için birleştirmeye izin verilmiyor",
-        "webhook_limit_reached": "Webhook sınırına ulaşıldı"
+        "webhook_limit_reached": "Webhook sınırına ulaşıldı",
+        "risk_policy_inherited": "Bu ilke hesaba ait",
+        "risk_policy_not_inherited": "Bu ilke bu panoya ait"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -634,7 +636,9 @@
         "document_already_linked": "Bu belge başka bir göreve ekli. Önce oradan ayırın ya da ayrı bir kopya ekleyin.",
         "dry_run_not_mergeable": "Bu pull request bir prova çalışmasından geliyor, bu yüzden buradan birleştirilemez. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın.",
         "submission_not_allowed": "Bu görevin birleştirme politikası, çalışmayı başlatan rolün bu tür bir değişikliği birleştirmesine izin vermiyor. Rolü buna izin veren bir takım arkadaşı birleştirebilir ya da bir yönetici birleştirme ön ayarındaki politikayı genişletebilir.",
-        "webhook_limit_reached": "Bu çalışma alanında zaten en fazla sayıda giden webhook kayıtlı. Artık ihtiyaç duymadığınız birini kaldırın ve bunu yeniden kaydedin."
+        "webhook_limit_reached": "Bu çalışma alanında zaten en fazla sayıda giden webhook kayıtlı. Artık ihtiyaç duymadığınız birini kaldırın ve bunu yeniden kaydedin.",
+        "risk_policy_inherited": "Hesaptaki tüm panolarla paylaşıldığı için buradan değiştirilemez. Bu panoya kopyalayıp kopyayı düzenleyin.",
+        "risk_policy_not_inherited": "Zaten bu panonun kendi ilkesi: doğrudan düzenleyin ya da artık sunulmasını istemiyorsanız silin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -2596,6 +2600,12 @@
         "load": "Denetim günlüğü yüklenemedi.",
         "loadMore": "Daha eski kayıtlar yüklenemedi"
       }
+    },
+    "accountRiskPolicies": {
+      "intro": "Bu hesaptaki tüm panoların paylaştığı birleştirme duruşları. Her pano bunları salt okunur devralır; birini kopyalayıp düzenleyebilir ya da gizleyebilir. Hiçbirini seçmemiş bir görevi hangi ilkenin yöneteceği pano başına belirlenir.",
+      "empty": "Henüz hesap genelinde risk ilkesi yok. Siz bir tane ekleyene kadar panolar kendi kitaplıklarını kullanır.",
+      "loadFailed": "Hesap risk ilkeleri yüklenemedi",
+      "confirmDelete": "\"{name}\" bu hesaptaki tüm panolardan geri çekilecek. Onu seçmiş görevler panolarının varsayılanına döner."
     }
   },
   "mcpAuthorize": {
@@ -2715,7 +2725,8 @@
         "team": "Ekip ve erişim",
         "fragments": "Bağlam parçaları",
         "skills": "Beceriler",
-        "foundational": "Temel hizmetler"
+        "foundational": "Temel hizmetler",
+        "riskPolicies": "Risk ilkeleri"
       }
     },
     "infrastructure": {
@@ -3152,7 +3163,11 @@
         "created": "İlke oluşturuldu",
         "createFailed": "İlke oluşturulamadı",
         "defaultFailed": "Varsayılan ayarlanamadı",
-        "deleteFailed": "İlke silinemedi"
+        "deleteFailed": "İlke silinemedi",
+        "cloned": "İlke bu panoya kopyalandı",
+        "cloneFailed": "İlke kopyalanamadı",
+        "hideFailed": "İlke gizlenemedi",
+        "unhideFailed": "İlke geri getirilemedi"
       },
       "autoMergeOnHint": "İlke sınırları içindeyken otomatik birleştir.",
       "autoMergeOffHint": "PR'yi her zaman insan incelemesine gönder.",
@@ -3214,6 +3229,32 @@
       "autoAnswer": {
         "label": "Otomatik yanıt güven eşiği (%)",
         "hint": "Gözetimsiz bir çalıştırmanın bir kişiyi beklemek yerine önerilen yanıtı kullanabilmesi için Requirement Writer’ın ne kadar emin olması gerektiği. Yalnızca inceleyicinin ürün sahibi olmadan yanıtlanabilir bulduğu bulgular uygundur."
+      },
+      "tier": {
+        "account": "Hesaptan",
+        "accountHint": "Tüm hesap için tanımlı. Her pano bunu devralır; yalnızca hesap yöneticisi değiştirebilir."
+      },
+      "own": {
+        "heading": "Bu panonun ilkeleri"
+      },
+      "inherited": {
+        "heading": "Hesaptan devralındı",
+        "hint": "Bu hesaptaki tüm panolarla paylaşılır. Bir ilkeyi kopyalayıp burada düzenleyebilir ya da gizleyerek bu panodaki hiçbir görevin seçememesini sağlayabilirsiniz.",
+        "clone": "Panoya kopyala",
+        "cloneHint": "Bu ilkeyi panoya kopyalayın; sınırlarını orada düzenleyebilirsiniz.",
+        "copyName": "{name} (kopya)",
+        "hide": "Gizle",
+        "hideHint": "Bu ilkeyi bu panoda artık sunma. Daha sonra geri getirebilirsiniz."
+      },
+      "hidden": {
+        "heading": "Gizlenen hesap ilkeleri",
+        "restore": "Geri getir",
+        "withdrawn": "Hesap tarafından artık tanımlanmıyor",
+        "loadFailed": "Bu liste yüklenemedi; bu nedenle burada görünmeyen gizlenmiş bir ilke olabilir."
+      },
+      "confirmHide": {
+        "title": "Bu ilke gizlensin mi?",
+        "body": "\"{name}\" bu panoda sunulmayacak ve onu seçmiş görevler panonun varsayılan ilkesine döner. Daha sonra geri getirebilirsiniz."
       }
     },
     "observabilityConnection": {

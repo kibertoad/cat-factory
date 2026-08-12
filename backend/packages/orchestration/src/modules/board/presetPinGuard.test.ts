@@ -1,5 +1,10 @@
 import { seedModelPresets, seedRiskPolicies } from '@cat-factory/kernel'
-import type { ModelPreset, ModelPresetRepository, RiskPolicyRepository } from '@cat-factory/kernel'
+import type {
+  ModelPreset,
+  ModelPresetRepository,
+  RiskPolicyRepository,
+  WorkspaceRiskPolicyReader,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { createPresetPinGuard } from './presetPinGuard.js'
 
@@ -22,17 +27,19 @@ describe('preset pin guard', () => {
   /** A library that HAS been read at least once, so it holds rows rather than the catalog. */
   const seeded = (rows: { id: string }[]) =>
     ({ list: () => Promise.resolve(rows) }) as unknown as ModelPresetRepository &
-      RiskPolicyRepository
+      RiskPolicyRepository &
+      WorkspaceRiskPolicyReader
 
   const guard = (over: {
     modelPresetRepository?: ModelPresetRepository
+    riskPolicyReader?: WorkspaceRiskPolicyReader
     riskPolicyRepository?: RiskPolicyRepository
   }) => createPresetPinGuard(over)
 
   it('accepts an id the workspace holds, and refuses one it does not', async () => {
     const pins = guard({
       modelPresetRepository: seeded([AUTHORED]),
-      riskPolicyRepository: seeded(seedRiskPolicies()),
+      riskPolicyReader: seeded(seedRiskPolicies()),
     })
     await expect(
       pins.assertPinsExist({ homeWorkspaceId: WS, modelPresetId: AUTHORED.id }),
@@ -60,7 +67,7 @@ describe('preset pin guard', () => {
     // seeding here would be a write performed in order to say no.
     const pins = guard({
       modelPresetRepository: seeded([]),
-      riskPolicyRepository: seeded([]),
+      riskPolicyReader: seeded([]),
     })
     await expect(
       pins.assertPinsExist({
@@ -72,6 +79,39 @@ describe('preset pin guard', () => {
     await expect(
       pins.assertPinsExist({ homeWorkspaceId: WS, modelPresetId: 'mdp_typo' }),
     ).rejects.toMatchObject({ details: { reason: 'model_preset_not_found' } })
+  })
+
+  it('still reads an unseeded board as the catalog when its ACCOUNT has authored a policy', async () => {
+    // The emptiness question is about the tier the catalog is SEEDED INTO, which since ADR 0055 is
+    // narrower than what a risk-policy read answers. Asked of the merged library, a single inherited
+    // policy made it non-empty and switched the catalog fallback off, refusing exactly the built-in
+    // ids an unseeded board is about to hold.
+    const pins = guard({
+      riskPolicyReader: seeded([{ id: 'mp_account_authored' }]),
+      riskPolicyRepository: seeded([]),
+    })
+    await expect(
+      pins.assertPinsExist({ homeWorkspaceId: WS, riskPolicyId: seedRiskPolicies()[0]!.id }),
+    ).resolves.toBeUndefined()
+    // The inherited policy itself is pinnable, and a typo is still refused.
+    await expect(
+      pins.assertPinsExist({ homeWorkspaceId: WS, riskPolicyId: 'mp_account_authored' }),
+    ).resolves.toBeUndefined()
+    await expect(
+      pins.assertPinsExist({ homeWorkspaceId: WS, riskPolicyId: 'mp_typo' }),
+    ).rejects.toMatchObject({ details: { reason: 'risk_policy_not_found' } })
+  })
+
+  it('stops consulting the catalog once the BOARD has authored its own library', async () => {
+    // The converse, and what keeps the case above safe: a built-in the board deleted is gone, so its
+    // id must be refused even while the account tier keeps the merged library non-empty.
+    const pins = guard({
+      riskPolicyReader: seeded([{ id: 'mp_account_authored' }, { id: 'mp_board_own' }]),
+      riskPolicyRepository: seeded([{ id: 'mp_board_own' }]),
+    })
+    await expect(
+      pins.assertPinsExist({ homeWorkspaceId: WS, riskPolicyId: seedRiskPolicies()[0]!.id }),
+    ).rejects.toMatchObject({ details: { reason: 'risk_policy_not_found' } })
   })
 
   it('stops consulting the catalog once the workspace has authored its own library', async () => {

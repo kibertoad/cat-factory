@@ -18,7 +18,6 @@ import {
   ValidationError,
   type FragmentOwnerKind,
   UnavailableError,
-  UnauthorizedError,
 } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -26,6 +25,7 @@ import type { Context } from 'hono'
 import type { FragmentLibraryModule } from '@cat-factory/orchestration'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { mountAccountMembership } from '../../http/accountAccess.js'
 import { loadWorkspaceAccess, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { assertCapability, requireCapability } from '../../http/guards.js'
 
@@ -88,10 +88,7 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
   // other doesn't: each shared mount prefix carries sibling controllers, and a `use('*')` inside a
   // sub-app lands on `<prefix>/*` and would authorize their routes too.
   if (scope === 'account') {
-    for (const resource of GUARDED_RESOURCES) {
-      app.use(resource, accountGuard)
-      app.use(`${resource}/*`, accountGuard)
-    }
+    mountAccountMembership(app, GUARDED_RESOURCES, 'Sign in to manage the library')
   } else {
     mountWorkspacePermission(app, 'settings.manage', GUARDED_RESOURCES)
   }
@@ -273,8 +270,8 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
  * document B's token can read into A's own library. Fails closed with the existence-hiding 404 the
  * workspace gate uses (never revealing whether the workspace exists / is in another account).
  *
- * `accountGuard` is the sign-in floor for EVERY account-tier route (it 401s a request with no
- * user), so a signed-in caller is always present here — including under dev-open, where the
+ * `mountAccountMembership` is the sign-in floor for EVERY account-tier route (it 401s a request with
+ * no user), so a signed-in caller is always present here — including under dev-open, where the
  * account routes still require a real session (unlike the workspace gate, this tier never passes
  * through anonymously). A missing user is therefore a hard denial, never an allow-all: rejecting it
  * up front keeps the check fail-closed even if this helper is ever reused off an unguarded mount.
@@ -291,15 +288,4 @@ async function requireViaWorkspaceAccess(
   if (account !== accountId) throw new NotFoundError('Workspace', viaWorkspaceId)
   const access = await loadWorkspaceAccess(container, viaWorkspaceId, userId)
   if (!access?.allowed) throw new NotFoundError('Workspace', viaWorkspaceId)
-}
-
-/** Guard an account-scoped request: require sign-in + membership (404 otherwise). */
-async function accountGuard(c: Context<AppEnv>, next: () => Promise<void>) {
-  const user = c.get('user')
-  if (!user) {
-    throw new UnauthorizedError('Sign in to manage the library')
-  }
-  // requireMember throws NotFoundError (→ 404) when the user isn't a member.
-  await c.get('container').accountService.requireMember(param(c, 'accountId'), user.id)
-  await next()
 }

@@ -47,7 +47,9 @@ import type {
   ReleaseHealthConfigRepository,
   ReportsRepository,
   RequirementReviewRepository,
+  AccountRiskPolicyRepository,
   RiskPolicyRepository,
+  RiskPolicySuppressionRepository,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
   SpendRollupRepository,
@@ -145,6 +147,11 @@ import {
   DrizzleSharedStackRepository,
 } from './drizzle/initiatives.js'
 
+import {
+  DrizzleAccountRiskPolicyRepository,
+  DrizzleRiskPolicySuppressionRepository,
+} from './drizzle/account-risk-policies.js'
+
 import { DrizzleMergeTrackRecordRepository } from './drizzle/mergeTrackRecord.js'
 
 import {
@@ -204,6 +211,8 @@ export interface CoreRepositories {
   brainstormSessionRepository: BrainstormSessionRepository
   initiativeRepository: InitiativeRepository
   riskPolicyRepository: RiskPolicyRepository
+  accountRiskPolicyRepository: AccountRiskPolicyRepository
+  riskPolicySuppressionRepository: RiskPolicySuppressionRepository
   mergeTrackRecordRepository: MergeTrackRecordRepository
   sharedStackRepository: SharedStackRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
@@ -269,6 +278,8 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     brainstormSessionRepository: new DrizzleBrainstormSessionRepository(db),
     initiativeRepository: new DrizzleInitiativeRepository(db),
     riskPolicyRepository: new DrizzleRiskPolicyRepository(db),
+    accountRiskPolicyRepository: new DrizzleAccountRiskPolicyRepository(db),
+    riskPolicySuppressionRepository: new DrizzleRiskPolicySuppressionRepository(db),
     mergeTrackRecordRepository: new DrizzleMergeTrackRecordRepository(db),
     sharedStackRepository: new DrizzleSharedStackRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
@@ -304,6 +315,12 @@ export {
   DrizzleDocInterviewRepository,
   DrizzleRequirementReviewRepository,
 } from './drizzle/reviews.js'
+// The account tier of the risk-policy library (ADR 0055) + a board's suppressions. Re-exported so
+// the conformance harness can author an account policy against the real store.
+export {
+  DrizzleAccountRiskPolicyRepository,
+  DrizzleRiskPolicySuppressionRepository,
+} from './drizzle/account-risk-policies.js'
 export { createDrizzleSandboxDeps } from './drizzle/sandbox.js'
 export { DrizzleTestSecretsRepository } from './drizzle/connections.js'
 export { DrizzleValidationConfigRepository } from './drizzle/connections.js'

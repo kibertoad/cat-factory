@@ -779,7 +779,13 @@ export type {
   SlackSettingsRepository,
   SlackMemberMappingRepository,
 } from './slack-repositories.js'
-export type { RiskPolicyRepository } from './risk-policy-repositories.js'
+export type {
+  AccountRiskPolicy,
+  AccountRiskPolicyRepository,
+  RiskPolicyRepository,
+  RiskPolicySuppressionRepository,
+  WorkspaceRiskPolicyReader,
+} from './risk-policy-repositories.js'
 export type {
   MergeTrackRecordRepository,
   MergeTrackRecordPatch,
