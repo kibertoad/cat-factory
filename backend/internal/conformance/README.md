@@ -10,24 +10,29 @@ or an engine path only one facade wires, fails a test instead of shipping.
 Nothing here executes on its own. `src/suites/*.ts` are libraries; the runnable entry points are the
 facade specs that call them:
 
-| Facade     | Entry point                                                        | Needs              |
-| ---------- | ------------------------------------------------------------------ | ------------------ |
-| Cloudflare | `backend/runtimes/cloudflare/test/integration/conformance.spec.ts` | workerd + local D1 |
-| Node       | `backend/runtimes/node/test/conformance.<group>.spec.ts`           | a real Postgres    |
-| Local      | `backend/runtimes/local/test/conformance.<group>.spec.ts`          | a real Postgres    |
+| Facade     | Entry point                                                                | Needs              |
+| ---------- | -------------------------------------------------------------------------- | ------------------ |
+| Cloudflare | `backend/runtimes/cloudflare/test/integration/conformance.<group>.spec.ts` | workerd + local D1 |
+| Node       | `backend/runtimes/node/test/conformance.<group>.spec.ts`                   | a real Postgres    |
+| Local      | `backend/runtimes/local/test/conformance.<group>.spec.ts`                  | a real Postgres    |
 
-The Worker runs the WHOLE suite from one spec (`defineConformanceSuite`); the Postgres facades
-split it per group (`defineExecutionConformance` and its siblings) so the largest group is the long
-pole of a parallel run rather than serialised behind the rest. A group's spec `describe.skip`s
-itself when `DATABASE_URL` is unset, so a run with no database is green and proves nothing.
+Every facade now splits the suite per group (`defineExecutionConformance` and its siblings), each
+spec importing its facade's harness module, so the largest group is the long pole of a parallel run
+rather than serialised behind the rest. The Worker used to run the whole suite from one spec, and
+that one file grew to 533 of its package's ~1400 tests: vitest's `--shard` slices by FILE COUNT, so
+no split of the lane could balance it and its shard came within 41 seconds of the 15-minute cap.
+`defineConformanceSuite` (the aggregate) is still exported and still what a NEW facade should reach
+for first. A Postgres group's spec `describe.skip`s itself when `DATABASE_URL` is unset, so a run
+with no database is green and proves nothing.
 
 **Run the Cloudflare one.** It needs no database, so it works on a machine with nothing set up, and
 it covers the same assertions. `CLAUDE.md` bans reaching for a package lane to check nothing else
-broke, and a suite edit is not the exception: name that spec on the command line.
+broke, and a suite edit is not the exception: name the spec for the group you touched on the command
+line (`conformance.core`, `.agents`, `.integration`, `.execution`, `.misc`, `.cache`).
 
 ```sh
 pnpm exec turbo run build --filter=@cat-factory/conformance   # see below, this is not optional
-cd backend/runtimes/cloudflare && pnpm exec vitest run test/integration/conformance.spec.ts
+cd backend/runtimes/cloudflare && pnpm exec vitest run test/integration/conformance.execution.spec.ts
 ```
 
 **The build step is the trap.** The facade specs import this package's BUILT output, so an unbuilt
@@ -49,7 +54,7 @@ catalog owes each of those suites is in
   Postgres, so it goes through `app.call` (the facade's real Hono app) or the harness's declared
   seams, never a runtime's own repository class.
 - **A new harness capability is a `ConformanceHarness` / `ConformanceApp` member implemented by
-  EVERY facade** (`runtimes/cloudflare/test/integration/conformance.spec.ts`,
+  EVERY facade** (`runtimes/cloudflare/test/integration/conformanceHarness.ts`,
   `runtimes/node/test/harness.ts`, `runtimes/local/test/harness.ts` and its mothership sibling). A
   member one facade leaves out is a parity hole the suite can no longer see.
 - **Seed state through the API a user would use.** The exception is state a user can no longer

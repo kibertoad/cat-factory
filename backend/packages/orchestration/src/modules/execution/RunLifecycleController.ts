@@ -135,7 +135,17 @@ export class RunLifecycleController {
       'Pipeline',
       pipelineId,
     )
-    return this.launch(workspaceId, block, pipeline, options)
+    // `return await`, NOT a bare `return`, and the same in `startAgentKind`: it is load-bearing on
+    // workerd, not the redundant await a lint rule reads it as. `launch` REFUSES synchronously (the
+    // launch-constraint gate, the gate-override arity check), so a bare `return` hands an
+    // ALREADY-REJECTED promise to this async function's adoption step, which attaches its handler
+    // one microtask later. workerd's unhandled-rejection detector runs at the end of the current
+    // microtask checkpoint and sees a rejected promise nobody is watching; V8's own detector waits
+    // a turn longer and never does. So every refusal here floated a phantom "unhandled rejection"
+    // on the Worker while the caller was awaiting it the whole time — invisible on Node, and on
+    // Cloudflare it reads in the logs like a crash rather than the 422 it is. Awaiting attaches the
+    // handler synchronously, so the rejection is never unobserved.
+    return await this.launch(workspaceId, block, pipeline, options)
   }
 
   /**
@@ -157,7 +167,8 @@ export class RunLifecycleController {
     await this.deps.requireWorkspace(workspaceId)
     const block = await this.deps.requireBlock(workspaceId, blockId)
     const pipeline = adHocPipelineFor(agentKind, this.deps.agentKindRegistry)
-    return this.launch(workspaceId, block, pipeline, options)
+    // `return await` for the reason `start` states above: `launch` can refuse synchronously.
+    return await this.launch(workspaceId, block, pipeline, options)
   }
 
   /**

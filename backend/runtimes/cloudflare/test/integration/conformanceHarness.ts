@@ -5,12 +5,6 @@ import {
   FakeEnvConfigRepairer,
   FakeRepoBootstrapper,
   RecordingEventPublisher,
-  defineCacheSuite,
-  defineConformanceSuite,
-  defineMergeTrackRecordSuite,
-  defineReviewFrictionSuite,
-  defineWorkspaceAccessSuite,
-  defineWorkspaceRbacSuite,
   makeIncorporatedClarityReview,
   makeReadyClarityReview,
   makeIncorporatedReview,
@@ -37,10 +31,16 @@ import { D1DocInterviewRepository } from '../../src/infrastructure/repositories/
 import { D1AccountSettingsRepository } from '../../src/infrastructure/repositories/D1AccountSettingsRepository'
 import { D1TaskRepository } from '../../src/infrastructure/repositories/D1TaskRepository'
 
-// Run the shared cross-runtime conformance suite against the Cloudflare Worker
-// facade (the real Hono app over a real local D1, inside workerd). The Node
-// facade runs the identical suite over real Postgres — together they mandate
-// feature parity: a behavioural difference fails the same assertion in one runtime.
+// The Cloudflare Worker's {@link ConformanceHarness}: the real Hono app over a real local D1,
+// inside workerd. The Node facade builds the same harness over real Postgres — together they
+// mandate feature parity: a behavioural difference fails the same assertion in one runtime.
+//
+// A MODULE, not a spec: the suite groups run as sibling `conformance.*.spec.ts` files that each
+// import this harness, mirroring the layout Node and local already use. vitest's `--shard` splits
+// by FILE COUNT (it hashes paths and slices equal counts, blind to what a file holds), so while
+// every group lived in one spec that ONE file carried 533 of this package's ~1400 tests and no
+// 3-way split could balance: its shard ran ~4x its siblings and came within 41 seconds of the
+// lane's 15-minute cap. Nine files can be distributed; one cannot be.
 
 type WorkerMakeAppOpts = Parameters<ConformanceHarness['makeApp']>[1]
 
@@ -298,20 +298,4 @@ const harness: ConformanceHarness = {
   },
 }
 
-defineConformanceSuite(harness)
-// Workspace-RBAC initiative (slice 2): the membership roster + access-mode persistence
-// must round-trip identically on D1 and Postgres.
-defineWorkspaceAccessSuite(harness)
-// Workspace-RBAC initiative (slice 3): the gate's resolution + viewer write floor + list
-// filtering, enforced over the real HTTP gate — identically on D1 and Postgres.
-defineWorkspaceRbacSuite(harness)
-// Opt-in review-debt friction: the four settings columns + the board's friction guard must
-// gate task creation identically on D1 and Postgres.
-defineReviewFrictionSuite(harness)
-// Merge track record: the classification → per-class rule → merge → effort tag → per-class SQL
-// rollup chain must behave identically on D1 and Postgres.
-defineMergeTrackRecordSuite(harness)
-// Caching initiative: the Worker serves the fragment catalog through the
-// ISOLATE-SAFE (pass-through) profile — coherence must hold there exactly as it
-// does through Node's live in-memory cache.
-defineCacheSuite(harness)
+export { harness }
