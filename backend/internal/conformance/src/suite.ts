@@ -18,12 +18,16 @@ import { defineMiscConformance } from './suites/misc.js'
 // upgrade) stays in each runtime's own suite.
 //
 // The suite is split into contiguous GROUP functions (core / agents / integration /
-// execution / misc), one file each under `suites/`, so the Postgres-backed runtimes can
-// run each group as its own spec file in parallel (vitest parallelises across files, not
-// within one). Each group emits its describes directly; when called standalone they are
-// top-level, when called from the aggregate below they nest under one `[name] conformance`
-// block. They hold no cross-group state (every register/clear is scoped to its own
-// describe), sharing only the pure helpers in `suites/shared.ts`.
+// execution / misc), one file each under `suites/`, so every facade can run each group as
+// its own spec file in parallel (vitest parallelises across files, not within one). Each
+// group emits its describes directly; when called standalone they are top-level, when
+// called from the aggregate below they nest under one `[name] conformance` block. They hold
+// no cross-group state (every register/clear is scoped to its own describe), sharing only
+// the pure helpers in `suites/shared.ts`.
+//
+// This list is what `scripts/check-conformance-group-parity.mjs` reads: adding a group here
+// without a spec file on all three facades fails that guard rather than reporting green
+// about assertions nothing runs.
 export {
   defineCoreConformance,
   defineAgentConformance,
@@ -32,10 +36,13 @@ export {
   defineMiscConformance,
 }
 
-// The aggregate the Cloudflare Worker runs (one file → one D1, `singleWorker`): every
-// group, each self-wrapping in its own `[name] conformance` describe block. The Postgres
-// runtimes instead call the individual group functions from separate spec files so they
-// parallelise across vitest workers.
+// The aggregate: every group, each self-wrapping in its own `[name] conformance` describe
+// block. No facade runs it today — all three call the group functions from separate spec
+// files, so the largest group is the long pole of a parallel run rather than serialised
+// behind the rest. It stays because it is the one call a NEW facade reaches for first, and
+// because "the whole suite" needs a name that cannot fall behind the parts: the parity guard
+// requires it to call every group exported above, so a group added to one and not the other
+// is a failure rather than a hole nobody can see from either side.
 export function defineConformanceSuite(harness: ConformanceHarness): void {
   defineCoreConformance(harness)
   defineAgentConformance(harness)

@@ -25,6 +25,12 @@ no split of the lane could balance it and its shard came within 41 seconds of th
 for first. A Postgres group's spec `describe.skip`s itself when `DATABASE_URL` is unset, so a run
 with no database is green and proves nothing.
 
+**Adding a group means adding a spec file to all three facades**, and
+`scripts/check-conformance-group-parity.mjs` (CI's `repo-guards` job) fails until you have: it
+requires every `define…Conformance` exported here to be called by the aggregate and by a spec on
+each facade. Nothing else can see that gap — a facade missing a group runs its remaining groups
+green, and assertions that never execute read exactly like assertions that passed.
+
 **Run the Cloudflare one.** It needs no database, so it works on a machine with nothing set up, and
 it covers the same assertions. `CLAUDE.md` bans reaching for a package lane to check nothing else
 broke, and a suite edit is not the exception: name the spec for the group you touched on the command

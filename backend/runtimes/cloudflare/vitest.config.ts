@@ -110,8 +110,8 @@ export default defineConfig(async () => {
       // card — tipped into a spurious 10s timeout while every other shard stayed green.
       //
       // So this now matches the NODE runtime's 30s (`runtimes/node/vitest.config.ts`), which
-      // is the real fix rather than a nudge: both facades run the SAME
-      // `defineConformanceSuite`, so holding the shared suite to a 3x tighter budget on the
+      // is the real fix rather than a nudge: both facades run the SAME conformance groups,
+      // so holding the shared suite to a 3x tighter budget on the
       // slower runtime (workerd + real D1) was a harness parity gap — the identical spec
       // passes on the Postgres shards and only ever failed here. Given the budget-bounded
       // driver above, the headroom cannot hide a stall; it only stops "slow" from reading as

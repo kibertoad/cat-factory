@@ -1,3 +1,4 @@
+import { beforeEach } from 'vitest'
 import { setLogLevel } from '@cat-factory/server'
 
 // Silence the app's own logger for the whole suite, the same way and for the same reasons as
@@ -6,5 +7,7 @@ import { setLogLevel } from '@cat-factory/server'
 // `createRecordingLogger()`, which never consults this gate).
 //
 // Symmetric with the Node and Worker facades' copies: the local facade runs the same engine and
-// the same conformance groups, so it produces the same transcript noise.
+// the same conformance groups, so it produces the same transcript noise, and `startLocal()`
+// establishes its own threshold exactly as `start()` does.
 setLogLevel('silent')
+beforeEach(() => setLogLevel('silent'))
