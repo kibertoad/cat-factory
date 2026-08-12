@@ -15,10 +15,12 @@ The five live-deployment acceptance specs used vitest as a shell while switching
 everything vitest does, and paid for the parts it could not switch off in workarounds that had become
 among the most complicated code in the package.
 
-**What the specs actually used.** Across 792 lines of spec, exactly six vitest APIs appeared:
-`describe`, `it`, `beforeAll`, `expect` (18 calls), and `inject` (2). No `vi.`, no mocking, no
-`afterAll`, no `test()`. Nothing is faked in this suite by design, so the mocking half of the
-framework was dead weight.
+**What the specs actually used.** Across 792 lines of spec, four vitest APIs appeared: `describe`
+(5 calls), `it` (16, two of them `it.each`), `beforeAll` (5) and `expect` (18). No `vi.`, no
+mocking, no `afterAll`, no bare `test()`. Nothing is faked in this suite by design, so the mocking
+half of the framework was dead weight. A fifth API, `inject` (2 calls), appeared nowhere in a spec:
+it lived in the shared `acceptance/fixtures.ts`, where it existed only to undo vitest's own file
+isolation, which is the next section.
 
 **What the config switched off**, each with a comment explaining why the default was wrong here: the
 test and hook timeouts (`0`, because there is no honest number for an hour-long real run), file
@@ -62,16 +64,25 @@ the suite prints itself. It is the shape the package's three other CLIs (`config
    wanting better failure output belongs in `evidence.ts` as a reduction with its own unit test, where
    it is checked on every CI run rather than only during an afternoon pass.
 3. **`src/scenarioRunner.ts` owns the four properties the framework used to**, and each is pinned by
-   its own unit test: ORDER (the array in `src/scenarios/index.ts`), BAIL (stop at the first failure;
-   what follows reports as `not run`, never as passed), the PREREQUISITE GATE before every scenario
-   that declares itself `gated`, and NO TIMEOUT in any form. It is pure over a seams object, so the
-   whole driver is testable with no deployment.
+   a unit test: ORDER (the array in `src/scenarios/index.ts`), BAIL (stop at the first failure; what
+   follows reports as `not run`, never as passed), the PREREQUISITE GATE before every scenario that
+   declares itself `gated`, and NO TIMEOUT in any form. It is pure over a seams object, so the whole
+   driver is testable with no deployment. Order takes TWO tests and needs both:
+   `test/scenarioRunner.test.ts` pins that the loop walks the array it is handed, over synthetic
+   scenarios, and `test/scenarios.test.ts` pins the REAL array (each id's numeric prefix against its
+   position, and that the preflight report is the one ungated scenario) as a relation rather than a
+   copy, so adding a sixth scenario in the right place passes and adding it in the wrong one fails.
 4. **Type stripping is Node's own.** The entry points target modern Node and carry no
-   `--experimental-strip-types`; the package declares `engines.node >= 24`, which is the version the
-   repository already documents for its generated project and its Node deployment.
-5. **The package's unit tests stay on vitest.** `vitest.config.ts` collects `test/**/*.test.ts`, 24
-   files of ordinary fast unit tests with mocks, and CI runs them. Nothing about them is served by this
-   change.
+   `--experimental-strip-types`; the package declares `engines.node >= 24`, which is now the whole
+   repository's floor (root `package.json`) as well as the version documented for the generated
+   project and the Node deployment. Nothing checks the version at runtime, deliberately: below 24 a
+   `.ts` entry point does not load at all, so the check would have to be a JavaScript shim in front
+   of every command, and Node 24+ is a supported-platform statement rather than a condition to
+   degrade around. It is stated in the README's prerequisites instead.
+5. **The package's unit tests stay on vitest.** `vitest.config.ts` collects `test/**/*.test.ts`,
+   ordinary fast unit tests with mocks, and CI runs them. Nothing about them is served by this change.
+   The include is deliberately narrow rather than counted: `src/` outside it is what keeps the
+   scenarios (real spend, a real cluster) out of every CI lane.
 
 **What had to survive unchanged**, because each is a property somebody debugged into existence: the
 ledger and resume (it survives across INVOCATIONS, which no runner gives you); bail semantics; rule 0
@@ -92,6 +103,15 @@ module graph, and a module graph was one spec file, so it really did run once pe
 module-level memo in one process would have quietly turned that into once per pass. Beyond rule 0,
 this is what refuses a pass whose workspace went over budget during the feature runs before the next
 scenario spends.
+
+**The one exception is a hand-off, not a memo** (`createPrerequisiteGate`). The `00-preflight`
+scenario evaluates every prerequisite to render them as named claims, and `01-adopt-and-scaffold`'s
+gate then re-evaluated the identical set seconds later: ~14 duplicate round trips, every verdict
+line printed to the operator twice, and two copies of each `prerequisite` entry in the journal
+`status` reduces. So that evaluation is offered to the NEXT `assert` and consumed by it exactly
+once, whatever happens after. It is bounded by construction rather than by a TTL, because the gate
+after the first is separated from it by a scenario that spent an afternoon, which is precisely the
+one that must not reuse anything.
 
 **The password is still asked UP FRONT**, even though one process could hold a lazily-collected answer
 for the whole pass. The reason changed rather than disappearing: a person is at the terminal when a

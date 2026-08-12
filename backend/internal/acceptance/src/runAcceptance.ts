@@ -25,16 +25,22 @@
 // configuration, the run id or the ledger was refused, or a person declined the password prompt, and
 // no model money was spent. **1 = a scenario failed**, which is a pass with real state behind it,
 // left in place to inspect and to resume.
+//
+// **Both exits are reached by RETURNING, and everything that could reach one another way is inside a
+// boundary.** An escaped throw is the third outcome the contract above does not have: Node prints a
+// stack and exits 1, which an operator reads as "a scenario failed, your state is still there,
+// resume it", and none of the summary, the ledger path or the resume command is printed at the
+// moment they are worth the most. So the pass has a boundary of its own (below), and the whole
+// command has one under it for anything before a pass exists.
 
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { requireConfig, stateDirFrom } from './config.ts'
 import { envFile } from './envFile.ts'
-import { assertPrerequisites, buildHarness, type Harness } from './harness.ts'
-import { describeFailure, resumeInvocation } from './operatorText.ts'
+import { buildHarness, type Harness } from './harness.ts'
+import { describeFailure, failureWithLocation, resumeInvocation, scrubbed } from './operatorText.ts'
+import { packageRoot } from './passFiles.ts'
 import { askForPersonalPassword } from './personalPasswordAsk.ts'
 import { createPersonalUnlock } from './personalUnlock.ts'
-import { createClient, readPinnedPreset } from './publicApi.ts'
+import { readPinnedPreset } from './publicApi.ts'
 import {
   formatScenarioSummary,
   runScenarios,
@@ -48,7 +54,16 @@ import { recordsFacts, resolveRunId } from './world.ts'
 /** How much of a failure the JOURNAL carries, the console holding the rest. See `journalFailure`. */
 const JOURNAL_FAILURE_CHARS = 300
 
-process.exitCode = await run()
+process.exitCode = await run().catch((error: unknown) => {
+  // The outermost boundary, and it answers 2 because everything inside it that can create anything
+  // has its own (see `runPass`): reaching here means the `.env`, the configuration or the run id
+  // threw on the way in, so nothing was created and nothing was spent.
+  console.error(
+    `The acceptance suite could not start, and this is a failure of the SUITE rather than a ` +
+      `refusal it meant to print. Nothing was created.\n\n${failureWithLocation(error)}`,
+  )
+  return 2
+})
 
 async function run(): Promise<number> {
   // The `.env` beside `package.json`, with the shell winning over the file (`envFile.ts` owns that
@@ -56,7 +71,7 @@ async function run(): Promise<number> {
   // configuration lives: eight variables, one of them an API key and one a ServiceAccount token, are
   // more than anyone wants to re-export per shell. Passed around as a record rather than merged into
   // `process.env`, so nothing downstream can read a value this file did not resolve.
-  const env = { ...envFile(resolve(dirname(fileURLToPath(import.meta.url)), '..')), ...process.env }
+  const env = { ...envFile(packageRoot), ...process.env }
 
   const opened = openPass(env)
   if (!opened.ok) {
@@ -65,7 +80,7 @@ async function run(): Promise<number> {
     console.error(opened.problem)
     return 2
   }
-  const { harness, runId } = opened
+  const { harness } = opened
 
   // Before the banner, as `globalSetup` was before the first test line: the prompt is the one thing
   // here a person has to read and answer, and anything drawn over it is what made this hard to follow
@@ -76,43 +91,75 @@ async function run(): Promise<number> {
     return 2
   }
 
+  return runPass(harness)
+}
+
+/**
+ * The pass itself, from the banner to the closing words, with the boundary that owns exit code 1.
+ *
+ * Everything from here on can have created something, which is what the boundary is for: a scenario
+ * FACTORY that refuses at build time, or a throw out of the summary or the closing words after an
+ * afternoon of real spend, is a bug in the suite rather than a scenario failure, and it must still
+ * leave the operator holding the run id, the ledger and the resume. Reported as what it is, so
+ * nobody goes hunting a scenario that did not fail.
+ */
+async function runPass(harness: Harness): Promise<number> {
+  const runId = harness.world.value.runId
   // Printed before the first scenario because an operator whose pass dies in the bugfix scenario
   // needs this value to resume and has no other way to recover it. Which makes it the most important
   // command this suite prints, and therefore the one that may least be spelled for a shell the
   // operator is not holding: `resumeInvocation` renders it for the one that will receive it.
+  //
+  // The address is SCRUBBED: it may legitimately carry userinfo, no URL policy rejects it, and this
+  // banner heads the file an afternoon-long pass is piped into.
   console.log(
-    `\nacceptance run ${runId} against ${harness.config.baseUrl}\n` +
+    `\nacceptance run ${runId} against ${scrubbed(harness.config.baseUrl)}\n` +
       `  ledger:  ${harness.world.path}\n` +
       `  journal: ${harness.journal.path}\n` +
       `  watch:   pnpm --filter @cat-factory/acceptance run status ${runId}\n` +
       `  resume:  ${resumeInvocation(runId)}\n`,
   )
 
-  const outcomes = await runScenarios(
-    {
-      open: (scenario) => {
-        // The journal phase is entered HERE, in the one place that knows a scenario is starting, so
-        // every line the scenario writes is filed under it. A scenario that entered its own phase
-        // would be a fifth copy of the same call and the first one forgotten would file an
-        // afternoon's observations under its predecessor.
-        harness.journal.enterPhase(scenario.id)
-        console.log(`\n${scenario.id}  ${scenario.title}`)
+  try {
+    const outcomes = await runScenarios(
+      {
+        open: (scenario) => {
+          // The journal phase is entered HERE, in the one place that knows a scenario is starting,
+          // so every line the scenario writes is filed under it. A scenario that entered its own
+          // phase would be a fifth copy of the same call and the first one forgotten would file an
+          // afternoon's observations under its predecessor.
+          harness.journal.enterPhase(scenario.id)
+          console.log(`\n${scenario.id}  ${scenario.title}`)
+        },
+        gate: () => harness.prerequisites.assert(),
+        log: (message) => console.log(message),
+        onFailure: (failure) => {
+          harness.journal.record('failure', journalFailure(failure))
+        },
+        now: () => Date.now(),
       },
-      gate: () => assertPrerequisites(harness),
-      log: (message) => console.log(message),
-      onFailure: (_scenario, failure) => {
-        harness.journal.record('failure', journalFailure(failure))
-      },
-      now: () => Date.now(),
-    },
-    SCENARIOS.map((build) => build(harness)),
-  )
+      SCENARIOS.map((build) => build(harness)),
+    )
 
-  console.log(formatScenarioSummary(outcomes))
-  // The ledger AS IT NOW STANDS, not as it opened: what a failed pass may be told to do next turns
-  // on whether anything was created, and the scenarios have been writing to it all afternoon.
-  console.log(closingWords(outcomes, runId, recordsFacts(harness.world.value)))
-  return scenariosExitCode(outcomes)
+    console.log(formatScenarioSummary(outcomes))
+    // The ledger AS IT NOW STANDS, not as it opened: what a failed pass may be told to do next turns
+    // on whether anything was created, and the scenarios have been writing to it all afternoon.
+    console.log(closingWords(outcomes, runId, recordsFacts(harness.world.value)))
+    return scenariosExitCode(outcomes)
+  } catch (error) {
+    console.error(
+      `\nThe pass stopped on a failure of the SUITE ITSELF, not of a scenario: nothing below is a ` +
+        `verdict about the deployment.\n\n${failureWithLocation(error)}\n\n` +
+        // Named unconditionally, unlike `closingWords`: this is the one exit whose own report may be
+        // the thing that broke, so what it owes the operator is the ids and the paths rather than
+        // advice derived from a ledger read it may not be able to make.
+        `The pass is '${runId}'. Its ledger is ${harness.world.path} and its journal is ` +
+        `${harness.journal.path}; both are as the last scenario left them.\n` +
+        `  report: pnpm --filter @cat-factory/acceptance run status ${runId}\n` +
+        `  resume: ${resumeInvocation(runId)}`,
+    )
+    return 1
+  }
 }
 
 /**
@@ -126,7 +173,7 @@ async function run(): Promise<number> {
  */
 function openPass(
   env: Record<string, string | undefined>,
-): { ok: true; harness: Harness; runId: string } | { ok: false; problem: string } {
+): { ok: true; harness: Harness } | { ok: false; problem: string } {
   try {
     const config = requireConfig(env)
     // `latest` with nothing on disk is a REFUSAL rather than a fresh pass: the two are opposite
@@ -137,11 +184,11 @@ function openPass(
     // whose own `runId` disagrees with its name was copied or renamed, and `WorldStore` will not
     // guess which half is right. Built before the password is asked for, so nobody is prompted by a
     // pass that cannot open its ledger.
-    return {
-      ok: true,
-      harness: buildHarness({ config, runId, unlock: createPersonalUnlock() }),
-      runId,
-    }
+    //
+    // The harness is the WHOLE result: the run id is not returned beside it, because the harness
+    // carries it (`world.value.runId`) and `WorldStore` refuses to open a ledger that disagrees with
+    // its own name. Two copies threaded separately is two things that can drift.
+    return { ok: true, harness: buildHarness({ config, runId, unlock: createPersonalUnlock() }) }
   } catch (error) {
     // `describeFailure`, not the interpolating describer: the configuration refusal names every
     // missing variable with what each is for, and kernel's human budget would cut it after the first
@@ -163,14 +210,18 @@ function openPass(
  * It asks THROUGH the unlock holder, so the password lands in the same closure a lazy ask would have
  * filled and never in a value this file holds. The suite has no function that hands a password back
  * any more, which is what makes "written nowhere" structural rather than a rule to remember.
+ *
+ * The catalog read goes through the PASS's own client, not a second one built to omit the unlock.
+ * That distinction was real under vitest, where `globalSetup` ran before any harness existed; here
+ * the holder is empty at this instant by construction (this is the ask that fills it), so its
+ * `headers()` answers `{}` and the two clients send byte-identical requests.
  */
 async function askUpFront(harness: Harness): Promise<string | null> {
   try {
     await askForPersonalPassword({
       log: (message) => console.log(message),
       hold: (reason) => harness.unlock.obtain(reason),
-      readPinned: () =>
-        readPinnedPreset(createClient(harness.config), harness.config.modelPresetId),
+      readPinned: () => readPinnedPreset(harness.client, harness.config.modelPresetId),
     })
     return null
   } catch (error) {

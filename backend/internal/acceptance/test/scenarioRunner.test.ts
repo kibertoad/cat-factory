@@ -20,7 +20,7 @@ import {
 
 type Recorded = {
   deps: ScenarioRunnerDeps
-  /** Every seam call, in order: `open:<id>`, `gate:<id>`, `log:<line>`, `fail:<id>`. */
+  /** Every seam call, in order: `open:<id>`, `gate`, `log:<line>`, `fail`. */
   calls: string[]
   logs: string[]
   failures: ScenarioFailure[]
@@ -37,16 +37,20 @@ function recorder(options: { gateThrows?: string } = {}): Recorded {
     failures,
     deps: {
       open: (scenario) => calls.push(`open:${scenario.id}`),
-      gate: async (scenario) => {
-        calls.push(`gate:${scenario.id}`)
+      // Neither `gate` nor `onFailure` is told WHICH scenario, so what a gate call can be attributed
+      // to here is the `open:` immediately before it. That is the seam's contract rather than a
+      // limitation of the recorder: there is one gate and it cannot vary per scenario, and the
+      // journal is already in the failing scenario's phase.
+      gate: async () => {
+        calls.push('gate')
         if (options.gateThrows) throw new Error(options.gateThrows)
       },
       log: (message) => {
         calls.push(`log:${message}`)
         logs.push(message)
       },
-      onFailure: (scenario, failure) => {
-        calls.push(`fail:${scenario.id}`)
+      onFailure: (failure) => {
+        calls.push('fail')
         failures.push(failure)
       },
       // Monotonic and deterministic, so a summary can be asserted on: one tick per reading.
@@ -216,9 +220,14 @@ describe('runScenarios', () => {
       scenario('02-third', { gated: true }),
     ])
 
-    expect(recorded.calls.filter((call) => call.startsWith('gate:'))).toEqual([
-      'gate:01-second',
-      'gate:02-third',
+    // Two gate calls, each immediately after its own scenario opened and before any step of it: the
+    // ungated report is the one with nothing between its `open` and its first step.
+    expect(recorded.calls.filter((call) => call === 'gate' || call.startsWith('open:'))).toEqual([
+      'open:00-preflight',
+      'open:01-second',
+      'gate',
+      'open:02-third',
+      'gate',
     ])
   })
 

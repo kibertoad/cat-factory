@@ -14,7 +14,9 @@ delivered it and CLOSED it, against a LIVE local deployment with nothing faked. 
 driver now owns (order, bail, the gate before every scenario, no timeout):
 [ADR 0057](../../docs/adr/0057-acceptance-standalone-runner.md).
 Type stripping is Node's own, so the scripts carry no `--experimental-strip-types` and the package
-declares `engines.node >= 24`. Needs a running deployment, a k3s cluster
+declares `engines.node >= 24`, matching the repository floor. Nothing checks that at runtime by
+design: below 24 the entry point does not load at all, and Node 24+ is a supported-platform
+statement rather than a condition the suite degrades around. Needs a running deployment, a k3s cluster
 and real model credentials; `src/config.ts` refuses with the whole list of missing VARIABLES, and
 `src/prerequisites.ts` then refuses with the whole list of unsatisfied DEPLOYMENT conditions, each
 carrying the steps and commands that fix it.
@@ -184,6 +186,7 @@ under `src/`.
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `src/runAcceptance.ts`       | The pass: what is settled before it starts, what an operator reads, the exit code.                                 |
 | `src/scenarioRunner.ts`      | The driver: order, bail, the gate before every gated scenario, the summary. Unit-tested.                           |
+| `src/scenarios/index.ts`     | The ORDER, as an array, pinned by a test against each id's own numeric prefix rather than a copy of the list.      |
 | `src/scenarios/preflight`    | Reports each prerequisite as its own step. Creates nothing, and is the one UNGATED scenario.                       |
 | `src/scenarios/adoptAndSca…` | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.                   |
 | `src/scenarios/featureWith…` | `pl_build` across both services; environment / CI / merge evidence.                                                |

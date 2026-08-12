@@ -259,3 +259,54 @@ export function formatPreflightFailure(report: PreflightReport): string | null {
     `See backend/internal/acceptance/README.md#prerequisites.`
   )
 }
+
+/** The pass's prerequisite gate: the driver's `assert`, and the report scenario's `evaluate`. */
+export type PrerequisiteGate = {
+  /**
+   * Every prerequisite, evaluated FRESH, for the scenario that RENDERS them one claim at a time.
+   *
+   * What it also does is stand the result down for the next {@link PrerequisiteGate.assert}, which
+   * is the whole reason the report scenario does not simply call the evaluation itself.
+   */
+  evaluate: () => Promise<PreflightReport>
+  /** Refuse the pass unless every required prerequisite is satisfied. Throws the whole refusal. */
+  assert: () => Promise<void>
+}
+
+/**
+ * The gate the driver runs before every gated scenario, over a fresh evaluation, EXCEPT where one
+ * was made for this pass a moment ago and nothing has happened since.
+ *
+ * Freshness is rule 0 and the reason there is no memo here: a pass takes an afternoon, so a
+ * workspace that went over budget during the feature runs, or a model unwired between them, must be
+ * refused before the next scenario spends rather than discovered as a run that stalls. A
+ * pass-scoped memo would quietly turn the per-scenario gate into a once-per-pass one, which is also
+ * what a resumed pass would skip entirely.
+ *
+ * The ONE exception is the seam between the report and the first gated scenario, and it is an
+ * exception because they are the same evaluation twice with nothing in between. `00-preflight`
+ * evaluates every prerequisite to render them as named claims; `01-adopt-and-scaffold`'s gate then
+ * re-evaluated the identical set seconds later, which is ~14 duplicate round trips, every verdict
+ * line printed to the operator twice, and two copies of each `prerequisite` entry in the journal
+ * `status` reduces. So an evaluation is OFFERED to the next `assert` and consumed by it: exactly
+ * once, whatever happens next, because the second gate of a pass is separated from the first by a
+ * scenario that spent an afternoon and is precisely the one that must not reuse anything.
+ */
+export function createPrerequisiteGate(evaluate: () => Promise<PreflightReport>): PrerequisiteGate {
+  let standing: PreflightReport | null = null
+  return {
+    evaluate: async () => {
+      const report = await evaluate()
+      standing = report
+      return report
+    },
+    assert: async () => {
+      // Consumed BEFORE the verdict is read, so a refusal cannot leave a stale report standing for
+      // whatever asks next.
+      const report = standing ?? (await evaluate())
+      standing = null
+      const failure = formatPreflightFailure(report)
+      if (failure) throw new Error(failure)
+    },
+  }
+}

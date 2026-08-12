@@ -273,6 +273,14 @@ this suite. What the gate cannot settle is a preset's `dryRunRoles`: the public 
 report which workspace role a key's runs are admitted under, so a non-empty list is STATED as a
 caveat rather than graded, which is the honest disposition for an answer the probe cannot reach.
 
+**The machine you run the suite from**
+
+- **Node 24 or newer**, which is the repository's floor (root `package.json`, `engines.node`) and
+  this package's too. The four commands below are `node src/<entry>.ts`, run by Node's own type
+  stripping with no flag, so an older Node does not fail a prerequisite: it fails to LOAD, with
+  `ERR_UNKNOWN_FILE_EXTENSION: Unknown file extension ".ts"` and nothing else to go on. Anything
+  below 24 is unsupported rather than degraded.
+
 **The deployment**
 
 - Running in **local mode** (`@cat-factory/local-server`), or any deployment you hold an `admin`
@@ -510,7 +518,10 @@ poll interval is ten seconds and whose journal has been silent for twenty minute
 is dead or detached, and nothing else distinguishes those from "still working".
 
 The command opens no connection to the deployment, creates nothing, and needs no API key, so it is
-safe to run against a pass that is currently going.
+safe to run against a pass that is currently going. It does read the same `.env` the pass does, for
+`ACCEPTANCE_STATE_DIR` and `ACCEPTANCE_RUN_ID` only: read off the shell alone it would look for the
+passes somewhere the pass never wrote them, and the command it would be disagreeing with is the
+`watch:` line the pass itself printed for the operator to paste.
 
 ## Resuming
 
@@ -791,23 +802,23 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/runAcceptance.ts`       | `pnpm run acceptance`. Settles the run id and the password, builds the harness, drives the scenarios, owns what an operator reads and the exit code.                                                                             |
 | `src/scenarioRunner.ts`      | The driver: order, bail, the per-step report, the summary, the exit code. Pure over its seams; unit-tested.                                                                                                                      |
-| `src/scenarios/index.ts`     | The ORDER, as an array. What the vitest sequencer used to be.                                                                                                                                                                    |
+| `src/scenarios/index.ts`     | The ORDER, as an array. What the vitest sequencer used to be. Unit-tested against each id's own numeric prefix, so a scenario added out of place fails a test rather than a live pass.                                           |
 | `src/scenarios/*.ts`         | The five scenarios themselves, one per file, each a factory over the harness.                                                                                                                                                    |
 | `src/harness.ts`             | What every scenario is handed, built once per pass, plus the prerequisite gate the driver runs before each of them.                                                                                                              |
 | `src/personalPasswordAsk.ts` | What the up-front ask decides, and what it does when it cannot: degrade and continue, except for a person declining. Unit-tested.                                                                                                |
 | `src/config.ts`              | Environment → config in two halves (a BOARD, and what it takes to RUN a pass on one), reporting every problem at once. Pure; unit-tested.                                                                                        |
-| `src/envFile.ts`             | The `.env` at the package root, read the same way by the pass, `reset` and `configure`. Pure.                                                                                                                                    |
-| `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.                                                                                                                                                              |
+| `src/envFile.ts`             | The `.env` at the package root, read the same way by all four commands. Pure.                                                                                                                                                    |
+| `src/preflight.ts`           | The prerequisite vocabulary, runner, refusal, and the pass's GATE, which is where the report scenario's evaluation is handed to the gate seconds behind it rather than made twice. Pure; unit-tested.                            |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                                                           |
 | `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                                                      |
 | `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Unit-tested; reads the ambient shell unless a dialect is passed. |
 | `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested.                                  |
 | `src/presets.ts`             | The one preset-to-catalog join `configure`, `model-preset` and the up-front unlock share. Pure; unit-tested.                                                                                                                     |
 | `src/world.ts`               | The resumable ledger: what a pass created, and what a ledger says.                                                                                                                                                               |
-| `src/passFiles.ts`           | Where a pass's files live, which passes a state directory holds, and the `latest` pointer.                                                                                                                                       |
+| `src/passFiles.ts`           | Where a pass's files live, which passes a state directory holds, the `latest` pointer, and the ONE spelling of the package root all four commands resolve their `.env` against.                                                  |
 | `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                                                   |
 | `src/status.ts`              | Ledger + journal → "where is this pass". Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.                                                                                                    |
-| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                                                                                                                                                                         |
+| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else, finding them through the same `.env` the pass does.                                                                                                                     |
 | `src/reset.ts`               | Starting over: which frames a clear targets (this configuration's two questions, a named pass, or `--all`), the order the deletes go in, what it refuses to remove, and what it cannot reclaim. Driven by seams; unit-tested.    |
 | `src/resetCli.ts`            | `pnpm run reset`. Supplies the real clients and file removals, parses the positional and the three flags, owns the exit code.                                                                                                    |
 | `src/providerPurge.ts`       | `--purge-repos`: composing the issue and repository halves into one plan, one apply and one report. Unit-tested through its two halves.                                                                                          |

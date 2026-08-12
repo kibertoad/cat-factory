@@ -61,6 +61,11 @@ or open the website PR yourself.
 
 ## Common commands
 
+**Node 24 or newer**, which the root `package.json` declares as `engines.node`. Below that is not
+supported and not worked around: several entry points here are TypeScript run by Node's own type
+stripping (on by default from 23.6), and the source targets that floor rather than the oldest
+runtime it might meet.
+
 ```sh
 pnpm install            # one install for the whole workspace
 pnpm build              # build the publishable libraries (dist)

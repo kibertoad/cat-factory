@@ -59,6 +59,25 @@ export function describeFailure(error: unknown): string {
 }
 
 /**
+ * A thrown value as the whole refusal, with the developer's half under it.
+ *
+ * The message chain comes first and is the whole message for everything this suite throws on
+ * purpose: a preflight refusal, a deadline naming its last observation, a graded claim list. Those
+ * are deliverables rather than log lines, so they are rendered through {@link describeFailure} (the
+ * TERMINAL budget) rather than the 400-character one a toast reads, and a stack over the top of one
+ * is noise.
+ *
+ * The frames come second and are for the other kind of failure, a bug in the suite itself, where
+ * `Cannot read properties of undefined` with no location is an afternoon of guessing. Vitest printed
+ * both; so does this, at both of the two places that report an unexpected throw (a scenario's, in
+ * `scenarioRunner.ts`, and the pass's own, in `runAcceptance.ts`).
+ */
+export function failureWithLocation(error: unknown): string {
+  const location = thrownLocation(error)
+  return location ? `${describeFailure(error)}\n\n${location}` : describeFailure(error)
+}
+
+/**
  * Where a thrown value came FROM, capped, or null when it says nothing about that.
  *
  * The sibling of {@link describeThrown} and the answer to a different reader. Everything this suite
@@ -68,9 +87,17 @@ export function describeFailure(error: unknown): string {
  * thing is the file and line: vitest printed a stack under every failure, and dropping it with the
  * framework would have made that class of failure an afternoon of guessing.
  *
- * The FRAMES only, matched on their own `at ` shape rather than by cutting the message off the front
- * of `error.stack`. A stack begins with as many lines as the message has, and this suite's messages
- * routinely run to twenty; anything that assumed one would print the refusal a second time.
+ * The FRAMES only, and the message is cut off the front BY ITS OWN CONTENT rather than by counting
+ * lines. V8 builds a stack as `${name}: ${message}` followed by the frames, so the end of
+ * `error.message` is exactly where the frames may begin; a fixed number of header lines is the thing
+ * that cannot be assumed, because this suite's messages routinely run to twenty.
+ *
+ * Scanning the WHOLE stack for `at ` was the same assumption wearing a safer face. These messages
+ * are numbered remedies, pasted command blocks and folded-in provider error bodies, so a line of one
+ * beginning with whitespace and `at ` is ordinary prose: lifted out, it is rendered under the failure
+ * as though it were a frame AND printed a second time, having already appeared in the message above.
+ * A message the stack does not carry (a subclass that rebuilt it) falls back to the whole string,
+ * which is no worse than before.
  *
  * Capped, and the cap SAYS what it dropped: the tail of a stack is Node's own module machinery, and a
  * reader who assumed the six frames were all of it would conclude the throw happened at top level.
@@ -78,11 +105,27 @@ export function describeFailure(error: unknown): string {
 export function thrownLocation(error: unknown, limit = 6): string | null {
   const stack = error instanceof Error ? error.stack : undefined
   if (!stack) return null
-  const frames = stack.split('\n').filter((line) => /^\s+at /.test(line))
+  const messageEnd = error instanceof Error ? endOfMessage(stack, error.message) : 0
+  const frames = stack
+    .slice(messageEnd)
+    .split('\n')
+    .filter((line) => /^\s+at /.test(line))
   if (frames.length === 0) return null
   const shown = frames.slice(0, limit).map((frame) => `  ${frame.trim()}`)
   const dropped = frames.length - shown.length
   return [...shown, ...(dropped > 0 ? [`  … ${dropped} more frame(s)`] : [])].join('\n')
+}
+
+/**
+ * Where the message region of a stack ENDS, or 0 when this stack does not carry the message.
+ *
+ * `indexOf` rather than a length arithmetic on the `Name: ` prefix: an error's `name` is writable
+ * and a cause chain re-renders, so the offset of the message is not something to compute. An empty
+ * message matches at 0 and correctly cuts nothing.
+ */
+function endOfMessage(stack: string, message: string): number {
+  const at = stack.indexOf(message)
+  return at === -1 ? 0 : at + message.length
 }
 
 /**

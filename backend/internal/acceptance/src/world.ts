@@ -295,6 +295,37 @@ export class WorldStore {
 }
 
 /**
+ * What each ledger slot IS, which is the question `recordsFacts` turns on.
+ *
+ * `created` is a thing that exists outside this process because the pass made it: a board service,
+ * a run, an issue on the provider. `bookkeeping` is anything else the ledger carries about the pass
+ * itself, which is evidence of nothing having been created.
+ */
+type LedgerSlot = 'created' | 'bookkeeping'
+
+/**
+ * Every slot a ledger holds, classified, EXHAUSTIVE over `World` by construction.
+ *
+ * The `satisfies` is the point: a field added to `World` fails to compile until it is named here,
+ * so the classification cannot silently acquire a fifth state ("we never decided"). Scanning the
+ * whole object instead read every non-null value as a created thing, which is right for today's
+ * ledger and wrong the moment one carries something that is not one: a `startedAt` or a `notes`
+ * would compile, pass every test, and from then on report EVERY pass (including a fresh attempt a
+ * prerequisite refused before anything existed) as having created something.
+ */
+const LEDGER_SLOTS = {
+  backend: 'created',
+  frontend: 'created',
+  scaffoldBackend: 'created',
+  scaffoldFrontend: 'created',
+  featureBackend: 'created',
+  featureFrontend: 'created',
+  bugfix: 'created',
+  intakeIssue: 'created',
+  issueDelivery: 'created',
+} satisfies Record<Exclude<keyof World, 'runId'>, LedgerSlot>
+
+/**
  * Whether this pass has recorded a FACT: anything at all on the deployment or the provider.
  *
  * The one rule behind two answers that must never disagree. `status` uses it to decide whether the
@@ -304,11 +335,13 @@ export class WorldStore {
  * refused before anything was created. It is also the rule the `latest` pointer follows, which is why
  * a refused attempt never claims it.
  *
- * Over every record rather than a named subset, so a ledger slot added later counts with no second
- * edit: the alternative is a new kind of work that a pass can create and then report as nothing.
+ * `!= null` rather than `!== null`: a slot a hand-edited ledger left `undefined` is an absent
+ * record, and reading it as a present one is the same lie in the same direction.
  */
 export function recordsFacts(world: World): boolean {
-  return Object.entries(world).some(([key, value]) => key !== 'runId' && value !== null)
+  return Object.entries(LEDGER_SLOTS).some(
+    ([key, slot]) => slot === 'created' && world[key as keyof World] != null,
+  )
 }
 
 /**

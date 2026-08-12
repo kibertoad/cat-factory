@@ -19,9 +19,10 @@ import { serviceTitles } from './instructions.ts'
 import { Journal } from './journal.ts'
 import type { PersonalUnlock } from './personalUnlock.ts'
 import {
-  formatPreflightFailure,
+  createPrerequisiteGate,
   formatPreflightLine,
   type PreflightReport,
+  type PrerequisiteGate,
   runPreflight,
 } from './preflight.ts'
 import { PREREQUISITES } from './prerequisites.ts'
@@ -45,7 +46,15 @@ export type Harness = {
    * empty (and lazy) otherwise.
    */
   unlock: PersonalUnlock
+  /**
+   * The pass's prerequisite gate: the driver's refusal before every gated scenario, and the report
+   * scenario's own evaluation. ONE object, so the two cannot come to evaluate different things.
+   */
+  prerequisites: PrerequisiteGate
 }
+
+/** Everything an evaluation of the prerequisites reads. The harness, minus what only a scenario needs. */
+type PrerequisiteInputs = Pick<Harness, 'config' | 'client' | 'deployment' | 'world' | 'journal'>
 
 /**
  * Build the pass's harness.
@@ -61,13 +70,20 @@ export function buildHarness(options: {
 }): Harness {
   const { config, runId, unlock } = options
   const world = new WorldStore(config.stateDir, runId)
-  return {
+  // Named, because the gate closes over exactly these and the harness closes over the gate: taking
+  // the whole `Harness` would be a cycle, and `PrerequisiteInputs` says which half an evaluation
+  // actually reads.
+  const inputs: PrerequisiteInputs = {
     config,
-    unlock,
     client: createClient(config, unlock),
     deployment: new DeploymentApi({ baseUrl: config.baseUrl }),
     world,
     journal: new Journal(world.dir, runId),
+  }
+  return {
+    ...inputs,
+    unlock,
+    prerequisites: createPrerequisiteGate(() => evaluatePrerequisites(inputs)),
   }
 }
 
@@ -83,10 +99,11 @@ export function buildHarness(options: {
  * workspace that went over budget during the feature runs, or a model unwired between them, is
  * refused before the next scenario spends rather than discovered as a run that stalls.
  *
- * The volume is unchanged from the vitest shape: five evaluations of a handful of cheap reads.
+ * The one place a report is REUSED is the seam between the preflight report and the gate that runs
+ * seconds later with nothing in between; `createPrerequisiteGate` owns that and nothing else does.
  */
-export function evaluatePrerequisites(harness: Harness): Promise<PreflightReport> {
-  const { config, client, deployment, world, journal } = harness
+function evaluatePrerequisites(inputs: PrerequisiteInputs): Promise<PreflightReport> {
+  const { config, client, deployment, world, journal } = inputs
   return runPreflight(
     PREREQUISITES,
     {
@@ -120,18 +137,6 @@ export function evaluatePrerequisites(harness: Harness): Promise<PreflightReport
       },
     },
   )
-}
-
-/**
- * The gate the driver runs before every gated scenario.
- *
- * It throws ONE error naming every unsatisfied prerequisite (`preflight.ts` builds it), which is
- * what "fail loudly" has to mean for a suite whose alternative failure mode is an afternoon of real
- * spend ending in a message about something else.
- */
-export async function assertPrerequisites(harness: Harness): Promise<void> {
-  const failure = formatPreflightFailure(await evaluatePrerequisites(harness))
-  if (failure) throw new Error(failure)
 }
 
 /**

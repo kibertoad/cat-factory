@@ -10,12 +10,10 @@
 // nothing there, and it writes exactly one file.
 
 import { readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { createConsoleIo, createNodeShell } from '@cat-factory/cli'
 import { configure, connectDeployment } from './configure.ts'
-
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+import { packageRoot } from './passFiles.ts'
 
 const outcome = await configure({
   io: createConsoleIo(),

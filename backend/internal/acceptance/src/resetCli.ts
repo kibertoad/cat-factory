@@ -22,13 +22,17 @@
 // Setting `process.exitCode` and letting the process end on its own flushes what was written.
 
 import { rmSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { PrReportRunProvider } from '@cat-factory/sdk'
 import { type BoardConfig, resolveBoardConfig, resolveReporterConfig } from './config.ts'
 import { envFile } from './envFile.ts'
-import { describeThrown, resetInvocation } from './operatorText.ts'
-import { latestPointerPath, listPasses, readLatestPointer, resolveStateDir } from './passFiles.ts'
+import { describeThrown, resetInvocation, scrubbed } from './operatorText.ts'
+import {
+  latestPointerPath,
+  listPasses,
+  packageRoot,
+  readLatestPointer,
+  resolveStateDir,
+} from './passFiles.ts'
 import {
   formatProviderPlan,
   formatProviderReport,
@@ -68,7 +72,7 @@ async function run(): Promise<number> {
   // owns that rule). Read here rather than left to `process.env` because that file IS where an
   // operator's configuration lives: the pass reads it the same way (`envFile.ts`), and a cleanup that
   // only saw the shell would refuse a perfectly configured checkout with six missing variables.
-  const env = { ...envFile(resolve(dirname(fileURLToPath(import.meta.url)), '..')), ...process.env }
+  const env = { ...envFile(packageRoot), ...process.env }
 
   const resolution = resolveBoardConfig(env)
   if (!resolution.ok) {
@@ -140,7 +144,7 @@ async function run(): Promise<number> {
   const client = resetClient(sdk)
 
   console.log(
-    `reset against ${config.baseUrl} (workspace ${config.workspaceId})\n` +
+    `reset against ${scrubbed(config.baseUrl)} (workspace ${config.workspaceId})\n` +
       `  repositories: ${config.repoOwner}/${config.repos.backend}, ` +
       `${config.repoOwner}/${config.repos.frontend}\n` +
       `  name prefix:  ${config.namePrefix}\n` +

@@ -26,7 +26,7 @@
 //     anonymous expiry, which is the exact regression the disabled vitest timeout existed to prevent.
 
 import { formatDuration } from './deadline.ts'
-import { describeFailure, thrownLocation } from './operatorText.ts'
+import { failureWithLocation } from './operatorText.ts'
 
 /**
  * Run one named piece of work, printed as it starts and timed as it ends.
@@ -75,12 +75,24 @@ export type ScenarioOutcome = {
 export type ScenarioRunnerDeps = {
   /** A scenario is opening: bind the journal phase and announce it. */
   open: (scenario: Scenario) => void
-  /** The prerequisite gate, run as this loop's own first step for every gated scenario. */
-  gate: (scenario: Scenario) => Promise<void>
+  /**
+   * The prerequisite gate, run as this loop's own first step for every gated scenario.
+   *
+   * It takes NO scenario, because there is exactly one gate and it cannot vary by scenario: what
+   * varies is only whether it runs, which is the scenario's own `gated` flag and this loop's
+   * decision. A parameter here would advertise a per-scenario gate that nothing can implement.
+   */
+  gate: () => Promise<void>
   /** Operator output. */
   log: (message: string) => void
-  /** A scenario failed: the durable half of the report (`journal.ts`'s `failure` kind). */
-  onFailure: (scenario: Scenario, failure: ScenarioFailure) => void
+  /**
+   * A scenario failed: the durable half of the report (`journal.ts`'s `failure` kind).
+   *
+   * Also without the scenario, and for a related reason: the journal is already in that scenario's
+   * PHASE (the `open` seam entered it), so a handler that took the scenario would be re-deciding
+   * what the line is filed under, which is exactly how two answers come to disagree.
+   */
+  onFailure: (failure: ScenarioFailure) => void
   now: () => number
 }
 
@@ -135,7 +147,7 @@ async function runScenario(deps: ScenarioRunnerDeps, scenario: Scenario): Promis
     // opening failed is a failed scenario with a summary, not an unhandled rejection that ends the
     // pass with no report.
     deps.open(scenario)
-    if (scenario.gated) await step(GATE_STEP, () => deps.gate(scenario))
+    if (scenario.gated) await step(GATE_STEP, () => deps.gate())
     await scenario.run(step)
     return {
       id: scenario.id,
@@ -145,9 +157,9 @@ async function runScenario(deps: ScenarioRunnerDeps, scenario: Scenario): Promis
       failure: null,
     }
   } catch (error) {
-    const failure = { step: current, text: failureText(error) }
+    const failure = { step: current, text: failureWithLocation(error) }
     deps.log(`    FAIL  (${formatDuration(deps.now() - startedAt)})\n\n${failure.text}\n`)
-    deps.onFailure(scenario, failure)
+    deps.onFailure(failure)
     return {
       id: scenario.id,
       status: 'failed',
@@ -160,24 +172,6 @@ async function runScenario(deps: ScenarioRunnerDeps, scenario: Scenario): Promis
 
 /** What the gate is called wherever it is reported. Named once so the two readers agree. */
 export const GATE_STEP = 'prerequisites (checked before every scenario, resumed passes included)'
-
-/**
- * A thrown value as the failure an operator reads, with the developer's half under it.
- *
- * The message chain comes first and is the whole message for everything this suite throws on
- * purpose: a preflight refusal, a deadline naming its last observation, a graded claim list. Those
- * are deliverables rather than log lines, so they are rendered through `describeFailure` (the
- * TERMINAL budget) rather than the 400-character one a toast reads, and a stack over the top of one
- * is noise.
- *
- * The frames come second and are for the other kind of failure, a bug in the suite itself, where
- * `Cannot read properties of undefined` with no location is an afternoon of guessing. Vitest printed
- * both; so does this.
- */
-function failureText(error: unknown): string {
-  const location = thrownLocation(error)
-  return location ? `${describeFailure(error)}\n\n${location}` : describeFailure(error)
-}
 
 /**
  * The pass in five lines, printed after the failure text rather than instead of it.
