@@ -8,6 +8,7 @@
     "acceptance": "vitest run --config vitest.acceptance.config.ts",
     "acceptance:watch": "vitest --config vitest.acceptance.config.ts",
     "configure": "node --experimental-strip-types src/configureCli.ts",
+    "reset": "node --experimental-strip-types src/resetCli.ts",
     "status": "node --experimental-strip-types src/statusCli.ts",
     "test": "vitest",
     "test:run": "vitest run",

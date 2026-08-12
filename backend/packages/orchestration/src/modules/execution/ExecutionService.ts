@@ -1399,7 +1399,11 @@ export class ExecutionService {
   }
 
   /** @see RunLifecycleController.teardownForBlockTree */
-  teardownForBlockTree(workspaceId: string, rootId: string): Promise<PreloadedBlocks> {
-    return this.runActions.lifecycle.teardownForBlockTree(workspaceId, rootId)
+  teardownForBlockTree(
+    workspaceId: string,
+    rootId: string,
+    opts: { preloaded?: PreloadedBlocks } = {},
+  ): Promise<PreloadedBlocks> {
+    return this.runActions.lifecycle.teardownForBlockTree(workspaceId, rootId, opts)
   }
 }

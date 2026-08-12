@@ -178,12 +178,15 @@ export function boardController(): Hono<AppEnv> {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const blockId = c.req.valid('param').blockId
-    // Tear down any running runs under this subtree FIRST — killing their containers
-    // and durable drivers — so deleting a service/module never orphans a container
-    // that would idle until its watchdog. Then remove the blocks + run records.
-    const preloaded = await container.executionService.teardownForBlockTree(workspaceId, blockId)
-    // Teardown already listed the board (and deleted only run records, not blocks), so hand
-    // that list to removeBlock rather than paying a second full board read on the same DELETE.
+    // Refuse BEFORE anything is torn down: a service frame still holding unfinished work is
+    // archived rather than deleted, and the teardown below is irreversible, so a guard that
+    // fired after it would refuse a delete that had already killed the runs it was protecting.
+    // The preflight hands back the board list it decided on, so the whole DELETE still pays ONE
+    // full board read: the teardown reuses it, and so does the remove.
+    const preloaded = await container.boardService.assertRemovable(workspaceId, blockId)
+    // Then kill every container and durable driver under the subtree, so deleting a
+    // service/module never orphans a container that would idle until its watchdog.
+    await container.executionService.teardownForBlockTree(workspaceId, blockId, { preloaded })
     await container.boardService.removeBlock(workspaceId, blockId, { preloaded })
     return c.body(null, 204)
   })

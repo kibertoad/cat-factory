@@ -67,7 +67,7 @@ public abstract class Resources {
         return jobs;
     }
 
-    /** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), or patch one, including declaring where the manifests for its per-run environments are read from. */
+    /** The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), patch one (including declaring where the manifests for its per-run environments are read from), or delete one with everything under it. The delete refuses a service holding unfinished tasks rather than discarding work in flight. */
     public ServicesClient services() {
         return services;
     }

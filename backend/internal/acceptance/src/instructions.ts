@@ -27,6 +27,24 @@
 import { MANIFEST_DIR } from './k3s.ts'
 
 /**
+ * The board titles a pass's two service frames take, derived from its name prefix.
+ *
+ * Beside the descriptions because they are the same authoring decision (what the two frames are
+ * CALLED and what they are), and in `src/` rather than in `acceptance/fixtures.ts` because three
+ * readers need it and only one of them is a spec: the `board-titles` prerequisite, which refuses a
+ * fresh pass whose titles a previous one took, and `reset`, which finds those frames again in order
+ * to delete them. A CLI cannot import the fixtures module at all (it builds the whole harness and
+ * calls vitest's `inject`), so a second copy of the rule would have been the alternative, and two
+ * spellings of a title is a frame the cleanup silently cannot see.
+ *
+ * `ACCEPTANCE_NAME_PREFIX` is what makes two operators able to share one board, so the prefix is
+ * the whole of the variation here.
+ */
+export function serviceTitles(prefix: string): { backend: string; frontend: string } {
+  return { backend: `${prefix} Catalog API`, frontend: `${prefix} Catalog Web` }
+}
+
+/**
  * What each adopted service IS, in one sentence, for the frame's `description`.
  *
  * Part of this file rather than of the spec because it is a brief like the others: a service frame's

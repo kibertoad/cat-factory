@@ -509,6 +509,7 @@ mapping, so it always agrees with the field it filters on.
 | `DELETE /api/v1/tasks/:taskId`                   | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                                                          |
 | `POST /api/v1/services`                          | `admin`  | Create a service, optionally backed by a repository. See [Provisioning the board](#provisioning-the-board).                                                                                                                                                                                                                                                           |
 | `PATCH /api/v1/services/:serviceId`              | `admin`  | Patch a service's authored fields, and declare its `provisioning`: where a per-run environment's manifests are read from. See [Deployment provisioning](#deployment-provisioning).                                                                                                                                                                                    |
+| `DELETE /api/v1/services/:serviceId`             | `admin`  | Delete the service, its subtree **and the run history under it**; a live run is stopped first. Destructive; `204`. Refuses `422 service_has_unfinished_tasks` rather than discarding work in flight; `404`s an archived frame.                                                                                                                                        |
 | `GET /api/v1/repos`                              | `read`   | The repositories a service can be created against, and which service each already backs.                                                                                                                                                                                                                                                                              |
 | `GET /api/v1/services/:serviceId/spec`           | `read`   | The service's in-repo **specification**: the requirement tree, the Gherkin rendered from it, and the commit both were read at. See [Service specification](#service-specification).                                                                                                                                                                                   |
 | `POST /api/v1/tasks/:taskId/dependencies`        | `write`  | Declare that this task waits for another. Declare a dependency. Idempotent. See [Ordering a batch of tasks](#ordering-a-batch-of-tasks).                                                                                                                                                                                                                              |
@@ -620,6 +621,31 @@ archive/restore and the module/epic vocabulary stay out for the same reason.
 
 Service creation is `admin`, which is board STRUCTURE and the rung a provisioning integration holds
 anyway.
+
+**Taking one down is the same rung, and it is the other half of provisioning your own board.**
+Whoever raises a service is whoever has to reclaim it: an environment rebuilt per test pass, a
+repository retired, a frame raised against the wrong repository.
+
+```http
+GET    /api/v1/services/blk_api/tasks     # what is under it
+DELETE /api/v1/tasks/blk_task             # each unfinished task, if you mean it
+DELETE /api/v1/services/blk_api           # 204: the frame, its subtree, its run history
+```
+
+The delete takes the frame, its modules, its tasks and the run history recorded under them. Any run
+still going underneath is stopped and its container killed first, so nothing is left idling. Two
+answers to branch on rather than retry:
+
+- **`422`, `reason: service_has_unfinished_tasks`.** A frame holding a task that has not finished is
+  refused, because deleting one discards work in flight along with its history. `details` carries
+  `unfinishedTasks`, the count. The refusal is decided BEFORE anything is torn down, so a `422`
+  leaves the frame, its tasks and their runs exactly as they were: retrying it changes nothing, and
+  the runs still going are still yours to stop or resume. Deleting those tasks first is the caller
+  saying it means it; the app's other option is archiving, which this surface does not publish, so a
+  service you want to keep and hide is one to handle in the app.
+- **`404` for an ARCHIVED service.** Every per-service endpoint here addresses exactly the population
+  `GET /api/v1/services` reports, and an archived frame is absent from it. Restore it in the app if
+  you meant to delete it after all.
 
 #### Ordering a batch of tasks
 

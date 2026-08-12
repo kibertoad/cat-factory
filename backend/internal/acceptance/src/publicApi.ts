@@ -36,8 +36,14 @@ export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
  *
  * Absent unlock ⇒ the plain client, byte for byte: a workspace on a provider API key sends no such
  * header and is never asked for a password.
+ *
+ * Takes the two fields it addresses rather than the whole config, so a command that holds only the
+ * BOARD half (`reset`) drives the same client the specs do instead of a second one built beside it.
  */
-export function createClient(config: AcceptanceConfig, unlock?: PersonalUnlock): CatFactoryClient {
+export function createClient(
+  config: Pick<AcceptanceConfig, 'baseUrl' | 'apiKey'>,
+  unlock?: PersonalUnlock,
+): CatFactoryClient {
   return new CatFactoryClient({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,

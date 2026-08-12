@@ -220,13 +220,22 @@ export function blockedRepoMessage(
     ]
   }
   return [
-    `'${slug}' already backs a whole-repo service homed on ANOTHER board of this account, so ` +
+    `'${slug}' already backs a whole-repo service this workspace-scoped read cannot name, so ` +
       `POST /api/v1/services will refuse it (reason: repo_service_homed_elsewhere).`,
     `GET /api/v1/repos reports that as \`linkedElsewhere: true\` with \`serviceId: null\`: the ` +
-      `frame exists but has no id this workspace-scoped key could address, which is why the id is ` +
-      `withheld rather than handed back. Reading only \`serviceId\` reads the row as available.`,
-    `Run the pass from the board that HOMES that service (or with a key scoped to it), or point ` +
-      `the suite at a repository no service holds.`,
+      `frame exists but has no id this key could address, which is why the id is withheld rather ` +
+      `than handed back. Reading only \`serviceId\` reads the row as available.`,
+    // TWO states answer identically here, and they have opposite fixes, so neither may be
+    // asserted as the diagnosis. `linkedElsewhere` is computed against the frames this board
+    // VISIBLY lists, and an archived frame is not one of them, so a service archived on THIS
+    // board reads exactly like one homed on somebody else's. Naming only the second sends an
+    // operator to a board that does not exist.
+    `Either it is homed on ANOTHER board of this account: run the pass from the board that HOMES ` +
+      `that service (or with a key scoped to it), or point the suite at a repository no service ` +
+      `holds.`,
+    `Or it backs a frame on THIS board that has been ARCHIVED, which is not listed and has no id ` +
+      `to delete: restore it in the app (and reset again), or delete it there, which is what ` +
+      `releases the repository projection. /api/v1 publishes neither archive nor restore.`,
   ]
 }
 

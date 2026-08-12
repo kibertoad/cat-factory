@@ -15,6 +15,7 @@ import type { CatFactoryClient, PrReportRunProvider } from '@cat-factory/sdk'
 import { inject } from 'vitest'
 import { DeploymentApi } from '../src/deploymentApi.ts'
 import { type AcceptanceConfig, requireConfig } from '../src/config.ts'
+import { serviceTitles } from '../src/instructions.ts'
 import { Journal } from '../src/journal.ts'
 import { resumeInvocation } from '../src/operatorText.ts'
 import { createPersonalUnlock, type PersonalUnlock } from '../src/personalUnlock.ts'
@@ -177,9 +178,4 @@ export function issueApiFor(
 ): IssueApi | null {
   const build = ISSUE_APIS[provider]
   return build ? build({ token: config.vcs.token, apiBaseUrl: config.vcs.apiBaseUrl }) : null
-}
-
-/** Board titles, derived so the ledger, the specs and the board cannot disagree about them. */
-export function serviceTitles(prefix: string): { backend: string; frontend: string } {
-  return { backend: `${prefix} Catalog API`, frontend: `${prefix} Catalog Web` }
 }

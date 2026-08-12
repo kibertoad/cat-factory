@@ -47,19 +47,11 @@ import type {
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { noopLogger, registerServiceForFrame, requireWorkspace } from '@cat-factory/kernel'
+import { createBlockRemoval } from './blockRemoval.js'
 import { createBoardLayoutWrites } from './layoutWrites.js'
 import { createBoardReparentWrite } from './reparentWrite.js'
 import { createMountProjection } from './mountProjection.js'
-import { pruneDanglingEdges, reclaimDoomedEntities } from './removal-cascade.js'
-import {
-  canReparent,
-  descendantIds,
-  gridSlot,
-  serviceOf,
-  tasksOf,
-  unfinishedTasksUnder,
-  wouldCreateCycle,
-} from './board.logic.js'
+import { canReparent, gridSlot, serviceOf, tasksOf, wouldCreateCycle } from './board.logic.js'
 import type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 import { ReviewFrictionGuard } from './reviewFrictionGuard.js'
 import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
@@ -281,6 +273,12 @@ export class BoardService {
    * (see layoutWrites.ts). Both split their write between a frame's per-board mount override and
    * the shared block row, and `resizeBlock` layers the child translation on top of that.
    */
+  /**
+   * The block DELETE sequence (see blockRemoval.ts): the unfinished-work refusal, the home
+   * resolution, the side-table cascade and the per-board fan-out, which share one board list and
+   * one ORDER.
+   */
+  private readonly removal: ReturnType<typeof createBlockRemoval>
   private readonly layout: ReturnType<typeof createBoardLayoutWrites>
   /**
    * The reparent write (see reparentWrite.ts): containment rules, the cross-home subtree
@@ -428,6 +426,20 @@ export class BoardService {
           fields,
         ),
     }
+    this.removal = createBlockRemoval({
+      blockRepository,
+      executionRepository,
+      serviceRepository,
+      workspaceMountRepository,
+      initiativeRepository,
+      documentRepository,
+      taskRepository,
+      requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
+      resolveBlockHomeForRemoval: (workspaceId, id) =>
+        this.resolveBlockHomeForRemoval(workspaceId, id),
+      emitBoardChanged: (originWorkspaceId, change) =>
+        this.emitBoardChanged(originWorkspaceId, change),
+    })
     this.layout = createBoardLayoutWrites({
       blockRepository,
       workspaceMountRepository,
@@ -1276,89 +1288,24 @@ export class BoardService {
   }
 
   /**
-   * Delete a block and all its descendants, dropping dangling dependencies.
-   *
-   * `opts.preloaded` lets the caller hand in a block list it already loaded (the delete
-   * path's teardown lists the board immediately before this) so a locally-owned delete
-   * doesn't re-list the whole board; it is reused ONLY when it was loaded for the same
-   * workspace this block homes to (a mounted shared service homed elsewhere re-lists).
+   * Refuse a delete that would discard work in flight, and hand back the board list the refusal
+   * was decided on, for the teardown and the remove to reuse (see blockRemoval.ts). A DELETE is
+   * three calls and the middle one is irreversible, so this is what makes a 422 change nothing.
    */
-  async removeBlock(
+  assertRemovable(workspaceId: string, id: string): Promise<PreloadedBlocks> {
+    return this.removal.assertRemovable(workspaceId, id)
+  }
+
+  /**
+   * Delete a block and all its descendants, dropping dangling dependencies. Thin delegate to the
+   * collaborator that owns the delete sequence (see blockRemoval.ts).
+   */
+  removeBlock(
     workspaceId: string,
     id: string,
     opts: { preloaded?: PreloadedBlocks } = {},
   ): Promise<void> {
-    await this.requireWorkspace(workspaceId)
-    // Resolve the block at its home so a shared service's block can be deleted from any board
-    // that mounts it (the delete then applies to the one shared copy everywhere). Deletion is
-    // best-effort and idempotent: if the block row is already GONE (e.g. a half-deleted service
-    // that left a dangling mount/repo-link/execution), we must NOT 404 — a thing not existing
-    // can't be allowed to block cleanup of the related entities that do still exist. The resolve
-    // never throws; it falls back to this workspace, and every cleanup below is scoped to that
-    // home, so we tear down whatever references the id (+ its surviving descendants) without ever
-    // touching another workspace's data.
-    const homeWorkspaceId = await this.resolveBlockHomeForRemoval(workspaceId, id)
-    // Capture the boards this removal must reach BEFORE we delete the block + drop its service's
-    // mounts (after which the block→service→mounts join can't resolve anything). The union of the
-    // acting workspace and every workspace mounting the doomed service is then notified post-delete.
-    const fanoutTargets = new Set<string>([workspaceId])
-    if (this.workspaceMountRepository) {
-      for (const ws of await this.workspaceMountRepository.listWorkspaceIdsMountingBlock(
-        homeWorkspaceId,
-        id,
-      )) {
-        fanoutTargets.add(ws)
-      }
-    }
-    // Reuse the caller's list only when it was loaded for this block's home (the common
-    // locally-owned delete); a mounted service homed elsewhere re-lists against its home.
-    const blocks =
-      opts.preloaded && opts.preloaded.workspaceId === homeWorkspaceId
-        ? opts.preloaded.blocks
-        : await this.blockRepository.listByWorkspace(homeWorkspaceId)
-    const doomed = descendantIds(blocks, id)
-
-    // A service frame that still has unfinished work must NOT be deleted (that would discard
-    // in-flight tasks + their history) — it is archived instead (hidden, restorable with no
-    // expiry). Only guard a real, still-present top-level frame: a dangling/already-gone id
-    // (idempotent re-delete, a leaf task, a module) falls through to the normal cleanup below.
-    const target = blocks.find((b) => b.id === id)
-    if (target?.level === 'frame' && target.parentId === null) {
-      const unfinished = unfinishedTasksUnder(blocks, id)
-      if (unfinished.length > 0) {
-        throw new ValidationError(
-          `This service has ${unfinished.length} unfinished task(s); archive it instead of deleting.`,
-        )
-      }
-    }
-
-    await this.executionRepository.deleteByBlock(homeWorkspaceId, id)
-    // Every SIDE-TABLE row keyed by a doomed block id — the account-owned service + its mounts,
-    // and the initiative entity. Extracted to its own module (see `removal-cascade.ts`): each is
-    // an optional, batched reclaim, and this is where the delete path grows, so a future
-    // block-keyed table gets a section there rather than another branch in this method.
-    await reclaimDoomedEntities(
-      {
-        ...(this.serviceRepository ? { serviceRepository: this.serviceRepository } : {}),
-        ...(this.workspaceMountRepository
-          ? { workspaceMountRepository: this.workspaceMountRepository }
-          : {}),
-        ...(this.initiativeRepository ? { initiativeRepository: this.initiativeRepository } : {}),
-        ...(this.documentRepository ? { documentRepository: this.documentRepository } : {}),
-        ...(this.taskRepository ? { taskRepository: this.taskRepository } : {}),
-      },
-      { homeWorkspaceId, deletedId: id, blocks, doomed },
-    )
-    await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
-
-    await pruneDanglingEdges(this.blockRepository, homeWorkspaceId, blocks, doomed)
-
-    // The block + any shared service are now gone, so fan out per captured target (blockId is
-    // unresolvable post-delete): every board that showed the block refreshes it away. There is
-    // nothing to carry, and a delete CASCADES, so the refresh is the point.
-    for (const ws of fanoutTargets) {
-      await this.emitBoardChanged(ws, { reason: 'block-removed' })
-    }
+    return this.removal.removeBlock(workspaceId, id, opts)
   }
 
   /**

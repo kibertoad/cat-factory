@@ -31,13 +31,14 @@ import {
   backendScaffoldBrief,
   frontendScaffoldBrief,
   SERVICE_DESCRIPTIONS,
+  serviceTitles,
 } from '../src/instructions.ts'
 import { buildK3sConnection, buildK3sSecrets, buildServiceProvisioning } from '../src/k3s.ts'
 import { filePinnedTask } from '../src/publicApi.ts'
 import { fileAndDrive } from '../src/resume.ts'
 import { requireRunDone } from '../src/runDriver.ts'
 import type { RunRecord, ServiceRecord } from '../src/world.ts'
-import { assertPrerequisites, harness, serviceTitles } from './fixtures.ts'
+import { assertPrerequisites, harness } from './fixtures.ts'
 
 /** What each half of the pair is, as `POST /api/v1/services` names it. */
 const SERVICE_TYPES: Record<'backend' | 'frontend', ServiceType> = {

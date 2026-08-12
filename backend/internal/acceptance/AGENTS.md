@@ -104,6 +104,34 @@ journal into where a pass got to, opening no connection to the deployment.
 `ACCEPTANCE_RUN_ID=<id|latest>` resumes, adopting or re-attaching to whatever the previous attempt
 left rather than re-filing it. The README tables both.
 
+**And it is RESETTABLE, which is the other branch of every refusal over leftover state.**
+`pnpm run reset [runId|latest] [--all] [--yes]` (`src/reset.ts` + `src/resetCli.ts`) deletes the service
+frames this configuration would adopt, their tasks and the run history under them, then the local
+files of the passes naming them. It exists because "delete the service frame that holds this one" was
+an app act until `DELETE /api/v1/services/{serviceId}`, so the one way out of `target-repos` an
+operator running headless could not take was starting over. Traps, each a decision the code states:
+it PREVIEWS by default and `--yes` is the whole opt-in; it targets what the CONFIGURATION points at
+(the two repositories' frames, this prefix's titles) rather than a ledger, since the state with no
+other way out is the state whose ledger is gone, and NAMING a pass adds whatever its ledger holds; it
+KEEPS a pass's files whenever any frame that ledger names is still on the board (refused, or never
+targeted) OR a repository could not be freed, because the ledger is the only map from a leftover
+frame back to a run id and an unfreeable repository is held by a frame no read here can name at all;
+and it STATES what no key reclaims (the repositories keep their content, a reporter-filed issue stays
+open, cluster namespaces are untouched), so a cleared board never reads as a fresh one. The PREVIEW
+runs that same retention rule, so it never lists files the apply will keep, and anything unfreeable
+is a non-zero exit even when nothing was refused.
+
+**`--all` is a THIRD target beside those two, not a wider reading of them**: every frame
+`GET /api/v1/services` lists plus every pass in the state directory, for the frames the narrow
+questions structurally cannot see (a different `ACCEPTANCE_NAME_PREFIX`, repositories the `.env` has
+replaced, a frame raised by hand). None of those blocks a pass, so no refusal prints the flag. Two
+things it changes rather than widens: the PLAN states the scope outright, because a board holding one
+pass renders an identical frame list either way and the reading is the safety property; and every pass
+file goes, including a refused attempt's, because a board with no frames maps nothing and a kept file
+is a run id `latest` may still resolve to. It needs the BOARD half of
+the config only (`resolveBoardConfig`): demanding a cluster to clean up after one refuses exactly the
+operator whose cluster has moved on.
+
 Two traps, both learned from the same broken pass. **The RUN ID is settled in `globalSetup` and
 injected**, never resolved in a spec: it is the KEY to the ledger the specs pass facts through, and
 per module graph means per FILE, so five specs opened five ledgers a second apart and every fact
@@ -141,7 +169,7 @@ every CI lane.
 | `acceptance/02-feature-…`      | `pl_build` across both services; environment / CI / merge evidence.                                                |
 | `acceptance/03-investigate-…`  | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                                   |
 | `acceptance/04-issue-intake-…` | An issue filed as the REPORTER, delivered from its `ticket` link, and closed by the writeback.                     |
-| `src/`                         | The harness, plus `configure`. Per-file roles are tabled in the README.                                            |
+| `src/`                         | The harness, plus `configure` and `reset`. Per-file roles are tabled in the README.                                |
 | `test/`                        | Unit tests for the pure logic (config, gate, probe failures, ledger, journal, status, evidence, waits, configure). |
 
 **The rules the specs are written to** (each expanded in the README, and each the reason a

@@ -26,6 +26,7 @@ const SURFACE = {
   listPublicServices: { group: 'services', method: 'list' },
   createPublicService: { group: 'services', method: 'create' },
   updatePublicService: { group: 'services', method: 'update' },
+  deletePublicService: { group: 'services', method: 'delete' },
 
   // ---- The service SPEC: what a service is committed to honouring -------------------------
   // Its own group rather than a `services.getSpec`, because the spec is a resource in its own
@@ -284,6 +285,10 @@ export const MCP_TOOL_HINTS = {
   // Destructive AND idempotent, which is the pair `readOnlyHint` alone cannot express: deleting a
   // task twice leaves the board in the same state, and the first call is still irreversible.
   deletePublicTask: { destructive: true, idempotent: true },
+  // The same pair one level up, and the consequence is strictly larger: a service delete takes its
+  // whole subtree and every run recorded under it. Idempotent in EFFECT (a second call finds
+  // nothing left to remove and 404s), which says nothing about the first one being recoverable.
+  deletePublicService: { destructive: true, idempotent: true },
   // The outbound webhook, same pair and for a subtler reason: neither call spends anything, and
   // both overwrite state whose previous value cannot be recovered through this API: the endpoint
   // someone else's integration is registered at, and a signing secret that is never readable back.
@@ -303,7 +308,7 @@ export const MCP_TOOL_HINTS = {
 export const GROUP_DOCS = {
   jobs: 'Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.',
   services:
-    "The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), or patch one, including declaring where the manifests for its per-run environments are read from.",
+    "The workspace's board services, the frames tasks are created under: list them, create one (optionally backed by a repository), patch one (including declaring where the manifests for its per-run environments are read from), or delete one with everything under it. The delete refuses a service holding unfinished tasks rather than discarding work in flight.",
   spec: "A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome.",
   repos:
     'The repositories this workspace can back a service with, and which service each already backs (the discovery half of service creation); the ones its connection could reach but has not adopted yet, and adopting one by name; plus creating a brand-new one, where a bootstrap writes the repository with an agent and reports the board service it materialises.',
