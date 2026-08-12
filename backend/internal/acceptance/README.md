@@ -34,6 +34,15 @@ deterministic. That is why it is a hand-run acceptance pass rather than a lane.
 
 Five spec files, run in order. Each spec's output is the next one's input.
 
+That order is PINNED, by a sequencer keyed on the file name (`src/specOrder.ts`). It is not a
+formatting convention and `fileParallelism: false` does not supply it: that setting stops two specs
+running at once, which is a different property. Vitest's default sequencer reorders the files it is
+handed from a cache of the previous run (failed first, then longest-duration first), so paired with
+`bail: 1` the slowest spec of the last pass ran FIRST, failed in milliseconds on a ledger key nothing
+had written yet, and stopped the pass before the spec that writes it had started. What that looks
+like from outside is the LAST spec failing in a pass where nothing else ran, under a message telling
+you to run the suite from the start.
+
 | Spec                       | What it does                                                                                                                                                       |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `00-preflight`             | Reports every prerequisite as its own named test. Creates nothing. The GATE runs in each spec, so a resumed pass cannot skip it.                                   |
@@ -702,6 +711,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `acceptance/*.acceptance.ts` | The five specs, in order. `fixtures.ts` builds the harness and mounts the gate.                                                                                                                                                  |
 | `acceptance/globalSetup.ts`  | The two facts settled once for the whole pass, in the main process before any worker exists: the RUN ID, and the personal-password ask (the real config, client and terminal).                                                   |
+| `src/specOrder.ts`           | The order the specs run in, pinned to the file name, and why vitest's default sequencer cannot be left to decide it. Pure; unit-tested.                                                                                          |
 | `src/personalPasswordAsk.ts` | What that ask decides, and what it does when it cannot: degrade and continue, except for a person declining. Unit-tested.                                                                                                        |
 | `src/config.ts`              | Environment → config in two halves (a BOARD, and what it takes to RUN a pass on one), reporting every problem at once. Pure; unit-tested.                                                                                        |
 | `src/envFile.ts`             | The `.env` beside the vitest config, read the same way by the config and by `globalSetup`. Pure.                                                                                                                                 |

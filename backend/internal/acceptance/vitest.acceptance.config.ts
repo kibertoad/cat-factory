@@ -1,10 +1,11 @@
 import { defineConfig } from 'vitest/config'
 import { envFile } from './src/envFile.ts'
+import { NarrativeSequencer } from './src/specOrder.ts'
 
 // The acceptance suite: real agents against a live deployment. NOT part of `test:run`, so no CI
 // lane can reach it (see `vitest.config.ts` for the other half of that split).
 //
-// Five settings carry the whole shape of this suite:
+// Six settings carry the whole shape of this suite:
 //
 //   - **`fileParallelism: false` and one worker.** The specs form ONE narrative (spec 02 ships
 //     the feature spec 03 then files a bug against) and they share a repository, a workspace and
@@ -13,6 +14,13 @@ import { envFile } from './src/envFile.ts'
 //     prevent. Note this does NOT make module state shared: vitest gives every test file its own
 //     module graph regardless, which is why the facts specs pass to each other live in the
 //     on-disk ledger (`src/world.ts`) rather than in a memoised object.
+//   - **`sequence.sequencer`, which pins the specs to FILE NAME order.** The two settings above
+//     prevent two specs running AT ONCE and nothing more; this file used to claim they also gave
+//     the order, and they never did. Vitest's default sequencer reorders by a cache of the previous
+//     run (failed first, then longest first), so paired with `bail: 1` the slowest spec of the last
+//     pass ran FIRST, failed on a ledger key nothing had written yet, and stopped the run before the
+//     spec that writes it had started. Why it is a file-name rule and not a cache tweak:
+//     `src/specOrder.ts`.
 //   - **No timeout.** A real `pl_build` run dispatches container agents against a real model and
 //     gates on real CI; there is no honest number to put here, and a vitest timeout firing
 //     mid-run would abandon a provisioned k3s namespace and a half-open pull request rather than
@@ -37,6 +45,7 @@ export default defineConfig({
     include: ['acceptance/**/*.acceptance.ts'],
     fileParallelism: false,
     maxWorkers: 1,
+    sequence: { sequencer: NarrativeSequencer },
     // 0 DISABLES these two (verified: a deliberately slow test passes under them). Note that
     // `teardownTimeout` does NOT share that meaning: 0 there is a literal zero milliseconds, and
     // setting it makes every run end with "Timeout terminating forks worker". It is left at its
