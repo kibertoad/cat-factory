@@ -271,7 +271,7 @@ function requestIdStep(error: CatFactoryApiError): readonly string[] {
  * one.
  *
  * The two budgets exist because the readers do (kernel documents the split), and this reader is a
- * terminal: an operator reading a failed `beforeAll`, with the deployment's own account of itself in
+ * terminal: an operator reading a refused scenario, with the deployment's own account of itself in
  * the detail. Under the human cap a 502 whose body ran to a few hundred characters lost its tail,
  * and a root read carries up to 2000 characters of body precisely because a fallback app's problem
  * list and a gateway's error page are where the fix is named.
@@ -375,14 +375,14 @@ export function describeProbeFailure(
  * deployment answers, in which case a reachability check tests the one thing that is settled.
  *
  * The closing step is what names this suite's equivalent of the "then test again" kernel's hints end
- * on. It says how to re-run rather than claiming nothing was created: this gate runs in EVERY spec's
- * `beforeAll` so a resumed pass reaches it with services adopted and pull requests open, and telling
+ * on. It says how to re-run rather than claiming nothing was created: this gate runs before EVERY
+ * scenario, so a resumed pass reaches it with services adopted and pull requests open, and telling
  * that operator a re-run starts clean is how they start a second pass that `board-titles` then
  * refuses.
  *
  * It names the ID and never `latest`, which it used to offer as an equivalent. The pointer follows
- * the most recent pass to record a FACT, and this failure is reached from every spec's `beforeAll`,
- * including the first one of a pass that has recorded none: exactly when the two name different
+ * the most recent pass to record a FACT, and this failure is reached from the gate before every
+ * scenario, including the first one of a pass that has recorded none: exactly when the two name different
  * passes, and following `latest` there resumes an older half-built one instead.
  */
 function buildRemedy(steps: readonly string[], reachTarget: string | undefined): Remedy {

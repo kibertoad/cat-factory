@@ -8,6 +8,7 @@ import {
   scrubbed,
   shellFlavour,
   shellQuoted,
+  thrownLocation,
 } from '../src/operatorText.ts'
 
 // Each of these is pinned here because each has exactly one edge case that undoes the point of it: a
@@ -35,6 +36,46 @@ describe('describeThrown', () => {
   it('reports a non-Error throw as itself, which is a fact worth having', () => {
     expect(describeThrown('the pool is closed')).toBe('the pool is closed')
     expect(describeThrown(null)).toBe('null')
+  })
+})
+
+describe('thrownLocation', () => {
+  it('answers the FRAMES, whatever the message did', () => {
+    // Matched on their own `at ` shape rather than by cutting the message off the front of the stack:
+    // a stack begins with as many lines as the message has, and this suite's refusals routinely run
+    // to twenty, so anything that assumed one line would print the refusal a second time.
+    const error = new Error('a refusal\nwith numbered steps\n  1. do this\n  2. then this')
+    const location = thrownLocation(error)
+
+    expect(location).not.toBeNull()
+    expect(location).not.toContain('numbered steps')
+    // Frames, plus at most the note the cap adds; nothing of the message.
+    for (const line of location?.split('\n') ?? []) {
+      expect(line.trim()).toMatch(/^(at |… \d+ more frame)/)
+    }
+  })
+
+  it('caps the frames and SAYS what it dropped', () => {
+    // The tail of a stack is Node's own module machinery; a reader who assumed the shown frames were
+    // all of it would conclude the throw happened at top level.
+    const error = new Error('deep')
+    error.stack = [
+      'Error: deep',
+      ...Array.from({ length: 9 }, (_, at) => `    at frame${at}`),
+    ].join('\n')
+
+    const location = thrownLocation(error, 4)
+
+    expect(location).toContain('at frame3')
+    expect(location).not.toContain('at frame4')
+    expect(location).toContain('5 more frame(s)')
+  })
+
+  it('says nothing for a value that has no stack to speak of', () => {
+    // A thrown string, or an error a test hand-built: the caller prints the message alone rather than
+    // an empty section under it.
+    expect(thrownLocation('the pool is closed')).toBeNull()
+    expect(thrownLocation(Object.assign(new Error('no stack'), { stack: undefined }))).toBeNull()
   })
 })
 

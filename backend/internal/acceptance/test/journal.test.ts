@@ -27,7 +27,7 @@ describe('Journal', () => {
   it('binds later events to the phase most recently entered', () => {
     const dir = scratch()
     const journal = new Journal(dir, 'run-1', 'suite')
-    journal.record('observation', 'before any spec')
+    journal.record('observation', 'before any scenario')
     journal.enterPhase('02-feature')
     journal.record('observation', 'still working')
 

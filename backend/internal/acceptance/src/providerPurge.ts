@@ -55,7 +55,7 @@ export type ProviderPurgeInput = {
    * Handed in rather than inferred, because discovery cannot tell them apart: a kept pass's issue
    * carries the same title and the same author as a removed one's, which is the fingerprint the
    * whole discovery test is built on. Without them the narrow half of a reset would settle the
-   * spec-04 gate of the very pass it went out of its way to leave resumable.
+   * scenario-04 gate of the very pass it went out of its way to leave resumable.
    */
   keptIssues: readonly LedgerIssue[]
   /**
@@ -100,7 +100,7 @@ export async function planProviderPurge(
     ledgerIssues: input.ledgerIssues,
     keptIssues: input.keptIssues,
     // The one place the suite's issue text is authored, so a purge cannot come to disagree with the
-    // spec that files it. A second title added there is discovered here with no change.
+    // scenario that files it. A second title added there is discovered here with no change.
     knownTitles: [offsetValidationIssue().title],
   })
   const repos: RepoPurgePlan[] = []

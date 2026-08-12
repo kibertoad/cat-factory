@@ -520,12 +520,12 @@ describe('target-repos', () => {
   })
 
   it('passes a repository the connection can reach but nobody has adopted', async () => {
-    // The state a hand-written `.env` starts in, and it is not a refusal: spec 01 adopts a reachable
+    // The state a hand-written `.env` starts in, and it is not a refusal: scenario 01 adopts a reachable
     // repository itself through `POST /api/v1/repos/link`. Gating on the LINKED list alone would
     // refuse a setup that is complete, and would make `configure` the only supported way in.
     const detail = await satisfied('target-repos', { client: client([], both()) })
     expect(detail).toContain('reachable but not adopted yet')
-    expect(detail).toContain('spec 01')
+    expect(detail).toContain('scenario 01')
   })
 
   it('reports the two populations separately, since only the adopted one has been checked', async () => {
@@ -712,7 +712,7 @@ describe('target-repos', () => {
   it('refuses a repository whose service is homed on ANOTHER board, which serviceId cannot state', async () => {
     // `serviceId: null` with `linkedElsewhere: true` is the contract's honest answer for a service
     // this workspace-scoped key cannot address. Reading only the id passes the gate and leaves a
-    // `repo_service_homed_elsewhere` 409 for spec 01's first adopt.
+    // `repo_service_homed_elsewhere` 409 for scenario 01's first adopt.
     const verdict = await refusal('target-repos', {
       client: client([
         repo('cf-acc-catalog-api', { linkedElsewhere: true }),
@@ -724,7 +724,7 @@ describe('target-repos', () => {
   })
 
   it('refuses a reachable-but-unadopted repository whose service is homed elsewhere', async () => {
-    // The hole that opened when "unlinked" started meaning "spec 01 will link it": `linkedElsewhere`
+    // The hole that opened when "unlinked" started meaning "scenario 01 will link it": `linkedElsewhere`
     // is an ACCOUNT-scoped judgement, so it is true for a repository this board has not adopted, and
     // `POST /api/v1/services` refuses it either way. Judging only the LINKED rows green-lit exactly
     // this case, and the pass then died on the adopt, after the gate that exists to precede it.
@@ -884,7 +884,7 @@ describe('tracker-writeback', () => {
     expect(verdict.remedy.steps.join('\n')).toContain('MERGE')
   })
 
-  it('passes with questionsOnPark off, which spec 04 does not use, and says so', async () => {
+  it('passes with questionsOnPark off, which scenario 04 does not use, and says so', async () => {
     const detail = await satisfied('tracker-writeback', {
       client: client({ ...all, questionsOnPark: false }, 1),
     })

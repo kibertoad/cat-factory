@@ -22,7 +22,7 @@
 //      check to build and why a fix with no CLI states its screen rather than inventing one.
 //
 // The checks themselves live in `prerequisites.ts`. This file holds the vocabulary, the runner and
-// the pure reductions the specs and `test/preflight.test.ts` assert on. What a THROWN probe means
+// the pure reductions the scenarios and `test/preflight.test.ts` assert on. What a THROWN probe means
 // (rule 2's `unknown` branch) lives in `probeFailure.ts`, which reads the whole cause chain through
 // kernel rather than the one link `error.message` exposes.
 
@@ -80,7 +80,7 @@ export type PrerequisiteVerdict =
 export type PrerequisiteDisposition = 'required' | 'advisory'
 
 export type Prerequisite<Context> = {
-  /** Stable id, used as the test name in spec 00 and as the journal event's subject. */
+  /** Stable id, used as the step name in scenario 00 and as the journal event's subject. */
   id: string
   /** What holding this prerequisite guarantees, phrased for the person reading a failure. */
   what: string
@@ -213,10 +213,10 @@ export function formatRemedy(remedy: Remedy, indent = ''): string {
 /**
  * One failing prerequisite, in full: what it guarantees, what is wrong, and how to fix it.
  *
- * Spec 00 hands this to its per-prerequisite assertion and `formatPreflightFailure` stacks it, so
- * the instructions reach BOTH readers. Those are different people in practice: the one reading a
- * single red test in vitest's output, and the one reading the one-error refusal a resumed pass
- * throws out of `beforeAll`.
+ * Scenario 00 hands this to its per-prerequisite assertion and `formatPreflightFailure` stacks it, so
+ * the instructions reach BOTH readers. Those are different people in practice: the one reading one
+ * red claim in the preflight report, and the one reading the one-error refusal the gate throws
+ * before a resumed pass's first scenario.
  */
 export function formatPrerequisiteFailure(result: PrerequisiteResult): string {
   const verdict = result.verdict

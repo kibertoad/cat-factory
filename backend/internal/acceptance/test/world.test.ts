@@ -3,14 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readLatestRunId } from '../src/passFiles.ts'
-import {
-  coerceWorld,
-  findPassesNaming,
-  readWorld,
-  requirePassRunId,
-  resolveRunId,
-  WorldStore,
-} from '../src/world.ts'
+import { coerceWorld, findPassesNaming, readWorld, resolveRunId, WorldStore } from '../src/world.ts'
 
 // The ledger is what makes a re-run resume instead of re-scaffolding two repositories, so the
 // properties tested here are the ones whose failure costs an afternoon of real model spend:
@@ -44,21 +37,6 @@ describe('resolveRunId', () => {
     // The two intents are opposite: someone asking to continue must never be handed a fresh pass
     // that bootstraps two repositories and spends real money.
     expect(() => resolveRunId({ ACCEPTANCE_RUN_ID: 'latest' }, scratch())).toThrow(/names no/)
-  })
-})
-
-describe('requirePassRunId', () => {
-  it('takes the id the pass was given', () => {
-    expect(requirePassRunId('20260811151012')).toBe('20260811151012')
-  })
-
-  it('refuses an absent one rather than minting a ledger no other spec can read', () => {
-    // The regression this guards: resolved per spec FILE, five specs opened five ledgers and the
-    // chain between them became five one-spec passes, which surfaces four specs later as "the
-    // ledger has no 'backend'". A fallback here is what made that silent.
-    for (const missing of [undefined, '', '   ']) {
-      expect(() => requirePassRunId(missing)).toThrow(/globalSetup/)
-    }
   })
 })
 
@@ -187,9 +165,9 @@ describe('WorldStore', () => {
     expect(new WorldStore(dir, 'run-2').value.frontend).toBeNull()
   })
 
-  it('names the missing record and how to recover when a spec reads one too early', () => {
+  it('names the missing record and how to recover when a scenario reads one too early', () => {
     const store = new WorldStore(scratch(), 'run-1')
-    // The message is the deliverable: this fires when someone runs spec 03 alone, and "cannot
+    // The message is the deliverable: this fires when someone runs scenario 03 alone, and "cannot
     // read properties of null" would send them into the harness instead of at the ledger.
     expect(() => store.require('backend')).toThrow(/ACCEPTANCE_RUN_ID/)
     expect(() => store.require('backend')).toThrow(/backend/)
@@ -272,7 +250,7 @@ describe('coerceWorld', () => {
     expect(world?.scaffoldFrontend).toBeNull()
   })
 
-  it('drops a ledger written before spec 01 stopped bootstrapping, rather than half-reading it', () => {
+  it('drops a ledger written before scenario 01 stopped bootstrapping, rather than half-reading it', () => {
     // Internals are not kept backwards compatible (CLAUDE.md), and this is the shape that proves it
     // costs nothing: an old ledger's `bootstrapJobs` is simply not read, and the pass starts fresh
     // instead of re-attaching to a job id no endpoint answers any more.

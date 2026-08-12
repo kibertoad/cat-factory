@@ -10,7 +10,7 @@
 // The last of those is owned here COMPLETELY: every shell dialect this suite prints is decided in the
 // one `DIALECTS` table, and a call site says what it needs rather than which shell is in play.
 
-import { getErrorMessage, redactSecrets } from '@cat-factory/kernel'
+import { errorChainText, getErrorMessage, redactSecrets } from '@cat-factory/kernel'
 
 /**
  * A thrown value as text, with the ONE fallback for a chain that said nothing.
@@ -21,16 +21,75 @@ import { getErrorMessage, redactSecrets } from '@cat-factory/kernel'
  * it is what this fallback is for: interpolated bare, an empty answer renders as `could not be read
  * ()`, which states less than naming the absence. One helper rather than the phrase re-invented at
  * each site, so the sentence a reader sees for an undescribable failure is one sentence.
+ *
+ * For a failure that is INTERPOLATED into a sentence, which is every caller here except the two that
+ * print a refusal whole. Those take {@link describeFailure}, because this one carries kernel's
+ * 400-character human budget.
  */
 export function describeThrown(error: unknown): string {
   return getErrorMessage(error) || 'no reason reported'
 }
 
 /**
+ * Cap on a refusal printed WHOLE to this pass's console.
+ *
+ * kernel keeps two budgets because its readers do (a 400-character one for a toast or a persisted
+ * `reason`, 4,000 for a log field), and this is a third reader: a terminal, or the file an
+ * afternoon-long pass was piped into. Almost everything that reaches it is a refusal this suite
+ * AUTHORED and every line of it is instructions, so the budgets above are the wrong ones by an order
+ * of magnitude: a preflight naming fourteen prerequisites with their numbered remedies runs to
+ * thousands of characters, and cut at 400 an operator gets the first two and no fix for either. It is
+ * still capped rather than unbounded, because a link of the chain can be a provider's HTML error
+ * page, and kernel's cap states what it dropped.
+ */
+export const MAX_PRINTED_FAILURE_CHARS = 20_000
+
+/**
+ * A thrown value as the WHOLE refusal, for the two places that print one as the entire output: the
+ * pass's own failure report (`scenarioRunner.ts`) and the refusals that stop it before it opens
+ * (`runAcceptance.ts`).
+ *
+ * Its own function rather than a parameter on {@link describeThrown}, so the choice of reader is made
+ * once per site by NAME. Getting it wrong is silent in the direction that matters: a truncated
+ * refusal reads as a complete one, which is how a remedy an operator never saw becomes "the suite
+ * didn't say".
+ */
+export function describeFailure(error: unknown): string {
+  return errorChainText(error, MAX_PRINTED_FAILURE_CHARS) || 'no reason reported'
+}
+
+/**
+ * Where a thrown value came FROM, capped, or null when it says nothing about that.
+ *
+ * The sibling of {@link describeThrown} and the answer to a different reader. Everything this suite
+ * throws on purpose is a deliverable (a preflight refusal with numbered steps, a deadline naming its
+ * last observation), and for those the message is the whole message. The other kind of failure is a
+ * bug in the suite, where the message is `Cannot read properties of undefined` and the only useful
+ * thing is the file and line: vitest printed a stack under every failure, and dropping it with the
+ * framework would have made that class of failure an afternoon of guessing.
+ *
+ * The FRAMES only, matched on their own `at ` shape rather than by cutting the message off the front
+ * of `error.stack`. A stack begins with as many lines as the message has, and this suite's messages
+ * routinely run to twenty; anything that assumed one would print the refusal a second time.
+ *
+ * Capped, and the cap SAYS what it dropped: the tail of a stack is Node's own module machinery, and a
+ * reader who assumed the six frames were all of it would conclude the throw happened at top level.
+ */
+export function thrownLocation(error: unknown, limit = 6): string | null {
+  const stack = error instanceof Error ? error.stack : undefined
+  if (!stack) return null
+  const frames = stack.split('\n').filter((line) => /^\s+at /.test(line))
+  if (frames.length === 0) return null
+  const shown = frames.slice(0, limit).map((frame) => `  ${frame.trim()}`)
+  const dropped = frames.length - shown.length
+  return [...shown, ...(dropped > 0 ? [`  … ${dropped} more frame(s)`] : [])].join('\n')
+}
+
+/**
  * A value as it may be PRINTED: scrubbed.
  *
  * A base URL may legitimately carry userinfo (`https://svc:secret@backend.example.com`), which no
- * URL policy rejects, and every string this suite builds from one is thrown out of `beforeAll` and
+ * URL policy rejects, and every string this suite builds from one is thrown out of a refusal and
  * printed to a console. kernel scrubs the target inside its own hints for exactly this reason, and
  * it scrubs an error chain on the way out; a value that came from THIS suite's config or from a
  * response body gets neither, so it is scrubbed at the emit site instead.

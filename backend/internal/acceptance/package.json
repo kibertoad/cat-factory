@@ -5,11 +5,10 @@
   "description": "Acceptance suite against a LIVE local deployment: drives the published TypeScript SDK over the real /api/v1 to bootstrap two empty repos, ship a cross-service feature onto a real k3s ephemeral environment, and then investigate and fix the defect that feature leaves behind. Real agents, real LLM spend, real pull requests. Never run in CI. Not published.",
   "type": "module",
   "scripts": {
-    "acceptance": "vitest run --config vitest.acceptance.config.ts",
-    "acceptance:watch": "vitest --config vitest.acceptance.config.ts",
-    "configure": "node --experimental-strip-types src/configureCli.ts",
-    "reset": "node --experimental-strip-types src/resetCli.ts",
-    "status": "node --experimental-strip-types src/statusCli.ts",
+    "acceptance": "node src/runAcceptance.ts",
+    "configure": "node src/configureCli.ts",
+    "reset": "node src/resetCli.ts",
+    "status": "node src/statusCli.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -24,5 +23,8 @@
     "@types/node": "^26.2.0",
     "typescript": "7.0.2",
     "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

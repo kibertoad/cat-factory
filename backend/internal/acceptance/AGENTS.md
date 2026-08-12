@@ -6,8 +6,15 @@ feature leaves behind, and finally files an issue as an OUTSIDE reporter and ass
 delivered it and CLOSED it, against a LIVE local deployment with nothing faked. Full notes:
 [`README.md`](./README.md).
 
-**Entry:** `acceptance/*.acceptance.ts` via
-`pnpm --filter @cat-factory/acceptance run acceptance`. Needs a running deployment, a k3s cluster
+**Entry:** `src/runAcceptance.ts` via
+`pnpm --filter @cat-factory/acceptance run acceptance`.
+**No test framework**: five scenarios (`src/scenarios/`) in ONE process, in the order
+`src/scenarios/index.ts` lists them, driven by `src/scenarioRunner.ts`, asserting with
+`node:assert/strict`, bailing at the first failure. What that replaced, and the four properties the
+driver now owns (order, bail, the gate before every scenario, no timeout):
+[ADR 0057](../../docs/adr/0057-acceptance-standalone-runner.md).
+Type stripping is Node's own, so the scripts carry no `--experimental-strip-types` and the package
+declares `engines.node >= 24`. Needs a running deployment, a k3s cluster
 and real model credentials; `src/config.ts` refuses with the whole list of missing VARIABLES, and
 `src/prerequisites.ts` then refuses with the whole list of unsatisfied DEPLOYMENT conditions, each
 carrying the steps and commands that fix it.
@@ -17,7 +24,7 @@ that `.env`. Its rule is **resolve rather than ask**: the workspace from `GET /a
 from the VCS connection, the preset from the library joined against the model catalog, the cluster
 from the kubeconfig (through `@cat-factory/cli`'s own `readApiServerCommand`/`readTokenCommand`, so
 the namespace and secret name are not restated here). What it asks is the two tokens nothing can mint (the API key, and the
-REPORTER token spec 04 files with, whose provider page it opens prefilled) plus the two
+REPORTER token scenario 04 files with, whose provider page it opens prefilled) plus the two
 repository names, and it then ADOPTS each one (`POST /api/v1/repos/link`, idempotent), STATING each
 attempt's outcome: an unreachable repository gets the creation page and the steps only a person can
 carry out. It never overwrites a value without naming it, carries unmanaged lines over byte for byte,
@@ -25,7 +32,7 @@ and prints neither token.
 
 **The operator creates the two repositories; the suite ADOPTS them.** `canCreateRepos` is false for
 every PAT connection and the App path creates only under `/orgs/{org}/repos`, so bootstrapping was
-the one prerequisite no configuration could satisfy. Spec 01 backs a service with each `repoId` and
+the one prerequisite no configuration could satisfy. Scenario 01 backs a service with each `repoId` and
 scaffolds both through `pl_build` from the briefs in `src/instructions.ts`, which is why a scaffold
 resumes exactly as a feature run does. `target-repos` gates on the repositories being REACHABLE AND
 adoptable, and says outright that emptiness is not what it checked: no `/api/v1` read publishes it.
@@ -56,17 +63,14 @@ process and nothing else writes it down, and the header rides EVERY request thro
 `fetch` seam rather than being attached at the call that first needed it: answering a park re-mints
 the run's activation server-side, so a pass needs it for hours after the start.
 
-**Asked ONCE per pass, in `acceptance/globalSetup.ts`, which is also where the pass's run id is
-settled** (see the resume section below for why the two share a hook). Vitest isolates every spec file in its own
-module graph and its own worker process, so a holder built in `fixtures.ts` cannot outlive the file
-that built it: asked lazily on the first `428`, a pass is asked once per FILE that starts or answers a
-run, four times, each prompt drawn over a live reporter. `globalSetup` runs in the main process before
-any worker exists, asks only when the pinned preset's base model reports `personalSubscription` (so a
-provider-key workspace still sees nothing), and hands the value to each worker through `provide` /
-`inject`, which is RPC and not a file. The hook is WIRING; every judgement it makes lives in
-`src/personalPasswordAsk.ts`, where it is unit-tested, because every one of them is a degradation.
-Traps: `test.env` is NOT applied in that process (hence `src/envFile.ts`, read by the vitest config
-and the hook alike); the verdict reads `personalSubscription` and never `available`, because a
+**Asked ONCE per pass, up front in `src/runAcceptance.ts`, which is also where the pass's run id is
+settled.** In one process the ask could now be lazy and still be made once; it stays up front because a
+person is at the terminal when a pass STARTS and by design not twenty minutes in, when the first
+dispatch would discover the model needs a password. It asks THROUGH the holder (`unlock.obtain`), so
+nothing hands a password back as a value: the suite has no such function any more, which is what makes
+"written nowhere" structural rather than a rule to remember. The wiring is thin; every judgement lives
+in `src/personalPasswordAsk.ts`, where it is unit-tested, because every one of them is a degradation.
+Traps: the verdict reads `personalSubscription` and never `available`, because a
 selectable personal-subscription model is exactly the case that still answers `428`; a catalog it
 cannot read asks later rather than not at all, because the preflight owns diagnosing an unreachable
 deployment; and NOTHING here may throw, since it runs before the first prerequisite is evaluated and
@@ -76,7 +80,8 @@ is a decision rather than a limit of where the pass is running.
 
 Traps in the prompt itself: writing the password beside `CAT_FACTORY_API_KEY` would collapse a
 two-factor credential into one file; it reads the CONTROLLING TERMINAL rather than `process.stdin`,
-which under vitest's forked workers is a pipe; and that device is opened READ-WRITE on Windows
+which whatever runs the script is free to make a pipe (vitest's forked worker then, `pnpm run`
+now); and that device is opened READ-WRITE on Windows
 (`consoleDevice`), because `SetConsoleMode` writes to the console input buffer. Opened `r`, `CONIN$`
 reads fine and refuses raw mode with `EPERM` on a machine with a console right there, which is why the
 prompt never once appeared on Windows. A console-less process cannot open `CONIN$` at all, so the
@@ -145,11 +150,11 @@ is a run id `latest` may still resolve to. It needs the BOARD half of
 the config only (`resolveBoardConfig`): demanding a cluster to clean up after one refuses exactly the
 operator whose cluster has moved on.
 
-Two traps, both learned from the same broken pass. **The RUN ID is settled in `globalSetup` and
-injected**, never resolved in a spec: it is the KEY to the ledger the specs pass facts through, and
-per module graph means per FILE, so five specs opened five ledgers a second apart and every fact
-spec 01 recorded was invisible to spec 02. `requirePassRunId` refuses an absent one rather than
-minting a replacement, because minting one is exactly the shape that made this silent. **The
+Two traps, both learned from the same broken pass. **The RUN ID is settled once by the entry point
+and handed to `buildHarness`**, never resolved in a scenario: it is the KEY to the ledger the
+scenarios pass facts through, and under vitest per module graph meant per FILE, so five specs opened
+five ledgers a second apart and every fact spec 01 recorded was invisible to spec 02. One process
+makes that absence unrepresentable, which is why the injection guard that used to refuse it is gone. **The
 `latest` pointer is written on the first FACT**, not when a ledger opens: a fresh attempt refused by
 a prerequisite creates nothing, and pointing `latest` at it overwrites the pointer to the half-built
 pass whose leftovers caused the refusal, leaving it reachable only by an id nobody wrote down. Which
@@ -168,29 +173,33 @@ NAME**: the `runId` inside a ledger is a copy of it, so a disagreement means a c
 file, and `WorldStore` refuses rather than guessing which half is right.
 
 **It is NOT in CI and must never become so.** `test:run` points at `vitest.config.ts`, which
-collects `test/**/*.test.ts` only: this package's own unit tests. The acceptance specs are behind
-`vitest.acceptance.config.ts`, which nothing but the `acceptance` script names. Adding
-`acceptance/` to the default include would put real model spend and a cluster requirement into
-every CI lane.
+collects `test/**/*.test.ts` only: this package's own unit tests. The scenarios are not tests to any
+runner, so nothing collects them by accident; what WOULD put real model spend and a cluster
+requirement into every CI lane is widening that include to `**/*.test.ts` and adding a test file
+under `src/`.
 
 **Where things live**
 
-| File                           | What                                                                                                               |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `acceptance/00-preflight`      | Reports each prerequisite as its own test. Creates nothing.                                                        |
-| `acceptance/01-adopt-…`        | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.                   |
-| `acceptance/02-feature-…`      | `pl_build` across both services; environment / CI / merge evidence.                                                |
-| `acceptance/03-investigate-…`  | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                                   |
-| `acceptance/04-issue-intake-…` | An issue filed as the REPORTER, delivered from its `ticket` link, and closed by the writeback.                     |
-| `src/`                         | The harness, plus `configure` and `reset`. Per-file roles are tabled in the README.                                |
-| `test/`                        | Unit tests for the pure logic (config, gate, probe failures, ledger, journal, status, evidence, waits, configure). |
+| File                         | What                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `src/runAcceptance.ts`       | The pass: what is settled before it starts, what an operator reads, the exit code.                                 |
+| `src/scenarioRunner.ts`      | The driver: order, bail, the gate before every gated scenario, the summary. Unit-tested.                           |
+| `src/scenarios/preflight`    | Reports each prerequisite as its own step. Creates nothing, and is the one UNGATED scenario.                       |
+| `src/scenarios/adoptAndSca…` | k3s engine + a service per adopted repo + each one's manifest source + two `pl_build` scaffolds.                   |
+| `src/scenarios/featureWith…` | `pl_build` across both services; environment / CI / merge evidence.                                                |
+| `src/scenarios/investigate…` | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.                                   |
+| `src/scenarios/issueIntake…` | An issue filed as the REPORTER, delivered from its `ticket` link, and closed by the writeback.                     |
+| `src/`                       | The harness, plus `configure` and `reset`. Per-file roles are tabled in the README.                                |
+| `test/`                      | Unit tests for the pure logic (config, gate, probe failures, ledger, journal, status, evidence, waits, configure). |
 
-**The rules the specs are written to** (each expanded in the README, and each the reason a
+**The rules the scenarios are written to** (each expanded in the README, and each the reason a
 particular file exists):
 
-0. **Refuse before spending, with the fix attached.** `src/prerequisites.ts` runs in EVERY spec's
-   `beforeAll`, not just spec 00: a resumed pass starts where it stopped, so a gate only the first
-   file mounts is one the resume path skips. An unreadable probe is its own verdict, never read as
+0. **Refuse before spending, with the fix attached.** `src/prerequisites.ts` runs before EVERY
+   gated scenario, not just in scenario 00: a resumed pass starts where it stopped, so a gate only the
+   first one runs is one the resume path skips. The DRIVER runs it, off the scenario's own `gated`
+   flag, so a new scenario cannot spend an afternoon without answering the question, and it is
+   re-evaluated per scenario rather than cached, because a budget can be spent mid-pass. An unreadable probe is its own verdict, never read as
    "unmet", and it NAMES its cause: `src/probeFailure.ts` is a discriminated verdict over three
    states. "Never answered" is classified through kernel's `describeConnectionFailure` (because
    `error.message` renders every transport failure this gate can hit as undici's contentless `fetch
@@ -217,16 +226,17 @@ failed`), with the SDK's own deadline corrected to `timeout` since its abort mar
    is mid-cycle on, and reading "listed" as "answer me" waives the gate one poll after answering
    it. A loop that settles whatever it finds drives a run past decisions a person was meant to make
    and still ends `done`.
-3. **A wait that expires states its last observation.** The vitest timeout is off so
-   `src/deadline.ts` fires first.
+3. **A wait that expires states its last observation.** `src/deadline.ts` is the suite's only
+   clock, and the runner introduces no timeout of its own (the vitest one was disabled for the same
+   reason).
 4. **Report every failing claim, not just the first.** A pass costs an afternoon.
 
-**The defect spec 03 hunts is planted in the SPECIFICATION, not the code.** The two briefs in
+**The defect scenario 03 hunts is planted in the SPECIFICATION, not the code.** The two briefs in
 `src/instructions.ts` disagree about whether pagination offsets are 0- or 1-based; each service is
 correct against its own brief and passes its own review, so the mismatch survives to production the
 way a real integration bug does. A defect planted in the implementation would be caught by
-`pl_build`'s `reviewer` step and spec 03 would find nothing. **So spec 02 asserts the delivery
-machinery worked, never that the product is correct**. That claim is spec 03's, and it is settled
+`pl_build`'s `reviewer` step and scenario 03 would find nothing. **So scenario 02 asserts the delivery
+machinery worked, never that the product is correct**. That claim is scenario 03's, and it is settled
 by fixing the bug.
 
 **Changing a brief means re-checking the symptom.** The briefs, the bug report and
@@ -234,7 +244,7 @@ by fixing the bug.
 Edit the pagination rules and that trace changes, so the bug report has to change with them or the
 investigator is handed a symptom the code does not produce.
 
-**Spec 04 files its issue OUTSIDE the platform, and that is the point.** The reporter holds
+**Scenario 04 files its issue OUTSIDE the platform, and that is the point.** The reporter holds
 `ACCEPTANCE_VCS_TOKEN` and talks to the provider's REST API (`src/vcsIssues.ts`), because an issue the
 platform's own credential created and closed proves only that the credential works. The client is
 provider-KEYED and `gitlab` is null with its reason stated (no `/api/v1` read publishes which instance

@@ -136,7 +136,7 @@ describe('planIssuePurge', () => {
 
   // The exclusion cannot be derived here: a kept pass's issue wears the same title and the same
   // author as a removed pass's, which is the whole fingerprint discovery works from. Closing it
-  // would settle the spec-04 gate of the one pass the reset went out of its way to leave resumable.
+  // would settle the scenario-04 gate of the one pass the reset went out of its way to leave resumable.
   it('leaves an issue belonging to a pass whose files are kept, and names that pass', async () => {
     const kept = { ...ledgerIssue, runId: '20260812090000', number: 11 }
     const result = await plan(api({ listOpen: async () => [open()] }), [], [kept])

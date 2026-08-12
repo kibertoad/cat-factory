@@ -178,7 +178,7 @@ describe('formatPreflightFailure', () => {
   })
 
   it('carries the commands into the refusal, which is the only place a resumed pass reads', async () => {
-    // A pass resumed into spec 02 never runs spec 00, so this one string is the whole report.
+    // A pass resumed into scenario 02 never runs scenario 00, so this one string is the whole report.
     // Losing the commands here would leave the instructions readable only on a fresh pass.
     const report = await runPreflight([prerequisite('a', 'required', unsatisfied)], undefined)
     expect(formatPreflightFailure(report)).toContain('curl -sS http://127.0.0.1:8787/health')
@@ -246,7 +246,7 @@ describe('formatPreflightLine', () => {
 })
 
 describe('the registry', () => {
-  it('gives every prerequisite a distinct id, which spec 00 names its tests from', () => {
+  it('gives every prerequisite a distinct id, which scenario 00 names its tests from', () => {
     const ids = PREREQUISITES.map((prerequisite) => prerequisite.id)
     expect(new Set(ids).size).toBe(ids.length)
   })

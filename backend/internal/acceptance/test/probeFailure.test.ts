@@ -425,7 +425,7 @@ describe('describeProbeFailure, when something that is not the deployment answer
 
 describe('the remedy every probe failure carries', () => {
   it('says how to RESUME rather than claiming a re-run starts clean', () => {
-    // The gate runs in EVERY spec's `beforeAll` by design, so a resumed pass reaches it with
+    // The gate runs in EVERY scenario's `beforeAll` by design, so a resumed pass reaches it with
     // services adopted and pull requests open. Told a re-run starts clean, that operator starts a
     // second pass, which `board-titles` then refuses.
     const rendered = describeProbeFailure(new Error('boom'), probe).remedy.steps.join('\n')

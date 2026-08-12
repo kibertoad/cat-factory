@@ -3,7 +3,7 @@
 // cat-factory splits a per-PR environment into an ENGINE (the workspace's infra handler: which
 // apiserver, which credentials, how a URL is derived) and a SOURCE (each service's own
 // `provisioning`: where its manifests live). See `backend/docs/per-service-provisioning.md`. The
-// suite has to supply both, and they are built here rather than inline in a spec so the pair
+// suite has to supply both, and they are built here rather than inline in a scenario so the pair
 // stays readable as a pair.
 //
 // **`raw`, not `kustomize`, is load-bearing.** A `raw` manifest source is applied synchronously
@@ -55,7 +55,7 @@ export function buildK3sConnection(cluster: ClusterConfig): PublicEnvironmentCon
       namespaceTemplate: cluster.namespaceTemplate,
       url: { source: 'ingressTemplate', hostTemplate: cluster.ingressHostTemplate, scheme: 'http' },
       // 45 minutes. The sweeper's backstop only, not the normal exit: the `disposer` step
-      // reclaims the namespace as the run settles, and spec 02 asserts it did. A TTL that fired
+      // reclaims the namespace as the run settles, and scenario 02 asserts it did. A TTL that fired
       // first would tear the environment down under the assertion and report a teardown the run
       // did not perform.
       defaultTtlMs: 45 * 60 * 1000,
@@ -78,7 +78,7 @@ export function buildServiceProvisioning(): PublicServiceProvisioning {
 }
 
 /**
- * The environment URL a namespace will answer on, for a spec that wants to state the expectation
+ * The environment URL a namespace will answer on, for a scenario that wants to state the expectation
  * before the run produces it.
  *
  * Renders the same `{{namespace}}` hole the backend renders, and ONLY that one: the other
@@ -93,7 +93,7 @@ export function renderEnvironmentHost(hostTemplate: string, namespace: string): 
 /**
  * The FIXED tail of an ingress host template: everything after the last `}}`.
  *
- * What a spec can honestly assert about a provisioned environment's URL. The namespace and
+ * What a scenario can honestly assert about a provisioned environment's URL. The namespace and
  * pull-request number in the template are values the RUN chose, which this suite cannot predict
  * and has no business pinning; the domain it configured is the part that proves the URL came from
  * the k3s wiring under test rather than from some other environment backend.

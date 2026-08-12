@@ -13,7 +13,13 @@
 
 import type { JournalEvent } from './journal.ts'
 import { resumeInvocation } from './operatorText.ts'
-import type { IssueRecord, RunRecord, ServiceRecord, World } from './world.ts'
+import {
+  type IssueRecord,
+  recordsFacts,
+  type RunRecord,
+  type ServiceRecord,
+  type World,
+} from './world.ts'
 
 export type PhaseStatus = {
   phase: string
@@ -34,7 +40,7 @@ export type PassStatus = {
   services: readonly { role: string; record: ServiceRecord }[]
   runs: readonly { role: string; record: RunRecord }[]
   /**
-   * The issue spec 04 filed on the provider, or null.
+   * The issue scenario 04 filed on the provider, or null.
    *
    * Reported beside what the pass created ON the deployment because it is the one artifact this
    * suite leaves OUTSIDE it: a failed pass leaves an open issue on somebody's repository, and the
@@ -97,11 +103,9 @@ export function summarisePass(input: {
     runs,
     issue: world.intakeIssue,
     idleMs: last ? Math.max(0, now - last.at) : null,
-    resume: adviseResume(
-      world.runId,
-      services.length > 0 || runs.length > 0 || world.intakeIssue !== null,
-      input.latestRunId,
-    ),
+    // The same predicate the PASS itself closes with (`world.ts`), rather than the same rule
+    // re-derived from the projections above: the two answers are read by one operator, minutes apart.
+    resume: adviseResume(world.runId, recordsFacts(world), input.latestRunId),
   }
 }
 
@@ -129,10 +133,10 @@ function adviseResume(
  *
  * Grouped rather than keyed on the `phase-started` event, because a journal is routinely read
  * mid-write and while a pass is resuming: a phase whose start line is in an earlier pass's tail
- * still has observations worth showing, and dropping it would report a working spec as absent.
+ * still has observations worth showing, and dropping it would report a working scenario as absent.
  *
  * The journal accumulates across every attempt at one run id, so a phase is routinely entered
- * more than once and routinely goes on after finishing (spec 02 finishes a phase per service).
+ * more than once and routinely goes on after finishing (scenario 02 finishes a phase per service).
  * Two rules keep the report about NOW rather than about the file:
  *
  *   - **`phase-started` re-opens the phase**, re-anchoring `startedAt`. Left at the first entry,
@@ -140,7 +144,7 @@ function adviseResume(
  *     nothing anyone asks of it.
  *   - **`finished` is the phase's LAST word, not a latch.** A phase that finished and then wrote
  *     again is still working, and rendering it `done` beside a message from before the resume is
- *     the one reading that sends someone away believing the spec passed.
+ *     the one reading that sends someone away believing the scenario passed.
  */
 function reducePhases(events: readonly JournalEvent[]): readonly PhaseStatus[] {
   const byPhase = new Map<string, PhaseStatus>()

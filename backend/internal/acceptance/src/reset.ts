@@ -822,7 +822,7 @@ function unlinkedLines(unlinked: readonly string[]): readonly string[] {
     '',
     `Not linked to this workspace, so GET /api/v1/repos says nothing about what backs ` +
       `${unlinked.length === 1 ? 'it' : 'them'}: ${unlinked.join(', ')}. Nothing here needs ` +
-      `clearing for ${unlinked.length === 1 ? 'it' : 'them'}; spec 01 adopts a reachable ` +
+      `clearing for ${unlinked.length === 1 ? 'it' : 'them'}; scenario 01 adopts a reachable ` +
       `repository itself, and if one is spoken for on ANOTHER board the target-repos gate is what ` +
       `says so.`,
   ]
@@ -909,9 +909,9 @@ function leftoversOf(
     ...(issues.length > 0
       ? [
           issues.length === 1
-            ? `The issue spec 04 filed as the REPORTER stays open on the provider, because it was ` +
+            ? `The issue scenario 04 filed as the REPORTER stays open on the provider, because it was ` +
               `never the platform's to close: ${issues[0]}. Close it with the account that filed it.`
-            : `The ${issues.length} issues spec 04 filed as the REPORTER stay open on the ` +
+            : `The ${issues.length} issues scenario 04 filed as the REPORTER stay open on the ` +
               `provider, because they were never the platform's to close: ${issues.join('; ')}. ` +
               `Close them with the account that filed them.`,
         ]

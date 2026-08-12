@@ -66,7 +66,7 @@ export type PreflightContext = {
   config: AcceptanceConfig
   client: CatFactoryClient
   deployment: DeploymentApi
-  /** Board titles this pass will use. Supplied rather than derived: `fixtures.ts` owns them. */
+  /** Board titles this pass will use. Supplied rather than derived: `instructions.ts` owns them. */
   serviceTitles: readonly string[]
   /**
    * The service ids THIS pass's ledger already names, i.e. non-empty on a RESUMED pass.
@@ -95,7 +95,7 @@ export type PreflightContext = {
    * The reporter's issue client for a provider, or null when this suite cannot address that
    * provider's API (`vcsIssues.ts` owns which, and why).
    *
-   * Supplied rather than built here, for the reason every other collaborator is: `fixtures.ts` holds
+   * Supplied rather than built here, for the reason every other collaborator is: `harness.ts` holds
    * the credential, and a unit test drives the gate with no network. Required rather than optional
    * so a facade that forgot to wire it fails to typecheck instead of reporting a satisfied
    * prerequisite it never checked.
@@ -361,8 +361,8 @@ const KEY_REMEDIES: Record<
       `A token's scope is fixed when it is created, so the '${identity.scope}' one cannot be ` +
         'raised: mint a new token rather than editing this one.',
       'In the SPA: Integrations, "API access tokens", Create a token, scope "Full access".',
-      '"Full access" is the rung that carries both what spec 01 needs (creating services) and ' +
-        'what spec 03 needs (answering a parked human gate).',
+      '"Full access" is the rung that carries both what scenario 01 needs (creating services) and ' +
+        'what scenario 03 needs (answering a parked human gate).',
       'Export the new secret as CAT_FACTORY_API_KEY, then revoke the old token.',
     ],
     commands: [publicApiRead(config, '/me', 'confirm the new key is admin on this workspace')],
@@ -836,12 +836,12 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         })
       }
       if (!connection.canManageWorkflows) {
-        // The scaffold runs ship a build-and-push workflow, and spec 02 asserts a real CI gate.
+        // The scaffold runs ship a build-and-push workflow, and scenario 02 asserts a real CI gate.
         // Without `workflows: write` the provider REJECTS the push that adds it, which surfaces as
         // a scaffold pull request that half-worked.
         problems.push(
           'it was not granted permission to write workflow files, so the scaffolded CI workflow ' +
-            "cannot be pushed and spec 02's CI gate has nothing to gate on",
+            "cannot be pushed and scenario 02's CI gate has nothing to gate on",
         )
         steps.push(
           'Grant workflow writes: "Workflows: read and write" on a GitHub App installation, or ' +
@@ -883,7 +883,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
         repo: findRepo(repos, config.repoOwner, entry.name),
       }))
 
-      // A repository this workspace has not LINKED is not a refusal any more: spec 01 adopts one
+      // A repository this workspace has not LINKED is not a refusal any more: scenario 01 adopts one
       // through `POST /api/v1/repos/link`. So what this gate has to establish about an unlisted
       // repository is REACHABILITY, which is a different read, and the only refusal left is the one
       // no API can fix for an operator.
@@ -1053,7 +1053,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       const mine = adopted.filter((repo) => repo.serviceId && owned.has(repo.serviceId))
       // The two populations are reported separately, because they are two different states of the
       // setup and only one of them has been through the checks above: an ADOPTED repository was read
-      // with its links and flags, where a merely reachable one is a promise that spec 01 will link it.
+      // with its links and flags, where a merely reachable one is a promise that scenario 01 will link it.
       const linkedNote =
         adopted.length > 0
           ? `${adopted.map((repo) => `${repo.owner}/${repo.name}`).join(' and ')} ` +
@@ -1065,7 +1065,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       const pendingNote =
         reachable.length > 0
           ? `${reachable.map((repo) => `${repo.owner}/${repo.name}`).join(' and ')} ` +
-            `${reachable.length === 1 ? 'is' : 'are'} reachable but not adopted yet, which spec 01 ` +
+            `${reachable.length === 1 ? 'is' : 'are'} reachable but not adopted yet, which scenario 01 ` +
             `does itself (POST /api/v1/repos/link)`
           : ''
       return satisfied(
@@ -1076,12 +1076,12 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
   },
   {
     id: 'issue-credential',
-    what: "ACCEPTANCE_VCS_TOKEN can open an issue on the repository spec 04's reporter files against",
+    what: "ACCEPTANCE_VCS_TOKEN can open an issue on the repository scenario 04's reporter files against",
     disposition: 'required',
     check: async ({ client, config, issueApiFor }) => {
-      // Spec 04's premise is an issue filed by somebody OUTSIDE this deployment, so the credential
+      // Scenario 04's premise is an issue filed by somebody OUTSIDE this deployment, so the credential
       // that files it is not the workspace's connection and nothing checked so far says anything
-      // about it. Checked here rather than discovered at the top of spec 04, because by then the
+      // about it. Checked here rather than discovered at the top of scenario 04, because by then the
       // pass has already scaffolded two repositories and shipped two features.
       const target = issueTarget(config)
       const { connection } = await client.vcs.getConnection()
@@ -1106,7 +1106,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       if (!api) {
         return unsatisfied(
           `this suite cannot file an issue on '${connection.provider}', which is what this ` +
-            `workspace is connected to, so spec 04 has no way to act as the reporter`,
+            `workspace is connected to, so scenario 04 has no way to act as the reporter`,
           {
             steps: [...UNSUPPORTED_PROVIDER_REASON[connection.provider]],
             docs: 'backend/internal/acceptance/README.md',
@@ -1161,7 +1161,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
     what: 'the workspace writes back to a linked tracker issue when its pull request opens and merges',
     disposition: 'required',
     check: async ({ client, config }) => {
-      // The two actions spec 04's final claim is made of. Both are ON for a workspace that has never
+      // The two actions scenario 04's final claim is made of. Both are ON for a workspace that has never
       // configured them (`DEFAULT_TRACKER_WRITEBACK`), so this gate fires only where somebody
       // deliberately turned one off, and it then refuses BEFORE the pass spends an afternoon
       // delivering an issue nobody will close.
@@ -1176,12 +1176,12 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           `comment-on-open and resolve-on-merge are both on, from ${chosen}` +
             (writeback.questionsOnPark
               ? ''
-              : ' (questionsOnPark is off, which spec 04 does not use)'),
+              : ' (questionsOnPark is off, which scenario 04 does not use)'),
         )
       }
       return unsatisfied(
         `${off.join(' and ')} ${off.length === 1 ? 'is' : 'are'} off for this workspace, from ` +
-          `${chosen}. Spec 04 asserts the platform CLOSED the issue it delivered and commented on ` +
+          `${chosen}. Scenario 04 asserts the platform CLOSED the issue it delivered and commented on ` +
           `it at both edges of the pull request's life, and neither happens with these off.`,
         {
           steps: [
@@ -1208,7 +1208,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
   },
   {
     id: 'auto-merge-policy',
-    what: 'the default risk policy permits the auto-merge every spec ends on',
+    what: 'the default risk policy permits the auto-merge every scenario ends on',
     disposition: 'required',
     check: async ({ client, config }) => {
       const { policies } = await client.riskPolicies.list()
@@ -1276,7 +1276,7 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
       // established per repository.
       const resuming = adoptedServiceIds.length > 0
       if (taken.length === 0 || resuming) {
-        // On a RESUMED pass the frames existing is the point: the ledger names them and spec 01
+        // On a RESUMED pass the frames existing is the point: the ledger names them and scenario 01
         // re-reads the board to confirm they are still there.
         return satisfied(
           resuming

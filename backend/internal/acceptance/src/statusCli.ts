@@ -1,6 +1,6 @@
 // `pnpm --filter @cat-factory/acceptance run status`: read a pass without disturbing it.
 //
-// Deliberately NOT a vitest spec and deliberately not part of the suite: it opens no connection
+// Deliberately not part of the pass: it opens no connection
 // to the deployment, creates nothing, and reads only the two files a pass writes. That is what
 // makes it safe to run against a pass that is currently going, which is the only time anyone
 // wants it.

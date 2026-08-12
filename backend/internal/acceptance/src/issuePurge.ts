@@ -1,6 +1,6 @@
 // Closing the issues a pass filed as the REPORTER, which nothing else can close.
 //
-// Spec 04's premise is that a stranger opens an issue, so it is filed with a credential of its own
+// Scenario 04's premise is that a stranger opens an issue, so it is filed with a credential of its own
 // and the platform's job is to deliver and close it. An interrupted pass therefore leaves a real open
 // issue that belongs to nobody the platform can act for: `reset` has always had to state it as a
 // leftover ("close it with the account that filed it"), because it holds only a board key.
@@ -74,7 +74,7 @@ export type IssuePurgeInput = {
    * Discovery is deliberately blind to which pass filed what: the author-and-title pair is a
    * fingerprint of THE SUITE, and a kept pass's issue wears it exactly as a removed one's does. So
    * the exclusion cannot be derived here and is handed in, or the narrow half of a reset closes the
-   * spec-04 gate of the one pass it went out of its way to leave resumable.
+   * scenario-04 gate of the one pass it went out of its way to leave resumable.
    */
   keptIssues: readonly LedgerIssue[]
   /**

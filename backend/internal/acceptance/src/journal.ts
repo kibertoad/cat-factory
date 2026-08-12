@@ -2,7 +2,7 @@
 //
 // The suite already narrates itself to stdout, and stdout is the wrong place for the question an
 // operator actually has. A pass runs for an afternoon in a terminal nobody is watching, and the
-// questions that follow are asked from somewhere else: which spec is it on, how long has the
+// questions that follow are asked from somewhere else: which scenario is it on, how long has the
 // coder been working, did the backend feature merge, is it worth waiting or is it wedged. A
 // scrollback buffer answers none of those from another window, and answers none of them at all
 // once the terminal is gone.
@@ -33,7 +33,7 @@ export type JournalEventKind =
 export type JournalEvent = {
   /** Epoch ms. The only clock the status reduction has. */
   at: number
-  /** The spec file this came from, e.g. `02-feature-with-defect`. */
+  /** The scenario this came from, e.g. `02-feature-with-defect`. */
   phase: string
   kind: JournalEventKind
   message: string
@@ -61,12 +61,12 @@ export class Journal {
   }
 
   /**
-   * Bind every subsequent event to a spec.
+   * Bind every subsequent event to a scenario.
    *
    * There is deliberately no way to restore the previous phase. A binding that can be swapped
    * back invites a shared helper to enter a phase of its own to do some work and hand the journal
    * back, and the phase it holds while doing so is the one every concurrent write lands under.
-   * Only a spec enters a phase, and it does so once (`acceptance/fixtures.ts`).
+   * It is entered in exactly one place, as a scenario opens (`runAcceptance.ts`'s `open` seam).
    */
   enterPhase(phase: string): void {
     this.#phase = phase

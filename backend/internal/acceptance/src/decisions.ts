@@ -10,7 +10,7 @@
 //   - Exactly TWO kinds are answered, each because the suite has a designed intent for it:
 //     `follow-ups` (triage the Coder's companion raises, on by default on every coder step, which
 //     would otherwise park every build) and `clarity-review` (the human gate `pl_bugfix` is built
-//     around; answering it IS the point of spec 03).
+//     around; answering it IS the point of scenario 03).
 //   - Every other kind is a hard FAILURE naming the kind and step. A run that parks somewhere
 //     unexpected is a finding, not an obstacle.
 //   - Every answer is logged with what it answered and how. A decision settled silently is
@@ -28,7 +28,7 @@
 import { reviewAwaitsHuman } from '@cat-factory/contracts'
 import type { CatFactoryClient, PublicDecision, PublicDecisionList } from '@cat-factory/sdk'
 
-/** What the suite did with one parked decision, for the run log and the spec's own assertions. */
+/** What the suite did with one parked decision, for the run log and the scenario's own assertions. */
 export type AnsweredDecision = {
   kind: string
   /** One line per action taken, e.g. `dismissed follow_up itm_4`. */
@@ -40,7 +40,7 @@ export type AnswerOptions = {
   runId: string
   /**
    * What to say when the platform asks a question the brief already answers. Kept as a caller
-   * argument rather than a constant because spec 03's answer is about the bug under
+   * argument rather than a constant because scenario 03's answer is about the bug under
    * investigation, and a generic string there would be the suite feeding the investigator noise.
    */
   steer: string
@@ -117,7 +117,7 @@ export function unexpectedDecision(decision: PublicDecision): string {
     `not answer.\n` +
     `Only 'follow-ups' and 'clarity-review' are answered here (see src/decisions.ts for why). ` +
     `A run stopping anywhere else is a finding: answer it in the SPA to see what the pipeline ` +
-    `does next, or change the pipeline the spec starts.`
+    `does next, or change the pipeline the scenario starts.`
   )
 }
 
@@ -242,7 +242,7 @@ export function clarityCapReached(decision: ClarityDecision): string {
     `resolve-exceeded: another round, proceed on the last clarified report, or stop and reset.\n` +
     `Worth reading before you do: the suite answers as the person who filed the report, so a ` +
     `review that never converges usually means the report and the reviewer are talking past each ` +
-    `other (see the STEER in acceptance/03-investigate-and-fix.acceptance.ts).`
+    `other (see the STEER in src/scenarios/investigateAndFix.ts).`
   )
 }
 
