@@ -43,7 +43,25 @@ export type PassStatus = {
   issue: IssueRecord | null
   /** Since the last journal line. Null when the journal is empty. */
   idleMs: number | null
+  /** What a resume should name after reading this report. */
+  resume: ResumeAdvice
 }
+
+/**
+ * Which pass, if any, is worth resuming after reading this report.
+ *
+ * A discriminated result rather than a run id that is sometimes this pass's: the report an operator
+ * reads most often is of a pass that created NOTHING (a fresh attempt a prerequisite refused), and
+ * "resume this one" is the one instruction that must not be printed there. Resuming it starts over,
+ * which is the afternoon of real spend the ledger exists to avoid.
+ */
+export type ResumeAdvice =
+  /** This pass created something, so continuing it continues that work. */
+  | { kind: 'this-pass'; runId: string }
+  /** This pass created nothing; that one holds the work, and is what `latest` resolves to. */
+  | { kind: 'another-pass'; runId: string }
+  /** This pass created nothing and no pass on disk has, so a re-run starts clean either way. */
+  | { kind: 'nothing-to-resume' }
 
 export function summarisePass(input: {
   world: World
@@ -51,26 +69,59 @@ export function summarisePass(input: {
   ledgerPath: string
   journalPath: string
   now: number
+  /**
+   * The run id the `latest` pointer names, or null.
+   *
+   * Supplied rather than read here so this stays a pure reduction over the two files a pass leaves,
+   * and so the CLI has one place that touches the state directory.
+   */
+  latestRunId: string | null
 }): PassStatus {
   const { world, events, now } = input
   const last = events.at(-1)
+  const services = collect(world, ['backend', 'frontend'] as const)
+  const runs = collect(world, [
+    'scaffoldBackend',
+    'scaffoldFrontend',
+    'featureBackend',
+    'featureFrontend',
+    'bugfix',
+    'issueDelivery',
+  ] as const)
   return {
     runId: world.runId,
     ledgerPath: input.ledgerPath,
     journalPath: input.journalPath,
     phases: reducePhases(events),
-    services: collect(world, ['backend', 'frontend'] as const),
-    runs: collect(world, [
-      'scaffoldBackend',
-      'scaffoldFrontend',
-      'featureBackend',
-      'featureFrontend',
-      'bugfix',
-      'issueDelivery',
-    ] as const),
+    services,
+    runs,
     issue: world.intakeIssue,
     idleMs: last ? Math.max(0, now - last.at) : null,
+    resume: adviseResume(
+      world.runId,
+      services.length > 0 || runs.length > 0 || world.intakeIssue !== null,
+      input.latestRunId,
+    ),
   }
+}
+
+/**
+ * The same rule the `latest` pointer follows, read back: a pass is resumable once it has recorded a
+ * FACT, and the pointer names the most recent pass that did.
+ *
+ * The two are computed from different sources on purpose. This pass's records come from its own
+ * ledger, which is the report's subject; the pointer is what the deployment-wide "resume the thing
+ * that broke" resolves to. They agree for a pass that got somewhere, and their disagreement is
+ * exactly the fact worth printing: the attempt being read did nothing, and the work is elsewhere.
+ */
+function adviseResume(
+  runId: string,
+  recordedFacts: boolean,
+  latestRunId: string | null,
+): ResumeAdvice {
+  if (recordedFacts) return { kind: 'this-pass', runId }
+  if (latestRunId && latestRunId !== runId) return { kind: 'another-pass', runId: latestRunId }
+  return { kind: 'nothing-to-resume' }
 }
 
 /**
@@ -178,6 +229,17 @@ export function formatPassStatus(
     // absence carry a meaning nobody can see.
     lines.push('', `Last journal line ${formatDuration(status.idleMs)} ago.`)
   }
-  lines.push('', `Resume with: ${resumeInvocation(status.runId)}`)
+  lines.push('', resumeLine(status.resume))
   return lines.join('\n')
+}
+
+function resumeLine(advice: ResumeAdvice): string {
+  if (advice.kind === 'this-pass') return `Resume with: ${resumeInvocation(advice.runId)}`
+  if (advice.kind === 'another-pass') {
+    return (
+      `This pass recorded nothing, so resuming it would start over. Pass ${advice.runId} is the ` +
+      `most recent that created something: ${resumeInvocation(advice.runId)}`
+    )
+  }
+  return 'This pass recorded nothing, and neither has any other pass here: a re-run starts clean.'
 }

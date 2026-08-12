@@ -16,13 +16,26 @@ function event(partial: Partial<JournalEvent> & { message: string }): JournalEve
   return { at: at(0), phase: '01-bootstrap', kind: 'observation', ...partial }
 }
 
-function summarise(input: { world?: World; events?: JournalEvent[]; now?: number }) {
+function worldWithWork(): World {
+  return {
+    ...emptyWorld('run-1'),
+    backend: { blockId: 'blk_1', serviceId: 'blk_1', repoName: 'acme/api' },
+  }
+}
+
+function summarise(input: {
+  world?: World
+  events?: JournalEvent[]
+  now?: number
+  latestRunId?: string | null
+}) {
   return summarisePass({
     world: input.world ?? emptyWorld('run-1'),
     events: input.events ?? [],
     ledgerPath: '/tmp/run-1.json',
     journalPath: '/tmp/run-1.journal.jsonl',
     now: input.now ?? at(0),
+    latestRunId: input.latestRunId ?? null,
   })
 }
 
@@ -175,10 +188,35 @@ describe('summarisePass', () => {
 })
 
 describe('formatPassStatus', () => {
-  it('always ends with the command that resumes this exact pass', () => {
+  it('ends with the command that resumes this exact pass, once the pass has created something', () => {
     // The value an operator needs and cannot recover any other way once the terminal is gone.
-    const rendered = formatPassStatus(summarise({}), formatDuration)
+    const rendered = formatPassStatus(summarise({ world: worldWithWork() }), formatDuration)
     expect(rendered).toContain(resumeInvocation('run-1'))
+  })
+
+  it('sends a pass that created NOTHING to the pass that did, rather than to itself', () => {
+    // The commonest report there is: an attempt a prerequisite refused. Resuming it starts over,
+    // which is the afternoon of real spend the ledger exists to avoid, so the closing line names the
+    // pass holding the work instead. That id is also the one an operator cannot read off the board.
+    const rendered = formatPassStatus(summarise({ latestRunId: '20260809175530' }), formatDuration)
+    expect(rendered).toContain(resumeInvocation('20260809175530'))
+    expect(rendered).not.toContain(resumeInvocation('run-1'))
+    expect(rendered).toContain('recorded nothing')
+  })
+
+  it('offers no resume at all when nothing on disk has recorded a fact', () => {
+    // "Resume nothing" and "resume something else" are different facts, and only the first one means
+    // a re-run is the same either way.
+    const rendered = formatPassStatus(summarise({}), formatDuration)
+    expect(rendered).toContain('a re-run starts clean')
+    expect(rendered).not.toContain('ACCEPTANCE_RUN_ID')
+  })
+
+  it('resumes ITSELF even while the pointer names a later pass', () => {
+    // A pass that got somewhere is resumable whether or not it is the most recent one to have done
+    // so, and the report is about the pass being read.
+    const status = summarise({ world: worldWithWork(), latestRunId: 'someone-elses-pass' })
+    expect(status.resume).toEqual({ kind: 'this-pass', runId: 'run-1' })
   })
 
   it('says outright that nothing has been recorded, rather than rendering an empty report', () => {
