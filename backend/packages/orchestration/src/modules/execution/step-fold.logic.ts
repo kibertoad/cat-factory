@@ -98,6 +98,64 @@ export function recordDispatchAttribution(
 }
 
 /**
+ * The dispatch epoch for the NEXT job of `dispatchedKind` in this run: how many jobs of that kind
+ * the run has already dispatched (see `AgentRunContext.dispatchEpoch`). The container
+ * executor suffixes its harness job id with it, so `<runId>-<agentKind>[-epoch]` names the n-th
+ * job of that kind in the run and every dispatch gets an id of its own.
+ *
+ * That matters because the harness re-attaches to an EXISTING job id rather than re-running
+ * (replay idempotency), and a container-reusing transport — a warm local pool, a self-hosted
+ * runner pool — keeps its `JobRegistry` alive across rounds, since reclaiming a pooled member does
+ * NOT destroy it. A pool is also asked to route STICKY BY JOB ID (`runner-pool-integration.md` §7),
+ * which is right for a live job and exactly wrong afterwards. So a re-dispatch under a used id
+ * REPLAYS the earlier job's completed result: same output, same recorded usage, no model call.
+ * Every loop in the engine that re-dispatches is exposed to that, and each one it reached read
+ * either as work that "passed regardless" (the Tester re-test that never re-tested) or as a loop
+ * that could not converge (a companion re-grading a byte-identical artifact and never moving 0.76).
+ *
+ * Read off {@link recordDispatchAttribution}'s counter, which is the whole design: that is the one
+ * funnel EVERY dispatch site already calls, it counts the same `dispatchedKind` string the job id
+ * is built from, and `resetStepForRerun` deliberately never clears it. So the epoch is monotonic by
+ * construction and total over the loops: a new re-dispatching mechanism (a companion rework round,
+ * a tester quality re-run, a human's second fix request, whatever comes next) needs no counter of
+ * its own and no registration anywhere.
+ *
+ * It replaced a hand-summed list of six per-loop counters (`test.attempts`, `gate.attempts`,
+ * `ralph.attempts`, eviction recoveries, PR-review resumes, a fork-phase bump), which was wrong in
+ * both directions: a loop nobody added left the epoch pinned at 0, and `ralph.attempts` is ZEROED
+ * by `restartRalphState` on a loop-back, so a summed epoch could go DOWN onto an id the harness
+ * already held. Counting across EVERY step, not just the dispatching one, is what makes the id
+ * unique within the RUN rather than within the step: `fixer` is dispatched as a helper off four
+ * different steps, and two of them requesting one fix each would otherwise both mint `<run>-fixer`.
+ */
+export function dispatchEpochFor(
+  instance: { steps: readonly PipelineStep[] },
+  dispatchedKind: string,
+): number {
+  let dispatched = 0
+  for (const step of instance.steps) {
+    for (const entry of step.dispatches ?? []) {
+      if (entry.agentKind === dispatchedKind) dispatched += entry.count
+    }
+  }
+  return dispatched
+}
+
+/**
+ * The `dispatchEpoch` slice of an agent context: {@link dispatchEpochFor}'s count, and nothing at
+ * all for the run's FIRST job of a kind. Absent and 0 mean the same thing to the container executor
+ * (the job id keeps its unsuffixed shape), and a spread-ready partial keeps that equivalence here,
+ * beside the counter, rather than as a conditional at the one call site that builds the context.
+ */
+export function dispatchEpochSlice(
+  instance: { steps: readonly PipelineStep[] },
+  dispatchedKind: string,
+): { dispatchEpoch?: number } {
+  const dispatchEpoch = dispatchEpochFor(instance, dispatchedKind)
+  return dispatchEpoch > 0 ? { dispatchEpoch } : {}
+}
+
+/**
  * Record what an INLINE dispatch will do with the running kind's tool servers (MCP).
  *
  * The counterpart of the `handle.toolServers` fold above on the path that returns a RESULT instead

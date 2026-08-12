@@ -873,19 +873,30 @@ export const pipelineStepSchema = v.object({
   ),
   /**
    * Transient rework feedback carried on a PRODUCER step while it is being re-run by
-   * a downstream companion (the analogue of an approval's `changes_requested`
+   * a downstream reviewer (the analogue of an approval's `changes_requested`
    * feedback for the automatic path). Folded into the agent's revision context on the
-   * re-run, then cleared. Absent when no companion rework is in flight.
+   * re-run, then cleared. Absent when no rework is in flight.
    */
   rework: v.optional(
     v.nullable(
       v.object({
-        /** The producer's previous proposal the companion challenged. */
+        /** The producer's previous proposal the reviewer challenged. */
         previousProposal: v.string(),
-        /** The companion's prose feedback driving the rework. */
+        /** The reviewer's prose feedback driving the rework. */
         feedback: v.string(),
         /** Optional per-item / per-block challenges to address. */
         comments: v.optional(v.array(stepReviewCommentSchema)),
+        /**
+         * WHO asked. Four paths write this field and they are not all automatic: a companion's
+         * below-threshold round and a judge's bounce are (`reviewer`), and so is a human GRANTING
+         * an extra companion round (the feedback being answered is still the companion's), but a
+         * human requesting changes on a companion's gate has their OWN feedback carried here
+         * (`human`). Required so a new rework driver has to answer the question rather than
+         * inherit whichever framing the prompt happened to use: telling an agent a person is
+         * waiting on work no person has looked at is a false attribution, and hiding a real one
+         * behind "your work was reviewed" loses the fact that somebody IS waiting.
+         */
+        requestedBy: v.picklist(['human', 'reviewer']),
       }),
     ),
   ),

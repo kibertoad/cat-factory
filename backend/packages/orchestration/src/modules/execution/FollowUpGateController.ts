@@ -223,7 +223,9 @@ export class FollowUpGateController {
     // Reset the step for a fresh dispatch; `step.followUps` is intentionally preserved
     // (resetStepForRerun doesn't touch it) so the surfaced items survive the loop.
     this.stepGraph.resetStepForRerun(step)
-    step.rework = { previousProposal: '', feedback }
+    // A person decided these: policy can only DISMISS an item, so anything queued or answered
+    // reached that state through the follow-up inbox. The feedback prose says so too.
+    step.rework = { previousProposal: '', feedback, requestedBy: 'human' }
     this.stepGraph.startStep(step)
     if (instance.status === 'blocked') instance.status = 'running'
   }

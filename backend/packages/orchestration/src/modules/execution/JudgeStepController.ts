@@ -434,6 +434,7 @@ export class JudgeStepController {
     this.deps.stepGraph.rerunProducerThrough(instance, producerIndex, stepIndex, {
       previousProposal: instance.steps[producerIndex]?.output ?? '',
       feedback: renderJudgeRework(verdict, judge.rubric.name, extraFeedback),
+      requestedBy: 'reviewer',
     })
     // `rerunProducerThrough` resets the judge step too; `judge` survives `resetStepForRerun`
     // by design, but re-assign explicitly so the incremented bounce count is what persists.
@@ -572,7 +573,10 @@ export class JudgeStepController {
     const verdict = step.judge?.verdict ?? { score: 0, summary: '', findings: [] }
     this.deps.stepGraph.rerunProducerThrough(instance, bounceTo, stepIndex, {
       previousProposal: instance.steps[bounceTo]?.output ?? '',
+      // The human bought the round, but what the producer answers is the JUDGE's verdict (their
+      // own guidance rides inside it), so the round reads as the automatic one it repeats.
       feedback: renderJudgeRework(verdict, judge.rubric.name, feedback),
+      requestedBy: 'reviewer',
     })
     step.judge = { ...step.judge!, status: 'bouncing' }
     if (instance.status === 'blocked') instance.status = 'running'

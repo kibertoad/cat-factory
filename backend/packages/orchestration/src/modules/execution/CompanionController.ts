@@ -366,6 +366,7 @@ export class CompanionController {
     this.deps.stepGraph.loopCompanionProducer(instance, instance.currentStep, {
       previousProposal: producer.output ?? '',
       feedback: assessment?.summary ?? '',
+      requestedBy: 'reviewer',
       ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
     })
     await this.deps.stateMachine.persistAndEmit(workspaceId, instance, {

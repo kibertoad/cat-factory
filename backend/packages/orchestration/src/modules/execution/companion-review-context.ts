@@ -95,8 +95,13 @@ export function priorReviewFor(
 
 /**
  * The `revision` slice: what a step being RE-RUN with feedback is answering now — a human's
- * "request changes" on its approval gate, or a downstream companion's automatic rework
+ * "request changes" on its approval gate, or a rework round a downstream reviewer drove
  * (`step.rework`, which wins when both are present). Empty when neither applies.
+ *
+ * WHO asked travels with it. This is the one place both loops are in view, and the answer is not
+ * derivable from which field carried the feedback: a human requesting changes on a COMPANION's
+ * gate has their feedback redirected onto the producer's `step.rework` too, which is why the
+ * source of that record states it rather than this reader inferring it.
  */
 function revisionSlice(step: PipelineStep): { revision?: AgentRunContext['revision'] } {
   const source = step.rework
@@ -104,12 +109,14 @@ function revisionSlice(step: PipelineStep): { revision?: AgentRunContext['revisi
         previousProposal: step.rework.previousProposal,
         feedback: step.rework.feedback,
         comments: step.rework.comments,
+        requestedBy: step.rework.requestedBy,
       }
     : step.approval?.status === 'changes_requested'
       ? {
           previousProposal: step.approval.proposal,
           feedback: step.approval.feedback ?? '',
           comments: step.approval.comments,
+          requestedBy: 'human' as const,
         }
       : undefined
   if (!source) return {}
@@ -117,6 +124,10 @@ function revisionSlice(step: PipelineStep): { revision?: AgentRunContext['revisi
     revision: {
       previousProposal: source.previousProposal,
       feedback: source.feedback,
+      // A rework row written before this field existed (a run in flight across the deploy) reads
+      // back without it. The reviewer framing is the safe answer there: it is the common case and
+      // the failure it avoids — claiming a person is waiting — is the one being fixed.
+      requestedBy: source.requestedBy ?? 'reviewer',
       ...(source.comments?.length
         ? {
             comments: source.comments.map((c) => ({

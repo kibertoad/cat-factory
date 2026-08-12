@@ -88,7 +88,11 @@ describe('the prior-rounds fold', () => {
       context({
         agentKind: 'architect',
         priorReview: { role: 'producer', threshold: 0.8, roundsRemaining: 1, rounds: [rounds[0]!] },
-        revision: { previousProposal: 'v1', feedback: 'runAsNonRoot needs a numeric uid' },
+        revision: {
+          previousProposal: 'v1',
+          feedback: 'runAsNonRoot needs a numeric uid',
+          requestedBy: 'reviewer',
+        },
       }),
       registry(),
     )
@@ -116,7 +120,11 @@ describe('feedback accounting', () => {
     const prompt = userPromptFor(
       context({
         agentKind: 'architect',
-        revision: { previousProposal: 'v1', feedback: 'commit to an ingress class' },
+        revision: {
+          previousProposal: 'v1',
+          feedback: 'commit to an ingress class',
+          requestedBy: 'reviewer',
+        },
       }),
       registry(),
     )
@@ -126,12 +134,53 @@ describe('feedback accounting', () => {
     expect(prompt).toContain('"Response to review"')
   })
 
-  it('does not tell the producer a HUMAN asked, since a companion round is not one', () => {
+  it('puts the accounting in the REPLY, never in the artifact the producer commits', () => {
+    // ONE directive reaches every producer, including the ones whose deliverable is committed:
+    // `doc-writer` ships a document and `spec-writer` its `spec/` shards, and nothing strips a
+    // "Response to review" section back out of either — told to answer IN the deliverable, they
+    // ship it carrying a dialogue with an automated reviewer, one section per round. The reply is
+    // where correspondence belongs, and it is what every companion reads anyway (the engine folds
+    // a settled step's output into the next prompt as prior work).
     const prompt = userPromptFor(
-      context({ agentKind: 'architect', revision: { previousProposal: 'v1', feedback: 'f' } }),
+      context({
+        agentKind: 'architect',
+        revision: {
+          previousProposal: 'v1',
+          feedback: 'name the audience',
+          requestedBy: 'reviewer',
+        },
+      }),
       registry(),
     )
-    expect(prompt).not.toContain('A human reviewed')
+    expect(prompt).toContain('in your REPLY')
+    expect(prompt).toContain('never commit it into the work itself')
+  })
+
+  it('names WHO asked: an automatic reviewer round is not a person waiting', () => {
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        revision: { previousProposal: 'v1', feedback: 'f', requestedBy: 'reviewer' },
+      }),
+      registry(),
+    )
+    expect(prompt).toContain('An automated reviewer graded your previous proposal')
+    expect(prompt).not.toContain('A person reviewed')
+  })
+
+  it('still says a PERSON asked when one actually did, which outranks the feedback itself', () => {
+    // The human "request changes" path on a companion's gate redirects onto the producer's
+    // `rework`, so both loops arrive through the same slice and only `requestedBy` tells them
+    // apart. Flattening them loses the fact that somebody is waiting on this round.
+    const prompt = userPromptFor(
+      context({
+        agentKind: 'architect',
+        revision: { previousProposal: 'v1', feedback: 'f', requestedBy: 'human' },
+      }),
+      registry(),
+    )
+    expect(prompt).toContain('A person reviewed your previous proposal')
+    expect(prompt).not.toContain('An automated reviewer')
   })
 
   it('tells the GRADER to check the accounting against the work, once rounds exist', () => {
@@ -141,6 +190,9 @@ describe('feedback accounting', () => {
     )
     expect(prompt).toContain('confirm a claimed change by finding it')
     expect(prompt).toContain('settled on the argument')
+    // A producer whose deliverable is a pushed commit answers with the change alone, so a missing
+    // accounting must not become a finding of its own — that would spend a rework round on prose.
+    expect(prompt).toContain('a missing accounting is not a finding')
   })
 
   it('withholds the grader directive on the FIRST grading, where no accounting can exist yet', () => {

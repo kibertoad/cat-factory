@@ -4,7 +4,7 @@ import type { PipelineStep, ServiceProvisioning } from '@cat-factory/kernel'
 import {
   decideDeployerConfig,
   deployerServiceConfigIssues,
-  deployEvictionEpoch,
+  deployDispatchEpoch,
   deployJobId,
   hasEnabledDeployerStep,
   orderProvisionTargets,
@@ -77,17 +77,29 @@ describe('orderProvisionTargets', () => {
   })
 })
 
-describe('deployEvictionEpoch', () => {
-  it('is 0 for a first dispatch', () => {
-    expect(deployEvictionEpoch(step())).toBe(0)
+describe('deployDispatchEpoch', () => {
+  it('is 0 for a first dispatch, stamped or not', () => {
+    expect(deployDispatchEpoch(step())).toBe(0)
+    expect(deployDispatchEpoch(step({ attempts: 1 }))).toBe(0)
   })
 
   it('sums genuine + transient eviction recoveries', () => {
-    expect(deployEvictionEpoch(step({ evictionRecoveries: 2 }))).toBe(2)
-    expect(deployEvictionEpoch(step({ transientEvictionRecoveries: 3 }))).toBe(3)
+    expect(deployDispatchEpoch(step({ evictionRecoveries: 2 }))).toBe(2)
+    expect(deployDispatchEpoch(step({ transientEvictionRecoveries: 3 }))).toBe(3)
     expect(
-      deployEvictionEpoch(step({ evictionRecoveries: 1, transientEvictionRecoveries: 4 })),
+      deployDispatchEpoch(step({ evictionRecoveries: 1, transientEvictionRecoveries: 4 })),
     ).toBe(5)
+  })
+
+  it('counts the step RE-STARTS too, so a rebuild loop-back cannot re-attach', () => {
+    // The human-test gate's "rebuild the environment" resets the deployer and starts it again
+    // (`rerunRange`), which bumps only `attempts`. Without this term the rebuild re-derived the
+    // FIRST deploy's job id and the idempotent transport re-attached to its completed provision
+    // job: nothing was re-provisioned, and the gate read back a stale environment as a fresh one.
+    expect(deployDispatchEpoch(step({ attempts: 2 }))).toBe(1)
+    expect(deployDispatchEpoch(step({ attempts: 3 }))).toBe(2)
+    // Both terms in play: two rebuilds, one of which was also evicted and recovered.
+    expect(deployDispatchEpoch(step({ attempts: 3, evictionRecoveries: 1 }))).toBe(3)
   })
 })
 

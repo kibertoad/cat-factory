@@ -74,14 +74,24 @@ export const PRIOR_ROUNDS_DIRECTIVE =
  * Disagreement is a legitimate outcome and this is what gives it a channel. A reviewer is not
  * always right, and a producer that must ARGUE a point down is doing better work than one that
  * complies with everything or ignores what it doubts.
+ *
+ * The accounting goes in the producer's REPLY, never into the artifact. Every companion reads that
+ * reply — the engine folds a settled step's output into the next agent's prompt as prior work
+ * (`priorOutputsFor` → the "grading the output of ..." section), which is exactly what an inline
+ * companion grades and what a container-backed one reads beside the checkout. Told to put it "in
+ * your deliverable" instead, a `doc-writer` commits a dialogue with an automated reviewer into the
+ * document that ships, and a `spec-writer` into its `spec/` shards, with nothing anywhere that
+ * strips it back out.
  */
 export const FEEDBACK_ACCOUNTING_DIRECTIVE =
   'Account for EVERY point raised, one by one. Either change the work and say what you changed, ' +
   'or, where you judge a point wrong, already handled, or out of scope, leave the work as it is ' +
   'and say plainly why. A point you neither act on nor argue against is indistinguishable from ' +
-  'one you missed, and it will be raised again unchanged. Put that accounting IN your ' +
-  'deliverable, as a short "Response to review" section listing each point with its disposition ' +
-  'and, where you changed something, where the change is.'
+  'one you missed, and it will be raised again unchanged. Put that accounting in your REPLY, as a ' +
+  'short "Response to review" section listing each point with its disposition and, where you ' +
+  'changed something, where the change is. It belongs in the reply and nowhere else: it is ' +
+  'correspondence about the work, so never commit it into the work itself — not into a document, ' +
+  'a specification, a code comment or a commit message.'
 
 /**
  * What a grader does with the accounting {@link FEEDBACK_ACCOUNTING_DIRECTIVE} asks for.
@@ -90,14 +100,22 @@ export const FEEDBACK_ACCOUNTING_DIRECTIVE =
  * The claim is checked against the WORK rather than believed: an accounting asserting a change the
  * artifact does not contain is worse than the point it answers, since it would otherwise buy a
  * rating the work did not earn.
+ *
+ * A MISSING accounting is deliberately not a finding of its own. The rating is on the work, and a
+ * producer whose deliverable is a pushed commit legitimately answers with the change alone (the
+ * `coder` under `reviewer` is exactly that pair, and the repo's own rule says a coder may end with
+ * no final text at all). Marking its absence would spend a rework round on prose the reviewer
+ * cannot read anyway; what an unanswered point costs is stated where it belongs, in the point
+ * staying open.
  */
 export const ACCOUNTING_REVIEW_DIRECTIVE =
-  'The work should carry a "Response to review" section accounting for each point you raised. ' +
-  'Read it, and hold it to the WORK: confirm a claimed change by finding it, and say so when you ' +
-  'cannot. A point argued against is settled on the argument, so accept a sound one and stop ' +
-  'raising it rather than repeating it. A point neither changed nor argued is still open. An ' +
-  'accounting that claims a change the work does not contain is a more serious finding than the ' +
-  'point it was answering, and no accounting at all where you raised points is itself a finding.'
+  'The producer was asked to answer each point you raised, in its reply. Where it did, hold that ' +
+  'accounting to the WORK: confirm a claimed change by finding it, and say so when you cannot. A ' +
+  'point argued against is settled on the argument, so accept a sound one and stop raising it ' +
+  'rather than repeating it. A point neither changed nor argued is still open. An accounting that ' +
+  'claims a change the work does not contain is a more serious finding than the point it was ' +
+  'answering. Rate the WORK, never the accounting: some producers answer only with the change ' +
+  'itself, so a missing accounting is not a finding — the points it leaves open are.'
 
 /** How much of one round's prose a rendering keeps. Generous for the latest, tight for the rest. */
 const LATEST_ROUND_CHARS = 4_000

@@ -242,9 +242,26 @@ export function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry
 }
 
 /**
- * When a human requested changes on this step's gated proposal, append their
- * feedback and the previous proposal so the agent revises rather than restarts.
- * Applied to every inline agent kind (standard-phase and generic alike).
+ * Who asked for the revision, said in one sentence. An exhaustive `Record`, so a third kind of
+ * reviewer fails to compile here rather than silently borrowing one of these two framings.
+ *
+ * The distinction is load-bearing in both directions: a companion's automatic round framed as a
+ * person's request tells the agent somebody is waiting on work no person has read, and a real
+ * "request changes" flattened into "your work was reviewed" loses the one fact that outranks the
+ * feedback itself.
+ */
+const REVISION_REQUESTER_FRAMING: Record<
+  NonNullable<AgentRunContext['revision']>['requestedBy'],
+  string
+> = {
+  human: 'A person reviewed your previous proposal and requested changes.',
+  reviewer: 'An automated reviewer graded your previous proposal and asked for changes.',
+}
+
+/**
+ * When changes were requested on this step's previous proposal — by a person on its gate, or by
+ * the reviewer that grades it — append the feedback and that proposal so the agent revises rather
+ * than restarts. Applied to every inline agent kind (standard-phase and generic alike).
  */
 function withRevision(prompt: string, context: AgentRunContext): string {
   const revision = context.revision
@@ -252,12 +269,11 @@ function withRevision(prompt: string, context: AgentRunContext): string {
   const lines = [
     prompt,
     '',
-    // Deliberately passive about WHO reviewed: this same slice carries a human "request changes"
-    // and an automatic companion's rework round, and naming a human for the second one told the
-    // agent a person was waiting on work no person had looked at.
-    'Your previous proposal was reviewed and changes were requested. Revise that proposal to',
-    'answer the feedback: keep what still holds, change what was flagged. Do not start from',
-    'scratch.',
+    // Falls back to the reviewer framing for a rework row written before `requestedBy` existed:
+    // it is the common case, and it is the false-human claim that this exists to stop.
+    REVISION_REQUESTER_FRAMING[revision.requestedBy] ?? REVISION_REQUESTER_FRAMING.reviewer,
+    'Revise that proposal to answer the feedback: keep what still holds, change what was',
+    'flagged. Do not start from scratch.',
     '',
     FEEDBACK_ACCOUNTING_DIRECTIVE,
     '',

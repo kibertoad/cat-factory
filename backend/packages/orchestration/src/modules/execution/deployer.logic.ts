@@ -58,12 +58,27 @@ export function orderProvisionTargets(
 }
 
 /**
- * The deploy step's eviction epoch: the total number of container-eviction re-dispatches so far
- * (genuine + transient infra churn). Drives {@link deployJobId} so each eviction recovery
- * dispatches a fresh job id, analogous to the agent path's `dispatchEpochFor`.
+ * The deploy step's dispatch epoch: how many times this step has already been sent, counting the
+ * two things that re-send it. Drives {@link deployJobId}, so each re-dispatch addresses a fresh
+ * job rather than re-attaching to a finished one — the deploy analogue of the agent path's
+ * `dispatchEpochFor`, and needed for the same reason (the runner transport is idempotent per ref).
+ *
+ *  - CONTAINER EVICTIONS (genuine + transient infra churn), where re-using the id would route the
+ *    recovery straight back to the job whose runner just died.
+ *  - The step's own RE-STARTS, which is the human-test gate's "rebuild the environment" loop-back
+ *    (`rerunRange` resets this step and starts it again, bumping `attempts`). Without this term
+ *    that rebuild re-derived the first deploy's id, re-attached to its COMPLETED provision job, and
+ *    reported a successful rebuild of an environment nothing had re-provisioned.
+ *
+ * It cannot read the agent path's counter: a deploy job is dispatched through
+ * `EnvironmentProvisioning.startProvision` with a ref, not as an agent job, so nothing records it
+ * on `step.dispatches`. Both terms only ever grow (`startStep` bumps `attempts` once per fresh
+ * attempt and `resetStepForRerun` preserves it), and neither moves WITHIN one start, so a Workflows
+ * replay of the dispatch still reproduces the same id.
  */
-export function deployEvictionEpoch(step: PipelineStep): number {
-  return (step.evictionRecoveries ?? 0) + (step.transientEvictionRecoveries ?? 0)
+export function deployDispatchEpoch(step: PipelineStep): number {
+  const evictions = (step.evictionRecoveries ?? 0) + (step.transientEvictionRecoveries ?? 0)
+  return evictions + Math.max(0, (step.attempts ?? 1) - 1)
 }
 
 // ---------------------------------------------------------------------------
