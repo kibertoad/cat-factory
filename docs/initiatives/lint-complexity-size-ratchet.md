@@ -250,7 +250,7 @@ ownerId)` pair, a spend-ledger row's rollup keys) to `persistenceRpcTenantSurfac
 > `containerAgentResult`/`jobBody`, `integrations` `WebhookService`/`compose`/
 > `EnvironmentConnectionService`/`provision-detect`, `frontend` `usePipelineErrorToast`/
 > `KubernetesEnvironmentForm`, `node` `config.ts`, `local` `container.ts`, Worker
-> `WorkersAiLlmUpstream`, and the test harnesses (`conformance.spec.ts`, node/local `harness.ts`,
+> `WorkersAiLlmUpstream`, and the test harnesses (`conformanceHarness.ts`, node/local `harness.ts`,
 > `FakeAgentExecutor`, `docs-refresh/preset.test.ts`). Three near-budget files that grew from
 > in-file helpers (`ContainerAgentExecutor.ts`, `rpc.ts`, `container/modules.ts`) had those helpers
 > relocated to sibling files rather than raising their `check-file-size.mjs` allowances. The

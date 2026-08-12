@@ -23,6 +23,8 @@ export default defineConfig(async () => {
         // wrangler v4 would try to open an authenticated remote proxy session
         // for it on startup. Tests inject a FakeAgentExecutor and never touch
         // env.AI, so opt out of remote bindings to keep the suite fully local.
+        // `test/helpers.ts` goes one step further and unbinds `AI` for the app it
+        // builds, so an inline call cannot reach a binding that can only reject.
         remoteBindings: false,
         // NOTE: the v3 `isolatedStorage`/`singleWorker` pool options no longer
         // exist on the v4 `cloudflareTest` plugin schema (it strips unknown
@@ -92,7 +94,7 @@ export default defineConfig(async () => {
       }),
     ],
     test: {
-      setupFiles: ['./test/apply-migrations.ts'],
+      setupFiles: ['./test/setup/silenceLogs.ts', './test/apply-migrations.ts'],
       // These run inside real workerd against a real local D1, and the heaviest
       // engine specs drive a run to a standstill TWICE (park on a decision / the
       // spend gate, resolve it, then drive again) — each round is real store I/O.
@@ -104,37 +106,26 @@ export default defineConfig(async () => {
       // means "slow", not "broken".
       //
       // 10s was set as "roughly double the observed worst case" from a local run, and CI
-      // then disproved it: the shard carrying `conformance.spec.ts` runs ~2x the wall-clock
-      // of its siblings (the pre-existing `[ai]`-binding rejection storm below retries with
-      // exponential backoff on every inline Tester-QC call), and the heaviest double-drive
-      // spec — the spend-gate budget_paused card — tipped into a spurious 10s timeout while
-      // every other shard stayed green.
+      // then disproved it: the heaviest double-drive spec — the spend-gate budget_paused
+      // card — tipped into a spurious 10s timeout while every other shard stayed green.
       //
       // So this now matches the NODE runtime's 30s (`runtimes/node/vitest.config.ts`), which
-      // is the real fix rather than a nudge: both facades run the SAME
-      // `defineConformanceSuite`, so holding the shared suite to a 3x tighter budget on the
+      // is the real fix rather than a nudge: both facades run the SAME conformance groups,
+      // so holding the shared suite to a 3x tighter budget on the
       // slower runtime (workerd + real D1) was a harness parity gap — the identical spec
       // passes on the Postgres shards and only ever failed here. Given the budget-bounded
       // driver above, the headroom cannot hide a stall; it only stops "slow" from reading as
       // "broken".
       testTimeout: 30_000,
       hookTimeout: 30_000,
-      // Ignore workerd's un-awaitable unhandled rejections so a benign, expected
-      // one can't red an otherwise-green run. The `[ai]` binding cannot run in the
-      // local pool (`remoteBindings: false`), so any engine path that fires an INLINE
-      // Cloudflare Workers AI call (the Tester quality-review companion) rejects with
-      // "Binding AI needs to be run remotely". The product code CATCHES that failure and
-      // passes through (every assertion still passes) — but AI SDK v7 wraps each provider
-      // call in a diagnostics-channel tracing span, and workerd's `node:diagnostics_channel`
-      // polyfill reports `tracingChannel(...).hasSubscribers` as `undefined` rather than
-      // `false`, so `ai` takes its traced path instead of the no-subscriber pass-through and
-      // its internal settle handler floats a second rejection nothing can consume. We
-      // subscribe to none of `ai`'s telemetry channels, so this promise has no product
-      // meaning, and workerd surfaces it at the runtime level where no JS handler
-      // (`addEventListener('unhandledrejection')`) can intercept it. Test-pool-only, like
-      // `remoteBindings: false` and the `toad-cache` alias below; revisit if a future `ai`
-      // release restores the no-subscriber pass-through under the workerd polyfill.
-      dangerouslyIgnoreUnhandledErrors: true,
+      // NOTE: `dangerouslyIgnoreUnhandledErrors` is deliberately NOT set. It used to be, to
+      // absorb the `[ai]`-binding rejection storm (the pool cannot run that binding, so every
+      // inline Tester-QC call rejected after the AI SDK's retries), and the cost of the blanket
+      // ignore was that it absorbed everything ELSE too: a genuine leak sat in the middle of 96
+      // expected ones, counted in `Errors` and ignored, for as long as it took someone to read
+      // the number. The storm is gone at the source — `test/helpers.ts` runs the pool with the
+      // binding unbound, which is Node's posture — so an unhandled rejection is once again a
+      // fact worth failing on. Do not reintroduce this to quiet a new one; find its owner.
     },
     resolve: {
       // Pin `toad-cache` to its CommonJS build inside the Workers test pool.

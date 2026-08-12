@@ -526,6 +526,16 @@ jobs:
       - name: Guard test-lane parity
         run: node scripts/check-test-lane-parity.mjs
 
+      # Requires every group of the split conformance suite to run on every facade. Wiring the
+      # suite used to be one call per facade, which nobody could half-do; it is now five group
+      # functions across fifteen spec files, and a facade missing one reports GREEN — the
+      # assertions it skips are indistinguishable from assertions that passed. That is the failure
+      # the conformance package exists to prevent, so it cannot be left to whoever wires the next
+      # group remembering all three trees. Its fixtures run in the `node --test` step above. Pure
+      # node, no install, no network.
+      - name: Guard conformance group parity
+        run: node scripts/check-conformance-group-parity.mjs
+
   # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
   # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
   # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`
