@@ -576,12 +576,42 @@ describe('target-repos', () => {
         repo('cf-acc-catalog-api', { serviceId: 'blk_9' }),
         repo('cf-acc-catalog-web'),
       ]),
-      passesNaming: (serviceIds) => (serviceIds.includes('blk_9') ? ['20260811151012'] : []),
+      passesNaming: (serviceIds) =>
+        serviceIds.includes('blk_9') ? [{ runId: '20260811151012', serviceIds: ['blk_9'] }] : [],
     })
     expect(verdict.remedy.steps[0]).toContain('20260811151012')
     // Compared against the renderer rather than a spelling, so this stays an assertion about WHICH
     // command is offered; `operatorText.test.ts` pins what each shell's form must be.
     expect(commandsOf(verdict.remedy)[0]).toBe(resumeInvocation('20260811151012'))
+    // The status read beside it names that pass too. Bare, it reports whichever pass ran LAST, which
+    // in this exact situation is the refused attempt being read rather than the pass under discussion.
+    expect(commandsOf(verdict.remedy)[1]).toContain('run status 20260811151012')
+  })
+
+  it('says what resuming one pass leaves behind when the leftovers span two', async () => {
+    // "RESUME one of them" is not an instruction here: resuming the pass holding the API leaves the
+    // WEB service unowned, this same check refuses again, and naming the other pass sends the reader
+    // back to the first. So the split is stated with what each pass holds, and the choice it really
+    // leaves (continue one, clear the other's leftovers) is the thing named.
+    const verdict = await refusal('target-repos', {
+      client: client([
+        repo('cf-acc-catalog-api', { serviceId: 'blk_api' }),
+        repo('cf-acc-catalog-web', { serviceId: 'blk_web' }),
+      ]),
+      passesNaming: () => [
+        { runId: 'pass-a', serviceIds: ['blk_api'] },
+        { runId: 'pass-b', serviceIds: ['blk_web'] },
+      ],
+    })
+    const step = verdict.remedy.steps[0] ?? ''
+    expect(step).toContain('pass-a holds blk_api')
+    expect(step).toContain('pass-b holds blk_web')
+    expect(step).toContain('no single resume')
+    // Both are offered, since which one to continue is the operator's call and neither id is
+    // recoverable from the board.
+    expect(commandsOf(verdict.remedy)).toEqual(
+      expect.arrayContaining([resumeInvocation('pass-a'), resumeInvocation('pass-b')]),
+    )
   })
 
   it('allows the link the LEDGER names, on a resumed pass', async () => {
@@ -803,7 +833,7 @@ describe('board-titles', () => {
     const verdict = await refusal('board-titles', {
       client: board([{ title: 'cf-acc Catalog API', serviceId: 'blk_api' }]),
       serviceTitles: ['cf-acc Catalog API', 'cf-acc Catalog Web'],
-      passesNaming: () => ['20260811151012'],
+      passesNaming: () => [{ runId: '20260811151012', serviceIds: ['blk_api'] }],
     })
     const commands = commandsOf(verdict.remedy)
     expect(commands[0]).toBe(resumeInvocation('20260811151012'))

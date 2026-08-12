@@ -56,6 +56,7 @@ import {
 } from './operatorText.ts'
 import type { Prerequisite, PrerequisiteVerdict, Remedy, RemedyCommand } from './preflight.ts'
 import { baseUrlStep } from './probeFailure.ts'
+import type { PassOwnership } from './world.ts'
 import { usablePresets } from './presets.ts'
 import { describeKeyProblem, type KeyProblem, type PublicIdentity } from './publicApi.ts'
 import { type IssueApi, issueTarget, slug, UNSUPPORTED_PROVIDER_REASON } from './vcsIssues.ts'
@@ -77,15 +78,18 @@ export type PreflightContext = {
    */
   adoptedServiceIds: readonly string[]
   /**
-   * The run ids of OTHER passes on disk whose ledgers name any of these services.
+   * The OTHER passes on disk whose ledgers name any of these services, and which ones each holds.
    *
    * What makes "resume that pass instead" an instruction rather than a suggestion. Both checks that
    * refuse over leftover state used to offer `latest`, and `latest` is the wrong pass the moment
    * anything ran after the one holding the work: typically the operator's own refused attempt from
    * a minute ago. A lookup rather than a value because it costs a directory read, and a satisfied
    * pass should read no ledger but its own.
+   *
+   * Which services each pass holds, rather than a flat list of ids, because two passes routinely
+   * hold one board between them and the remedy has to say what resuming either one leaves behind.
    */
-  passesNaming: (serviceIds: readonly string[]) => readonly string[]
+  passesNaming: (serviceIds: readonly string[]) => readonly PassOwnership[]
   /**
    * The reporter's issue client for a provider, or null when this suite cannot address that
    * provider's API (`vcsIssues.ts` owns which, and why).
@@ -150,14 +154,25 @@ function publicApiWrite(
   }
 }
 
-/** Read a pass without touching the deployment: the first thing to run when leftovers are in the way. */
-const statusRead: RemedyCommand = {
-  run: 'pnpm --filter @cat-factory/acceptance run status',
-  purpose: 'show the most recent pass and its run id, without touching the deployment',
+/**
+ * Read a pass without touching the deployment: the first thing to run when leftovers are in the way.
+ *
+ * NAMED whenever there is a pass to name. The bare form reports whichever pass ran last, and in the
+ * situation this remedy exists for that is reliably the refused attempt the operator is standing in,
+ * not the pass that owns the leftovers being discussed.
+ */
+function statusRead(runId?: string): RemedyCommand {
+  const command = 'pnpm --filter @cat-factory/acceptance run status'
+  return runId
+    ? { run: `${command} ${runId}`, purpose: `show what pass ${runId} got to, without touching it` }
+    : {
+        run: command,
+        purpose: 'show the pass that ran last and its run id, without touching the deployment',
+      }
 }
 
 /**
- * "Resume the pass that owns this instead", as a step plus the command that does it.
+ * "Resume the pass that owns this instead", as a step plus the commands that do it.
  *
  * Shared by the two checks that refuse over another pass's leftover state, so both name the SAME
  * pass: one reasons about repository links and the other about frame titles, and an operator handed
@@ -168,35 +183,54 @@ const statusRead: RemedyCommand = {
  * the pass holding the work; the id is the one thing the operator cannot recover from the board.
  * Naming no pass is stated rather than hidden: it means the state was built somewhere else (another
  * machine, another operator, another `ACCEPTANCE_STATE_DIR`), and resuming is not on the table.
+ *
+ * Leftovers SPANNING two passes get their own wording, because "resume one of them" is not an
+ * instruction there: resuming A leaves B's service in the way, this same check refuses again, and
+ * naming B the second time sends the reader back to A. So the split is stated with the services each
+ * pass holds, and the choice it actually leaves (continue one and clear the other's leftovers, which
+ * is the step each caller adds after this one) is named as such.
  */
-function resumeTheOwningPass(passes: readonly string[]): {
+function resumeTheOwningPass(owners: readonly PassOwnership[]): {
   step: string
   commands: readonly RemedyCommand[]
 } {
   // The LAST id, which for a minted one (a timestamp) is the most recent attempt. Every match is
   // named in the step, so a hand-named id that sorts oddly still puts the choice in front of a
   // reader rather than resolving it silently.
-  const owner = passes.at(-1)
+  const owner = owners.at(-1)
   if (!owner) {
     return {
       step:
         'No ledger under ACCEPTANCE_STATE_DIR names it, so it was built by another operator, ' +
         'another machine, or a pass whose state directory has since been cleared. Nothing here can ' +
         'be resumed onto it.',
-      commands: [statusRead],
+      commands: [statusRead()],
+    }
+  }
+  const commands = owners.flatMap((pass) => [
+    {
+      run: resumeInvocation(pass.runId),
+      purpose: `resume pass ${pass.runId}, which owns ${pass.serviceIds.join(' and ')}`,
+    },
+    statusRead(pass.runId),
+  ])
+  if (owners.length === 1) {
+    return {
+      step:
+        `Pass ${owner.runId} is the one whose ledger names it: RESUME that pass rather than ` +
+        `starting over, and the leftover state becomes the state it continues from.`,
+      commands,
     }
   }
   return {
     step:
-      passes.length === 1
-        ? `Pass ${owner} is the one whose ledger names it: RESUME that pass rather than starting ` +
-          `over, and the leftover state becomes the state it continues from.`
-        : `Passes ${passes.join(' and ')} name it. RESUME one of them rather than starting over ` +
-          `(${owner} is the most recent), and the leftover state becomes what it continues from.`,
-    commands: [
-      { run: resumeInvocation(owner), purpose: `resume pass ${owner}, which owns that service` },
-      statusRead,
-    ],
+      `This state belongs to ${owners.length} different passes ` +
+      `(${owners.map((pass) => `${pass.runId} holds ${pass.serviceIds.join(' and ')}`).join('; ')}), ` +
+      `and no single resume continues all of it: resuming one leaves the others' services in the ` +
+      `way and earns this same refusal. RESUME the pass whose work is worth keeping ` +
+      `(${owner.runId} is the most recent) and clear what the others left, or clear all of it and ` +
+      `start clean.`,
+    commands,
   }
 }
 

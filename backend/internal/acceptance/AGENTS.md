@@ -113,7 +113,18 @@ minting a replacement, because minting one is exactly the shape that made this s
 a prerequisite creates nothing, and pointing `latest` at it overwrites the pointer to the half-built
 pass whose leftovers caused the refusal, leaving it reachable only by an id nobody wrote down. Which
 is also why the two checks that refuse over leftover state name the OWNING pass's run id
-(`findPassesNaming`) instead of offering `latest`.
+(`findPassesNaming`) instead of offering `latest`, and why they name the pass PER SERVICE: leftovers
+routinely span two passes, and no single resume continues both.
+
+**"What ran last" and "what is worth resuming" are different questions, and `status` asks the
+first.** With no run id it reports the pass that wrote to the state directory most recently
+(`findMostRecentPass`), not the pointer: the report someone wants is of the attempt they just
+watched, which is by construction the one that recorded no fact and so never claimed the pointer.
+Asked through the pointer it answered "no acceptance pass found" while that attempt's journal sat in
+the directory it named. A pass that created nothing still closes its report by naming the pass that
+did, so the resume line is never an invitation to start over. **And a pass is identified by its FILE
+NAME**: the `runId` inside a ledger is a copy of it, so a disagreement means a copied or renamed
+file, and `WorldStore` refuses rather than guessing which half is right.
 
 **It is NOT in CI and must never become so.** `test:run` points at `vitest.config.ts`, which
 collects `test/**/*.test.ts` only: this package's own unit tests. The acceptance specs are behind

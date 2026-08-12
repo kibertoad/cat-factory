@@ -1,11 +1,11 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { readLatestRunId } from '../src/passFiles.ts'
 import {
   coerceWorld,
   findPassesNaming,
-  readLatestRunId,
   readWorld,
   requirePassRunId,
   resolveRunId,
@@ -62,7 +62,7 @@ describe('requirePassRunId', () => {
   })
 })
 
-describe('readLatestRunId', () => {
+describe('the latest pointer, as WorldStore writes it', () => {
   it('names the pass as soon as it has recorded a FACT, so an interrupted one is resumable', () => {
     // Not on completion (the pass worth resuming is one that did not finish) and not on OPEN: see
     // the next case for what opening used to cost.
@@ -106,10 +106,14 @@ describe('findPassesNaming', () => {
     new WorldStore(dir, 'later-pass').patch({
       backend: { blockId: 'blk_other', serviceId: 'blk_other', repoName: 'acme/other' },
     })
-    expect(findPassesNaming(dir, ['blk_web'], 'this-pass')).toEqual(['owner-pass'])
+    expect(findPassesNaming(dir, ['blk_web'], 'this-pass')).toEqual([
+      { runId: 'owner-pass', serviceIds: ['blk_web'] },
+    ])
+    // Which pass holds WHICH service, because leftovers spanning two passes are the case no single
+    // resume settles, and a remedy can only say so if it knows what resuming one leaves behind.
     expect(findPassesNaming(dir, ['blk_api', 'blk_other'], 'this-pass')).toEqual([
-      'later-pass',
-      'owner-pass',
+      { runId: 'later-pass', serviceIds: ['blk_other'] },
+      { runId: 'owner-pass', serviceIds: ['blk_api'] },
     ])
   })
 
@@ -125,6 +129,19 @@ describe('findPassesNaming', () => {
   it('reads a state directory that does not exist as no passes', () => {
     expect(findPassesNaming(join(scratch(), 'never-created'), ['blk_x'], 'mine')).toEqual([])
   })
+
+  it('skips a ledger whose contents name a pass other than its file', () => {
+    // A pass is identified by its FILE NAME, so a copied ledger states an id whose own file is
+    // elsewhere or gone. Offered as a resume target it sends an operator to `ACCEPTANCE_RUN_ID` of a
+    // pass that starts empty and re-scaffolds both repositories, which is the outcome the whole
+    // owning-pass lookup exists to prevent.
+    const dir = scratch()
+    new WorldStore(dir, 'original').patch({ backend: emptyService() })
+    copyFileSync(join(dir, 'original.json'), join(dir, 'copied.json'))
+    expect(findPassesNaming(dir, ['blk_x'], 'this-pass')).toEqual([
+      { runId: 'original', serviceIds: ['blk_x'] },
+    ])
+  })
 })
 
 describe('WorldStore', () => {
@@ -139,6 +156,29 @@ describe('WorldStore', () => {
     // reason the ledger is a file rather than module state.
     const resumed = new WorldStore(dir, 'run-1')
     expect(resumed.value.backend?.blockId).toBe('blk_1')
+  })
+
+  it('refuses a ledger file that says it belongs to another pass', () => {
+    // The two halves of a pass's identity are its file name and the `runId` inside it, and only a
+    // copy or a rename can make them disagree. Neither answer is safe to guess: adopting the
+    // contents files this pass's work under another pass's records, and discarding them overwrites
+    // a ledger that may be the last copy. So it refuses and names both ids.
+    const dir = scratch()
+    new WorldStore(dir, 'original').patch({ backend: emptyService() })
+    copyFileSync(join(dir, 'original.json'), join(dir, 'copied.json'))
+    expect(() => new WorldStore(dir, 'copied')).toThrow(/'original'/)
+    expect(() => new WorldStore(dir, 'copied')).toThrow(/copied/)
+  })
+
+  it('points `latest` at its OWN id, not at what the ledger file claims', () => {
+    // Read off the contents, a copied ledger would point `latest` at a run id whose ledger is
+    // elsewhere, and the resume it advertises would silently start empty.
+    const dir = scratch()
+    new WorldStore(dir, 'run-1').patch({ backend: emptyService() })
+    expect(JSON.parse(readFileSync(join(dir, 'latest.json'), 'utf8'))).toEqual({
+      runId: 'run-1',
+      ledger: join(dir, 'run-1.json'),
+    })
   })
 
   it('keeps runs apart by id, so two passes never read each other', () => {

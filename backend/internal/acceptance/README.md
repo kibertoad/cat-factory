@@ -389,27 +389,27 @@ It never overwrites a value without saying so: an existing value becomes the pro
 summary names every key it replaced, and anything in the file it does not manage (a pasted
 `ACCEPTANCE_K3S_CA_PEM`, say) is carried over byte for byte. Neither token is ever printed back.
 
-| Variable                               | Required | What it is                                                                                                                                                                        |
-| -------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves `/api/v1` and the deployment root reads.                                                                                     |
-| `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (spec 03 also needs the `decide` rung it includes).                                                                                           |
-| `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                                                                                                   |
-| `ACCEPTANCE_REPO_OWNER`                | yes      | The owner both repositories live under. `GET /api/v1/vcs/connection` reports it.                                                                                                  |
-| `ACCEPTANCE_BACKEND_REPO`              | yes      | Name of the empty repository the backend service adopts. **You create it; the suite adopts it.**                                                                                  |
-| `ACCEPTANCE_FRONTEND_REPO`             | yes      | Name of the empty repository the frontend adopts. Must differ from the backend's.                                                                                                 |
-| `ACCEPTANCE_VCS_TOKEN`                 | yes      | Provider token spec 04 files its issue with, as an outside reporter. Classic GitHub: `repo`. Fine-grained: "Issues: Read and write" on the backend repository. Never the API key. |
-| `ACCEPTANCE_VCS_API_BASE`              | no       | The provider's REST base, default `https://api.github.com`. GitHub Enterprise Server is `https://<host>/api/v3`, which no `/api/v1` read publishes.                               |
-| `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                                                                                                     |
-| `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                                                                                                  |
-| `ACCEPTANCE_K3S_CA_PEM`                | one of   | The cluster CA in PEM. Wins over the insecure flag when both are set.                                                                                                             |
-| `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                                                                                                               |
-| `ACCEPTANCE_MODEL_PRESET`              | no       | Preset id pinned on every task, default `mdp_claude` (the built-in Claude preset). `configure` offers the library as a menu, so the id never has to be typed.                     |
-| `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS. Also the host the scaffold briefs ask each service's Ingress to serve, so overriding it moves both halves together. |
-| `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                                                                                                  |
-| `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Prefixes the board frames and tasks, not the repositories. Set it per-person when a board is shared.                                                            |
-| `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a vitest timeout; see below.                                                                                                                 |
-| `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                                                                                                  |
-| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass. Unset starts a new one. The one variable normally set per invocation, so see the shell forms below.                 |
+| Variable                               | Required | What it is                                                                                                                                                                             |
+| -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves `/api/v1` and the deployment root reads.                                                                                          |
+| `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (spec 03 also needs the `decide` rung it includes).                                                                                                |
+| `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                                                                                                        |
+| `ACCEPTANCE_REPO_OWNER`                | yes      | The owner both repositories live under. `GET /api/v1/vcs/connection` reports it.                                                                                                       |
+| `ACCEPTANCE_BACKEND_REPO`              | yes      | Name of the empty repository the backend service adopts. **You create it; the suite adopts it.**                                                                                       |
+| `ACCEPTANCE_FRONTEND_REPO`             | yes      | Name of the empty repository the frontend adopts. Must differ from the backend's.                                                                                                      |
+| `ACCEPTANCE_VCS_TOKEN`                 | yes      | Provider token spec 04 files its issue with, as an outside reporter. Classic GitHub: `repo`. Fine-grained: "Issues: Read and write" on the backend repository. Never the API key.      |
+| `ACCEPTANCE_VCS_API_BASE`              | no       | The provider's REST base, default `https://api.github.com`. GitHub Enterprise Server is `https://<host>/api/v3`, which no `/api/v1` read publishes.                                    |
+| `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                                                                                                          |
+| `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                                                                                                       |
+| `ACCEPTANCE_K3S_CA_PEM`                | one of   | The cluster CA in PEM. Wins over the insecure flag when both are set.                                                                                                                  |
+| `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                                                                                                                    |
+| `ACCEPTANCE_MODEL_PRESET`              | no       | Preset id pinned on every task, default `mdp_claude` (the built-in Claude preset). `configure` offers the library as a menu, so the id never has to be typed.                          |
+| `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS. Also the host the scaffold briefs ask each service's Ingress to serve, so overriding it moves both halves together.      |
+| `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                                                                                                       |
+| `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Prefixes the board frames and tasks, not the repositories. Set it per-person when a board is shared.                                                                 |
+| `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a vitest timeout; see below.                                                                                                                      |
+| `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                                                                                                       |
+| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass that recorded a fact. Unset starts a new one. The one variable normally set per invocation, so see the shell forms below. |
 
 They live in a **`.env` beside `vitest.acceptance.config.ts`** (gitignored, and read by that
 config: vitest does not pick one up on its own). A variable set in the shell wins over the file, so
@@ -458,13 +458,19 @@ are asked from somewhere else. So every observation is appended to a journal bes
 and a second command reduces the two into an answer:
 
 ```sh
-pnpm --filter @cat-factory/acceptance run status          # the most recent pass that created something
+pnpm --filter @cat-factory/acceptance run status          # the pass that ran last
 pnpm --filter @cat-factory/acceptance run status 20260809175530
+pnpm --filter @cat-factory/acceptance run status latest   # the pass worth resuming
 ```
 
-Named with no run id it follows the same pointer `ACCEPTANCE_RUN_ID=latest` does, so it names the
-most recent pass that recorded a FACT rather than the most recent process started. A pass still in
-its preflight has created nothing to report; the run id in its own banner is what asks about it.
+With no run id it reports whichever pass wrote to the state directory last, which is usually the
+attempt just watched. That is deliberately NOT the pointer `ACCEPTANCE_RUN_ID=latest` follows: the
+pointer names the most recent pass to record a FACT, and an attempt a prerequisite refused records
+none while still writing the journal saying why. Asked through the pointer, the report someone wants
+most is the one it cannot reach.
+
+Both are shown either way. A pass that created nothing is reported as such, and the report closes by
+naming the pass that DID, so the resume line is never an invitation to start over.
 
 A phase re-entered by a later attempt at the same run id is re-opened and re-timed from that
 entry, so what the report shows is the CURRENT pass rather than a phase that reads `done` under
@@ -618,7 +624,8 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Unit-tested; reads the ambient shell unless a dialect is passed. |
 | `src/adopt.ts`               | Repository → board service (adopting it first when the workspace has not), every way that join refuses, and the one copy of the reachability steps the gate and `configure` share. Unit-tested.                                  |
 | `src/presets.ts`             | The one preset-to-catalog join `configure`, `model-preset` and the up-front unlock share. Pure; unit-tested.                                                                                                                     |
-| `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                                                                                                                                                                  |
+| `src/world.ts`               | The resumable ledger: what a pass created, and what a ledger says.                                                                                                                                                               |
+| `src/passFiles.ts`           | Where a pass's files live, which passes a state directory holds, and the `latest` pointer.                                                                                                                                       |
 | `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                                                   |
 | `src/status.ts`              | Ledger + journal → "where is this pass". Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.                                                                                                    |
 | `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                                                                                                                                                                         |

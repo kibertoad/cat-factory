@@ -17,8 +17,9 @@
 // The failure is reported once and then the suite carries on.
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 import { describeThrown } from './operatorText.ts'
+import { passPaths } from './passFiles.ts'
 
 /** What kind of thing happened. Bounded, because `status.ts` reduces on it. */
 export type JournalEventKind =
@@ -51,7 +52,7 @@ export class Journal {
   #broken = false
 
   constructor(stateDir: string, runId: string, phase = 'suite') {
-    this.#path = join(stateDir, `${runId}.journal.jsonl`)
+    this.#path = passPaths(stateDir, runId).journalPath
     this.#phase = phase
   }
 
