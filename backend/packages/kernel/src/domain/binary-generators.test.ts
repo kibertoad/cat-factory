@@ -1,3 +1,5 @@
+import { binaryGeneratorCapabilitySchema } from '@cat-factory/contracts'
+import type { BinaryGeneratorCapability, BinaryModality } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   BinaryGeneratorRegistry,
@@ -8,27 +10,13 @@ import {
   binaryGeneratorContextFileFor,
   binaryGeneratorSelectionIssues,
   describeBinaryGeneratorSelectionIssues,
+  describeCapability,
   dispatchBinaryGenerators,
   renderBinaryGeneratorSection,
   resolveBinaryGeneratorSelection,
 } from './binary-generators.js'
+import { generator } from './binary-generators.fixtures.js'
 import { binaryContextFileFor, renderBinaryOutputBrief } from './binary-outputs.js'
-
-function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGeneratorView {
-  return {
-    id: 'retro-diffusion',
-    name: 'Retro Diffusion',
-    summary: 'Pixel-art image generation.',
-    description: 'Good for sprites and tiles; not for photorealism.',
-    modalities: ['image'],
-    mediaTypes: ['image/png'],
-    capabilities: [],
-    endpoint: 'https://api.retrodiffusion.ai/v1',
-    credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token request header' }],
-    contracts: [],
-    ...overrides,
-  }
-}
 
 const music = generator({
   id: 'studio-music',
@@ -910,249 +898,169 @@ describe('describeModality', () => {
   })
 })
 
-describe('generation options', () => {
-  // The THIRD refusal axis, and it has the same three outcomes the format one does. That is what
-  // lets it ship without invalidating every integration registered before capabilities existed.
-  it('refuses an option no DECLARING integration supports', () => {
-    const issues = binaryGeneratorSelectionIssues(
-      {
-        storageServiceId: 'store',
-        generatorIds: ['retro-diffusion'],
-        generation: { seed: 7 },
-      },
-      [generator({ capabilities: ['aspect-ratio'] })],
-    )
-    expect(issues).toEqual([{ problem: 'capability_unsupported', capability: 'seed' }])
-  })
-
-  // The motivating case, end to end at the refusal: a step whose deliverable is a 96x96 sprite,
-  // holding an integration that can only be asked for a bucket, is refused BEFORE it spends
-  // anything. Left admitted it succeeds, charges, stores a downscaled render, and every other
-  // check on it passes.
-  it('refuses an exact size against an integration that only takes a shape', () => {
-    const issues = binaryGeneratorSelectionIssues(
-      {
-        storageServiceId: 'store',
-        generatorIds: ['retro-diffusion'],
-        generation: { outputSize: { width: 96, height: 96 } },
-      },
-      [generator({ capabilities: ['aspect-ratio'] })],
-    )
-    expect(issues).toEqual([{ problem: 'capability_unsupported', capability: 'exact-size' }])
-  })
-
-  it('states the exact size to the agent as a requirement, not a preference', () => {
-    const section = renderBinaryGeneratorSection({
-      selection: resolveBinaryGeneratorSelection(
-        { storageServiceId: 'store', generatorIds: ['retro-diffusion'] },
-        [generator({ capabilities: ['exact-size'] })],
-      ),
-      requestedModalities: [],
-      generation: { outputSize: { width: 96, height: 96 } },
-    }).join('\n')
-    expect(section).toContain('EXACTLY 96x96 pixels')
-    // The brief deliberately states NO resize policy: the platform has no view of whether a
-    // downscale is acceptable for a given asset. What it does require is that a substitution is
-    // reported and the delivered size declared, so the loss is never silent.
-    expect(section).toContain('declare the size you actually delivered')
-  })
-
-  it('admits an option nothing has declared either way', () => {
-    const issues = binaryGeneratorSelectionIssues(
-      { storageServiceId: 'store', generatorIds: ['retro-diffusion'], generation: { seed: 7 } },
-      [generator({ capabilities: [] })],
-    )
-    expect(issues).toEqual([])
-  })
-
-  // The requirement is DERIVED, so one reference image never trips the multi-reference rule.
-  it('asks for multi-reference only above one reference image', () => {
-    const config = (count: number) => ({
-      storageServiceId: 'store',
-      generatorIds: ['retro-diffusion'],
-      generation: {
-        referenceImages: Array.from({ length: count }, () => ({
-          location: 'a.png',
-          role: 'style' as const,
-        })),
-      },
+describe('describeCapability', () => {
+  // The sibling of `describeModality`'s retired-value case, and the reason it needs its own test:
+  // both keep a `default` that a passing typecheck can never reach, so the ONLY thing that can
+  // demonstrate the runtime half works is a value the union does not have.
+  it('renders every member of the picklist as its own distinct phrase', () => {
+    const described = binaryGeneratorCapabilitySchema.options.map((capability) => {
+      const phrase = describeCapability(capability)
+      // Handing back the member's own identifier is not a description, and it is what a `Record`
+      // missing an entry degrades to if someone replaces this switch with a lookup and a fallback.
+      expect(phrase).not.toBe(capability)
+      // ...and it must not have fallen through to the unknown-capability describer either, which
+      // would report every current member as one this deployment does not define.
+      expect(phrase).not.toContain('does not define')
+      return phrase
     })
-    const only = [generator({ capabilities: ['reference-image'] })]
-    expect(binaryGeneratorSelectionIssues(config(1), only)).toEqual([])
-    expect(binaryGeneratorSelectionIssues(config(2), only)).toEqual([
-      { problem: 'capability_unsupported', capability: 'multi-reference' },
-    ])
+    expect(new Set(described).size).toBe(binaryGeneratorCapabilitySchema.options.length)
   })
 
-  it('names the unsupported capability in words an operator can act on', () => {
-    const message = describeBinaryGeneratorSelectionIssues('imager', [
-      { problem: 'capability_unsupported', capability: 'mask-edit' },
-    ])
-    expect(message).toContain('editing only the region an image mask names')
-    expect(message).not.toContain('undefined')
-  })
-
-  it('states the options, who honours them, and what could not be checked', () => {
-    const lines = renderBinaryGeneratorSection({
-      selection: {
-        selected: [
-          generator({ id: 'flux', capabilities: ['seed', 'reference-image'] }),
-          generator({ id: 'nano', capabilities: ['reference-image'] }),
-        ],
-        unresolvedIds: [],
-      },
-      requestedModalities: [],
-      generation: {
-        seed: 7,
-        referenceImages: [{ location: 'refs/hero.png', service: 'asset-store', role: 'subject' }],
-      },
-    }).join('\n')
-    // A reference the platform never fetches has to be NAMED, or the agent generates without it
-    // and reports success.
-    expect(lines).toContain('`refs/hero.png` in the `asset-store` service')
-    // With two producers, "supported" is not the whole answer: an option one of them ignores
-    // leaves nothing on the artifact to say which happened.
-    expect(lines).toContain('a fixed seed: `flux`.')
-    expect(lines).toContain('The others do not declare it')
-  })
-
-  it('states an unverifiable option as unknown rather than as unavailable', () => {
-    const lines = renderBinaryGeneratorSection({
-      selection: { selected: [generator({ capabilities: [] })], unresolvedIds: [] },
-      requestedModalities: [],
-      generation: { tileable: true },
-    }).join('\n')
-    expect(lines).toContain('unknown rather than settled')
+  it('names a capability this build does not define rather than rendering it as undefined', () => {
+    // How it gets here: a mothership-mode node resolves its integrations over
+    // `/internal/binary-generators` from a process one build AHEAD of it, so the value is real and
+    // this build has no case for it. It reaches the refusal whose whole job is to say what a
+    // selection cannot do, so falling off the end would splice `undefined` into that sentence.
+    const unknown = 'holographic' as BinaryGeneratorCapability
+    expect(describeCapability(unknown)).toBe(
+      "'holographic' (a capability this deployment does not define)",
+    )
+    expect(
+      describeBinaryGeneratorSelectionIssues('illustrator', [
+        { problem: 'capability_unsupported', capability: unknown },
+      ]),
+    ).toContain("'holographic' (a capability this deployment does not define)")
   })
 })
 
-describe('generation option VALUES', () => {
-  const bucketed = generator({
-    id: 'grok-imagine',
-    capabilities: ['aspect-ratio'],
-    accepts: { aspectRatios: ['1:1', '16:9', '9:16'] },
-  })
-  const anyRatio = generator({ id: 'flux', capabilities: ['aspect-ratio'] })
-
-  // The fourth refusal axis, and the failure it exists for: the option is supported, so the call
-  // succeeds and comes back cropped to whatever the vendor's picklist rounded to. Every check
-  // downstream passes.
-  it('refuses a value every declaring integration enumerated away', () => {
-    expect(
-      binaryGeneratorSelectionIssues(
-        {
-          storageServiceId: 'store',
-          generatorIds: ['grok-imagine'],
-          generation: { aspectRatio: '7:3' },
-        },
-        [bucketed],
-      ),
-    ).toEqual([
-      {
-        problem: 'option_value_unaccepted',
-        value: { option: 'aspectRatio', requested: '7:3', accepted: ['1:1', '16:9', '9:16'] },
-      },
-    ])
-  })
-
-  // The state that keeps this from retroactively refusing working selections: an integration
-  // that declared the capability and no set has said nothing about this value, so the step is
-  // admitted and the gap is reported to the agent instead.
-  it('admits a value a silent declarer might still serve', () => {
-    expect(
-      binaryGeneratorSelectionIssues(
-        {
-          storageServiceId: 'store',
-          generatorIds: ['grok-imagine', 'flux'],
-          generation: { aspectRatio: '7:3' },
-        },
-        [bucketed, anyRatio],
-      ),
-    ).toEqual([])
-  })
-
-  it('names the value and what IS accepted in words an operator can act on', () => {
-    const message = describeBinaryGeneratorSelectionIssues('imager', [
-      {
-        problem: 'option_value_unaccepted',
-        value: { option: 'outputSize', requested: '96x96', accepted: ['1024x1024'] },
-      },
-    ])
-    expect(message).toContain('an output size of 96x96')
-    expect(message).toContain('1024x1024')
-    expect(message).not.toContain('undefined')
-  })
-
-  // On the integration's own entry rather than only under the step's options, because an agent
-  // holding two image APIs picks per artifact and this is the kind of fact that decides.
-  it('states each integration’s accepted sets beside its formats', () => {
-    const lines = renderBinaryGeneratorSection({
-      selection: {
-        selected: [
-          generator({
-            id: 'recraft',
-            capabilities: ['exact-size', 'upscale'],
-            accepts: { outputSizes: [{ width: 1024, height: 1024 }], upscaleFactors: [2] },
-          }),
-        ],
-        unresolvedIds: [],
-      },
-      requestedModalities: [],
-    }).join('\n')
-    expect(lines).toContain('Renders at these exact sizes and no others: 1024x1024.')
-    expect(lines).toContain('Accepts these upscale factors and no others: 2.')
-  })
-
-  // Admission let the step through on the strength of the silent integration, so the agent is the
-  // party that has to route around the one that refuses the value, and it can only do that if it
-  // is told which fact it is holding.
-  it('tells the agent when one integration refuses the value and another has not said', () => {
-    const lines = renderBinaryGeneratorSection({
-      selection: { selected: [bucketed, anyRatio], unresolvedIds: [] },
-      requestedModalities: [],
-      generation: { aspectRatio: '7:3' },
-    }).join('\n')
-    expect(lines).toContain('does NOT accept what this step asks for (an aspect ratio)')
-  })
-
-  // The state every registration is in until an endpoint is audited. A brief paragraph fired here
-  // would ride nearly every step carrying an aspect ratio, which is how a line stops being read.
-  it('says nothing when no selected integration states a set', () => {
-    const lines = renderBinaryGeneratorSection({
-      selection: { selected: [anyRatio], unresolvedIds: [] },
-      requestedModalities: [],
-      generation: { aspectRatio: '7:3' },
-    }).join('\n')
-    expect(lines).not.toContain('does NOT accept what this step asks for')
-  })
-
-  // Two enumerating endpoints where only one takes the value: the step is servable, so admission
-  // stays out of it, and the providers list directly above names BOTH as honouring the option.
-  // Naming the one that will crop is the whole remedy, because routing is the agent's call.
-  it('names the integration that enumerated the value away when another accepts it', () => {
-    const wide = generator({
-      id: 'nano-banana',
-      capabilities: ['aspect-ratio'],
-      accepts: { aspectRatios: ['7:3', '1:1'] },
+describe('binaryGeneratorSelectionIssues: a step with no binary-output config at all', () => {
+  // The three states the initiative doc keeps apart: no declaration, an empty declaration, and an
+  // unknown id. This is the FIRST, and it reaches both entry points as `undefined`: every read
+  // here goes through `config?.`, so dropping one optional chain is not a wrong verdict but a
+  // `TypeError` thrown out of run admission.
+  it('resolves an absent config into an empty selection rather than throwing', () => {
+    expect(resolveBinaryGeneratorSelection(undefined, [generator()])).toEqual({
+      selected: [],
+      unresolvedIds: [],
     })
-    const lines = renderBinaryGeneratorSection({
-      selection: { selected: [wide, bucketed], unresolvedIds: [] },
-      requestedModalities: [],
-      generation: { aspectRatio: '7:3' },
-    }).join('\n')
-    expect(lines).toContain('`grok-imagine` states the values it accepts')
-    expect(lines).toContain('does NOT accept the 7:3 this step asks for')
-    expect(lines).not.toContain('`nano-banana` states the values it accepts')
-    // Servable by part of the selection, so it is a brief paragraph and not a refusal.
+    expect(binaryGeneratorSelectionIssues(undefined, [generator()])).toEqual([])
+  })
+
+  it('imposes no requirement of its own when a config declares only its storage', () => {
+    // An empty declaration is admitted for the same reason by a different path: the fields are
+    // there and empty, so every loop runs zero times.
     expect(
       binaryGeneratorSelectionIssues(
-        {
-          storageServiceId: 'store',
-          generatorIds: ['nano-banana', 'grok-imagine'],
-          generation: { aspectRatio: '7:3' },
-        },
-        [wide, bucketed],
+        { storageServiceId: 'asset-store', generatorIds: [], modalities: [], mediaTypes: [] },
+        [generator()],
       ),
     ).toEqual([])
+  })
+})
+
+describe('describeBinaryGeneratorSelectionIssues: one issue versus several', () => {
+  it('states a single issue inline, and several as a list', () => {
+    const one = describeBinaryGeneratorSelectionIssues('illustrator', [
+      { problem: 'unknown_generator', generatorId: 'ghost-synth' },
+    ])
+    // Inline, because a one-item bulleted list reads as though something was cut from it.
+    expect(one).toContain(
+      "does not resolve: 'ghost-synth' is not a generative integration this deployment registers",
+    )
+    expect(one).not.toContain('\n  - ')
+
+    const two = describeBinaryGeneratorSelectionIssues('illustrator', [
+      { problem: 'unknown_generator', generatorId: 'ghost-synth' },
+      { problem: 'modality_uncovered', modality: 'audio' },
+    ])
+    expect(two).toContain("\n  - 'ghost-synth' is not a generative integration")
+    expect(two).toContain('\n  - no selected integration produces audio')
+  })
+})
+
+describe('renderBinaryGeneratorSection: a selection that resolved to NOTHING', () => {
+  const unresolvedOnly = {
+    selection: { selected: [], unresolvedIds: ['ghost-synth'] },
+    requestedModalities: [] as BinaryModality[],
+  }
+
+  it('keeps "nothing is configured" apart from "what you selected is not registered"', () => {
+    // Both render an empty integration list, and the two need opposite things from the agent:
+    // generate with what you have, versus report a gap in a step somebody configured. Collapsed,
+    // an agent is told to improvise around an integration an operator meant it to use.
+    const text = renderBinaryGeneratorSection(unresolvedOnly).join('\n')
+    expect(text).toContain('`ghost-synth`')
+    expect(text).toContain('which this deployment does not register')
+    expect(text).not.toContain('No generative integration is configured for this step')
+
+    const nothing = renderBinaryGeneratorSection({
+      selection: { selected: [], unresolvedIds: [] },
+      requestedModalities: [],
+    }).join('\n')
+    expect(nothing).toContain('No generative integration is configured for this step')
+    expect(nothing).not.toContain('does not register')
+  })
+
+  it('does not open the per-integration section when every selected id was unresolved', () => {
+    const text = renderBinaryGeneratorSection(unresolvedOnly).join('\n')
+    expect(text).not.toContain('Generate every artifact through these integrations')
+    expect(text).not.toContain('### `')
+  })
+})
+
+describe('renderBinaryGeneratorSection: an integration with no credential and no contract', () => {
+  const bare = generator({ credentials: [], contracts: [] })
+  const text = renderBinaryGeneratorSection({
+    selection: { selected: [bare], unresolvedIds: [] },
+    requestedModalities: [],
+  }).join('\n')
+
+  // The agent is the only party that can see whether a value arrived, so an absent credential has
+  // to be STATED. Silence reads as "a key is coming", and an agent that decides one is missing
+  // either invents a header or abandons an endpoint that works unauthenticated.
+  it('says no credential is configured rather than omitting the paragraph', () => {
+    expect(text).toContain('No credential is configured for `retro-diffusion`')
+    expect(text).toContain('call it unauthenticated as its contract describes')
+    expect(text).toContain('report a rejection rather than inventing a key')
+    expect(text).not.toContain('is provided to your process as the environment variable')
+  })
+
+  it('says no API contract is registered rather than pointing at a file that is not there', () => {
+    expect(text).toContain('No API contract is registered for `retro-diffusion`')
+    expect(text).toContain('do not invent operations or fields')
+    expect(text).not.toContain('.cat-context/')
+  })
+})
+
+describe('dispatchBinaryGenerators: the credential projection', () => {
+  const project = (credentials: BinaryGeneratorView['credentials']) =>
+    dispatchBinaryGenerators({ selected: [generator({ credentials })], unresolvedIds: [] })[0]
+      ?.credentials
+
+  // A credential has TWO names and only one of them is a boundary (ADR 0041). The executor asks the
+  // resolver for `key` and injects under `envName`, so a projection that dropped `envName` would
+  // deliver the value under a variable the agent is never told to read.
+  it('carries the injection name when it differs from the lookup key', () => {
+    expect(project([{ key: 'RD_TOKEN', envName: 'RETRO_DIFFUSION_API_KEY' }])).toEqual([
+      { key: 'RD_TOKEN', envName: 'RETRO_DIFFUSION_API_KEY' },
+    ])
+  })
+
+  it('OMITS the injection name where the lookup key is also the variable', () => {
+    // `toEqual` cannot tell an absent key from one holding `undefined`, and that difference is the
+    // whole point of the optional field: `{ envName: undefined }` on the wire is a claim that a
+    // second name was declared. So the KEYS are what gets asserted.
+    const [projected] = project([{ key: 'RD_TOKEN' }]) ?? []
+    expect(Object.keys(projected ?? {})).toEqual(['key'])
+  })
+
+  it('carries an OPTIONAL credential as optional, and leaves a required one to the default', () => {
+    // Inverted, this is the failure `required: false` exists to prevent: the executor refusing to
+    // call a working unauthenticated endpoint because an absent value read as mandatory.
+    expect(project([{ key: 'OPENAI_API_KEY', required: false }])).toEqual([
+      { key: 'OPENAI_API_KEY', required: false },
+    ])
+    const [required] = project([{ key: 'RD_TOKEN', required: true }]) ?? []
+    expect(Object.keys(required ?? {})).toEqual(['key'])
   })
 })

@@ -16,10 +16,18 @@ import { defineMutationConfig } from '../../../scripts/stryker-base.mjs'
 // the coverage floor answers "is this tested at all", this one answers "is the test asserting
 // anything".
 export default defineMutationConfig({
-  mutate: ['src/domain/**/*.ts', 'src/shared/**/*.ts', '!src/**/*.test.ts'],
-  // Measured 81.78% total / 84.51% covered over 6,152 mutants. The floor is the truncated total
+  // `*.fixtures.ts` is excluded on the same ground `*.test.ts` is: it is a factory the suites
+  // call, so its literals are scaffolding rather than behaviour, and mutating them would report
+  // survivors nothing should be asked to pin while enlarging the denominator the floor is read off.
+  mutate: [
+    'src/domain/**/*.ts',
+    'src/shared/**/*.ts',
+    '!src/**/*.test.ts',
+    '!src/**/*.fixtures.ts',
+  ],
+  // Measured 84.23% total / 85.79% covered over 7,316 mutants. The floor is the truncated total
   // less the two-point margin every floor here carries (docs/internal/mutation-testing.md says
   // what the margin absorbs); kernel is the package that needs it most, since ONE new `domain/`
   // module arriving with no tests moves the total by more than a point on its own.
-  minimumScore: 79,
+  minimumScore: 82,
 })
