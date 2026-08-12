@@ -59,11 +59,12 @@ import type { World } from './world.ts'
 export function parseResetArgs(
   argv: readonly string[],
 ):
-  | { ok: true; runId: string | null; all: boolean; apply: boolean }
+  | { ok: true; runId: string | null; all: boolean; apply: boolean; purgeRepos: boolean }
   | { ok: false; problem: string } {
   let runId: string | null = null
   let apply = false
   let all = false
+  let purgeRepos = false
   for (const arg of argv) {
     if (arg === '--yes' || arg === '-y') {
       apply = true
@@ -73,10 +74,19 @@ export function parseResetArgs(
       all = true
       continue
     }
+    // Its own flag rather than part of `--all`, which is about how much of the BOARD to clear. This
+    // is a different axis (the provider side), it needs a credential the board half does not, and
+    // bundling the two would make a whole-board clear silently start rewriting repositories.
+    if (arg === '--purge-repos') {
+      purgeRepos = true
+      continue
+    }
     if (arg.startsWith('-')) {
       return {
         ok: false,
-        problem: `unknown option '${arg}'. Usage: ${resetInvocation()} [runId|latest] [--all] [--yes]`,
+        problem:
+          `unknown option '${arg}'. Usage: ${resetInvocation()} ` +
+          `[runId|latest] [--all] [--purge-repos] [--yes]`,
       }
     }
     if (runId !== null) {
@@ -89,7 +99,7 @@ export function parseResetArgs(
     }
     runId = arg
   }
-  return { ok: true, runId, all, apply }
+  return { ok: true, runId, all, apply, purgeRepos }
 }
 
 /** One row of `GET /api/v1/repos`, narrowed to what decides whether a repository is spoken for. */
@@ -173,6 +183,16 @@ export type ResetInput = {
    * cleanup has to act on: see {@link LatestPointer}.
    */
   latest: LatestPointer | null
+  /**
+   * Whether `--purge-repos` is reclaiming the PROVIDER side in the same invocation.
+   *
+   * Needed by a plan that makes no provider call, because {@link leftoversOf} states in writing that
+   * the two repositories keep their content and that a reporter's issue stays open. Those sentences
+   * are the whole reason a cleared board is not read as a fresh one, and the purge makes both false.
+   * A leftovers paragraph that is wrong is worse than none: it is the part of this output an operator
+   * takes on trust precisely because they cannot see the repositories from here.
+   */
+  purgeProvider?: boolean
 }
 
 /** Why a frame is in the plan. Several can be true of one frame, and all of them are stated. */
@@ -405,7 +425,7 @@ export async function planReset(client: ResetClient, input: ResetInput): Promise
       input.latest !== null && (namesPlannedPass || input.all)
         ? { runId: latestRunId, path: input.latest.path }
         : null,
-    leftovers: leftoversOf(config, passes, extraRepos),
+    leftovers: leftoversOf(config, passes, extraRepos, input.purgeProvider === true),
   }
 }
 
@@ -840,10 +860,36 @@ function leftoversOf(
   config: BoardConfig,
   passes: readonly PlannedPass[],
   extraRepos: readonly string[],
+  purgeProvider: boolean,
 ): readonly string[] {
   const issues = passes.flatMap((pass) =>
     pass.issueUrl ? [`${pass.runId}: ${pass.issueUrl}`] : [],
   )
+  // With `--purge-repos` the two sentences below are the ones this run is actively disproving, so
+  // they are replaced rather than softened: the repository half is reported by the purge itself,
+  // recovery command included, and repeating "it keeps its content" beside that would contradict it.
+  if (purgeProvider) {
+    return [
+      // The purge only ever touches the two repositories the `.env` names, so under `--all` this is
+      // the ONE thing about repositories that is still unreclaimed, and dropping it here would let a
+      // purge report be read as covering every repository the plan just deleted a frame for.
+      ...(extraRepos.length > 0
+        ? [
+            `${extraRepos.join(', ')} ${extraRepos.length === 1 ? 'backs a frame' : 'back frames'} ` +
+              `this plan deletes and ${extraRepos.length === 1 ? 'is' : 'are'} NOT purged: ` +
+              `--purge-repos empties only the two repositories this configuration points at. ` +
+              `${extraRepos.length === 1 ? 'It keeps its' : 'They keep their'} content, branches ` +
+              `and open pull requests.`,
+          ]
+        : []),
+      `Whatever a purged repository held is in its own history, NOT here: the purge commits on top ` +
+        `of the previous tip and tags every ref it touches, so the recovery command it prints is ` +
+        `the authority on putting one back.`,
+      `Per-PR namespaces on the cluster (ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) are not touched. A run ` +
+        `that finished reclaimed its own; one that was killed may have left a namespace behind, and ` +
+        `only kubectl can see which.`,
+    ]
+  }
   return [
     ...(extraRepos.length > 0
       ? [
