@@ -247,7 +247,9 @@ export function buildCommonBody(
     // the harness, and admission has already refused a step whose model resolves to a CLI that
     // does not serve the selection. Absent for every API-transport dispatch, which is exactly the
     // prior behaviour — the tool bills the leased plan several times an ordinary turn, so it is
-    // never on by default.
+    // never on by default. A handshake CAPABILITY (`HARNESS_BODY_CAPABILITIES`), unlike
+    // `artifactUpload` below it: the brief names the staging directory whatever the image does with
+    // this flag, so an older runner pool would run blind rather than merely uploading nothing.
     ...(dispatchNeedsHarnessGeneration(context.binaryGenerators) ? { generateImages: true } : {}),
     ...(artifactUpload ? { artifactUpload } : {}),
     ...(referenceScreenshots ? { referenceScreenshots } : {}),

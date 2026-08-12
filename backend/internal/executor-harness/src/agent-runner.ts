@@ -30,7 +30,7 @@ import {
   type ObservedMcpServer,
   type SkillSpec,
 } from './agent-capabilities.js'
-import { createCodexHome, disposeCodexHome } from './codex-home.js'
+import { codexImageGapNote, createCodexHome, disposeCodexHome } from './codex-home.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
 import { killChildProcess, spawnDetached } from './process.js'
@@ -1197,14 +1197,22 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   let cumulative: CodexCumulativeUsage | undefined
 
   // The per-run `CODEX_HOME` — the credential, the config and the generated-output redirect — is
-  // a lifecycle of its own, in `codex-home.ts`. Ambient mode answers undefined: the developer's
+  // a lifecycle of its own, in `codex-home.ts`. Ambient mode answers no home: the developer's
   // own CLI login, with nothing written and nothing to tear down.
-  const codexHome = await createCodexHome(opts)
+  const { home: codexHome, images } = await createCodexHome(opts)
 
   // Codex has no system-prompt flag, so fold the composed role + best-practice
   // context into the prompt itself (Claude Code instead rides --append-system-prompt,
   // falling back to this same fold when the prompt overflows argv).
-  const prompt = foldSystemPrompt(opts.systemPrompt, opts.userPrompt)
+  //
+  // An image capability that could NOT be honoured is stated in the same fold, because the
+  // backend's brief has already promised it and only this half knows it is missing. Absent for
+  // every ordinary run, which is byte-for-byte the prompt it composed before.
+  const gap = codexImageGapNote(images)
+  const prompt = foldSystemPrompt(
+    opts.systemPrompt,
+    gap ? `${opts.userPrompt}\n\n${gap}` : opts.userPrompt,
+  )
   // This stream's tool-silence window (see the claude runner for the shape); opened just before
   // the CLI starts and closed in the `finally` below.
   let toolWindow: ToolProgressWindow = NO_TOOL_WINDOW
@@ -1329,7 +1337,7 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     throw withAgentReport(err, summary, secrets)
   } finally {
     toolWindow.close()
-    if (codexHome) await disposeCodexHome(codexHome, opts)
+    if (codexHome) await disposeCodexHome(codexHome, opts, images)
   }
 }
 

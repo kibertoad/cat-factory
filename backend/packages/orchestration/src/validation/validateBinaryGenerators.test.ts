@@ -247,6 +247,19 @@ describe('generative binary integration registry validation', () => {
       expect(problems[0]?.message).toContain('codex')
     })
 
+    it('refuses a harness this build DOES run but which cannot generate', () => {
+      // The failure that reads as a working registration: `claude-code` passes every structural
+      // check, admission resolves a claude-code step and admits it, the dispatch sets the flag,
+      // the runner ignores it, and the brief tells the agent to collect from a staging directory
+      // nothing created. The run then reports a model problem for one string of deployment code.
+      const problems = problemsFor([{ ...harnessServed, harness: 'claude-code' }])
+      expect(problems).toHaveLength(1)
+      expect(problems[0]?.code).toBe('binary_generator_unknown_harness')
+      expect(problems[0]?.message).toContain('no built-in generation tool')
+      // And it names what CAN serve one, since that is the whole remedy.
+      expect(problems[0]?.message).toContain('codex')
+    })
+
     it('never raises it for an ordinary api integration', () => {
       expect(problemsFor([valid])).toEqual([])
     })

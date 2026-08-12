@@ -78,8 +78,17 @@ describe('requiredHarnessCapabilities', () => {
       mcpServers: [{ id: 'docs' }],
       skills: [{ id: 'house-style' }],
       designImages: { url: 'https://x/y', token: 't', files: [{ artifactId: 'a' }] },
+      generateImages: true,
     }
     expect(requiredHarnessCapabilities(populated)).toEqual(HARNESS_BODY_CAPABILITIES)
+  })
+
+  it('sees a FLAG-shaped capability, and reads an unset flag as carrying nothing', () => {
+    // `generateImages` is neither a list nor a manifest. It is a capability all the same, because
+    // the generator brief names a staging directory unconditionally: an image that ignores the
+    // flag leaves the agent collecting from a directory nothing created.
+    expect(requiredHarnessCapabilities({ generateImages: true })).toEqual(['generateImages'])
+    expect(requiredHarnessCapabilities({ generateImages: false })).toEqual([])
   })
 })
 

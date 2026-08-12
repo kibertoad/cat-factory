@@ -1,5 +1,6 @@
 import type { ToolServerUnavailableReason } from '@cat-factory/contracts'
 import type { HarnessKind } from '../ports/model-provider.js'
+import { isHarnessKind } from '../ports/model-provider.js'
 
 // ---------------------------------------------------------------------------
 // Agent CAPABILITIES — the skills an agent applies and the tool servers (MCP) it may call.
@@ -424,6 +425,44 @@ export function mcpServerSupportsHarness(
 ): boolean {
   if (!MCP_SUPPORTED_HARNESSES.includes(harness)) return false
   return definition.harnesses ? definition.harnesses.includes(harness) : true
+}
+
+/**
+ * Whether each harness's CLI carries a BUILT-IN generation tool a `harness`-transport binary
+ * generator can be served by. An exhaustive `Record` over `HarnessKind` for the reason
+ * {@link MCP_HARNESS_TRANSPORTS} is one: an omitted entry would read as "cannot generate", which is
+ * the safe direction, and a harness added without an answer is a decision nobody made.
+ *
+ * Only Codex has one today (`image_gen`, available ONLY on ChatGPT subscription auth). The
+ * platform's own tool-provisioning is not a substitute: this is about a tool the VENDOR puts in
+ * the CLI, which is exactly what makes a harness-served generator need no API key.
+ */
+export const HARNESS_GENERATES_BINARIES: Record<HarnessKind, boolean> = {
+  pi: false,
+  'claude-code': false,
+  codex: true,
+}
+
+/**
+ * The harnesses a `harness`-transport generator may name. DERIVED from
+ * {@link HARNESS_GENERATES_BINARIES} rather than listed again, so the two cannot drift.
+ */
+export const BINARY_GENERATING_HARNESSES: readonly HarnessKind[] = (
+  Object.keys(HARNESS_GENERATES_BINARIES) as HarnessKind[]
+).filter((harness) => HARNESS_GENERATES_BINARIES[harness])
+
+/**
+ * Whether an untrusted harness name is a CLI that can actually serve a `harness`-transport
+ * generator.
+ *
+ * Deliberately NARROWER than {@link isHarnessKind}: a definition naming `pi` or `claude-code`
+ * passes every structural check, dispatches with the tool flag set, and produces nothing, while
+ * the agent's brief tells it to collect from a staging directory nothing created. "This build runs
+ * that CLI" and "that CLI can generate" are two questions, and only the second is the one a
+ * generative registration is asking.
+ */
+export function harnessServesBinaryGeneration(value: unknown): value is HarnessKind {
+  return isHarnessKind(value) && HARNESS_GENERATES_BINARIES[value]
 }
 
 /** Whether this harness's MCP client can reach a server over `transport`. */

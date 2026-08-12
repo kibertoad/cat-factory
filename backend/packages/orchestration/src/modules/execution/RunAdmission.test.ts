@@ -508,3 +508,134 @@ describe('RunAdmission — the capability set is resolved under the block’s pr
     expect(resolveProviderCapabilities).toHaveBeenCalledWith('ws', 'u1', undefined)
   })
 })
+
+// The HARNESS-REACHABILITY guard resolves the step's model itself, which makes it a second copy of
+// the dispatch precedence — and every way it can disagree refuses a run that would have worked, or
+// stays silent on a block that would not. These pin it against what `ModelRouter.resolveDispatchRef`
+// actually does.
+describe('RunAdmission — the step harness is resolved the way the DISPATCH resolves it', () => {
+  /** A deployment whose only generative integration is served by the codex CLI. */
+  function codexGenerators() {
+    const generators = defaultBinaryGeneratorRegistry()
+    generators.register({
+      id: 'codex-images',
+      name: 'Codex image generation',
+      summary: 'gpt-image-2 through the Codex CLI.',
+      description: '',
+      modalities: ['image'],
+      transport: 'harness',
+      harness: 'codex',
+    })
+    return registryBinaryGeneratorSource(generators)
+  }
+
+  const selection = {
+    agentKinds: ['image-generator'],
+    stepOptions: [
+      {
+        binaryOutput: {
+          storageServiceId: 'asset-store',
+          generatorIds: ['codex-images'],
+          modalities: ['image' as const],
+        },
+      },
+    ],
+  }
+
+  function harnessAdmission(options: {
+    generatorSource?: ReturnType<typeof codexGenerators>
+    subscriptionVendors?: string[]
+    workspaceDefault?: string
+  }) {
+    const resolveProviderCapabilities = vi.fn(async () => ({
+      // An OpenRouter key, so a dual-mode OpenAI model has a metered route to resolve onto.
+      directProviders: new Set(['openrouter']),
+      subscriptionVendors: new Set(options.subscriptionVendors ?? []),
+      cloudflareEnabled: false,
+    }))
+    const resolveWorkspaceModelDefault = vi.fn(async () => options.workspaceDefault)
+    const deps = {
+      workspaceRepository: { accountOf: vi.fn(async () => 'acc') },
+      blockRepository: { listByWorkspace: vi.fn(async () => []) },
+      executionRepository: { listLive: vi.fn(async () => []) },
+      contextBuilder: {
+        resolveServiceFrame: vi.fn(async () => null),
+        resolveServiceConfig: vi.fn(async () => null),
+        resolveFrontendConfig: vi.fn(async () => null),
+      },
+      agentKindRegistry: registry,
+      spend: { isOverBudget: vi.fn(async () => false) },
+      binaryGeneratorSource: options.generatorSource ?? codexGenerators(),
+      resolveProviderCapabilities,
+      resolveWorkspaceModelDefault,
+    } as unknown as RunAdmissionDeps
+    return {
+      admission: new RunAdmission(deps),
+      resolveProviderCapabilities,
+      resolveWorkspaceModelDefault,
+    }
+  }
+
+  it('admits a codex-served generator on a dual-mode model the workspace has a token for', async () => {
+    // "Subscriptions always win" is applied ON TOP of the catalog's flavour order, which puts
+    // `subscription` LAST. Reading the flavour order alone resolves `gpt-5.6-sol` to its OpenRouter
+    // route (harness `pi`) and refuses a step that is about to dispatch on codex — telling the
+    // operator to pin a codex model that is already what will run.
+    const { admission: guard } = harnessAdmission({ subscriptionVendors: ['codex'] })
+    const pinned = { ...block, modelId: 'gpt-5.6-sol' } as unknown as Block
+    await expect(guard.assertRunnable('ws', pinned, selection, 'u1')).resolves.toBeUndefined()
+  })
+
+  it('refuses it when the same model has no subscription to be routed onto', async () => {
+    // The other side of the same override: with no codex token the step really does run on the
+    // OpenRouter route, under Pi, where the CLI's image tool does not exist.
+    const { admission: guard } = harnessAdmission({})
+    const pinned = { ...block, modelId: 'gpt-5.6-sol' } as unknown as Block
+    const error = await refusal(guard.assertRunnable('ws', pinned, selection, 'u1'))
+    expect(error.details).toMatchObject({
+      reason: 'binary_output_generator_invalid',
+      problem: 'generator_harness_unavailable',
+      requiredHarness: 'codex',
+      resolvedHarness: 'pi',
+    })
+  })
+
+  it('falls THROUGH an unresolvable block pin to the workspace default, as the dispatch does', async () => {
+    // `resolveStepModelRef` does not stop at a stale pin, it tries the next source. Stopping here
+    // switched the guard OFF on exactly the blocks most likely to be misconfigured.
+    const { admission: guard } = harnessAdmission({ workspaceDefault: 'gpt-5.6-sol' })
+    const stale = { ...block, modelId: 'model-retired-last-year' } as unknown as Block
+    const error = await refusal(guard.assertRunnable('ws', stale, selection, 'u1'))
+    expect(error.details).toMatchObject({ problem: 'generator_harness_unavailable' })
+  })
+
+  it('resolves NO model when the deployment registers no harness-served integration', async () => {
+    // The rule cannot fire, so the capability read and the per-kind default lookup it needs are
+    // pure waste on every start of every pipeline carrying a binary-output step.
+    const source = registryBinaryGeneratorSource(generatorRegistry())
+    const { admission: guard, resolveWorkspaceModelDefault } = harnessAdmission({
+      generatorSource: source,
+    })
+    await guard.assertRunnable(
+      'ws',
+      block,
+      {
+        agentKinds: ['image-generator'],
+        stepOptions: [
+          {
+            binaryOutput: {
+              storageServiceId: 'asset-store',
+              generatorIds: ['retro-diffusion'],
+              modalities: ['image' as const],
+            },
+          },
+        ],
+      },
+      'u1',
+    )
+    // The later provider guard reads the per-kind default too, but only for a block with NO pin;
+    // this block has none, so a call here would be the harness resolution's own. It must not
+    // happen twice for one kind.
+    expect(resolveWorkspaceModelDefault.mock.calls).toHaveLength(1)
+  })
+})

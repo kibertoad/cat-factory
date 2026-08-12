@@ -20,16 +20,31 @@ Images API and never offered the tool. A harness-transport definition may declar
 would be an environment variable the deployment believes authenticates something and that nothing
 ever reads.
 
+Boot validation holds a harness transport to a CLI that actually generates, which today is codex
+alone. "This build runs that CLI" and "that CLI has a generation tool" are different questions, and
+admitting the first lets a definition naming `pi` or `claude-code` pass every check, dispatch with
+the tool flag set, produce nothing, and brief the agent to collect from a directory nothing created.
+
 Reachability becomes its own admission axis (`generator_harness_unavailable`): a step selecting a
 harness-served integration must resolve to that CLI. The requirement is DERIVED from the step's
-model by the same precedence dispatch uses, and an unresolved model raises nothing. Notably this is
+model by the same precedence dispatch uses — including the fall-through past an unresolvable block
+pin and the "subscriptions always win" override, without which the guard refuses a codex-served
+generator on a step that is about to run codex. An unresolved model raises nothing. Notably this is
 NOT a capability flag on the model catalog: whether the tool is offered is decided by the vendor per
 session and per plan tier, so a boolean on a model row would be a guarantee nothing here can verify.
+The pipeline builder states the constraint it cannot check (which CLI serves each candidate, and
+which the current selection needs) as advice, since a pipeline is a template and the model is chosen
+per task.
 
 The harness redirects codex's output into `.cat-context/binary-output/generated/` before the CLI
 starts, because codex exposes no path for what it generated and its output directory is also where
 the run's decrypted subscription credential lives. It is opt-in per job: the tool bills the leased
-plan at several times an ordinary turn.
+plan at several times an ordinary turn. `generateImages` joins the job-body capability handshake, so
+a runner pool on an older image is refused rather than run blind against a brief that names the
+staging directory regardless. Where the capability genuinely cannot be honoured (an `ambientAuth`
+run has no per-run home to redirect, a filesystem refuses the link) the harness says so in the
+prompt instead of dropping it, and the teardown report tells a late-arriving image apart from one
+that was never reachable.
 
 Separately, the harness now consumes the job body's `artifactUpload` and surfaces it as
 `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`. The backend has injected that field and served the

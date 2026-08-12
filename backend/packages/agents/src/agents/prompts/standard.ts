@@ -6,7 +6,8 @@ import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext, DesignImageUnavailableReason } from '@cat-factory/kernel'
 import {
-  BINARY_GENERATED_DIR,
+  AGENT_CONTEXT_DIR,
+  BINARY_GENERATED_PATH,
   CONTEXT_BUDGET,
   estimateTokens,
   freshnessHeaderLines,
@@ -410,8 +411,12 @@ export function customTaskTypeSection(context: AgentRunContext): string {
  * container agent can read what it needs on demand rather than carrying every body in
  * its prompt. Kept in sync with the harness's own constant (executor-harness has no
  * dependency on this package).
+ *
+ * Re-exported from kernel rather than spelled again here: kernel RENDERS paths under this
+ * directory into the prompts it composes (the binary-generator brief), so a second literal at
+ * this layer would be a copy the harness contract suite pins while kernel's own goes unchecked.
  */
-export const CONTEXT_DIR = '.cat-context'
+export const CONTEXT_DIR = AGENT_CONTEXT_DIR
 
 /**
  * Subdirectory of {@link CONTEXT_DIR} holding the REFERENCE DESIGN images a run was handed: the
@@ -456,11 +461,12 @@ export const DESIGN_RENDER_DIR = `${CONTEXT_DIR}/design-renders`
  * workspace package, so (like {@link CONTEXT_DIR}) the constant exists twice and the copies are
  * pinned byte-for-byte by the harness contract suite.
  *
- * The subdirectory comes from kernel's own path vocabulary rather than a literal, so the brief
- * (rendered in kernel) and the prompt (rendered here) cannot name different directories: that
- * would leave exactly THREE copies of one path with only two of them pinned.
+ * The WHOLE path comes from kernel's own vocabulary rather than being reassembled here, because
+ * the brief the agent reads is rendered in kernel and this constant is what the contract suite
+ * pins: reassembling it would leave three copies of one path with only two of them checked, and a
+ * rename would ship green with the brief naming a directory nothing writes.
  */
-export const GENERATED_BINARY_DIR = `${CONTEXT_DIR}/${BINARY_GENERATED_DIR}`
+export const GENERATED_BINARY_DIR = BINARY_GENERATED_PATH
 
 /**
  * The design pictures this dispatch holds, and what became of them.

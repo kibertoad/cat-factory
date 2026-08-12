@@ -628,7 +628,7 @@
         "pipeline_schedule_intake_unconfigured": "Krok pobierania błędów czerpie pracę z ustawień pobierania zgłoszeń harmonogramu, a powiązany harmonogram ich nie ma. Najpierw skonfiguruj pobieranie zgłoszeń w harmonogramie.",
         "foundational_service_exists": "Usługa fundamentalna o tym identyfikatorze jest już zarejestrowana w tym zakresie. Otwórz istniejący wpis i go edytuj — dwie usługi nie mogą współdzielić identyfikatora, ponieważ to jego nazwą architekt posługuje się w projekcie.",
         "binary_output_service_invalid": "Krok generujący wyniki binarne wybiera usługę fundamentalną, której katalog tego obszaru roboczego nie może rozpoznać: identyfikator jest nieznany albo wybrana usługa przechowywania nie ma zdolności asset-storage. Popraw wybór w kroku lub zarejestruj usługę, a następnie uruchom ponownie.",
-        "binary_output_generator_invalid": "Krok generujący dane binarne wybiera integrację generatywną, której to wdrożenie nie rejestruje, albo żadna z wybranych integracji nie tworzy typu treści, który krok ma dostarczyć. Integracje generatywne rejestruje się w kodzie wdrożenia, a nie w tej przestrzeni roboczej: zarejestruj ją lub popraw wybór w kroku, a następnie uruchom ponownie.",
+        "binary_output_generator_invalid": "Krok generujący dane binarne wybiera integrację generatywną, której to wdrożenie nie rejestruje, żadna z wybranych integracji nie tworzy typu treści, który krok ma dostarczyć, albo jedną z nich tworzy CLI agenta, na którym model tego kroku nie działa. Integracje generatywne rejestruje się w kodzie wdrożenia, a nie w tej przestrzeni roboczej: zarejestruj ją, popraw wybór kroku albo przypisz krokowi model działający w wymaganym CLI, a następnie uruchom ponownie.",
         "foundational_service_not_inherited": "Wyłączenie dotyczy usługi dziedziczonej z konta. Ten identyfikator jest zarejestrowany przez tę tablicę, więc nie ma czego wyłączać - usuń zamiast tego własny wpis tablicy.",
         "input_gate_not_parked": "Ten przebieg nie czeka już na kontrolę danych wejściowych. Ktoś mógł już na nią odpowiedzieć albo przebieg poszedł dalej.",
         "input_gate_parked": "To uruchomienie czeka na kontrolę danych wejściowych, której nie da się rozstrzygnąć przez zatwierdzenie. Skorzystaj z powiadomienia przy uruchomieniu: popraw zadanie i sprawdź ponownie albo uruchom mimo to.",
@@ -4937,6 +4937,8 @@
       "binaryOutputMediaTypeUnusable": "Nie zapisano, bo to nie są typy mediów: {entries}. Zapisz każdy jako type/subtype.",
       "binaryOutputGeneratorMissing": "Ta instalacja nie rejestruje tych integracji generatywnych: {ids}. Rejestruje się je w kodzie instalacji, a nie w tym obszarze roboczym.",
       "binaryOutputGeneratorOverlap": "Więcej niż jedna wybrana integracja tworzy ten sam typ treści ({overlaps}). Nie ma w tym nic złego, ale typ treści nie decyduje już, którą wywoła agent: napisz w promptcie tego kroku, której użyć i do czego, bo inaczej wybierze jedną i będzie jej używał dalej.",
+      "binaryOutputGeneratorVia": "przez {harness}",
+      "binaryOutputGeneratorHarness": "Te integracje są tworzone przez CLI agenta, a nie przez API ({generators}), więc ten krok działa tylko z modelem uruchamianym w tym CLI. Uruchomienie z innym modelem zostanie odrzucone na starcie.",
       "binaryOutputModalityUncovered": "Żadna wybrana integracja nie tworzy {modalities}, które ten krok ma dostarczyć.",
       "binaryOutputModalityRetired": "{modality} (już niedostępne — wybierz ponownie typy treści tego kroku)",
       "binaryOutputModality": {

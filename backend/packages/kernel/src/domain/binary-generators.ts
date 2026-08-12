@@ -20,7 +20,7 @@ import type {
 } from '@cat-factory/contracts'
 import type { BinaryGeneratorView } from './binary-generator-registry.js'
 import {
-  BINARY_GENERATED_DIR,
+  BINARY_GENERATED_PATH,
   BINARY_GENERATOR_CONTEXT_DIR,
   binaryGeneratorContextFileFor,
 } from './binary-output-paths.js'
@@ -289,10 +289,13 @@ export function binaryGeneratorSelectionIssues(
     problem: 'unknown_generator' as const,
     generatorId,
   }))
-  // The REACHABILITY axis, checked before the capability ones because it is the coarser fault: a
-  // generator the step's CLI does not carry cannot cover a modality either, and reporting both
-  // would state one misconfiguration twice. Skipped entirely when the caller could not resolve
-  // the harness — see the issue's own doc for why a guess is worse than an absence.
+  // The REACHABILITY axis, checked before the capability ones because it is the coarser fault and
+  // it SHORT-CIRCUITS them: a generator the step's CLI does not carry covers nothing, so every
+  // coverage judgement below would restate one misconfiguration as several, each with its own
+  // remedy, on a surface that renders every problem it recognises. Skipped entirely when the
+  // caller could not resolve the harness — see the issue's own doc for why a guess is worse than
+  // an absence. The unresolved-id issues above ride along because they are a different fault
+  // about different ids, and fixing this one would not surface them.
   if (resolvedHarness) {
     for (const generator of selected) {
       if (!isHarnessTransport(generator) || generator.harness === resolvedHarness) continue
@@ -303,6 +306,7 @@ export function binaryGeneratorSelectionIssues(
         resolvedHarness,
       })
     }
+    if (issues.some((issue) => issue.problem === 'generator_harness_unavailable')) return issues
   }
   const covered = new Set(selected.flatMap((generator) => generator.modalities))
   for (const modality of config?.modalities ?? []) {
@@ -860,7 +864,7 @@ function requirementLines(
 function harnessLines(generator: BinaryGeneratorView): string[] {
   return [
     `- Served by your own \`${generator.harness}\` agent CLI: generate with its built-in generation tool. There is no API to call, no endpoint, and no credential — the run is already authenticated.`,
-    `- Output lands in \`.cat-context/${BINARY_GENERATED_DIR}/\`. Collect the files from there and store each one through the storage service above. Nothing else moves them, so a file you leave there is an artifact this step did not deliver.`,
+    `- Output lands in \`${BINARY_GENERATED_PATH}/\`. Collect the files from there and store each one through the storage service above. Nothing else moves them, so a file you leave there is an artifact this step did not deliver.`,
     `- If the tool is unavailable in this session, say so and report which artifacts you could not produce. Do NOT substitute another generator, and do not describe an image you did not make.`,
   ]
 }

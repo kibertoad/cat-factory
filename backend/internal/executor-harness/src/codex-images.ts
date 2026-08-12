@@ -123,11 +123,15 @@ export async function sweepCodexImages(
     return []
   }
   const moved: string[] = []
+  // Loop-invariant: made ONCE here rather than per rescued file. This is the path where
+  // `stageCodexImages` did not create it, so it cannot be assumed to exist. A failure needs no
+  // report of its own — every rename below then fails and names its own file in the warning it
+  // already emits, which is the more useful line anyway.
+  await mkdir(target, { recursive: true }).catch(() => {})
   for (const name of names) {
     const from = join(source, name)
     const to = join(target, name)
     try {
-      await mkdir(target, { recursive: true })
       await rename(from, to)
       moved.push(name)
     } catch (error) {
@@ -146,7 +150,18 @@ export async function sweepCodexImages(
  * Only ever the LINK: `rm` on a symlink unlinks it and leaves the target alone, which is what must
  * happen here — the target is inside the checkout and holds the run's actual output. Passed the
  * home rather than the link path so a caller cannot accidentally hand it the staging directory.
+ *
+ * A failure is SWALLOWED (teardown must not take a completed run down with it) and REPORTED,
+ * because this unlink is the property that stops the recursive delete that follows from reaching
+ * the checkout. Dropping it silently would forfeit that with no line anywhere saying so, and the
+ * evidence would be missing artifacts nobody could trace back to this call.
  */
-export async function unstageCodexImages(codexHome: string): Promise<void> {
-  await rm(join(codexHome, CODEX_OUTPUT_DIRNAME), { recursive: false, force: true }).catch(() => {})
+export async function unstageCodexImages(codexHome: string, log?: Logger): Promise<void> {
+  try {
+    await rm(join(codexHome, CODEX_OUTPUT_DIRNAME), { recursive: false, force: true })
+  } catch (error) {
+    log?.warn('could not remove the codex image redirect before tearing the home down', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }

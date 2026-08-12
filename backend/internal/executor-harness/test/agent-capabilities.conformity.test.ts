@@ -169,6 +169,7 @@ describe('harness body-capability list conforms to kernel', () => {
         token: 'sess',
         files: [{ artifactId: 'art1', fileName: 'checkout.png', view: 'Checkout' }],
       },
+      generateImages: true,
     })
     for (const capability of HARNESS_BODY_CAPABILITIES) {
       expect((job as unknown as Record<string, unknown>)[capability]).toBeDefined()

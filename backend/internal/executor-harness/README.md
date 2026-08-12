@@ -179,8 +179,19 @@ failed redirect left behind and NAMES it, because an image that arrived too late
 different fact from a run that generated none.
 
 Opt-in per job because the tool bills the leased ChatGPT plan at several times an ordinary turn.
-A no-op under `ambientAuth`: there is no per-run home to configure or redirect, and reconfiguring
-the developer's own `~/.codex` is the HOME-global mutation this harness never makes.
+
+Unavailable under `ambientAuth`: there is no per-run home to configure or redirect, and
+reconfiguring the developer's own `~/.codex` is the HOME-global mutation this harness never makes.
+Unavailable is not silent — the backend has already composed a brief naming the staging directory,
+so `createCodexHome` reports the gap and one sentence is folded into the prompt saying the tool
+could not be enabled and nothing will appear there. A refused redirect gets its own wording (the
+tool IS on, its output is only unreachable until the post-run sweep), and the teardown report reads
+the same outcome, so a rescued file is never reported as a late arrival when the redirect never
+existed at all.
+
+`generateImages` is also a `/health` capability, so a runner pool on an image that predates it is
+refused rather than run blind: the brief names the staging directory whatever the image does with
+the flag.
 
 ### Skills and tool servers
 
@@ -303,7 +314,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/reference-screenshots.ts` | The task's REFERENCE DESIGN images: downloads the manifest a capturing job body carries into `.cat-context/reference-screenshots/` (on the run's own container session token) and composes the prompt block naming each file's view. Best-effort, time-bounded and IDEMPOTENT over the checkout, so a repair round re-costs a stat rather than a transfer. A reference that is not on disk is NAMED to the agent, whether a transfer failed or the backend's cap dropped the view, because on disk an absent file and a screen the design does not have are the same thing. Backend-authored throughout, including the file names. |
 | `src/bootstrap-mode.ts` | The repo-bootstrap MODE: clone-a-reference-or-scaffold → run the agent → refuse to push an empty tree → reinit + force-push to the pre-created target repo. |
 | `src/artifact-upload.ts` | The OUTBOUND half of the artifact seam: parses the body's `artifactUpload` and projects it onto the agent's env as `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`, registering the token for redaction first. Passes through what the body carries and decides nothing: which kinds get the seam is the backend's call. |
-| `src/codex-images.ts` | Codex's own `image_gen` output, staged where the agent can reach it: creates `$CODEX_HOME/generated_images` as a symlink into `.cat-context/binary-output/generated/` before the CLI starts, sweeps anything a failed redirect left behind, and unlinks (never follows) the redirect at teardown. Exists because codex exposes no path for what it generated AND `$CODEX_HOME` holds the run's decrypted credential, so neither asking the agent nor sending it there is available. |
+| `src/codex-images.ts` | Codex's own `image_gen` output, staged where the agent can reach it: creates `$CODEX_HOME/generated_images` as a symlink into `.cat-context/binary-output/generated/` before the CLI starts, sweeps anything a failed redirect left behind, and unlinks (never follows) the redirect at teardown — a failed unlink is REPORTED, because that unlink is what stops the recursive delete reaching the checkout. Exists because codex exposes no path for what it generated AND `$CODEX_HOME` holds the run's decrypted credential, so neither asking the agent nor sending it there is available. |
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |
 

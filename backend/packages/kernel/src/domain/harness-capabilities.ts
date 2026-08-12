@@ -32,19 +32,28 @@ import type { RunnerDispatchAck, RunnerJobStopOutcome } from '../ports/runner-tr
  * BACKEND (only it knows the delivery verdict and the views no container was sent) and would name a
  * directory an older image never wrote.
  *
+ * `generateImages` is a member for exactly that reason and not for its own shape: it is a bare
+ * flag, but the generator brief it turns on names a staging directory unconditionally, so an image
+ * that ignores the flag leaves the agent hunting for output in a directory nothing created, and the
+ * run reports a vendor problem for what is a runner pool one release behind. `artifactUpload` is
+ * NOT a member for the opposite reason: it is delivered as environment variables the prompt names
+ * only where they are read, and an image that ignores it produces a run that uploaded nothing
+ * rather than one that was told it had.
+ *
  * Keyed as an exhaustive `Record` so the list below cannot drift from the union, and mirrored
  * byte-for-byte by the harness's own `HARNESS_BODY_CAPABILITIES` (the image is built from `src/`
  * plus typescript alone, so it can depend on no workspace package). The pairing is pinned by the
  * harness's `test/agent-capabilities.conformity.test.ts`, the same copy-plus-pin arrangement the
  * id/tool-name patterns use.
  */
-export type HarnessBodyCapability = 'mcpServers' | 'skills' | 'designImages'
+export type HarnessBodyCapability = 'mcpServers' | 'skills' | 'designImages' | 'generateImages'
 
 /** Operator-facing prose for each capability: what the body carried, in words. */
 const HARNESS_BODY_CAPABILITY_LABELS: Record<HarnessBodyCapability, string> = {
   mcpServers: 'tool servers (MCP)',
   skills: 'skills',
   designImages: 'design pictures',
+  generateImages: "the agent CLI's own image generation",
 }
 
 /** Every capability the handshake covers. Derived, so it cannot drift from the union. */
@@ -110,6 +119,10 @@ const HARNESS_BODY_CAPABILITY_CARRIED: Record<HarnessBodyCapability, (value: unk
       typeof value === 'object' &&
       value !== null &&
       isPopulatedList((value as { files?: unknown }).files),
+    // A plain flag, and the only shape here that is neither a list nor a manifest. `=== true`
+    // rather than truthiness, because the field is the wire's own boolean and anything else in it
+    // is a body this backend did not compose.
+    generateImages: (value) => value === true,
   }
 
 /**

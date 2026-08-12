@@ -155,12 +155,29 @@ Three consequences, each of which is a rule somewhere:
   value is injected into the agent's process, so declaring one means a variable the deployment
   believes authenticates something and that nothing ever reads. The auth is the leased
   subscription the run already used.
+- **A harness transport may name only a CLI that actually GENERATES** (`harnessServesBinaryGeneration`,
+  boot validation). "This build runs that CLI" and "that CLI has a generation tool" are two
+  questions, and admitting the first lets a definition naming `pi` or `claude-code` pass every
+  structural check, resolve, dispatch with the flag set, produce nothing, and brief the agent to
+  collect from a staging directory nothing created. The run then reports a model problem for one
+  string of deployment code.
 - **Reachability is an admission axis of its own** (`generator_harness_unavailable`), because every
   other issue judges whether the integration can do the WORK and this judges whether it is in the
   process at all. The requirement is DERIVED from the step's resolved model
-  (`RunAdmission.resolveStepHarnesses`, the same precedence dispatch uses), never declared. An
-  unresolved model raises nothing: the third outcome the format, capability and value axes all
-  take, because a guess about which CLI a step will run under is worse than an absence.
+  (`RunAdmission.resolveStepHarnesses`), never declared. An unresolved model raises nothing: the
+  third outcome the format, capability and value axes all take, because a guess about which CLI a
+  step will run under is worse than an absence. It also SHORT-CIRCUITS the coverage axes, since an
+  unreachable generator covers nothing and every one of them would restate the same fault.
+
+  The derivation is a second copy of the dispatch precedence, and every way it can drift refuses a
+  run that would have worked. Both halves bite: `resolveStepModelRef` falls THROUGH an unresolvable
+  block pin rather than stopping at one, and `ModelRouter.resolveEffectiveRef` applies
+  "subscriptions always win" ON TOP of a catalog flavour order that puts `subscription` LAST, so a
+  dual-mode model on a workspace holding a token for its vendor dispatches on the subscription
+  harness while the bare catalog order resolves it to a metered route. Miss either and the guard
+  refuses a codex-served generator on a step that is about to run codex, or goes quiet on exactly
+  the stale pin most likely to be wrong.
+
 - **"Can generate images" is NOT a flag on the model catalog**, and that was the tempting shortcut.
   It is a property of the TOOL, which the vendor provisions per session and per plan tier and which
   demonstrably is not always offered (openai/codex#36832: the app exposes `image_gen` while the CLI
@@ -185,6 +202,28 @@ that generated none.
 harness-served generator). It bills the leased plan at 3-5x an ordinary turn, so an always-on image
 capability would charge every run for one it never uses. The backend keys off the TRANSPORT and
 never off a CLI name; which tool to enable is the harness's own business.
+
+**And it is a handshake CAPABILITY** (`HARNESS_BODY_CAPABILITIES`), not merely an optional field.
+The test that decides membership is whether the PROMPT would lie, and here it does: the generator
+brief names the staging directory unconditionally, so a runner pool one image behind ignores the
+flag while the agent is told where to collect from. That is the blind run the handshake exists to
+refuse, and without membership the dispatch cannot even see the question.
+
+**A capability that cannot be honoured is STATED, twice over.** Under `ambientAuth` there is no
+per-run home to configure or redirect and the developer's own `~/.codex` is never touched, so the
+tool is simply not there: `createCodexHome` answers the outcome rather than a bare home, and
+`codexImageGapNote` folds one sentence into the prompt naming what is missing and pointing at the
+brief's own "if the tool is unavailable, say so" instruction. A refused REDIRECT (an existing
+directory, a filesystem that will not make a link) gets its own wording, because the tool is on and
+its output is unreachable until the post-run sweep, which is a different fact and a different fix.
+The teardown report reads the same outcome, so a rescued file is never called a late arrival when
+the redirect never existed.
+
+**The builder states the constraint it cannot check.** A pipeline is a template and the model is
+resolved per block at dispatch, so the picker cannot judge whether a step will run the required CLI.
+It says which CLI serves each harness-backed candidate (in the label) and which the current
+selection therefore needs (`generator_harness_required`, ADVISORY), which is what keeps the
+admission refusal from arriving as a surprise about a selection the product's own picker offered.
 
 ### Content types are a closed vocabulary
 

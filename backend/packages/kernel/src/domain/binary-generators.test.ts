@@ -328,6 +328,30 @@ describe('binaryGeneratorSelectionIssues', () => {
       ).toEqual([])
     })
 
+    it('states the unreachable generator ONCE, not once per axis it now fails', () => {
+      // An unreachable generator covers nothing, so every coverage judgement below would restate
+      // one misconfiguration as several, each with its own remedy, on a surface that renders every
+      // problem it recognises as its own line.
+      const issues = binaryGeneratorSelectionIssues(
+        { ...selection, modalities: ['audio'], mediaTypes: ['audio/mpeg'] },
+        [codexImages],
+        'claude-code',
+      )
+      expect(issues.map((issue) => issue.problem)).toEqual(['generator_harness_unavailable'])
+    })
+
+    it('still reports an unresolved id beside it, being a different fault about a different id', () => {
+      const issues = binaryGeneratorSelectionIssues(
+        { ...selection, generatorIds: ['codex-images', 'nope'] },
+        [codexImages],
+        'claude-code',
+      )
+      expect(issues.map((issue) => issue.problem)).toEqual([
+        'unknown_generator',
+        'generator_harness_unavailable',
+      ])
+    })
+
     it('names both harnesses in the message, since the fix is the MODEL not the integration', () => {
       const message = describeBinaryGeneratorSelectionIssues('image-generator', [
         {

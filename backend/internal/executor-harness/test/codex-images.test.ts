@@ -53,6 +53,17 @@ describe('codex image staging', () => {
     expect(exclude).toContain('.cat-context/')
   })
 
+  it('does not accrete a duplicate exclude entry per materialiser', async () => {
+    // Several materialisers legitimately run in one job (context files, skill resources, this
+    // one), and on a persistent checkout a blind append leaves one copy per run forever.
+    await mkdir(join(cwd, '.git', 'info'), { recursive: true })
+    await writeFile(join(cwd, '.git', 'info', 'exclude'), '', 'utf8')
+    await stageCodexImages(home, cwd)
+    await stageCodexImages(home, cwd)
+    const lines = (await readFile(join(cwd, '.git', 'info', 'exclude'), 'utf8')).split('\n')
+    expect(lines.filter((line) => line.trim() === '.cat-context/')).toHaveLength(1)
+  })
+
   it('redirects the CLI output directory into the checkout', async () => {
     expect(await stageCodexImages(home, cwd)).toBe(true)
     // Writing where codex writes must land where the agent reads, with no copy step in between:
