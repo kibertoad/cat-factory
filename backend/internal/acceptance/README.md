@@ -391,27 +391,27 @@ It never overwrites a value without saying so: an existing value becomes the pro
 summary names every key it replaced, and anything in the file it does not manage (a pasted
 `ACCEPTANCE_K3S_CA_PEM`, say) is carried over byte for byte. Neither token is ever printed back.
 
-| Variable                               | Required | What it is                                                                                                                                                                             |
-| -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves `/api/v1` and the deployment root reads.                                                                                          |
-| `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (spec 03 also needs the `decide` rung it includes).                                                                                                |
-| `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                                                                                                        |
-| `ACCEPTANCE_REPO_OWNER`                | yes      | The owner both repositories live under. `GET /api/v1/vcs/connection` reports it.                                                                                                       |
-| `ACCEPTANCE_BACKEND_REPO`              | yes      | Name of the empty repository the backend service adopts. **You create it; the suite adopts it.**                                                                                       |
-| `ACCEPTANCE_FRONTEND_REPO`             | yes      | Name of the empty repository the frontend adopts. Must differ from the backend's.                                                                                                      |
-| `ACCEPTANCE_VCS_TOKEN`                 | yes      | Provider token spec 04 files its issue with, as an outside reporter. Classic GitHub: `repo`. Fine-grained: "Issues: Read and write" on the backend repository. Never the API key.      |
-| `ACCEPTANCE_VCS_API_BASE`              | no       | The provider's REST base, default `https://api.github.com`. GitHub Enterprise Server is `https://<host>/api/v3`, which no `/api/v1` read publishes.                                    |
-| `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                                                                                                          |
-| `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                                                                                                       |
-| `ACCEPTANCE_K3S_CA_PEM`                | one of   | The cluster CA in PEM. Wins over the insecure flag when both are set.                                                                                                                  |
-| `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                                                                                                                    |
-| `ACCEPTANCE_MODEL_PRESET`              | no       | Preset id pinned on every task, default `mdp_claude` (the built-in Claude preset). `configure` offers the library as a menu, so the id never has to be typed.                          |
-| `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS. Also the host the scaffold briefs ask each service's Ingress to serve, so overriding it moves both halves together.      |
-| `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                                                                                                       |
-| `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Prefixes the board frames and tasks, not the repositories. Set it per-person when a board is shared.                                                                 |
-| `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a vitest timeout; see below.                                                                                                                      |
-| `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                                                                                                       |
-| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass that recorded a fact. Unset starts a new one. The one variable normally set per invocation, so see the shell forms below. |
+| Variable                               | Required | What it is                                                                                                                                                                                                                                                                                                                                     |
+| -------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CAT_FACTORY_BASE_URL`                 | yes      | Backend origin, e.g. `http://127.0.0.1:8787`. Serves `/api/v1` and the deployment root reads.                                                                                                                                                                                                                                                  |
+| `CAT_FACTORY_API_KEY`                  | yes      | A public-API key scoped **`admin`** (spec 03 also needs the `decide` rung it includes).                                                                                                                                                                                                                                                        |
+| `ACCEPTANCE_WORKSPACE_ID`              | yes      | The workspace the key is bound to. `GET /api/v1/me` reports it.                                                                                                                                                                                                                                                                                |
+| `ACCEPTANCE_REPO_OWNER`                | yes      | The owner both repositories live under. `GET /api/v1/vcs/connection` reports it.                                                                                                                                                                                                                                                               |
+| `ACCEPTANCE_BACKEND_REPO`              | yes      | Name of the empty repository the backend service adopts. **You create it; the suite adopts it.**                                                                                                                                                                                                                                               |
+| `ACCEPTANCE_FRONTEND_REPO`             | yes      | Name of the empty repository the frontend adopts. Must differ from the backend's.                                                                                                                                                                                                                                                              |
+| `ACCEPTANCE_VCS_TOKEN`                 | yes      | Provider token spec 04 files its issue with, as an outside reporter, and `reset --purge-repos` empties the repositories with. Classic GitHub: `repo` (plus `workflow` for the purge). Fine-grained: "Issues: Read and write" on the backend repository (plus "Contents" and "Workflows" read+write on both, for the purge). Never the API key. |
+| `ACCEPTANCE_VCS_API_BASE`              | no       | The provider's REST base, default `https://api.github.com`. GitHub Enterprise Server is `https://<host>/api/v3`, which no `/api/v1` read publishes.                                                                                                                                                                                            |
+| `ACCEPTANCE_K3S_API_SERVER`            | yes      | Apiserver URL, e.g. `https://127.0.0.1:6443`.                                                                                                                                                                                                                                                                                                  |
+| `ACCEPTANCE_K3S_TOKEN`                 | yes      | The ServiceAccount bearer token.                                                                                                                                                                                                                                                                                                               |
+| `ACCEPTANCE_K3S_CA_PEM`                | one of   | The cluster CA in PEM. Wins over the insecure flag when both are set.                                                                                                                                                                                                                                                                          |
+| `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                                                                                                                                                                                                                                                                            |
+| `ACCEPTANCE_MODEL_PRESET`              | no       | Preset id pinned on every task, default `mdp_claude` (the built-in Claude preset). `configure` offers the library as a menu, so the id never has to be typed.                                                                                                                                                                                  |
+| `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS. Also the host the scaffold briefs ask each service's Ingress to serve, so overriding it moves both halves together.                                                                                                                                                              |
+| `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                                                                                                                                                                                                                                                               |
+| `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Prefixes the board frames and tasks, not the repositories. Set it per-person when a board is shared.                                                                                                                                                                                                                         |
+| `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a vitest timeout; see below.                                                                                                                                                                                                                                                                              |
+| `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                                                                                                                                                                                                                                                               |
+| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass that recorded a fact. Unset starts a new one. The one variable normally set per invocation, so see the shell forms below.                                                                                                                                                         |
 
 They live in a **`.env` beside `vitest.acceptance.config.ts`** (gitignored, and read by that
 config: vitest does not pick one up on its own). A variable set in the shell wins over the file, so
@@ -628,6 +628,14 @@ It is a separate flag from `--all`, on a different axis: `--all` says how much o
 this says whether to touch the provider at all. Without the variable it refuses, naming it, and
 changes nothing.
 
+The purge asks more of that token than filing an issue does: **Contents and Workflows read+write on
+both repositories**, on top of Issues. A scaffolded repository holds a GitHub Actions workflow, and
+the provider refuses a commit that removes one from a token carrying no workflow permission, so the
+credential that ran the pass may still be refused by the cleanup. Which provider it calls comes from
+`GET /api/v1/vcs/connection` rather than being assumed: a workspace connected to one this suite
+cannot address refuses here for the same reason the `issue-credential` prerequisite does, rather than
+having its calls sent to GitHub.
+
 **Nothing it does is destructive, and that is the design rather than a caution.** The two
 repositories are named in a `.env`, a `.env` can name the wrong thing, and the failure worth
 engineering against is an operator emptying a repository that mattered. So:
@@ -638,21 +646,34 @@ engineering against is an operator emptying a repository that mattered. So:
   with `force: false`: the API request cannot be the thing that loses a commit. The rejected
   alternative was a parentless orphan commit, which reads as a genuinely fresh repository and makes
   the old tree reachable from nothing. Messy history is the price, and it is the right one.
-- **Every ref is TAGGED before it is touched**, at the sha it held (`cf-acc-reset/<stamp>/<branch>`).
-  Redundant for the default branch and load-bearing for the leftover scaffold branches, which are
-  deleted: a deleted branch's commits are reachable from nothing unless something names them. A
-  branch whose backup tag did NOT land is left in place rather than deleted.
-- **The report prints the recovery command with the sha in it**, per repository. A purge that can be
-  undone but does not say how is only half the property, and the moment it is needed is the moment
-  the ledger naming the pass may already be gone.
+- **Every ref is TAGGED before it is touched**, at the sha it held
+  (`cf-acc-reset/<stamp>/<branch>-<digest>`). Redundant for the default branch and load-bearing for
+  the leftover scaffold branches, which are deleted: a deleted branch's commits are reachable from
+  nothing unless something names them. Each backup is the precondition of the write it protects and
+  no more, so a branch whose own tag did NOT land is left in place while the rest goes ahead. The
+  digest is over the branch name, because flattening the slashes alone maps `cat-factory/x` and
+  `cat-factory-x` onto one tag, and a tag that already exists at somebody else's sha is not a backup:
+  the provider answers 422 either way, so what is there is READ rather than assumed.
+- **The report prints the recovery command with the sha in it**, per repository, and states what it
+  did beside the tree. A purge that can be undone but does not say how is only half the property, and
+  the moment it is needed is the moment the ledger naming the pass may already be gone.
+- **A repository with no README at the root is REFUSED in the plan**, since the emptying is expressed
+  as a tree listing what stays and there is no such tree with nothing to keep.
 
 **Which issues it closes is a PAIR, and both halves matter.** An issue qualifies when the reporter
 credential authored it AND its title is one this suite files. Author alone would close a human's
 issue that happens to sit on a fixture repository; title alone would close somebody else's issue
 quoting this suite's. Everything failing either test is reported as skipped, with which half failed,
 because "we saw it and left it" and "we never looked" are different facts. Issues a removed pass's
-ledger names are closed on the ledger's word, since that is evidence of authorship on its own; an
-issue belonging to a pass whose files are KEPT is left alone, because somebody may still resume it.
+ledger names are closed on the ledger's word, since that is evidence of authorship on its own.
+
+**An issue belonging to a pass whose files are KEPT is left alone, and the plan says what that is
+worth.** Discovery cannot tell one apart on its own (a kept pass's issue wears the same title and the
+same author), so the exclusion is named rather than inferred. But files and issues are per-pass while
+the repositories are not: there is one pair per board, and emptying them is what stops a kept pass
+being resumable, whatever its ledger says. So the preview names those passes and states the
+consequence, where it can still be acted on, rather than letting the retention read as a promise the
+purge does not keep.
 
 It does NOT guess whether a repository "looks scaffolded" before emptying it. No honest test exists
 (a scaffolded repository and a hand-built service look identical), and a wrong guess either refuses a

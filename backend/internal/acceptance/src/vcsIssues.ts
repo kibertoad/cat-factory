@@ -28,6 +28,12 @@ import { describeThrown } from './operatorText.ts'
 /** One repository, as both the provider's API and `GET /api/v1/repos` name it. */
 export type IssueTarget = { owner: string; repo: string }
 
+/** Rows per page for the one list read here: the provider's maximum. */
+const ISSUES_PER_PAGE = 100
+
+/** Pages `listOpen` walks before it REFUSES, rather than silently answering the part it read. */
+const MAX_ISSUE_PAGES = 50
+
 /** An issue that now exists on the provider. */
 export type FiledIssue = {
   number: number
@@ -278,15 +284,36 @@ function createGitHubIssueApi(options: IssueApiOptions): IssueApi {
       // the only thing separating them in this payload is the presence of a `pull_request` key. Left
       // unfiltered, a purge would "close" the run's own pull requests as if they were reporter
       // issues, which is both wrong and the kind of wrong that reads as success.
-      const response = await call(`${issuesPath(target)}?state=open&per_page=100`)
-      if (!response.ok) throw await failure(response, `listing open issues on ${slug(target)}`)
-      const rows = (await response.json()) as {
+      //
+      // Paged to the END, and the page-fill test is over the RAW rows rather than the filtered ones:
+      // a repository whose open pull requests fill the first page would otherwise look like the last
+      // page of issues, and the reporter's issue on page two would never be seen. A purge that
+      // reports nothing to close is indistinguishable from one that never looked.
+      const rows: {
         number?: number
         title?: string
         html_url?: string
         user?: { login?: string } | null
         pull_request?: unknown
-      }[]
+      }[] = []
+      for (let page = 1; page <= MAX_ISSUE_PAGES; page += 1) {
+        const response = await call(
+          `${issuesPath(target)}?state=open&per_page=${ISSUES_PER_PAGE}&page=${page}`,
+        )
+        if (!response.ok) {
+          throw await failure(response, `listing open issues on ${slug(target)} (page ${page})`)
+        }
+        const batch = (await response.json()) as typeof rows
+        rows.push(...batch)
+        if (batch.length < ISSUES_PER_PAGE) break
+        if (page === MAX_ISSUE_PAGES) {
+          throw new Error(
+            `${slug(target)} has more than ${MAX_ISSUE_PAGES * ISSUES_PER_PAGE} open issues and ` +
+              `pull requests, which is past anything this suite creates. Refusing rather than ` +
+              `acting on the part that was read.`,
+          )
+        }
+      }
       return rows
         .filter((row) => row.pull_request === undefined && typeof row.number === 'number')
         .map((row) => ({

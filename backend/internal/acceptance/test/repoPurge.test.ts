@@ -109,7 +109,29 @@ describe('planRepoPurge', () => {
 
 describe('backupTagName', () => {
   it('flattens a slash, which would otherwise make a nested tag namespace', () => {
-    expect(backupTagName('S', 'feat/catalog')).toBe('cf-acc-reset/S/feat-catalog')
+    expect(backupTagName('S', 'feat/catalog')).toMatch(
+      /^cf-acc-reset\/S\/feat-catalog-[0-9a-f]{8}$/,
+    )
+  })
+
+  // Flattening ALONE maps these onto one tag. The provider answers the second create with the same
+  // 422 it answers "already exists" with, and a purge that read that as a landed backup would delete
+  // the second branch with nothing but the FIRST branch's sha named anywhere.
+  it('keeps two branches that flatten alike on separate tags', () => {
+    expect(backupTagName('S', 'cat-factory/x')).not.toBe(backupTagName('S', 'cat-factory-x'))
+  })
+
+  // Every one of these is a name git refuses outright, and the refusal arrives as the same 422.
+  it('produces a name git accepts, whatever the branch was called', () => {
+    for (const branch of ['feat/x..y', 'wip*', 'a b~c^d:e', '.hidden', 'release.lock', 'q?[x]']) {
+      const tag = backupTagName('20260812', branch)
+      const [, , component] = tag.split('/')
+      expect(tag.startsWith('cf-acc-reset/20260812/')).toBe(true)
+      expect(component).toMatch(/^[A-Za-z0-9._-]+$/)
+      expect(component).not.toContain('..')
+      expect(component?.startsWith('.')).toBe(false)
+      expect(component?.endsWith('.lock')).toBe(false)
+    }
   })
 })
 
@@ -147,9 +169,9 @@ describe('applyRepoPurge', () => {
     expect(order.indexOf('commitKeepingOnly')).toBeLessThan(order.indexOf('updateBranch'))
   })
 
-  // The one case that must never destroy anything: if the backup cannot be written, the purge has
-  // no way to offer recovery, so it refuses the whole repository rather than proceeding.
-  it('destroys nothing when a backup tag cannot be created', async () => {
+  // The one case that must never destroy anything: with no backup written, the purge has no way to
+  // offer recovery, so neither the tree nor a branch is touched.
+  it('destroys nothing when no backup tag can be created', async () => {
     const client = api({
       createTag: async () => {
         throw new Error('refs are protected')
@@ -162,18 +184,36 @@ describe('applyRepoPurge', () => {
     expect(repoPurgeSucceeded([report])).toBe(false)
   })
 
-  it('leaves a branch in place when its own backup tag did not land', async () => {
-    // The default branch's tag succeeds and the feature branch's fails, so only the delete that
-    // would be unrecoverable is refused. The tree emptying still happens: it is revertible on its own.
+  // Each backup is the precondition of the write it protects, and no more than that. Aborting the
+  // repository on the first failed tag made this branch of the code unreachable: the guard below is
+  // the only thing standing between a missing backup and an unrecoverable delete, so it has to be
+  // reachable in the state it was written for.
+  it('leaves a branch in place when its own backup tag did not land, and empties the tree anyway', async () => {
     const client = api({
       createTag: async (_t, tag) => {
-        if (tag.endsWith('feat-catalog')) throw new Error('nope')
+        if (tag.includes('feat-catalog')) throw new Error('nope')
       },
     })
-    const plan = await planned(client)
-    const report = await applyRepoPurge(client, plan)
-    expect(report.outcome.status).toBe('failed')
+    const report = await applyRepoPurge(client, await planned(client))
+    // The emptying commit is revertible on its own, and the default branch's own tag landed.
+    expect(report.outcome).toEqual({ status: 'emptied', commitSha: 'new-sha' })
     expect(client.calls.map((call) => call.name)).not.toContain('deleteBranch')
+    expect(report.problems.join('\n')).toContain('unrecoverable')
+    expect(repoPurgeSucceeded([report])).toBe(false)
+  })
+
+  // The mirror image: the default branch's tag is the one that fails, so the TREE is left as it is
+  // while the branch whose backup did land is still deletable.
+  it('leaves the tree alone when the default branch was not backed up', async () => {
+    const client = api({
+      createTag: async (_t, tag) => {
+        if (tag.includes('main')) throw new Error('protected')
+      },
+    })
+    const report = await applyRepoPurge(client, await planned(client))
+    expect(report.outcome.status).toBe('failed')
+    expect(client.calls.map((call) => call.name)).not.toContain('commitKeepingOnly')
+    expect(client.calls.map((call) => call.name)).toContain('deleteBranch')
   })
 
   it('closes a pull request before deleting the branch it is open against', async () => {
@@ -193,6 +233,19 @@ describe('applyRepoPurge', () => {
     expect(report.outcome).toEqual({ status: 'emptied', commitSha: 'new-sha' })
     expect(report.problems).toHaveLength(1)
     expect(report.problems[0]).toContain('feat/catalog')
+    expect(repoPurgeSucceeded([report])).toBe(false)
+  })
+
+  // The emptying is expressed as a tree listing what STAYS, so a repository with nothing to keep has
+  // no such tree to write: the provider rejects an empty one. Refused where the condition is known
+  // rather than discovered after the backup tags have been written.
+  it('refuses a repository with no README at the root, before writing anything', async () => {
+    const client = api({ rootEntries: async () => ['src', 'package.json'] })
+    const plan = await planned(client)
+    expect(plan.refusal).toContain('no README')
+    const report = await applyRepoPurge(client, plan)
+    expect(report.outcome.status).toBe('failed')
+    expect(client.calls).toEqual([])
     expect(repoPurgeSucceeded([report])).toBe(false)
   })
 
@@ -227,5 +280,19 @@ describe('recoveryLines', () => {
     })
     const report = await applyRepoPurge(client, await planned(client))
     expect(recoveryLines(report).join('\n')).toContain(backupTagName('20260812T1200', 'main'))
+  })
+
+  // A refused commit does not stop the deletes, which have backups of their own, so "nothing was
+  // emptied" would send an operator away from the one recovery they need.
+  it('names the branches it deleted even though the tree write refused', async () => {
+    const client = api({
+      commitKeepingOnly: async () => {
+        throw new Error('tree write refused')
+      },
+    })
+    const report = await applyRepoPurge(client, await planned(client))
+    const text = recoveryLines(report).join('\n')
+    expect(text).toContain('feat/catalog')
+    expect(text).toContain(backupTagName('20260812T1200', 'feat/catalog'))
   })
 })

@@ -69,6 +69,15 @@ export type IssuePurgeInput = {
   /** Issues the passes being removed recorded. */
   ledgerIssues: readonly LedgerIssue[]
   /**
+   * Issues recorded by passes whose files the reset KEEPS, which are left open and said to be.
+   *
+   * Discovery is deliberately blind to which pass filed what: the author-and-title pair is a
+   * fingerprint of THE SUITE, and a kept pass's issue wears it exactly as a removed one's does. So
+   * the exclusion cannot be derived here and is handed in, or the narrow half of a reset closes the
+   * spec-04 gate of the one pass it went out of its way to leave resumable.
+   */
+  keptIssues: readonly LedgerIssue[]
+  /**
    * Titles this suite files, from `instructions.ts`.
    *
    * Passed in rather than imported, so the one place a title is authored stays the one place it is
@@ -116,6 +125,9 @@ export async function planIssuePurge(
   }
 
   const named = new Set(input.ledgerIssues.map((issue) => key(issue.target, issue.number)))
+  const kept = new Map(
+    input.keptIssues.map((issue) => [key(issue.target, issue.number), issue.runId]),
+  )
   for (const target of input.targets) {
     let open: Awaited<ReturnType<IssueApi['listOpen']>>
     try {
@@ -129,6 +141,16 @@ export async function planIssuePurge(
     }
     for (const issue of open) {
       if (named.has(key(target, issue.number))) continue
+      const keptBy = kept.get(key(target, issue.number))
+      if (keptBy !== undefined) {
+        skipped.push({
+          target,
+          number: issue.number,
+          title: issue.title,
+          reason: `filed by pass ${keptBy}, whose files this reset keeps, so it may still be resumed`,
+        })
+        continue
+      }
       const titleMatches = input.knownTitles.includes(issue.title)
       // The viewer being unknown is not "not the author": with the author half unavailable the
       // pair test cannot be met at all, so the issue is skipped and said to be skipped.

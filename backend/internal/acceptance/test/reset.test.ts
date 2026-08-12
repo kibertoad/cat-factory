@@ -458,6 +458,29 @@ describe('planReset', () => {
     // The cluster note is untouched: no flag here reclaims a namespace, so that one is still true.
     expect(notes).toContain('ACCEPTANCE_K3S_NAMESPACE_TEMPLATE')
   })
+
+  // The purge empties the two repositories the `.env` names and no others, so under `--all` the
+  // repositories it does NOT touch are the only unreclaimed ones left. Dropping their note along
+  // with the sentences the purge disproves is how a purge report comes to read as covering every
+  // repository the plan just deleted a frame for.
+  it('still names a repository the purge does not touch', async () => {
+    const f = fake({
+      repos: [
+        { name: 'catalog-api', serviceId: 'blk_api' },
+        { name: 'unrelated-svc', serviceId: 'blk_other' },
+      ],
+      services: [
+        { serviceId: 'blk_api', title: TITLES.backend },
+        { serviceId: 'blk_other', title: 'Somebody else’s service' },
+      ],
+    })
+
+    const plan = await planReset(f.client, input({ all: true, purgeProvider: true }))
+
+    const notes = plan.leftovers.join('\n')
+    expect(notes).toContain('acme/unrelated-svc')
+    expect(notes).toContain('NOT purged')
+  })
 })
 
 describe('applyReset', () => {

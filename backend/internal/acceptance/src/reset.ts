@@ -870,6 +870,18 @@ function leftoversOf(
   // recovery command included, and repeating "it keeps its content" beside that would contradict it.
   if (purgeProvider) {
     return [
+      // The purge only ever touches the two repositories the `.env` names, so under `--all` this is
+      // the ONE thing about repositories that is still unreclaimed, and dropping it here would let a
+      // purge report be read as covering every repository the plan just deleted a frame for.
+      ...(extraRepos.length > 0
+        ? [
+            `${extraRepos.join(', ')} ${extraRepos.length === 1 ? 'backs a frame' : 'back frames'} ` +
+              `this plan deletes and ${extraRepos.length === 1 ? 'is' : 'are'} NOT purged: ` +
+              `--purge-repos empties only the two repositories this configuration points at. ` +
+              `${extraRepos.length === 1 ? 'It keeps its' : 'They keep their'} content, branches ` +
+              `and open pull requests.`,
+          ]
+        : []),
       `Whatever a purged repository held is in its own history, NOT here: the purge commits on top ` +
         `of the previous tip and tags every ref it touches, so the recovery command it prints is ` +
         `the authority on putting one back.`,

@@ -105,7 +105,7 @@ journal into where a pass got to, opening no connection to the deployment.
 left rather than re-filing it. The README tables both.
 
 **And it is RESETTABLE, which is the other branch of every refusal over leftover state.**
-`pnpm run reset [runId|latest] [--all] [--yes]` (`src/reset.ts` + `src/resetCli.ts`) deletes the service
+`pnpm run reset [runId|latest] [--all] [--purge-repos] [--yes]` (`src/reset.ts` + `src/resetCli.ts`) deletes the service
 frames this configuration would adopt, their tasks and the run history under them, then the local
 files of the passes naming them. It exists because "delete the service frame that holds this one" was
 an app act until `DELETE /api/v1/services/{serviceId}`, so the one way out of `target-repos` an
@@ -116,10 +116,23 @@ other way out is the state whose ledger is gone, and NAMING a pass adds whatever
 KEEPS a pass's files whenever any frame that ledger names is still on the board (refused, or never
 targeted) OR a repository could not be freed, because the ledger is the only map from a leftover
 frame back to a run id and an unfreeable repository is held by a frame no read here can name at all;
-and it STATES what no key reclaims (the repositories keep their content, a reporter-filed issue stays
-open, cluster namespaces are untouched), so a cleared board never reads as a fresh one. The PREVIEW
-runs that same retention rule, so it never lists files the apply will keep, and anything unfreeable
-is a non-zero exit even when nothing was refused.
+and it STATES what the run in hand does not reclaim (cluster namespaces always, and without
+`--purge-repos` the repositories' content and any reporter-filed issue), so a cleared board never
+reads as a fresh one. The PREVIEW runs that same retention rule, so it never lists files the apply
+will keep, and anything unfreeable is a non-zero exit even when nothing was refused.
+
+**`--purge-repos` is the PROVIDER half of that paragraph, on `ACCEPTANCE_VCS_TOKEN`**
+(`src/providerPurge.ts` over `src/issuePurge.ts` + `src/repoPurge.ts`): it closes the issues this
+suite filed and empties the two repositories back to their README. Its whole design constraint is
+that a mistake must be undoable, since a `.env` can name the wrong repository: the emptying is a
+commit ON TOP of the tip, every ref is tagged before it is touched, and the recovery command is
+printed with the sha in it. Two traps beyond that. Each backup is the precondition of the ONE write
+it protects, so a branch whose tag did not land is left in place while the rest goes ahead, and a
+tag the provider says already exists is READ rather than believed (422 is also every way a ref
+cannot be created at all). And the state files are per-pass while the repositories are shared, so a
+reset that KEEPS a pass leaves its issue alone and then says outright that the pass is no longer
+resumable: the retention would otherwise read as a promise the purge does not keep. Details, and the
+token permissions it needs beyond filing an issue, are in the README.
 
 **`--all` is a THIRD target beside those two, not a wider reading of them**: every frame
 `GET /api/v1/services` lists plus every pass in the state directory, for the frames the narrow

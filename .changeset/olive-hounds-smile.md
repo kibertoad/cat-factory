@@ -9,3 +9,7 @@ Both were previously stated as leftovers because an `admin` key structurally can
 emptying is recoverable by construction: an ordinary commit on top of the current tip (so the previous
 tree stays in history and one `git revert` restores it), every ref tagged at the sha it held before it
 is touched, and the recovery command printed with the report.
+
+The flag asks more of `ACCEPTANCE_VCS_TOKEN` than filing an issue does: Contents and Workflows
+read+write on both repositories (classic GitHub: `repo` plus `workflow`), because a scaffolded
+repository holds an Actions workflow and the provider refuses a commit that removes one otherwise.

@@ -31,6 +31,7 @@
 // exists (a scaffolded repo and a hand-built service look identical) and a wrong guess either
 // refuses a legitimate reset or empties something on a hunch. Recoverability is the protection.
 
+import { createHash } from 'node:crypto'
 import { describeThrown } from './operatorText.ts'
 
 /** One repository, as both the provider's API and `GET /api/v1/repos` name it. */
@@ -89,11 +90,33 @@ export function isKeptPath(path: string): boolean {
   return /^readme(\.[^/]*)?$/i.test(path)
 }
 
-/** The backup tag for one ref, at the sha it held before this purge. */
+/**
+ * The backup tag for one ref, at the sha it held before this purge.
+ *
+ * Two things a branch name can do that a tag name may not, and both end in the same place: the
+ * provider answers 422, and a caller reading that as "it already exists" records a backup nothing
+ * wrote. So the name is made VALID and made UNIQUE, rather than trusted.
+ *
+ * - **Valid**: git refuses a ref component holding a space, `~`, `^`, `:`, `?`, `*`, `[`, `\`, `..`
+ *   or `@{`, one that starts with `.`, and one that ends in `.` or `.lock`. Everything outside
+ *   `[A-Za-z0-9._-]` becomes `-`, doubled dots collapse, and the digest suffix means the name can
+ *   never end in `.` or `.lock` whatever the branch was called.
+ * - **Unique**: flattening alone maps `cat-factory/x` and `cat-factory-x` onto ONE tag, and the
+ *   second of the two would then be "already backed up" at the first one's sha, which is the state
+ *   that gets a branch deleted with nothing naming its commits. The digest is over the ORIGINAL
+ *   name, so two distinct branches cannot share a tag.
+ */
 export function backupTagName(stamp: string, branch: string): string {
-  // Slashes in a branch name would make a nested tag namespace and can collide with an existing
-  // tag directory (`refs/tags/a` vs `refs/tags/a/b`), so they are flattened.
-  return `cf-acc-reset/${stamp}/${branch.replace(/\//g, '-')}`
+  const readable = branch
+    .replace(/[^A-Za-z0-9._-]/g, '-')
+    .replace(/\.{2,}/g, '.')
+    .replace(/^\.+/, '')
+  return `cf-acc-reset/${stamp}/${readable}-${digest(branch)}`
+}
+
+/** Eight hex characters of the branch name, which is what keeps two flattened names apart. */
+function digest(branch: string): string {
+  return createHash('sha1').update(branch).digest('hex').slice(0, 8)
 }
 
 export type PlannedBackup = { tag: string; branch: string; commitSha: string }
@@ -120,6 +143,15 @@ export type RepoPurgePlan = {
    * already-empty repository is that it was already empty.
    */
   alreadyEmpty: boolean
+  /**
+   * Why this repository will not be emptied at all, when the plan can already tell.
+   *
+   * One case reaches it: a tree with things to remove and NO README to keep. The commit that
+   * expresses the emptying is a tree listing what stays, an empty one is a body the provider
+   * rejects, and the failure would arrive after the backup tags were written. Refused where the
+   * condition is KNOWN instead, so the preview names it and the apply writes nothing.
+   */
+  refusal: string | null
 }
 
 /**
@@ -146,6 +178,7 @@ export async function planRepoPurge(
       closePullRequests: [],
       backups: [],
       alreadyEmpty: true,
+      refusal: null,
     }
   }
 
@@ -177,6 +210,14 @@ export async function planRepoPurge(
       })),
     ],
     alreadyEmpty: removePaths.length === 0 && deleteBranches.length === 0 && pulls.length === 0,
+    refusal:
+      removePaths.length > 0 && keepPaths.length === 0
+        ? `${slug(target)} has no README at the root of ${head.branch}, and the emptying is ` +
+          `expressed as a tree listing what STAYS: with nothing to keep there is no such tree to ` +
+          `write. Branches and pull requests are left alone too, since the point of emptying them ` +
+          `is a repository a fresh pass can scaffold into. Put a README on ${head.branch} (which ` +
+          `is what the operator setup asks for) and run it again.`
+        : null,
   }
 }
 
@@ -214,10 +255,14 @@ export type RepoPurgeReport = {
 /**
  * Carry one repository's purge out, in the order that keeps it recoverable.
  *
- * Backups FIRST, and a backup that fails ABORTS this repository rather than continuing: the tag is
- * the thing that makes deleting a branch undoable, so writing it is a precondition of the deletes,
- * not a nice-to-have alongside them. Everything after that collects its failures and carries on,
- * because a branch that will not delete says nothing about the next one.
+ * Backups FIRST, and each one is the PRECONDITION of the write it protects rather than of the whole
+ * repository: the default branch's tag gates the emptying commit, and a side branch's tag gates that
+ * branch's delete and nothing else. Per-ref rather than all-or-nothing because the failure they
+ * guard against is per-ref too (a protected ref, a name the provider will not tag), and aborting the
+ * repository on the first one turns "leave that branch in place" into "leave everything in place",
+ * which is a purge that reports failure without having tried the parts that would have worked.
+ * Everything after a backup collects its failures and carries on, because a branch that will not
+ * delete says nothing about the next one.
  */
 export async function applyRepoPurge(
   api: RepoContentApi,
@@ -232,32 +277,39 @@ export async function applyRepoPurge(
     problems: [] as string[],
   }
   if (plan.head === null) return { ...base, outcome: { status: 'no-commits' } }
+  if (plan.refusal !== null) {
+    return { ...base, outcome: { status: 'failed', detail: plan.refusal } }
+  }
   if (plan.alreadyEmpty) return { ...base, outcome: { status: 'already-empty' } }
 
+  const problems: string[] = []
   const backupsCreated: PlannedBackup[] = []
   for (const backup of plan.backups) {
     try {
       await api.createTag(plan.target, backup.tag, backup.commitSha)
       backupsCreated.push(backup)
     } catch (error) {
-      // Refused before anything was destroyed, which is the whole reason backups run first.
-      return {
-        ...base,
-        backupsCreated,
-        outcome: {
-          status: 'failed',
-          detail:
-            `could not create the backup tag '${backup.tag}' at ${backup.commitSha}, so nothing ` +
-            `was emptied (a purge that cannot be undone is not one this command performs): ` +
-            `${describeThrown(error)}`,
-        },
-      }
+      problems.push(
+        `could not create the backup tag '${backup.tag}' at ${backup.commitSha}, so nothing is ` +
+          `written to '${backup.branch}': ${describeThrown(error)}`,
+      )
     }
   }
+  const headBackedUp = backupsCreated.some((backup) => backup.branch === plan.head?.branch)
 
-  const problems: string[] = []
   let outcome: RepoPurgeOutcome
-  if (plan.removePaths.length === 0) {
+  if (!headBackedUp) {
+    // The emptying commit is revertible on its own, so this tag is redundant for RECOVERY. It is
+    // kept as a precondition anyway because it is the cheapest possible probe of whether this
+    // credential may write refs here at all, and finding that out by half-emptying a repository is
+    // the more expensive way. The failure is already in `problems`, one line up.
+    outcome = {
+      status: 'failed',
+      detail:
+        `the backup tag for '${plan.head.branch}' did not land, so the tree was left exactly as ` +
+        `it is (a purge that cannot be undone is not one this command performs)`,
+    }
+  } else if (plan.removePaths.length === 0) {
     // Nothing in the tree to remove, but branches or pull requests still made this repository
     // non-empty, so the tree is left exactly as it is rather than given a no-op commit.
     outcome = { status: 'already-empty' }
@@ -329,13 +381,19 @@ export async function applyRepoPurge(
  */
 export function recoveryLines(report: RepoPurgeReport): readonly string[] {
   if (report.outcome.status !== 'emptied') {
-    return report.backupsCreated.length === 0
-      ? []
-      : [
-          `${slug(report.target)}: nothing was emptied; the backup tags below still name every ref ` +
-            `as it was.`,
-          ...report.backupsCreated.map((backup) => `    ${backup.tag} -> ${backup.commitSha}`),
-        ]
+    if (report.backupsCreated.length === 0) return []
+    // "The tree was not emptied" is not "nothing happened": each branch delete is guarded by its own
+    // backup, so some can have gone ahead while the commit refused. Saying otherwise would send an
+    // operator away from a recovery they need.
+    const deleted = report.branchesDeleted.length
+    return [
+      `${slug(report.target)}: the tree was NOT emptied` +
+        (deleted > 0
+          ? `, but ${deleted} branch(es) were deleted: ${report.branchesDeleted.join(', ')}. `
+          : `. `) +
+        `The backup tags below name every ref at the sha it held.`,
+      ...report.backupsCreated.map((backup) => `    ${backup.tag} -> ${backup.commitSha}`),
+    ]
   }
   const lines = [
     `${slug(report.target)}: emptied by commit ${report.outcome.commitSha}, on top of ` +

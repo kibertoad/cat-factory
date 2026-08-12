@@ -25,6 +25,7 @@ import {
   type LedgerIssue,
   planIssuePurge,
 } from './issuePurge.ts'
+import { describeThrown } from './operatorText.ts'
 import {
   applyRepoPurge,
   planRepoPurge,
@@ -48,13 +49,46 @@ export type ProviderPurgeInput = {
   targets: readonly IssueTarget[]
   /** Issues recorded by the passes the board reset is removing. */
   ledgerIssues: readonly LedgerIssue[]
+  /**
+   * Issues recorded by passes whose files the reset KEEPS, which nothing here may close.
+   *
+   * Handed in rather than inferred, because discovery cannot tell them apart: a kept pass's issue
+   * carries the same title and the same author as a removed one's, which is the fingerprint the
+   * whole discovery test is built on. Without them the narrow half of a reset would settle the
+   * spec-04 gate of the very pass it went out of its way to leave resumable.
+   */
+  keptIssues: readonly LedgerIssue[]
+  /**
+   * Passes whose files this reset keeps, by run id.
+   *
+   * Named because the repositories are SHARED by every pass on a board while the state files are
+   * per-pass: keeping a pass's ledger says it may be resumed, and emptying the repositories it ran
+   * against says it may not. Both halves are true, so the preview states the consequence rather
+   * than letting an operator read the retention as a promise the purge does not keep.
+   */
+  keptPasses: readonly string[]
   /** The stamp the backup tags are namespaced under. Injected so a test can pin it. */
   stamp: string
 }
 
+/** A repository whose plan could not be read, so nothing is planned for it. */
+export type UnreadableRepo = { target: IssueTarget; problem: string }
+
 export type ProviderPurgePlan = {
   issues: IssuePurgePlan
   repos: readonly RepoPurgePlan[]
+  /**
+   * Repositories a provider read refused, collected rather than thrown.
+   *
+   * The issue half has collected its own since it was written, and this half owed the same: a 403
+   * from an org-restricted token, a 404 on a repository the credential cannot see, or an HTML body
+   * from a proxy would otherwise escape a PREVIEW as a stack trace, printed above the board plan
+   * that had not been rendered yet. A command whose whole first form is "read this before deciding"
+   * has to survive one of its reads failing.
+   */
+  unreadableRepos: readonly UnreadableRepo[]
+  /** Carried from the input, so the preview and the report state it identically. */
+  keptPasses: readonly string[]
 }
 
 export async function planProviderPurge(
@@ -64,20 +98,34 @@ export async function planProviderPurge(
   const issues = await planIssuePurge(clients.issues, {
     targets: input.targets,
     ledgerIssues: input.ledgerIssues,
+    keptIssues: input.keptIssues,
     // The one place the suite's issue text is authored, so a purge cannot come to disagree with the
     // spec that files it. A second title added there is discovered here with no change.
     knownTitles: [offsetValidationIssue().title],
   })
   const repos: RepoPurgePlan[] = []
+  const unreadableRepos: UnreadableRepo[] = []
   for (const target of input.targets) {
-    repos.push(await planRepoPurge(clients.content, target, input.stamp))
+    try {
+      repos.push(await planRepoPurge(clients.content, target, input.stamp))
+    } catch (error) {
+      unreadableRepos.push({
+        target,
+        problem:
+          `could not read ${slug(target)}, so nothing is planned for it and whatever it holds ` +
+          `stays: ${describeThrown(error)}`,
+      })
+    }
   }
-  return { issues, repos }
+  return { issues, repos, unreadableRepos, keptPasses: input.keptPasses }
 }
 
 export type ProviderPurgeReport = {
   issues: IssuePurgeReport
   repos: readonly RepoPurgeReport[]
+  /** Carried through from the plan: a repository nothing could be planned for was not purged. */
+  unreadableRepos: readonly UnreadableRepo[]
+  keptPasses: readonly string[]
 }
 
 export async function runProviderPurge(
@@ -89,11 +137,15 @@ export async function runProviderPurge(
   for (const repoPlan of plan.repos) {
     repos.push(await applyRepoPurge(clients.content, repoPlan))
   }
-  return { issues, repos }
+  return { issues, repos, unreadableRepos: plan.unreadableRepos, keptPasses: plan.keptPasses }
 }
 
 export function providerPurgeSucceeded(report: ProviderPurgeReport): boolean {
-  return issuePurgeSucceeded(report.issues) && repoPurgeSucceeded(report.repos)
+  return (
+    issuePurgeSucceeded(report.issues) &&
+    repoPurgeSucceeded(report.repos) &&
+    report.unreadableRepos.length === 0
+  )
 }
 
 /** The plan, as the preview an operator grades before adding `--yes`. */
@@ -120,6 +172,10 @@ export function formatProviderPlan(plan: ProviderPurgePlan): string {
     lines.push(`  ${slug(repo.target)}:`)
     if (repo.head === null) {
       lines.push('    no commits at all, so there is nothing to empty')
+      continue
+    }
+    if (repo.refusal !== null) {
+      lines.push(`    REFUSES to empty it: ${repo.refusal}`)
       continue
     }
     if (repo.alreadyEmpty) {
@@ -155,11 +211,33 @@ export function formatProviderPlan(plan: ProviderPurgePlan): string {
     '  this touches is tagged at the sha it held first. The report prints the exact recovery',
     '  command for each repository.',
   )
-  if (plan.issues.problems.length > 0) {
+  lines.push(...keptPassLines(plan.keptPasses, 'will no longer be'))
+  const problems = [...plan.issues.problems, ...plan.unreadableRepos.map((repo) => repo.problem)]
+  if (problems.length > 0) {
     lines.push('', '  Could not be read, so nothing was planned for it:')
-    lines.push(...plan.issues.problems.map((problem) => `    ${problem}`))
+    lines.push(...problems.map((problem) => `    ${problem}`))
   }
   return lines.join('\n')
+}
+
+/**
+ * What emptying the shared repositories costs the passes this reset is KEEPING.
+ *
+ * Stated in both the preview and the report, and stated as a consequence rather than as a warning to
+ * be dismissed: the board half of a narrow reset deliberately keeps those files (and this purge
+ * deliberately leaves their issues open) so somebody can resume them, and there is exactly one set of
+ * repositories on a board. Silence here would let the retention read as a promise the purge breaks.
+ */
+function keptPassLines(keptPasses: readonly string[], tense: string): readonly string[] {
+  if (keptPasses.length === 0) return []
+  return [
+    '',
+    `  ${keptPasses.length === 1 ? 'Pass' : 'Passes'} ${keptPasses.join(', ')} ` +
+      `${keptPasses.length === 1 ? 'keeps its files' : 'keep their files'} and ` +
+      `${keptPasses.length === 1 ? 'its issue' : 'their issues'}, but every pass on this board ` +
+      `shares these repositories: emptied, ${keptPasses.length === 1 ? 'it' : 'they'} ${tense} ` +
+      `resumable. Reset ${keptPasses.length === 1 ? 'it' : 'them'} too, or drop --purge-repos.`,
+  ]
 }
 
 /** The outcome, per issue and per repository, with the recovery commands. */
@@ -186,29 +264,41 @@ export function formatProviderReport(report: ProviderPurgeReport): string {
     lines.push(`  ${slug(repo.target)}: ${describeRepoOutcome(repo)}`)
     lines.push(...repo.problems.map((problem) => `      ${problem}`))
   }
+  lines.push(...report.unreadableRepos.map((repo) => `  ${repo.problem}`))
 
   const recovery = report.repos.flatMap((repo) => recoveryLines(repo))
   if (recovery.length > 0) {
     lines.push('', '  HOW TO PUT A REPOSITORY BACK (nothing below was discarded):')
     lines.push(...recovery.map((line) => `  ${line}`))
   }
+  lines.push(...keptPassLines(report.keptPasses, 'are no longer'))
   return lines.join('\n')
 }
 
+/**
+ * What became of one repository, INCLUDING what happened beside the tree.
+ *
+ * The tree, the pull requests and the branches are three writes with three preconditions, so the
+ * tree's outcome is not the repository's: a delete guarded by its own backup tag goes ahead whether
+ * or not the emptying commit did. A line reading "already empty, so nothing was written" over a
+ * closed pull request and a deleted branch is the report telling an operator the opposite of what
+ * this command just did, on the one surface they have for grading it.
+ */
 function describeRepoOutcome(report: RepoPurgeReport): string {
   const outcome = report.outcome
-  if (outcome.status === 'emptied') {
-    return (
-      `emptied by commit ${outcome.commitSha}` +
-      (report.branchesDeleted.length > 0
-        ? `, ${report.branchesDeleted.length} branch(es) deleted`
-        : '') +
-      (report.pullRequestsClosed.length > 0
-        ? `, ${report.pullRequestsClosed.length} pull request(s) closed`
-        : '')
-    )
+  const alsoDid = [
+    ...(report.branchesDeleted.length > 0
+      ? [`${report.branchesDeleted.length} branch(es) deleted`]
+      : []),
+    ...(report.pullRequestsClosed.length > 0
+      ? [`${report.pullRequestsClosed.length} pull request(s) closed`]
+      : []),
+  ]
+  const beside = alsoDid.length > 0 ? `; ${alsoDid.join(', ')}` : ''
+  if (outcome.status === 'emptied') return `emptied by commit ${outcome.commitSha}${beside}`
+  if (outcome.status === 'already-empty') {
+    return `the tree was already empty, so no commit was written${beside}`
   }
-  if (outcome.status === 'already-empty') return 'already empty, so nothing was written'
   if (outcome.status === 'no-commits') return 'has no commits, so there was nothing to empty'
-  return `REFUSED: ${outcome.detail}`
+  return `REFUSED: ${outcome.detail}${beside}`
 }

@@ -1,10 +1,12 @@
 // The provider side of the repository purge: the REST calls `repoPurge.ts` plans against.
 //
 // Split from `repoPurge.ts` so the JUDGEMENTS (what to keep, what to tag, what order to write in)
-// stay drivable with no network, which is the half worth testing. This file is plumbing, and the one
-// thing in it that is a decision rather than a call is stated where it happens: the new tree is built
-// WITHOUT `base_tree`, because a tree built on a base is a PATCH of it and there is no way to spell
-// "remove everything else" in one. Listing only the kept entries is how the emptying is expressed.
+// stay drivable with no network, which is the half worth testing. This file is plumbing, and each
+// place where a call is nonetheless a decision says so where it happens: the new tree is built
+// WITHOUT `base_tree` (a tree built on a base is a PATCH of it, and there is no way to spell "remove
+// everything else" in one, so listing the kept entries is how the emptying is expressed), a list is
+// read to its LAST page rather than its first, and a 422 on a tag create is VERIFIED rather than
+// read as "it already exists", because believing that is what makes a delete unrecoverable.
 //
 // **Provider-keyed for the reason `vcsIssues.ts` is.** GitLab is null rather than served by GitHub's
 // client: its API lives on the instance, and nothing in `/api/v1` publishes which instance a
@@ -44,6 +46,19 @@ export const REPO_CONTENT_APIS: Record<
 
 type TreeEntry = { path?: string; mode?: string; type?: string; sha?: string }
 
+/** Rows per page. The provider's maximum, so the fewest round trips for a full list. */
+const PER_PAGE = 100
+
+/**
+ * Pages a list read will walk before it refuses.
+ *
+ * A ceiling rather than an unbounded loop, and it THROWS rather than answering what it has: a purge
+ * that acted on a truncated list would delete the branches it saw, report the repository emptied and
+ * leave the tail in place, which is the exact "clean report, built-out repository" state this command
+ * exists to end. 5000 rows is far past anything a fixture repository accumulates.
+ */
+const MAX_PAGES = 50
+
 function createGitHubRepoContentApi(options: RepoContentApiOptions): RepoContentApi {
   const call = async (path: string, init?: RequestInit): Promise<Response> => {
     const fetchImpl = options.fetchImpl ?? fetch
@@ -65,6 +80,31 @@ function createGitHubRepoContentApi(options: RepoContentApiOptions): RepoContent
     const response = await call(path)
     if (!response.ok) throw await failure(response, what)
     return (await response.json()) as T
+  }
+
+  /**
+   * Every page of a list endpoint, never the first one.
+   *
+   * A repository the suite has run against several times accumulates one `cat-factory/<blockId>`
+   * branch per block per run, so a single page is a list that goes quietly short exactly on the
+   * repositories this purge is for. A page shorter than the size asked for is the last one.
+   */
+  const pages = async <T>(path: string, what: string): Promise<T[]> => {
+    const rows: T[] = []
+    const join = path.includes('?') ? '&' : '?'
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      const batch = await json<T[]>(
+        `${path}${join}per_page=${PER_PAGE}&page=${page}`,
+        `${what} (page ${page})`,
+      )
+      rows.push(...batch)
+      if (batch.length < PER_PAGE) return rows
+    }
+    throw new Error(
+      `${what} answered more than ${MAX_PAGES * PER_PAGE} rows, which is past anything this suite ` +
+        `creates. Refusing rather than acting on the part that was read: a purge over a truncated ` +
+        `list reports a repository emptied while the tail is still on it.`,
+    )
   }
 
   /** The root tree entries of one commit, with the metadata a rebuild needs. */
@@ -97,7 +137,7 @@ function createGitHubRepoContentApi(options: RepoContentApiOptions): RepoContent
       )
       const branch = repo.default_branch
       if (typeof branch !== 'string' || branch.length === 0) return null
-      const response = await call(`${repoPath(target)}/git/ref/heads/${encodeURIComponent(branch)}`)
+      const response = await call(`${repoPath(target)}/git/ref/heads/${encodeRefPath(branch)}`)
       // 404 here is a repository with a default branch NAME and no commits under it, which is what
       // an empty repository looks like: nothing to empty rather than a failure.
       if (response.status === 404) return null
@@ -114,8 +154,8 @@ function createGitHubRepoContentApi(options: RepoContentApiOptions): RepoContent
     },
 
     async branches(target) {
-      const rows = await json<{ name?: string; commit?: { sha?: string } }[]>(
-        `${repoPath(target)}/branches?per_page=100`,
+      const rows = await pages<{ name?: string; commit?: { sha?: string } }>(
+        `${repoPath(target)}/branches`,
         `listing branches on ${slug(target)}`,
       )
       return rows.flatMap((row): RepoBranch[] =>
@@ -126,8 +166,8 @@ function createGitHubRepoContentApi(options: RepoContentApiOptions): RepoContent
     },
 
     async openPullRequests(target) {
-      const rows = await json<{ number?: number; title?: string; head?: { ref?: string } }[]>(
-        `${repoPath(target)}/pulls?state=open&per_page=100`,
+      const rows = await pages<{ number?: number; title?: string; head?: { ref?: string } }>(
+        `${repoPath(target)}/pulls?state=open`,
         `listing pull requests on ${slug(target)}`,
       )
       return rows.flatMap((row): RepoPullRequest[] =>
@@ -142,11 +182,23 @@ function createGitHubRepoContentApi(options: RepoContentApiOptions): RepoContent
         method: 'POST',
         body: JSON.stringify({ ref: `refs/tags/${tag}`, sha: commitSha }),
       })
-      // 422 is "already exists", which for a backup tag at the same sha is the state we wanted. The
-      // tag name carries a per-run stamp, so this is a re-run of the same purge rather than a
-      // collision with somebody else's tag.
-      if (response.status === 422) return
-      if (!response.ok) throw await failure(response, `tagging ${commitSha} as '${tag}'`)
+      if (response.ok) return
+      if (response.status !== 422) throw await failure(response, `tagging ${commitSha} as '${tag}'`)
+      // 422 is the status GitHub answers for "Reference already exists" AND for every way a ref
+      // cannot be created at all ("Object does not exist", a name git rejects). Believing it is the
+      // first one is the single unrecoverable bug available here: the caller records a backup that
+      // was never written and then deletes the branch it was supposed to name. So the existing tag
+      // is READ, and only a tag already at this exact sha counts as the backup this call wanted.
+      const refused = await failure(response, `tagging ${commitSha} as '${tag}'`)
+      const existing = await call(`${repoPath(target)}/git/ref/tags/${encodeRefPath(tag)}`)
+      if (!existing.ok) throw refused
+      const sha = ((await existing.json()) as { object?: { sha?: string } }).object?.sha
+      if (sha === commitSha) return
+      throw new Error(
+        `'${tag}' already exists on ${slug(target)} at ${sha ?? '(no sha)'} rather than at ` +
+          `${commitSha}, so it is not a backup of this ref and nothing may be deleted on the ` +
+          `strength of it.`,
+      )
     },
 
     async commitKeepingOnly(target, commit: KeepOnlyCommit) {
@@ -194,16 +246,13 @@ function createGitHubRepoContentApi(options: RepoContentApiOptions): RepoContent
     },
 
     async updateBranch(target, branch, commitSha) {
-      const response = await call(
-        `${repoPath(target)}/git/refs/heads/${encodeURIComponent(branch)}`,
-        {
-          method: 'PATCH',
-          // `force: false` is the safety property spelled out rather than left to the default: the
-          // new commit descends from the tip, so a fast-forward is all this ever needs, and a
-          // provider that would have to rewrite the branch to satisfy this call REFUSES instead.
-          body: JSON.stringify({ sha: commitSha, force: false }),
-        },
-      )
+      const response = await call(`${repoPath(target)}/git/refs/heads/${encodeRefPath(branch)}`, {
+        method: 'PATCH',
+        // `force: false` is the safety property spelled out rather than left to the default: the
+        // new commit descends from the tip, so a fast-forward is all this ever needs, and a
+        // provider that would have to rewrite the branch to satisfy this call REFUSES instead.
+        body: JSON.stringify({ sha: commitSha, force: false }),
+      })
       if (!response.ok) throw await failure(response, `moving ${branch} on ${slug(target)}`)
     },
 
@@ -216,10 +265,9 @@ function createGitHubRepoContentApi(options: RepoContentApiOptions): RepoContent
     },
 
     async deleteBranch(target, branch) {
-      const response = await call(
-        `${repoPath(target)}/git/refs/heads/${encodeURIComponent(branch)}`,
-        { method: 'DELETE' },
-      )
+      const response = await call(`${repoPath(target)}/git/refs/heads/${encodeRefPath(branch)}`, {
+        method: 'DELETE',
+      })
       // Already gone is the state the purge wanted.
       if (response.status === 404 || response.status === 422) return
       if (!response.ok) throw await failure(response, `deleting branch '${branch}'`)
@@ -229,6 +277,20 @@ function createGitHubRepoContentApi(options: RepoContentApiOptions): RepoContent
 
 function slug(target: PurgeTarget): string {
   return `${target.owner}/${target.repo}`
+}
+
+/**
+ * Encode a ref name for a `/git/ref[s]/<type>/<name>` path, SEGMENT BY SEGMENT.
+ *
+ * Every branch this purge deletes is a `cat-factory/<blockId>` the platform created, so slashes are
+ * the normal case rather than an edge one. A whole-string `encodeURIComponent` turns the separator
+ * into `%2F`, which the provider does not match: the read 404s, and a 404 on this API is the answer
+ * that reads as "already gone" (`deleteBranch`) or "no commits yet" (`head`). A purge would then
+ * report every branch deleted and touch none of them. The same helper, for the same reason, is
+ * `encodeBranchPath` in `backend/packages/server/src/github/ensureWorkBranch.ts`.
+ */
+function encodeRefPath(ref: string): string {
+  return ref.split('/').map(encodeURIComponent).join('/')
 }
 
 /** The error for a provider response nobody expected, carrying the body that names the cause. */

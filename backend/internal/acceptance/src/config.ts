@@ -166,14 +166,29 @@ const BOARD_REQUIRED: readonly Requirement[] = [
   },
 ]
 
-/** What it takes to RUN a pass on that board: something to deploy onto, and someone to report as. */
-const RUN_REQUIRED: readonly Requirement[] = [
+/**
+ * What it takes to act as the outside REPORTER, which is also what `reset --purge-repos` needs.
+ *
+ * Its own slice of the table rather than a second spelling of the entry, because two commands need
+ * exactly this credential and one of them ({@link resolveReporterConfig}) needs nothing else: an
+ * operator emptying two fixture repositories should not be refused over the k3s token they
+ * abandoned. Sliced, so the variable is still named, and its permissions still described, once.
+ */
+const REPORTER_REQUIRED: readonly Requirement[] = [
   {
     name: 'ACCEPTANCE_VCS_TOKEN',
     purpose:
-      "provider token the suite files spec 04's issue with, as an outside reporter would " +
-      '(GitHub classic: `repo`; fine-grained: Issues read+write on the target repository)',
+      "provider token the suite files spec 04's issue with, as an outside reporter would, and " +
+      'that `reset --purge-repos` empties the two repositories with (GitHub classic: `repo` plus ' +
+      '`workflow`; fine-grained: Contents, Issues and Workflows read+write on both repositories). ' +
+      'The workflow permission is not optional for the purge: a scaffolded repository holds a ' +
+      'GitHub Actions workflow, and a commit that removes one is refused without it',
   },
+]
+
+/** What it takes to RUN a pass on that board: something to deploy onto, and someone to report as. */
+const RUN_REQUIRED: readonly Requirement[] = [
+  ...REPORTER_REQUIRED,
   { name: 'ACCEPTANCE_K3S_API_SERVER', purpose: 'kube-apiserver URL, e.g. https://127.0.0.1:6443' },
   {
     name: 'ACCEPTANCE_K3S_TOKEN',
@@ -246,6 +261,7 @@ export function resolveBoardConfig(env: EnvRecord): BoardConfigResolution {
  */
 export function resolveConfig(env: EnvRecord): ConfigResolution {
   const board = resolveBoardConfig(env)
+  const reporter = resolveReporterConfig(env)
   const problems = [...(board.ok ? [] : board.problems), ...missing(env, RUN_REQUIRED)]
 
   const insecure = readBoolean(env.ACCEPTANCE_K3S_INSECURE)
@@ -271,9 +287,10 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
     )
   }
 
-  // `board.ok` is re-tested rather than inferred from an empty `problems`: it is what NARROWS the
-  // board config below, and a refusal that already collected its problems cannot also hand one over.
-  if (!board.ok || problems.length > 0) return { ok: false, problems }
+  // `board.ok` and `reporter.ok` are re-tested rather than inferred from an empty `problems`: they
+  // are what NARROW the two halves below, and a refusal that already collected its problems cannot
+  // also hand one over.
+  if (!board.ok || !reporter.ok || problems.length > 0) return { ok: false, problems }
 
   return {
     ok: true,
@@ -295,14 +312,10 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
         namespaceTemplate:
           trimmed(env.ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) ?? 'cf-acc-{{pullNumber}}',
       },
-      vcs: {
-        token: required(env, 'ACCEPTANCE_VCS_TOKEN'),
-        // GitHub's public REST base, which is right for every github.com deployment and wrong in
-        // exactly one knowable way (Enterprise Server), so it is overridable rather than assumed.
-        apiBaseUrl: stripTrailingSlash(
-          trimmed(env.ACCEPTANCE_VCS_API_BASE) ?? 'https://api.github.com',
-        ),
-      },
+      // The reporter half, resolved by the function `reset --purge-repos` calls rather than beside
+      // it: a second spelling of the default REST base is a second thing to change on the day an
+      // Enterprise Server deployment needs one, and the two would then disagree per command.
+      vcs: reporter.reporter,
       // 90 minutes. A `pl_build` run with a design pass, a container coder, two testers and a
       // real CI gate routinely takes 30–45; the budget is generous because the thing it is
       // guarding against is a run that has STOPPED, not one that is slow.
@@ -325,22 +338,14 @@ export type ReporterConfigResolution =
  * built from the same table, so a variable is still named in exactly one place.
  */
 export function resolveReporterConfig(env: EnvRecord): ReporterConfigResolution {
-  const token = trimmed(env.ACCEPTANCE_VCS_TOKEN)
-  if (!token) {
-    return {
-      ok: false,
-      problems: [
-        `ACCEPTANCE_VCS_TOKEN is required to purge the repositories: closing an issue the REPORTER ` +
-          `filed and rewriting a repository's contents are provider acts, and the board key cannot ` +
-          `do either. Classic GitHub token: 'repo'. Fine-grained: 'Contents: Read and write' plus ` +
-          `'Issues: Read and write' on both repositories.`,
-      ],
-    }
-  }
+  const problems = missing(env, REPORTER_REQUIRED)
+  if (problems.length > 0) return { ok: false, problems }
   return {
     ok: true,
     reporter: {
-      token,
+      token: required(env, 'ACCEPTANCE_VCS_TOKEN'),
+      // GitHub's public REST base, which is right for every github.com deployment and wrong in
+      // exactly one knowable way (Enterprise Server), so it is overridable rather than assumed.
       apiBaseUrl: stripTrailingSlash(
         trimmed(env.ACCEPTANCE_VCS_API_BASE) ?? 'https://api.github.com',
       ),

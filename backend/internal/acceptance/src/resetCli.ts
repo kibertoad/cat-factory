@@ -1,5 +1,5 @@
-// `pnpm --filter @cat-factory/acceptance run reset [runId|latest] [--all] [--yes]`: clear a board
-// back to "before any pass ran".
+// `pnpm --filter @cat-factory/acceptance run reset [runId|latest] [--all] [--purge-repos] [--yes]`:
+// clear a board back to "before any pass ran".
 //
 // A sibling of `statusCli.ts` and `configureCli.ts` and thin for the same reason: every judgement
 // lives in `reset.ts`, behind seams, so `test/reset.test.ts` drives the whole flow with no
@@ -24,22 +24,24 @@
 import { rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { PrReportRunProvider } from '@cat-factory/sdk'
 import { type BoardConfig, resolveBoardConfig, resolveReporterConfig } from './config.ts'
 import { envFile } from './envFile.ts'
-import { resetInvocation } from './operatorText.ts'
+import { describeThrown, resetInvocation } from './operatorText.ts'
 import { latestPointerPath, listPasses, readLatestPointer, resolveStateDir } from './passFiles.ts'
 import {
   formatProviderPlan,
   formatProviderReport,
   planProviderPurge,
   type ProviderPurgeClients,
+  type ProviderPurgePlan,
   providerPurgeSucceeded,
   runProviderPurge,
 } from './providerPurge.ts'
 import type { LedgerIssue } from './issuePurge.ts'
 import { createClient } from './publicApi.ts'
 import { REPO_CONTENT_APIS } from './repoContentApi.ts'
-import { ISSUE_APIS } from './vcsIssues.ts'
+import { ISSUE_APIS, UNSUPPORTED_PROVIDER_REASON } from './vcsIssues.ts'
 import {
   applyReset,
   formatResetPlan,
@@ -48,6 +50,7 @@ import {
   planReset,
   type ResetClient,
   type ResetPassOnDisk,
+  type ResetPlan,
   resetSucceeded,
 } from './reset.ts'
 import { readWorld } from './world.ts'
@@ -122,16 +125,19 @@ async function run(): Promise<number> {
     return 2
   }
 
-  // Resolved BEFORE anything is read, so a `--purge-repos` with no credential refuses having
-  // changed nothing rather than clearing the board and then discovering it cannot finish the job.
-  const provider = parsed.purgeRepos ? providerClients(env) : null
+  const sdk = createClient(config)
+
+  // Resolved BEFORE anything is deleted, so a `--purge-repos` this deployment's provider cannot be
+  // addressed with refuses having changed nothing, rather than clearing the board and then
+  // discovering it cannot finish the job.
+  const provider = parsed.purgeRepos ? await providerClients(env, sdk) : null
   if (provider !== null && !provider.ok) {
     console.error(provider.problem)
     return 2
   }
   const providerApis = provider?.ok === true ? provider.clients : null
 
-  const client = resetClient(config)
+  const client = resetClient(sdk)
 
   console.log(
     `reset against ${config.baseUrl} (workspace ${config.workspaceId})\n` +
@@ -159,19 +165,7 @@ async function run(): Promise<number> {
   })
 
   const providerPlan =
-    providerApis === null
-      ? null
-      : await planProviderPurge(providerApis, {
-          targets: [
-            { owner: config.repoOwner, repo: config.repos.backend },
-            { owner: config.repoOwner, repo: config.repos.frontend },
-          ],
-          // Only the passes this reset is REMOVING: an issue belonging to a pass whose files are
-          // being kept is one somebody may still resume, and closing it would settle a spec 04 the
-          // resumed pass is still waiting on.
-          ledgerIssues: ledgerIssuesOf(plan.passes, passes),
-          stamp: backupStamp(),
-        })
+    providerApis === null ? null : await planPurge(providerApis, config, plan, passes)
 
   if (!parsed.apply) {
     console.log(formatResetPlan(plan))
@@ -190,19 +184,90 @@ async function run(): Promise<number> {
     return 0
   }
 
+  return applyBoth(
+    client,
+    plan,
+    providerApis !== null && providerPlan !== null
+      ? { apis: providerApis, plan: providerPlan }
+      : null,
+  )
+}
+
+/**
+ * What `--purge-repos` would do to the provider, from the plan the board half just made.
+ *
+ * Its own function because the two lists it derives are the same fact read from opposite sides, and
+ * getting either wrong is silent: the passes this reset REMOVES name the issues that may be closed,
+ * and the passes it KEEPS name the ones that may not, plus the consequence the purge has to state
+ * about them.
+ */
+async function planPurge(
+  apis: ProviderPurgeClients,
+  config: BoardConfig,
+  plan: ResetPlan,
+  passes: readonly ResetPassOnDisk[],
+): Promise<ProviderPurgePlan> {
+  const removing = new Set(plan.passes.map((pass) => pass.runId))
+  const kept = passes.filter((pass) => !removing.has(pass.runId))
+  return planProviderPurge(apis, {
+    targets: [
+      { owner: config.repoOwner, repo: config.repos.backend },
+      { owner: config.repoOwner, repo: config.repos.frontend },
+    ],
+    // Only the passes this reset is REMOVING: an issue belonging to a pass whose files are being
+    // kept is one somebody may still resume, and closing it would settle a spec 04 the resumed pass
+    // is still waiting on.
+    ledgerIssues: ledgerIssuesOf(passes, removing),
+    // The same issues from the other side, because DISCOVERY cannot tell them apart: a kept pass's
+    // issue carries this suite's title and this credential's authorship exactly as a removed pass's
+    // does, so the exclusion has to be named rather than inferred.
+    keptIssues: ledgerIssuesOf(passes, new Set(kept.map((pass) => pass.runId))),
+    // Their files stay and their issues stay, but the repositories are shared by every pass on the
+    // board: the purge states that consequence rather than leaving the retention to read as a
+    // promise it does not keep.
+    keptPasses: kept.map((pass) => pass.runId),
+    stamp: backupStamp(),
+  })
+}
+
+/**
+ * Carry both halves out, and answer the exit code.
+ *
+ * The only part of this command that WRITES, which is why it is one function: the board goes first
+ * and the provider second, and each REPORTS before the other is judged, so a captured log holds what
+ * happened in the order it happened whichever half refused.
+ *
+ * They then close with different sentences, because they refuse over different things and need
+ * different fixes. Sending an operator to "run the reset again" over a provider-only failure asks
+ * them to re-clear a board that is already clear, which under `--purge-repos` empties both
+ * repositories a second time.
+ */
+async function applyBoth(
+  client: ResetClient,
+  plan: ResetPlan,
+  provider: { apis: ProviderPurgeClients; plan: ProviderPurgePlan } | null,
+): Promise<number> {
   const report = await applyReset(client, { remove: removeFile }, plan)
   console.log(formatResetReport(report))
   let providerOk = true
-  if (providerApis !== null && providerPlan !== null) {
-    const providerReport = await runProviderPurge(providerApis, providerPlan)
+  if (provider !== null) {
+    const providerReport = await runProviderPurge(provider.apis, provider.plan)
     console.log(formatProviderReport(providerReport))
     providerOk = providerPurgeSucceeded(providerReport)
   }
-  if (!resetSucceeded(report) || !providerOk) {
+  if (!resetSucceeded(report)) {
     console.error(
       `\nThe reset did not finish: something above refused, or a repository it cannot free is ` +
         `still held. The board still holds state a fresh pass will be refused over, so fix what is ` +
         `named and run the reset again.`,
+    )
+    return 1
+  }
+  if (!providerOk) {
+    console.error(
+      `\nThe board was cleared, but the PROVIDER half did not finish: something above refused. ` +
+        `The board itself needs no second reset; fix what is named and run it again with ` +
+        `--purge-repos to reclaim the rest.`,
     )
     return 1
   }
@@ -216,12 +281,19 @@ async function run(): Promise<number> {
  * The two provider clients `--purge-repos` needs, or the refusal naming what is missing.
  *
  * Extracted from `run` rather than inlined, because it is the one part of this command that resolves
- * a SECOND credential and it has three ways to refuse. Answering a discriminated result keeps the
+ * a SECOND credential and it has four ways to refuse. Answering a discriminated result keeps the
  * caller a single branch, and keeps the refusal text beside the resolution that produced it.
+ *
+ * **Which provider is read off the WORKSPACE, never assumed.** The two tables answer null for a
+ * provider this suite cannot address, and a caller that indexed them at `github` would turn that
+ * seam into decoration: on a GitLab-connected workspace every call would go to `api.github.com`, the
+ * 404s would read as "already closed or gone", and the command would exit 0 having done nothing. It
+ * is the same read the `issue-credential` prerequisite makes, for the same reason.
  */
-function providerClients(
+async function providerClients(
   env: Record<string, string | undefined>,
-): { ok: true; clients: ProviderPurgeClients } | { ok: false; problem: string } {
+  sdk: ReturnType<typeof createClient>,
+): Promise<{ ok: true; clients: ProviderPurgeClients } | { ok: false; problem: string }> {
   const reporter = resolveReporterConfig(env)
   if (!reporter.ok) {
     return {
@@ -232,37 +304,55 @@ function providerClients(
         `\n\nDrop the flag to clear the board only, which needs no provider credential.`,
     }
   }
-  // GitHub for every deployment this suite can run against. The tables answer null for a provider
-  // it cannot address, which is a refusal rather than a call against the wrong host: see
-  // `vcsIssues.ts` for why GitLab has no entry.
-  const issues = ISSUE_APIS.github?.(reporter.reporter) ?? null
-  const content = REPO_CONTENT_APIS.github?.(reporter.reporter) ?? null
+  let provider: PrReportRunProvider | null
+  try {
+    provider = (await sdk.vcs.getConnection()).connection?.provider ?? null
+  } catch (error) {
+    return {
+      ok: false,
+      problem:
+        `--purge-repos could not read which provider this workspace is connected to, so it does ` +
+        `not know whose API to call and the board was left untouched: ${describeThrown(error)}`,
+    }
+  }
+  if (provider === null) {
+    return {
+      ok: false,
+      problem:
+        `--purge-repos needs to know which provider this workspace is connected to, and it has no ` +
+        `VCS connection at all. Connect it (Integrations, in the SPA), or drop the flag to clear ` +
+        `the board only.`,
+    }
+  }
+  const issues = ISSUE_APIS[provider]?.(reporter.reporter) ?? null
+  const content = REPO_CONTENT_APIS[provider]?.(reporter.reporter) ?? null
   if (issues === null || content === null) {
     return {
       ok: false,
       problem:
-        `--purge-repos cannot address this provider's API, so the board was left untouched. Drop ` +
-        `the flag to clear the board only.`,
+        `--purge-repos cannot address '${provider}', which is what this workspace is connected ` +
+        `to, so the board was left untouched. Drop the flag to clear the board only.\n\n` +
+        UNSUPPORTED_PROVIDER_REASON[provider].map((reason) => `  - ${reason}`).join('\n'),
     }
   }
   return { ok: true, clients: { issues, content } }
 }
 
 /**
- * The issues recorded by the passes this reset is REMOVING, as the purge names them.
+ * The issues recorded by a named set of passes, as the purge names them.
  *
- * Keyed on the plan's pass list rather than every pass on disk, for the same reason the plan itself
- * is: an issue belonging to a pass whose files are being KEPT is one somebody may still resume, and
- * closing it would settle the spec-04 gate that pass is waiting on.
+ * Taken twice from opposite sides: the passes being REMOVED name what may be closed, and the passes
+ * being KEPT name what may not, because somebody may still resume them and closing their issue would
+ * settle the spec-04 gate they are waiting on. One function for both, so the two lists cannot come to
+ * disagree about what a ledger's issue is.
  */
 function ledgerIssuesOf(
-  planned: readonly { runId: string }[],
   passes: readonly ResetPassOnDisk[],
+  runIds: ReadonlySet<string>,
 ): readonly LedgerIssue[] {
-  const removing = new Set(planned.map((pass) => pass.runId))
   return passes.flatMap((pass) => {
     const issue = pass.world?.intakeIssue
-    if (!issue || !removing.has(pass.runId)) return []
+    if (!issue || !runIds.has(pass.runId)) return []
     return [
       {
         runId: pass.runId,
@@ -286,8 +376,7 @@ function backupStamp(): string {
 }
 
 /** The SDK, narrowed to the five calls the reset makes. */
-function resetClient(config: BoardConfig): ResetClient {
-  const sdk = createClient(config)
+function resetClient(sdk: ReturnType<typeof createClient>): ResetClient {
   return {
     repos: async () => (await sdk.repos.list()).repos,
     services: async () => (await sdk.services.list()).services,

@@ -226,6 +226,54 @@ describe('reading an issue back', () => {
   })
 })
 
+describe('listing the open issues a purge judges', () => {
+  // On GitHub every pull request IS an issue in this payload, so a run's own pull requests fill the
+  // page the reporter's issue is on. Judging the page by the FILTERED rows would read a full page of
+  // pull requests as the last page of issues and never look at page two, and a purge that closed
+  // nothing is indistinguishable from one that never looked.
+  it('pages by the RAW rows, so a page full of pull requests is not read as the end', async () => {
+    const api = github({
+      'GET /repos/acme/catalog-api/issues?state=open&per_page=100&page=1': {
+        status: 200,
+        body: Array.from({ length: 100 }, (_unused, index) => ({
+          number: index + 1,
+          title: 'a pull request',
+          pull_request: { url: 'u' },
+        })),
+      },
+      'GET /repos/acme/catalog-api/issues?state=open&per_page=100&page=2': {
+        status: 200,
+        body: [
+          {
+            number: 101,
+            title: 'GET /items ignores a non-numeric offset',
+            html_url: 'https://github.com/acme/catalog-api/issues/101',
+            user: { login: 'acceptance-bot' },
+          },
+        ],
+      },
+    })
+    const open = await api.listOpen(TARGET)
+    expect(open).toHaveLength(1)
+    expect(open[0]).toMatchObject({ number: 101, authorLogin: 'acceptance-bot' })
+  })
+
+  it('stops at a short page rather than asking for one more', async () => {
+    const calls: { method: string; url: string; headers: Record<string, string> }[] = []
+    const api = github(
+      {
+        'GET /repos/acme/catalog-api/issues?state=open&per_page=100&page=1': {
+          status: 200,
+          body: [{ number: 1, title: 't', html_url: 'u', user: { login: 'a' } }],
+        },
+      },
+      calls,
+    )
+    await api.listOpen(TARGET)
+    expect(calls).toHaveLength(1)
+  })
+})
+
 describe('the provider tables', () => {
   it('withholds a client for a provider whose instance is unknowable, and says what is missing', async () => {
     // Null is the honest answer rather than a gap: `configureEnv.ts` makes the same call for the

@@ -48,8 +48,17 @@ const ledgerIssue: LedgerIssue = {
   url: 'https://github.com/acme/catalog-api/issues/1',
 }
 
-async function plan(client: IssueApi, ledgerIssues: readonly LedgerIssue[] = []) {
-  return planIssuePurge(client, { targets: [backend], ledgerIssues, knownTitles: [KNOWN] })
+async function plan(
+  client: IssueApi,
+  ledgerIssues: readonly LedgerIssue[] = [],
+  keptIssues: readonly LedgerIssue[] = [],
+) {
+  return planIssuePurge(client, {
+    targets: [backend],
+    ledgerIssues,
+    keptIssues,
+    knownTitles: [KNOWN],
+  })
 }
 
 describe('planIssuePurge', () => {
@@ -123,6 +132,18 @@ describe('planIssuePurge', () => {
     )
     expect(result.problems[0]).toContain('still open')
     expect(issuePurgeSucceeded({ ...empty(), problems: result.problems })).toBe(false)
+  })
+
+  // The exclusion cannot be derived here: a kept pass's issue wears the same title and the same
+  // author as a removed pass's, which is the whole fingerprint discovery works from. Closing it
+  // would settle the spec-04 gate of the one pass the reset went out of its way to leave resumable.
+  it('leaves an issue belonging to a pass whose files are kept, and names that pass', async () => {
+    const kept = { ...ledgerIssue, runId: '20260812090000', number: 11 }
+    const result = await plan(api({ listOpen: async () => [open()] }), [], [kept])
+    expect(result.close).toEqual([])
+    expect(result.skipped).toHaveLength(1)
+    expect(result.skipped[0]?.reason).toContain('20260812090000')
+    expect(result.skipped[0]?.reason).toContain('resumed')
   })
 
   it('does not list a ledger-named issue twice when discovery finds it too', async () => {
