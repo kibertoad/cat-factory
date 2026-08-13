@@ -1,5 +1,30 @@
 # @cat-factory/local-server
 
+## 0.131.2
+
+### Patch Changes
+
+- 792ecde: Rebuild the executor image on Claude Code 2.1.229. Pi (0.84.1), Codex (0.147.0) and the Pi
+  todo/web-tools extensions (2.4.0) are already on their newest release, and the shared
+  `node:26-trixie-slim` base still resolves to the digest the image is pinned to, so Claude Code is
+  the only moving part.
+
+  The image tag is bumped to `cat-factory-executor:1.113.0` across the wrangler config, the publish
+  script and `RECOMMENDED_HARNESS_IMAGE`, since republishing over a live tag does not roll a
+  deployment out. The deploy image is unchanged and keeps `0.2.13`.
+
+- Updated dependencies [792ecde]
+- Updated dependencies [792ecde]
+  - @cat-factory/agents@0.128.1
+  - @cat-factory/integrations@0.160.12
+  - @cat-factory/kernel@0.296.1
+  - @cat-factory/node-server@0.204.2
+  - @cat-factory/orchestration@0.268.1
+  - @cat-factory/executor-harness@1.114.0
+  - @cat-factory/server@0.283.1
+  - @cat-factory/gitlab@0.20.15
+  - @cat-factory/prompt-fragments@1.0.69
+
 ## 0.131.1
 
 ### Patch Changes
