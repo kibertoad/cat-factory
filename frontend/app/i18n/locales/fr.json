@@ -3001,6 +3001,7 @@
         "ciMaxAttempts": "Tentatives de correction CI",
         "maxRequirementIterations": "Itérations d'exigences",
         "maxRequirementConcernAllowed": "Validation auto. des préoccupations jusqu'à",
+        "companionMaxReworks": "Cycles de retravail du compagnon",
         "autoMerge": "Fusion automatique"
       },
       "newPreset": "Nouvelle politique",
@@ -3012,6 +3013,7 @@
         "impact": "Impact%",
         "ciFix": "Corr. CI",
         "reqIter": "Itér. exig.",
+        "companionRework": "Retrav.",
         "autoPass": "Valid. auto. jusqu'à"
       },
       "add": "Ajouter",

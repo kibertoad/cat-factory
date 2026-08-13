@@ -30,6 +30,49 @@ function expectShippedPolicyIdentity(preset: RiskPolicy): void {
   expect(preset.dryRunRoles).toEqual([])
 }
 
+/**
+ * The seeded catalog as the store hands it back: the exact set of built-ins, the two a task resolves
+ * by default, and every budget column round-tripping. Returns the default preset's id, which is all
+ * the caller needs from it afterwards.
+ *
+ * One helper because these assertions are one claim (creating a board wrote the catalog and nothing
+ * dropped a column on the way), and because they belong to the SEED rather than to the
+ * single-default invariant the test goes on to exercise against presets it creates itself.
+ */
+function expectSeededCatalog(policies: RiskPolicy[]): string {
+  // Exactly the catalog, no more and no less: the property that actually breaks when a facade's
+  // seed writer drops a built-in or writes one twice.
+  expect(policies.map((p) => p.id).sort()).toEqual(SEEDED_IDS)
+  const balanced = policies.find((p) => p.id === 'mp_balanced')!
+  const manual = policies.find((p) => p.id === 'mp_manual_review')!
+  // Balanced is the in-app default and auto-merges; "Manual review only" does neither, and fully
+  // prevents auto-merge, so every PR under it is routed to a human.
+  expect(balanced.isDefault).toBe(true)
+  expect(balanced.autoMergeEnabled).toBe(true)
+  expect(manual.isDefault).toBe(false)
+  expect(manual.autoMergeEnabled).toBe(false)
+  // The version COLUMN round-trips, read against the catalog rather than a literal.
+  expect(balanced.version).toBe(seedFor('mp_balanced').version)
+  // The judge knobs round-trip with their defaults through both stores; "Manual review only"
+  // spends no rework rounds on its own (it routes everything to the human it already asks).
+  expect(balanced.judgeMinScore).toBe(0.7)
+  expect(balanced.judgeMaxBounces).toBe(1)
+  expect(manual.judgeMaxBounces).toBe(0)
+  // Every class falls back to the score ceilings and no role changes that, byte-for-byte the
+  // historical policy.
+  expectShippedPolicyIdentity(balanced)
+  expectShippedPolicyIdentity(manual)
+  // The remaining loop budgets round-trip with their defaults: the QC companion, the companion
+  // REWORK budget (read against the catalog rather than a literal, since the engine seeds every
+  // companion step from it, so a facade that dropped the column would put the loop back on a
+  // hard-coded ceiling no policy states), and the post-release-health watch.
+  expect(balanced.maxTesterQualityIterations).toBe(3)
+  expect(balanced.companionMaxReworks).toBe(seedFor('mp_balanced').companionMaxReworks)
+  expect(balanced.releaseWatchWindowMinutes).toBe(30)
+  expect(balanced.releaseMaxAttempts).toBe(1)
+  return balanced.id
+}
+
 export function defineProvisioningConformance(harness: ConformanceHarness): void {
   describe('merge presets', () => {
     it('seeds the built-in catalog, enforces the single-default invariant, and guards the default', async () => {
@@ -37,40 +80,13 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       const { workspace } = await createWorkspace()
       const base = `/workspaces/${workspace.id}/risk-policies`
 
-      // CREATING the board wrote the whole built-in catalog: Balanced (default, auto-merge on)
-      // and "Manual review only" (non-default, auto-merge OFF). This first read is the first
-      // thing to have listed them, which is the point: the run path resolves a task's governing
-      // preset without listing anything, so a library that only appeared once somebody had read
-      // it would leave a board nobody had opened governed by the built-in fallback.
+      // CREATING the board wrote the whole built-in catalog. This first read is the first thing to
+      // have listed it, which is the point: the run path resolves a task's governing preset without
+      // listing anything, so a library that only appeared once somebody had read it would leave a
+      // board nobody had opened governed by the built-in fallback.
       const initial = await call<RiskPolicy[]>('GET', base)
       expect(initial.status).toBe(200)
-      // Exactly the catalog, no more and no less — the property that actually breaks when a
-      // facade's seed writer drops a built-in or writes one twice.
-      expect(initial.body.map((p) => p.id).sort()).toEqual(SEEDED_IDS)
-      const balanced = initial.body.find((p) => p.id === 'mp_balanced')!
-      const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
-      expect(balanced.isDefault).toBe(true)
-      expect(balanced.autoMergeEnabled).toBe(true)
-      // The version COLUMN round-trips, read against the catalog rather than a literal.
-      expect(balanced.version).toBe(seedFor('mp_balanced').version)
-      // The judge knobs round-trip with their defaults through both stores; "Manual review only"
-      // spends no rework rounds on its own (it routes everything to the human it already asks).
-      expect(balanced.judgeMinScore).toBe(0.7)
-      expect(balanced.judgeMaxBounces).toBe(1)
-      expect(manual.judgeMaxBounces).toBe(0)
-      // Every class falls back to the score ceilings and no role changes that — byte-for-byte the
-      // historical policy.
-      expectShippedPolicyIdentity(balanced)
-      expectShippedPolicyIdentity(manual)
-      // The QC-companion budget round-trips with its default through both stores.
-      expect(balanced.maxTesterQualityIterations).toBe(3)
-      // "Manual review only" fully prevents auto-merge: every PR is routed to human review.
-      expect(manual.isDefault).toBe(false)
-      expect(manual.autoMergeEnabled).toBe(false)
-      // The post-release-health knobs round-trip with their defaults through both stores.
-      expect(balanced.releaseWatchWindowMinutes).toBe(30)
-      expect(balanced.releaseMaxAttempts).toBe(1)
-      const seededDefaultId = balanced.id
+      const seededDefaultId = expectSeededCatalog(initial.body)
 
       // Add a non-default preset; the seeded default stays the default.
       const lenient = await call<RiskPolicy>('POST', base, {
@@ -82,6 +98,7 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
         maxRequirementIterations: 5,
         maxRequirementConcernAllowed: 'medium',
         maxTesterQualityIterations: 4,
+        companionMaxReworks: 1,
         releaseWatchWindowMinutes: 45,
         releaseMaxAttempts: 2,
       })
@@ -91,6 +108,7 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       expect(lenient.body.maxRequirementIterations).toBe(5)
       expect(lenient.body.maxRequirementConcernAllowed).toBe('medium')
       expect(lenient.body.maxTesterQualityIterations).toBe(4)
+      expect(lenient.body.companionMaxReworks).toBe(1)
       expect(lenient.body.releaseWatchWindowMinutes).toBe(45)
       expect(lenient.body.releaseMaxAttempts).toBe(2)
 

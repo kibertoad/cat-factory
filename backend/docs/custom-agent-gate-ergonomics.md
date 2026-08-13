@@ -89,7 +89,7 @@ running again rather than a verdict being disposed.
 
 Register it with `AgentKindRegistry.registerCompanion`, beside the kind's own registration: a
 companion is a relationship BETWEEN kinds, so it lives on the kind registry rather than a registry
-of its own. Three things bite:
+of its own. Several things bite:
 
 - **The pairing is registered SEPARATELY from the kind**, so every read goes through the registry.
   A projection built off the kind's own definition sees no companions at all.
@@ -116,6 +116,24 @@ of its own. Three things bite:
   container-backed producer re-attached to its FIRST completed job every round: the harness replays a
   job id it already holds, and a companion then re-graded a byte-identical artifact until the budget
   ran out. Anything new that re-runs a step inherits the fix; nothing needs a counter of its own.
+- **The BUDGET is the task's risk policy, never the registration**: `companionMaxReworks` (3 on
+  every built-in, which is the ceiling the engine used to hard-code). A step is seeded with the
+  catalog default at run start, where no policy is resolved yet, so the resolved value is adopted
+  onto `step.companion.maxAttempts` on the grading that records the step's FIRST verdict, the same
+  way the Tester's quality budget is adopted on its first report. Read ONCE, and keyed on the
+  verdict list rather than on the attempt count, because two things grade a step again on an
+  unspent budget: a human's "request changes" on a gated companion charges no round
+  (`requestStepChanges`), and a human's extra round at the cap RAISES that same field
+  (`resolveCompanionExceeded`), so a later read would report a ceiling the step no longer has.
+  `0` is a posture rather than an off switch: the companion still grades, and its first verdict
+  below the bar goes straight to the iteration-cap park (or to `proceed` under
+  `autonomy: 'unattended'`) instead of buying a round.
+- **The first-batch rule is SUBORDINATE to that budget.** A companion's first batch of comments
+  loops its producer back whatever the rating was, because that first set of findings is worth a
+  round even from work that scored well. The round is bought from `companionMaxReworks`, so with
+  none to buy the rating decides alone. Read the other way round, a `0` policy parked every
+  companion step (a review with nothing at all to say is the rare one) and, unattended, stamped
+  `capSettledByPolicy` on producers that had met their bar.
 - **The producer answers in its REPLY.** `FEEDBACK_ACCOUNTING_DIRECTIVE` makes it account for every
   point (changed, or argued down with a reason) as a "Response to review" section in the reply, never
   in a committed artifact, because that reply is what the next round folds in as prior work — for a

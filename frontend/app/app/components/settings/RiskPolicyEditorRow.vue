@@ -187,6 +187,18 @@ const deleteBlocked = computed(
       </label>
       <label class="block">
         <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+          {{ t('settings.riskPolicy.field.companionMaxReworks') }}
+        </span>
+        <UInput
+          v-model.number="draft.companionMaxReworks"
+          type="number"
+          :min="0"
+          :max="10"
+          size="sm"
+        />
+      </label>
+      <label class="block">
+        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
           {{ t('settings.riskPolicy.field.maxRequirementConcernAllowed') }}
         </span>
         <USelect

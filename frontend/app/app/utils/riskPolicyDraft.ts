@@ -1,4 +1,4 @@
-import type { StepGating } from '@cat-factory/contracts'
+import { DEFAULT_COMPANION_MAX_ATTEMPTS, type StepGating } from '@cat-factory/contracts'
 import type {
   ClassRulesByRole,
   DryRunRoles,
@@ -25,6 +25,12 @@ export interface RiskPolicyDraft {
   ciMaxAttempts: number
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
+  /**
+   * How many automatic rework rounds a companion (reviewer / architect-companion /
+   * spec-companion) may drive before the run parks for a person. `0` sends the first verdict below
+   * the bar straight to that park, which is a posture rather than a disabled loop.
+   */
+  companionMaxReworks: number
   autoMergeEnabled: boolean
   /**
    * Whether a run under this policy answers the parks its own automatic loops raise when they give
@@ -87,6 +93,7 @@ export function toRiskPolicyDraft(p: RiskPolicy): RiskPolicyDraft {
     ciMaxAttempts: p.ciMaxAttempts,
     maxRequirementIterations: p.maxRequirementIterations,
     maxRequirementConcernAllowed: p.maxRequirementConcernAllowed,
+    companionMaxReworks: p.companionMaxReworks,
     autoMergeEnabled: p.autoMergeEnabled,
     unattended: p.autonomy === 'unattended',
     minAutoAnswerConfidence: Math.round(p.minAutoAnswerConfidence * 100),
@@ -112,6 +119,10 @@ export function blankRiskPolicyDraft(): RiskPolicyDraft {
     ciMaxAttempts: 10,
     maxRequirementIterations: 6,
     maxRequirementConcernAllowed: 'none',
+    // Off the constant the create schema itself defaults to, so the form cannot pre-fill a number
+    // the platform has stopped shipping. The percentages above are literals because they are the
+    // EDITING scale (0..100) rather than the stored value; this one is stored as typed.
+    companionMaxReworks: DEFAULT_COMPANION_MAX_ATTEMPTS,
     autoMergeEnabled: true,
     // A new policy parks on its own caps, matching every built-in but the unattended default: a
     // licence to answer them is a posture somebody grants, never one a blank form assumes.
@@ -162,6 +173,7 @@ export function riskPolicyPatchFromDraft(
     ciMaxAttempts: d.ciMaxAttempts,
     maxRequirementIterations: d.maxRequirementIterations,
     maxRequirementConcernAllowed: d.maxRequirementConcernAllowed,
+    companionMaxReworks: d.companionMaxReworks,
     autoMergeEnabled: d.autoMergeEnabled,
     autonomy: d.unattended ? 'unattended' : 'attended',
     minAutoAnswerConfidence: d.minAutoAnswerConfidence / 100,

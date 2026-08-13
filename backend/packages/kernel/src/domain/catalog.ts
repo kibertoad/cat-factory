@@ -1,4 +1,5 @@
 import {
+  DEFAULT_COMPANION_MAX_ATTEMPTS,
   DEFAULT_JUDGE_MAX_BOUNCES,
   DEFAULT_JUDGE_MIN_SCORE,
   DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE,
@@ -92,6 +93,11 @@ export const DEFAULT_RISK_POLICY = {
   // Test quality-control companion: how many times it may loop the Tester for a more
   // complete report before letting the run proceed to the greenlight / fixer decision.
   maxTesterQualityIterations: 3,
+  // Companion rework loop: how many times a companion (reviewer / architect-companion /
+  // spec-companion) may send its producer back with findings before it parks for a person. The
+  // shipped value is the one the engine hard-coded before this was policy, so a workspace that
+  // never opens the field keeps exactly the behaviour it had.
+  companionMaxReworks: DEFAULT_COMPANION_MAX_ATTEMPTS,
   // Post-release-health gate: how long (minutes) the gate watches the deployed
   // release's monitors/SLOs before declaring it healthy, and how many on-call
   // investigations may be dispatched while watching (the on-call agent investigates
@@ -204,6 +210,8 @@ export interface RiskPolicySeed {
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
   maxTesterQualityIterations: number
+  /** How many automatic rework rounds a companion may drive before it parks for a person. */
+  companionMaxReworks: number
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
@@ -267,6 +275,7 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
     maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
     maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
+    companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
@@ -323,6 +332,13 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     maxRequirementIterations: 3,
     maxRequirementConcernAllowed: DEFAULT_RISK_POLICY.maxRequirementConcernAllowed,
     maxTesterQualityIterations: 2,
+    // NOT narrowed, unlike the three budgets around it, and the difference is what each round buys.
+    // A reviewer pass and a judge re-grade produce a JUDGEMENT nobody unwatched will read, so extra
+    // ones only delay the `proceed` this policy is going to take. A companion rework round produces
+    // WORK: the producer re-runs against the findings, and `proceed` at the cap accepts whatever it
+    // last wrote. Cutting the rounds here would not save a conversation nobody is having, it would
+    // ship a worse artifact unattended.
+    companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
@@ -368,6 +384,11 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     maxRequirementIterations: DEFAULT_RISK_POLICY.maxRequirementIterations,
     maxRequirementConcernAllowed: 'none',
     maxTesterQualityIterations: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
+    // The stock budget, NOT the 0 this preset gives judge bounces. A judge bounce buys another
+    // rubric verdict, which this preset has already decided a human will read anyway; a companion
+    // rework round buys a better spec or architecture BEFORE the pull request that human reviews
+    // exists. Routing every merge to a person is not a reason to hand them worse work.
+    companionMaxReworks: DEFAULT_RISK_POLICY.companionMaxReworks,
     releaseWatchWindowMinutes: DEFAULT_RISK_POLICY.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_RISK_POLICY.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_RISK_POLICY.humanReviewGraceMinutes,
@@ -424,6 +445,7 @@ export function riskPolicyFromSeed(seed: RiskPolicySeed, createdAt: number): Ris
     maxRequirementIterations: seed.maxRequirementIterations,
     maxRequirementConcernAllowed: seed.maxRequirementConcernAllowed,
     maxTesterQualityIterations: seed.maxTesterQualityIterations,
+    companionMaxReworks: seed.companionMaxReworks,
     releaseWatchWindowMinutes: seed.releaseWatchWindowMinutes,
     releaseMaxAttempts: seed.releaseMaxAttempts,
     humanReviewGraceMinutes: seed.humanReviewGraceMinutes,
