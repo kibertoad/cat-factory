@@ -167,6 +167,13 @@ export function containerJobLog(
       // signal this counter exists for: containers dying under the run. The dimension is the
       // EVICTION cause, named explicitly so a later `kind` field on this line cannot displace it.
       if (fields?.evicted) countFailure(metrics, 'container.evicted', fields.evicted)
+      // A REFUSED work-branch push is the other operational fault a failed job view can carry, and
+      // the only other one the engine re-dispatches rather than reports. Its cost is a doubled
+      // agent run (tokens and wall clock), which is invisible per run and only visible as a rate,
+      // and the remedy it prints tells the operator to check whether two runs are active for the
+      // same block, a recurrence nothing else here can show them.
+      if (fields?.failureCause === 'branch-contended')
+        metrics.increment('container.branch_contended')
     },
     capabilityGap: (support) => reportCapabilityGap(logger, metrics, support),
     blindJobStopped: (outcome) => {

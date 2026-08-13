@@ -26,7 +26,7 @@
  *                           went quiet, this one says the model rabbit-holed while streaming.
  *  - `agent`              — the agent ran but produced an unusable/failed result, or threw.
  *  - `git`                — a git operation failed (clone/push/merge/PR).
- *  - `branch-contended`   — a push to the work branch was REFUSED because the branch carries
+ *  - `branch-contended`:    a push to the work branch was REFUSED because the branch carries
  *                           commits this push would drop (a second writer, or a rewrite of an
  *                           earlier run's history). Split out of `git` because it is the one git
  *                           fault the ENGINE can recover from on its own: re-dispatching the step

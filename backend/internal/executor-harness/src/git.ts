@@ -118,12 +118,12 @@ function gitSubcommand(args: string[]): string {
  * reports: it does for a tip our own checkout created, so the two are distinguishable and need
  * different remedies (see {@link PUSH_REJECTION_REMEDIES}).
  *
- *  - `local-rewrite` — we HAVE the remote's tip and are no longer descended from it, i.e. this
+ *  - `local-rewrite`: we HAVE the remote's tip and are no longer descended from it, i.e. this
  *    checkout amended / reset / rebased a commit that had already been pushed. Git labels it
  *    `(non-fast-forward)`.
- *  - `remote-writer` — the remote's tip is a commit this checkout has never seen (`(fetch first)`),
- *    or our lease found the branch moved past what we published (`(stale info)`): a SECOND writer
- *    owns the branch.
+ *  - `remote-writer`: the remote's tip is a commit this checkout has never seen (`(fetch first)`),
+ *    or our lease found the branch moved past what we published (`(stale info)`), so a SECOND
+ *    writer owns the branch.
  */
 export type PushRejection = 'local-rewrite' | 'remote-writer'
 
@@ -137,8 +137,8 @@ export function classifyPushRejection(stderr: string): PushRejection | undefined
   // A HOST-side refusal is not contention, and re-dispatching cannot help: branch protection, a
   // pre-receive hook or a token policy is declining the write itself, and GitHub's protected-branch
   // message says "refusing to allow a non-fast-forward push", which would otherwise read as a
-  // rewrite. Git's own labels separate the two cleanly — `! [remote rejected]` is the server
-  // declining, `! [rejected]` is git's own fast-forward/lease check — so such a failure stays a
+  // rewrite. Git's own labels separate the two cleanly (`! [remote rejected]` is the server
+  // declining, `! [rejected]` is git's own fast-forward/lease check), so such a failure stays a
   // plain `git` fault with the write-access remedy below.
   if (/remote rejected|protected branch|hook declined|refusing to allow/i.test(stderr)) {
     return undefined
@@ -161,12 +161,13 @@ export function classifyPushRejection(stderr: string): PushRejection | undefined
  */
 const PUSH_REJECTION_REMEDIES: Record<PushRejection, string> = {
   'local-rewrite':
-    'The push was refused because this checkout rewrote history that had already been pushed to the ' +
-    'work branch (an amend, reset or rebase of an existing commit). The platform checkpoint-pushes ' +
-    "the agent's commits while it works, and it force-pushes ONLY over the commits the same run " +
-    'published, so this rejection is a rewrite of commits an EARLIER run put on the branch. The ' +
-    'engine re-dispatches the step to resume from the branch as it stands; work already on the ' +
-    'branch is never dropped.',
+    'The push was refused because the commit it publishes is not descended from the one the work ' +
+    'branch already holds: this checkout rewrote history that had already been pushed (an amend, ' +
+    "reset or rebase of an existing commit). The platform checkpoint-pushes the agent's commits " +
+    'while it works and lets a run force over its OWN published checkpoint, so what stays refused ' +
+    'is a rewrite it cannot attribute to this pass: commits an earlier run published, or a rewrite ' +
+    'that dropped the branch tip this pass started from. The engine re-dispatches the step to ' +
+    'resume from the branch as it stands; work already on the branch is never dropped.',
   'remote-writer':
     'The push was refused because another writer advanced this work branch while the run was ' +
     'working (a second dispatch for the same block, or a person pushing to it). Nothing is lost: ' +
@@ -267,7 +268,7 @@ function gitFailure(err: unknown, args: string[], aborted: boolean): HarnessFail
   const stderr = typeof e?.stderr === 'string' ? e.stderr : (e?.stderr?.toString() ?? '')
   const base = e instanceof Error ? e.message : String(err)
   // `execFile` builds its rejection message as `Command failed: <cmd>\n<stderr>`, so for the
-  // ordinary non-zero exit the stderr is ALREADY in `base` — appending it again printed every
+  // ordinary non-zero exit the stderr is ALREADY in `base`, and appending it again printed every
   // git failure's output twice, which reads as two attempts. Append only what `base` lacks
   // (a killed/other rejection whose message carries no output).
   const tail = stderr.trim()
@@ -1131,13 +1132,20 @@ export async function fetchPullRequestHead(opts: {
 }
 
 /**
- * Push the work branch to origin. The remote URL carries only the username, so
- * the token is supplied here via the askpass env (never in argv).
+ * Push the work branch to origin and return the sha it PUBLISHED. The remote URL carries only the
+ * username, so the token is supplied here via the askpass env (never in argv).
  *
- * Returns the sha now PUBLISHED on the branch, read back from the remote-tracking ref a
- * successful push updates — so it is exactly what the remote holds, not what HEAD happened to be
- * before the push (the agent can commit in between). `undefined` when the ref could not be read;
- * the caller then leases nothing rather than leasing against a guess.
+ * The push names an explicit SOURCE COMMIT (`<sha>:refs/heads/<branch>`) rather than the branch,
+ * which is what makes the return value exact rather than a guess. The agent commits while this
+ * runs, so `git push origin <branch>` publishes whatever the branch ref holds at the moment git
+ * reads it, and a caller that leases against a sha it read either side of that has leased against
+ * the wrong commit. Reading it back from `refs/remotes/origin/<branch>` afterwards is worse than
+ * inexact, it is EMPTY on the production checkout: a fresh coding run clones one branch
+ * (`cloneRepo`), so the remote's fetch refspec covers the base alone and `git push` creates no
+ * tracking ref for the work branch at all. Naming the sha needs no ref and no round trip.
+ *
+ * `-u` goes with it: with a non-branch source git sets no upstream config (verified), nothing in
+ * the harness reads that config, and the agent is told never to push or pull.
  *
  * `expectRemoteSha` turns the push into a LEASED force (`--force-with-lease=<branch>:<sha>`), which
  * is how a run whose own checkpoint push it has since rewritten still lands. It is deliberately NOT
@@ -1152,36 +1160,86 @@ export async function pushBranch(
   ghToken: string,
   signal?: AbortSignal,
   opts: { expectRemoteSha?: string } = {},
-): Promise<string | undefined> {
+): Promise<string> {
+  const sha = (
+    await git(['rev-parse', '--verify', `refs/heads/${branch}`], { cwd: dir, signal })
+  ).trim()
   const lease = opts.expectRemoteSha ? [`--force-with-lease=${branch}:${opts.expectRemoteSha}`] : []
-  await git(['push', ...lease, '-u', 'origin', branch], {
+  await git(['push', ...lease, 'origin', `${sha}:refs/heads/${branch}`], {
     cwd: dir,
     signal,
     env: await authEnv(ghToken),
   })
-  return remoteTrackingSha(dir, branch, signal)
+  return sha
 }
 
 /**
- * The sha the local remote-tracking ref holds for `branch` (`refs/remotes/origin/<branch>`), or
- * undefined when there is none (never pushed/fetched) or it could not be read. `git push` updates
- * it for every ref it successfully pushed, which is what makes it an exact record of what this
- * checkout published — see {@link pushBranch}.
+ * Whether `sha` is still reachable from `branch`'s tip, i.e. the branch CONTAINS it:
+ * `git rev-list --count --max-count=1 <sha> --not refs/heads/<branch>` is 0 when everything
+ * reachable from `sha` is reachable from the branch too (the tip itself counts as contained).
+ *
+ * Phrased as a rev-list rather than `merge-base --is-ancestor` on purpose: the latter answers "no"
+ * by EXITING 1, which is indistinguishable here from a broken checkout, and this probe's whole job
+ * is to be trusted only when it is a definite answer. Tri-state for the same reason (as
+ * {@link branchAheadOfBase} is):
+ *
+ *  - `true`: confirmed contained.
+ *  - `false`: confirmed dropped, so the branch was rewritten below `sha`.
+ *  - `undefined`: could not determine (an unknown object, a rev-list error). A caller must not read
+ *    a failed probe as either answer.
+ *
+ * The work-branch lease is gated on this: see {@link workBranchLease}.
  */
-async function remoteTrackingSha(
+export async function branchContainsCommit(
   dir: string,
   branch: string,
+  sha: string,
   signal?: AbortSignal,
-): Promise<string | undefined> {
+): Promise<boolean | undefined> {
   try {
-    const out = await git(['rev-parse', '--verify', `refs/remotes/origin/${branch}`], {
-      cwd: dir,
-      signal,
-    })
-    return out.trim() || undefined
+    const out = await git(
+      ['rev-list', '--count', '--max-count=1', sha, '--not', `refs/heads/${branch}`],
+      { cwd: dir, signal },
+    )
+    const count = Number(out.trim())
+    return Number.isNaN(count) ? undefined : count === 0
   } catch {
     return undefined
   }
+}
+
+/**
+ * The lease a work-branch push is entitled to (the `opts` {@link pushBranch} takes): the sha this
+ * pass last published, and nothing at all before it has published one.
+ *
+ * The extra condition is what bounds the force to THIS pass's own commits, which the lease alone
+ * does not do and the design promises. Once one checkpoint has landed, a rewrite that drops
+ * `baseSha` (the tip the pass started from, which on a RESUMED branch is an earlier run's published
+ * work) would still lease successfully against our own checkpoint and carry those earlier commits
+ * away with it. So the lease is withheld unless the branch still CONTAINS `baseSha`: the push then
+ * goes out plain, git refuses it as a non-fast-forward, and the engine re-dispatches onto the
+ * branch as it stands.
+ *
+ * A probe that could not answer withholds it too (`onWithheld('unreadable')`), because the two
+ * mistakes are not symmetric: withholding costs a refused rewrite and one re-dispatch, trusting an
+ * unreadable probe costs commits.
+ */
+export async function workBranchLease(args: {
+  dir: string
+  branch: string
+  /** The branch tip this pass started from. */
+  baseSha: string
+  /** The sha this pass published, if any (`pushBranch`'s return). */
+  publishedSha: string | undefined
+  signal?: AbortSignal
+  /** Told why the lease was withheld, so the harness can log it with its own logger. */
+  onWithheld?: (probe: 'unreadable' | 'dropped') => void
+}): Promise<{ expectRemoteSha?: string }> {
+  if (!args.publishedSha) return {}
+  const contains = await branchContainsCommit(args.dir, args.branch, args.baseSha, args.signal)
+  if (contains === true) return { expectRemoteSha: args.publishedSha }
+  args.onWithheld?.(contains === undefined ? 'unreadable' : 'dropped')
+  return {}
 }
 
 /**

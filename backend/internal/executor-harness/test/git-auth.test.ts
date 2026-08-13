@@ -131,7 +131,7 @@ describe('classifyPushRejection (a refused push is not a generic git fault)', ()
   // what each one classifies to, including the case the ordering exists for.
   it('reads a host-side REFUSAL as neither shape (re-dispatching cannot help)', () => {
     // GitHub's protected-branch message contains the words "non-fast-forward push", so this is the
-    // case that would misclassify as a rewrite — and be re-dispatched to fail identically.
+    // case that would misclassify as a rewrite, and be re-dispatched to fail identically.
     const stderr =
       'remote: error: GH006: Protected branch update failed for refs/heads/main.\n' +
       'remote: error: refusing to allow a non-fast-forward push to a protected branch\n' +
@@ -145,8 +145,32 @@ describe('classifyPushRejection (a refused push is not a generic git fault)', ()
     expect(classifyPushRejection('fatal: the remote end hung up unexpectedly')).toBeUndefined()
   })
 
+  it('resolves a stderr carrying BOTH shapes in the documented order', () => {
+    // The ordering `classifyPushRejection` documents is the only thing these fixtures test, and
+    // nothing else can: each real-git refusal in `git-push-lease.test.ts` matches exactly one
+    // shape, so swapping the branches leaves every other assertion in both files green. Both
+    // halves below are real git output (a `(stale info)` lease refusal, and the hint block git
+    // prints for a plain non-fast-forward, which contains "tip of your current branch is behind").
+    const staleInfo =
+      ' ! [rejected]        c0ffee -> wb (stale info)\nerror: failed to push some refs'
+    const nonFastForward =
+      ' ! [rejected]        c0ffee -> wb (non-fast-forward)\n' +
+      'error: failed to push some refs\n' +
+      'hint: Updates were rejected because the tip of your current branch is behind\n' +
+      "hint: its remote counterpart. If you want to integrate the remote changes,\nhint: use 'git pull' before pushing again."
+    // A SECOND WRITER wins over the rewrite shape: it is the one that says the branch holds commits
+    // this checkout has never seen, and its remedy is the one that names another writer.
+    expect(classifyPushRejection(`${staleInfo}\n${nonFastForward}`)).toBe('remote-writer')
+    expect(classifyPushRejection(`${nonFastForward}\n${staleInfo}`)).toBe('remote-writer')
+    // And the host-side guard wins over both, because no re-dispatch resolves branch protection.
+    const hostRefusal =
+      'remote: error: pre-receive hook declined\n ! [remote rejected] wb -> wb (pre-receive hook declined)'
+    expect(classifyPushRejection(`${hostRefusal}\n${staleInfo}`)).toBeUndefined()
+    expect(classifyPushRejection(`${hostRefusal}\n${nonFastForward}`)).toBeUndefined()
+  })
+
   it('never advises `git pull`, which no autonomous run can act on', () => {
-    // git's own hint for both shapes is "use 'git pull' before pushing again" — advice for a
+    // git's own hint for both shapes is "use 'git pull' before pushing again", which is advice for a
     // person at a terminal. The remedy has to name what the PLATFORM does instead.
     for (const stderr of [
       ' ! [rejected] b -> b (non-fast-forward)',

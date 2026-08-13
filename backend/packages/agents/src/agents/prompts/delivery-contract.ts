@@ -21,7 +21,7 @@
 //
 // The APPEND-ONLY rule below is the half this contract was missing. The harness
 // checkpoint-pushes the agent's commits about once a minute so an evicted container
-// doesn't lose them, which makes a commit PUBLISHED within a minute of being made —
+// doesn't lose them, which makes a commit PUBLISHED within a minute of being made,
 // something the agent has no way to observe. Amending or resetting one after that is
 // ordinary git hygiene, and the "validate locally before you finish" instruction below
 // is exactly what leads an agent to commit, run the tests, fix, and amend. The harness

@@ -60,23 +60,30 @@ The layers, in order of where they bite:
 The agent's tool loop only edits files in the checkout. Every git operation (clone, branch,
 commit, push) is executed by the **harness**, not the agent, via `execFile('git', [...])` with a
 fixed argv and no shell (`backend/internal/executor-harness/src/git.ts`). The push is exactly
-`git push [--force-with-lease=<branch>:<sha>] -u origin <branch>` (`pushBranch`), and the branch
-name comes off the **job body composed by the backend at dispatch**
-(`job.pushBranch ?? job.newBranch ?? job.branch`), never from model output. A hallucinated
-"argument" in the model's reply therefore has nowhere to become a remote, a branch, a refspec, or a
-flag.
+`git push [--force-with-lease=<branch>:<sha>] origin <sha>:refs/heads/<branch>` (`pushBranch`), and
+the branch name comes off the **job body composed by the backend at dispatch**
+(`job.pushBranch ?? job.newBranch ?? job.branch`), never from model output; both shas are read out
+of the checkout's own refs. A hallucinated "argument" in the model's reply therefore has nowhere to
+become a remote, a branch, a refspec, or a flag.
 
-**The force is bounded by a lease, and the lease is bounded to what the same run published.** The
-harness checkpoint-pushes the agent's commits while it works, so it is its own competing writer: the
-agent can amend a commit that is already on the branch, which a plain push then refuses. The
-optional `--force-with-lease` is what lets that land, and the `<sha>` it expects is only ever a sha
-THIS pass pushed and read back from its own remote-tracking ref (`createWorkBranchPusher`) — never a
-tip the run merely cloned, and never a value derived from model output. So the widest thing a
-compromised run gains is the ability to overwrite commits it itself published moments earlier, on
-the one branch it was already allowed to push; a second writer's commits (another dispatch, a
-person) refuse the push as `(stale info)`, and any other ref is untouchable. `--force` with no lease
-appears nowhere on this path (the only unconditional force in the harness is the bootstrap
-`reinitAndPush` onto a repo the Worker pre-flighted as empty).
+**The force is bounded by a lease, and the lease is bounded twice over.** The harness
+checkpoint-pushes the agent's commits while it works, so it is its own competing writer: the agent
+can amend a commit that is already on the branch, which a plain push then refuses. The optional
+`--force-with-lease` is what lets that land, under two conditions that `workBranchLease` checks
+together, because the lease alone bounds only one end of it:
+
+1. the `<sha>` it expects is one **this pass itself pushed** (the source commit the push named), so
+   a tip the run merely cloned is never leased against, and
+2. the branch **still contains the tip this pass started from**, so a rewrite reaching below that
+   tip is refused rather than leased over. Without this, a resumed run that had landed one
+   checkpoint could force away the commits it resumed from.
+
+Neither value derives from model output. So the widest thing a compromised run gains is the ability
+to overwrite commits it itself published moments earlier, on the one branch it was already allowed
+to push; a second writer's commits (another dispatch, a person) refuse the push as `(stale info)`,
+a rewrite of an earlier run's work refuses as `(non-fast-forward)`, and any other ref is
+untouchable. `--force` with no lease appears nowhere on this path (the only unconditional force in
+the harness is the bootstrap `reinitAndPush` onto a repo the Worker pre-flighted as empty).
 
 Where a model-authored string legitimately must become a git or shell argument (the declared test
 paths in the bugfix reproduction proof, tracker board slugs), it is validated for **git magic, not

@@ -113,7 +113,7 @@ describe('standard solution-phase prompts', () => {
     it('tells the build agent its commits are already published, so it never rewrites them', () => {
       const build = standardSystemPrompt('build')
       // The harness checkpoint-pushes commits about once a minute, which the agent cannot observe
-      // from inside the container — so an amend of its own commit is a delivery failure it had no
+      // from inside the container, so an amend of its own commit is a delivery failure it had no
       // way to predict. The rule has to be STATED; it is not inferable from anything the agent sees.
       expect(build).toMatch(/Add commits; never rewrite them/i)
       expect(build).toMatch(/publishes your commits to the branch WHILE you work/i)

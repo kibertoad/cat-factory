@@ -24,6 +24,7 @@ import {
   pushBranch,
   refreshFromBaseIfClean,
   remoteBranchExists,
+  workBranchLease,
 } from './git.js'
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
 import type { HarnessCallMetric } from './pi.js'
@@ -285,12 +286,20 @@ function followUpPollIntervalMs(): number {
  * Every push after the first LEASES against the sha this pass published (see
  * {@link pushBranch}), because the checkpoint makes the harness its own competing writer: it
  * publishes a commit within a minute of the agent making it, and the agent is then free to amend,
- * reset or rebase that commit — perfectly ordinary git hygiene, and the delivery contract asks it
- * to validate AFTER committing, which is exactly the sequence that produces an amend. Without the
+ * reset or rebase that commit, which is perfectly ordinary git hygiene, and the delivery contract
+ * asks it to validate AFTER committing, exactly the sequence that produces an amend. Without the
  * lease the final push is refused as a non-fast-forward and the whole run fails with its work
  * already on the branch. The lease is what keeps that recovery from becoming a blanket `--force`:
  * a SECOND writer (a concurrent dispatch for the same block) still refuses the push, which is the
  * "never clobber another run's commits" property the resume design leans on.
+ *
+ * The lease alone does not bound the force to THIS pass's own commits, and that is the property
+ * the design promises, so it is checked rather than assumed: once one checkpoint has landed, a
+ * rewrite that drops `baseSha` (the tip the pass started from, which on a RESUMED branch is an
+ * earlier run's published work) would lease successfully against our own checkpoint and take the
+ * earlier commits with it. So the lease is armed only while the branch still CONTAINS `baseSha`;
+ * withheld, the push goes out plain, git refuses it, and the engine re-dispatches onto the branch
+ * as it stands. A rewrite this pass cannot prove is its own is never forced away.
  *
  * Only push once the branch has advanced past its pre-run tip: pushing while it still sits at
  * `baseSha` would create the work branch at the base commit (a zero-diff branch), which a later
@@ -319,19 +328,23 @@ function createWorkBranchPusher(args: {
     if (pushInFlight) return pushInFlight
     pushInFlight = (async () => {
       if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
-      const pushed = await pushBranch(
+      // The rule the lease is entitled to lives beside the push ({@link workBranchLease}); the
+      // warn is here, because a withheld lease is how a rewrite this pass cannot claim fails the
+      // push it is about to make, and the run's log is where that is read.
+      const lease = await workBranchLease({
         dir,
-        spec.pushBranch,
-        spec.ghToken,
+        branch: spec.pushBranch,
+        baseSha,
+        publishedSha,
         signal,
-        publishedSha ? { expectRemoteSha: publishedSha } : {},
-      )
-      // A push that lands but whose tracking ref cannot be read leaves the next push UNLEASED
-      // (a plain push, i.e. the pre-lease behaviour) rather than leasing against a stale guess,
-      // which would refuse the very rewrite the lease exists to allow. Warn, because a rewrite
-      // after this point would then fail the run as contention it did not cause.
-      if (!pushed) logger.warn('coding-agent: pushed but could not read the published sha')
-      publishedSha = pushed
+        onWithheld: (probe) =>
+          logger.warn('coding-agent: push lease withheld, the branch dropped its pre-run tip', {
+            baseSha,
+            publishedSha,
+            probe,
+          }),
+      })
+      publishedSha = await pushBranch(dir, spec.pushBranch, spec.ghToken, signal, lease)
     })().finally(() => {
       pushInFlight = null
     })

@@ -168,6 +168,15 @@ export class PollCompletionController {
     // eviction re-dispatch/exhausted upsert in recoverContainerEviction, or markContainerErrored
     // on a genuine failure (failRun then re-reads from storage).
     this.recordBackendDiagnostics(instance, update.backend)
+    // Fold the job's EVIDENCE next, ahead of every recovery below, because a recovered failure
+    // returns without reaching the reporting path and the evidence outlives the job either way. The
+    // harness writes both reports onto the job view as its phases finish, independent of what later
+    // killed the job: a refused work-branch push settles a job carrying a completed (typically
+    // green) validation report and a finished reproduction proof, and dropping them here would
+    // discard exactly the runs whose evidence a reader needs. Idempotent, so the re-dispatch's own
+    // report simply replaces this one; persisted by whichever path upserts below.
+    const validationDetail = this.applyValidationFailure(step, update.validationReport)
+    applyReproductionReport(step, update.reproductionReport)
     // A container eviction (the per-run container vanished, its in-memory job is gone) is
     // usually transient. The shared recovery drops the dead handle and returns `continue` so
     // the driver re-dispatches the SAME step to a fresh container, within the per-flavour
@@ -210,18 +219,10 @@ export class PollCompletionController {
     // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
     // Mark the container errored and persist so the failed details show it (failRun
     // re-reads from storage, so an in-memory-only mutation would be lost; failRun emits
-    // the terminal frame, so markContainerErrored deliberately doesn't).
-    // A job that failed because its PRE-PR VALIDATION never went green carries the harness's
-    // report: record it on the step (the evidence — each command's exit code + output tail) and
-    // prefer its rendered detail over the generic harness diagnostic, so the board's failure card
-    // shows WHICH check failed and what it printed. Persisted by `markContainerErrored` below,
-    // which is why it is folded on first. A report-less failure is untouched.
-    const validationDetail = this.applyValidationFailure(step, update.validationReport)
-    // A job that died for an UNRELATED reason may still have completed its reproduction proof (a
-    // failed verification never fails a job by itself). Record it so the evidence is not lost
-    // with the run — it never contributes to the failure detail, which belongs to whatever
-    // actually killed the job.
-    applyReproductionReport(step, update.reproductionReport)
+    // the terminal frame, so markContainerErrored deliberately doesn't). The two harness reports
+    // were already folded onto the step above: a red PRE-PR VALIDATION lends its rendered detail
+    // to this failure (so the board's card shows WHICH check failed and what it printed), and the
+    // reproduction proof never contributes one, the detail belonging to whatever killed the job.
     await this.markContainerErrored(workspaceId, instance, step)
     return {
       kind: 'job_failed',
@@ -241,16 +242,16 @@ export class PollCompletionController {
   /**
    * Recover a step whose push to the work branch was refused because the branch had moved under it
    * (the harness's `branch-contended` cause: a second writer, or a rewrite of history an earlier
-   * run published). Resets the step so the driver re-dispatches it — the fresh dispatch RESUMES the
-   * existing branch, so the agent continues on top of whatever is now on it instead of against it —
-   * and returns `continue`. Returns null once the bounded budget is spent, so the caller reports the
+   * run published). Resets the step so the driver re-dispatches it, and the fresh dispatch RESUMES
+   * the existing branch, so the agent continues on top of whatever is now on it instead of against
+   * it, then returns `continue`. Returns null once the bounded budget is spent, so the caller reports the
    * harness's rejection, remedy included, as the run's failure.
    *
    * Lives here rather than beside `recoverContainerEviction` (which the deployer path shares)
    * because only an agent step pushes a work branch: a deployer job has no branch to contend for.
    *
-   * The step's own work is NOT lost by failing here either way — the refused push means the branch
-   * already holds commits — so this recovery buys a race its resolution, and never data.
+   * The step's own work is NOT lost by failing here either way, since the refused push means the
+   * branch already holds commits, so this recovery buys a race its resolution, and never data.
    */
   private async recoverBranchContention(
     workspaceId: string,

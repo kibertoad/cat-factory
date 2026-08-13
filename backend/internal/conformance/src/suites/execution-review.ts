@@ -610,6 +610,11 @@ function registerCompanionAndFailureTests(harness: ConformanceHarness): void {
       // Only the first job fails: the point is that the SECOND one runs. Failing forever would
       // assert nothing about the recovery, since an unrecovered run also ends `failed`.
       pollFailOnce: true,
+      // And the second job has to be a genuinely NEW job, which is what this mode models: ids come
+      // off the run's dispatch epoch (as the container executor's do) and a finished job's result is
+      // CACHED rather than recomputed. So a re-dispatch under the failed job's own id replays the
+      // failure and this test goes red, which is the production bug the epoch exists to prevent.
+      pooledContainer: true,
     })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id

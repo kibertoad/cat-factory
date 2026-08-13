@@ -82,7 +82,7 @@ export const PROMPT_VERSIONS = {
   // v5: the build phase now distinguishes `established` (standing) from `aspirational`
   // (agreed-but-not-built) requirements in the committed `spec/`.
   // v6: the shared delivery contract states that commits are PUBLISHED as they are made, so the
-  // agent adds commits rather than amending/resetting/rebasing ones it already made — a rule it
+  // agent adds commits rather than amending/resetting/rebasing ones it already made, a rule it
   // could not infer, since the checkpoint push that publishes them is invisible from inside the
   // container.
   build: { id: 'build', version: 6, text: standardSystemPrompt('build') },
