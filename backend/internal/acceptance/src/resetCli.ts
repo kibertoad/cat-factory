@@ -20,6 +20,11 @@
 // `process.exit`. That call tears the process down without draining a PIPED stdout, so
 // `… run reset --all | tee plan.txt` lost the tail of the very plan the preview exists to be read.
 // Setting `process.exitCode` and letting the process end on its own flushes what was written.
+//
+// **And every line goes to stdout, refusals included**, for the other half of that reason: `tee`
+// captures one stream, so a refusal written to stderr is on the terminal and missing from the plan an
+// operator kept, which is the file they are reading precisely because this command deletes things. The
+// exit code carries the verdict; the stream carries the answer. Same rule in `runAcceptance.ts`.
 
 import { rmSync } from 'node:fs'
 import type { PrReportRunProvider } from '@cat-factory/sdk'
@@ -64,7 +69,7 @@ process.exitCode = await run()
 async function run(): Promise<number> {
   const parsed = parseResetArgs(process.argv.slice(2))
   if (!parsed.ok) {
-    console.error(parsed.problem)
+    console.log(parsed.problem)
     return 2
   }
 
@@ -78,7 +83,7 @@ async function run(): Promise<number> {
   if (!resolution.ok) {
     // Printed rather than thrown: a stack trace above the list is noise, and the list is the whole
     // message. Refused BEFORE anything is read, so a half-configured checkout deletes nothing.
-    console.error(
+    console.log(
       `The reset is not configured. It talks to a LIVE deployment and deletes real board state, so ` +
         `it refuses to guess.\n\n` +
         resolution.problems.map((problem) => `  - ${problem}`).join('\n') +
@@ -99,7 +104,7 @@ async function run(): Promise<number> {
   // requests, and silently widening a named reset into an unnamed one is the shape that deletes
   // something nobody asked about.
   if (parsed.runId === 'latest' && latest?.runId == null) {
-    console.error(
+    console.log(
       `ACCEPTANCE_RUN_ID / the argument said 'latest', but ${latestPointerPath(stateDir)} names no ` +
         `pass that recorded a fact. Name a pass explicitly, or run the reset with no argument to ` +
         `clear what this configuration points at.`,
@@ -121,7 +126,7 @@ async function run(): Promise<number> {
   if (namedRunId !== null && !passes.some((pass) => pass.runId === namedRunId)) {
     // Stated rather than treated as an empty ledger: a typo'd run id would otherwise silently reset
     // only what the configuration points at, and report success for a pass it never read.
-    console.error(
+    console.log(
       `No pass '${namedRunId}' in ${stateDir}. Run ` +
         `'pnpm --filter @cat-factory/acceptance run status' for the passes it holds, or drop the ` +
         `argument to clear what this configuration points at.`,
@@ -136,7 +141,7 @@ async function run(): Promise<number> {
   // discovering it cannot finish the job.
   const provider = parsed.purgeRepos ? await providerClients(env, sdk) : null
   if (provider !== null && !provider.ok) {
-    console.error(provider.problem)
+    console.log(provider.problem)
     return 2
   }
   const providerApis = provider?.ok === true ? provider.clients : null
@@ -260,7 +265,7 @@ async function applyBoth(
     providerOk = providerPurgeSucceeded(providerReport)
   }
   if (!resetSucceeded(report)) {
-    console.error(
+    console.log(
       `\nThe reset did not finish: something above refused, or a repository it cannot free is ` +
         `still held. The board still holds state a fresh pass will be refused over, so fix what is ` +
         `named and run the reset again.`,
@@ -268,7 +273,7 @@ async function applyBoth(
     return 1
   }
   if (!providerOk) {
-    console.error(
+    console.log(
       `\nThe board was cleared, but the PROVIDER half did not finish: something above refused. ` +
         `The board itself needs no second reset; fix what is named and run it again with ` +
         `--purge-repos to reclaim the rest.`,

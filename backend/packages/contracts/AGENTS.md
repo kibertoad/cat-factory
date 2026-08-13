@@ -16,10 +16,11 @@ top-level files are the domain contracts.
   names; `docs/glossary.md`).
 - `execution.ts`: the run/step runtime state, composed from the step-state clusters that live in
   their own modules: `gate.ts` (polling gates), `human-verdict-gates.ts` (human-test, visual
-  confirmation) and `step-decisions.ts` (an agent's question, review comments, a companion
-  verdict, and the approval gate — which is also the engine's GENERIC parking mechanism, so a
-  pending approval does NOT by itself mean "approval gate"; orchestration's
-  `dedicatedParkSurface` is what tells them apart).
+  confirmation), `companion-state.ts` (a companion rework loop's bar, budget, verdict history and
+  the two flags saying how a loop that never cleared the bar ended) and `step-decisions.ts` (an
+  agent's question, review comments, a companion verdict, and the approval gate — which is also
+  the engine's GENERIC parking mechanism, so a pending approval does NOT by itself mean "approval
+  gate"; orchestration's `dedicatedParkSurface` is what tells them apart).
 - `public-decisions.ts`: the external projection of every park a run can stop on, plus the bodies
   that answer them. The kind union is the surface's honesty check — a member with no route behind
   it is a promise `/api/v1` cannot keep.

@@ -441,9 +441,11 @@ function claudeUsage(raw: unknown): InlineCliResult['usage'] {
 // Claude Code reports failures IN-BAND (process exit 0) via `is_error` / an `error_*` subtype,
 // with the error text in `result`. Left unchecked, that error string would be handed back as a
 // "successful" reviewer answer and parsed as a real (garbage) review; surface it as a throw so
-// the run fails instead. (These one-shot CLIs expose no token-length stop reason, so a genuine
-// output-cap truncation still reads as `stop` — the reviewer's `finishReason === 'length'`
-// guard only fires for HTTP providers. `error_max_turns` is the closest limit signal they give.)
+// the run fails instead. (These one-shot CLIs expose no token-length stop reason, so an
+// output-cap truncation is UNDETECTABLE on this path and the reviewer's `finishReason ===
+// 'length'` guard only fires for HTTP providers. It is reported as an ABSENT finish reason
+// rather than as `stop`, so a reader can tell "not measurable here" from "measured, clean".
+// `error_max_turns` is the closest limit signal these CLIs give.)
 const CLAUDE_ERROR_SUBTYPES = new Set(['error_max_turns', 'error_during_execution'])
 
 /**
@@ -813,8 +815,9 @@ function makeClaudeRunner(exec: CliExec, budget: InlineCliBudget = {}): InlineCl
     const result = fold.result
     if (!result) {
       // No terminal event (an older CLI, or a wrapper that swallowed the stream) — fall back to the
-      // raw text, as the single-object path did when its JSON wouldn't parse.
-      return { text: fold.fallbackText, finishReason: 'stop' }
+      // raw text, as the single-object path did when its JSON wouldn't parse. No `finishReason`:
+      // the stream this path exists to cope with is the one that told us nothing.
+      return { text: fold.fallbackText }
     }
     const subtype = typeof result.subtype === 'string' ? result.subtype : undefined
     if (result.is_error === true || (subtype && CLAUDE_ERROR_SUBTYPES.has(subtype))) {
@@ -825,9 +828,13 @@ function makeClaudeRunner(exec: CliExec, budget: InlineCliBudget = {}): InlineCl
       )
     }
     const text = typeof result.result === 'string' ? result.result : ''
+    // No `finishReason`: the terminal event says the run did not ERROR, which is not the same as
+    // the model having stopped of its own accord, and it carries no stop reason to say which.
+    // Claiming `stop` here is what made the caller's output-cap check unfireable.
+    //
     // The terminal event's own cumulative figure, not the folded per-call sum: on a run that
     // finished, the CLI's account of itself is authoritative.
-    return { text, finishReason: 'stop', usage: claudeUsage(result.usage) }
+    return { text, usage: claudeUsage(result.usage) }
   }
 }
 
@@ -871,7 +878,8 @@ function makeCodexRunner(exec: CliExec, budget: InlineCliBudget = {}): InlineCli
       ...budget,
       ...(req.signal ? { signal: req.signal } : {}),
     })
-    return { text: stdout.trim(), finishReason: 'stop' }
+    // No `finishReason`: `codex exec` prints its final message and nothing about why it stopped.
+    return { text: stdout.trim() }
   }
 }
 

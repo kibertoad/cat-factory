@@ -1164,7 +1164,14 @@ export interface InlineJob extends HarnessAuthFields {
 /** The inline completion result: the reply text plus lifted token usage / per-call telemetry. */
 export interface InlineResult {
   text: string
-  /** `length` when the model hit its output cap (the reviewer rejects a truncated doc). */
+  /**
+   * `length` when the model hit its output cap (the reviewer rejects a truncated doc), `stop`
+   * when it finished of its own accord, ABSENT when the CLI reported no stop reason at all.
+   *
+   * Absent is the normal case today: neither subscription CLI exposes a per-call stop reason on
+   * its parent stream, and the three states must stay distinct because a reader that takes
+   * absent for `stop` is asserting the one thing a truncation check exists to disprove.
+   */
   finishReason?: 'stop' | 'length'
   /**
    * The job's token usage with the input side split into its three ORTHOGONAL classes:

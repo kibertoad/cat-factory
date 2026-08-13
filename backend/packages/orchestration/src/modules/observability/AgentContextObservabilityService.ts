@@ -3,12 +3,15 @@ import type {
   AgentContextSnapshot,
   AgentContextSnapshotRepository,
   Clock,
+  GroupCacheHandle,
   IdGenerator,
   RecordAgentContextInput,
+  StoreAgentContextGate,
+  WorkspaceSettingsCacheValue,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import {
-  DEFAULT_WORKSPACE_SETTINGS,
+  createStoreAgentContextGate,
   isSecretShapedFilename,
   redactSecrets,
   redactSecretsDeep,
@@ -74,6 +77,16 @@ export interface AgentContextObservabilityServiceDependencies {
   idGenerator: IdGenerator
   clock: Clock
   /**
+   * The shared `AppCaches.workspaceSettings` slice, when the facade has one.
+   *
+   * The per-workspace gate below is asked once per RECORDED DISPATCH, and an inline dispatch waits
+   * on it before its model call (see `recordInlineAgentContext`), so on a run made of inline steps
+   * an uncached read is a settings SELECT per step — a mothership node reaches it over the
+   * `/internal/persistence` RPC. Absent ⇒ a direct repository read, which is the Worker's situation
+   * and costs nothing there: the slice is `enabled: false` in the isolate-safe profile.
+   */
+  workspaceSettingsCache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
+  /**
    * The deployment's prompt-recording switch (`LLM_RECORD_PROMPTS`, default true). When
    * false the operator has opted out of retaining prompt text, so the full agent
    * context (prompts + injected file bodies) is NOT stored either — the operator
@@ -93,12 +106,13 @@ export interface AgentContextObservabilityServiceDependencies {
  *
  * Storing is gated twice: the deployment-wide prompt-recording switch
  * ({@link recordPrompts}) AND the per-workspace `storeAgentContext` setting must both be
- * enabled. Wired only when a snapshot repository is present, so tests and unconfigured
- * facades collect nothing.
+ * enabled, the second through kernel's shared {@link createStoreAgentContextGate} (the one
+ * implementation every body-capturing path asks). Wired only when a snapshot repository is present,
+ * so tests and unconfigured facades collect nothing.
  */
 export class AgentContextObservabilityService implements AgentContextRecorder {
   private readonly repository: AgentContextSnapshotRepository
-  private readonly settings: WorkspaceSettingsRepository
+  private readonly storeEnabled: StoreAgentContextGate
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly recordPrompts: boolean
@@ -106,12 +120,20 @@ export class AgentContextObservabilityService implements AgentContextRecorder {
   constructor({
     agentContextSnapshotRepository,
     workspaceSettingsRepository,
+    workspaceSettingsCache,
     idGenerator,
     clock,
     recordPrompts = true,
   }: AgentContextObservabilityServiceDependencies) {
     this.repository = agentContextSnapshotRepository
-    this.settings = workspaceSettingsRepository
+    // Kernel's ONE implementation of the per-workspace half of the double gate, rather than a
+    // second reading of `settings.storeAgentContext` here: it is the same privacy decision the
+    // proxied and inline metric paths make, and the reason it lives in kernel is that two copies of
+    // it drifted once already. Caching comes with it.
+    this.storeEnabled = createStoreAgentContextGate({
+      repository: workspaceSettingsRepository,
+      ...(workspaceSettingsCache ? { cache: workspaceSettingsCache } : {}),
+    })
     this.idGenerator = idGenerator
     this.clock = clock
     this.recordPrompts = recordPrompts
@@ -168,10 +190,5 @@ export class AgentContextObservabilityService implements AgentContextRecorder {
   /** Snapshots recorded for a run, newest first (for the observability drill-down). */
   listByExecution(workspaceId: string, executionId: string): Promise<AgentContextSnapshot[]> {
     return this.repository.listByExecution(workspaceId, executionId)
-  }
-
-  private async storeEnabled(workspaceId: string): Promise<boolean> {
-    const settings = (await this.settings.get(workspaceId)) ?? DEFAULT_WORKSPACE_SETTINGS
-    return settings.storeAgentContext
   }
 }

@@ -16,6 +16,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
+import { OperatorRefusal } from './operatorText.ts'
 import {
   latestPointerPath,
   listPasses,
@@ -154,7 +155,7 @@ export function resolveRunId(
   if (pinned === 'latest') {
     const latest = readLatestRunId(stateDir)
     if (latest) return latest
-    throw new Error(
+    throw new OperatorRefusal(
       `ACCEPTANCE_RUN_ID=latest, but ${latestPointerPath(stateDir)} names no ` +
         `previous pass. Name a run id explicitly, or unset ACCEPTANCE_RUN_ID to start a new pass ` +
         `(which scaffolds two repositories and spends real money).`,
@@ -228,7 +229,7 @@ export class WorldStore {
     mkdirSync(this.#paths.dir, { recursive: true })
     const stored = readWorld(this.#paths.ledgerPath)
     if (stored && stored.runId !== runId) {
-      throw new Error(
+      throw new OperatorRefusal(
         `The ledger at ${this.#paths.ledgerPath} says it belongs to pass '${stored.runId}', not ` +
           `'${runId}'. A pass is identified by its FILE NAME, so this one was copied or renamed. ` +
           `Rename it back to '${stored.runId}.json' and resume that pass, or move it aside to let ` +
@@ -301,7 +302,7 @@ export class WorldStore {
  * a run, an issue on the provider. `bookkeeping` is anything else the ledger carries about the pass
  * itself, which is evidence of nothing having been created.
  */
-type LedgerSlot = 'created' | 'bookkeeping'
+export type LedgerSlot = 'created' | 'bookkeeping'
 
 /**
  * Every slot a ledger holds, classified, EXHAUSTIVE over `World` by construction.
@@ -312,8 +313,13 @@ type LedgerSlot = 'created' | 'bookkeeping'
  * ledger and wrong the moment one carries something that is not one: a `startedAt` or a `notes`
  * would compile, pass every test, and from then on report EVERY pass (including a fresh attempt a
  * prerequisite refused before anything existed) as having created something.
+ *
+ * Exported for `test/world.test.ts`, which asserts the RELATION this table states (`created` counts,
+ * `bookkeeping` does not) rather than a copy of today's membership. Read off `World`'s own keys, that
+ * test could only say "every slot counts", which is the very reading the `bookkeeping` member exists to
+ * make representable: the first correctly-classified one would have failed it.
  */
-const LEDGER_SLOTS = {
+export const LEDGER_SLOTS = {
   backend: 'created',
   frontend: 'created',
   scaffoldBackend: 'created',

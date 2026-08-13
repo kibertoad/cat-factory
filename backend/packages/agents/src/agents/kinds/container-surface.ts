@@ -3,6 +3,9 @@ import { isContainerBackedCompanion } from './companions.js'
 import type { AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
+// What a kind's declared `agent.surface` implies, stated once: whether a dispatch hands the agent
+// a real checkout, and whether the agent's DELIVERABLE is the reply it returns.
+//
 // The ONE definition of "does this dispatch hand the agent a real checkout?".
 //
 // Two consumers need the same answer and must never disagree about it: the
@@ -57,4 +60,27 @@ export function dispatchDeliversCheckout(
 ): boolean {
   if (opts.consensusEnabled) return false
   return runsInContainer(kind, registry)
+}
+
+/**
+ * Whether this kind's DELIVERABLE is the reply it returns — a report, a plan, structured JSON the
+ * platform parses — rather than a commit it pushed.
+ *
+ * The same declaration `applySurfaceDirectives` reads to decide who gets `FINAL_ANSWER_IN_REPLY`,
+ * because it is the same question: an `inline` or `container-explore` kind that answers with an
+ * empty reply has produced nothing, while a `container-coding` kind (coder, doc-writer) routinely
+ * ends with no final text at all and its work is in the branch.
+ *
+ * Asked by any caller that would otherwise read a step's `output` as a proxy for its WORK. The
+ * companion stall rule is the motivating one: comparing a coder's summary reply across two rounds
+ * says nothing about whether it changed the diff, and two empty replies are what a correct coder
+ * looks like.
+ *
+ * FALSE for a kind with no `agent` spec, which is the fail-safe answer: the callers here treat a
+ * true as licence to conclude something from `output`, and a kind that declared no surface has told
+ * us nothing to conclude from.
+ */
+export function deliverableIsReply(kind: AgentKind, registry: AgentKindRegistry): boolean {
+  const surface = registry.agentStep(kind)?.surface
+  return surface === 'inline' || surface === 'container-explore'
 }

@@ -40,6 +40,10 @@ export * from './pipeline-purpose-vocabulary.js'
 // compatibility (asserted in the tests): the palette may hide what the save gate
 // tolerates, never the reverse, which would offer a kind that cannot then be saved.
 //
+// `build` and `bugfix` are ONE classifier to three of those four surfaces: the same work, split
+// only so the pickers can tell them apart. {@link classifierSuits} states that relation once, so a
+// palette and a library looking at the same draft cannot answer it differently.
+//
 // Every pipeline carries one: `purpose` is mandatory at every write boundary (the entity, the
 // create request, the seed spec and therefore every `PipelineRegistry` registration), and the row
 // mapper resolves the pre-mandatory NULLs the back-fill missed. So none of these predicates has an
@@ -49,8 +53,15 @@ export * from './pipeline-purpose-vocabulary.js'
 // {@link classifierFor} for what an unrecognised value means and why they read it default-OPEN.
 // ---------------------------------------------------------------------------
 
-/** The agent-palette categories hidden from a non-`build` pipeline (writes no code, runs no tests). */
+/** The agent-palette categories hidden from a pipeline that ships no code (runs no tests either). */
 const NON_BUILD_HIDDEN_CATEGORIES: readonly AgentCategory[] = ['build', 'test']
+
+/**
+ * The purposes that SHIP CODE, and so have a use for every palette category. `bugfix` is here
+ * beside `build` because the two differ only in what they are offered TO ({@link
+ * pipelineAllowedForTaskType}): a bug fix designs, implements, tests and merges like any change.
+ */
+const CODE_SHIPPING_PURPOSES: readonly PipelinePurpose[] = ['build', 'bugfix']
 
 /**
  * The purpose to narrow BY, or `null` for "this build has nothing to narrow by".
@@ -74,10 +85,33 @@ function classifierFor(purpose: Pipeline['purpose'] | null | undefined): Pipelin
 }
 
 /**
+ * Whether something classified `own` suits a context being judged AT `classifier`: exact match,
+ * plus the single relation "`build` satisfies `bugfix`", one way.
+ *
+ * The two members are the same WORK (a bug fix designs, implements, tests and merges exactly as a
+ * build does), and are split only so the pickers can withhold a defect-report preset from a feature
+ * task ({@link pipelineAllowedForTaskType}). So anything classified `build` is at home in a bugfix
+ * context: every palette kind whose `purposes` list predates the member (the Bug Investigator
+ * declares `build`, most absurdly of all), and the whole build ladder in the saved-pipeline library
+ * of a bugfix draft, which would otherwise open holding two rows.
+ *
+ * The reverse does NOT hold: naming `bugfix` claims the defect-report context specifically and says
+ * nothing about a general build.
+ *
+ * ONE definition, read by both surfaces that narrow by purpose ({@link purposeSuggestsAgentKind},
+ * {@link pipelineMatchesPurpose}), because the palette and the library answering the same question
+ * differently is what a user reads as one of them being broken.
+ */
+function classifierSuits(own: PipelinePurpose, classifier: PipelinePurpose): boolean {
+  return own === classifier || (classifier === 'bugfix' && own === 'build')
+}
+
+/**
  * Whether a pipeline of `purpose` may use an agent kind in `category`: the builder's SAVE
- * gate. A `build` pipeline may use anything; every other purpose refuses the Implementation
- * (`build`) and Testing (`test`) categories, the two that contradict the classifier outright.
- * Uncategorized kinds (no `category`) are always allowed, the caller showing them regardless.
+ * gate. A code-shipping pipeline ({@link CODE_SHIPPING_PURPOSES}) may use anything; every other
+ * purpose refuses the Implementation (`build`) and Testing (`test`) categories, the two that
+ * contradict the classifier outright. Uncategorized kinds (no `category`) are always allowed,
+ * the caller showing them regardless.
  *
  * For what the palette OFFERS, see {@link purposeSuggestsAgentCategory}: it narrows further,
  * and the difference is what keeps a stored pipeline editable after this file gets an opinion
@@ -90,7 +124,7 @@ export function purposeAllowsAgentCategory(
   category: AgentCategory,
 ): boolean {
   const classifier = classifierFor(purpose)
-  if (classifier === null || classifier === 'build') return true
+  if (classifier === null || CODE_SHIPPING_PURPOSES.includes(classifier)) return true
   return !NON_BUILD_HIDDEN_CATEGORIES.includes(category)
 }
 
@@ -107,6 +141,9 @@ const PURPOSE_SUGGESTED_CATEGORIES: Record<
 > = {
   // Ships product code: every category is in play.
   build: { review: true, design: true, build: true, test: true, docs: true, gates: true },
+  // Ships product code too, so the same row. What differs is the task type it is offered to,
+  // which this table does not decide.
+  bugfix: { review: true, design: true, build: true, test: true, docs: true, gates: true },
   // Authors a document: researched, drafted, reviewed and merged like any change, but
   // nothing is implemented or tested.
   document: { review: true, design: true, build: false, test: false, docs: true, gates: true },
@@ -182,6 +219,10 @@ export interface AgentPurposeRelevance {
  * has to fix it. An AUTHORED empty list never reaches here at all: `agentPresentationSchema`
  * refuses one at registration, so this reading cannot double as a way of saying "offer me
  * nowhere", which is what someone typing `purposes: []` means and the opposite of what it does.
+ *
+ * A declaration is matched through {@link classifierSuits}, so declaring `build` also answers for
+ * `bugfix`: the two members are the same work, and without that the new one would silently empty
+ * out a bugfix palette.
  */
 export function purposeSuggestsAgentKind(
   purpose: Pipeline['purpose'],
@@ -191,7 +232,8 @@ export function purposeSuggestsAgentKind(
   if (classifier === null) return true
   if (kind.category && !purposeSuggestsAgentCategory(purpose, kind.category)) return false
   const declared = kind.purposes?.filter((p) => isPipelinePurpose(p)) ?? []
-  return declared.length === 0 || declared.includes(classifier)
+  if (declared.length === 0) return true
+  return declared.some((p) => classifierSuits(p, classifier))
 }
 
 /**
@@ -210,8 +252,9 @@ export function purposeSuggestsAgentKind(
  *    {@link pipelineAllowedForTaskType} draws, and for the same reason.
  *
  * Unlike the pickers' gate this narrows a list somebody is BROWSING rather than one they are about
- * to run from, so it may be exact where that one is permissive: two known purposes never mix, and
- * the caller states how many rows the dial is holding back and offers the way out of it.
+ * to run from, so it may be exact where that one is permissive: two known purposes mix only where
+ * {@link classifierSuits} says they are the same work, and the caller states how many rows the dial
+ * is holding back and offers the way out of it.
  */
 export function pipelineMatchesPurpose(
   pipeline: Pick<Pipeline, 'purpose'>,
@@ -221,22 +264,34 @@ export function pipelineMatchesPurpose(
   if (classifier === null) return true
   const own = classifierFor(pipeline.purpose)
   if (own === null) return true
-  return own === classifier
+  return classifierSuits(own, classifier)
 }
 
 /**
- * The purposes a PROGRAMMATIC task (`feature` / `bug`) may be offered. It ships code, so a
- * `document` or `review` pipeline is meaningless for it — the reverse of the narrowing those task
- * types already got. `research` is included because reaching for a spike before committing to an
- * approach is a legitimate move on a feature someone has not yet scoped; `planning` is not, being
- * initiative-level work that the block-level gate refuses anyway.
+ * The purposes a `bug` task may be offered. It ships code, so a `document` or `review` pipeline is
+ * meaningless for it — the reverse of the narrowing those task types already got. `research` is
+ * included because reaching for a spike before committing to an approach is a legitimate move on
+ * work someone has not yet scoped; `planning` is not, being initiative-level work that the
+ * block-level gate refuses anyway.
  *
  * Applied as a DENY list (everything not named here is hidden) rather than an allow list, which is
  * the one place this narrowing differs in direction from `document` / `review` — see
  * {@link pipelineAllowedForTaskType} for why a classifier this build cannot NAME has to stay
  * visible here.
  */
-const PROGRAMMATIC_PURPOSES: readonly PipelinePurpose[] = ['build', 'research']
+const BUG_PURPOSES: readonly PipelinePurpose[] = ['build', 'bugfix', 'research']
+
+/**
+ * The purposes a `feature` task may be offered: {@link BUG_PURPOSES} minus `bugfix`.
+ *
+ * A bugfix preset is built around a DEFECT REPORT — it investigates one against the codebase,
+ * triages it with a human for fixability, and writes a failing reproduction test before anything
+ * is fixed. On a feature there is no report to investigate and nothing red to make green, so the
+ * front half of such a run has no input and the reproduction proof it exists to produce is
+ * vacuous. That is a narrowing in the same spirit as the document / review ones, drawn one notch
+ * finer because both sides of it ship code.
+ */
+const FEATURE_PURPOSES: readonly PipelinePurpose[] = BUG_PURPOSES.filter((p) => p !== 'bugfix')
 
 /**
  * Whether `pipeline` should be offered when starting a task of `taskType` — the pickers' gate.
@@ -245,9 +300,11 @@ const PROGRAMMATIC_PURPOSES: readonly PipelinePurpose[] = ['build', 'research']
  *
  *  - `document` → only `document` pipelines (it authors a document; nothing else applies).
  *  - `review` → only `review` pipelines (it reviews an existing PR and opens none).
- *  - `feature` / `bug` → everything EXCEPT `document` / `review` / `planning`
- *    ({@link PROGRAMMATIC_PURPOSES}). These ship code, so offering them a document-authoring or
- *    PR-review preset was noise in the one picker people use most.
+ *  - `bug` → everything EXCEPT `document` / `review` / `planning` ({@link BUG_PURPOSES}). It ships
+ *    code, so offering it a document-authoring or PR-review preset was noise in the one picker
+ *    people use most.
+ *  - `feature` → the same, minus `bugfix` ({@link FEATURE_PURPOSES}): a preset that investigates a
+ *    defect report and reproduces it has neither input on a feature.
  *  - anything else, including a CUSTOM (namespaced) type and an undefined `taskType`, is
  *    unrestricted — a deployment's own task type has no purpose mapping we could infer.
  *
@@ -259,10 +316,10 @@ const PROGRAMMATIC_PURPOSES: readonly PipelinePurpose[] = ['build', 'research']
  *    task is actively wrong — running it would author no document and open a code PR nobody asked
  *    for. A purpose this build cannot name is hidden there: guessing costs more than an absence
  *    the user resolves by picking a preset the build does know.
- *  - `feature` / `bug` merely EXCLUDE the known purposes that cannot ship code, so an unnameable
- *    one stays visible. It is not known-wrong for a feature, and hiding it would take a
- *    deployment's own pipeline out of the picker people use most the moment its classifier
- *    outlives the bundle reading it, with nothing on screen to explain the absence.
+ *  - `feature` / `bug` merely EXCLUDE the known purposes that do not fit, so an unnameable one
+ *    stays visible. It is not known-wrong for a feature, and hiding it would take a deployment's
+ *    own pipeline out of the picker people use most the moment its classifier outlives the bundle
+ *    reading it, with nothing on screen to explain the absence.
  *
  * Composed with the launch-availability / block-level / visual-frame filters at each picker.
  */
@@ -274,7 +331,8 @@ export function pipelineAllowedForTaskType(
   if (taskType === 'review') return pipeline.purpose === 'review'
   if (taskType === 'feature' || taskType === 'bug') {
     const own = classifierFor(pipeline.purpose)
-    return own === null || PROGRAMMATIC_PURPOSES.includes(own)
+    const offered = taskType === 'bug' ? BUG_PURPOSES : FEATURE_PURPOSES
+    return own === null || offered.includes(own)
   }
   return true
 }

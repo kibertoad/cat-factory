@@ -30,6 +30,10 @@ export const HARNESS_FAILURE_CAUSES = [
   // without a usable product / without a change to push.
   'agent',
   'git',
+  // A push to the work branch was refused because the branch moved under the run. Distinct from
+  // `git` because the engine RECOVERS from it (a bounded re-dispatch resumes the branch as it now
+  // stands), where any other git fault would just fail again.
+  'branch-contended',
   'api',
   'llm-upstream',
   'no-usable-output',
@@ -64,6 +68,7 @@ const FAILURE_KIND_BY_CAUSE: Record<HarnessFailureCause, 'timeout' | 'agent'> = 
   'no-tool-progress': 'timeout',
   agent: 'agent',
   git: 'agent',
+  'branch-contended': 'agent',
   api: 'agent',
   'llm-upstream': 'agent',
   'no-usable-output': 'agent',

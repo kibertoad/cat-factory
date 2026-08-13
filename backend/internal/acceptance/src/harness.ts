@@ -51,10 +51,24 @@ export type Harness = {
    * scenario's own evaluation. ONE object, so the two cannot come to evaluate different things.
    */
   prerequisites: PrerequisiteGate
+  /**
+   * Operator output, the SAME function the driver logs through (`ScenarioRunnerDeps.log`).
+   *
+   * Injected rather than `console.log` reached for here, and the reason is the fourteen prerequisite
+   * verdict lines: they are the only output between a scenario opening and its first step, they are
+   * printed twice per pass on a resumed one, and reached for on the global console they were the one
+   * line of a pass that did not go through the seam. What that costs is not hypothetical in one
+   * direction: a second sink (a file, a structured tee for an afternoon-long pass) is one change here
+   * and would have silently missed exactly those lines.
+   */
+  log: (message: string) => void
 }
 
 /** Everything an evaluation of the prerequisites reads. The harness, minus what only a scenario needs. */
-type PrerequisiteInputs = Pick<Harness, 'config' | 'client' | 'deployment' | 'world' | 'journal'>
+type PrerequisiteInputs = Pick<
+  Harness,
+  'config' | 'client' | 'deployment' | 'world' | 'journal' | 'log'
+>
 
 /**
  * Build the pass's harness.
@@ -67,8 +81,9 @@ export function buildHarness(options: {
   config: AcceptanceConfig
   runId: string
   unlock: PersonalUnlock
+  log: (message: string) => void
 }): Harness {
-  const { config, runId, unlock } = options
+  const { config, runId, unlock, log } = options
   const world = new WorldStore(config.stateDir, runId)
   // Named, because the gate closes over exactly these and the harness closes over the gate: taking
   // the whole `Harness` would be a cycle, and `PrerequisiteInputs` says which half an evaluation
@@ -79,6 +94,7 @@ export function buildHarness(options: {
     deployment: new DeploymentApi({ baseUrl: config.baseUrl }),
     world,
     journal: new Journal(world.dir, runId),
+    log,
   }
   return {
     ...inputs,
@@ -103,7 +119,7 @@ export function buildHarness(options: {
  * seconds later with nothing in between; `createPrerequisiteGate` owns that and nothing else does.
  */
 function evaluatePrerequisites(inputs: PrerequisiteInputs): Promise<PreflightReport> {
-  const { config, client, deployment, world, journal } = inputs
+  const { config, client, deployment, world, journal, log } = inputs
   return runPreflight(
     PREREQUISITES,
     {
@@ -133,7 +149,7 @@ function evaluatePrerequisites(inputs: PrerequisiteInputs): Promise<PreflightRep
       probe: { subject: 'the cat-factory backend', target: config.baseUrl },
       onResult: (result) => {
         journal.record('prerequisite', formatPreflightLine(result).trim())
-        console.log(formatPreflightLine(result))
+        log(formatPreflightLine(result))
       },
     },
   )

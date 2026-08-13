@@ -59,6 +59,22 @@ export type OperationalCounter =
   /** A container job settled as evicted/crashed. Dimensioned by the eviction kind. */
   | 'container.evicted'
   /**
+   * A container job settled because its push to the work branch was REFUSED: the branch moved
+   * under the run (a second dispatch for the same block, or a rewrite of commits an earlier run
+   * published). The engine re-dispatches once, so the cost of each one is a whole agent run spent
+   * twice, in tokens and in wall clock, on a run that reports as a clean success.
+   *
+   * That is the reason it is counted and not only logged: per run it is invisible, and the remedy
+   * the harness prints ends "if it recurs, check whether two runs are active for the same block",
+   * which is a recurrence no per-run line can show.
+   *
+   * UNDIMENSIONED. The split worth having is which of the two rejection shapes it was, and the
+   * harness's `PushRejection` does not cross the job-view boundary (the cause does). Widening the
+   * view for a dimension would mean a runner-image bump; the shape stays in the remedy text the
+   * failed step carries, and the ids ride the log line at the increment site.
+   */
+  | 'container.branch_contended'
+  /**
    * A container dispatch was REFUSED because the runner image told us it does not parse a
    * capability field the job body carried (`domain/harness-capabilities.ts`). Dimensioned by
    * `capability`, which is a closed union, so the cardinality is the vocabulary's size.

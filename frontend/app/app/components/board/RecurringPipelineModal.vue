@@ -131,7 +131,8 @@ function defaultRecurrence(): Recurrence {
   }
 }
 
-// Hide UI-testing pipelines when the frame has no UI to exercise — they'd be refused at run start.
+// Hide a pipeline whose UI-testing step would REACH a frame with no UI (one scoped to a frontend
+// service excuses itself) — it would be refused at run start.
 // Also hide `'one-off'`-only pipelines: attaching one to a schedule is refused server-side.
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) => pipelineAllowedForSchedule(p, frame.value, board.blocks)),

@@ -487,6 +487,12 @@ export interface HarnessCallsRecordInput {
  * arrives on (the per-poll drain and the terminal result list). It falls back to the position
  * in this batch only for an older harness image that streams nothing — there the terminal list
  * is the sole channel, so its indices are already job-scoped.
+ *
+ * A metric flagged {@link HarnessCallMetric.standsForJob} is filed with a NULL `turnIndex`: it
+ * carries the job's unattributed remainder rather than a turn, and a reader ordering a step's
+ * calls by turn must not be handed a position it never occupied. Its ID still comes from `seq`,
+ * so idempotency is unaffected — the same split `CliInlineLanguageModel` makes between its
+ * per-call rows and its one step-level row.
  */
 export function makeHarnessCallRecorder(
   service: LlmObservabilityService,
@@ -507,7 +513,7 @@ export function makeHarnessCallRecorder(
         // Absent on an older harness image (no phase marker at all), which normalises to the
         // unattributed slice rather than being guessed at from the agent kind.
         ...(call.phase !== undefined ? { phase: call.phase } : {}),
-        turnIndex,
+        turnIndex: call.standsForJob ? null : turnIndex,
         messageCount: call.messageCount,
         toolCount: 0,
         requestMaxTokens: null,

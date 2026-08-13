@@ -129,7 +129,10 @@ export class IterationCapController {
               return
             }
             s.companion.maxAttempts += 1
-            s.companion.exceeded = undefined
+            // `exceeded` and `stalled` describe the round that PARKED, and a person has just said
+            // to try again; both are cleared by `rerunProducerThrough` below, the one funnel every
+            // re-arm goes through, rather than here — so the human "request changes" re-run gets
+            // the same treatment without a second copy of the rule.
             const producer = inst.steps[this.deps.stepGraph.companionProducerIndex(inst, i)]
             // Capture the approval id BEFORE `loopCompanionProducer`: it resets the companion
             // step for re-run (`resetStepForRerun`), which NULLS `s.approval`, so reading

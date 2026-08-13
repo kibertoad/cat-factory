@@ -176,12 +176,14 @@ export class AgentDispatchController {
           // instead of the misleading container framing.
           step.container = { status: 'errored' }
           // Hand the classifier the step's run history so a container lost AFTER work began (a
-          // failed eviction-recovery re-dispatch, `evictionRecoveries > 0`) is reported as an
-          // unrecoverable eviction — with elapsed minutes + any partial slice count — rather than
-          // the misleading "container failed to start". See ADR 0026 D1.
+          // failed eviction-recovery re-dispatch, `evictionRecoveries > 0`, or the re-dispatch of a
+          // step whose work-branch push was refused) is reported as what it is (an unrecoverable
+          // eviction with elapsed minutes + any partial slice count, or a resume of already-pushed
+          // commits) rather than the misleading "container failed to start". See ADR 0026 D1.
           const classified = classifyDispatchFailure(error, {
             evictionRecoveries: step.evictionRecoveries,
             transientEvictionRecoveries: step.transientEvictionRecoveries,
+            branchContentionRecoveries: step.branchContentionRecoveries,
             startedAt: step.startedAt,
             sliceCount: step.prReview?.slices?.length,
           })

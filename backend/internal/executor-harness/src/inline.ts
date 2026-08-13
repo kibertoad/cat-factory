@@ -18,14 +18,26 @@ import type { RunOptions } from './runner.js'
 // is injected.
 
 /**
- * Map the harness CLI's terminal stop reason (lifted onto the last call metric) to the
- * inline `finishReason` the reviewer keys off. Only Claude Code reports it (`max_tokens` on
- * a `--output-format stream-json` result); Codex's thinner stream exposes none, so it reads
- * as `stop` — the same one-shot limitation the host-CLI runner has.
+ * Map the harness CLI's terminal stop reason (lifted onto the last call metric) to the inline
+ * `finishReason` the reviewer keys off, or `undefined` when the CLI reported NONE.
+ *
+ * Undefined rather than `stop`, which is what this returned for years on the strength of a
+ * comment claiming Claude Code reports the reason. It does not: its `stream-json` `assistant`
+ * envelopes carry the message-START snapshot, whose `stop_reason` is null, so every call metric
+ * a claude-code or codex run produces has a null reason and this answered `stop` for all of them.
+ * `stop` is a positive claim that the model finished of its own accord, and it is the exact claim
+ * a truncation check is trying to disprove — so the one caller keyed off it
+ * (`finishReason === 'length'`) could never fire, and every store that kept the row recorded a
+ * clean stop nobody observed.
+ *
+ * Kept as a MAPPING rather than deleted because the field remains reachable: a subagent turn is
+ * read from a completed JSONL transcript, which does carry `stop_reason`, and a future CLI build
+ * (or `--include-partial-messages`) would restore it on the parent stream too.
  */
-function deriveFinishReason(calls: HarnessCallMetric[] | undefined): 'stop' | 'length' {
+function deriveFinishReason(calls: HarnessCallMetric[] | undefined): 'stop' | 'length' | undefined {
   const last = calls?.[calls.length - 1]
-  const reason = last?.finishReason?.toLowerCase() ?? ''
+  const reason = last?.finishReason?.toLowerCase()
+  if (!reason) return undefined
   return reason === 'max_tokens' || reason === 'length' ? 'length' : 'stop'
 }
 
@@ -57,9 +69,10 @@ export async function handleInline(job: InlineJob, opts: RunOptions): Promise<In
       ...(opts.signal ? { signal: opts.signal } : {}),
       ...(opts.onActivity ? { onActivity: opts.onActivity } : {}),
     })
+    const finishReason = deriveFinishReason(outcome.callMetrics)
     return {
       text: outcome.summary,
-      finishReason: deriveFinishReason(outcome.callMetrics),
+      ...(finishReason ? { finishReason } : {}),
       ...(outcome.usage ? { usage: inlineUsage(outcome.usage, outcome.callMetrics) } : {}),
       ...(outcome.callMetrics ? { callMetrics: outcome.callMetrics } : {}),
     }

@@ -452,12 +452,25 @@ export interface ClaudeRunTelemetry {
  * `ambientAuth` run has no isolated config home to watch — the tagged turns are recorded here
  * instead, on per-dispatch transcripts of their own. Dropping them in that case would leave the run
  * billed by neither channel, and an under-count reads as a cheap run rather than as an error.
+ *
+ * Which is also why the two are published through SEPARATE callbacks. A caller reconciling the
+ * parent's terminal cumulative usage needs the parent's calls alone, and with one shared callback
+ * the fallback channel silently mixed subagent turns into that list — where they both understated
+ * the shortfall and, being last, attracted it (`unaccountedUsageCall`). `publishSubagent` is
+ * optional so a caller that draws no distinction (a test, the settled-transcript path where nothing
+ * arrives here anyway) keeps one sink.
  */
 export function createClaudeRunTelemetry(
-  opts: ClaudeStreamTelemetryOptions & { watcherOwnsSubagents: boolean },
+  opts: ClaudeStreamTelemetryOptions & {
+    watcherOwnsSubagents: boolean
+    /** Where a SUBAGENT conversation's call goes. Absent ⇒ `publish`, the parent's sink. */
+    publishSubagent?: (metric: HarnessCallMetric) => void
+  },
 ): ClaudeRunTelemetry {
   const parent = createClaudeStreamTelemetry(opts)
-  const subagents = opts.watcherOwnsSubagents ? undefined : createSubagentStreamTelemetry(opts)
+  const subagents = opts.watcherOwnsSubagents
+    ? undefined
+    : createSubagentStreamTelemetry({ ...opts, publish: opts.publishSubagent ?? opts.publish })
   let sawSubagentTurn = false
 
   return {

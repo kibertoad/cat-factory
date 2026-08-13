@@ -15,11 +15,12 @@ import {
   parseCompanionAssessment,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { companionFor, companionTargets } from '@cat-factory/agents'
+import { companionFor, companionTargets, deliverableIsReply } from '@cat-factory/agents'
 import type { SpendService } from '@cat-factory/spend'
 import { extractJson } from '../requirements/requirements.logic.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import { companionLoopStalled } from './companionProgress.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import { resolvesOwnCaps, type ResolvedRunRiskPolicy, type RunPolicyScope } from './policy-types.js'
 import { buildStepApproval } from './stepApproval.js'
@@ -369,14 +370,51 @@ export class CompanionController {
       })
     }
 
-    // BELOW THRESHOLD, automatic budget spent → DON'T get stuck. Park on a human
-    // decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
+    // BELOW THRESHOLD and NOT GETTING ANYWHERE: the producer handed back the very text it was
+    // asked to revise and the rating did not move, so every round still on the budget would buy
+    // another copy of a verdict already given (see `companionLoopStalled` for the run that
+    // motivated it). Stopping EARLY takes the same exit as spending the budget, deliberately: the
+    // question a person is asked at the cap ("one more round / proceed / stop & reset") is exactly
+    // the question here, an unattended policy already has an answer for it, and inventing a second
+    // exit would mean a second set of resolutions for the SPA and the policy to know about.
+    //
+    // `stalled` is recorded beside `exceeded` rather than in place of it: they reach the same gate
+    // for opposite reasons, and only this one says the run had rounds left and abandoned them.
+    const producerStep = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
+    const stalled =
+      producerStep !== undefined &&
+      companionLoopStalled({
+        producer: producerStep,
+        verdicts: companion.verdicts,
+        // Answered from the REGISTRY, so a deployment's own producer kind is judged by its own
+        // declaration: only a kind whose deliverable is its reply can be found standing still by
+        // comparing that reply. See `deliverableIsReply`.
+        producerDeliverableIsReply: deliverableIsReply(
+          producerStep.agentKind,
+          this.deps.agentKindRegistry,
+        ),
+      })
+    if (stalled) {
+      companion.stalled = true
+      this.deps.logger?.warn('companion rework loop stopped early: no progress', {
+        workspaceId,
+        runId: instance.id,
+        blockId: block.id,
+        agentKind: step.agentKind,
+        attempts: companion.attempts,
+        maxAttempts: companion.maxAttempts,
+        rating: companion.verdicts[companion.verdicts.length - 1]?.rating,
+      })
+    }
+
+    // BELOW THRESHOLD, automatic budget spent (or abandoned as above) → DON'T get stuck. Park on
+    // a human decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
     // surface the requirements reviewer uses at its cap. Only AUTOMATIC reworks count
     // against the budget (`attempts`); human "request changes" cycles on a gated
     // companion re-run the producer without consuming it. `step.output` already holds the
     // companion's latest feedback; the `exceeded` flag + the parked approval gate let the
     // SPA render the three choices (resolved via `resolveCompanionExceeded`).
-    if (!hasReworkBudget(companion)) {
+    if (stalled || !hasReworkBudget(companion)) {
       step.companion = companion
       // …unless the run's policy says nobody is coming. `proceed` is one of the three choices the
       // gate offers a person, and it is the only one an unattended policy may take on their
