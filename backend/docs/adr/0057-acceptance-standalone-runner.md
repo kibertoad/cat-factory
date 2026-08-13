@@ -116,15 +116,24 @@ once, whatever happens after. It is bounded by construction rather than by a TTL
 after the first is separated from it by a scenario that spent an afternoon, which is precisely the
 one that must not reuse anything.
 
-**The password is still asked UP FRONT**, even though one process could hold a lazily-collected answer
-for the whole pass. The reason changed rather than disappearing: a person is at the terminal when a
-pass starts and by design not twenty minutes in, when the first dispatch would discover the model
-needs one. The ask goes THROUGH the holder, which deleted the one function that handed a password back
-as a value, and it PRIMES that holder rather than filling it (`unlock.prime`, not `obtain`): asking
-early is a fact about where the OPERATOR is, and it may not also decide where the secret goes. Held
-from the ask, the header rode the fourteen preflight probes, every repository and service read and
-every decision poll of an afternoon; primed, it starts at the first `428` exactly as the lazy path
-does, which is also what the vitest shape did with its injected value (a lazily-consulted supplier).
+**The password is still asked UP FRONT, and held from there**, even though one process could hold a
+lazily-collected answer for the whole pass. The reason changed rather than disappearing: a person is at
+the terminal when a pass starts and by design not twenty minutes in, when the first dispatch would
+discover the model needs one. Headless is what the suite is FOR, so an operator launches a pass and
+leaves, and a requirement that can be established while they are still there is established there. The
+ask goes THROUGH the holder (`unlock.obtain`), which deleted the one function that handed a password
+back as a value, and the holder has exactly one filling method.
+
+The alternative considered was to collect up front and attach only from the first `428`, which is what
+the vitest shape did with its injected value (a lazily-consulted supplier). Rejected: the exposure it
+narrows is a handful of reads against the ONE deployment the pass is pinned to, which consults the
+header only on the gated run calls, and what it costs is that having the credential stops being a
+property of the client seam and becomes a rule each future call site remembers through
+`withPersonalUnlock`. That trade is the wrong way round for an unattended afternoon. **The gate on
+holding is the CONFIRMATION, not the timing**: the ask fires only where the catalog answered and the
+pinned preset's base model reports `personalSubscription`, so a pass that holds a password is one
+already known to be about to spend that subscription, and a pass where neither could be established
+asks and holds nothing.
 
 **The controlling-terminal prompt is KEPT.** Its justification was vitest's piped worker stdio, and
 the layer that decides this process's stdio is still there: `pnpm --filter … run` sits between the

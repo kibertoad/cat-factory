@@ -11,16 +11,20 @@
 // API key would hand both halves to anyone who read one file. A resumed pass asks again, which is
 // the correct cost.
 //
-// The header rides EVERY request the client makes once a password is HELD, rather than being
+// The header rides EVERY request the client makes once a password is held, rather than being
 // attached at the one call that first needed it: a pass answers parked decisions for hours after
 // the start, each of those wakes the durable driver and re-mints the run's activation, and each
 // therefore needs the password again. The server never keeps it between calls.
 //
-// **When it starts riding them is a separate question, and the answer is the first `428`.** The
-// up-front ask collects the password before the pass opens (`personalPasswordAsk.ts`) because that is
-// when a person is at the terminal; it PRIMES the holder rather than filling it, so the credential
-// still first leaves this process at the call that needs it and not on the fourteen preflight probes,
-// the repository reads and the decision polls that precede one. See {@link PersonalUnlock.prime}.
+// **And it is held from the up-front ask, not from the first `428`, whenever the pinned preset
+// CONFIRMS this pass will spend a subscription.** Headless is how the suite is used: the operator
+// starts a pass and walks away, so everything it will need has to be in hand while they are still
+// there. Once that confirmation exists, withholding the collected password until a call is refused
+// buys little (the pass talks to ONE deployment, which reads this header only on the gated run
+// calls) and costs the property that matters to an unattended afternoon: having the credential stops
+// being a fact about the client seam and becomes a rule every future call site has to remember
+// through {@link withPersonalUnlock}. Where the confirmation cannot be made, nothing is asked and
+// nothing is held, and the lazy path below is the whole behaviour.
 
 import { closeSync, openSync, writeSync } from 'node:fs'
 import { ReadStream } from 'node:tty'
@@ -47,19 +51,16 @@ function vendorOf(error: CatFactoryCredentialRequiredError): string | null {
 export interface PersonalUnlock {
   /** The header to merge into a request, or nothing while no password is held. */
   headers(): Record<string, string>
-  /** Ask for the password (once per pass), naming why. Rejects when there is no terminal to ask. */
-  obtain(reason: string): Promise<void>
   /**
-   * COLLECT the password now, to be held at the first call that needs it.
+   * Ask for the password (once per pass), naming why, and HOLD it. Rejects when there is no
+   * terminal to ask on.
    *
-   * The up-front ask (`personalPasswordAsk.ts`) exists because a person is at the terminal when a
-   * pass starts and by design not twenty minutes later. What it must not also do is decide WHERE the
-   * password goes: primed rather than held, the header still starts riding at the first `428`, so a
-   * pass's fourteen preflight probes, its service reads and its decision polls carry no credential
-   * they have no use for. {@link obtain} consults what this collected instead of prompting again, so
-   * the operator is asked exactly once either way.
+   * The one entry point, whether the ask is the up-front one (`personalPasswordAsk.ts`, on a pass
+   * whose pinned preset says it will need this) or the lazy one at a `428`. Two entry points was one
+   * of them collecting without holding, and what that turned into is described at the top of this
+   * file.
    */
-  prime(reason: string): Promise<void>
+  obtain(reason: string): Promise<void>
   /** Whether a password has already been supplied this pass. */
   held(): boolean
 }
@@ -69,17 +70,15 @@ export interface PersonalUnlock {
  * the request header — which is what keeps "held in memory only" a property of the code rather
  * than a rule someone has to remember at each call site.
  *
- * Two variables rather than one, and the split is the whole of {@link PersonalUnlock.prime}: only
- * `password` is what {@link PersonalUnlock.headers} sends, so a collected-but-not-yet-needed secret is
- * structurally unable to ride a request. It also keeps `held()` answering the question
- * {@link withPersonalUnlock} asks of it (has a password already been TRIED and still refused), which a
- * single variable would have answered "yes" before the first call was made.
+ * ONE variable, which is what makes `held()` and `headers()` two readings of the same fact: a
+ * password this pass has been given is a password its requests carry. A second, collected-but-withheld
+ * one would split them, and `withPersonalUnlock` asks `held()` precisely to decide whether asking
+ * again could change anything.
  */
 export function createPersonalUnlock(
   readSecret: (prompt: string) => Promise<string> = readSecretFromTty,
 ): PersonalUnlock {
   let password: string | undefined
-  let primed: string | undefined
   return {
     headers: (): Record<string, string> =>
       password ? { [PERSONAL_PASSWORD_HEADER]: password } : {},
@@ -87,10 +86,7 @@ export function createPersonalUnlock(
     async obtain(reason) {
       // Checked at collection time, so a too-short entry is refused while the operator is still at
       // the terminal rather than twenty minutes into the pass.
-      password = primed ?? checked(await readSecret(promptFor(reason)))
-    },
-    async prime(reason) {
-      primed = checked(await readSecret(promptFor(reason)))
+      password = checked(await readSecret(promptFor(reason)))
     },
   }
 }
@@ -124,10 +120,12 @@ function checked(entered: string): string {
  * Run a call that may need the personal subscription, asking for the password if the deployment
  * says one is needed, then retrying ONCE.
  *
- * Lazy rather than up-front, and that is what keeps the common pass friction-free: a workspace
- * running on a provider API key never sees a prompt, because no call ever answers `428`. It also
- * means the suite never has to predict whether the pinned preset resolves to an individual-usage
- * vendor — the deployment already answers that question, precisely, at the moment it matters.
+ * The FALLBACK ask, and it is what keeps the common pass friction-free: a workspace running on a
+ * provider API key never sees a prompt, because no call ever answers `428`. It also means the suite
+ * is never WRONG about whether the pinned preset resolves to an individual-usage vendor. The
+ * up-front ask predicts that to get the operator asked while they are still at the terminal; this is
+ * the deployment answering the same question precisely, at the moment it matters, for every pass
+ * where the prediction could not be made.
  *
  * Exactly one retry. A second `428` means the password was wrong or the subscription is not there,
  * and re-asking in a loop would turn a clear failure into a pass that hangs on a prompt nobody is

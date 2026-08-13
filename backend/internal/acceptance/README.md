@@ -343,10 +343,14 @@ person's subscription, and only their personal password opens it. Two consequenc
   the catalog cannot be read, it says so and leaves the ask at the first dispatch that needs it. What
   it never does is hand the password back as a value: the prompt fills the holder that rides every
   request (`src/personalUnlock.ts`), which is what makes "written nowhere" a property of the code.
-- **Asking early does not widen where it goes.** The up-front ask PRIMES that holder rather than
-  filling it, so the header still starts riding requests at the first call the deployment answers `428`
-  to. Held from the ask instead, the credential would travel on the fourteen preflight probes, every
-  repository and service read and every decision poll of the afternoon before anything needed it.
+- **What is asked for early is also HELD from early**, and the condition on that is the confirmation
+  above: the ask only happens once the catalog has said this pass will spend the subscription, so the
+  credential is not being attached speculatively. A pass runs headless for an afternoon and its
+  operator has gone, so from the ask onward having the password is a property of the client seam
+  rather than something each later call site reaches for. The alternative (collect now, attach at the
+  first `428`) narrows the exposure to a handful of reads against the one deployment the pass is
+  pinned to, which reads the header only on the gated run calls, and pays for it with a failure mode
+  nobody is present to answer.
 - **That ask can only ever DELAY the prompt, never end the pass**, and the one exception is a person.
   It runs before the first prerequisite is evaluated and before a journal line exists, so anything it
   threw would be the operator's whole output: no "your key names another workspace", no "the pinned

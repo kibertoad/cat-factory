@@ -292,22 +292,24 @@ function openPass(
  * filled and never in a value this file holds. The suite has no function that hands a password back
  * any more, which is what makes "written nowhere" structural rather than a rule to remember.
  *
- * And it PRIMES that holder rather than filling it, which is what keeps asking early from also
- * widening where the secret goes. Held from here, the header would ride the fourteen preflight probes,
- * every repository and service read, and every decision poll of an afternoon, on a pass that needs it
- * at its dispatches; primed, it starts at the first `428` exactly as the lazy path does, and the
- * operator is still asked once, at the terminal, before anything runs.
+ * And it FILLS that holder, so from here the credential is something the pass simply has. Collecting
+ * it and withholding it until the first `428` was considered and rejected: it narrows the exposure to
+ * a handful of reads against the ONE deployment this pass is pinned to (which consults this header
+ * only on the gated run calls), and in exchange it makes having the credential a rule each call site
+ * remembers through `withPersonalUnlock` rather than a property of the client seam. The reader here
+ * is somebody who started a headless pass and left, so the failure that costs the most is the one
+ * discovered at 4pm by a terminal nobody is at.
  *
  * The catalog read goes through the PASS's own client, not a second one built to omit the unlock.
- * That distinction was real under vitest, where `globalSetup` ran before any harness existed; here the
- * holder holds nothing until a call needs it, so its `headers()` answers `{}` and the two clients send
- * byte-identical requests.
+ * That distinction was real under vitest, where `globalSetup` ran before any harness existed; here
+ * the holder is empty at this instant by construction (this is the ask that fills it), so its
+ * `headers()` answers `{}` and the two clients send byte-identical requests.
  */
 async function askUpFront(harness: Harness): Promise<string | null> {
   try {
     await askForPersonalPassword({
       log: harness.log,
-      prime: (reason) => harness.unlock.prime(reason),
+      hold: (reason) => harness.unlock.obtain(reason),
       readPinned: () => readPinnedPreset(harness.client, harness.config.modelPresetId),
     })
     return null

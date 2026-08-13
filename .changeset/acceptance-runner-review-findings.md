@@ -4,15 +4,7 @@
 
 Review findings on the standalone acceptance runner (#1983).
 
-The one with a behaviour change worth naming: the up-front personal-password ask filled the unlock
-holder eagerly, so `X-Personal-Password` rode every request of the pass rather than starting at the
-first `428` as it did before the runner conversion (where the injected value was installed as a lazily
-consulted supplier). Asking early is a fact about the operator being at the terminal; it may not also
-decide where the secret goes. `PersonalUnlock.prime` collects without holding, so the fourteen preflight
-probes, the repository and service reads and the decision polls travel without a credential they have no
-use for, and the operator is still asked exactly once.
-
-The rest are the pass's own reporting. Every command now prints to stdout, refusals included, because a
+These are the pass's own reporting, plus one documented decision about the personal-password ask. Every command now prints to stdout, refusals included, because a
 `tee`d afternoon-long pass captures one stream and the configuration refusal, the declined prompt and
 the suite-failure report were on the other. A `ScenarioFailure` carries its message and its location
 separately, so a suite bug's stack frames stop being folded into the one-line phase message `status`
@@ -24,6 +16,14 @@ prerequisite's remedy instead of the first one's, which is rule 4 and what the t
 already did. And `status`'s no-argument default is back to "the pass that ran last": an
 `ACCEPTANCE_RUN_ID` line in the `.env` names the pass to report on, but a `latest` in that file no longer
 converts the bare form into the pointer question, which refuses where the bare form would have answered.
+
+The personal-password ask keeps HOLDING what it collects, and that is now argued for rather than
+incidental: the suite exists to be run headless, so an operator starts a pass and walks away, and once
+the pinned preset has confirmed the pass will spend their subscription there is nothing to gain by
+withholding the answer until a call is refused. Collecting-without-holding would narrow the exposure to
+a few reads against the one deployment the pass is pinned to (which consults the header only on the
+gated run calls) and would make "the pass has the credential" a rule each future call site remembers
+through `withPersonalUnlock` rather than a property of the client seam.
 
 Docs: the claim that a `.ts` entry point "does not load at all" below Node 24 was false (type stripping
 is on by default from 22.18 and 23.6, as CONTRIBUTING.md already said), so a successful run was never

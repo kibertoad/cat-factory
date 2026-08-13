@@ -64,19 +64,21 @@ is about models omitted ENTIRELY (locally-run endpoints), so labelling from it c
 model invisible and sends an operator to re-mint a token that will change nothing. `src/presets.ts`
 owns the three-way verdict both commands share. `src/personalUnlock.ts` holds the password for the
 process and nothing else writes it down, and the header rides EVERY request through the client's
-`fetch` seam ONCE HELD rather than being attached at the call that first needed it: answering a park
-re-mints the run's activation server-side, so a pass needs it for hours after the start. **When it
-starts riding them is a separate question and the answer is the first `428`**, which is why the up-front
-ask PRIMES the holder (`prime`) instead of filling it: asking early is about where the operator is, and
-held from the ask the credential travelled on fourteen preflight probes and every read of an afternoon
-before anything needed it.
+`fetch` seam once held rather than being attached at the call that first needed it: answering a park
+re-mints the run's activation server-side, so a pass needs it for hours after the start.
 
 **Asked ONCE per pass, up front in `src/runAcceptance.ts`, which is also where the pass's run id is
 settled.** In one process the ask could now be lazy and still be made once; it stays up front because a
 person is at the terminal when a pass STARTS and by design not twenty minutes in, when the first
-dispatch would discover the model needs a password. It asks THROUGH the holder (`unlock.prime`), so
-nothing hands a password back as a value: the suite has no such function any more, which is what makes
-"written nowhere" structural rather than a rule to remember. The wiring is thin; every judgement lives
+dispatch would discover the model needs a password. Headless is the whole point of the suite, and an
+operator who starts one walks away, so a requirement that can be established while they are there is
+established there. It asks THROUGH the holder (`unlock.obtain`), so nothing hands a password back as a
+value: the suite has no such function any more, which is what makes "written nowhere" structural rather
+than a rule to remember. **The holder has ONE filling method on purpose.** Collecting up front and
+withholding until the first `428` narrows the exposure to a few reads against the one deployment the
+pass is pinned to (which consults the header only on the gated run calls), and pays for it by making
+"the pass has the credential" a rule each future call site remembers through `withPersonalUnlock`
+instead of a property of the client seam, discovered wrong hours later at a terminal nobody is at. The wiring is thin; every judgement lives
 in `src/personalPasswordAsk.ts`, where it is unit-tested, because every one of them is a degradation.
 Traps: the verdict reads `personalSubscription` and never `available`, because a
 selectable personal-subscription model is exactly the case that still answers `428`; a catalog it

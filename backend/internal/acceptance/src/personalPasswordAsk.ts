@@ -22,25 +22,32 @@ export type PersonalPasswordAskDeps = {
   /** The pinned preset with its catalog row. THROWS when the deployment could not be read. */
   readPinned: () => Promise<PinnedPreset | null>
   /**
-   * Ask the operator, naming why, and leave what they type IN the holder. Rejects when there is no
-   * terminal to ask on.
+   * Ask the operator, naming why, and HOLD what they type. Rejects when there is no terminal to ask
+   * on.
    *
    * One seam rather than a read paired with a hand-over, which is what this was under vitest: the
    * password had to come back as a value so `provide` could send it down an RPC channel to each
-   * worker. In one process the holder is the same closure the lazy ask fills, so nothing has to carry
-   * a copy and the suite no longer has a function that hands a password back at all.
+   * worker. In one process the holder is the same closure the lazy ask fills (`personalUnlock.ts`'s
+   * `obtain`), so nothing has to carry a copy and the suite no longer has a function that hands a
+   * password back at all.
    *
-   * It PRIMES rather than holds (`personalUnlock.ts`'s `prime`, not `obtain`), which is what keeps
-   * asking early from also widening where the secret goes: the header starts riding requests at the
-   * first `428`, so everything this ask precedes (the whole preflight) still travels without one.
+   * Held rather than collected-and-withheld, and the reason is the READER of this whole hook: an
+   * operator who starts a headless pass and leaves. Everything below has already established that
+   * this pass will spend their subscription, so from here the credential is simply something the pass
+   * has, on every request, with no later moment where a call site has to remember to reach for it.
    */
-  prime: (reason: string) => Promise<void>
+  hold: (reason: string) => Promise<void>
   /** What the operator reads while this happens. */
   log: (message: string) => void
 }
 
 /**
  * Ask once, or say why it did not.
+ *
+ * **The ask is CONDITIONAL on a confirmation, and that is what earns the right to hold the answer.**
+ * It happens only where the deployment answered and the pinned preset's base model is an
+ * individual-usage one, so a pass that is asked is a pass already known to be about to spend that
+ * subscription for hours. Where neither can be established, nothing is asked and nothing is held.
  *
  * Rejects for exactly one cause: {@link PersonalPasswordDeclined}. Everything else it can meet is
  * reported and returned from, which is what keeps this incapable of ending a pass that the
@@ -76,7 +83,7 @@ async function readPinned(deps: PersonalPasswordAskDeps): Promise<PinnedPreset |
 }
 
 /**
- * Ask and prime the holder, or state the refusal and leave the pass to continue.
+ * Ask and hold, or state the refusal and leave the pass to continue.
  *
  * The refusal is printed rather than thrown, and what it costs is one prompt drawn mid-pass later
  * instead of one drawn cleanly now. What throwing cost was the entire preflight: a pass in an
@@ -88,7 +95,7 @@ async function readPinned(deps: PersonalPasswordAskDeps): Promise<PinnedPreset |
  */
 async function ask(deps: PersonalPasswordAskDeps, reason: string): Promise<void> {
   try {
-    await deps.prime(reason)
+    await deps.hold(reason)
   } catch (error) {
     if (error instanceof PersonalPasswordDeclined) throw error
     deps.log(

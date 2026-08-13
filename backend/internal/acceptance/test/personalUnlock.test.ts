@@ -12,8 +12,9 @@ import {
 
 // The unlock exists so a pass can run on the operator's OWN subscription without the password
 // living anywhere but this process. What is worth pinning is therefore not the prompt's cosmetics
-// but the three properties an operator relies on: it is asked for only when a call actually needs
-// it, it then rides EVERY later request, and a wrong password fails once and loudly rather than
+// but the three properties an operator relies on: it is asked for exactly once per pass (up front
+// where the pinned preset confirms it will be needed, at the first `428` where nothing could be
+// confirmed), it then rides EVERY later request, and a wrong one fails once and loudly rather than
 // re-prompting forever at a terminal nobody is watching.
 
 const credentialRequired = (vendor?: string) =>
@@ -75,24 +76,20 @@ describe('createPersonalUnlock', () => {
     expect(unlock.headers()).toEqual({ 'X-Personal-Password': 'hunter2' })
   })
 
-  it('primes without holding, so a collected password rides no request until one needs it', async () => {
-    // The property the up-front ask depends on. Asking at the start is about the OPERATOR being at
-    // the terminal; it may not also decide where the secret goes, or a pass collects the password and
-    // then attaches it to fourteen preflight probes, every repository read and every decision poll.
+  it('rides every request from the up-front ask onward, with no second entry point', async () => {
+    // What the up-front ask (`personalPasswordAsk.ts`) depends on, and the reason the holder has ONE
+    // filling method rather than a collect-now-hold-later pair. The operator who is asked here starts
+    // a headless pass and leaves, so once the pinned preset has confirmed the pass spends their
+    // subscription, having it is a property of the client seam and not of each later call site
+    // remembering `withPersonalUnlock`.
     const readSecret = vi.fn(async (_prompt: string) => 'hunter2')
     const unlock = createPersonalUnlock(readSecret)
 
-    await unlock.prime('this pass runs on your personal subscription')
+    await unlock.obtain('this pass runs on your personal subscription')
 
     expect(readSecret).toHaveBeenCalledTimes(1)
-    expect(unlock.held()).toBe(false)
-    expect(unlock.headers()).toEqual({})
-  })
-
-  it('refuses a primed password the platform would not accept, while the operator is still there', async () => {
-    const unlock = createPersonalUnlock(async () => 'short')
-    await expect(unlock.prime('because')).rejects.toThrow(/at least 6 characters/)
-    expect(unlock.held()).toBe(false)
+    expect(unlock.held()).toBe(true)
+    expect(unlock.headers()).toEqual({ 'X-Personal-Password': 'hunter2' })
   })
 })
 
@@ -104,22 +101,26 @@ describe('withPersonalUnlock', () => {
     expect(readSecret).not.toHaveBeenCalled()
   })
 
-  it('spends a primed password at the first 428 rather than prompting a second time', async () => {
-    // The other half of priming: the operator is asked ONCE either way. A pass that collected the
-    // password up front and then prompted again at the first dispatch would be asking a terminal
-    // nobody has been sitting at for twenty minutes.
+  it('never re-prompts a pass whose password came from the up-front ask', async () => {
+    // The path a headless pass now takes when the up-front password is wrong, and the reason it may
+    // not be a prompt: the operator answered at the start and left. A `428` here says the password
+    // is wrong or the subscription is not there, and neither is a thing a terminal nobody is at can
+    // fix, so it fails once, loudly, naming both causes.
     const readSecret = vi.fn(async (_prompt: string) => 'hunter2')
     const unlock = createPersonalUnlock(readSecret)
-    await unlock.prime('up front')
-    const call = vi
-      .fn<() => Promise<string>>()
-      .mockRejectedValueOnce(credentialRequired('claude'))
-      .mockResolvedValueOnce('started')
+    await unlock.obtain('up front')
+    const call = vi.fn(async () => {
+      throw credentialRequired('claude')
+    })
 
-    await expect(withPersonalUnlock(unlock, 'Starting the scaffold', call)).resolves.toBe('started')
+    await expect(withPersonalUnlock(unlock, 'Starting the scaffold', call)).rejects.toThrow(
+      /still needs a personal-credential unlock/,
+    )
 
+    // One call and no second ask: the retry exists to spend a password just collected, and there is
+    // nothing here left to collect.
+    expect(call).toHaveBeenCalledTimes(1)
     expect(readSecret).toHaveBeenCalledTimes(1)
-    expect(unlock.headers()).toEqual({ 'X-Personal-Password': 'hunter2' })
   })
 
   it('prompts on a 428 and retries the call once', async () => {
