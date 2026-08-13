@@ -1794,6 +1794,7 @@
       "dispatch": "Despacho",
       "environment": "Entorno",
       "evicted": "Desalojada",
+      "harness_shutdown": "Harness detenido",
       "timeout": "Tiempo agotado",
       "agent": "Agente",
       "job_failed": "Trabajo fallido",

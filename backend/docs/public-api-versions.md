@@ -774,3 +774,23 @@ Each entry carries the reviewer's note and the `anchorId` it targets; severity i
 every entry is a `blocker` by construction. An empty array with `exceeded: true` is the OTHER cap: the
 rework rounds ran out with the rating under the bar, which is a loop giving up rather than a review
 objecting.
+
+## 1.54.0
+
+1.54.0, not 1.53.0: one additive enum member, `harness_shutdown`, in the run failure-kind
+vocabulary (`GET /api/v1/debug/runs/{runId}`, the bootstrap-job projection, and any surface
+carrying a failure kind). Nothing existing changes shape or meaning, and the SDKs tolerate unknown
+enum values by design, so a consumer built against 1.53.0 keeps parsing.
+
+This one was authored as 1.53.0 and collided with `blockingFindings` above, which reached main
+first: both branches bumped the minor to the same number, so `API_VERSION` and the generated
+`docs/openapi.json` auto-merged byte-identically with no conflict, and the only thing that objected
+was this file's own section heading.
+
+**What a consumer NOTICES is a population change**: a class of failure that used to arrive as
+`evicted` now arrives under its own name. A container whose harness exited CLEANLY while a job was
+still running was indistinguishable, to the engine, from one that vanished, so it was reported as
+an eviction and re-dispatched on the crash budget. Those two need opposite handling: an eviction is
+worth one fresh container, and a shutdown is caused by something that is still there on the next
+attempt (a host restart, an operator, or, in the run that named this, the agent's own cleanup
+command killing the harness process). A dashboard that counts `evicted` will see that count fall.

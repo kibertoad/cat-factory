@@ -1195,6 +1195,12 @@ export type AgentJobUpdate =
       backend?: string
       evicted?: ContainerEvictionKind
       /**
+       * The transport watched the harness EXIT CLEANLY with this job still in flight (forwarded
+       * from {@link RunnerJobView.harnessShutdown}): it was shut down, not lost. Mutually
+       * exclusive with `evicted`, and the driver treats it as terminal rather than recovering it.
+       */
+      harnessShutdown?: true
+      /**
        * The pre-PR validation report of a job that failed BECAUSE its checks stayed red until
        * the attempt budget was spent — the evidence behind the failure (each command's exit code
        * + a bounded, secret-scrubbed output tail). The engine records it on the step beside the

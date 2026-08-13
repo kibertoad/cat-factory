@@ -3848,6 +3848,7 @@
       "dispatch": "Zustellung",
       "environment": "Umgebung",
       "evicted": "Verdrängt",
+      "harness_shutdown": "Harness beendet",
       "timeout": "Zeitüberschreitung",
       "agent": "Agent",
       "job_failed": "Job fehlgeschlagen",

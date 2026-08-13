@@ -55,7 +55,7 @@ const ATTW_SKIP = new Set(['@cat-factory/app'])
 // extensions across the facade. Every other package stays on the full esm-only profile.
 const ATTW_EXTRA_FLAGS = new Map([
   ['@cat-factory/worker', ['--ignore-rules', 'internal-resolution-error']],
-  // @cat-factory/executor-harness's `.` entry is a compiled runner payload (dist/server.js,
+  // @cat-factory/executor-harness's `.` entry is a compiled runner payload (dist/harness-server.js,
   // built with declaration:false) that consumers spawn as a process, not import for types, so
   // its "no types" is intentional — suppress just that rule. Its `./embed` source export still
   // resolves types and stays fully checked.

@@ -1,5 +1,6 @@
 import {
   CONTAINER_EVICTION_ERROR,
+  HARNESS_SHUTDOWN_ERROR,
   harnessDispatchError,
   readRunnerDispatchAck,
   type HarnessCallMetric,
@@ -135,29 +136,55 @@ async function safeJson(res: Response): Promise<unknown> {
 export type EvictionCause = 'unreachable' | 'job_unknown'
 
 /**
- * GET a harness job view by id. A 404 (job unknown/reaped, or the harness was recreated)
- * maps to an eviction view; a connection error consults `isDead` — true ⇒ eviction (the
- * backend is gone), false ⇒ rethrow the transient error so the caller retries. Any other
- * non-OK status throws a `<label>`-prefixed error. `isDead` is also where the caller
- * performs its own cleanup (drop a dead pool member / clear a stale cache entry).
+ * What a caller can tell about a backend that has stopped serving its job: how it died (prose for
+ * the failure `detail`) and whether that death was a clean exit (the verdict). Both optional, both
+ * best-effort; a caller that supplies neither gets the plain eviction.
+ */
+interface HarnessDeathReaders {
+  exitedCleanly?: () => boolean | Promise<boolean>
+  postMortem?: (cause: EvictionCause) => Promise<string | undefined>
+}
+
+/**
+ * GET a harness job view by id. A 404 (job unknown/reaped, or the harness was recreated) maps to a
+ * terminal death view; a connection error consults `isDead` — true ⇒ the same, false ⇒ rethrow the
+ * transient error so the caller retries. Any other non-OK status throws a `<label>`-prefixed error.
+ * `isDead` is also where the caller performs its own cleanup (drop a dead pool member / clear a
+ * stale cache entry).
  *
  * `postMortem` (optional) is the LAST chance to read anything off the dying backend: it runs
- * only on an eviction branch, and its text rides the view's `detail` through to the run's
+ * only on a death branch, and its text rides the view's `detail` through to the run's
  * recorded failure. A container that dies MID-RUN is otherwise reclaimed (`release()` removes
  * it) with its stdout — the only record of WHY the harness process exited — destroyed, leaving
  * a bare "container evicted or crashed" and nothing to diagnose from. It is handed the
  * {@link EvictionCause} so it can refuse to attribute a live backend's output to this run.
+ *
+ * `exitedCleanly` (optional) separates the two ways a harness stops serving a job: one that CRASHED
+ * or was reclaimed, versus one that exited 0 while this job was still running, i.e. was shut down.
+ * Only the caller can tell (it owns the process or the container), and only the second reading is
+ * terminal. See {@link HARNESS_SHUTDOWN_ERROR}. A caller that cannot tell leaves it out and every
+ * death stays an eviction, which is the reading that costs a fresh container rather than a run.
+ *
+ * It is asked on BOTH eviction branches, because the question is not whether the backend that
+ * ANSWERED exited: it is whether the one this job was handed to did. On a backend that outlives a
+ * run (the native host process, the warm pool) those are routinely different, and the 404 is then
+ * the REPLACEMENT never having heard of the job — the same shutdown, reported as an eviction and
+ * re-dispatched into whatever caused it, purely because a sibling job's re-dispatch respawned the
+ * harness first. The caller answers for the backend THIS job was dispatched to (both local
+ * transports key that off the dispatch generation / the run's own container), so a live backend
+ * answering a 404 still yields false.
  */
-export async function pollHarnessJob(opts: {
-  fetchImpl: typeof fetch
-  endpoint: HarnessEndpoint
-  jobId: string
-  secret: string
-  timeoutMs: number
-  label: string
-  isDead: () => boolean | Promise<boolean>
-  postMortem?: (cause: EvictionCause) => Promise<string | undefined>
-}): Promise<RunnerJobView> {
+export async function pollHarnessJob(
+  opts: {
+    fetchImpl: typeof fetch
+    endpoint: HarnessEndpoint
+    jobId: string
+    secret: string
+    timeoutMs: number
+    label: string
+    isDead: () => boolean | Promise<boolean>
+  } & HarnessDeathReaders,
+): Promise<RunnerJobView> {
   let res: Response
   try {
     res = await opts.fetchImpl(
@@ -169,14 +196,23 @@ export async function pollHarnessJob(opts: {
       },
     )
   } catch (err) {
-    if (await opts.isDead()) return evictionView(await postMortemOf(opts, 'unreachable'))
+    if (await opts.isDead()) return deathView(opts, 'unreachable')
     throw err
   }
-  if (res.status === 404) return evictionView(await postMortemOf(opts, 'job_unknown'))
+  if (res.status === 404) return deathView(opts, 'job_unknown')
   if (!res.ok) {
     throw new Error(`${opts.label} job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
   }
   return (await res.json()) as RunnerJobView
+}
+
+/**
+ * The terminal view for a job whose backend stopped serving it, on either eviction branch: the
+ * caller's post-mortem as the failure `detail`, and its clean-exit reading as the verdict.
+ */
+async function deathView(opts: HarnessDeathReaders, cause: EvictionCause): Promise<RunnerJobView> {
+  const detail = await postMortemOf(opts, cause)
+  return (await exitedCleanlyOf(opts)) ? shutdownView(detail) : evictionView(detail)
 }
 
 /** The terminal eviction view, carrying the caller's post-mortem as the failure `detail`. */
@@ -189,13 +225,43 @@ function evictionView(detail: string | undefined): RunnerJobView {
   }
 }
 
+/**
+ * The terminal SHUTDOWN view: the harness exited cleanly with this job still in flight.
+ *
+ * Deliberately carries no `evicted` verdict, because it is not one and the engine's recovery is
+ * keyed on that field: something stopped the harness, and re-dispatching the same step into a
+ * fresh one only reproduces whatever did.
+ */
+function shutdownView(detail: string | undefined): RunnerJobView {
+  return {
+    state: 'failed',
+    error: HARNESS_SHUTDOWN_ERROR,
+    harnessShutdown: true,
+    ...(detail ? { detail } : {}),
+  }
+}
+
 /** Run the caller's post-mortem, if any. Best-effort: a diagnostic never fails the poll. */
 async function postMortemOf(
-  opts: { postMortem?: (cause: EvictionCause) => Promise<string | undefined> },
+  opts: HarnessDeathReaders,
   cause: EvictionCause,
 ): Promise<string | undefined> {
   if (!opts.postMortem) return undefined
   return opts.postMortem(cause).catch(() => undefined)
+}
+
+/**
+ * Read the caller's clean-exit verdict, if any. Best-effort in the same way the post-mortem is,
+ * and for a sharper reason: this runs on a branch that has already established the job is over, so
+ * a runtime read that throws (a `docker inspect` against a daemon that just went away) must still
+ * leave the poll with a death to report. Unreadable ⇒ false, the reading that costs a container
+ * rather than the run.
+ */
+async function exitedCleanlyOf(opts: HarnessDeathReaders): Promise<boolean> {
+  if (!opts.exitedCleanly) return false
+  return Promise.resolve()
+    .then(() => opts.exitedCleanly?.() ?? false)
+    .catch(() => false)
 }
 
 /** The inline completion a finished `inline` job records (mirrors the harness `InlineResult`). */

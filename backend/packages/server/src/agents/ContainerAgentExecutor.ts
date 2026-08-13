@@ -59,7 +59,7 @@ import {
   toRunResult,
 } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
-import { containerJobLog } from './containerAgentLogging.js'
+import { containerJobLog, settleFailureFields } from './containerAgentLogging.js'
 import { acceptContainerJob } from './containerAgentDispatch.js'
 import { recordAgentContextSnapshot } from './agentContextRecord.js'
 import { type RecordToolCalls, drainToolCalls } from './toolTrajectory.js'
@@ -598,7 +598,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const result = view.result ?? {}
     await this.recordHarnessCallsOnce(handle, result)
     if (view.state === 'failed') {
-      jobLog.settled('failed', { failureCause: view.failureCause, evicted: view.evicted })
+      jobLog.settled('failed', settleFailureFields(view))
       return { state: 'failed', error: view.error ?? 'Implementation job failed', ...failureMeta }
     }
     // Completed: a structured `error` (e.g. "no file changes") is still a failure. The harness

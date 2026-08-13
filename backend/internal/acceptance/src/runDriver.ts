@@ -121,13 +121,39 @@ export async function driveRun(options: DriveOptions & { runId: string }): Promi
 export function requireRunDone(run: PublicRun, context: string): PublicRun {
   if (run.status === 'done') return run
   const failure = run.error ? `${run.error.code}: ${run.error.message}` : '(no error recorded)'
-  const hint =
-    run.status === 'blocked'
-      ? `\n  The run is parked. Read GET /api/v1/runs/${run.runId}/decisions to see on what.`
-      : run.pullRequest
-        ? `\n  A pull request was opened (${run.pullRequest.url}) but the run did not reach 'done'. ` +
-          `On a pipeline with a merger that means the merge was HELD rather than performed: check ` +
-          `the workspace's merge-threshold preset, which this suite needs to permit auto-merge.`
-        : ''
-  throw new Error(`${context}: run ${run.runId} ended '${run.status}': ${failure}${hint}`)
+  throw new Error(`${context}: run ${run.runId} ended '${run.status}': ${failure}${hintFor(run)}`)
+}
+
+/**
+ * The line under a run that did not finish, saying where to look next.
+ *
+ * ORDER IS THE POINT, and it took a wasted investigation to get right. A run that FAILED has
+ * already said why, in its own error, and any hint offered on top of that competes with it: the
+ * merge-preset line below fires on "there is a pull request and the status is not done", which is
+ * also true of a run that died in the coder step three phases before any merge was considered. It
+ * sent the reader to a threshold setting to explain a container that had been killed.
+ *
+ * So a failure keeps the floor, a park says where the decision list is, and the merge hint is
+ * offered only where nothing else explains the stop: the run finished its pipeline, opened a pull
+ * request, and still is not `done`.
+ */
+function hintFor(run: PublicRun): string {
+  if (run.error) {
+    return (
+      `\n  The run FAILED rather than being held: the error above is the deployment's own account ` +
+      `of it. GET /api/v1/debug/runs/${run.runId} carries the step it died on and that step's ` +
+      `failure detail.`
+    )
+  }
+  if (run.status === 'blocked') {
+    return `\n  The run is parked. Read GET /api/v1/runs/${run.runId}/decisions to see on what.`
+  }
+  if (run.pullRequest) {
+    return (
+      `\n  A pull request was opened (${run.pullRequest.url}) and the run recorded no failure, so ` +
+      `on a pipeline with a merger the merge was HELD rather than performed: check the ` +
+      `workspace's merge-threshold preset, which this suite needs to permit auto-merge.`
+    )
+  }
+  return ''
 }

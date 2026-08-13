@@ -25,4 +25,4 @@ else
   echo "entrypoint: no rootless docker present; local infra will be unavailable" >&2
 fi
 
-exec node dist/server.js
+exec node dist/harness-server.js

@@ -26,6 +26,7 @@ export const FAILURE_KIND_KEYS: Record<AgentFailureKind, string> = {
   dispatch: 'platformObservability.failureKind.dispatch',
   environment: 'platformObservability.failureKind.environment',
   evicted: 'platformObservability.failureKind.evicted',
+  harness_shutdown: 'platformObservability.failureKind.harness_shutdown',
   timeout: 'platformObservability.failureKind.timeout',
   agent: 'platformObservability.failureKind.agent',
   job_failed: 'platformObservability.failureKind.job_failed',

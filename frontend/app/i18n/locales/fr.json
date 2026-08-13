@@ -1794,6 +1794,7 @@
       "dispatch": "Envoi",
       "environment": "Environnement",
       "evicted": "Évincée",
+      "harness_shutdown": "Harness arrêté",
       "timeout": "Délai dépassé",
       "agent": "Agent",
       "job_failed": "Tâche échouée",

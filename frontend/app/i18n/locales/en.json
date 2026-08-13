@@ -1892,6 +1892,7 @@
       "dispatch": "Dispatch",
       "environment": "Environment",
       "evicted": "Evicted",
+      "harness_shutdown": "Harness shut down",
       "timeout": "Timeout",
       "agent": "Agent",
       "job_failed": "Job failed",

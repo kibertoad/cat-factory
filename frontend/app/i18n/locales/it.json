@@ -3848,6 +3848,7 @@
       "dispatch": "Invio",
       "environment": "Ambiente",
       "evicted": "Sfrattata",
+      "harness_shutdown": "Harness arrestato",
       "timeout": "Timeout",
       "agent": "Agente",
       "job_failed": "Job fallito",

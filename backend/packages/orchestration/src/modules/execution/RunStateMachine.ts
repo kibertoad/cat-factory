@@ -68,6 +68,8 @@ const EXECUTION_FAILURE_HINTS: Record<AgentFailureKind, string> = {
     'The implementation container reported a failure. Inspect its logs (Cloudflare Workers Observability, filtered by the run id), then retry to spin a fresh container.',
   evicted:
     'The implementation container kept vanishing mid-run even after automatic fresh-container restarts. Most often this is transient: a deploy / new-version rollout draining the container, in which case simply retrying once the rollout has finished succeeds. If it persists, it points at a memory or crash issue on the run — inspect its logs (Cloudflare Workers Observability, filtered by the run id) and consider a heavier container instance type. Retry to try again.',
+  harness_shutdown:
+    'The container’s harness process exited cleanly while this step was still running, so something STOPPED it rather than it crashing: the host or deployment restarted, an operator stopped the container, or the agent’s own commands killed it (a shell command that kills processes by name can match the harness itself). This is deliberately not retried automatically, because a fresh container walks back into the same cause. The step’s failure detail carries the container’s last words; fix what stopped it, then retry.',
   timeout:
     'The run exceeded its time budget — a step or the implementation job did not finish in time. Retry to start it again.',
   rejected:

@@ -36,6 +36,7 @@ import {
 import {
   type ContainerEndpoint,
   type ContainerExec,
+  type ContainerExitState,
   type ContainerRuntimeAdapter,
   createRuntimeAdapter,
   DockerRuntimeAdapter,
@@ -427,6 +428,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // No container for this run at all → it was evicted/reaped (or never started).
     if (!resolved) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
 
+    // One read of the container's exit state for the whole poll, shared by the verdict and the
+    // post-mortem below (see {@link onceExitState}).
+    const exitState = this.onceExitState(resolved.containerId)
     // Address the per-RUN container, but read the per-step job by its own id. A connection
     // error confirms-or-denies an eviction via the runtime; a confirmed-dead container
     // clears the cache so the next dispatch starts fresh.
@@ -442,10 +446,11 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.cache.delete(ref.runId)
         return true
       },
+      exitedCleanly: () => this.exitedCleanly(exitState),
       // Ignores the eviction cause on purpose: a per-RUN container serves this run and nothing
       // else, so its output is this run's on either branch. Only the shared pool member has to
       // ask (see {@link pooledPostMortem}).
-      postMortem: () => this.containerPostMortem(resolved.containerId),
+      postMortem: () => this.containerPostMortem(resolved.containerId, exitState),
     })
     // Surface the container's id + the (credential-free) host URL the harness is published
     // on, so the run's details can show WHICH local container the run is on and where to
@@ -674,6 +679,8 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // harness's persistent checkout resumes the work branch). A 404 from a member that is still
     // healthy is an eviction for THIS job only (its harness forgot it); the member stays in the
     // pool, which is exactly why the post-mortem below has to know which branch it is on.
+    // One read of the member's exit state for the whole poll (see {@link onceExitState}).
+    const exitState = this.onceExitState(member.containerId)
     const view = await pollHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint: member,
@@ -686,13 +693,14 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.dropMember(member)
         return true
       },
+      exitedCleanly: () => this.exitedCleanly(exitState),
       // Same last chance to read the dying member as the per-run path: this is the only
       // moment its exit state and log tail are still readable, and a pooled member is where
       // a long coding step actually runs on a warm deployment. Without it the whole class of
       // mid-run container deaths that pooling is meant to make cheaper were the ones that
       // reported nothing but the bare eviction sentinel. Cause-aware, unlike the per-run
       // path: see {@link pooledPostMortem}.
-      postMortem: (cause) => this.pooledPostMortem(member.containerId, cause),
+      postMortem: (cause) => this.pooledPostMortem(member.containerId, cause, exitState),
     })
     // Same container id + host URL enrichment as the per-run path (the leased pool member
     // is just a differently-sourced container); the harness view carries the live `phase`.
@@ -962,6 +970,37 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   }
 
   /**
+   * A single-shot read of one container's exit state, shared by everything ONE poll asks about
+   * that container's death.
+   *
+   * The verdict (did the harness exit cleanly) and the post-mortem (how it ended, plus its log
+   * tail) are the same question asked twice, and each `exitState` call is a `docker inspect`
+   * subprocess. Reading once is not only a spawn saved: the two calls straddle whatever reaps the
+   * container, so separately they can disagree, and a poll that reports an exit code in its
+   * detail while its verdict saw nothing is a contradiction on one screen.
+   */
+  private onceExitState(containerId: string): () => Promise<ContainerExitState | undefined> {
+    let pending: Promise<ContainerExitState | undefined> | undefined
+    return () => (pending ??= this.adapter.exitState(this.exec, containerId))
+  }
+
+  /**
+   * Whether a container that has stopped serving a job exited CLEANLY (code 0), which on an
+   * image whose only workload is the harness means the harness was SHUT DOWN mid-job rather than
+   * crashing or being reclaimed. Anything else, including a runtime that reports no exit code at
+   * all, answers false and leaves the failure an eviction.
+   *
+   * A remove (`docker rm -f`, our own release path) kills with SIGKILL and reports 137, so this
+   * cannot mistake the engine's own teardown for a shutdown; a 0 means the process handled a
+   * signal and left, and the only thing in the container that does that is the harness.
+   */
+  private async exitedCleanly(
+    exitState: () => Promise<ContainerExitState | undefined>,
+  ): Promise<boolean> {
+    return (await exitState())?.code === 0
+  }
+
+  /**
    * The post-mortem for a container that died MID-RUN (see `pollHarnessJob`'s `postMortem`):
    * its exit state plus a tail of its own stdout/stderr. This is the only moment the logs are
    * still readable — `release()` removes the container once the run settles — and without them
@@ -976,13 +1015,16 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
    * 404 from a container that answered the poll (its harness restarted and no longer knows the
    * job), and asserting an exit there would put a wrong cause of death on the run.
    */
-  private async containerPostMortem(containerId: string): Promise<string | undefined> {
-    const exit = await this.adapter.exitState(this.exec, containerId)
+  private async containerPostMortem(
+    containerId: string,
+    exitState: () => Promise<ContainerExitState | undefined>,
+  ): Promise<string | undefined> {
+    const exit = await exitState()
     const logs = (await this.adapter.logs(this.exec, containerId)).trim()
     if (!exit && !logs) return undefined
     const parts = [
       exit
-        ? `Container ${containerId} exited while the job was running. Exit: ${exit}`
+        ? `Container ${containerId} exited while the job was running. Exit: ${exit.description}`
         : `Container ${containerId} stopped serving the job; the runtime reports no exit state for it (it may still be running).`,
     ]
     if (logs) parts.push(`Container logs:\n${logs}`)
@@ -1008,8 +1050,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private async pooledPostMortem(
     containerId: string,
     cause: EvictionCause,
+    exitState: () => Promise<ContainerExitState | undefined>,
   ): Promise<string | undefined> {
-    if (cause === 'unreachable') return this.containerPostMortem(containerId)
+    if (cause === 'unreachable') return this.containerPostMortem(containerId, exitState)
     return (
       `Pool member ${containerId} answered the poll but no longer knows this job (its harness ` +
       `restarted or reaped it). The member is still serving other runs, so its output is not ` +

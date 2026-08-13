@@ -37,6 +37,7 @@ import { codexImageGapNote, createCodexHome, disposeCodexHome } from './codex-ho
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
 import { killChildProcess, spawnDetached } from './process.js'
+import { abortReasonOf } from './failure.js'
 import { describeProcessExit } from './process-exit.js'
 import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
 import { createSliceTracker, startSubagentWatcher, type SliceReview } from './subagents.js'
@@ -307,10 +308,19 @@ function streamCli(
         })
       }
       if (aborted) {
-        // Carry the tail on the rejection so a caller that REPLACES this generic message with a
-        // more specific cause (the no-progress guard's diagnostic) can still append it — the
-        // stderr is often the only evidence of what the CLI was doing when it was killed.
-        reject(Object.assign(new Error('agent run aborted by watchdog'), { stderrTail }))
+        // SAY WHO ABORTED IT. Every abort reaches this branch, not just a watchdog's: the
+        // shutdown handler aborts every running job (`harness shutting down (SIGTERM)`) and so
+        // does a backend-requested stop. A watchdog kill is relabelled downstream from the
+        // structured `killReason`, so hard-coding "aborted by watchdog" here was wrong for
+        // exactly the aborts that have nothing else to say: a job killed because something
+        // shut the harness down reported a watchdog that never fired, which is a wrong lead in
+        // the one log an operator has. The reason rides `signal.reason` (see `runner.ts`'s
+        // `entry.abort`), the way `settlePiRun` already reads it on the Pi path.
+        //
+        // Carry the tail on the rejection so a caller that REPLACES this message with a more
+        // specific cause (the no-progress guard's diagnostic) can still append it: the stderr
+        // is often the only evidence of what the CLI was doing when it was killed.
+        reject(Object.assign(new Error(abortReasonOf(opts.signal)), { stderrTail }))
         return
       }
       if (code !== 0) {

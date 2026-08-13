@@ -1,6 +1,7 @@
 import {
   composePostMortem,
   CONTAINER_EVICTION_ERROR,
+  HARNESS_SHUTDOWN_ERROR,
   harnessDispatchError,
   readRunnerDispatchAck,
   type RunnerDispatchAck,
@@ -63,7 +64,28 @@ const TRANSIENT_EVICTION_ERROR: Record<ContainerStopCause, string> = {
  */
 function evictionView(observed: StopObservation): RunnerJobView {
   const detail = composePostMortem([describeContainerExit(observed.exit, observed.cause)])
-  const { cause } = observed
+  const { cause, expiredCause, exit } = observed
+  // A workload that EXITED 0 with the job still in flight did not crash and was not reclaimed:
+  // the harness was shut down, and the run is over rather than one container short. Read only
+  // where nothing else explains the stop: a reclaim we performed is a SIGKILL and never lands
+  // here as a 0 (`observationForStop` records nothing for a stop this container asked for), and
+  // a cause that IS named is churn, which recovers. Local's container/native transports read the
+  // same fact off their own runtimes; the wording and the field come from kernel so all three
+  // report one thing.
+  //
+  // "Named" includes a cause whose attribution window has passed (`expiredCause`), which the
+  // exit's own, much wider window routinely outlives: a drain the harness answered by exiting 0
+  // and a poll that lands minutes later is the ORDINARY shape of a rollout discovered by a
+  // re-driven run, and reading it here as a shutdown would fail a healthy run outright where
+  // expiry alone only costs it the larger budget.
+  if (!cause && !expiredCause && exit?.reason === 'exit' && exit.code === 0) {
+    return {
+      state: 'failed',
+      error: HARNESS_SHUTDOWN_ERROR,
+      harnessShutdown: true,
+      ...(detail ? { detail } : {}),
+    }
+  }
   return {
     state: 'failed',
     error: cause ? TRANSIENT_EVICTION_ERROR[cause] : EVICTION_ERROR,

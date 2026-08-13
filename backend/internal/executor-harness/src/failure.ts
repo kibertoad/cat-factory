@@ -111,3 +111,36 @@ export function toolSilenceAbortMessage(toolSilenceMs: number): string {
     `${Math.round(toolSilenceMs / 1000)}s`
   )
 }
+
+/**
+ * What an aborted CLI run says about WHY, read off the signal that killed it.
+ *
+ * Every abort funnels through one `AbortController` whose reason the caller supplies (a
+ * watchdog's own phrase, `harness shutting down (SIGTERM)`, a backend-requested stop), so the
+ * signal is the only place that distinction survives the kill. A watchdog abort is relabelled
+ * further downstream from the structured `killReason`, which is precisely why the fallback here
+ * must NOT name one: an abort with nothing else to say is not a timeout, and saying it was sends
+ * whoever reads the job's failure looking for a watchdog that never fired.
+ */
+export function abortReasonOf(signal: AbortSignal | undefined): string {
+  const reason = signal?.reason
+  if (isContentlessAbort(reason)) return 'agent run aborted'
+  return reason instanceof Error && reason.message.trim() ? reason.message : 'agent run aborted'
+}
+
+/**
+ * Whether an abort reason is the platform's OWN, i.e. the one a reasonless `abort()` supplies.
+ *
+ * Without this the fallback above is unreachable. `controller.abort()` with no argument does not
+ * leave `signal.reason` empty: it sets an `AbortError` DOMException, which on Node IS an `Error`
+ * and whose message is the contentless "This operation was aborted". So every abort that has
+ * nothing to say (the no-progress guard's, whose real diagnostic is folded in by its caller)
+ * surfaced that sentence instead, which reads like a quoted cause and names nothing.
+ *
+ * Keyed on the NAME rather than `instanceof DOMException`, so it holds wherever the class is not a
+ * global. A timeout abort (`AbortSignal.timeout`) keeps its own `TimeoutError` message, which does
+ * say something.
+ */
+function isContentlessAbort(reason: unknown): boolean {
+  return reason instanceof Error && reason.name === 'AbortError'
+}

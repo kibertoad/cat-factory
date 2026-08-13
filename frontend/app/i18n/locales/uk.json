@@ -1794,6 +1794,7 @@
       "dispatch": "Відправлення",
       "environment": "Середовище",
       "evicted": "Витіснено",
+      "harness_shutdown": "Harness зупинено",
       "timeout": "Час вичерпано",
       "agent": "Агент",
       "job_failed": "Завдання не виконано",
