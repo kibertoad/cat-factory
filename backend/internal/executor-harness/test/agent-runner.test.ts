@@ -511,6 +511,65 @@ describe.skipIf(!unix)('runClaudeCode telemetry — subagents and the live strea
     expect(outcome.callMetrics?.[0]?.inputTokens).toBe(300)
   })
 
+  it('recovers the OUTPUT side when the stream costed every turn at the message-start snapshot', async () => {
+    // The shape Claude Code actually emits: each `assistant` envelope carries the usage as of
+    // message_start, so the input and cache counts are final and `output_tokens` is the handful
+    // of tokens produced when the message opened. Because every turn was "costed", the old
+    // all-or-nothing fallback stood down and the run's real output was never recorded at all
+    // (measured: a `coder` step at 198 output tokens against a true 14,033). The turns must keep
+    // their own numbers and the shortfall must land, WITHOUT double-counting the input side that
+    // already added up.
+    fakeCli('claude', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          usage: { input_tokens: 2, cache_read_input_tokens: 998, output_tokens: 4 },
+          content: [{ type: 'text', text: 'first' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'msg_2',
+          usage: { input_tokens: 2, cache_read_input_tokens: 4_998, output_tokens: 5 },
+          content: [{ type: 'text', text: 'second' }],
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        result: 'done',
+        // Every billed input bucket summed (2+998+2+4998), and the TRUE output total.
+        usage: { input_tokens: 4, cache_read_input_tokens: 5_996, output_tokens: 9_000 },
+      }),
+    ])
+    const asPublished: Array<{ text: string; inputTokens: number; outputTokens: number }> = []
+    const outcome = await runClaudeCode({
+      cwd,
+      model: 'claude-opus-4-8',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      onCallMetric: (call) => {
+        asPublished.push({
+          text: call.responseText,
+          inputTokens: call.inputTokens,
+          outputTokens: call.outputTokens,
+        })
+      },
+    })
+
+    // Input untouched (it already reconciled); the 8,991 output shortfall lands on the last turn.
+    expect(asPublished).toEqual([
+      { text: 'first', inputTokens: 2, outputTokens: 4 },
+      { text: 'second', inputTokens: 2, outputTokens: 8_996 },
+    ])
+    // What the live channel published IS what the terminal list holds: the last call is withheld
+    // until attribution has run, so the backend's first write is the attributed number.
+    expect(outcome.callMetrics?.map((c) => c.outputTokens)).toEqual([4, 8_996])
+    expect(outcome.callMetrics?.reduce((n, c) => n + c.outputTokens, 0)).toBe(9_000)
+  })
+
   it('seeds telemetry as a single folded user turn (no phantom system) when the prompt overflows argv', async () => {
     fakeCli('claude', [
       JSON.stringify({

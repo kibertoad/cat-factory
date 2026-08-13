@@ -672,47 +672,47 @@ export function publishCallMetric(
 
 /** Appends captured calls to a run's list, streaming each one as soon as it is final. */
 export interface CallMetricPublisher {
-  /** Append a captured call, streaming it now unless its tokens can still be rewritten. */
+  /** Append a captured call, holding it back until a later one proves its tokens are final. */
   publish(call: HarnessCallMetric): void
-  /** Stream whatever is still withheld. Call once the run's totals are attributed. */
+  /** Stream the call still withheld. Call once the run's totals are attributed. */
   flush(): void
 }
 
 /**
- * A {@link publishCallMetric} wrapper for a producer whose per-call tokens may be filled in at
- * the END of the run: a CLI that reports only a cumulative total leaves every turn at zero, and
- * `attributeCumulativeUsage` pins the total onto the last call once the terminal `result` event
- * arrives.
+ * A {@link publishCallMetric} wrapper for a producer whose per-call tokens are filled in at the
+ * END of the run: `attributeCumulativeUsage` pins the terminal cumulative shortfall onto the LAST
+ * captured call once the CLI's `result` event arrives.
  *
- * Since a published call must be final (the backend stores it on the drain and ignores the
- * terminal repeat), a call the CLI did NOT cost is appended to the list but WITHHELD from the
- * live stream — otherwise it records as a zero-token row and the attributed numbers never land.
- * The withholding window closes the moment any call IS costed: attribution can no longer fire, so
- * everything held is final and released at once, in capture order, and every later call streams
- * immediately whatever its tokens. {@link flush} covers the run that was never costed at all.
+ * A published call must be FINAL — the backend records it on the drain and its first write wins,
+ * so the terminal repeat of an already-streamed row is a no-op. Attribution can only ever rewrite
+ * the last call, so exactly the last call is withheld: each `publish` releases its predecessor and
+ * holds the newcomer, and {@link flush} (called after attribution, and again on the abort path)
+ * releases the final one. A run therefore streams every turn but the one in hand, which is the
+ * least lag that keeps "published ⇒ final" true.
+ *
+ * It used to withhold on a different rule — hold UNCOSTED calls, and stop holding anything the
+ * moment one call reported tokens — on the assumption that a costed call proved attribution could
+ * no longer fire. Claude Code disproves it: every turn arrives costed on the input side while the
+ * output side is still the message-start snapshot, so nothing was ever withheld, the last call
+ * streamed with ~5 output tokens, and the attributed figure lost the race to its own first write.
+ * See {@link attributeCumulativeUsage} for the measurements.
  */
 export function createCallMetricPublisher(
   calls: HarnessCallMetric[],
   onCallMetric?: (call: HarnessCallMetric) => void,
 ): CallMetricPublisher {
-  const withheld: HarnessCallMetric[] = []
-  let anyCosted = false
+  let held: HarnessCallMetric | undefined
   const flush = (): void => {
-    for (const call of withheld) onCallMetric?.(call)
-    withheld.length = 0
+    const call = held
+    held = undefined
+    if (call) onCallMetric?.(call)
   }
   return {
     publish(call) {
-      const costed = call.inputTokens > 0 || call.outputTokens > 0
-      if (!costed && !anyCosted) {
-        publishCallMetric(calls, call)
-        withheld.push(call)
-        return
-      }
-      if (costed) anyCosted = true
-      // Released BEFORE this call so the live sequence stays in capture order.
+      // Released BEFORE this call is held so the live sequence stays in capture order.
       flush()
-      publishCallMetric(calls, call, onCallMetric)
+      publishCallMetric(calls, call)
+      held = call
     },
     flush,
   }

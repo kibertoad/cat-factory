@@ -83,7 +83,15 @@ export interface InlineCliRequest {
 /** What the CLI runner returns after one completion. */
 export interface InlineCliResult {
   text: string
-  /** `length` when the model hit its output cap (the reviewer rejects a truncated doc). */
+  /**
+   * `length` when the model hit its output cap (the reviewer rejects a truncated doc), `stop`
+   * when the model finished of its own accord, ABSENT when the CLI reported neither.
+   *
+   * Absent is what both subscription CLIs actually give today: Claude Code's `stream-json`
+   * `assistant` envelopes carry the message-START snapshot, whose `stop_reason` is null, and
+   * `codex exec` narrates nothing at all. A runner must leave it absent rather than defaulting
+   * to `stop`, which asserts the very thing a truncation check is trying to disprove.
+   */
   finishReason?: 'stop' | 'length'
   /**
    * The call's token usage, with the input side split into its three orthogonal classes:
@@ -273,10 +281,17 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
       if (telemetry) {
         this.fileUnaccounted(options, result, this.now() - startedAt, accounted, reported, uncosted)
       }
-      const reason = result.finishReason ?? 'stop'
+      // `other` is the AI SDK's catch-all member, and the nearest thing its closed union has to
+      // "the CLI did not say" — the point being that it is not `stop`, which would assert the
+      // model finished of its own accord. `raw` is left undefined for the same reason: there was
+      // no vendor string to carry. The row this model FILES records null rather than `other`,
+      // since the store's column is nullable and can state the absence exactly.
+      const reason = result.finishReason
       return {
         content: result.text ? [{ type: 'text', text: result.text }] : [],
-        finishReason: { unified: reason, raw: reason },
+        finishReason: reason
+          ? { unified: reason, raw: reason }
+          : { unified: 'other', raw: undefined },
         usage: toUsage(result.usage),
         warnings: [],
       }
@@ -342,10 +357,13 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
    * - **Every turn costed** ⇒ shortfall 0 ⇒ NO row, because one here would double every token of
    *   the step in its rollup.
    * - **Some turns costed and some not** — an older CLI build, a turn that errored before reporting
-   *   usage. This is the case a plain "aggregate only when nothing was costed" rule got wrong: the
-   *   uncosted turns' spend simply vanished, under-counting the step with nothing saying so. It is
-   *   NOT what the container harness does (`attributeCumulativeUsage` pins the run total onto the
-   *   last call, keeping a row per turn), so the shortfall is stated here as its own row and the
+   *   usage, or (the routine case) Claude Code costing every turn's INPUT while leaving its output
+   *   at the message-start snapshot. This is the case a plain "aggregate only when nothing was
+   *   costed" rule got wrong: the uncosted spend simply vanished, under-counting the step with
+   *   nothing saying so. The container harness reaches the same answer by the other route — its
+   *   `attributeCumulativeUsage` grows the LAST call by the per-side shortfall, since it has a call
+   *   list to grow and no step-level row — and the two agree on the rule that matters: a shortfall
+   *   is recorded somewhere, per class, rather than discarded. Here it is its own row, and the
    *   inconsistent narration is logged.
    *
    * No `turnIndex`: this is not a turn within the sequence, it stands for the step.
@@ -385,7 +403,11 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
       cacheWriteTokens: cacheWrite,
       completionTokens: output,
       totalTokens: total,
-      finishReason: result.finishReason ?? 'stop',
+      // NULL where the CLI reported nothing, matching every per-call row this model files. A
+      // `?? 'stop'` here made the step-level row the one place a subscription run claimed a
+      // clean stop, so a store holding both read as a run whose turns were unmeasured and whose
+      // step was measured fine.
+      finishReason: result.finishReason ?? null,
       durationMs,
       ok: true,
       errorMessage: null,

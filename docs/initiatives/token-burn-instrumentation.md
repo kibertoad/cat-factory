@@ -231,14 +231,14 @@ conformance suite):
 
 ## Per-slice checklist
 
-| #   | Slice                      | Scope                                                                                                            | Status  | PR    |
-| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------- | ----- |
-| 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; give subagent turns ONE owning channel        | ✅ done | #1430 |
-| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ✅ done |       |
-| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ✅ done | #1455 |
-| 3   | Per-run rollup by phase    | `GROUP BY (agent_kind, phase)` aggregate + carry-cost proxy; onto `step.metrics`; panel + debug overview         | ✅ done |       |
-| 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo |       |
-| 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one: see below                      | ⬜ todo |       |
+| #   | Slice                      | Scope                                                                                                            | Status                                                  | PR    |
+| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ----- |
+| 0   | One row per CALL           | Fold Claude Code's per-content-block envelopes back into one call; give subagent turns ONE owning channel        | ✅ done                                                 | #1430 |
+| 1   | Honest per-turn accounting | Adopt `token-telemetry-per-class-and-cost` Slice 1 (fresh / read / write split) as the dependency                | ✅ done                                                 |       |
+| 2   | Turn index + phase axis    | Turn ordinal + phase on `llm_call_metrics` (harness `callMetrics`, proxy `observe`, both telemetry DBs, mappers) | ✅ done                                                 | #1455 |
+| 3   | Per-run rollup by phase    | `GROUP BY (agent_kind, phase)` aggregate + carry-cost proxy; onto `step.metrics`; panel + debug overview         | ✅ done                                                 |       |
+| 4   | Baseline & decision        | Interactive-CC vs pipeline baseline on a trivial task; per-phase breakdown → name the winning lever              | ⬜ todo                                                 |       |
+| 5   | Parent per-call output     | The parent's own turns record the stream's early output count, not the final one: see below                      | ◐ the run TOTAL is recovered; the per-call SPLIT is not |       |
 
 ### Slice 0: what the instrument was actually reporting (2026-07-28)
 
@@ -287,6 +287,21 @@ and correct, and the run total stays right (the `result` event), so what is left
 output split for the PARENT's own turns. Fixing it means deciding which source owns per-call usage:
 most likely joining the stream's prompt side to the parent session transcript's usage side on
 `message.id`, which is a real restructuring of the two-source split rather than a patch.
+
+**Half of it landed, and the halves are worth keeping apart.** The claim above that "the run total
+stays right" was true of the `result` event and NOT of `llm_call_metrics`, which is what every
+in-app surface reads. `attributeCumulativeUsage` was supposed to carry the total across, but it
+guarded on whether ANY tokens had been reported, and the input side always satisfies that, so it
+stood down on every real run. Measured later on a different board: a `coder` step summing 198 output
+tokens against a terminal 14,033, an `initiative-analyst` 531 against 30,471, a `reviewer` 68 against
+its own thousands, with the INPUT side matching the terminal figure to the token in each case. The
+guard is now a per-side shortfall, so the run's output total is present in the store again.
+
+What is still open is exactly the SPLIT: the shortfall lands on the last call, so a run's per-turn
+output distribution is "the early counts, plus everything else on the final turn". That is honest at
+the step and the run level (a rollup sums correctly) and wrong per turn, so do not build a per-turn
+output analysis on it until the `message.id` join above is done. Nothing marks the synthesised turn
+as synthesised, which is the first thing that join should change.
 
 ## Conventions / gotchas carried between iterations
 

@@ -1,14 +1,17 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type {
+  AgentContextRecorder,
   DesignImageDelivery,
+  Logger,
   ModelFlavor,
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
-import { resolveDesignImageDelivery } from '@cat-factory/kernel'
+import { noopLogger, resolveDesignImageDelivery } from '@cat-factory/kernel'
+import { recordInlineAgentContext } from './inline-context-record.js'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
 import { standardsVerbosityFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
@@ -92,6 +95,18 @@ export interface AiAgentExecutorDependencies {
    * pretending the task had none.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The agent-context observability sink, so an inline dispatch records the complete context it
+   * gave its agent exactly as a container dispatch does.
+   *
+   * Optional in the same sense as the container executor's: a facade that retains no telemetry
+   * wires none. Its ABSENCE used to be the whole story though — nothing anywhere called this for
+   * an inline kind — which is why the snapshot table held container kinds only and every reader
+   * of it silently mis-explained the gap. See `inline-context-record.ts`.
+   */
+  agentContextRecorder?: AgentContextRecorder
+  /** Where a dropped snapshot reports itself. Absent ⇒ `noopLogger`. */
+  logger?: Logger
 }
 
 /**
@@ -118,6 +133,8 @@ export class AiAgentExecutor implements AgentExecutor {
   private readonly webSearch?: InlineWebSearchOptions
   private readonly agentKindRegistry: AgentKindRegistry
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  private readonly agentContextRecorder?: AgentContextRecorder
+  private readonly log: Logger
 
   constructor({
     modelProviderResolver,
@@ -129,6 +146,8 @@ export class AiAgentExecutor implements AgentExecutor {
     webSearch,
     agentKindRegistry,
     resolveBinaryArtifactStore,
+    agentContextRecorder,
+    logger,
   }: AiAgentExecutorDependencies) {
     if (!modelProviderResolver && !modelProvider) {
       throw new Error('AiAgentExecutor requires a modelProviderResolver or a modelProvider')
@@ -142,6 +161,8 @@ export class AiAgentExecutor implements AgentExecutor {
     this.webSearch = webSearch
     this.agentKindRegistry = agentKindRegistry ?? defaultAgentKindRegistry()
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
+    this.agentContextRecorder = agentContextRecorder
+    this.log = (logger ?? noopLogger).child({ scope: 'inlineAgentExecutor' })
   }
 
   /**
@@ -301,6 +322,22 @@ export class AiAgentExecutor implements AgentExecutor {
     const design = await this.resolveDesignImages(context, ref)
     const promptContext: AgentRunContext = { ...context, ...design.context }
     const userPrompt = userPromptFor(promptContext, this.agentKindRegistry)
+
+    // The complete provided context, filed exactly as the container executor files its own at
+    // dispatch: this is the one point where the fully composed prompts and the folded fragment
+    // bodies exist as one unit. Requires the run ids to file under; an executor invoked outside a
+    // run (the benchmark harness) has none and records nothing.
+    if (context.workspaceId && context.executionId) {
+      await recordInlineAgentContext(this.agentContextRecorder, this.log, {
+        context,
+        ref,
+        systemPrompt: system,
+        userPrompt,
+        workspaceId: context.workspaceId,
+        executionId: context.executionId,
+        harness: this.runsInline?.(ref) ? (ref.harness ?? null) : null,
+      })
+    }
 
     const { text, usage } = await generateText({
       model,

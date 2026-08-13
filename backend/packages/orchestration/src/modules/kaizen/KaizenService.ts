@@ -396,7 +396,7 @@ function parseVerdict(text: string): KaizenVerdict {
 }
 
 /** Build the grader's user prompt: the provided context + an interaction-telemetry digest. */
-function buildKaizenPrompt(
+export function buildKaizenPrompt(
   grading: KaizenGrading,
   snapshot: AgentContextSnapshot | null,
   calls: LlmCallMetric[],
@@ -425,9 +425,15 @@ function buildKaizenPrompt(
       )
     }
   } else {
+    // Names no cause. It used to guess one ("prompt recording may be off"), which was wrong for
+    // every INLINE kind — nothing recorded snapshots for those at all until the inline executor
+    // gained a recorder — and a grader handed a cause duly recommended enabling a switch that was
+    // already enabled. Two causes remain reachable (recording genuinely off, or a step whose
+    // dispatch predates the recorder) and this cannot tell them apart, so it says so.
     parts.push(
-      'No provided-context snapshot was captured for this step (prompt recording may be off). ' +
-        'Grade primarily from the interaction telemetry below.',
+      'No provided-context snapshot is available for this step, so the system prompt and ' +
+        'injected context CANNOT be assessed. Do not infer why, and do not grade their quality ' +
+        'either way: grade only what the interaction telemetry below supports.',
     )
   }
 
@@ -435,22 +441,57 @@ function buildKaizenPrompt(
   return parts.join('\n\n')
 }
 
-/** A compact, model-readable digest of the per-call telemetry for one step. */
+/**
+ * A compact, model-readable digest of the per-call telemetry for one step.
+ *
+ * Two things here are stated carefully because the grader REASONS about them and, told them
+ * loosely, spends a whole recommendation on a defect that does not exist.
+ *
+ * **The input side is three orthogonal classes, never `promptTokens` alone.** That field is FRESH
+ * (uncached) input by definition (`token-telemetry-per-class-and-cost.md` slice 1), so on a
+ * prompt-cached subscription run it is a handful of tokens per call while the real input is
+ * hundreds of thousands. Reported as "Prompt tokens (sum)" it read as 16 against a true 332,552,
+ * and the grader correctly concluded that no such call could exist and filed "fix prompt-token
+ * accounting" against telemetry that was in fact recording it exactly.
+ *
+ * **An absent finish reason is reported as absent, never folded into a value.** Neither
+ * subscription CLI reports one, so `truncated` is not 0 on those runs, it is UNKNOWABLE, and a
+ * flat "Truncated calls: 0" is the "absent is not zero" trap: it invites the grader to certify a
+ * step as cleanly completed on evidence nobody collected.
+ */
 function digestCalls(calls: LlmCallMetric[]): string {
   if (calls.length === 0) return 'No LLM calls were recorded for this step.'
-  const truncated = calls.filter((c) => c.finishReason === 'length').length
   const errors = calls.filter((c) => !c.ok).length
-  const promptTokens = calls.reduce((s, c) => s + c.promptTokens, 0)
-  const completionTokens = calls.reduce((s, c) => s + c.completionTokens, 0)
-  const finishReasons = summarizeCounts(calls.map((c) => c.finishReason ?? 'unknown'))
+  const sum = (read: (call: LlmCallMetric) => number): number =>
+    calls.reduce((total, call) => total + read(call), 0)
+  const fresh = sum((c) => c.promptTokens)
+  const cacheRead = sum((c) => c.cacheReadTokens)
+  const cacheWrite = sum((c) => c.cacheWriteTokens)
+  const completionTokens = sum((c) => c.completionTokens)
+  const reported = calls.filter((c) => c.finishReason != null)
   const lines = [
     `Total model calls: ${calls.length}`,
-    `Truncated calls (hit output limit): ${truncated}`,
     `Failed calls: ${errors}`,
-    `Prompt tokens (sum): ${promptTokens}`,
+    `Input tokens (sum): ${fresh + cacheRead + cacheWrite} ` +
+      `(${fresh} fresh + ${cacheRead} cache reads + ${cacheWrite} cache writes)`,
     `Completion tokens (sum): ${completionTokens}`,
-    `Finish reasons: ${finishReasons}`,
   ]
+  if (reported.length === 0) {
+    lines.push(
+      'Finish reasons: NOT REPORTED by this model backend for any call. Whether any call was ' +
+        'truncated at its output limit is therefore unknown, not known to be none. Do not treat ' +
+        'these calls as having completed cleanly, and do not report this as a telemetry defect: ' +
+        'the subscription agent CLIs expose no per-call stop reason.',
+    )
+  } else {
+    lines.push(
+      `Truncated calls (hit output limit): ${reported.filter((c) => c.finishReason === 'length').length}`,
+      `Finish reasons: ${summarizeCounts(reported.map((c) => c.finishReason ?? ''))}` +
+        (reported.length < calls.length
+          ? ` (${calls.length - reported.length} call(s) reported none)`
+          : ''),
+    )
+  }
   const last = calls[0] // newest first
   if (last?.responseText) {
     lines.push(

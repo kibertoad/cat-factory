@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { claudeAssistantContent, isObject, numberOf, redactBody } from './claude-stream.js'
+import { attributeCumulativeUsage, claudeUsage } from './usage-attribution.js'
 import { createClaudeRunTelemetry, subagentDispatchId } from './claude-call-aggregator.js'
 import {
   ToolCallTracker,
@@ -200,24 +201,6 @@ export interface SubscriptionRunOptions {
    * session-transcript path is logged for the run when the isolated config home is torn down.
    */
   log?: Logger
-}
-
-/**
- * Fallback token attribution: if a CLI reported a cumulative total but no per-turn
- * usage (so every captured call has zero tokens), pin the whole total onto the LAST
- * call rather than dropping it — the run's tokens are still accounted, just not split
- * per turn. A no-op when the calls already carry per-turn tokens.
- */
-function attributeCumulativeUsage(
-  calls: HarnessCallMetric[],
-  usage: { inputTokens: number; outputTokens: number } | undefined,
-): void {
-  if (!usage || calls.length === 0) return
-  const anyTokens = calls.some((c) => c.inputTokens > 0 || c.outputTokens > 0)
-  if (anyTokens) return
-  const last = calls[calls.length - 1]!
-  last.inputTokens = usage.inputTokens
-  last.outputTokens = usage.outputTokens
 }
 
 /**
@@ -1136,21 +1119,6 @@ async function assembleClaudeOutcome(args: {
     ...(mergedUsage ? { usage: mergedUsage } : {}),
     ...(mergedCalls.length ? { callMetrics: mergedCalls } : {}),
   }
-}
-
-function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number } | undefined {
-  if (!isObject(raw)) return undefined
-  // Count every input bucket Anthropic bills: fresh input plus BOTH cache reads and
-  // cache writes (cache_creation_input_tokens), which are real consumed tokens — and
-  // are the dominant share on a long agent run. Omitting them under-weights a token's
-  // true load in the usage-aware rotation window.
-  const input =
-    numberOf(raw.input_tokens) +
-    numberOf(raw.cache_read_input_tokens) +
-    numberOf(raw.cache_creation_input_tokens)
-  const output = numberOf(raw.output_tokens)
-  if (input === 0 && output === 0) return undefined
-  return { inputTokens: input, outputTokens: output }
 }
 
 // ---------------------------------------------------------------------------

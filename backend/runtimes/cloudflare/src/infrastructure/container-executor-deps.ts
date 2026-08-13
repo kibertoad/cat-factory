@@ -192,6 +192,13 @@ export function selectAgentExecutor(deps: WorkerExecutorDeps): AgentExecutor {
     ...(deps.resolveBinaryArtifactStore
       ? { resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore }
       : {}),
+    // The SAME recorder the container executor is given below, so an inline kind's provided
+    // context lands in `agent_context_snapshots` too. Wiring it here and not there is what left
+    // every companion, judge and inline document kind absent from that table.
+    ...(deps.agentContextObservability
+      ? { agentContextRecorder: deps.agentContextObservability }
+      : {}),
+    logger,
   })
 
   // The sandbox MUST build — a null here means a prerequisite (GitHub App private

@@ -157,6 +157,17 @@ describe('a companion at its rework cap', () => {
     expect(inst.steps[1]!.companion?.capSettledByPolicy).toBe(true)
   })
 
+  it('does NOT fire the stall flag when the budget simply ran out', async () => {
+    // The two reach the same gate, so the flags are the only thing telling a reviewer which
+    // happened. This is the setup with rounds genuinely spent and no standstill to report.
+    const { controller } = harness('attended')
+    const inst = instance()
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, { ...BELOW })
+
+    expect(inst.steps[1]!.companion?.exceeded).toBe(true)
+    expect(inst.steps[1]!.companion?.stalled).toBeUndefined()
+  })
+
   it('still raises the pipeline OWN approval gate on a gated companion step', async () => {
     // The line the whole feature is drawn on: an unattended policy answers the parks the ENGINE
     // raises when its automation gives up, and never one the pipeline asked for. A step somebody
@@ -182,5 +193,96 @@ describe('a companion at its rework cap', () => {
     expect(inst.steps[1]!.approval?.status).toBe('pending')
     expect(inst.steps[1]!.companion?.exceeded).toBeUndefined()
     expect(park).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A companion loop that has stopped getting anywhere takes the SAME exit as one that ran out of
+ * budget, with rounds still on the clock. Asserted through the controller rather than only over
+ * the pure rule because the thing worth pinning is that it lands on the iteration-cap gate: an
+ * early stop that invented its own park would need its own resolutions in the SPA, in
+ * `IterationCapController` and in the risk policy, none of which exist.
+ */
+describe('a companion loop that has stopped making progress', () => {
+  /** Budget deliberately UNSPENT (0 of 3), so only the stall can reach the cap branch. */
+  function stalledInstance(): ExecutionInstance {
+    const inst = instance()
+    inst.steps[0] = {
+      agentKind: 'architect',
+      state: 'done',
+      progress: 1,
+      decision: null,
+      output: 'the design',
+      // What it was handed to revise, byte-identical to what it returned.
+      rework: { previousProposal: 'the design', feedback: 'still vague' },
+    } as PipelineStep
+    inst.steps[1] = step({
+      companion: {
+        threshold: 0.8,
+        maxAttempts: 3,
+        attempts: 1,
+        // The previous round's rating; this cycle's 0.4 verdict is appended before the check.
+        verdicts: [{ rating: 0.4, threshold: 0.8, passed: false, feedback: 'still vague' }],
+      },
+    })
+    return inst
+  }
+
+  it('parks on the iteration-cap gate with rounds still unspent, flagged as a stall', async () => {
+    const { controller, park, settle } = harness('attended')
+    const inst = stalledInstance()
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      { ...BELOW },
+    )
+
+    expect(park).toHaveBeenCalledOnce()
+    expect(settle).not.toHaveBeenCalled()
+    expect(result.kind).toBe('awaiting_decision')
+    const companion = inst.steps[1]!.companion
+    // `exceeded` too, because that is what makes the park ANSWERABLE (`resolveCompanionExceeded`
+    // refuses a step without it, and `dedicatedParkSurface` routes on it). `stalled` is what says
+    // the budget was abandoned rather than spent.
+    expect(companion?.exceeded).toBe(true)
+    expect(companion?.stalled).toBe(true)
+    expect(companion?.attempts).toBeLessThan(companion!.maxAttempts)
+  })
+
+  it('settles by policy on an unattended run rather than waiting for nobody', async () => {
+    const { controller, park, settle } = harness('unattended')
+    const inst = stalledInstance()
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, { ...BELOW })
+
+    expect(park).not.toHaveBeenCalled()
+    expect(settle).toHaveBeenCalledOnce()
+    // Both stamps: the loop was abandoned as unproductive AND policy answered the resulting gate.
+    // They are different facts and a reviewer of the pull request needs each.
+    expect(inst.steps[1]!.companion?.stalled).toBe(true)
+    expect(inst.steps[1]!.companion?.capSettledByPolicy).toBe(true)
+    expect(inst.steps[1]!.companion?.exceeded).toBeUndefined()
+  })
+
+  it('keeps looping when the producer changed the work, even at an unmoved rating', async () => {
+    const { controller, park, settle } = harness('attended')
+    const inst = stalledInstance()
+    ;(inst.steps[0] as PipelineStep).output = 'the design, now with a queue'
+
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      { ...BELOW },
+    )
+
+    expect(result.kind).toBe('continue')
+    expect(park).not.toHaveBeenCalled()
+    expect(settle).not.toHaveBeenCalled()
+    expect(inst.steps[1]!.companion?.stalled).toBeUndefined()
   })
 })

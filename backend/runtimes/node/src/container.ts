@@ -34,6 +34,7 @@ import {
 import { applyGateProviders, warnUnwiredGates } from '@cat-factory/gates'
 import { GitLabIdentityResolver } from '@cat-factory/gitlab'
 import type {
+  AgentContextRecorder,
   ResolveBinaryArtifactStore,
   ResolveRunInitiatorToken,
   VcsIdentityRegistry,
@@ -753,31 +754,52 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
  * identical), taking every local the composition root built as a single typed bundle.
  */
 /**
- * The one-slot holder this root publishes the binary-artifact store into.
+ * The slots this root publishes into for the collaborators it builds BEFORE their contents exist.
  *
- * The store is composed from the per-account settings stack, which this root builds AFTER the
- * model stack that constructs the inline agent executor — and that executor needs the store to
- * read the bytes of a task's design pictures. The orderings are not negotiable in either
- * direction (the account stack registers gate providers that must land before
- * `applyGateProviders`; the model stack must exist before the run platform that composes the
- * executors), so the two are bound by a DEFERRED READ rather than by moving either.
+ * Both are read by the INLINE agent executor, which the model stack constructs early, and both are
+ * produced later: the binary-artifact store by the per-account settings stack, the agent-context
+ * recorder by the run-services stack. The orderings are not negotiable in either direction (the
+ * account stack registers gate providers that must land before `applyGateProviders`; the model
+ * stack must exist before the run platform that composes the executors), so they are bound by a
+ * DEFERRED READ rather than by moving either.
  *
  * The same class of problem `applyNodePostAssemblyWiring` exists for, and handled the same way:
- * explicitly, in the root, with the read failing SAFE. An inline dispatch that runs before the
- * slot is filled (there is no such path today; nothing dispatches during assembly) resolves no
- * store, and its prompt then states that the pictures could not be delivered — which is the honest
- * answer for a deployment with no storage too.
+ * explicitly, in the root, with each read failing SAFE. An inline dispatch that runs before a slot
+ * is filled (there is no such path today; nothing dispatches during assembly) resolves no store —
+ * its prompt then states that the pictures could not be delivered, the honest answer for a
+ * deployment with no storage too — and records no context snapshot, exactly as a deployment that
+ * retains no telemetry does.
  */
-interface ArtifactStoreLateBinding {
+interface NodeLateBindings {
   resolve?: ResolveBinaryArtifactStore
+  /** @see AiAgentExecutorDependencies.agentContextRecorder */
+  agentContextRecorder?: AgentContextRecorder
+}
+
+/**
+ * Fill every slot of {@link NodeLateBindings}, once, at the point in the root where all of them
+ * exist.
+ *
+ * One call rather than an assignment per slot, so a new deferred value is added HERE and cannot be
+ * declared on the interface, read by an early collaborator, and then never published: that hole is
+ * silent by construction, since an unfilled slot reads exactly like a deployment that wired the
+ * capability off.
+ */
+function publishLateBindings(
+  slots: NodeLateBindings,
+  resolve: ResolveBinaryArtifactStore,
+  agentContextRecorder: AgentContextRecorder | undefined,
+): void {
+  slots.resolve = resolve
+  slots.agentContextRecorder = agentContextRecorder
 }
 
 interface NodeContainerFinalizeBundle {
   /**
-   * Where this root publishes the binary-artifact store once it exists, for the collaborators
-   * built BEFORE it. See {@link ArtifactStoreLateBinding}.
+   * Where this root publishes the values built AFTER the collaborators that read them.
+   * See {@link NodeLateBindings}.
    */
-  artifactStore: ArtifactStoreLateBinding
+  artifactStore: NodeLateBindings
   config: AppConfig
   options: NodeContainerOptions
   env: NodeJS.ProcessEnv
@@ -974,8 +996,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     binaryStoreRegistry: options.binaryStoreRegistry,
     caches: options.caches,
   })
-  // Hand the store to the collaborators this root built BEFORE it (the inline agent executor).
-  artifactStore.resolve = resolveBinaryArtifactStore
+  publishLateBindings(artifactStore, resolveBinaryArtifactStore, agentContextObservability)
 
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
   // allow-list); absent => strict public-https.
@@ -1147,9 +1168,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // local-model-endpoint + user-secret + OpenRouter + subscription + personal-subscription
   // stores, the trace sink, the model-provider resolver, and the inline executor), lifted into
   // `container-model-deps.ts` so this composition root stays within the file-size budget.
-  // See {@link ArtifactStoreLateBinding}: the store is built further down this function, and the
-  // inline executor below needs to read through it.
-  const artifactStore: ArtifactStoreLateBinding = {}
+  // See {@link NodeLateBindings}: the artifact store and the agent-context recorder are both
+  // built further down this function, and the inline executor below reads through each.
+  const artifactStore: NodeLateBindings = {}
   const models = buildNodeModelDeps({
     env,
     config,
@@ -1175,6 +1196,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // sibling does. Deferred, because that store is composed later in this function.
     resolveBinaryArtifactStore: (workspaceId) =>
       artifactStore.resolve?.(workspaceId) ?? Promise.resolve(null),
+    // Deferred for the same reason, and through the same slot: the run-services stack builds the
+    // recorder. Wired so an INLINE kind's provided context reaches `agent_context_snapshots` too,
+    // which is what the container executor's own wiring alone left out.
+    agentContextRecorder: {
+      record: (snapshot) =>
+        artifactStore.agentContextRecorder?.record(snapshot) ?? Promise.resolve(),
+    },
   })
 
   // Everything the engine needs to actually RUN a block: repo resolution, the runner transport +

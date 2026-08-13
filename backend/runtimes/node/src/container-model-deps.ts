@@ -22,10 +22,16 @@ import type {
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { Clock, IdGenerator, ResolveBinaryArtifactStore } from '@cat-factory/kernel'
+import type {
+  AgentContextRecorder,
+  Clock,
+  IdGenerator,
+  ResolveBinaryArtifactStore,
+} from '@cat-factory/kernel'
 import {
   type AppConfig,
   createInlineInstrumentation,
+  logger,
   wrapResolverWithTelemetry,
 } from '@cat-factory/server'
 import { buildTraceSink } from './container-executor-deps.js'
@@ -115,6 +121,12 @@ export interface NodeModelDepsInput {
    * delivered rather than pretending the task holds none.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The agent-context observability sink, so an INLINE dispatch files the provided-context
+   * snapshot its container sibling has always filed. Absent ⇒ no inline snapshots, as on a
+   * deployment retaining no telemetry.
+   */
+  agentContextRecorder?: AgentContextRecorder
 }
 
 /**
@@ -316,6 +328,10 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     webSearch: inlineWebSearchOptionsFromEnv(env),
     agentKindRegistry,
     ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
+    // Symmetric with the Worker's `selectAgentExecutor`: the inline executor files its provided
+    // context to the same sink the container executor does.
+    ...(input.agentContextRecorder ? { agentContextRecorder: input.agentContextRecorder } : {}),
+    logger,
   })
 
   return {
