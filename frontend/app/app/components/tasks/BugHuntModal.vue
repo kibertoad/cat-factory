@@ -1,7 +1,14 @@
 <script setup lang="ts">
-// Bug hunt: pick a connected tracker, pick one of its boards, and let the platform rank that
-// board's open, UNASSIGNED bugs by impact against implementation complexity. Confirming a
-// candidate adopts it as a bug task in the chosen container and starts the bug-fix pipeline.
+// Bug hunt: pick a connected tracker, scope the scan, and let the platform rank that board's
+// open, UNASSIGNED bugs by impact against implementation complexity. Confirming a candidate
+// adopts it as a bug task in the chosen container and starts the bug-fix pipeline.
+//
+// What SCOPES the scan depends on the tracker, and the source states which (`repoBacked`): a
+// repo-backed one (GitHub Issues, GitLab Issues) hunts the repository the chosen service is
+// linked to and offers NO board control, because its issues live in one repo per service and the
+// only honest answer is the one the backend resolves. Every other tracker names a board of its
+// own. Never a picker either way that could aim a hunt at a repository this board holds no
+// service for.
 //
 // The interactive dual of the recurring bug-triage schedule: same reading and same pipeline,
 // but a human picks the bug instead of the oldest match being claimed unattended.
@@ -37,6 +44,7 @@ import {
 } from '~/utils/sourcePicker'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import { appliesIntakePredicate } from '~/utils/intakePredicates'
+import { boardFromService as isBoardFromService, huntRequest } from './BugHuntModal.logic'
 
 const { t, d, n } = useI18n()
 const ui = useUiStore()
@@ -130,6 +138,17 @@ const boardItems = computed(() =>
   })),
 )
 
+/** This tracker's board is the chosen service's own repository (see the logic module). */
+const boardFromService = computed(() => isBoardFromService(descriptor.value))
+
+/**
+ * The service this hunt is scoped to has no repository linked, so it has no issues to read. The
+ * one scan failure worded here instead of in a toast: it names something to fix on this board,
+ * and it belongs beside the scope it invalidates.
+ */
+const REPO_NOT_LINKED: TaskSourceReadReason = 'repo_not_linked'
+const huntNeedsRepo = computed(() => hunt.huntErrorReason === REPO_NOT_LINKED)
+
 /**
  * The tracker CANNOT enumerate boards, so the user types the scope in themselves. Keyed on the
  * backend's reason code, not on "any error": an unreachable tracker or an expired token would
@@ -157,7 +176,17 @@ function createdAtDate(createdAt: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-const canHunt = computed(() => !!source.value && boardId.value.trim().length > 0)
+/** The scan this form currently describes, or null while it does not describe one. */
+const request = computed(() =>
+  huntRequest({
+    source: descriptor.value,
+    containerId: containerId.value,
+    board: boardId.value,
+    issueType: issueType.value,
+    labels: labels.value,
+  }),
+)
+const canHunt = computed(() => request.value !== null)
 
 watch(open, (isOpen) => {
   if (!isOpen) return
@@ -168,7 +197,7 @@ watch(open, (isOpen) => {
   awaitingConnect.value = null
   source.value = ui.bugHunt?.source ?? tasks.offeredSources[0]?.source ?? undefined
   resetContainer()
-  if (source.value) hunt.loadBoards(source.value)
+  loadBoardsFor(source.value)
 })
 
 // Switching tracker invalidates both the board list and any ranking already on screen: the
@@ -176,21 +205,33 @@ watch(open, (isOpen) => {
 watch(source, (next) => {
   boardId.value = ''
   hunt.reset()
-  if (next) hunt.loadBoards(next)
+  loadBoardsFor(next)
 })
 
+// For a repo-backed tracker the service IS the board, so moving the hunt to another service moves
+// it to another repository: the shortlist on screen belongs to the old one and must go with it.
+// A repo-less tracker keeps its results, since the container only decides where an adopted bug
+// lands and the scan is still of the board that was asked for.
+watch(containerId, () => {
+  if (boardFromService.value) hunt.reset()
+})
+
+/**
+ * Boards are listed only for a tracker that HAS a board to choose; asking otherwise is refused
+ * server-side. The other branch is not a no-op: the previous tracker's list (or the warning its
+ * failed listing left behind) has to go, or it renders under a tracker with no board field.
+ */
+function loadBoardsFor(next: TaskSourceKind | undefined) {
+  if (!next) return
+  if (isBoardFromService(tasks.descriptorFor(next))) hunt.dropBoards(next)
+  else hunt.loadBoards(next)
+}
+
 async function runHunt() {
-  if (!source.value || !canHunt.value) return
-  const parsedLabels = labels.value
-    .split(',')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-  const ok = await hunt.hunt(source.value, {
-    board: boardId.value.trim(),
-    ...(issueType.value.trim() ? { issueType: issueType.value.trim() } : {}),
-    ...(parsedLabels.length ? { labels: parsedLabels } : {}),
-  })
-  if (!ok) {
+  const input = request.value
+  if (!source.value || !input) return
+  const ok = await hunt.hunt(source.value, input)
+  if (!ok && !huntNeedsRepo.value) {
     toast.add({
       title: t('bugHunt.huntFailed'),
       description: hunt.huntError ?? undefined,
@@ -306,10 +347,21 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
           </UFormField>
 
           <UFormField :label="t('bugHunt.board')">
+            <!-- This tracker's issues belong to one repository per service, so the board is
+                 STATED rather than asked: the repository the service below is linked to. No
+                 control at all, because every value one could offer here is either that repo
+                 (nothing to choose) or another one this board holds no service for. -->
+            <p
+              v-if="boardFromService"
+              class="flex items-center gap-1.5 py-1 text-sm text-slate-300"
+            >
+              <UIcon name="i-lucide-folder-git-2" class="h-4 w-4 shrink-0" />
+              <span class="truncate">{{ t('bugHunt.boardFromService') }}</span>
+            </p>
             <!-- A tracker that can't enumerate its boards gets a free-text field rather than
                  an empty picker, so the hunt is still usable. -->
             <UInput
-              v-if="boardIsFreeText"
+              v-else-if="boardIsFreeText"
               v-model="boardId"
               :placeholder="t('bugHunt.boardPlaceholder')"
               class="w-full"
@@ -322,9 +374,14 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
               :placeholder="t('bugHunt.pickBoard')"
               class="w-full"
             />
+            <!-- The service holds no repository, so there are no issues to read. Said here
+                 rather than in a toast: it invalidates the scope named right above it. -->
+            <p v-if="huntNeedsRepo" class="mt-1 text-xs text-amber-400">
+              {{ t('bugHunt.boardNeedsRepo') }}
+            </p>
             <!-- A board read that failed for a fixable reason (unreachable site, expired
                  token): named, so the user isn't left with an empty picker and no cause. -->
-            <p v-if="boardsFailure" class="mt-1 text-xs text-amber-400">
+            <p v-else-if="boardsFailure" class="mt-1 text-xs text-amber-400">
               {{ t('bugHunt.boardsFailed', { reason: boardsFailure }) }}
             </p>
           </UFormField>
@@ -347,17 +404,23 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
           </UFormField>
         </div>
 
-        <!-- Where an adopted bug lands. Stated when the frame this hunt was opened from is the
-             only legal target; a choice (scoped to that frame) when it has modules, or over the
-             whole board when the hunt was opened standalone. -->
+        <!-- Where an adopted bug lands, and on a repo-backed tracker WHICH REPOSITORY is
+             scanned, so the wording says both rather than leaving the scope unexplained. Stated
+             when the frame this hunt was opened from is the only legal target; a choice (scoped
+             to that frame) when it has modules, or over the whole board when the hunt was opened
+             standalone. -->
         <p v-if="containerStated" class="text-xs text-slate-400">
-          <i18n-t keypath="bugHunt.adoptingInto" tag="span" scope="global">
+          <i18n-t
+            :keypath="boardFromService ? 'bugHunt.huntingIn' : 'bugHunt.adoptingInto'"
+            tag="span"
+            scope="global"
+          >
             <template #container>
               <span class="font-medium text-slate-200">{{ pinnedContainer!.title }}</span>
             </template>
           </i18n-t>
         </p>
-        <UFormField v-else :label="t('bugHunt.adoptInto')">
+        <UFormField v-else :label="t(boardFromService ? 'bugHunt.huntIn' : 'bugHunt.adoptInto')">
           <USelect v-model="containerId" :items="containerItems" class="w-full" />
         </UFormField>
 
@@ -379,6 +442,12 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
         <!-- Results -->
         <div v-if="hunt.hasResult" class="space-y-3 border-t border-slate-800 pt-3">
           <p class="text-xs text-slate-400">
+            <!-- The board the scan actually ran against, named because on a repo-backed tracker
+                 the platform resolved it: the person reading the shortlist should not have to
+                 infer which repository it came out of. -->
+            <span class="text-slate-500">
+              {{ t('bugHunt.scannedBoard', { board: hunt.result!.board }) }}
+            </span>
             {{ t(STATUS_KEYS[hunt.result!.analysisStatus]) }}
             <span v-if="hunt.result!.model" class="text-slate-500">
               {{ t('bugHunt.viaModel', { model: hunt.result!.model }) }}

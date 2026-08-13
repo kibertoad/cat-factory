@@ -1,10 +1,10 @@
 # Bug hunt
 
 The interactive dual of the recurring [`bug-triage` pipeline](./bug-triage-pipeline.md): a human
-picks a connected tracker and one of its boards, the platform reads that board's **open,
-unassigned** bugs and rates each on impact against implementation complexity, and the human
-confirms one candidate. That candidate is adopted onto the board as a `bug` task with the issue
-linked for context, and the standard bug-fix pipeline (`pl_bugfix`: investigate → triage →
+picks a connected tracker and the service the work belongs in, the platform reads the matching
+board's **open, unassigned** bugs and rates each on impact against implementation complexity, and
+the human confirms one candidate. That candidate is adopted onto the board as a `bug` task with the
+issue linked for context, and the standard bug-fix pipeline (`pl_bugfix`: investigate → triage →
 spec → architect → coder → review → merge tail) starts on it immediately.
 
 Same reading, same ranking vocabulary and the same downstream pipeline as the recurring triage
@@ -17,17 +17,46 @@ exists: a backlog worker is right for churning through known bugs, and useless f
 
 Three steps, one per user action, all under `/workspaces/:ws/bug-hunt/:source`:
 
-| Step  | Route             | Effect                                                           |
-| ----- | ----------------- | ---------------------------------------------------------------- |
-| Board | `GET /boards`     | Lists the source's boards (Jira projects / Linear teams / repos) |
-| Hunt  | `POST /hunts`     | Reads + rates the board's open unassigned bugs. **No writes.**   |
-| Adopt | `POST /adoptions` | Imports the issue, creates the bug task, starts the run          |
+| Step  | Route             | Effect                                                         |
+| ----- | ----------------- | -------------------------------------------------------------- |
+| Board | `GET /boards`     | Lists the source's boards (Jira projects / Linear teams)       |
+| Hunt  | `POST /hunts`     | Reads + rates the board's open unassigned bugs. **No writes.** |
+| Adopt | `POST /adoptions` | Imports the issue, creates the bug task, starts the run        |
 
 A source whose provider cannot enumerate boards is refused with a machine-readable
 `details.reason: 'boards_unsupported'`, and the SPA turns **that reason specifically** into a
 free-text board field. Keying the fallback on "any error" instead would present an unreachable
 tracker or an expired token as "type the board in yourself", which just moves the same failure to
 the next click; those are shown as the errors they are.
+
+### A repo-backed source has no board to pick
+
+GitHub Issues and GitLab Issues put every issue in ONE repository, and the only repository a hunt
+may read is the one the run's own service frame is linked to. So such a source offers **no board
+control at all**: `POST /hunts` carries the `containerId` the adopted bug will land in, and the
+board is the `owner/name` slug of that container's service repository, resolved through the same
+`resolveRepoTarget` ancestry walk an issue SEARCH scopes with (`server/src/modules/tasks/sourceRepoScope.ts`,
+shared by both surfaces so they cannot disagree about which sources have a board to choose).
+
+Neither half of that is cosmetic. A picker over the connection's repositories would let someone
+scan, rate, and then ADOPT a bug from a repository nothing on this board is linked to: the adopted
+task's run resolves its repo from the block ancestry and would open its PR somewhere else entirely,
+which is the same wrong-repo failure `resolveRepoTarget` has no first-repo fallback to avoid. And a
+board the caller names beside a repo-backed source is **refused** (`details.reason:
+'board_from_service'`) rather than ignored, because ignoring it answers a request to scan one place
+with a scan of another. Listing boards for such a source is refused with the same reason, ahead of
+the provider capability check, so the answer does not depend on whether that provider happens to be
+able to enumerate repositories.
+
+`board_from_service` is deliberately NOT `boards_unsupported`: those two lead a user to opposite
+places ("there is nothing to type, pick the service" versus "type the board in yourself"). The SPA
+knows which surface to render before it asks anything, off `TaskSourceState.repoBacked` (derived
+from the provider's declared `repoScope`, like `supportsIntake`), so the refusals are defence in
+depth for a client that ignored it rather than the everyday path.
+
+A service frame with no repository linked has no issues to hunt: that is
+`details.reason: 'repo_not_linked'`, the same refusal the issue search raises, worded on the hunt
+form beside the scope it invalidates rather than thrown as a toast.
 
 `BugHuntController` (`@cat-factory/server`) is member-tier, deliberately NOT mounted alongside the
 admin-gated `TaskSourceController`: a hunt neither reads nor edits a connection, and what it does
@@ -70,9 +99,11 @@ board scan that never rates anything.
 
 `TaskSourceProvider` gains two optional capabilities beside `searchIssues`:
 
-- **`listBoards`**: the picker's options. A provider without it is not silently reduced to an
-  empty list: the service raises, and the SPA turns that into a free-text board field, which is a
-  usable answer where an empty picker is not.
+- **`listBoards`**: the picker's options, for a source that HAS a board to pick. A provider
+  without it is not silently reduced to an empty list: the service raises, and the SPA turns that
+  into a free-text board field, which is a usable answer where an empty picker is not. A
+  repo-backed provider implements it on no account (see above), and the service refuses the call
+  before reaching it.
 - **`listBugCandidates`**: the same `IssueIntakeQuery` vocabulary the recurring intake uses (now
   carrying `unassignedOnly`), returning the richer `BugCandidate` rows the rating reasons over
   (body excerpt, labels, priority, age, comment count).
@@ -96,12 +127,14 @@ silently shortened list reads exactly like an exhaustive one. The service asks t
 "exactly 40 bugs, all of them here" from "40 shown, more behind them", and would tell a user their
 board holds more than they can see whenever it holds exactly 40.
 
-**The board scope is required, and validated rather than just interpolated.** A hunt's `board`
-arrives in a request body, and GitHub's `repo:` qualifier is the one value the search grammar takes
-bare, so `buildGitHubIntakeQuery` shape-checks it as `owner/repo` (every other value it emits is
-quoted). Without that, a board of `owner/repo is:closed` would silently contradict the `is:open` /
-`no:assignee` qualifiers the whole surface rests on. Jira escapes its project key into a quoted
-JQL literal and Linear passes the team id as a GraphQL variable, so neither has the same hole.
+**The board scope is required, and validated rather than just interpolated.** A repo-less hunt's
+`board` arrives in a request body, and GitHub's `repo:` qualifier is the one value the search
+grammar takes bare, so `buildGitHubIntakeQuery` shape-checks it as `owner/repo` (every other value
+it emits is quoted). Without that, a board of `owner/repo is:closed` would silently contradict the
+`is:open` / `no:assignee` qualifiers the whole surface rests on. Jira escapes its project key into
+a quoted JQL literal and Linear passes the team id as a GraphQL variable, so neither has the same
+hole. The check stays even though a GitHub hunt's board is now platform-derived: the recurring
+`bug-intake` schedule reaches the same builder with an operator-typed one.
 
 A query with NO repository at all is refused outright, for a blunter reason: `/search/issues`
 carries no implicit scope, so a boardless query returns whatever the credential can reach. Under a
@@ -206,6 +239,7 @@ work away and leave them to redo the pick; they can press Run instead.
 | Prompt                       | `agents/src/agents/prompts/bug-hunt.ts`                                   |
 | Vendor queries + mappers     | `integrations/src/modules/tasks/{jira,github-issues,linear}.logic.ts`     |
 | Read + rate + adopt          | `integrations/src/modules/tasks/BugHuntService.ts`                        |
+| Board scope resolution       | `server/src/modules/tasks/sourceRepoScope.ts`                             |
 | Inline rating model          | `orchestration/src/modules/bugHunt/BugHuntAssessorService.ts`             |
 | HTTP                         | `server/src/modules/bugHunt/BugHuntController.ts`                         |
 | SPA                          | `frontend/app/app/components/tasks/BugHuntModal.vue`, `stores/bugHunt.ts` |

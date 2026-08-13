@@ -79,6 +79,22 @@ describe('bug hunt store — board listing failures', () => {
     expect(store.boards.map((b) => b.id)).toEqual(['t1'])
   })
 
+  it('drops the previous tracker failure when the next one has no board to list', async () => {
+    // A repo-backed tracker renders no board field at all, so a stale "boards could not be
+    // loaded" warning would sit under a control that is not there, blaming this tracker for the
+    // last one's outage.
+    const { store, serve } = stubApi()
+    serve(() => Promise.reject(apiError(502, 'upstream')))
+    await store.loadBoards('jira')
+
+    store.dropBoards('github')
+
+    expect(store.boardsSource).toBe('github')
+    expect(store.boards).toEqual([])
+    expect(store.boardsError).toBeNull()
+    expect(store.boardsErrorReason).toBeNull()
+  })
+
   it('a source switch mid-flight never lands the older tracker failure on the newer one', async () => {
     const { store, serve } = stubApi()
     let rejectJira!: (e: unknown) => void

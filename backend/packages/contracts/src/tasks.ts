@@ -253,6 +253,18 @@ export const taskSourceStateSchema = v.object({
    * substitution stated on it rather than silently misleading.
    */
   ignoredIntakePredicates: v.array(issueIntakePredicateSchema),
+  /**
+   * Whether every issue of this source belongs to ONE repository (GitHub Issues, GitLab Issues),
+   * so the surfaces that read it SCOPE to a service frame's linked repo instead of asking which
+   * board to read. DERIVED from the provider's declared `repoScope`, like `supportsIntake`,
+   * because a descriptor field restating it drifts from the rule it is supposed to explain.
+   *
+   * On the wire because the SPA has to decide what to RENDER before it can ask the backend
+   * anything: a bug hunt on a repo-backed source shows the service it scans, a hunt on a
+   * repo-less one shows a board picker, and a client that guessed would either hide the only
+   * control that scopes a Jira hunt or offer a board field that is refused on submit.
+   */
+  repoBacked: v.boolean(),
 })
 export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
 
@@ -440,6 +452,12 @@ export const TASK_SOURCE_READ_REASONS = [
   // The tracker cannot enumerate boards for a bug hunt, so the SPA offers a free-text field
   // instead. Distinct from a tracker OUTAGE, which must be shown as the error it is.
   'boards_unsupported',
+  // A board was listed or named for a REPO-BACKED source, whose board is not a choice at all:
+  // it is the repository the hunt's service frame is linked to. Distinct from
+  // `boards_unsupported` because the answers are opposite: that one means "type the board in
+  // yourself", this one means "there is nothing to type, pick the service instead". The SPA knows
+  // which from `TaskSourceState.repoBacked` before it renders either.
+  'board_from_service',
 ] as const
 
 export type TaskSourceReadReason = (typeof TASK_SOURCE_READ_REASONS)[number]

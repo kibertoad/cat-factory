@@ -14,9 +14,13 @@ import { taskSourceKindSchema } from './tasks.js'
 // ---------------------------------------------------------------------------
 
 /**
- * One selectable board on a tracker — a Jira project, a Linear team, a GitHub repository.
- * `id` is vendor-shaped and handed straight back as the hunt's board scope, so the SPA
- * never has to know which of the three notions a source uses.
+ * One selectable board on a tracker: a Jira project, a Linear team. `id` is vendor-shaped and
+ * handed straight back as the hunt's board scope, so the SPA never has to know which notion a
+ * source uses.
+ *
+ * A REPO-BACKED source (GitHub Issues, GitLab Issues) has nothing to list here: its board is the
+ * repository the hunt's service frame is linked to, resolved server-side, so listing one is
+ * refused rather than answered with a picker that could scope a hunt at a stranger's repo.
  */
 export const trackerBoardSchema = v.object({
   id: v.string(),
@@ -117,7 +121,11 @@ export type BugHuntAnalysisStatus = v.InferOutput<typeof bugHuntAnalysisStatusSc
 
 export const bugHuntResultSchema = v.object({
   source: taskSourceKindSchema,
-  /** The board the hunt ran against, echoed back so a stale response is recognisable. */
+  /**
+   * The board the hunt ran against, echoed back so a stale response is recognisable. For a
+   * repo-backed source it also names the RESOLVED repository to the person reading the shortlist,
+   * rather than leaving that to be inferred from which service they opened the hunt on.
+   */
   board: v.string(),
   analysisStatus: bugHuntAnalysisStatusSchema,
   /** `provider:model` that produced the ranking, or null when there was none. */
@@ -142,12 +150,29 @@ export type BugHuntResult = v.InferOutput<typeof bugHuntResultSchema>
 // ---- Request bodies -------------------------------------------------------
 
 /**
- * Run a hunt. `board` is the vendor-shaped id from {@link trackerBoardSchema} (or typed in
- * by hand for a source whose boards can't be listed). The predicates default to the
- * tracker's own bug convention — issue type `bug` — and are narrowable per hunt.
+ * Run a hunt over one board's open, unassigned bugs. The predicates default to the tracker's
+ * own bug convention (issue type `bug`) and are narrowable per hunt.
  */
 export const runBugHuntSchema = v.object({
-  board: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),
+  /**
+   * The service frame (or a module under one) the hunt runs for: where an adopted candidate
+   * lands, and (for a REPO-BACKED source) what FIXES the board, since every issue of such a
+   * source belongs to one repository and the one this hunt may read is the service's own.
+   */
+  containerId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  /**
+   * The board to scan, as the vendor-shaped id from {@link trackerBoardSchema} (or typed in by
+   * hand for a source whose boards can't be listed).
+   *
+   * A REQUIRED key carrying a NULLABLE value, the same shape (and for the same reason) as the
+   * repo scope a search hands a provider: `null` means "this source has no board to name",
+   * which is the only legal value for a repo-backed one, whose board is resolved from
+   * `containerId`'s service instead. Naming one there is REFUSED rather than ignored, because a
+   * caller that believes it scoped a hunt somewhere must not be answered with a scan of somewhere
+   * else. Omitting one for a repo-LESS source is refused too, because an unscoped vendor issue
+   * search reaches everything the credential can see.
+   */
+  board: v.nullable(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
   /** Issue type to hunt; omitted → `bug`. Sources without a type notion ignore it. */
   issueType: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(60))),
   /** Labels that must ALL be present. */

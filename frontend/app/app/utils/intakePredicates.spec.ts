@@ -14,6 +14,7 @@ function state(ignored: TaskSourceState['ignoredIntakePredicates']): TaskSourceS
     enabled: true,
     ridesVcsProvider: 'gitlab',
     supportsIntake: true,
+    repoBacked: true,
     ignoredIntakePredicates: ignored,
   }
 }

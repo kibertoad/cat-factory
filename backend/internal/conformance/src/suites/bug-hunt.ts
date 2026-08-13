@@ -91,6 +91,27 @@ export function defineBugHuntConformance(harness: ConformanceHarness): void {
       expect(source.boardCalls[0]?.credentials.apiToken).toBe('t')
     })
 
+    it('refuses to list boards for a repo-backed source, whose board is its service repo', async () => {
+      // GitHub Issues / GitLab Issues put every issue in one repository, and the one a hunt may
+      // read is the repository its service frame is linked to. So there is no board to offer, and
+      // offering the connection's repositories would aim a hunt at a repository nothing on this
+      // board is linked to. The reason is what the SPA acts on: distinct from
+      // `boards_unsupported`, which means "type the board in yourself".
+      const source = new FakeTaskSourceProvider('github')
+      const app = harness.makeApp({ confidence: 1 }, { taskSourceProviders: [source] })
+      const { workspace } = await app.createWorkspace()
+
+      const res = await app.call<{ error: { details?: { reason?: string } } }>(
+        'GET',
+        `/workspaces/${workspace.id}/bug-hunt/github/boards`,
+      )
+
+      expect(res.status).toBe(422)
+      expect(res.body.error.details?.reason).toBe('board_from_service')
+      // Refused before the provider is reached: the point is that nothing enumerates repos.
+      expect(source.boardCalls).toEqual([])
+    })
+
     it('ranks a board unassigned-only, best ratio first, and pushes the predicates down', async () => {
       const { app, source, wsId } = await setup({ assessor: fakeAssessor() })
       source.set('PROJ-1', { title: 'Checkout crashes', labels: ['bug'], assignee: null })
@@ -99,6 +120,7 @@ export function defineBugHuntConformance(harness: ConformanceHarness): void {
       source.set('PROJ-3', { title: 'Checkout slow', labels: ['bug'], assignee: 'ada' })
 
       const res = await app.call<BugHuntResult>('POST', `/workspaces/${wsId}/bug-hunt/jira/hunts`, {
+        containerId: 'blk_auth',
         board: 'PROJ',
         labels: ['bug'],
         titleFragment: 'Checkout',
@@ -138,6 +160,7 @@ export function defineBugHuntConformance(harness: ConformanceHarness): void {
       source.set('PROJ-9', { title: 'Broken link', labels: ['bug'], assignee: null })
 
       const res = await app.call<BugHuntResult>('POST', `/workspaces/${wsId}/bug-hunt/jira/hunts`, {
+        containerId: 'blk_auth',
         board: 'PROJ',
       })
       expect(res.status).toBe(200)
@@ -163,6 +186,7 @@ export function defineBugHuntConformance(harness: ConformanceHarness): void {
       source.set('PROJ-10', { title: 'Upload times out', labels: ['bug'], assignee: null })
 
       const res = await app.call<BugHuntResult>('POST', `/workspaces/${wsId}/bug-hunt/jira/hunts`, {
+        containerId: 'blk_auth',
         board: 'PROJ',
       })
       expect(res.status).toBe(200)
@@ -223,6 +247,7 @@ export function defineBugHuntConformance(harness: ConformanceHarness): void {
       })
 
       const res = await app.call<BugHuntResult>('POST', `/workspaces/${wsId}/bug-hunt/jira/hunts`, {
+        containerId: 'blk_auth',
         board: 'PROJ',
       })
       expect(res.status).toBe(200)

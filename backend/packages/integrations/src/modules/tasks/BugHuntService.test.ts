@@ -220,6 +220,63 @@ describe('BugHuntService.hunt ranking degradation', () => {
   })
 })
 
+describe('BugHuntService.listBoards', () => {
+  /** A registry serving one provider, so the refusal is decided by what that provider DECLARES. */
+  function withProvider(impl: Partial<TaskSourceProvider>) {
+    return new BugHuntService({
+      taskSourceRegistry: {
+        get: () => impl as TaskSourceProvider,
+      } as unknown as TaskSourceRegistry,
+      taskConnectionStore: { getByWorkspace: async () => ({ credentials: {} }) } as never,
+      taskRepository: { listByWorkspace: async (): Promise<SourceTask[]> => [] } as never,
+      importService: {} as never,
+      linkService: {} as never,
+    })
+  }
+
+  it('refuses a REPO-BACKED source, whose board is its service repo rather than a choice', async () => {
+    // Declares BOTH: repo-backing is what decides, so a provider that could enumerate boards is
+    // still refused. Offering its reachable repositories would let a hunt scan (and adopt from) a
+    // repository nothing on this board is linked to.
+    let listed = false
+    const hunt = withProvider({
+      repoScope: { matches: () => true },
+      listBoards: async () => {
+        listed = true
+        return [{ id: 'acme/web', name: 'web', key: 'acme/web' }]
+      },
+    })
+
+    await expect(hunt.listBoards('ws_1', 'github')).rejects.toMatchObject({
+      details: { reason: 'board_from_service' },
+    })
+    expect(listed).toBe(false)
+  })
+
+  it('tells a source that simply cannot enumerate boards apart from that', async () => {
+    // The two refusals lead the SPA to opposite places ("type the board in yourself" versus
+    // "there is nothing to type"), so they must never collapse into one reason.
+    const hunt = withProvider({})
+
+    await expect(hunt.listBoards('ws_1', 'acme:servicenow')).rejects.toMatchObject({
+      details: { reason: 'boards_unsupported' },
+    })
+  })
+
+  it('lists a repo-less source through its provider, on the connection credentials', async () => {
+    const calls: Record<string, string>[] = []
+    const hunt = withProvider({
+      listBoards: async (credentials) => {
+        calls.push(credentials)
+        return [{ id: 'PROJ', name: 'Platform', key: 'PROJ' }]
+      },
+    })
+
+    expect((await hunt.listBoards('ws_1', 'jira')).map((b) => b.id)).toEqual(['PROJ'])
+    expect(calls).toHaveLength(1)
+  })
+})
+
 describe('BugHuntService board scope routing', () => {
   // Every leg here is a plain string, so a source routed to the wrong one fails as "no matching
   // issues" rather than as the mis-routing it is. That is exactly what happened when `gitlab`

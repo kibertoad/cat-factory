@@ -17,12 +17,20 @@ import { runInitiatorRole } from '../../http/runAdmission.js'
 import { blockEditAuthority } from '../../http/workspaceAccess.js'
 import { personalGateForBlock, readPersonalPassword } from '../providers/personalCredentialGate.js'
 import { requireCapability } from '../../http/guards.js'
+import { huntBoardScope, resolveSourceRepoScope } from '../tasks/sourceRepoScope.js'
 
 // ---------------------------------------------------------------------------
-// Bug hunt: pick a connected tracker, pick one of its boards, get its open + unassigned bugs
-// ranked by impact against implementation complexity, confirm one, and have it adopted onto
-// the board and driven through the bug-fix pipeline. The interactive dual of the recurring
-// `bug-intake` step. See `backend/docs/bug-hunt.md`.
+// Bug hunt: pick a connected tracker, scope the scan, get its open + unassigned bugs ranked by
+// impact against implementation complexity, confirm one, and have it adopted onto the board and
+// driven through the bug-fix pipeline. The interactive dual of the recurring `bug-intake` step.
+// See `backend/docs/bug-hunt.md`.
+//
+// What SCOPES the scan is decided here rather than in the service, because it is the one part of
+// a hunt that depends on the board: a REPO-BACKED source (GitHub Issues, GitLab Issues) hunts the
+// repository the run's own service frame is linked to, which is the `resolveRepoTarget` ancestry
+// walk the request container carries; every other source names a board of its own. Both resolve
+// through the same helper the issue search scopes with, so the two surfaces cannot disagree about
+// which sources have a board to pick.
 //
 // Member-tier by design, and deliberately NOT mounted alongside the admin-gated
 // `TaskSourceController`: a hunt neither reads nor edits a connection (the service resolves the
@@ -53,9 +61,10 @@ function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
 export function bugHuntController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  // The boards a hunt can be scoped to (Jira projects / Linear teams / GitHub repos). A source
-  // whose provider can't enumerate them raises a ValidationError the SPA turns into "type the
-  // board in yourself", which is a usable answer; an empty list would not be.
+  // The boards a hunt can be scoped to (Jira projects / Linear teams). A source whose provider
+  // can't enumerate them raises a ValidationError the SPA turns into "type the board in
+  // yourself", which is a usable answer; an empty list would not be. A repo-backed source is
+  // refused with its own reason, because there is nothing to type either.
   buildHonoRoute(app, listTrackerBoardsContract, async (c) => {
     const tasks = requireTasks(c)
     const source = sourceParam(c)
@@ -68,11 +77,16 @@ export function bugHuntController(): Hono<AppEnv> {
   // the ranked board scan, and the user picks from it.
   buildHonoRoute(app, runBugHuntContract, async (c) => {
     const tasks = requireTasks(c)
-    const result = await tasks.bugHuntService.hunt(
-      param(c, 'workspaceId'),
-      sourceParam(c),
-      c.req.valid('json'),
-    )
+    const source = sourceParam(c)
+    const { containerId, board, ...predicates } = c.req.valid('json')
+    // Resolved BEFORE the scan, and it can refuse: a repo-backed source whose service frame has
+    // no linked repository has no issues to hunt, and answering that with an unscoped vendor
+    // search would read every repository the credential can reach.
+    const scope = await resolveSourceRepoScope(c, tasks, source, containerId)
+    const result = await tasks.bugHuntService.hunt(param(c, 'workspaceId'), source, {
+      board: huntBoardScope(scope, board),
+      ...predicates,
+    })
     return c.json(result, 200)
   })
 

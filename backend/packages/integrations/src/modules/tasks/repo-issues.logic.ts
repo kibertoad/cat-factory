@@ -1,9 +1,4 @@
-import type {
-  BugCandidate,
-  GitHubIssueSearchHit,
-  TaskSourceKind,
-  TrackerBoard,
-} from '@cat-factory/kernel'
+import type { BugCandidate, GitHubIssueSearchHit, TaskSourceKind } from '@cat-factory/kernel'
 import { MAX_CANDIDATE_DESCRIPTION_CHARS } from './tasks.logic.js'
 
 // The projections every REPO-BACKED issue source shares (today GitHub Issues and GitLab Issues).
@@ -12,11 +7,11 @@ import { MAX_CANDIDATE_DESCRIPTION_CHARS } from './tasks.logic.js'
 // case comparison is authoritative, whether a namespace nests, what a predicate compiles to. Each
 // of those lives in that source's own `*-issues.logic.ts` and is documented there.
 //
-// What is HERE is what has no vendor in it. A hunt candidate and a hunt board are shapes the
-// PLATFORM defined, built from fields both vendors already normalise into `GitHubIssueSearchHit`,
-// so a second copy per source is not a place where a difference is expressed: it is a place where
-// a difference can appear by accident, in a projection the ranking model then reads as if the two
-// boards were described the same way.
+// What is HERE is what has no vendor in it. A hunt candidate is a shape the PLATFORM defined,
+// built from fields both vendors already normalise into `GitHubIssueSearchHit`, so a second copy
+// per source is not a place where a difference is expressed: it is a place where a difference can
+// appear by accident, in a projection the ranking model then reads as if the two boards were
+// described the same way.
 
 /**
  * Build a repo-backed source's search-hit → {@link BugCandidate} mapper.
@@ -44,26 +39,4 @@ export function repoIssueBugCandidateMapper(
     createdAt: hit.createdAt ?? '',
     commentCount: hit.commentCount ?? 0,
   })
-}
-
-/**
- * Map the repositories/projects a connection can reach onto hunt boards.
- *
- * `id` and `key` are both the `owner/name` slug, because a repo-backed board scope IS that slug
- * (it is what the matching {@link IssueIntakeQuery} board leg is split back out of). `name` is the
- * final segment alone, which is what a human scans a list by, and the `key` beside it disambiguates
- * two repositories of the same name under different owners: routine on both vendors, and the norm
- * on GitLab, where every team has its own `web`.
- *
- * A ref missing either half is DROPPED rather than rendered as a half-formed slug, since a board
- * whose scope cannot round-trip is one a hunt would fail on after the user picked it.
- */
-export function repoRefsToBoards(refs: { owner: string; name: string }[]): TrackerBoard[] {
-  return refs
-    .filter((ref) => ref.owner && ref.name)
-    .map((ref) => ({
-      id: `${ref.owner}/${ref.name}`,
-      name: ref.name,
-      key: `${ref.owner}/${ref.name}`,
-    }))
 }

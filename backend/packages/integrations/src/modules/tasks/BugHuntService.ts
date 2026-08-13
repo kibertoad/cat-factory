@@ -7,7 +7,6 @@ import type {
   BugHuntCandidate,
   BugHuntResult,
   IssueIntakeQuery,
-  RunBugHuntInput,
   TaskConnectionStore,
   TaskRepository,
   TaskSourceKind,
@@ -77,6 +76,26 @@ export const BUG_HUNT_SCAN_LIMIT = 40
 /** The tracker default when the caller names no issue type — the same one intake uses. */
 const DEFAULT_ISSUE_TYPE = 'bug'
 
+/**
+ * One scan's inputs, with the board already RESOLVED.
+ *
+ * Deliberately not the wire type: `RunBugHuntInput.board` is nullable because a repo-backed
+ * source names none (its board is the service frame's linked repository, which only the HTTP
+ * layer can resolve it, by reading the block ancestry through `resolveRepoTarget`). By the time a
+ * scan reaches this service that question is settled, so the board is a plain string and there is
+ * no second place where "which board?" could be answered differently.
+ */
+export interface BugHuntScan {
+  /** The vendor-shaped board scope, mapped onto the provider's own query leg below. */
+  board: string
+  /** Issue type to hunt; omitted → `bug`. Sources without a type notion ignore it. */
+  issueType?: string
+  /** Labels that must ALL be present. */
+  labels?: string[]
+  /** Substring that must appear in the issue title. */
+  titleFragment?: string
+}
+
 export class BugHuntService {
   constructor(private readonly deps: BugHuntServiceDependencies) {}
 
@@ -87,6 +106,18 @@ export class BugHuntService {
    */
   async listBoards(workspaceId: string, source: TaskSourceKind): Promise<TrackerBoard[]> {
     const provider = this.deps.taskSourceRegistry.get(source)
+    if (provider?.repoScope) {
+      // A repo-backed source has no board to OFFER: every issue of its belongs to one
+      // repository, and the one a hunt may read is the repository the service frame it runs for
+      // is linked to (`resolveRepoTarget`), never a choice made here. Refused ahead of the
+      // capability check below so the answer is the same whether or not such a provider can
+      // enumerate repositories at all: listing the connection's repos as boards would offer to
+      // scope a hunt at a repository nothing on this board is linked to.
+      throw new ValidationError(
+        `The '${source}' source scopes a hunt to a service's linked repository, so it has no boards to list.`,
+        { reason: 'board_from_service' satisfies TaskSourceReadReason },
+      )
+    }
     if (!provider?.listBoards) {
       // `reason` is what the SPA acts on: "this tracker cannot enumerate boards" is the ONE
       // failure whose answer is "type the board in yourself", and it must be distinguishable
@@ -112,7 +143,7 @@ export class BugHuntService {
   async hunt(
     workspaceId: string,
     source: TaskSourceKind,
-    input: RunBugHuntInput,
+    input: BugHuntScan,
   ): Promise<BugHuntResult> {
     const provider = this.deps.taskSourceRegistry.get(source)
     if (!provider?.listBugCandidates) {
