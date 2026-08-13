@@ -38,7 +38,11 @@ else imports its **ports** and domain types from here.
   `judge-registry.ts` is the FOURTH step-taxonomy bucket (an LLM verdict against a rubric vs a
   per-task threshold → advance / park / bounce / fail); its pure disposition rules are
   `judge-logic.ts` (`disposeJudgeVerdict` / `renderJudgeRework`). See CLAUDE.md → "Gates vs
-  agents" and `docs/initiatives/judge-registry.md`.
+  agents" and `docs/initiatives/judge-registry.md`. Its COMPANION sibling is
+  `companion-logic.ts` (`disposeCompanionVerdict`, `companionParkReasonFor`, `CompanionParkReason`):
+  the same shape of decision from a rework pair's inputs, where a `blocker` finding holds the step
+  whatever the rating, and where the park REASON is what decides whether an unattended policy may
+  answer it.
 - `ports/tracker-webhook.ts` is the INBOUND tracker seam: the neutral `TrackerWebhookEvent`
   (`issue` | `comment`, keyed `(source, externalId)`) plus the optional
   `TaskSourceProvider.webhook` capability a provider implements to verify + parse its vendor's

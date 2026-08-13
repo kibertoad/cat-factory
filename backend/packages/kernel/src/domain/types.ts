@@ -75,6 +75,7 @@ export type {
   SpendStatus,
   StepApproval,
   StepReviewComment,
+  ReviewCommentSeverity,
   StepSubtasks,
   WebSearchAvailability,
   WebSearchProvider,
