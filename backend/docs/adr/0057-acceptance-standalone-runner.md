@@ -72,13 +72,16 @@ the suite prints itself. It is the shape the package's three other CLIs (`config
    scenarios, and `test/scenarios.test.ts` pins the REAL array (each id's numeric prefix against its
    position, and that the preflight report is the one ungated scenario) as a relation rather than a
    copy, so adding a sixth scenario in the right place passes and adding it in the wrong one fails.
-4. **Type stripping is Node's own.** The entry points target modern Node and carry no
-   `--experimental-strip-types`; the package declares `engines.node >= 24`, which is now the whole
+4. **Type stripping is Node's own.** This package's four entry points target modern Node and carry no
+   `--experimental-strip-types` (three sibling internal harnesses still pass the flag; converting them
+   is not this change); the package declares `engines.node >= 24`, which is now the whole
    repository's floor (root `package.json`) as well as the version documented for the generated
-   project and the Node deployment. Nothing checks the version at runtime, deliberately: below 24 a
-   `.ts` entry point does not load at all, so the check would have to be a JavaScript shim in front
-   of every command, and Node 24+ is a supported-platform statement rather than a condition to
-   degrade around. It is stated in the README's prerequisites instead.
+   project and the Node deployment. Nothing checks the version at runtime, deliberately: Node 24+ is a
+   supported-platform statement rather than a condition to degrade around, and the alternative is a
+   JavaScript shim in front of every command. It is stated in the README's prerequisites instead.
+   **What is NOT the reason is the loader**: type stripping is on by default from 22.18 and 23.6, so a
+   `.ts` entry point loads perfectly well below the floor and a successful run is no evidence of being
+   on 24.
 5. **The package's unit tests stay on vitest.** `vitest.config.ts` collects `test/**/*.test.ts`,
    ordinary fast unit tests with mocks, and CI runs them. Nothing about them is served by this change.
    The include is deliberately narrow rather than counted: `src/` outside it is what keeps the
@@ -113,11 +116,24 @@ once, whatever happens after. It is bounded by construction rather than by a TTL
 after the first is separated from it by a scenario that spent an afternoon, which is precisely the
 one that must not reuse anything.
 
-**The password is still asked UP FRONT**, even though one process could hold a lazily-collected answer
-for the whole pass. The reason changed rather than disappearing: a person is at the terminal when a
-pass starts and by design not twenty minutes in, when the first dispatch would discover the model
-needs one. The ask now goes THROUGH the holder (`unlock.obtain`), which deleted the one function that
-handed a password back as a value.
+**The password is still asked UP FRONT, and held from there**, even though one process could hold a
+lazily-collected answer for the whole pass. The reason changed rather than disappearing: a person is at
+the terminal when a pass starts and by design not twenty minutes in, when the first dispatch would
+discover the model needs one. Headless is what the suite is FOR, so an operator launches a pass and
+leaves, and a requirement that can be established while they are still there is established there. The
+ask goes THROUGH the holder (`unlock.obtain`), which deleted the one function that handed a password
+back as a value, and the holder has exactly one filling method.
+
+The alternative considered was to collect up front and attach only from the first `428`, which is what
+the vitest shape did with its injected value (a lazily-consulted supplier). Rejected: the exposure it
+narrows is a handful of reads against the ONE deployment the pass is pinned to, which consults the
+header only on the gated run calls, and what it costs is that having the credential stops being a
+property of the client seam and becomes a rule each future call site remembers through
+`withPersonalUnlock`. That trade is the wrong way round for an unattended afternoon. **The gate on
+holding is the CONFIRMATION, not the timing**: the ask fires only where the catalog answered and the
+pinned preset's base model reports `personalSubscription`, so a pass that holds a password is one
+already known to be about to spend that subscription, and a pass where neither could be established
+asks and holds nothing.
 
 **The controlling-terminal prompt is KEPT.** Its justification was vitest's piped worker stdio, and
 the layer that decides this process's stdio is still there: `pnpm --filter … run` sits between the
@@ -140,10 +156,14 @@ had started. It was the fix for a live bug, it landed in a day, and ordering bec
 
 ## Consequences
 
-- **The suite prints its own report**: the run id and resume command, each scenario's steps as they
-  start with how long each took, the failure in full, then a summary naming which scenario broke, at
-  which step, and that the ones after it did not run. Exit 1 for a failed scenario, 2 for a pass that
-  refused to start (nothing created, nothing spent).
+- **The suite prints its own report**, all of it to STDOUT, refusals included: an afternoon-long pass
+  is piped to a file, `tee` captures one stream, and a refusal on the other is missing from exactly the
+  log somebody kept. The report is the run id and resume command, each scenario's steps as they start
+  with how long each took, the failure in full, then a summary naming which scenario broke, at which
+  step, and that the ones after it did not run. Exit 1 for a failed scenario, 2 for a pass that refused
+  to start (nothing created, nothing spent). **An exit code says whether a scenario ran, never whether
+  anything was created**: the commonest failure of all exits 1 with an empty ledger, so what may be
+  resumed is read off the ledger and stated in the closing words.
 - **`journal.ts`'s declared `failure` event kind is now written**, which nothing did before, so
   `status` from another window reports what a pass died of rather than only where it was.
 - **A failed pass's closing words depend on whether it created anything**, read off the ledger through

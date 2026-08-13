@@ -26,6 +26,15 @@ pnpm --filter @cat-factory/acceptance run status      # where is it, from anothe
 pnpm --filter @cat-factory/acceptance run reset       # what starting over would delete
 ```
 
+A pass runs for an afternoon, so it is usually piped to a file (`… run acceptance | tee pass.log`) and
+read afterwards. **Every line every one of these commands prints goes to stdout, refusals included**,
+which is what makes that log complete: `tee` captures one stream, and no command exits through
+`process.exit`, which would not drain it. The exit code carries the verdict instead, and there are three:
+`0` every scenario passed, `1` a scenario failed, `2` nothing ran (the configuration, the run id or the
+ledger was refused, or a person declined the password prompt). **`1` says the pass ran, never that it
+created anything**: the commonest failure of all is a prerequisite refusing a fresh attempt, and what
+there is to inspect or resume is read off the ledger and stated in the pass's closing words.
+
 ## What it is for
 
 The e2e suite ([`backend/internal/e2e`](../e2e)) proves the assembled product with every external
@@ -61,9 +70,13 @@ telling you to run the suite from the start.
 **What the pass prints**, since no reporter does it now: the run id and the resume command, then each
 scenario with its steps as they start and how long each took, then the failure in full where there is
 one, then a summary naming which scenario broke, at which step, and that the ones after it did not
-run. It exits 1 for a failed scenario and 2 for a pass that refused to START (an unconfigured
-checkout, a `latest` that names no pass, a ledger belonging to another pass, a declined password),
-because only the first leaves real state behind and only the first is worth resuming.
+run, and last the closing words, which say what to do next. It exits 1 for a failed scenario and 2 for
+a pass that refused to START (an unconfigured checkout, a `latest` that names no pass, a ledger
+belonging to another pass, a declined password), which is the difference between a pass that ran and
+one that never reached a scenario. **Whether a failed pass left anything behind is a separate
+question**, answered off the ledger in those closing words rather than by the exit code: the commonest
+failure in this suite is a prerequisite refusing a FRESH attempt, which exits 1 having created nothing
+to inspect and nothing to resume.
 
 ### You create the two repositories; the suite adopts them
 
@@ -277,9 +290,11 @@ caveat rather than graded, which is the honest disposition for an answer the pro
 
 - **Node 24 or newer**, which is the repository's floor (root `package.json`, `engines.node`) and
   this package's too. The four commands below are `node src/<entry>.ts`, run by Node's own type
-  stripping with no flag, so an older Node does not fail a prerequisite: it fails to LOAD, with
-  `ERR_UNKNOWN_FILE_EXTENSION: Unknown file extension ".ts"` and nothing else to go on. Anything
-  below 24 is unsupported rather than degraded.
+  stripping with no flag. Nothing checks the version, and the loader is not a check either: type
+  stripping is on by default from 22.18 and 23.6, so the commands load and run on those and a
+  successful start says nothing about the version you are on. Only 20 and 22 before 22.18 fail
+  outright, with `ERR_UNKNOWN_FILE_EXTENSION: Unknown file extension ".ts"` and nothing else to go on.
+  Anything below 24 is unsupported rather than degraded.
 
 **The deployment**
 
@@ -328,6 +343,14 @@ person's subscription, and only their personal password opens it. Two consequenc
   the catalog cannot be read, it says so and leaves the ask at the first dispatch that needs it. What
   it never does is hand the password back as a value: the prompt fills the holder that rides every
   request (`src/personalUnlock.ts`), which is what makes "written nowhere" a property of the code.
+- **What is asked for early is also HELD from early**, and the condition on that is the confirmation
+  above: the ask only happens once the catalog has said this pass will spend the subscription, so the
+  credential is not being attached speculatively. A pass runs headless for an afternoon and its
+  operator has gone, so from the ask onward having the password is a property of the client seam
+  rather than something each later call site reaches for. The alternative (collect now, attach at the
+  first `428`) narrows the exposure to a handful of reads against the one deployment the pass is
+  pinned to, which reads the header only on the gated run calls, and pays for it with a failure mode
+  nobody is present to answer.
 - **That ask can only ever DELAY the prompt, never end the pass**, and the one exception is a person.
   It runs before the first prerequisite is evaluated and before a journal line exists, so anything it
   threw would be the operator's whole output: no "your key names another workspace", no "the pinned
@@ -503,6 +526,14 @@ attempt just watched. That is deliberately NOT the pointer `ACCEPTANCE_RUN_ID=la
 pointer names the most recent pass to record a FACT, and an attempt a prerequisite refused records
 none while still writing the journal saying why. Asked through the pointer, the report someone wants
 most is the one it cannot reach.
+
+`ACCEPTANCE_RUN_ID` reaches this command too, out of the shell or out of the `.env` (see
+[Resuming](#resuming)), and it names the pass this report is about when nothing was passed on the
+command line: the pass in play is normally the one you are asking after. What it does not do is change
+which QUESTION the bare form answers. A `latest` typed as the argument refuses when no pass has
+recorded a fact, because that is what was asked; a `latest` line in the `.env` resolves through the
+pointer when it can and otherwise reports the pass that ran last, rather than refusing about a question
+nobody asked.
 
 Both are shown either way. A pass that created nothing is reported as such, and the report closes by
 naming the pass that DID, so the resume line is never an invitation to start over.
@@ -817,7 +848,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/world.ts`               | The resumable ledger: what a pass created, and what a ledger says.                                                                                                                                                               |
 | `src/passFiles.ts`           | Where a pass's files live, which passes a state directory holds, the `latest` pointer, and the ONE spelling of the package root all four commands resolve their `.env` against.                                                  |
 | `src/journal.ts`             | The append-only progress record a pass can be watched through.                                                                                                                                                                   |
-| `src/status.ts`              | Ledger + journal → "where is this pass". Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.                                                                                                    |
+| `src/status.ts`              | Ledger + journal → "where is this pass", plus WHICH pass a bare invocation is about (the argument asks, the environment pins). Unit-tested; its closing resume line takes the ambient shell from `operatorText.ts`.              |
 | `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else, finding them through the same `.env` the pass does.                                                                                                                     |
 | `src/reset.ts`               | Starting over: which frames a clear targets (this configuration's two questions, a named pass, or `--all`), the order the deletes go in, what it refuses to remove, and what it cannot reclaim. Driven by seams; unit-tested.    |
 | `src/resetCli.ts`            | `pnpm run reset`. Supplies the real clients and file removals, parses the positional and the three flags, owns the exit code.                                                                                                    |

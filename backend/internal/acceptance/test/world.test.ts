@@ -7,6 +7,7 @@ import {
   coerceWorld,
   emptyWorld,
   findPassesNaming,
+  LEDGER_SLOTS,
   readWorld,
   recordsFacts,
   resolveRunId,
@@ -309,16 +310,21 @@ describe('recordsFacts', () => {
     expect(recordsFacts(emptyWorld('20260812T1200'))).toBe(false)
   })
 
-  it('is true for any created thing, and covers EVERY slot a ledger can hold', () => {
-    // Driven off the ledger's own shape rather than a list restated here, so a slot added to `World`
-    // and forgotten in the classification fails HERE instead of silently reporting a pass that
-    // adopted a repository (or filed an issue) as having created nothing.
+  it('follows the classification: a `created` slot counts and a `bookkeeping` one does not', () => {
+    // Driven off `LEDGER_SLOTS` rather than off `World`'s keys, which is the difference between
+    // asserting the RULE and asserting today's membership. Every slot is `created` today, so a loop
+    // over the keys reads as an equivalent test and is not one: it says "every slot counts", which is
+    // exactly what `bookkeeping` exists to make false, so the first non-record field (the doc names a
+    // `startedAt` or a `notes`) would fail it and be classified `created` to make it pass again.
+    //
+    // The "a slot was added and forgotten" case this loop looks like it guards is already a BUILD
+    // failure: `LEDGER_SLOTS` is `satisfies Record<Exclude<keyof World, 'runId'>, LedgerSlot>`.
     const empty = emptyWorld('20260812T1200')
-    const slots = Object.keys(empty).filter((key) => key !== 'runId')
+    const entries = Object.entries(LEDGER_SLOTS)
 
-    expect(slots.length).toBeGreaterThan(0)
-    for (const slot of slots) {
-      expect(recordsFacts({ ...empty, [slot]: { anything: true } })).toBe(true)
+    expect(entries.length).toBeGreaterThan(0)
+    for (const [slot, kind] of entries) {
+      expect(recordsFacts({ ...empty, [slot]: { anything: true } })).toBe(kind === 'created')
     }
   })
 

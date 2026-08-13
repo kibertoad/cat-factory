@@ -15,11 +15,22 @@
 // attached at the one call that first needed it: a pass answers parked decisions for hours after
 // the start, each of those wakes the durable driver and re-mints the run's activation, and each
 // therefore needs the password again. The server never keeps it between calls.
+//
+// **And it is held from the up-front ask, not from the first `428`, whenever the pinned preset
+// CONFIRMS this pass will spend a subscription.** Headless is how the suite is used: the operator
+// starts a pass and walks away, so everything it will need has to be in hand while they are still
+// there. Once that confirmation exists, withholding the collected password until a call is refused
+// buys little (the pass talks to ONE deployment, which reads this header only on the gated run
+// calls) and costs the property that matters to an unattended afternoon: having the credential stops
+// being a fact about the client seam and becomes a rule every future call site has to remember
+// through {@link withPersonalUnlock}. Where the confirmation cannot be made, nothing is asked and
+// nothing is held, and the lazy path below is the whole behaviour.
 
 import { closeSync, openSync, writeSync } from 'node:fs'
 import { ReadStream } from 'node:tty'
 import { personalPasswordProblem } from '@cat-factory/contracts'
 import { CatFactoryCredentialRequiredError } from '@cat-factory/sdk'
+import { OperatorRefusal } from './operatorText.ts'
 
 /** The header the platform reads the personal password from (`PERSONAL_PASSWORD_HEADER`). */
 const PERSONAL_PASSWORD_HEADER = 'X-Personal-Password'
@@ -40,7 +51,15 @@ function vendorOf(error: CatFactoryCredentialRequiredError): string | null {
 export interface PersonalUnlock {
   /** The header to merge into a request, or nothing while no password is held. */
   headers(): Record<string, string>
-  /** Ask for the password (once per pass), naming why. Rejects when there is no terminal to ask. */
+  /**
+   * Ask for the password (once per pass), naming why, and HOLD it. Rejects when there is no
+   * terminal to ask on.
+   *
+   * The one entry point, whether the ask is the up-front one (`personalPasswordAsk.ts`, on a pass
+   * whose pinned preset says it will need this) or the lazy one at a `428`. Two entry points was one
+   * of them collecting without holding, and what that turned into is described at the top of this
+   * file.
+   */
   obtain(reason: string): Promise<void>
   /** Whether a password has already been supplied this pass. */
   held(): boolean
@@ -50,6 +69,11 @@ export interface PersonalUnlock {
  * Build the holder. The password lives in this closure; nothing returns it, so the only way out is
  * the request header — which is what keeps "held in memory only" a property of the code rather
  * than a rule someone has to remember at each call site.
+ *
+ * ONE variable, which is what makes `held()` and `headers()` two readings of the same fact: a
+ * password this pass has been given is a password its requests carry. A second, collected-but-withheld
+ * one would split them, and `withPersonalUnlock` asks `held()` precisely to decide whether asking
+ * again could change anything.
  */
 export function createPersonalUnlock(
   readSecret: (prompt: string) => Promise<string> = readSecretFromTty,
@@ -60,6 +84,8 @@ export function createPersonalUnlock(
       password ? { [PERSONAL_PASSWORD_HEADER]: password } : {},
     held: () => password !== undefined,
     async obtain(reason) {
+      // Checked at collection time, so a too-short entry is refused while the operator is still at
+      // the terminal rather than twenty minutes into the pass.
       password = checked(await readSecret(promptFor(reason)))
     },
   }
@@ -94,10 +120,12 @@ function checked(entered: string): string {
  * Run a call that may need the personal subscription, asking for the password if the deployment
  * says one is needed, then retrying ONCE.
  *
- * Lazy rather than up-front, and that is what keeps the common pass friction-free: a workspace
- * running on a provider API key never sees a prompt, because no call ever answers `428`. It also
- * means the suite never has to predict whether the pinned preset resolves to an individual-usage
- * vendor — the deployment already answers that question, precisely, at the moment it matters.
+ * The FALLBACK ask, and it is what keeps the common pass friction-free: a workspace running on a
+ * provider API key never sees a prompt, because no call ever answers `428`. It also means the suite
+ * is never WRONG about whether the pinned preset resolves to an individual-usage vendor. The
+ * up-front ask predicts that to get the operator asked while they are still at the terminal; this is
+ * the deployment answering the same question precisely, at the moment it matters, for every pass
+ * where the prediction could not be made.
  *
  * Exactly one retry. A second `428` means the password was wrong or the subscription is not there,
  * and re-asking in a loop would turn a clear failure into a pass that hangs on a prompt nobody is
@@ -468,8 +496,12 @@ function finish(terminal: { write: (text: string) => void }, settle: () => void)
  * terminal it cannot use degrades to asking again at the dispatch that needs one, while somebody
  * pressing Ctrl-C is a person saying "not this pass", and starting an afternoon-long run anyway
  * would be reading a refusal as consent.
+ *
+ * An {@link OperatorRefusal}, because it is the one thing the up-front ask re-throws and the boundary
+ * that catches it also catches whatever a bug in that ask would throw: one sentence is the whole
+ * message here, and stack frames under "you pressed Ctrl-C" would be noise.
  */
-export class PersonalPasswordDeclined extends Error {
+export class PersonalPasswordDeclined extends OperatorRefusal {
   constructor() {
     super('Cancelled at the personal-password prompt.')
     this.name = 'PersonalPasswordDeclined'

@@ -21,6 +21,53 @@ import {
   type World,
 } from './world.ts'
 
+/** Which pass a `status` invocation is about, or the reason there is none to report. */
+export type StatusTarget =
+  | { kind: 'pass'; runId: string }
+  | { kind: 'none'; reason: 'latest-names-none' | 'no-pass' }
+
+/**
+ * Which pass to report on, from the argument, the environment and what is on disk.
+ *
+ * Three questions, and only the middle one is the `latest` pointer. NAMED, it is that pass; asked for
+ * `latest`, it is the pass worth RESUMING (the most recent to record a fact); asked for nothing, it is
+ * the pass that ran LAST, which is usually the attempt the reader just watched fail and which by
+ * construction never claimed the pointer. Answered through the pointer, that reader was told "no
+ * acceptance pass found" while the journal they were asking about sat in the directory named.
+ *
+ * **The ARGUMENT asks a question; the environment only PINS a default.** That asymmetry is the whole of
+ * this function, and it is why `ACCEPTANCE_RUN_ID` is not simply read as a second argument. The
+ * variable's job is to name the pass the next RUN resumes, and the README's platform-neutral way to
+ * carry it is a line in the `.env` (which `configure` writes a note about), read here through the same
+ * file the pass reads so the two cannot disagree about which pass is in play. But `ACCEPTANCE_RUN_ID=latest`
+ * in that file used to convert the no-argument form into the pointer form for good, and the pointer
+ * REFUSES when no pass has recorded a fact: an operator with a directory full of refused attempts and
+ * a `latest` line in their `.env` got "'latest' names none" and exit 1 in answer to a question they
+ * never asked. So an unresolvable pointer refuses only where the command line asked for one, and
+ * otherwise falls through to the pass that ran last, which is what the bare form promises.
+ */
+export function resolveStatusTarget(input: {
+  /** The positional argument, trimmed, `undefined` when nothing was named. */
+  argument: string | undefined
+  /** `ACCEPTANCE_RUN_ID`, same treatment. The resume target this checkout pins, not a question. */
+  pinned: string | undefined
+  /** What the `latest` pointer names: the most recent pass to record a FACT, or null. */
+  latestRunId: string | null
+  /** The pass that wrote to the state directory most recently, or null when it holds none. */
+  mostRecentRunId: string | null
+}): StatusTarget {
+  const { argument, pinned, latestRunId, mostRecentRunId } = input
+  if (argument === 'latest') {
+    return latestRunId
+      ? { kind: 'pass', runId: latestRunId }
+      : { kind: 'none', reason: 'latest-names-none' }
+  }
+  if (argument !== undefined) return { kind: 'pass', runId: argument }
+  if (pinned !== undefined && pinned !== 'latest') return { kind: 'pass', runId: pinned }
+  const resolved = (pinned === 'latest' ? latestRunId : null) ?? mostRecentRunId
+  return resolved ? { kind: 'pass', runId: resolved } : { kind: 'none', reason: 'no-pass' }
+}
+
 export type PhaseStatus = {
   phase: string
   /** When the phase was last ENTERED, so a resumed pass measures this attempt and not the gap. */

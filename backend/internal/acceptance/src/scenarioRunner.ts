@@ -26,7 +26,7 @@
 //     anonymous expiry, which is the exact regression the disabled vitest timeout existed to prevent.
 
 import { formatDuration } from './deadline.ts'
-import { failureWithLocation } from './operatorText.ts'
+import { describeFailure, thrownLocation } from './operatorText.ts'
 
 /**
  * Run one named piece of work, printed as it starts and timed as it ends.
@@ -55,11 +55,29 @@ export type Scenario = {
   run: (step: ScenarioStep) => Promise<void>
 }
 
-/** What failed, and the text an operator reads. */
+/**
+ * What failed, in the TWO halves that have different readers.
+ *
+ * `message` is the refusal itself: a preflight's numbered remedies, a deadline naming its last
+ * observation, a graded claim list. `location` is the frames under it, which say nothing to an
+ * operator and are the whole answer for a bug in the suite.
+ *
+ * Split rather than one rendered string, because the two are consumed differently and folding them
+ * cost the journal: `runAcceptance.ts` records a failure as a phase's last message, `status` renders
+ * that on ONE line, and a `TypeError`'s six frames collapsed into it made the answer to "where is
+ * this pass" unreadable. The console still prints both, joined by {@link failureReport}.
+ */
 export type ScenarioFailure = {
   /** The step that threw, or null when the scenario threw outside one. */
   step: string | null
-  text: string
+  message: string
+  /** Null for a thrown value that carries no frames worth printing. */
+  location: string | null
+}
+
+/** Both halves as the CONSOLE reads them: the refusal, then where it was thrown from. */
+export function failureReport(failure: ScenarioFailure): string {
+  return failure.location ? `${failure.message}\n\n${failure.location}` : failure.message
 }
 
 export type ScenarioOutcome = {
@@ -157,8 +175,12 @@ async function runScenario(deps: ScenarioRunnerDeps, scenario: Scenario): Promis
       failure: null,
     }
   } catch (error) {
-    const failure = { step: current, text: failureWithLocation(error) }
-    deps.log(`    FAIL  (${formatDuration(deps.now() - startedAt)})\n\n${failure.text}\n`)
+    const failure = {
+      step: current,
+      message: describeFailure(error),
+      location: thrownLocation(error),
+    }
+    deps.log(`    FAIL  (${formatDuration(deps.now() - startedAt)})\n\n${failureReport(failure)}\n`)
     deps.onFailure(failure)
     return {
       id: scenario.id,
