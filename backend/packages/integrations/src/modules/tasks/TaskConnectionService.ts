@@ -198,6 +198,10 @@ export class TaskConnectionService {
         // grammars share no shape to inspect. Absent ⇒ every predicate bites, which is the
         // claim a source makes by saying nothing.
         ignoredIntakePredicates: [...(provider.ignoredIntakePredicates ?? [])],
+        // Asked of the provider's declared `repoScope`, the same fact the HTTP layer routes the
+        // search scope on, so the SPA and the backend cannot disagree about which sources have
+        // a board to pick and which have a service to scope to.
+        repoBacked: provider.repoScope != null,
       })
     }
     return states

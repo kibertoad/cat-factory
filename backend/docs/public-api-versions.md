@@ -758,10 +758,34 @@ kind of question: reading the step alone, a re-dispatched run is indistinguishab
 
 ## 1.53.0
 
-1.53.0, not 1.52.1: one additive enum member, `harness_shutdown`, in the run failure-kind
+1.53.0, not 1.52.1: one additive field, `blockingFindings`, on the `approval-gate` entry of
+`GET /api/v1/runs/{runId}/decisions`. Nothing existing changes shape or meaning, and a consumer built
+against 1.52.0 ignores it.
+
+**It closes a gap between what a caller may decide and what it can see.** A companion gate reporting
+`exceeded: true` is answered with `resolve-exceeded`, and one of the three choices is `proceed`. Until
+now the only prose on that decision was `proposal`, the companion's verdict SUMMARY, which the shipped
+reviewer prompt forbids from restating the individual findings: the graded points lived only in
+internal step state. So an integration answering `proceed` was accepting work whose stated must-fixes
+it had never been shown. The engine's own unattended risk policies refuse that park for exactly this
+reason, which made an external caller the one route past it and the one most in need of the detail.
+
+Each entry carries the reviewer's note and the `anchorId` it targets; severity is not carried because
+every entry is a `blocker` by construction. An empty array with `exceeded: true` is the OTHER cap: the
+rework rounds ran out with the rating under the bar, which is a loop giving up rather than a review
+objecting.
+
+## 1.54.0
+
+1.54.0, not 1.53.0: one additive enum member, `harness_shutdown`, in the run failure-kind
 vocabulary (`GET /api/v1/debug/runs/{runId}`, the bootstrap-job projection, and any surface
 carrying a failure kind). Nothing existing changes shape or meaning, and the SDKs tolerate unknown
-enum values by design, so a consumer built against 1.52.0 keeps parsing.
+enum values by design, so a consumer built against 1.53.0 keeps parsing.
+
+This one was authored as 1.53.0 and collided with `blockingFindings` above, which reached main
+first: both branches bumped the minor to the same number, so `API_VERSION` and the generated
+`docs/openapi.json` auto-merged byte-identically with no conflict, and the only thing that objected
+was this file's own section heading.
 
 **What a consumer NOTICES is a population change**: a class of failure that used to arrive as
 `evicted` now arrives under its own name. A container whose harness exited CLEANLY while a job was

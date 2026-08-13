@@ -19,6 +19,8 @@ import {
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
   mintSession,
+  seedFrameRepoLink,
+  type FrameRepoLinkRepositories,
 } from '@cat-factory/conformance'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
@@ -49,7 +51,22 @@ import {
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
 import { DrizzleDocumentRepository } from '../src/repositories/documents.js'
 import { DrizzleTaskRepository } from '../src/repositories/tasks.js'
+import { DrizzleGitHubInstallationRepository } from '../src/repositories/containerExecution.js'
+import { DrizzleRepoProjectionRepository } from '../src/repositories/github.js'
 import { createApp } from '../src/server.js'
+
+/**
+ * The three stores one frame→repo link is written across, over this facade's Drizzle repositories.
+ * The writes themselves live in `seedFrameRepoLink` (shared with the other facades); this names
+ * only which stores they land in.
+ */
+function frameRepoLinkRepos(db: DrizzleDb): FrameRepoLinkRepositories {
+  return {
+    installations: new DrizzleGitHubInstallationRepository(db),
+    projection: new DrizzleRepoProjectionRepository(db),
+    services: new DrizzleServiceRepository(db),
+  }
+}
 
 const BASE = 'https://cat-factory.test'
 
@@ -514,6 +531,7 @@ export function makeConformanceApp(
     accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,
     getService,
+    linkFrameRepo: (input) => seedFrameRepoLink(frameRepoLinkRepos(db), input),
     ...containerServiceProbes(container),
   }
 }

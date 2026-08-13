@@ -240,16 +240,19 @@ one is the usual confusion:
 - **`bug-intake`**: the non-LLM engine STEP inside that pipeline (see the step vocabulary above).
   It is the part that does the claiming; it exists only as a pipeline step and has no interactive
   surface.
-- **Bug hunt**: the INTERACTIVE surface, and not a pipeline or a step at all. A human picks a
-  tracker board, a `bug-hunter` inline model rates its open + UNASSIGNED bugs on impact against
+- **Bug hunt**: the INTERACTIVE surface, and not a pipeline or a step at all. A human picks the
+  board to scan, a `bug-hunter` inline model rates its open + UNASSIGNED bugs on impact against
   complexity, and the human confirms one; the confirmed candidate is adopted as a `bug` task on
   `pl_bugfix` (the ONE-OFF bug-fix pipeline, not `pl_bug_triage`). It persists nothing of its own.
   Full design in [`backend/docs/bug-hunt.md`](../backend/docs/bug-hunt.md).
 
-Two traps. **`bug-hunter` is an inline agent kind for the RATING only**: it never touches a
+Three traps. **`bug-hunter` is an inline agent kind for the RATING only**: it never touches a
 checkout and never becomes a pipeline step; the actual work runs through `pl_bugfix` afterwards.
-And a hunt filters to UNASSIGNED issues while the recurring intake does not: intake works a
-backlog the team already agreed to, a hunt looks for work nobody has taken.
+A hunt filters to UNASSIGNED issues while the recurring intake does not: intake works a
+backlog the team already agreed to, a hunt looks for work nobody has taken. And **"picks the board"
+is only literal for a tracker that HAS boards**: on a repo-backed source (GitHub Issues, GitLab
+Issues) the board is the repository the chosen service frame is linked to, resolved server-side,
+and naming one is refused rather than honoured.
 
 ### D1 ⇄ Drizzle migration parity
 

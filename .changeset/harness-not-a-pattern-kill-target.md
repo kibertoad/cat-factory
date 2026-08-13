@@ -42,7 +42,7 @@ container and native-process legs, and the Cloudflare per-run container) now dis
 that exited 0 with a job still in flight from one that crashed or was reclaimed, and report
 `harnessShutdown` instead of `evicted`. The engine fails that run immediately with a new
 `harness_shutdown` failure kind (additive to the public failure-kind vocabulary; OpenAPI surface
-1.53.0) and a hint that names the causes worth checking, rather than spending an automatic retry
+1.54.0) and a hint that names the causes worth checking, rather than spending an automatic retry
 that walks back into whatever stopped it. A runtime that reports no exit code (Apple `container`)
 keeps reporting an eviction, because an absent code is not a zero.
 

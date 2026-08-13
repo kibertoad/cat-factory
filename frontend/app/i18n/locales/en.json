@@ -1458,6 +1458,13 @@
       "awaitingChoice": "Awaiting a human choice",
       "approvalGate": "Approval gate",
       "companionReview": "Companion review",
+      "findingSeverity": {
+        "blocker": "Must fix",
+        "major": "Should fix",
+        "minor": "Minor",
+        "ungraded": "Comment",
+        "unrecognized": "Level not recognised ({level})"
+      },
       "correctionIterations": "{count} correction iteration. | {count} correction iterations.",
       "state": {
         "pending": "Pending",
@@ -1494,7 +1501,9 @@
       "closeEsc": "Close (Esc)",
       "companionCapHeading": "{agent} hit its {attempts}-attempt rework limit, still below the {threshold} bar.",
       "companionCapDetail": "Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
-      "companionStalledHeading": "{agent} stopped the rework loop after {attempts} of {maxAttempts} rounds: the last revision came back unchanged and the rating held below the {threshold} bar.",
+      "companionCapBlockedHeading": "{agent} hit its {attempts}-attempt rework limit with {count} must-fix finding still open. | {agent} hit its {attempts}-attempt rework limit with {count} must-fix findings still open.",
+      "companionCapBlockedDetail": "Proceeding accepts the work with those findings unfixed, which is why this run’s risk policy will never take that choice for you. Do one more automatic rework round, proceed anyway on the current output, or stop and reset the task so you can edit the inputs and resubmit.",
+      "companionStalledHeading": "{agent} stopped the rework loop after {attempts} of {maxAttempts} rounds: the last revision came back unchanged and its rating did not move.",
       "companionStalledDetail": "The remaining rounds were left unspent because they would only repeat a verdict already given. Do one more round anyway, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
       "infraAttempts": "Infrastructure attempts",
       "hideInfraAttempts": "Hide infrastructure attempts",
@@ -4889,7 +4898,9 @@
     "tracker": "Tracker",
     "board": "Board",
     "pickBoard": "Pick a board",
-    "boardPlaceholder": "Project key, team id or owner/repo",
+    "boardPlaceholder": "Project key or team id",
+    "boardFromService": "The repository this service is linked to",
+    "boardNeedsRepo": "This service has no repository linked, so it has no issues to hunt. Link one from the service panel.",
     "boardsFailed": "Boards could not be loaded: {reason}",
     "issueType": "Issue type",
     "issueTypeHelp": "Defaults to bug. Ignored by trackers with no issue types.",
@@ -4898,6 +4909,8 @@
     "labelsHelp": "Comma separated. All of them must be present.",
     "adoptInto": "Add the picked bug to",
     "adoptingInto": "The picked bug lands in {container}",
+    "huntIn": "Service to hunt",
+    "huntingIn": "Hunting the repository linked to {container}; the picked bug lands there too.",
     "run": "Hunt",
     "running": "Reading the board and rating what it finds…",
     "huntFailed": "The hunt failed",
@@ -4910,6 +4923,7 @@
     "noCandidates": "No open, unassigned bugs matched on this board.",
     "ratings": "Impact {impact}/5, complexity {complexity}/5, {confidence} confidence",
     "viaModel": "Rated by {model}.",
+    "scannedBoard": "Scanned {board}.",
     "truncated": "Only the first {count} matching bugs were scanned; this board holds more.",
     "comments": "{count} comment | {count} comments",
     "@comments": {
@@ -4926,6 +4940,10 @@
       "failed": "The rating could not be completed, so these are unrated.",
       "over_budget": "This workspace is over its spend budget, so these were not rated.",
       "empty": "Nothing to rate."
+    },
+    "refusal": {
+      "boardFromService": "This tracker scans the repository the chosen service is linked to, so it has no board of its own.",
+      "missingBoard": "Pick the board to hunt on."
     }
   },
   "pipeline": {

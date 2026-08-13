@@ -148,6 +148,7 @@ export {
 export {
   BugHuntService,
   BUG_HUNT_SCAN_LIMIT,
+  type BugHuntScan,
   type BugHuntServiceDependencies,
 } from './modules/tasks/BugHuntService.js'
 export {

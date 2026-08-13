@@ -11,6 +11,7 @@ import {
 } from '@cat-factory/orchestration'
 import type { InterviewView } from '@cat-factory/orchestration'
 import type { GateRegistry } from '@cat-factory/kernel'
+import { blockingReviewComments } from '@cat-factory/contracts'
 import type {
   BrainstormSession,
   BrainstormStage,
@@ -148,6 +149,11 @@ export function toJudgeDecision(stepKind: string, state: JudgeStepState): Public
  * to answer with `resolve-exceeded` instead of `approve`. Reading it as a plain boolean (rather
  * than only when a companion exists) means an ordinary pipeline gate reports `false`, which is the
  * true statement, not an omission.
+ *
+ * `blockingFindings` comes from the LATEST verdict, which is the round that parked: it is what a
+ * `proceed` would overrule, and the `proposal` beside it cannot state it (a companion's summary is a
+ * verdict and is forbidden from restating its own findings). Read through the shared
+ * `blockingReviewComments` so the API cannot count a must-fix the engine did not.
  */
 export function toApprovalDecision(
   step: PipelineStep,
@@ -169,6 +175,9 @@ export function toApprovalDecision(
     requiredApprovals: approval.requiredApprovals ?? 1,
     recordedApprovals: approval.approvals?.length ?? 0,
     exceeded: step.companion?.exceeded === true,
+    blockingFindings: blockingReviewComments(step.companion?.verdicts.at(-1)?.comments).map(
+      (finding) => ({ body: finding.body, anchorId: finding.anchorId ?? null }),
+    ),
   }
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PipelineStep } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry, type AgentKindRegistry } from '@cat-factory/agents'
-import { priorReviewFor } from './companion-review-context.js'
+import { buildReworkContext, priorReviewFor } from './companion-review-context.js'
 
 // The companion loop's memory, resolved from `step.companion.verdicts` for whichever side of the
 // loop is about to run. The behaviour worth pinning is that BOTH sides get it and that they get
@@ -22,13 +22,28 @@ function registry(): AgentKindRegistry {
   return reg
 }
 
-const verdict = (rating: number, feedback: string, comments?: { body: string }[]) => ({
+const verdict = (
+  rating: number,
+  feedback: string,
+  comments?: { body: string; anchorId?: string; severity?: 'blocker' | 'major' | 'minor' }[],
+) => ({
   rating,
   threshold: 0.8,
   passed: false,
   feedback,
   ...(comments ? { comments } : {}),
 })
+
+/** The rework a producer is looped back with: the LATEST verdict, as the engine records it. */
+function reworkFrom(inst: { steps: readonly PipelineStep[] }): NonNullable<PipelineStep['rework']> {
+  const latest = inst.steps[1]!.companion!.verdicts.at(-1)!
+  return {
+    previousProposal: 'the design',
+    feedback: latest.feedback,
+    requestedBy: 'reviewer',
+    ...(latest.comments?.length ? { comments: latest.comments } : {}),
+  }
+}
 
 /** The run as it stands when a companion has graded `verdicts.length` times. */
 function instance(verdicts: ReturnType<typeof verdict>[], attempts = verdicts.length) {
@@ -79,6 +94,32 @@ describe('priorReviewFor', () => {
     expect(priorReviewFor(inst, 1, registry())?.rounds[0]?.comments?.[0]?.body).toContain(
       'pathType',
     )
+  })
+
+  it('carries the ANCHOR each point targets, both ways round the loop', () => {
+    // A companion anchors to a structured item by id and quotes no prose, which is the shape every
+    // shipped companion prompt asks for. Projecting only `quotedSource` dropped the one handle the
+    // producer had on WHICH item a finding was about, and the prompt then rendered each of them
+    // against an empty target while ordering the producer to fix them first.
+    const anchored = [
+      { anchorId: 'REQ-4', severity: 'blocker' as const, body: 'the retry path is unhandled' },
+    ]
+    const graderRound = priorReviewFor(
+      instance([verdict(0.72, 'several gaps', anchored), verdict(0.74, 'still short')]),
+      1,
+      registry(),
+    )?.rounds[0]
+    expect(graderRound?.comments?.[0]?.anchorId).toBe('REQ-4')
+    expect(graderRound?.comments?.[0]?.severity).toBe('blocker')
+
+    // The producer reads the same point off the round it is being sent back with.
+    const looped = instance([verdict(0.72, 'earlier'), verdict(0.74, 'still short', anchored)])
+    const producerStep = { ...looped.steps[0]!, rework: reworkFrom(looped) }
+    const context = buildReworkContext({ ...looped, currentStep: 0 }, producerStep, registry())
+    expect(context.revision?.comments?.[0]?.anchorId).toBe('REQ-4')
+    // Absent fields stay ABSENT rather than becoming empty strings: the renderer decides what to
+    // write for a point with no quote, and it cannot tell `''` from "there was no quote".
+    expect(context.revision?.comments?.[0]).not.toHaveProperty('quotedSource')
   })
 
   it('is absent before there is any history to show', () => {

@@ -484,6 +484,16 @@ export {
   renderJudgeRework,
 } from './domain/judge-logic.js'
 
+// The COMPANION bucket's pure disposition, the judge's sibling: what a rework pair does with one
+// grading round, including the rule that a `blocker` finding holds the run whatever the rating.
+export {
+  type CompanionDispositionInput,
+  type CompanionDispositionResult,
+  type CompanionParkReason,
+  companionParkReasonFor,
+  disposeCompanionVerdict,
+} from './domain/companion-logic.js'
+
 // Typed provider registry: the deployment-supplied data sources a gate (or other
 // extension) probes, keyed by an opaque {@link ProviderToken}. Replaces the per-provider
 // module-global wire/get boilerplate. See `domain/provider-registry.ts`.

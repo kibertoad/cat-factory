@@ -123,4 +123,9 @@ export { defineWorkspaceSettingsSuite } from './workspace-settings-suite.js'
 export { defineWorkspaceAccessSuite } from './workspace-access-suite.js'
 export { defineWorkspaceRbacSuite } from './workspace-rbac-suite.js'
 export { mintSession } from './session.js'
+export {
+  seedFrameRepoLink,
+  type FrameRepoLink,
+  type FrameRepoLinkRepositories,
+} from './frame-repo-link.js'
 export { CONFORMANCE_DRIVE_CONFIG, driveWorkspace } from './drive.js'

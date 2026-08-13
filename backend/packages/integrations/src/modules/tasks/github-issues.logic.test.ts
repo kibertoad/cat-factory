@@ -6,7 +6,6 @@ import {
   githubHitToBugCandidate,
   githubIssueInRepoScope,
   githubIssueUrl,
-  githubReposToBoards,
   parseGitHubIssueExternalId,
   parseGitHubIssueRef,
   parseIssueDependencyLinks,
@@ -285,29 +284,6 @@ describe('githubHitToBugCandidate', () => {
   it('truncates a body long enough to dominate the ranking prompt', () => {
     const candidate = githubHitToBugCandidate({ ...hit, body: 'x'.repeat(5_000) })
     expect(candidate.description).toHaveLength(1_200)
-  })
-})
-
-describe('githubReposToBoards', () => {
-  it('maps installation repos onto owner/repo-scoped boards', () => {
-    expect(
-      githubReposToBoards([
-        { owner: 'octo', name: 'app' },
-        { owner: 'octo', name: 'infra' },
-      ]),
-    ).toEqual([
-      { id: 'octo/app', name: 'app', key: 'octo/app' },
-      { id: 'octo/infra', name: 'infra', key: 'octo/infra' },
-    ])
-  })
-
-  it('drops a repo missing either half of the scope it would produce', () => {
-    expect(
-      githubReposToBoards([
-        { owner: '', name: 'app' },
-        { owner: 'octo', name: '' },
-      ]),
-    ).toEqual([])
   })
 })
 

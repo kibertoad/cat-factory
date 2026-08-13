@@ -18,7 +18,7 @@ its agents work in its repositories but cannot:
 - **import** a GitLab issue onto a board block as agent context (`TaskImportService`);
 - run a recurring **`bug-intake`** schedule against a GitLab project (`BugIntakeService`
   needs `searchIssues`);
-- run the interactive **bug hunt** over GitLab issues (`listBoards` + `listBugCandidates`);
+- run the interactive **bug hunt** over GitLab issues (`listBugCandidates`);
 - receive **push intake or ticket-comment replies** from GitLab
   ([ADR 0032](../../backend/docs/adr/0032-tracker-webhook-intake.md) needs a webhook adapter);
 - **write back** to a GitLab issue (`TicketTrackerProvider`, the tech-debt pipeline's
@@ -43,7 +43,7 @@ client is needed.
 
 What is missing is everything ABOVE it: a `TaskSourceProvider` is a different port with a
 different contract (`normalizeConnection` / `parseRef` / `fetchTask` / `searchIssues` /
-`listBoards` / `listBugCandidates` / `diagnose` / `webhook`), and `GitHubIssuesProvider`
+`listBugCandidates` / `diagnose` / `webhook`), and `GitHubIssuesProvider`
 hard-codes GitHub in three places that a GitLab deployment cannot use (see the gotchas). The
 work is a provider plus its registry wiring, not a client.
 
@@ -136,7 +136,8 @@ tracker rather than a one-PR change.
 | 3b  | **Registry wiring, both facades** (pulled forward out of slice 4: the read path is unreachable unwired) | 🟩 done | this |
 | 3c  | **Registry-driven scope + settings surface** (review follow-up: three `github` hard-codings)            | 🟩 done | this |
 | 4   | `searchIssues` (recurring `bug-intake`) + the `board.gitlabProject` scope field                         | 🟩 done | this |
-| 5   | `listBoards` + `listBugCandidates` (interactive bug hunt), ONE vendor call per scan                     | 🟩 done | this |
+| 5   | `listBugCandidates` (interactive bug hunt), ONE vendor call per scan                                    | 🟩 done | this |
+| 5b  | **`listBoards` WITHDRAWN**: a repo-backed hunt scopes to its service's repo, never a picked board       | 🟩 done | this |
 | 6   | Webhook adapter: `X-Gitlab-Token` verification on the RAW body, push intake + ticket replies            | 🟩 done | this |
 | 7a  | Writeback as a `TaskSourceProvider` capability, GitLab implemented (PR notices, pickup, Q&A, acks)      | 🟩 done | this |
 | 7b  | The `tracker` STEP filing a new GitLab issue (`TicketTrackerProvider`, still GitHub/Jira/Linear)        | ⬜ todo |      |

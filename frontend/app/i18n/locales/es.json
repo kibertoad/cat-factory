@@ -1348,6 +1348,13 @@
       "awaitingChoice": "Esperando una elección humana",
       "approvalGate": "Verificación de aprobación",
       "companionReview": "Revisión del acompañante",
+      "findingSeverity": {
+        "blocker": "Debe corregirse",
+        "major": "Debería corregirse",
+        "minor": "Menor",
+        "ungraded": "Comentario",
+        "unrecognized": "Nivel no reconocido ({level})"
+      },
       "correctionIterations": "{count} iteración de corrección. | {count} iteraciones de corrección.",
       "state": {
         "pending": "Pendiente",
@@ -1403,7 +1410,9 @@
       "closeEsc": "Cerrar (Esc)",
       "companionCapHeading": "{agent} alcanzó su límite de {attempts} intentos de reelaboración, aún por debajo del umbral de {threshold}.",
       "companionCapDetail": "Haz una ronda más de reelaboración automática, avanza al siguiente paso aceptando la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
-      "companionStalledHeading": "{agent} detuvo el bucle de reelaboración tras {attempts} de {maxAttempts} rondas: la última revisión volvió sin cambios y la puntuación se mantuvo por debajo del umbral de {threshold}.",
+      "companionCapBlockedHeading": "{agent} alcanzó su límite de {attempts} intentos de reelaboración con {count} hallazgo obligatorio aún sin resolver. | {agent} alcanzó su límite de {attempts} intentos de reelaboración con {count} hallazgos obligatorios aún sin resolver.",
+      "companionCapBlockedDetail": "Continuar acepta el trabajo con esos hallazgos sin resolver, por eso la política de riesgo de esta ejecución nunca tomará esa decisión por ti. Haz una ronda más de reelaboración automática, continúa igualmente con la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
+      "companionStalledHeading": "{agent} detuvo el bucle de reelaboración tras {attempts} de {maxAttempts} rondas: la última revisión volvió sin cambios y la puntuación no se movió.",
       "companionStalledDetail": "Las rondas restantes quedaron sin usar porque solo repetirían un veredicto ya emitido. Haz una ronda más de todos modos, avanza al siguiente paso aceptando la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
       "infraAttempts": "Intentos de infraestructura",
       "hideInfraAttempts": "Ocultar intentos de infraestructura",
@@ -4731,7 +4740,9 @@
     "tracker": "Gestor de incidencias",
     "board": "Tablero",
     "pickBoard": "Elige un tablero",
-    "boardPlaceholder": "Clave de proyecto, id de equipo o owner/repo",
+    "boardPlaceholder": "Clave de proyecto o id de equipo",
+    "boardFromService": "El repositorio vinculado a este servicio",
+    "boardNeedsRepo": "Este servicio no tiene ningún repositorio vinculado, así que no hay incidencias que explorar. Vincula uno desde el panel del servicio.",
     "boardsFailed": "No se pudieron cargar los tableros: {reason}",
     "issueType": "Tipo de incidencia",
     "issueTypeHelp": "Por defecto bug. Se ignora en gestores sin tipos de incidencia.",
@@ -4740,6 +4751,8 @@
     "labelsHelp": "Separadas por comas. Todas deben estar presentes.",
     "adoptInto": "Añadir el error elegido a",
     "adoptingInto": "El error elegido se añade a {container}",
+    "huntIn": "Servicio a explorar",
+    "huntingIn": "Se explora el repositorio vinculado a {container}; el error elegido también se añade ahí.",
     "run": "Cazar",
     "running": "Leyendo el tablero y valorando lo que encuentra…",
     "huntFailed": "La caza ha fallado",
@@ -4752,6 +4765,7 @@
     "noCandidates": "No hay errores abiertos y sin asignar que coincidan en este tablero.",
     "ratings": "Impacto {impact}/5, complejidad {complexity}/5, confianza {confidence}",
     "viaModel": "Valorado por {model}.",
+    "scannedBoard": "Explorado {board}.",
     "truncated": "Solo se han explorado los primeros {count} errores coincidentes; este tablero contiene más.",
     "comments": "{count} comentario | {count} comentarios",
     "confidence": {
@@ -4765,6 +4779,10 @@
       "failed": "No se ha podido completar la valoración, así que están sin valorar.",
       "over_budget": "Este espacio de trabajo ha superado su presupuesto de gasto, así que no se han valorado.",
       "empty": "Nada que valorar."
+    },
+    "refusal": {
+      "boardFromService": "Este rastreador analiza el repositorio al que está vinculado el servicio elegido, así que no tiene un tablero propio.",
+      "missingBoard": "Elige el tablero en el que buscar."
     }
   },
   "pipeline": {

@@ -1,5 +1,6 @@
 import type { BlockEditAuthority } from '@cat-factory/contracts'
 import type {
+  BlockRepository,
   BugCandidate,
   BuiltinTaskSourceKind,
   BugHuntAnalysisStatus,
@@ -7,15 +8,16 @@ import type {
   BugHuntCandidate,
   BugHuntResult,
   IssueIntakeQuery,
-  RunBugHuntInput,
   TaskConnectionStore,
   TaskRepository,
   TaskSourceKind,
+  TaskSourceProvider,
   TaskSourceRegistry,
   TrackerBoard,
 } from '@cat-factory/kernel'
 import {
   ValidationError,
+  assertFound,
   parseBugHuntVerdicts,
   rankBugCandidates,
   redactSecrets,
@@ -44,6 +46,12 @@ export interface BugHuntServiceDependencies {
   taskSourceRegistry: TaskSourceRegistry
   taskConnectionStore: TaskConnectionStore
   taskRepository: TaskRepository
+  /**
+   * The board rows, read for ONE question: does the container a hunt names exist on this
+   * workspace at all. Narrowed to `get` because that is the whole of it — the same point-read
+   * {@link TaskLinkService.createTaskFromIssue} makes before it creates the adopted task.
+   */
+  blockRepository: Pick<BlockRepository, 'get'>
   importService: TaskImportService
   linkService: TaskLinkService
   /**
@@ -77,8 +85,59 @@ export const BUG_HUNT_SCAN_LIMIT = 40
 /** The tracker default when the caller names no issue type — the same one intake uses. */
 const DEFAULT_ISSUE_TYPE = 'bug'
 
+/**
+ * A provider that can actually back a hunt. The capability is optional on
+ * {@link TaskSourceProvider} (a source may be importable and not huntable), so the guard that
+ * establishes it says so in its RETURN type rather than leaving every caller to re-narrow.
+ */
+export type HuntableProvider = TaskSourceProvider &
+  Required<Pick<TaskSourceProvider, 'listBugCandidates'>>
+
+/**
+ * One scan's inputs, with the board already RESOLVED.
+ *
+ * Deliberately not the wire type: `RunBugHuntInput.board` is nullable because a repo-backed
+ * source names none (its board is the service frame's linked repository, which only the HTTP
+ * layer can resolve it, by reading the block ancestry through `resolveRepoTarget`). By the time a
+ * scan reaches this service that question is settled, so the board is a plain string and there is
+ * no second place where "which board?" could be answered differently.
+ */
+export interface BugHuntScan {
+  /** The vendor-shaped board scope, mapped onto the provider's own query leg below. */
+  board: string
+  /**
+   * Where a candidate would be adopted, carried by the SCAN rather than only by `adopt` so a
+   * container that could never receive one is refused before the hunt spends anything.
+   */
+  containerId: string
+  /** Issue type to hunt; omitted → `bug`. Sources without a type notion ignore it. */
+  issueType?: string
+  /** Labels that must ALL be present. */
+  labels?: string[]
+  /** Substring that must appear in the issue title. */
+  titleFragment?: string
+}
+
 export class BugHuntService {
   constructor(private readonly deps: BugHuntServiceDependencies) {}
+
+  /**
+   * The provider that can back a hunt for this source, or the refusal naming what this deployment
+   * lacks.
+   *
+   * Public because the HTTP layer has to refuse an unhuntable source BEFORE it asks which board a
+   * hunt is scoped to: for a repo-backed source that answer comes off the provider's own
+   * declaration, so an unregistered or unwired one has no answer at all, and answering anyway told
+   * the caller to "pick a board" on a surface that renders no board control. Pure (a registry
+   * lookup), and {@link hunt} calls it too, so a caller that skips it is refused all the same.
+   */
+  requireProvider(source: TaskSourceKind): HuntableProvider {
+    const provider = this.deps.taskSourceRegistry.get(source)
+    if (!provider?.listBugCandidates) {
+      throw new ValidationError(`The '${source}' source cannot back a bug hunt on this deployment.`)
+    }
+    return provider as HuntableProvider
+  }
 
   /**
    * List the boards a hunt can run against. A source whose provider can't enumerate boards
@@ -87,6 +146,18 @@ export class BugHuntService {
    */
   async listBoards(workspaceId: string, source: TaskSourceKind): Promise<TrackerBoard[]> {
     const provider = this.deps.taskSourceRegistry.get(source)
+    if (provider?.repoScope) {
+      // A repo-backed source has no board to OFFER: every issue of its belongs to one
+      // repository, and the one a hunt may read is the repository the service frame it runs for
+      // is linked to (`resolveRepoTarget`), never a choice made here. Refused ahead of the
+      // capability check below so the answer is the same whether or not such a provider can
+      // enumerate repositories at all: listing the connection's repos as boards would offer to
+      // scope a hunt at a repository nothing on this board is linked to.
+      throw new ValidationError(
+        `The '${source}' source scopes a hunt to a service's linked repository, so it has no boards to list.`,
+        { reason: 'board_from_service' satisfies TaskSourceReadReason },
+      )
+    }
     if (!provider?.listBoards) {
       // `reason` is what the SPA acts on: "this tracker cannot enumerate boards" is the ONE
       // failure whose answer is "type the board in yourself", and it must be distinguishable
@@ -112,12 +183,20 @@ export class BugHuntService {
   async hunt(
     workspaceId: string,
     source: TaskSourceKind,
-    input: RunBugHuntInput,
+    input: BugHuntScan,
   ): Promise<BugHuntResult> {
-    const provider = this.deps.taskSourceRegistry.get(source)
-    if (!provider?.listBugCandidates) {
-      throw new ValidationError(`The '${source}' source cannot back a bug hunt on this deployment.`)
-    }
+    const provider = this.requireProvider(source)
+    // The container is settled BEFORE the vendor read and the ranking call, not left to the
+    // adoption that follows: a hunt is the platform's first billable model call that is not
+    // behind a run start, so a scan nothing could ever be adopted out of must not spend one.
+    // The point-read is exactly the gate `createTaskFromIssue` applies before it creates the
+    // task, asked one step earlier; whether the container may HOLD a task stays with the create
+    // (`BoardService.addTask`), which is that rule's one authority.
+    assertFound(
+      await this.deps.blockRepository.get(workspaceId, input.containerId),
+      'Block',
+      input.containerId,
+    )
     const credentials = await this.credentialsFor(workspaceId, source)
 
     // Exclusion list: every issue from this source currently imported AND linked to a block is

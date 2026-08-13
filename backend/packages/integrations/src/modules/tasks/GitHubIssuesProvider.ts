@@ -15,7 +15,6 @@ import {
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
   type TaskSourceWritebackAdapter,
-  type TrackerBoard,
   ValidationError,
 } from '@cat-factory/kernel'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
@@ -280,18 +279,6 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       if (hits.length < per) break // a short page is the last page — stop paging
     }
     return out
-  }
-
-  /**
-   * List the workspace installation's repositories as hunt boards. No installation ⇒ an empty
-   * list, matching every other read on this provider (GitHub Issues rides the App, so "not
-   * installed" is an absence, not an error).
-   */
-  async listBoards(_credentials: TaskCredentials, workspaceId: string): Promise<TrackerBoard[]> {
-    const installation = await this.deps.installations.getByWorkspace(workspaceId)
-    if (!installation) return []
-    const page = await this.deps.githubClient.listInstallationRepos(installation.installationId)
-    return githubIssuesLogic.githubReposToBoards(page.items)
   }
 
   /**

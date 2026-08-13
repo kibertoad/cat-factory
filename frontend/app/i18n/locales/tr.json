@@ -1367,6 +1367,13 @@
       "awaitingChoice": "Bir kullanıcı seçimi bekleniyor",
       "approvalGate": "Onay kapısı",
       "companionReview": "Yardımcı incelemesi",
+      "findingSeverity": {
+        "blocker": "Mutlaka düzeltilmeli",
+        "major": "Düzeltilmeli",
+        "minor": "Küçük",
+        "ungraded": "Yorum",
+        "unrecognized": "Tanınmayan düzey ({level})"
+      },
       "correctionIterations": "{count} düzeltme yinelemesi. | {count} düzeltme yinelemesi.",
       "state": {
         "pending": "Beklemede",
@@ -1403,7 +1410,9 @@
       "closeEsc": "Kapat (Esc)",
       "companionCapHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, hâlâ {threshold} barının altında.",
       "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
-      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan {threshold} barının altında kaldı.",
+      "companionCapBlockedHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık. | {agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık.",
+      "companionCapBlockedDetail": "Devam etmek, bu bulgular düzeltilmeden işi kabul etmek demektir; bu yüzden bu çalışmanın risk politikası bu seçimi sizin yerinize asla yapmaz. Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyla yine de devam edin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
+      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan hiç değişmedi.",
       "companionStalledDetail": "Kalan turlar kullanılmadı, çünkü yalnızca verilmiş bir kararı yineleyeceklerdi. Yine de bir tur daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "infraAttempts": "Altyapı denemeleri",
       "hideInfraAttempts": "Altyapı denemelerini gizle",
@@ -4731,7 +4740,9 @@
     "tracker": "Takip aracı",
     "board": "Pano",
     "pickBoard": "Bir pano seçin",
-    "boardPlaceholder": "Proje anahtarı, takım kimliği veya owner/repo",
+    "boardPlaceholder": "Proje anahtarı veya takım kimliği",
+    "boardFromService": "Bu servise bağlı depo",
+    "boardNeedsRepo": "Bu servise bağlı bir depo yok, dolayısıyla taranacak kayıt da yok. Servis panelinden bir depo bağlayın.",
     "boardsFailed": "Panolar yüklenemedi: {reason}",
     "issueType": "Kayıt türü",
     "issueTypeHelp": "Varsayılan olarak bug. Kayıt türü olmayan araçlarda yok sayılır.",
@@ -4740,6 +4751,8 @@
     "labelsHelp": "Virgülle ayrılır. Hepsinin bulunması gerekir.",
     "adoptInto": "Seçilen hatayı şuraya ekle",
     "adoptingInto": "Seçilen hata {container} içine eklenir",
+    "huntIn": "Taranacak servis",
+    "huntingIn": "{container} servisine bağlı depo taranıyor; seçilen hata da oraya eklenir.",
     "run": "Avla",
     "running": "Pano okunuyor ve bulunanlar değerlendiriliyor…",
     "huntFailed": "Av başarısız oldu",
@@ -4752,6 +4765,7 @@
     "noCandidates": "Bu panoda eşleşen açık ve atanmamış hata yok.",
     "ratings": "Etki {impact}/5, karmaşıklık {complexity}/5, güven {confidence}",
     "viaModel": "{model} tarafından değerlendirildi.",
+    "scannedBoard": "{board} tarandı.",
     "truncated": "Yalnızca eşleşen ilk {count} hata tarandı; bu panoda daha fazlası var.",
     "comments": "{count} yorum | {count} yorum",
     "confidence": {
@@ -4765,6 +4779,10 @@
       "failed": "Değerlendirme tamamlanamadı, bu yüzden bunlar değerlendirilmedi.",
       "over_budget": "Bu çalışma alanı harcama bütçesini aştığı için bunlar değerlendirilmedi.",
       "empty": "Değerlendirilecek bir şey yok."
+    },
+    "refusal": {
+      "boardFromService": "Bu izleyici, seçilen hizmete bağlı depoyu tarar; bu yüzden kendine ait bir panosu yoktur.",
+      "missingBoard": "Aranacak panoyu seçin."
     }
   },
   "pipeline": {

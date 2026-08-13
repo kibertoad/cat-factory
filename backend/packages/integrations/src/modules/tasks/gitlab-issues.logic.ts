@@ -6,7 +6,7 @@ import {
   type TaskSourceDescriptor,
 } from '@cat-factory/kernel'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
-import { repoIssueBugCandidateMapper, repoRefsToBoards } from './repo-issues.logic.js'
+import { repoIssueBugCandidateMapper } from './repo-issues.logic.js'
 
 // GitLab-issues task-source pure logic, the sibling of `github-issues.logic.ts`: the
 // descriptor, the external-id grammar and its round-trip, the ref parser, and the
@@ -261,13 +261,6 @@ export function buildGitLabIntakeSearch(
  * conventions it declines to guess at are the scoped labels `priority::high` and `type::bug`.
  */
 export const gitlabHitToBugCandidate = repoIssueBugCandidateMapper('gitlab', gitlabIssueExternalId)
-
-/**
- * Map the projects a connection can reach onto hunt boards: the shared repo-backed projection,
- * since a GitLab board scope is the full path with namespace that {@link buildGitLabIntakeSearch}
- * splits back into a ref.
- */
-export const gitlabProjectsToBoards = repoRefsToBoards
 
 /**
  * Resolve raw search input that names ONE specific issue in the SCOPED project (rather than

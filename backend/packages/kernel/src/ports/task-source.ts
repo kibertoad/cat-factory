@@ -291,11 +291,16 @@ export interface TaskSourceProvider {
    */
   readonly ignoredIntakePredicates?: readonly IssueIntakePredicate[]
   /**
-   * List the boards a hunt can be scoped to — Jira projects, Linear teams, GitHub
-   * repositories. Optional: a provider without it can't back the bug hunt's board
-   * picker, and the hunt surface says so rather than offering an empty list.
-   * `workspaceId` serves the same per-workspace out-of-band authentication as
-   * {@link TaskSourceProvider.search}.
+   * List the boards a hunt can be scoped to (Jira projects, Linear teams). Optional: a provider
+   * without it can't back the bug hunt's board picker, and the hunt surface says so rather than
+   * offering an empty list. `workspaceId` serves the same per-workspace out-of-band
+   * authentication as {@link TaskSourceProvider.search}.
+   *
+   * A REPO-BACKED source (one declaring {@link TaskSourceProvider.repoScope}) implements this on
+   * NO account, and the hunt refuses to call it: such a source's board is not a choice, it is the
+   * repository the hunt's own service frame is linked to. Offering its reachable repositories as
+   * boards would let a hunt scan, and then adopt a bug from, a repository nothing on that board
+   * is linked to, which is the same unscoped read {@link TaskSourceProvider.search} refuses.
    */
   listBoards?(credentials: TaskCredentials, workspaceId: string): Promise<TrackerBoard[]>
   /**

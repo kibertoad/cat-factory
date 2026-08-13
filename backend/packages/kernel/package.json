@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/kernel",
-  "version": "0.298.2",
+  "version": "0.299.0",
   "description": "Shared vocabulary, pure logic, and port interfaces for the Agent Architecture Board.",
   "repository": {
     "type": "git",
@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
-    "ai": "^7.0.62",
+    "ai": "^7.0.64",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

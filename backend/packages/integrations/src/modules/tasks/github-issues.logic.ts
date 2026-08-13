@@ -5,7 +5,7 @@ import type {
   TaskSourceDescriptor,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
-import { repoIssueBugCandidateMapper, repoRefsToBoards } from './repo-issues.logic.js'
+import { repoIssueBugCandidateMapper } from './repo-issues.logic.js'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 
 // GitHub-issues task-source pure logic, kept out of the worker so it is
@@ -328,9 +328,3 @@ export function githubIssueInRepoScope(externalId: string, scope: TaskSearchRepo
  * external-id grammar. See {@link repoIssueBugCandidateMapper} for why `priority`/`type` stay empty.
  */
 export const githubHitToBugCandidate = repoIssueBugCandidateMapper('github', githubIssueExternalId)
-
-/**
- * Map an installation's repositories onto hunt boards: the shared repo-backed projection, since a
- * GitHub board scope is the `owner/repo` slug {@link buildGitHubIntakeQuery} puts in `repo:`.
- */
-export const githubReposToBoards = repoRefsToBoards

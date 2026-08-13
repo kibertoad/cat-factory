@@ -34,13 +34,13 @@ import { anchoredQualityScale, PRIOR_ROUNDS_DIRECTIVE } from './review-rounds.js
  * {@link anchoredQualityScale}, SHARED with the companion prompt, because the same argument
  * holds across the two grading buckets and not merely across rubrics.
  *
- * It deliberately does NOT carry `REVIEW_SUMMARY_LAYOUT`, which asks a reviewer to lay its
- * `summary` out as grouped bullets. A judge already returns its points as `findings`, and
- * `JudgeResultView` renders that array as its own list directly below the summary — so the layout
- * would have every point written twice, in two orderings that can disagree. The same reasoning
- * excludes the `pr-reviewer` and the tester; the fragment is for a reviewer whose one string IS
- * the whole review (the companions). What the judge needs is the RENDER half, which it has: the
- * summary goes through the same markdown reader, so a short verdict paragraph reads properly.
+ * It deliberately does NOT carry `REVIEW_FINDINGS_LAYOUT`, the companions' findings contract. A
+ * judge already returns its points as `findings`, graded on its own severity vocabulary, and
+ * `JudgeResultView` renders that array as its own list directly below the summary — so the
+ * fragment would impose a SECOND grading scheme over the same points. The same reasoning excludes
+ * the `pr-reviewer` and the tester. What the two buckets do share is stated where it belongs: the
+ * anchored scale above, and the "summary is a verdict, not a restatement" rule this prompt makes
+ * in its own words.
  */
 export const JUDGE_SYSTEM_PROMPT =
   'You are an impartial reviewer scoring a piece of work against a RUBRIC you are given. You ' +
