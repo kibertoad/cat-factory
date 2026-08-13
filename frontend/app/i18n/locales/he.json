@@ -3145,6 +3145,7 @@
         "ciMaxAttempts": "ניסיונות תיקון CI",
         "maxRequirementIterations": "איטרציות דרישות",
         "maxRequirementConcernAllowed": "מעבר אוטומטי בחששות ברף או מתחתיו",
+        "companionMaxReworks": "סבבי עיבוד מחדש של המלווה",
         "autoMerge": "מיזוג אוטומטי"
       },
       "newPreset": "מדיניות חדשה",
@@ -3156,6 +3157,7 @@
         "impact": "השפעה%",
         "ciFix": "תיקון CI",
         "reqIter": "איטרציות דרישות",
+        "companionRework": "עיבוד מחדש",
         "autoPass": "מעבר אוטומטי ברף או מתחתיו"
       },
       "add": "הוסף",

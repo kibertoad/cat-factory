@@ -3003,6 +3003,7 @@
         "ciMaxAttempts": "Спроби виправлення CI",
         "maxRequirementIterations": "Ітерації вимог",
         "maxRequirementConcernAllowed": "Авто-пропуск зауважень до",
+        "companionMaxReworks": "Цикли переробки компаньйона",
         "autoMerge": "Автозлиття"
       },
       "newPreset": "Нова політика",
@@ -3014,6 +3015,7 @@
         "impact": "Вплив%",
         "ciFix": "Випр. CI",
         "reqIter": "Ітер. вим.",
+        "companionRework": "Переробка",
         "autoPass": "Авто-пропуск до"
       },
       "add": "Додати",

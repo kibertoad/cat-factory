@@ -538,6 +538,7 @@
         "ciMaxAttempts": "CI-Fix-Versuche",
         "maxRequirementIterations": "Anforderungs-Iterationen",
         "maxRequirementConcernAllowed": "Auto-Pass bei Bedenken auf oder unter",
+        "companionMaxReworks": "Begleiter-Überarbeitungsrunden",
         "autoMerge": "Auto-Merge"
       },
       "autoMergeOnHint": "Automatisch mergen, wenn innerhalb der Richtliniengrenzen.",
@@ -551,6 +552,7 @@
         "impact": "Ausw.%",
         "ciFix": "CI-Fix",
         "reqIter": "Anf.-Iter.",
+        "companionRework": "Überarb.",
         "autoPass": "Auto-Pass auf oder unter"
       },
       "add": "Hinzufügen",

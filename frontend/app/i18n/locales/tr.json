@@ -3145,6 +3145,7 @@
         "ciMaxAttempts": "CI düzeltme denemeleri",
         "maxRequirementIterations": "Gereksinim yinelemeleri",
         "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç",
+        "companionMaxReworks": "Yardımcı yeniden çalışma turları",
         "autoMerge": "Otomatik birleştirme"
       },
       "newPreset": "Yeni ilke",
@@ -3156,6 +3157,7 @@
         "impact": "Etki%",
         "ciFix": "CI düzeltme",
         "reqIter": "Grks. yin.",
+        "companionRework": "Yen. çalışma",
         "autoPass": "Şu düzeyde veya altında otomatik geç"
       },
       "add": "Ekle",
