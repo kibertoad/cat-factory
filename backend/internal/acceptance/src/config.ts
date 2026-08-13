@@ -32,6 +32,17 @@ export type ClusterConfig = {
    */
   ingressHostTemplate: string
   namespaceTemplate: string
+  /**
+   * What the manifests' `{{image}}` placeholder resolves to, per pull request.
+   *
+   * Configured rather than defaulted-away, and REQUIRED in effect: the scaffold briefs make
+   * `{{image}}` mandatory in every Deployment, and the platform renders a hole it cannot fill as
+   * the empty string, so a connection carrying no template applies `image: ""` and the apiserver
+   * refuses the Deployment. The default publishes under the pull request's own number because
+   * that is the one per-PR discriminator the provision knows AND a legal image tag: a provision
+   * carries no commit sha, and `{{branch}}` is `cat-factory/<taskId>`, which no tag may contain.
+   */
+  imageTemplate: string
 }
 
 /**
@@ -313,6 +324,13 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
           trimmed(env.ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE) ?? '{{namespace}}.127.0.0.1.nip.io',
         namespaceTemplate:
           trimmed(env.ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) ?? 'cf-acc-{{pullNumber}}',
+        // GHCR under the repository's own owner, which needs no second credential decision: the
+        // workflow the briefs ask for pushes there with the `GITHUB_TOKEN` it already has. The
+        // `image-template` prerequisite renders this before a pass starts and says outright that
+        // it did not check whether anything publishes it, or whether the cluster may pull it.
+        imageTemplate:
+          trimmed(env.ACCEPTANCE_K3S_IMAGE_TEMPLATE) ??
+          'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}',
       },
       // The reporter half, resolved by the function `reset --purge-repos` calls rather than beside
       // it: a second spelling of the default REST base is a second thing to change on the day an

@@ -95,6 +95,20 @@ export type PrerequisiteResult = {
   verdict: PrerequisiteVerdict
 }
 
+/**
+ * The two verdict constructors, beside the type they build rather than private to the file that
+ * holds most of the checks: the checks are written in more than one module now (a gate that reads
+ * only the CONFIG lives in `manifestTemplates.ts`), and a second spelling of `{ status: … }` is how
+ * a verdict shape drifts.
+ */
+export const satisfied = (detail: string): PrerequisiteVerdict => ({ status: 'satisfied', detail })
+
+export const unsatisfied = (problem: string, remedy: Remedy): PrerequisiteVerdict => ({
+  status: 'unsatisfied',
+  problem,
+  remedy,
+})
+
 export type PreflightReport = {
   results: readonly PrerequisiteResult[]
 }

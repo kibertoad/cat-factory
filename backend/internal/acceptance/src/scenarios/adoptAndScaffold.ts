@@ -117,7 +117,7 @@ export function adoptAndScaffoldScenario(harness: Harness): Scenario {
           role: 'backend',
           ledgerKey: 'scaffoldBackend',
           title: 'Stand up the catalog API service',
-          brief: backendScaffoldBrief(config.cluster.ingressHostTemplate),
+          brief: backendScaffoldBrief(config.cluster),
         })
         assert.ok(record.pullRequestUrl, 'the backend scaffold run recorded no pull request')
       })
@@ -131,7 +131,7 @@ export function adoptAndScaffoldScenario(harness: Harness): Scenario {
           role: 'frontend',
           ledgerKey: 'scaffoldFrontend',
           title: 'Stand up the catalog web frontend',
-          brief: frontendScaffoldBrief(backend.repoName, config.cluster.ingressHostTemplate),
+          brief: frontendScaffoldBrief(backend.repoName, config.cluster),
         })
         assert.ok(record.pullRequestUrl, 'the frontend scaffold run recorded no pull request')
       })

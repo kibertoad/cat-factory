@@ -38,6 +38,7 @@ function config(overrides: Partial<AcceptanceConfig> = {}): AcceptanceConfig {
       insecureSkipTlsVerify: true,
       ingressHostTemplate: '{{namespace}}.127.0.0.1.nip.io',
       namespaceTemplate: 'cf-acc-{{pullNumber}}',
+      imageTemplate: 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}',
     },
     vcs: { token: 'reporter-token', apiBaseUrl: 'https://api.github.com' },
     stateDir: '.acceptance',
@@ -958,5 +959,44 @@ describe('ingress-template', () => {
       }),
     })
     expect(commandsOf(verdict.remedy)[0]).toContain("'{{namespace}}.127.0.0.1.nip.io'")
+  })
+})
+
+describe('image-template', () => {
+  // The gate that would have refused the pass this whole check came out of: a deployer step that
+  // applied `image: ""` because nothing filled `{{image}}`, three agents and a pull request in.
+  it('refuses a template naming a hole a provision does not fill, and names the hole', async () => {
+    const verdict = await refusal('image-template', {
+      config: config({
+        cluster: {
+          ...config().cluster,
+          imageTemplate: 'ghcr.io/{{repoOwner}}/{{repoName}}:{{commitSha}}',
+        },
+      }),
+    })
+    // Naming the placeholder is the point: the platform substitutes an unknown one with nothing
+    // and says so nowhere, so the operator otherwise reads an apiserver complaint about a field
+    // their manifest sets.
+    expect(verdict.problem).toContain('{{commitSha}}')
+    expect(commandsOf(verdict.remedy)[0]).toContain('pr-{{pullNumber}}')
+  })
+
+  it('refuses a tag built from the branch, which the platform renders with a slash in it', async () => {
+    const verdict = await refusal('image-template', {
+      config: config({
+        cluster: { ...config().cluster, imageTemplate: 'ghcr.io/acme/api:{{branch}}' },
+      }),
+    })
+    expect(verdict.problem).toContain("may not contain '/'")
+  })
+
+  it('passes on the default, and says what it did NOT check', async () => {
+    // Both unchecked facts are reachable states of a correctly configured suite, and both present
+    // as an environment that provisions and never becomes ready, so a pass that implied otherwise
+    // would send the next reader to the cluster.
+    const detail = await satisfied('image-template', { config: config() })
+    expect(detail).toContain('ghcr.io/intended-org/cf-acc-catalog-api:pr-1')
+    expect(detail).toContain('PUBLISHES')
+    expect(detail).toContain('403')
   })
 })

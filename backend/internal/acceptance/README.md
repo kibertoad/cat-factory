@@ -238,6 +238,7 @@ of it, one release behind.
 | `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                                                                                        |
 | `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                                                                             |
 | `ingress-template`   | yes     | An environment URL renders from the configured host template.                                                                                                                                                                   |
+| `image-template`     | yes     | The manifests' `{{image}}` renders to a reference a cluster could pull. It says outright what it did NOT check: whether anything publishes that reference, and whether the cluster may pull it.                                 |
 | `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal.                                                                                                                       |
 
 Three things it deliberately does NOT check, because none is knowable from where it stands:
@@ -462,6 +463,7 @@ summary names every key it replaced, and anything in the file it does not manage
 | `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                                                                                                                                                                                                                                                                                |
 | `ACCEPTANCE_MODEL_PRESET`              | no       | Preset id pinned on every task, default `mdp_claude` (the built-in Claude preset). `configure` offers the library as a menu, so the id never has to be typed.                                                                                                                                                                                      |
 | `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS. Also the host the scaffold briefs ask each service's Ingress to serve, so overriding it moves both halves together.                                                                                                                                                                  |
+| `ACCEPTANCE_K3S_IMAGE_TEMPLATE`        | no       | Default `ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}`. What the manifests' `{{image}}` resolves to, and what the workflow the briefs ask for is told to publish, so overriding it moves both halves together. A provision knows no commit sha, and `{{branch}}` is `cat-factory/<taskId>`, which no tag may contain.                      |
 | `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                                                                                                                                                                                                                                                                   |
 | `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Prefixes the board frames and tasks, not the repositories. Set it per-person when a board is shared.                                                                                                                                                                                                                             |
 | `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a whole-scenario timeout; see below.                                                                                                                                                                                                                                                                          |
@@ -806,6 +808,19 @@ is more than the single line an expiry message carries. What is banned is ending
 neither, and a wait must poll for everything its grade asserts or it hands the grader a half-written
 observation and fails what was working.
 
+**A THROWN poll is covered by that rule too**, and it used to escape it. The deployment this suite
+polls is by design a local one, run under `cat-factory supervise` (whose job is to restart the
+backend when it stops serving) in front of a `node --watch` that cycles the process on a file
+change, so a restart is an ordinary event over an afternoon. One of them killed a pass 41 minutes
+in: a `pl_build` scaffold with its coder and reviewer done and a pull request open, whose next
+`GET /tasks/:id/run` threw `connect ECONNREFUSED` and took the scenario with it, while the run
+itself carried on to its deployer step unobserved. So `src/deploymentOutage.ts` makes an
+unanswered poll an OBSERVATION for two minutes (journalled, and the recovery is journalled too,
+because an unexplained gap in the observations is how a restart becomes invisible), and an outage
+that outlasts that says the deployment stopped answering rather than blaming the run. An ANSWER is
+never waited through: a refusal is evidence, and the typed SDK error is rethrown untouched so its
+status and request id survive.
+
 **4. Every failing claim is reported, not just the first.** A run that both skipped its environment
 and failed CI is one story, and learning the second half on tomorrow's re-run wastes a day per bug.
 
@@ -840,6 +855,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/config.ts`              | Environment → config in two halves (a BOARD, and what it takes to RUN a pass on one), reporting every problem at once. Pure; unit-tested.                                                                                        |
 | `src/envFile.ts`             | The `.env` at the package root, read the same way by all four commands. Pure.                                                                                                                                                    |
 | `src/preflight.ts`           | The prerequisite vocabulary, runner, refusal, and the pass's GATE, which is where the report scenario's evaluation is handed to the gate seconds behind it rather than made twice. Pure; unit-tested.                            |
+| `src/manifestTemplates.ts`   | The two checks that render the templates the briefs embed (ingress host, image reference). Config-only, so they carry the narrower context. Unit-tested.                                                                         |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                                                           |
 | `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                                                      |
 | `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Unit-tested; reads the ambient shell unless a dialect is passed. |
@@ -869,6 +885,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                                                           |
 | `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                                                       |
 | `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`), and the typed answer a non-2xx or non-JSON reply becomes. Unit-tested.                                                                                |
+| `src/deploymentOutage.ts`    | Which thrown poll is an outage to wait through, and for how long. Pure; unit-tested.                                                                                                                                             |
 | `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                                                                                                                                                                  |
 
 **See also:** [`backend/internal/e2e`](../e2e) (the faked-externals product suite),

@@ -18,6 +18,7 @@ import type {
 import type { AcceptanceConfig } from './config.ts'
 import { waitFor } from './deadline.ts'
 import { isActionable } from './decisions.ts'
+import { deploymentOutageTolerance } from './deploymentOutage.ts'
 import type { Journal } from './journal.ts'
 import type { PersonalUnlock } from './personalUnlock.ts'
 import { type PinnedPreset, pinnedModel } from './presets.ts'
@@ -218,6 +219,12 @@ function kinds(decisions: PublicDecisionList['decisions']): string {
  * acceptance test, the one failure mode nobody can afford here. A poll re-asks the point read,
  * which is authoritative by construction and carries every step's whole output (the stream
  * clips them; see `truncated` on the run-step contract).
+ *
+ * **This is the wait that carries the outage tolerance**, and it is the only one that needs it:
+ * it is where a pass spends its hours, so it is where a deployment restart lands (see
+ * `deploymentOutage.ts`). The one-shot calls around it are exposed for a second each and would
+ * have to answer a harder question than "poll again" if they were retried, since some of them
+ * write.
  */
 export function waitForDecisionOrSettled(options: {
   client: CatFactoryClient
@@ -230,6 +237,7 @@ export function waitForDecisionOrSettled(options: {
   return waitFor({
     label: `task ${taskId} to park on an answerable decision or settle`,
     budgetMs,
+    tolerate: deploymentOutageTolerance(),
     probe: async () => {
       const run = await client.tasks.getRun(taskId)
       // Read decisions REGARDLESS of `parked`, as the contract instructs: a `follow-ups` entry
