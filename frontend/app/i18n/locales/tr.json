@@ -4830,6 +4830,7 @@
       "purposeUnrecognized": "Tanınmayan ({purpose})",
       "purposeOption": {
         "build": "Geliştirme",
+        "bugfix": "Hata düzeltme",
         "document": "Dokümantasyon",
         "review": "İnceleme",
         "research": "Araştırma",

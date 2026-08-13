@@ -4830,6 +4830,7 @@
       "purposeUnrecognized": "Нерозпізнано ({purpose})",
       "purposeOption": {
         "build": "Розробка",
+        "bugfix": "Виправлення помилки",
         "document": "Документація",
         "review": "Рецензування",
         "research": "Дослідження",

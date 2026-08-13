@@ -491,8 +491,8 @@ describe('seedPipelines — purpose classification is total and matches the engi
         .map((p) => p.id)
 
     const forFeature = offered('feature')
-    // The ladder plus the bug/ralph presets are all reachable...
-    for (const id of ['pl_build', 'pl_simple', 'pl_full', 'pl_bugfix', 'pl_ralph']) {
+    // The ladder plus the ralph preset are all reachable...
+    for (const id of ['pl_build', 'pl_simple', 'pl_full', 'pl_ralph']) {
       expect(forFeature, `${id} must be offered on a feature task`).toContain(id)
     }
     // ...and the presets that cannot ship code are not. `pl_initiative*` are the ones the engine
@@ -508,8 +508,19 @@ describe('seedPipelines — purpose classification is total and matches the engi
     ]) {
       expect(forFeature, `${id} must not be offered on a feature task`).not.toContain(id)
     }
-    // A `bug` task gets the same set as a feature (both ship code).
-    expect(offered('bug')).toEqual(forFeature)
+    // A `bug` task gets the same set PLUS the bugfix presets, and that is the ONLY thing the two
+    // programmatic types differ on: "Triage & fix bug" investigates a defect REPORT and writes a
+    // failing reproduction test, neither of which a feature can supply. The difference is derived
+    // from the catalog's own classifier rather than hand-listed, so a preset added with that
+    // purpose joins this assertion instead of breaking it.
+    const bugOnly = offered('bug').filter((id) => !forFeature.includes(id))
+    expect(bugOnly).toEqual(
+      seedPipelines()
+        .filter((p) => p.purpose === 'bugfix')
+        .map((p) => p.id),
+    )
+    expect(bugOnly, 'the one-off bug preset is the point of the narrowing').toContain('pl_bugfix')
+    expect(forFeature.every((id) => offered('bug').includes(id))).toBe(true)
     // The pre-existing narrowings still hold, and stay disjoint from the programmatic set.
     expect(offered('document')).toEqual(['pl_document', 'pl_document_quick', 'pl_business_docs'])
     expect(offered('review')).toEqual(['pl_review'])

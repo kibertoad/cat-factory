@@ -5,7 +5,12 @@ import * as v from 'valibot'
  * builder and stamped on every built-in preset, it is the classifier the SPA filters on:
  *
  *   - `build`      produces or changes application code (the default for engineering
- *                  pipelines: full builds, bug fixes, refactors, dependency updates, …).
+ *                  pipelines: full builds, refactors, dependency updates, …).
+ *   - `bugfix`     fixes a REPORTED DEFECT: it ships code exactly as `build` does, and it is
+ *                  built around a report to investigate, triage and reproduce, so it is offered
+ *                  to a `bug` task and withheld from a `feature` one. The two are otherwise the
+ *                  same classifier, which is why the palette and the save gate treat them alike
+ *                  and only `pipelineAllowedForTaskType` tells them apart.
  *   - `document`   authors or updates documentation (a PRD/RFC/runbook, business rules, …);
  *                  a `document` task offers ONLY these.
  *   - `review`     reviews existing code / a pull request and reports findings; writes no code.
@@ -20,7 +25,14 @@ import * as v from 'valibot'
  * modules both build a `Set` at evaluation time resolves to an empty one on whichever side
  * loses the race.
  */
-export const PIPELINE_PURPOSES = ['build', 'document', 'review', 'research', 'planning'] as const
+export const PIPELINE_PURPOSES = [
+  'build',
+  'bugfix',
+  'document',
+  'review',
+  'research',
+  'planning',
+] as const
 export const pipelinePurposeSchema = v.picklist(PIPELINE_PURPOSES)
 export type PipelinePurpose = v.InferOutput<typeof pipelinePurposeSchema>
 

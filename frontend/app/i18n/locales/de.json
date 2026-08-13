@@ -4387,6 +4387,7 @@
       "purposeUnrecognized": "Nicht erkannt ({purpose})",
       "purposeOption": {
         "build": "Entwicklung",
+        "bugfix": "Fehlerbehebung",
         "document": "Dokumentation",
         "review": "Review",
         "research": "Recherche",

@@ -4830,6 +4830,7 @@
       "purposeUnrecognized": "לא מזוהה ({purpose})",
       "purposeOption": {
         "build": "פיתוח",
+        "bugfix": "תיקון באג",
         "document": "תיעוד",
         "review": "סקירה",
         "research": "מחקר",

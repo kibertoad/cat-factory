@@ -4830,6 +4830,7 @@
       "purposeUnrecognized": "Non reconnu ({purpose})",
       "purposeOption": {
         "build": "Développement",
+        "bugfix": "Correction de bug",
         "document": "Documentation",
         "review": "Revue",
         "research": "Recherche",

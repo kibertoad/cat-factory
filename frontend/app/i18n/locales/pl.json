@@ -4830,6 +4830,7 @@
       "purposeUnrecognized": "Nierozpoznany ({purpose})",
       "purposeOption": {
         "build": "Programowanie",
+        "bugfix": "Poprawka błędu",
         "document": "Dokumentacja",
         "review": "Przegląd",
         "research": "Badania",

@@ -4994,6 +4994,7 @@
       },
       "purposeOption": {
         "build": "Build",
+        "bugfix": "Bug fix",
         "document": "Documentation",
         "review": "Review",
         "research": "Research",

@@ -380,13 +380,14 @@ const selectedModelPresetLabel = computed(() => {
 // still browsable.
 const fragmentPool = computed(() => fragments.forBlockType(frame.value?.type ?? 'service'))
 
-// Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
-// UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate). Also
-// hide `'recurring'`-only pipelines (a one-off task start of one is refused at run start) and every
-// pipeline whose purpose doesn't match the chosen task type (a doc task authors a doc, a review task
-// reviews a PR, and a `feature`/`bug` task ships code — so it is offered build + research only, not
-// the doc/review/planning presets). `blockLevel: 'task'` is passed literally because this modal only
-// ever creates a task leaf, which also drops the three planning presets the backend would refuse.
+// Hide UI-testing pipelines when the target frame has no UI for them to reach — a step scoped to
+// a frontend service excuses itself, so this only drops an UNCONDITIONAL one (see utils/pipeline
+// + the backend gate). Also hide `'recurring'`-only pipelines (a one-off task start of one is
+// refused at run start) and every pipeline whose purpose doesn't match the chosen task type (a doc
+// task authors a doc, a review task reviews a PR, a `bug` task ships code and may reach for a
+// bugfix preset, and a `feature` gets that set minus the bugfix ones, which have no defect report
+// to investigate). `blockLevel: 'task'` is passed literally because this modal only ever creates a
+// task leaf, which also drops the three planning presets the backend would refuse.
 // Re-filters as the chosen task type changes.
 const selectablePipelines = computed(() =>
   pipelines.pipelines.filter((p) =>

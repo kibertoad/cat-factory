@@ -4830,6 +4830,7 @@
       "purposeUnrecognized": "認識できません ({purpose})",
       "purposeOption": {
         "build": "開発",
+        "bugfix": "バグ修正",
         "document": "ドキュメント",
         "review": "レビュー",
         "research": "調査",

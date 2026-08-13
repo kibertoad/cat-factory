@@ -2,7 +2,8 @@ import {
   frameAllowsVisualPipeline,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
-  pipelineHasVisualStep,
+  pipelineRunsVisualStep,
+  resolveRunServiceScope,
 } from '@cat-factory/contracts'
 import type { AgentKind, Block, BlockLevel, Pipeline } from '~/types/domain'
 
@@ -102,16 +103,31 @@ export { pipelineAllowedForBlockLevel, pipelineAllowedForTaskType }
 // the gate.
 
 /**
- * Whether `pipeline` may run on a task under `frame`. A non-visual pipeline is always allowed;
- * a visual one only when the frame has a UI (see {@link frameAllowsVisualPipeline}). `blocks` is
- * the board's block list, used to find frontend→service links.
+ * Whether `pipeline` may run on a task under `frame`. Allowed when the frame has a UI (see
+ * {@link frameAllowsVisualPipeline}), and otherwise only when no visual step would REACH a
+ * dispatch there ({@link pipelineRunsVisualStep}). `blocks` is the board's block list, used to
+ * find frontend→service links.
+ *
+ * The two halves mirror run admission, which filters the chain through the run conditions and
+ * then gates the survivors on the frame. Asking only "does it list a visual step" hid every
+ * build rung from every picker on every non-frontend service the moment the ladder adopted the
+ * conditional tester pair: each rung lists a `tester-ui` scoped to `frontend`, which a backend
+ * task skips.
+ *
+ * The scope is derived from the FRAME alone, where the engine also folds in the task's involved
+ * services. That cannot disagree here: an involved service is always a non-frontend (a frontend
+ * frame has no connection neighbours, see `RunServiceScope`), so it can only ever re-confirm the
+ * `backend` half this frame already sets — and on a frontend frame the gate passes on the frame
+ * itself. An unresolved frame yields an empty scope, which admits every condition and is then
+ * refused by the frame half, exactly as the engine refuses it.
  */
 export function pipelineAllowedForFrame(
   pipeline: Pipeline,
   frame: Block | undefined,
   blocks: readonly Block[],
 ): boolean {
-  return !pipelineHasVisualStep(pipeline) || frameAllowsVisualPipeline(frame, blocks)
+  if (frameAllowsVisualPipeline(frame, blocks)) return true
+  return !pipelineRunsVisualStep(pipeline, resolveRunServiceScope(frame ? [frame] : []))
 }
 
 // Launch-availability filters, the surface counterpart to the backend's start-origin gate (a
@@ -126,7 +142,8 @@ export function pipelineAllowedForFrame(
  *  - `'recurring'`-only pipelines the backend would refuse;
  *  - visual pipelines on a frame with no UI;
  *  - pipelines whose `purpose` doesn't fit the given `taskType` (a `document` task offers only
- *    document pipelines; a `feature`/`bug` task only build + research ones);
+ *    document pipelines; a `bug` task build + bugfix + research ones, and a `feature` the same
+ *    minus the bugfix presets, which have no defect report to work from);
  *  - pipelines whose `purpose` doesn't fit the given `blockLevel` (planning pipelines run only on
  *    an initiative block, and an initiative block runs only those).
  *
