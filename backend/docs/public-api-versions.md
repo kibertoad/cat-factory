@@ -742,3 +742,16 @@ Two answers a caller has to branch on rather than retry:
 
 A run under the frame is stopped and its container killed before anything is removed, so a delete
 during a live run never leaves a container idling until its watchdog.
+
+## 1.52.0
+
+1.52.0, not 1.51.1: one additive field, `branchContentionRecoveries`, on every step of
+`GET /api/v1/debug/runs/{runId}`. Nothing existing changes shape or meaning, and a consumer built
+against 1.51.0 ignores it.
+
+**It is the counter for a recovery that is otherwise invisible.** The harness checkpoint-pushes an
+agent's commits while it works, so a push to the work branch can be REFUSED because the branch moved
+under the run; the engine re-dispatches the step once, and the run then reports as an ordinary
+success. The only trace that a whole agent run was spent twice, in tokens and in wall clock, is this
+number. It sits beside `evictionRecoveries`, which exists for the same reason and answers the same
+kind of question: reading the step alone, a re-dispatched run is indistinguishable from a clean one.

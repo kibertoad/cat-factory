@@ -51,6 +51,20 @@ export interface FakeAgentOptions {
   pollFailCause?: HarnessFailureCause
   /** The extended `detail` a {@link pollFailKinds} poll reports. Default a phase-timing breadcrumb. */
   pollFailDetail?: string
+  /**
+   * Fail only the FIRST job of each {@link pollFailKinds} kind IN EACH RUN; a later job of that
+   * kind runs normally, and a re-poll of the job that failed keeps failing (a failed job in
+   * production does not heal). What a RECOVERABLE failure cause needs in order to be asserted at
+   * all: with the default (fail forever) a recovery loop is indistinguishable from no recovery,
+   * since both end in a failed run.
+   *
+   * It only measures the recovery when the re-dispatch mints a NEW job id, which is why the
+   * recovery suites pair it with {@link pooledContainer}: that is the mode whose ids come off the
+   * run's dispatch epoch, exactly as the container executor's do. Under the default per-(run, step)
+   * id a re-dispatch re-attaches to the same job, so the assertion would pass just as well against
+   * an engine re-dispatching under a stale id, which is a bug this repo has shipped before.
+   */
+  pollFailOnce?: boolean
   /** Token usage reported per call, so the spend safeguard can be exercised. */
   usage?: { inputTokens: number; outputTokens: number }
   /**
@@ -792,6 +806,14 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   private readonly pollFailKinds: ReadonlySet<AgentKind>
   private readonly pollFailCause: HarnessFailureCause
   private readonly pollFailDetail: string
+  private readonly pollFailOnce: boolean
+  /**
+   * Which JOB owns the one scripted {@link pollFailOnce} failure, per (execution, kind). Keyed on
+   * the run rather than the kind alone because one executor serves every execution in a suite, so a
+   * kind-keyed set would silently let a second run's step of the same kind sail through; keyed on
+   * the job so a re-poll of the job that failed stays failed while a NEW job of that kind runs.
+   */
+  private readonly pollFailedJobs = new Map<string, string>()
   protected readonly followUpItems: FakeAgentOptions['followUps']
   /** The tool-server record every dispatch's handle carries, if the suite set one. */
   protected readonly toolServers: FakeAgentOptions['toolServers']
@@ -809,6 +831,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     this.pollFailDetail =
       options.pollFailDetail ??
       'Phase timings: clone=2s, agent=600s. last completed tool bash 600s ago.'
+    this.pollFailOnce = options.pollFailOnce ?? false
     this.followUpItems = options.followUps
     this.toolServers = options.toolServers
   }
@@ -869,6 +892,23 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     for (const id of this.jobs.keys()) if (id.startsWith(prefix)) this.jobs.delete(id)
   }
 
+  /**
+   * Whether THIS poll reports the scripted failure for a {@link FakeAgentOptions.pollFailKinds}
+   * kind. Without `pollFailOnce` every poll does. With it, the failure belongs to ONE job per
+   * (execution, kind): that job keeps reporting it however often the driver re-polls, and any later
+   * job of the same kind (the recovery's re-dispatch, under a fresh id) runs normally.
+   */
+  private failsThisPoll(context: AgentRunContext, handle: AgentJobHandle): boolean {
+    if (!this.pollFailOnce) return true
+    const key = `${context.executionId ?? 'noexec'}:${context.agentKind}`
+    const owner = this.pollFailedJobs.get(key)
+    if (owner === undefined) {
+      this.pollFailedJobs.set(key, handle.jobId)
+      return true
+    }
+    return owner === handle.jobId
+  }
+
   async pollJob(handle: AgentJobHandle): Promise<AgentJobUpdate> {
     const job = this.jobs.get(handle.jobId)
     // An unknown job id (e.g. polled after a result was already recorded) is treated as
@@ -876,7 +916,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
     if (!job) return { state: 'done', result: { output: '[async] done', model: 'fake' } }
     // Report a structured-cause failure (the deterministic analogue of the harness's failed
     // job view) so the engine's cause → AgentFailureKind mapping is exercised on both runtimes.
-    if (this.pollFailKinds.has(job.context.agentKind)) {
+    if (this.pollFailKinds.has(job.context.agentKind) && this.failsThisPoll(job.context, handle)) {
       return {
         state: 'failed',
         error: 'Aborted: no agent activity for 600s (likely hung in agent phase)',

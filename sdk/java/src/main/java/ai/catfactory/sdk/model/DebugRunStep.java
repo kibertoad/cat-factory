@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code DebugRunStep} wire model.
  * @param agentKind the {@code agentKind} field.
+ * @param branchContentionRecoveries the {@code branchContentionRecoveries} field.
  * @param evictionRecoveries the {@code evictionRecoveries} field.
  * @param finishedAt Always present; {@code null} when the server has no value for it.
  * @param firstEvictionDetail Always present; {@code null} when the server has no value for it.
@@ -29,6 +30,8 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record DebugRunStep(
     @JsonProperty("agentKind") String agentKind,
+
+    @JsonProperty("branchContentionRecoveries") Double branchContentionRecoveries,
 
     @JsonProperty("evictionRecoveries") Double evictionRecoveries,
 
@@ -79,6 +82,7 @@ public record DebugRunStep(
      */
     public static final class Builder {
         private @Nullable String agentKind;
+        private @Nullable Double branchContentionRecoveries;
         private @Nullable Double evictionRecoveries;
         private @Nullable Double finishedAt;
         private @Nullable DebugText firstEvictionDetail;
@@ -97,6 +101,12 @@ public record DebugRunStep(
         /** Set {@code agentKind}. */
         public Builder agentKind(@Nullable String agentKind) {
             this.agentKind = agentKind;
+            return this;
+        }
+
+        /** Set {@code branchContentionRecoveries}. */
+        public Builder branchContentionRecoveries(@Nullable Double branchContentionRecoveries) {
+            this.branchContentionRecoveries = branchContentionRecoveries;
             return this;
         }
 
@@ -186,7 +196,7 @@ public record DebugRunStep(
 
         /** Build the {@link DebugRunStep}. */
         public DebugRunStep build() {
-            return new DebugRunStep(agentKind, evictionRecoveries, finishedAt, firstEvictionDetail, hasStructuredResult, index, lastActivityAt, model, outputChars, progress, skipped, startedAt, state, subtasks, toolServers);
+            return new DebugRunStep(agentKind, branchContentionRecoveries, evictionRecoveries, finishedAt, firstEvictionDetail, hasStructuredResult, index, lastActivityAt, model, outputChars, progress, skipped, startedAt, state, subtasks, toolServers);
         }
     }
 }

@@ -11,24 +11,18 @@ import {
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 import { spawnedInitiative } from './shared.js'
-import {
-  registerCompanionAndFailureTests,
-  registerCompanionCapTests,
-} from './execution-companion.js'
 
 // Execution-engine conformance, slice 2: spec-increment ingest, requirements/clarity
 // substitution, initiative-preset steering, run restart, the implementation-fork decision loop,
-// and the producer/companion review gates. Re-opens the same `execution engine` describe group.
+// and the merger's own decision policy. Re-opens the same `execution engine` describe group.
 //
-// The companion half lives in `./execution-companion.ts` and registers into this same group; it
-// was split off when this file reached its size budget, not because it is a separate concern.
+// The companion loop that used to sit here is `./execution-companion.ts`, split off when this file
+// crossed its size budget for the second time; it registers into this same group.
 export function defineExecutionReviewConformance(harness: ConformanceHarness): void {
   describe('execution engine', () => {
     registerSpecIngestAndSteeringTests(harness)
     registerRequirementsGateTests(harness)
-    registerCompanionAndFailureTests(harness)
     registerMergerDecisionTests(harness)
-    registerCompanionCapTests(harness)
   })
 }
 

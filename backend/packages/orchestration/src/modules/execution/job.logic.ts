@@ -62,6 +62,20 @@ export const MAX_EVICTION_RECOVERIES = 1
 export const MAX_TRANSIENT_EVICTION_RECOVERIES = 5
 
 /**
+ * Recovery budget for a step whose push to the work branch was REFUSED because the branch moved
+ * under it (the harness reports `branch-contended`). Re-dispatching resumes the branch as it now
+ * stands, which is exactly what resolves the race the rejection reports: the other writer's
+ * commits are already there, so the agent works on top of them instead of against them.
+ *
+ * Set to 1, and deliberately lower than the transient-eviction budget: the two failure shapes look
+ * alike but recur differently. Infra churn is a window that passes, whereas the one contention
+ * shape the harness cannot resolve itself is an agent REWRITING history it did not publish, which
+ * is deterministic, so a second attempt does the same thing again. One retry buys the genuine race
+ * its resolution without funding a loop, and the failure past it names the cause precisely.
+ */
+export const MAX_BRANCH_CONTENTION_RECOVERIES = 1
+
+/**
  * Throttle window (ms) for persisting a container step's liveness heartbeat as its
  * `lastActivityAt`. The harness heartbeat advances on every stdout chunk and the driver polls
  * every ~15s, so persisting on every poll would rewrite the run needlessly; instead the engine
@@ -134,6 +148,13 @@ export interface DispatchFailureContext {
   evictionRecoveries?: number
   /** Transient-churn recoveries already spent — same "work had begun" signal as above. */
   transientEvictionRecoveries?: number
+  /**
+   * Branch-contention recoveries already spent (see `MAX_BRANCH_CONTENTION_RECOVERIES`). The third
+   * "work had begun" signal, and the STRONGEST of them: a refused push is proof the step's commits
+   * are on the remote branch already, where an eviction only proves the container reached the agent
+   * phase. It gets its own message rather than the eviction one because nothing was evicted.
+   */
+  branchContentionRecoveries?: number
   /** Epoch ms the step first began executing, to render "after N minutes of work". */
   startedAt?: number | null
   /** Slices the reviewer had already grouped the diff into (partial progress), if any. */
@@ -157,16 +178,33 @@ function elapsedWorkMinutes(context: DispatchFailureContext): number | null {
  * board and PR-review window can render "work was in progress".
  */
 function evictionAfterWorkMessage(context: DispatchFailureContext): string {
-  const minutes = elapsedWorkMinutes(context)
-  const when =
-    minutes != null
-      ? `after ${minutes} minute${minutes === 1 ? '' : 's'} of work`
-      : 'after work had begun'
   const slices =
     context.sliceCount && context.sliceCount > 0
       ? ` (${context.sliceCount} slice${context.sliceCount === 1 ? '' : 's'} reviewed)`
       : ''
-  return `The container was evicted ${when}${slices} and could not be recovered.`
+  return `The container was evicted ${whenWorkHadBegun(context)}${slices} and could not be recovered.`
+}
+
+/** "after N minutes of work", or the vaguer form when no start clock was recorded. */
+function whenWorkHadBegun(context: DispatchFailureContext): string {
+  const minutes = elapsedWorkMinutes(context)
+  return minutes != null
+    ? `after ${minutes} minute${minutes === 1 ? '' : 's'} of work`
+    : 'after work had begun'
+}
+
+/**
+ * The honest terminal message for the re-dispatch of a step whose work-branch push was REFUSED
+ * failing to start. Nothing was evicted here, so it keeps the `dispatch` framing, but it must not
+ * read as "never started": the step's commits are on the remote branch already, which is precisely
+ * what the refused push proved.
+ */
+function contentionAfterWorkMessage(context: DispatchFailureContext): string {
+  return (
+    `The container failed to start when resuming this step ${whenWorkHadBegun(context)}, ` +
+    'after its push to the work branch was refused. The commits it had already pushed are on the ' +
+    'branch.'
+  )
 }
 
 /**
@@ -193,6 +231,10 @@ function evictionAfterWorkMessage(context: DispatchFailureContext): string {
  *    the failed recovery re-dispatch of a container that reached the agent phase and was then
  *    evicted) is framed as `evicted` with an eviction-after-work message, NOT the misleading
  *    "container failed to start" (which reads as "never started"). See ADR 0026 D1.
+ *  - A generic throw on the re-dispatch after a REFUSED work-branch push
+ *    (`context.branchContentionRecoveries > 0`) is the same misattribution to avoid, with a
+ *    stronger history behind it: the step's commits are already on the branch. It keeps the
+ *    `dispatch` kind (no container was evicted) and says what it was resuming.
  *  - Anything else is a genuine container accept failure (`dispatch`): the container/runner
  *    never accepted the job (an HTTP/network error, a capacity blip) before any work happened.
  */
@@ -226,6 +268,12 @@ export function classifyDispatchFailure(
   const recoveries = (context.evictionRecoveries ?? 0) + (context.transientEvictionRecoveries ?? 0)
   if (recoveries > 0) {
     return { error: evictionAfterWorkMessage(context), failureKind: 'evicted', detail: message }
+  }
+  // Same reasoning, different history: this is the re-dispatch after a REFUSED work-branch push, so
+  // the step's work is not merely begun but pushed. It stays a `dispatch` failure (nothing was
+  // evicted) with a message that says so.
+  if ((context.branchContentionRecoveries ?? 0) > 0) {
+    return { error: contentionAfterWorkMessage(context), failureKind: 'dispatch', detail: message }
   }
   return { error: 'The container failed to start.', failureKind: 'dispatch', detail: message }
 }

@@ -7,23 +7,30 @@ import type {
 } from '@cat-factory/kernel'
 import type { ConformanceHarness } from '../harness.js'
 
-// Execution-engine conformance, the COMPANION half: the producer/companion review gates, the
-// agent-failure classification the SPA keys its remedies off, and what happens when a rework loop
-// stops (its budget spent, or a must-fix finding it could not get closed).
+// Execution-engine conformance: the COMPANION loop — a verdict on the preceding step's work, and
+// what happens when the loop cannot get that verdict to a pass.
 //
-// A sibling module rather than a group of its own: both halves register into the ONE
-// `execution engine` describe `execution-review.ts` opens, so this adds no
-// `define…Conformance` export and nothing for a facade to wire separately (see
-// `scripts/check-conformance-group-parity.mjs`). It is split off purely because the review slice
-// reached its file-size budget, and these are the cohesive part of it.
+// Split out of `execution-review.ts` when that file crossed its size budget again, along the seam
+// its neighbour `execution-failures.ts` had already found: the review slice is about the gates a
+// run passes THROUGH, and this is about one gate's own rework machine. The two halves of that
+// machine belong together, because the pass rule and the cap rule are the same decision seen at
+// two budgets (kernel's `disposeCompanionVerdict`), and a change to one that forgot the other is
+// exactly what these assertions catch.
+export function defineExecutionCompanionConformance(harness: ConformanceHarness): void {
+  describe('execution engine', () => {
+    registerCompanionGateTests(harness)
+    registerCompanionCapTests(harness)
+  })
+}
 
 /**
- * The producer/companion review gates and the agent-failure classification the SPA keys its
- * remedies off. The merger's own decision policy sits in `registerMergerDecisionTests`.
+ * The producer/companion review gates: a verdict ON the preceding step's work. The merger's own
+ * decision policy sits in `execution-review.ts`, and a job that never delivered work to grade is
+ * `execution-failures.ts`.
  *
- * Registered from `execution-review.ts`, into the same describe group.
+ * Registered from the suite above; the tests are unchanged by the move.
  */
-export function registerCompanionAndFailureTests(harness: ConformanceHarness): void {
+function registerCompanionGateTests(harness: ConformanceHarness): void {
   it('passes a companion gate when the rating clears the threshold', async () => {
     // A companion step grades the prior producer; at/above its threshold the run
     // proceeds. `reviewer` is the coder's companion, so ['coder','reviewer'] runs the
@@ -202,126 +209,16 @@ export function registerCompanionAndFailureTests(harness: ConformanceHarness): v
     const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
     expect(companionStep.state).not.toBe('done')
   })
-
-  it('classifies a container-start (dispatch) failure as `dispatch`, not a generic run failure', async () => {
-    // When the container/runner never accepts the job (startJob throws), the engine
-    // must classify it as a `dispatch` failure ("Container failed to start") and carry
-    // the verbatim provider error as the detail — identically on both runtimes — rather
-    // than a generic "Run failed" with a misleading "inspect the container logs" hint.
-    const app = harness.makeApp({
-      asyncKinds: ['coder'],
-      dispatchThrowKinds: ['coder'],
-      dispatchThrowMessage: 'Container dispatch failed (HTTP 503): no capacity',
-    })
-    const { workspace } = await app.createWorkspace()
-    const wsId = workspace.id
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-      name: 'Build only',
-      purpose: 'build',
-      agentKinds: ['coder'],
-    })
-    const start = await app.call<ExecutionInstance>(
-      'POST',
-      `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: pipeline.body.id },
-    )
-    expect(start.status).toBe(201)
-    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
-    expect(exec.status).toBe('failed')
-    expect(exec.failure?.kind).toBe('dispatch')
-    // The verbatim provider/runtime response is preserved as the detail for triage.
-    expect(exec.failure?.detail).toContain('HTTP 503')
-    // The step did not falsely complete; the container is surfaced as errored (the
-    // details say the container failed to start, not a generic "run failed").
-    const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
-    expect(coderStep.state).not.toBe('done')
-    expect(coderStep.container?.status).toBe('errored')
-    // The investigation diagnostics survive the failure they exist for. They used to be
-    // stamped from the job handle, which only exists once a container has ACCEPTED the job,
-    // so this failure, the one where "which step, which kind, which model" is hardest to
-    // reconstruct afterwards, recorded nothing at all.
-    const dispatch = exec.diagnostics?.lastDispatch
-    expect(dispatch?.agentKind).toBe('coder')
-    expect(dispatch?.stepIndex).toBe(0)
-    expect(dispatch?.failure?.kind).toBe('dispatch')
-    // No repo: nothing resolved one, and claiming a repo the dispatch never reached would be
-    // worse than an absent field.
-    expect(dispatch?.repo).toBeUndefined()
-  })
-
-  it('records diagnostics for an INLINE step, naming its backend', async () => {
-    // An inline step dispatches nowhere, which is why it used to stamp nothing: a pure-inline
-    // run reported no diagnostics at all, and a mixed pipeline reported whatever CONTAINER
-    // step ran last as where the run was when it died.
-    const app = harness.makeApp()
-    const { workspace } = await app.createWorkspace()
-    const wsId = workspace.id
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-      name: 'Inline only',
-      purpose: 'build',
-      agentKinds: ['coder'],
-    })
-    const start = await app.call<ExecutionInstance>(
-      'POST',
-      `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: pipeline.body.id },
-    )
-    expect(start.status).toBe(201)
-    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
-
-    const dispatch = exec.diagnostics?.lastDispatch
-    expect(dispatch?.agentKind).toBe('coder')
-    // `inline` is what distinguishes "the engine answered this itself" from a container step
-    // still waiting for the first poll to report its backend. Both are otherwise an absent
-    // `executionBackend`, and they need opposite investigations.
-    expect(dispatch?.executionBackend).toBe('inline')
-    expect(dispatch?.failure).toBeUndefined()
-  })
-
-  it("maps a polled job's structured failureCause → AgentFailureKind and surfaces the detail", async () => {
-    // The harness now reports a STRUCTURED `failureCause` (+ extended `detail`) on a failed
-    // job view; the engine must classify the failure from it WITHOUT regex-matching the error
-    // — a watchdog `inactivity-timeout` becomes `timeout`, and the harness detail is surfaced.
-    // Asserted identically on both runtimes so a facade/transport that drops the cause (the
-    // way the Node pool transport once did) fails here instead of silently degrading to `agent`.
-    const app = harness.makeApp({
-      asyncKinds: ['coder'],
-      pollFailKinds: ['coder'],
-      pollFailCause: 'inactivity-timeout',
-    })
-    const { workspace } = await app.createWorkspace()
-    const wsId = workspace.id
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-      name: 'Build only',
-      purpose: 'build',
-      agentKinds: ['coder'],
-    })
-    const start = await app.call<ExecutionInstance>(
-      'POST',
-      `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: pipeline.body.id },
-    )
-    expect(start.status).toBe(201)
-    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
-    expect(exec.status).toBe('failed')
-    // The watchdog cause classifies as `timeout`, not the generic `agent`.
-    expect(exec.failure?.kind).toBe('timeout')
-    // The harness's extended diagnostic is surfaced as the failure detail.
-    expect(exec.failure?.detail).toContain('Phase timings')
-    // The step's container is surfaced as errored (the run details show the container
-    // faulted), persisted before the failure funnels through `failRun`.
-    const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
-    expect(coderStep.container?.status).toBe('errored')
-  })
 }
 
 /**
- * What happens when a companion spends its rework budget: park, grant one more round,
- * proceed with the current output, or stop and reset the task to phase zero.
+ * What happens when a companion's loop stops: its rework budget spent, or a must-fix finding it
+ * could not get closed. Either way a person picks — one more round, proceed with the current
+ * output, or stop and reset the task to phase zero.
  *
- * Registered from `execution-review.ts`, into the same describe group.
+ * Registered from the suite above; the tests are unchanged by the move.
  */
-export function registerCompanionCapTests(harness: ConformanceHarness): void {
+function registerCompanionCapTests(harness: ConformanceHarness): void {
   it('parks for a human when a companion spends its rework budget (no longer fails)', async () => {
     // Below the threshold the companion loops the producer back for automatic rework;
     // once the budget is spent the run no longer fails — it PARKS on the shared

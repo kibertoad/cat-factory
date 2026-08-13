@@ -1,5 +1,65 @@
 # @cat-factory/node-server
 
+## 0.205.0
+
+### Minor Changes
+
+- 95408c2: A companion's automatic rework budget is now a risk-policy field instead of a constant in the engine.
+
+  Every other automatic loop reads its ceiling off the task's policy: the CI fixer (`ciMaxAttempts`),
+  the iterative requirements review (`maxRequirementIterations`), the Tester's quality gate
+  (`maxTesterQualityIterations`), a judge's bounces (`judgeMaxBounces`), the post-release-health watch.
+  The companion loop, which has the widest reach of them (every `reviewer`, `architect-companion`,
+  `spec-companion` and any pair a deployment registers) and is the one an operator actually watches
+  spend container dispatches, was pinned at 3 by `DEFAULT_COMPANION_MAX_ATTEMPTS` with no way to state
+  otherwise. `companionMaxReworks` closes that, on both policy tiers (account and workspace) and in the
+  policy editor beside the requirement-iteration budget.
+
+  `0` is a real posture rather than a disabled loop: the companion still grades and still writes its
+  verdict, and the first verdict below the bar goes straight to the iteration-cap park (or to
+  `proceed`, on a policy whose `autonomy` is `unattended`) instead of buying a round. A verdict at or
+  above the bar advances, comments and all. That last part is the one place this number changed an
+  existing rule rather than parameterising it: a companion's FIRST batch of comments loops the producer
+  back whatever it scored, and that rule now asks whether there is a round to spend before it fires.
+  Left alone, `0` would have parked every companion step, since a review with nothing at all to say is
+  the rare one.
+
+  A step is seeded with the catalog default at run start, where no policy is resolved, so the resolved
+  value is adopted onto `step.companion.maxAttempts` at the companion's first grading, the same way the
+  Tester's quality budget is adopted on its first report. That read happens once per step, keyed on the
+  step having recorded no verdict yet: a human granting an extra round at the cap does it by raising
+  that same field (and the grant charges the round immediately), so a later read would report a ceiling
+  the step no longer has. Keyed on the attempt count instead, it also fired a second time after a human
+  "request changes" on a gated companion, which re-runs the producer while deliberately charging no
+  round.
+
+  No behaviour changes by default. The column default and all three built-in seeds carry the 3 the
+  engine held, so a stored policy and a freshly seeded one are byte-for-byte identical and no seed
+  needed a version bump. The field stays off `/api/v1`, where the risk-policy projection deliberately
+  publishes only what decides whether a run can land without a person.
+
+### Patch Changes
+
+- Updated dependencies [95408c2]
+  - @cat-factory/contracts@0.307.0
+  - @cat-factory/kernel@0.297.0
+  - @cat-factory/orchestration@0.269.0
+  - @cat-factory/agents@0.128.2
+  - @cat-factory/consensus@0.16.15
+  - @cat-factory/eks@0.1.319
+  - @cat-factory/gates@0.10.46
+  - @cat-factory/gitlab@0.20.16
+  - @cat-factory/integrations@0.160.13
+  - @cat-factory/observability-otel@0.19.10
+  - @cat-factory/prompt-fragments@1.0.70
+  - @cat-factory/server@0.283.2
+  - @cat-factory/spend@0.15.88
+  - @cat-factory/caching@0.20.15
+  - @cat-factory/observability-langfuse@0.10.90
+  - @cat-factory/provider-bedrock@0.7.467
+  - @cat-factory/provider-cloudflare@0.7.468
+  - @cat-factory/provider-s3@0.2.387
+
 ## 0.204.2
 
 ### Patch Changes

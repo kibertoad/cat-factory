@@ -24,6 +24,8 @@ import {
   pushBranch,
   refreshFromBaseIfClean,
   remoteBranchExists,
+  unpublishedWorkBranchTip,
+  workBranchLease,
 } from './git.js'
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
 import type { HarnessCallMetric } from './pi.js'
@@ -280,13 +282,35 @@ function followUpPollIntervalMs(): number {
  * concurrently: overlapping pushes race on the remote ref and can make a push fail with a
  * ref-lock / non-fast-forward error — which, on the FINAL push, would fail the whole run even
  * though the work is committed. `pushWorkOnce` coalesces concurrent callers onto one push and only
- * pushes once the branch has advanced past `baseSha`.
+ * pushes what is UNPUBLISHED ({@link unpublishedWorkBranchTip}: past `baseSha`, and not already the
+ * tip the last push published).
  *
- * Only push once the branch has advanced past its pre-run tip: pushing while it still sits at
- * `baseSha` would create the work branch at the base commit (a zero-diff branch), which a later
- * retry would see via `remoteBranchExists` and treat as resumable work — then fail to open a PR
- * ("no commits between base and head"). So a run that never commits leaves NO branch behind,
- * preserving the clean no-op outcome.
+ * Every push after the first LEASES against the sha this pass published (see
+ * {@link pushBranch}), because the checkpoint makes the harness its own competing writer: it
+ * publishes a commit within a minute of the agent making it, and the agent is then free to amend,
+ * reset or rebase that commit, which is perfectly ordinary git hygiene, and the delivery contract
+ * asks it to validate AFTER committing, exactly the sequence that produces an amend. Without the
+ * lease the final push is refused as a non-fast-forward and the whole run fails with its work
+ * already on the branch. The lease is what keeps that recovery from becoming a blanket `--force`:
+ * a SECOND writer (a concurrent dispatch for the same block) still refuses the push, which is the
+ * "never clobber another run's commits" property the resume design leans on.
+ *
+ * The lease alone does not bound the force to THIS pass's own commits, and that is the property
+ * the design promises, so it is checked rather than assumed: once one checkpoint has landed, a
+ * rewrite that drops `baseSha` (the tip the pass started from, which on a RESUMED branch is an
+ * earlier run's published work) would lease successfully against our own checkpoint and take the
+ * earlier commits with it. So the lease is armed only while the branch still CONTAINS `baseSha`;
+ * withheld, the push goes out plain, git refuses it, and the engine re-dispatches onto the branch
+ * as it stands. A rewrite this pass cannot prove is its own is never forced away.
+ *
+ * What is pushable is {@link unpublishedWorkBranchTip}'s question, and both of its answers matter
+ * here. A branch still at `baseSha` must not be pushed at all, or a later retry resumes a zero-diff
+ * branch and cannot open a PR for it. A branch already at the published tip has nothing to add, and
+ * skipping it is what keeps the interval a LOSS WINDOW rather than a push rate: an hour-long run
+ * that commits eight times pushes eight times, not sixty. That skip is invisible to the outcome by
+ * construction: `finalizeCodingRun` decides `pushed` from the BRANCH (advanced this pass, or
+ * resumed), never from whether the final call issued a `git push`, because a tip the checkpoint
+ * already published is published.
  */
 function createWorkBranchPusher(args: {
   dir: string
@@ -301,11 +325,31 @@ function createWorkBranchPusher(args: {
 } {
   const { dir, spec, baseSha, logger, signal } = args
   let pushInFlight: Promise<void> | null = null
+  // The sha THIS pass last published to the work branch, and the only value it will ever lease a
+  // force push against. Starts unset even on a RESUMED branch: the tip we merely cloned is an
+  // earlier run's work, so a rewrite of it is refused (and re-driven) rather than forced away.
+  let publishedSha: string | undefined
   const pushWorkOnce = (): Promise<void> => {
     if (pushInFlight) return pushInFlight
     pushInFlight = (async () => {
-      if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
-      await pushBranch(dir, spec.pushBranch, spec.ghToken, signal)
+      if (!(await unpublishedWorkBranchTip({ dir, baseSha, publishedSha, signal }))) return
+      // The rule the lease is entitled to lives beside the push ({@link workBranchLease}); the
+      // warn is here, because a withheld lease is how a rewrite this pass cannot claim fails the
+      // push it is about to make, and the run's log is where that is read.
+      const lease = await workBranchLease({
+        dir,
+        branch: spec.pushBranch,
+        baseSha,
+        publishedSha,
+        signal,
+        onWithheld: (probe) =>
+          logger.warn('coding-agent: push lease withheld, the branch dropped its pre-run tip', {
+            baseSha,
+            publishedSha,
+            probe,
+          }),
+      })
+      publishedSha = await pushBranch(dir, spec.pushBranch, spec.ghToken, signal, lease)
     })().finally(() => {
       pushInFlight = null
     })
