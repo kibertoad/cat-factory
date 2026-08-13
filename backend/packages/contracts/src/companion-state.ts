@@ -61,6 +61,12 @@ export const companionStateSchema = v.object({
    * making progress: the producer returned work byte-identical to the revision it was asked
    * to change, and the companion's rating did not move.
    *
+   * Only ever set for a producer whose DELIVERABLE is its reply (an `inline` or
+   * `container-explore` kind). A `container-coding` producer's work is the commit it pushed and
+   * its reply is a summary it may reasonably not write at all, so its loop is bounded by
+   * `maxAttempts` alone and this stays absent there — absent meaning "not detectable", never
+   * "known to be converging".
+   *
    * A budget is a bound on how long a converging loop may take, not evidence that one is
    * converging. A run that re-graded an unchanged document to the same 0.76 four times over
    * spent its whole budget and ~17k completion tokens per round restating a verdict it had

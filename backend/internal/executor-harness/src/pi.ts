@@ -642,6 +642,16 @@ export interface HarnessCallMetric {
    * never disagree about which phase billed a call.
    */
   phase?: string
+  /**
+   * This row is not a TURN: it stands for the job as a whole, carrying the spend the CLI reported
+   * in its terminal cumulative total and did not attribute to any turn it narrated (see
+   * {@link unaccountedUsageCall}). It has no bodies, because there was no request to capture.
+   *
+   * The backend files it with a NULL turn index for that reason, while still deriving its row id
+   * from {@link seq} so a replayed poll re-records instead of duplicating. Absent on every real
+   * turn. `CliInlineLanguageModel`'s step-level row is the same idea on the inline path.
+   */
+  standsForJob?: boolean
 }
 
 /**
@@ -657,9 +667,13 @@ export interface HarnessCallMetric {
  * A published call must be FINAL. The backend records it the moment the drain reaches it and
  * IGNORES the terminal repeat (first write wins, so its stored prompt delta stays valid against
  * the chain tip it was written against), which means a field mutated after publishing never
- * reaches the store. A producer whose calls can still change (the cumulative-usage fallback,
- * whose totals arrive with the CLI's terminal `result` event) publishes through
- * {@link createCallMetricPublisher} instead, which withholds exactly those.
+ * reaches the store.
+ *
+ * That is a rule about every producer, and it is why the cumulative-usage reconciliation files its
+ * shortfall as a NEW row here at the end of the run (`unaccountedUsageCall`) rather than growing the
+ * last captured turn. This used to be wrapped by a publisher that withheld the turn attribution
+ * could still rewrite, trading a turn of streaming lag for that mutability; with nothing mutated,
+ * the wrapper had no reason left to exist.
  */
 export function publishCallMetric(
   calls: HarnessCallMetric[],
@@ -668,54 +682,6 @@ export function publishCallMetric(
 ): void {
   calls.push(call)
   onCallMetric?.(call)
-}
-
-/** Appends captured calls to a run's list, streaming each one as soon as it is final. */
-export interface CallMetricPublisher {
-  /** Append a captured call, holding it back until a later one proves its tokens are final. */
-  publish(call: HarnessCallMetric): void
-  /** Stream the call still withheld. Call once the run's totals are attributed. */
-  flush(): void
-}
-
-/**
- * A {@link publishCallMetric} wrapper for a producer whose per-call tokens are filled in at the
- * END of the run: `attributeCumulativeUsage` pins the terminal cumulative shortfall onto the LAST
- * captured call once the CLI's `result` event arrives.
- *
- * A published call must be FINAL — the backend records it on the drain and its first write wins,
- * so the terminal repeat of an already-streamed row is a no-op. Attribution can only ever rewrite
- * the last call, so exactly the last call is withheld: each `publish` releases its predecessor and
- * holds the newcomer, and {@link flush} (called after attribution, and again on the abort path)
- * releases the final one. A run therefore streams every turn but the one in hand, which is the
- * least lag that keeps "published ⇒ final" true.
- *
- * It used to withhold on a different rule — hold UNCOSTED calls, and stop holding anything the
- * moment one call reported tokens — on the assumption that a costed call proved attribution could
- * no longer fire. Claude Code disproves it: every turn arrives costed on the input side while the
- * output side is still the message-start snapshot, so nothing was ever withheld, the last call
- * streamed with ~5 output tokens, and the attributed figure lost the race to its own first write.
- * See {@link attributeCumulativeUsage} for the measurements.
- */
-export function createCallMetricPublisher(
-  calls: HarnessCallMetric[],
-  onCallMetric?: (call: HarnessCallMetric) => void,
-): CallMetricPublisher {
-  let held: HarnessCallMetric | undefined
-  const flush = (): void => {
-    const call = held
-    held = undefined
-    if (call) onCallMetric?.(call)
-  }
-  return {
-    publish(call) {
-      // Released BEFORE this call is held so the live sequence stays in capture order.
-      flush()
-      publishCallMetric(calls, call)
-      held = call
-    },
-    flush,
-  }
 }
 
 /** Pi's assistant summary plus {@link PiRunStats} describing what it did. */

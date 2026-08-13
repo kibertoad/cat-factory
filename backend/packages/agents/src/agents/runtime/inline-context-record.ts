@@ -10,15 +10,25 @@ import { runBestEffort } from '@cat-factory/kernel'
 // The agent-context observability snapshot for an INLINE dispatch.
 //
 // `agent_context_snapshots` had exactly one producer, `ContainerAgentExecutor`, so every inline
-// agent kind — the companions, the judges, the requirements reviewer, the task estimator, the
-// document kinds, Kaizen itself — was invisible to it. On a real board the table held rows for
-// `architect`, `coder`, `initiative-analyst` and `reviewer` and for nothing else, while
-// `architect-companion` had 16 recorded LLM calls and no snapshot at all.
+// AGENT KIND was invisible to it. On a real board the table held rows for `architect`, `coder`,
+// `initiative-analyst` and `reviewer` and for nothing else, while `architect-companion` had 16
+// recorded LLM calls and no snapshot at all.
 //
 // That is a hole with a reader: `KaizenService` grades a step from its snapshot plus its calls,
 // and told its grader "no provided-context snapshot was captured (prompt recording may be off)"
 // for every inline kind. Recording was ON. There was no capture site. The grader, given a cause,
 // duly recommended enabling a switch that was already enabled.
+//
+// WHAT THIS COVERS is every kind DISPATCHED through `AiAgentExecutor` — the companions, the
+// inline document kinds, the task estimator, any registered `surface: 'inline'` kind a deployment
+// adds. What it does NOT cover is the services that call `generateText` themselves rather than
+// through an agent-kind dispatch: the judges (`JudgeService`), the requirements and clarity
+// reviewers (`IterativeReviewService`, `RequirementReviewService`), the tester-quality reviewer,
+// the bug-hunt assessor, the document interviewer, and Kaizen's own grading call. Each composes its
+// own prompts at its own call site and none of them is a step dispatch, so a snapshot for those is
+// a separate piece of work, not a flag flip. Until it is done, their steps take the "no snapshot is
+// available" branch of the Kaizen prompt, which is why that branch names no cause: it cannot tell
+// this from a deployment with recording switched off.
 //
 // This is the sibling of the server layer's `buildAgentContextRecord` and deliberately NOT a
 // reuse of it: that one projects a container JOB BODY, and its whole reason for existing is the
@@ -69,6 +79,14 @@ export function buildInlineAgentContextRecord(input: {
       pipelineName: context.pipelineName,
       mode: 'inline',
       decisions: context.decisions,
+      // The rework this dispatch is answering, projected exactly as the container sibling does: the
+      // feedback verbatim (the whole of what the producer was told to fix) plus the FACT that a
+      // prior proposal was handed back, without the proposal itself, which is already the previous
+      // dispatch's own snapshot. It is the field a stalled-companion investigation starts from — a
+      // rework round is otherwise indistinguishable from a first pass in this record.
+      ...(context.revision
+        ? { revision: { feedback: context.revision.feedback, hadPriorProposal: true } }
+        : {}),
     },
   }
 }
@@ -80,7 +98,11 @@ export function buildInlineAgentContextRecord(input: {
  * exactly the one whose provided context someone wants to read, and a snapshot filed only on the
  * success path would be missing from every failure. And on the Worker an un-awaited insert is
  * dropped when the isolate hibernates on the next durable step, which is what the container
- * sibling's own comment records. The cost is one insert ahead of an LLM call.
+ * sibling's own comment records.
+ *
+ * So the cost is on the critical path by design, and it is one insert: the per-workspace gate the
+ * recorder asks first reads through the shared settings cache where a facade has one (see
+ * `AgentContextObservabilityService`), rather than a SELECT per dispatch.
  *
  * Best-effort: recording must never break a dispatch, and a recorder whose store is unreachable
  * says so once through the logger rather than failing the step.

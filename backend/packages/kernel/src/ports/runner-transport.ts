@@ -108,6 +108,15 @@ export interface HarnessCallMetric {
    * Absent on an older harness image; the recorder then stores the unattributed `''` phase.
    */
   phase?: string
+  /**
+   * This row is not a TURN: it stands for the JOB, carrying spend the CLI reported in its terminal
+   * cumulative total and attributed to no turn it narrated. It has no bodies, since there was no
+   * request to capture, and it is recorded with a NULL `turnIndex` for the same reason — a
+   * fabricated turn among measured ones is indistinguishable from a measured one, which is the
+   * whole point of keeping it apart. Its row id still derives from {@link seq}, so a replayed poll
+   * re-records rather than duplicating. Absent on every real turn.
+   */
+  standsForJob?: boolean
 }
 
 /** The structured work product a finished job records. */

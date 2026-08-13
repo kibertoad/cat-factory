@@ -73,16 +73,33 @@ describe('the Kaizen grader prompt', () => {
     expect(prompt).not.toContain('unknown×2')
   })
 
-  it('counts truncations, and names the shortfall, when the backend DOES report reasons', () => {
+  it('counts truncations against the calls that were MEASURED, on the same line', () => {
+    // The mixed case, and the reason the denominator rides this line rather than the next one: an
+    // absolute "Truncated calls: 1" reads as a step-wide fact, and the worst version of it is a 0
+    // computed over one measured call out of eight — the same trap as the all-silent case, wearing
+    // a number. The count, its denominator and the unknown remainder are one sentence.
     const prompt = buildKaizenPrompt(GRADING, null, [
       metric({ finishReason: 'length' }),
       metric({ finishReason: 'stop' }),
       metric({ finishReason: null }),
     ])
 
-    expect(prompt).toContain('Truncated calls (hit output limit): 1')
-    expect(prompt).toContain('length×1, stop×1')
-    expect(prompt).toContain('1 call(s) reported none')
+    expect(prompt).toContain(
+      'Truncated calls (hit output limit): 1 of the 2 call(s) that reported a finish reason; ' +
+        'the other 1 reported none, so truncation is UNKNOWN for those and this count is not a ' +
+        'step-wide total',
+    )
+    expect(prompt).toContain('Finish reasons: length×1, stop×1')
+  })
+
+  it('drops the caveat when every call reported a reason', () => {
+    const prompt = buildKaizenPrompt(GRADING, null, [
+      metric({ finishReason: 'stop' }),
+      metric({ finishReason: 'stop' }),
+    ])
+
+    expect(prompt).toContain('Truncated calls (hit output limit): 0 of the 2 call(s)')
+    expect(prompt).not.toContain('reported none')
   })
 
   it('names no CAUSE for a missing context snapshot', () => {

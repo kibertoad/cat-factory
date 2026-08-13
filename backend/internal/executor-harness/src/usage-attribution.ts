@@ -31,10 +31,11 @@ export function claudeUsage(
 }
 
 /**
- * Pin whatever the per-turn channel did NOT account for onto the LAST call: the terminal
- * cumulative usage minus the sum of the turns already costed, computed PER SIDE.
+ * The row standing for whatever the per-turn channel did NOT account for: the terminal cumulative
+ * usage minus the sum of the turns already costed, computed PER SIDE. `undefined` when the turns
+ * add up, so nothing is double counted.
  *
- * The per-side part is the whole point, and it replaced an all-or-nothing guard
+ * The per-side part is why this exists at all, and it replaced an all-or-nothing guard
  * (`calls.some(c => c.inputTokens > 0 || c.outputTokens > 0)` ⇒ return) that only ever fired for a
  * CLI reporting no per-turn usage at all. Claude Code reports plenty: its `assistant` envelopes
  * carry the message-START usage snapshot, whose INPUT and cache counts are final and whose
@@ -45,35 +46,57 @@ export function claudeUsage(
  * figure exactly, which is what made the shortfall invisible to a check that asked whether ANY
  * tokens had been reported.
  *
+ * **It is its OWN row rather than tokens added to the last captured call.** Growing a real turn by
+ * thousands of output tokens it did not produce makes a fabricated number indistinguishable from a
+ * measured one everywhere a per-call figure is read (`/api/v1/debug/*`, the observability panel, a
+ * step's per-call breakdown), and there is nothing on the row to mark it. The sibling rule on the
+ * inline path (`CliInlineLanguageModel.fileUnaccounted`) reached that conclusion first and files a
+ * step-level row; this is the same answer for the channel that has a call list. {@link
+ * HarnessCallMetric.standsForJob} is what keeps it from reading as a turn.
+ *
+ * **`calls` must be the PARENT loop's alone.** The terminal `result` event's cumulative covers the
+ * parent conversation only — a subagent's tokens live in its own transcript — so subtracting a
+ * subagent turn's tokens from it understates the shortfall, and pinning the remainder near one
+ * would bill a conversation for spend it never saw. Both were live in `ambientAuth` mode, where the
+ * CLI streams subagent turns onto the parent's stdout and no transcript watcher runs, so those
+ * turns are captured through the same publisher as the parent's.
+ *
  * {@link claudeUsage} sums every billed input bucket, so the already-accounted input is the sum of
  * all THREE per-call input classes, not `inputTokens` (fresh) alone. A residual input shortfall
- * lands on `inputTokens` because nothing in the terminal event says which class it belonged to;
- * that is the same attribution the previous code made when it pinned an uncosted run's whole
- * total, so no run gets a worse answer than it had.
+ * lands on `inputTokens` because nothing in the terminal event says which class it belonged to.
  *
  * Clamped at 0 per side: a CLI whose terminal figure is LOWER than its own per-turn sum has
- * reported the two inconsistently, and negative spend is not a thing to record. A run whose turns
- * already add up to the terminal total is left untouched, so nothing is double counted.
- *
- * The sibling rule on the inline path is `CliInlineLanguageModel.fileUnaccounted`, which files the
- * shortfall as its own step-level row because it has no last call to grow. Both exist so a
- * partially-costed run reports what it spent rather than what its narration happened to mention.
+ * reported the two inconsistently, and negative spend is not a thing to record.
  */
-export function attributeCumulativeUsage(
-  calls: HarnessCallMetric[],
+export function unaccountedUsageCall(
+  parentCalls: readonly HarnessCallMetric[],
   usage: { inputTokens: number; outputTokens: number } | undefined,
-): void {
-  if (!usage || calls.length === 0) return
+): HarnessCallMetric | undefined {
+  if (!usage) return undefined
   let accountedInput = 0
   let accountedOutput = 0
-  for (const call of calls) {
+  for (const call of parentCalls) {
     accountedInput += call.inputTokens + call.cacheReadTokens + call.cacheWriteTokens
     accountedOutput += call.outputTokens
   }
-  const inputShort = Math.max(0, usage.inputTokens - accountedInput)
-  const outputShort = Math.max(0, usage.outputTokens - accountedOutput)
-  if (!inputShort && !outputShort) return
-  const last = calls[calls.length - 1]!
-  last.inputTokens += inputShort
-  last.outputTokens += outputShort
+  const inputTokens = Math.max(0, usage.inputTokens - accountedInput)
+  const outputTokens = Math.max(0, usage.outputTokens - accountedOutput)
+  if (!inputTokens && !outputTokens) return undefined
+  return {
+    // No `model`: the terminal event names none, and the recorder then files the row under the
+    // model the step DISPATCHED, which is the same answer without this claiming to have observed
+    // it. (Claude Code serves some turns with a different model, so a guess here misprices.)
+    promptText: '',
+    messageCount: 0,
+    responseText: '',
+    reasoningText: '',
+    inputTokens,
+    // Both 0 rather than a split of `inputTokens`: the terminal figure is one number and says
+    // nothing about which input class the remainder belonged to.
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens,
+    finishReason: null,
+    standsForJob: true,
+  }
 }

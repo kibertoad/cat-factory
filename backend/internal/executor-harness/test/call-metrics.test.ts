@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createCallMetricPublisher, phasedProxyBaseUrl, type HarnessCallMetric } from '../src/pi.js'
-import { attributeCumulativeUsage } from '../src/usage-attribution.js'
+import { phasedProxyBaseUrl, type HarnessCallMetric } from '../src/pi.js'
+import { unaccountedUsageCall } from '../src/usage-attribution.js'
 
 // The live telemetry channel's one hard rule: a call handed to the stream is RECORDED, and the
 // backend ignores the terminal repeat (first write wins, so a row's stored prompt delta stays
-// valid against the tip it was written against). Anything still mutable therefore has to be held
-// back — which is exactly what the cumulative-usage fallback does to a call's tokens.
+// valid against the tip it was written against). So nothing may be mutated after it is published —
+// which is why the cumulative-usage reconciliation produces a NEW row rather than growing a turn.
 //
 // The end-to-end coverage of this lives in `agent-runner.test.ts` against a fake `claude` CLI,
 // which only runs on POSIX; these assertions are the platform-independent half.
@@ -24,91 +24,7 @@ function call(responseText: string, inputTokens = 0, outputTokens = 0): HarnessC
   }
 }
 
-describe('createCallMetricPublisher', () => {
-  it('streams each call once its successor proves its tokens are final', () => {
-    const calls: HarnessCallMetric[] = []
-    const streamed: HarnessCallMetric[] = []
-    const publisher = createCallMetricPublisher(calls, (c) => streamed.push(c))
-
-    publisher.publish(call('first', 100, 20))
-    // Only the first is out: the second is the one attribution can still rewrite.
-    expect(streamed.map((c) => c.responseText)).toEqual([])
-    publisher.publish(call('second', 200, 30))
-    expect(streamed.map((c) => c.responseText)).toEqual(['first'])
-    publisher.flush()
-    expect(streamed.map((c) => c.responseText)).toEqual(['first', 'second'])
-
-    // Same instances: the job registry stamps `seq` on the object it is handed, and the terminal
-    // list must carry that stamp so both channels mint one row id per call.
-    expect(streamed[0]).toBe(calls[0])
-    expect(streamed[1]).toBe(calls[1])
-  })
-
-  it('withholds the LAST call even when the CLI costed it, so attribution still lands', () => {
-    // The regression this exists for. Claude Code costs every turn's INPUT while leaving its
-    // output at the message-start snapshot, so the old "hold only un-costed calls" rule withheld
-    // nothing, the last call streamed with ~5 output tokens, and the shortfall
-    // `attributeCumulativeUsage` then pinned onto it lost the race to its own first write.
-    const calls: HarnessCallMetric[] = []
-    const streamed: Array<{ text: string; outputTokens: number }> = []
-    const publisher = createCallMetricPublisher(calls, (c) =>
-      // Snapshot AS PUBLISHED: the object is mutated by attribution afterwards, and what the
-      // backend stores is the state at this moment.
-      streamed.push({ text: c.responseText, outputTokens: c.outputTokens }),
-    )
-
-    const costed = call('costed', 25_394, 5)
-    publisher.publish(costed)
-    // Still on the terminal list, just not streamed — its output side is not final yet.
-    expect(calls).toEqual([costed])
-    expect(streamed).toEqual([])
-
-    // What `attributeCumulativeUsage` does once the CLI's terminal `result` arrives.
-    costed.outputTokens += 16_668
-    publisher.flush()
-
-    expect(streamed).toEqual([{ text: 'costed', outputTokens: 16_673 }])
-  })
-
-  it('flushes at most once, so a call is offered to the stream a single time', () => {
-    const calls: HarnessCallMetric[] = []
-    const streamed: string[] = []
-    const publisher = createCallMetricPublisher(calls, (c) => streamed.push(c.responseText))
-
-    publisher.publish(call('uncosted'))
-    publisher.flush()
-    publisher.flush()
-
-    expect(streamed).toEqual(['uncosted'])
-  })
-
-  it('releases every call in capture order across a whole run', () => {
-    const calls: HarnessCallMetric[] = []
-    const streamed: string[] = []
-    const publisher = createCallMetricPublisher(calls, (c) => streamed.push(c.responseText))
-
-    for (const text of ['one', 'two', 'three']) publisher.publish(call(text, 10, 5))
-    publisher.flush()
-
-    expect(streamed).toEqual(['one', 'two', 'three'])
-    // The abort path flushes too, and must not re-offer what it already released.
-    publisher.flush()
-    expect(streamed).toEqual(['one', 'two', 'three'])
-  })
-
-  it('appends to the run list with no stream wired (the proxy-metered path)', () => {
-    const calls: HarnessCallMetric[] = []
-    const publisher = createCallMetricPublisher(calls)
-
-    publisher.publish(call('one', 10, 5))
-    publisher.publish(call('two'))
-    publisher.flush()
-
-    expect(calls.map((c) => c.responseText)).toEqual(['one', 'two'])
-  })
-})
-
-describe('attributeCumulativeUsage', () => {
+describe('unaccountedUsageCall', () => {
   // The terminal `result` event's `usage.inputTokens` is every billed input bucket SUMMED, so the
   // already-accounted input is the sum of all three per-call classes.
   const costed = (
@@ -118,7 +34,7 @@ describe('attributeCumulativeUsage', () => {
     text = 'turn',
   ): HarnessCallMetric => ({ ...call(text, input, output), cacheReadTokens: cacheRead })
 
-  it('pins the OUTPUT shortfall onto the last call when every turn costed its input', () => {
+  it('files the OUTPUT shortfall as its own row when every turn costed its input', () => {
     // The measured shape: Claude Code's `assistant` envelopes report the input and cache counts
     // final and `output_tokens` at the message-START snapshot (single digits), so a run whose
     // turns are all "costed" still has essentially its whole output side unaccounted. The old
@@ -129,45 +45,82 @@ describe('attributeCumulativeUsage', () => {
       costed(2, 25_394, 5, 'c'),
       costed(2, 25_394, 2, 'd'),
     ]
-    attributeCumulativeUsage(calls, { inputTokens: 117_153, outputTokens: 16_673 })
+    const remainder = unaccountedUsageCall(calls, { inputTokens: 117_153, outputTokens: 16_673 })
 
-    // Input already added up, so nothing was added to it: 8 fresh + 117,145 cache reads.
-    expect(calls.map((c) => c.inputTokens)).toEqual([2, 2, 2, 2])
-    // The last turn keeps its own 2 and grows by the 16,656 shortfall.
-    expect(calls.map((c) => c.outputTokens)).toEqual([5, 5, 5, 16_658])
-    expect(calls.reduce((n, c) => n + c.outputTokens, 0)).toBe(16_673)
-  })
-
-  it('still pins the WHOLE total when a CLI costed nothing at all', () => {
-    // The case the previous rule was written for, unchanged: a shortfall equal to the total.
-    const calls = [call('only')]
-    attributeCumulativeUsage(calls, { inputTokens: 300, outputTokens: 50 })
-    expect(calls[0]).toMatchObject({ inputTokens: 300, outputTokens: 50 })
-  })
-
-  it('adds nothing when the turns already account for the terminal total', () => {
-    const calls = [costed(100, 900, 40, 'a'), costed(0, 1_000, 60, 'b')]
-    attributeCumulativeUsage(calls, { inputTokens: 2_000, outputTokens: 100 })
-    expect(calls.map((c) => [c.inputTokens, c.cacheReadTokens, c.outputTokens])).toEqual([
-      [100, 900, 40],
-      [0, 1_000, 60],
+    // Every captured turn is left EXACTLY as the CLI reported it. A turn grown by thousands of
+    // tokens it did not produce is a fabricated number that reads as a measured one.
+    expect(calls.map((c) => [c.inputTokens, c.outputTokens])).toEqual([
+      [2, 5],
+      [2, 5],
+      [2, 5],
+      [2, 2],
     ])
+    // Input already added up (8 fresh + 117,145 cache reads), so the row carries the output side
+    // alone — and says it stands for the job rather than for a turn.
+    expect(remainder).toEqual({
+      promptText: '',
+      messageCount: 0,
+      responseText: '',
+      reasoningText: '',
+      inputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 16_656,
+      finishReason: null,
+      standsForJob: true,
+    })
+    // The whole point: turns plus remainder reproduce the CLI's own total.
+    expect(calls.reduce((n, c) => n + c.outputTokens, 0) + remainder!.outputTokens).toBe(16_673)
+  })
+
+  it('carries the WHOLE total when a CLI costed nothing at all', () => {
+    // The case the previous rule was written for: a shortfall equal to the total. It is still one
+    // row, which for this CLI is the only row the run gets.
+    const remainder = unaccountedUsageCall([call('only')], { inputTokens: 300, outputTokens: 50 })
+    expect(remainder).toMatchObject({ inputTokens: 300, outputTokens: 50, standsForJob: true })
+  })
+
+  it('files NOTHING when the turns already account for the terminal total', () => {
+    // A zero-token row here would be a claim about a call nobody made, and any row at all would
+    // double-count in the step rollup.
+    const calls = [costed(100, 900, 40, 'a'), costed(0, 1_000, 60, 'b')]
+    expect(unaccountedUsageCall(calls, { inputTokens: 2_000, outputTokens: 100 })).toBeUndefined()
   })
 
   it('never subtracts when a CLI reports its two channels inconsistently', () => {
     // A terminal figure BELOW the per-turn sum is a contradiction in the CLI's own numbers, and
     // negative spend is not a thing to record. Clamped per side, so an over-reported input side
     // cannot cancel a genuine output shortfall.
-    const calls = [costed(500, 500, 5, 'a')]
-    attributeCumulativeUsage(calls, { inputTokens: 100, outputTokens: 900 })
-    expect(calls[0]).toMatchObject({ inputTokens: 500, cacheReadTokens: 500, outputTokens: 900 })
+    const remainder = unaccountedUsageCall([costed(500, 500, 5, 'a')], {
+      inputTokens: 100,
+      outputTokens: 900,
+    })
+    expect(remainder).toMatchObject({ inputTokens: 0, outputTokens: 895 })
   })
 
-  it('is a no-op with no calls or no terminal usage', () => {
-    const calls = [costed(10, 20, 30)]
-    attributeCumulativeUsage(calls, undefined)
-    expect(calls[0]).toMatchObject({ inputTokens: 10, cacheReadTokens: 20, outputTokens: 30 })
-    expect(() => attributeCumulativeUsage([], { inputTokens: 1, outputTokens: 1 })).not.toThrow()
+  it('counts only the PARENT loop, whose total the terminal event reports', () => {
+    // In `ambientAuth` mode there is no transcript watcher, so the CLI's tagged subagent turns are
+    // captured through the same publisher as the parent's. Subtracting one of them from the
+    // parent-only cumulative would understate the shortfall — and pinning the remainder onto the
+    // last captured call, as this once did, billed a subagent conversation for the parent's spend.
+    const parent = [costed(2, 25_000, 5, 'parent')]
+    const remainder = unaccountedUsageCall(parent, { inputTokens: 25_002, outputTokens: 9_001 })
+    expect(remainder).toMatchObject({ inputTokens: 0, outputTokens: 8_996 })
+  })
+
+  it('files nothing when the CLI reported no terminal usage at all', () => {
+    // Unknown is not zero: with no cumulative figure there is no shortfall to state.
+    expect(unaccountedUsageCall([costed(10, 20, 30)], undefined)).toBeUndefined()
+    expect(unaccountedUsageCall([], undefined)).toBeUndefined()
+  })
+
+  it('is the whole total for a run that captured no turns', () => {
+    // A CLI that narrated nothing but reported a cumulative: the row is the only record there is.
+    expect(unaccountedUsageCall([], { inputTokens: 1, outputTokens: 2 })).toMatchObject({
+      inputTokens: 1,
+      outputTokens: 2,
+      standsForJob: true,
+    })
   })
 })
 

@@ -20,7 +20,13 @@ export async function runCodeReview(input: RunnerInput<CodeReviewFixture>): Prom
       },
     },
   }
-  const executor = new AiAgentExecutor({ modelProvider: deps.provider, agentRouting: routing })
+  const executor = new AiAgentExecutor({
+    modelProvider: deps.provider,
+    agentRouting: routing,
+    // Nothing to file under: a benchmark cell is not a run, so its dispatches carry no workspace or
+    // execution id and a snapshot keyed to neither would be unreachable from every run-scoped read.
+    agentContextRecorder: undefined,
+  })
   const result = await executor.run(fixture.context)
   return {
     output: result.output ?? '',

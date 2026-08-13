@@ -428,8 +428,10 @@ export function buildKaizenPrompt(
     // Names no cause. It used to guess one ("prompt recording may be off"), which was wrong for
     // every INLINE kind — nothing recorded snapshots for those at all until the inline executor
     // gained a recorder — and a grader handed a cause duly recommended enabling a switch that was
-    // already enabled. Two causes remain reachable (recording genuinely off, or a step whose
-    // dispatch predates the recorder) and this cannot tell them apart, so it says so.
+    // already enabled. Three causes remain reachable: recording genuinely off, a step whose dispatch
+    // predates the recorder, and a step whose work was an inline service call rather than a kind
+    // dispatch (the judges, the requirements reviewer, this grader itself — see
+    // `inline-context-record.ts`). Nothing here can tell them apart, so it says so.
     parts.push(
       'No provided-context snapshot is available for this step, so the system prompt and ' +
         'injected context CANNOT be assessed. Do not infer why, and do not grade their quality ' +
@@ -457,7 +459,10 @@ export function buildKaizenPrompt(
  * **An absent finish reason is reported as absent, never folded into a value.** Neither
  * subscription CLI reports one, so `truncated` is not 0 on those runs, it is UNKNOWABLE, and a
  * flat "Truncated calls: 0" is the "absent is not zero" trap: it invites the grader to certify a
- * step as cleanly completed on evidence nobody collected.
+ * step as cleanly completed on evidence nobody collected. That holds for the MIXED case too, which
+ * is why the truncation count carries its own denominator on the same line rather than an absolute
+ * over whichever subset happened to report: "0" beside "8 calls" reads as a clean step even when
+ * seven of the eight measured nothing.
  */
 function digestCalls(calls: LlmCallMetric[]): string {
   if (calls.length === 0) return 'No LLM calls were recorded for this step.'
@@ -468,7 +473,12 @@ function digestCalls(calls: LlmCallMetric[]): string {
   const cacheRead = sum((c) => c.cacheReadTokens)
   const cacheWrite = sum((c) => c.cacheWriteTokens)
   const completionTokens = sum((c) => c.completionTokens)
-  const reported = calls.filter((c) => c.finishReason != null)
+  // Narrowed by a predicate, so the finish reasons below are strings and there is no `?? ''` to
+  // read as a guard: an unlabelled histogram entry is exactly what this digest must not print.
+  const reported = calls.filter((c): c is LlmCallMetric & { finishReason: string } => {
+    return c.finishReason != null
+  })
+  const silent = calls.length - reported.length
   const lines = [
     `Total model calls: ${calls.length}`,
     `Failed calls: ${errors}`,
@@ -484,12 +494,15 @@ function digestCalls(calls: LlmCallMetric[]): string {
         'the subscription agent CLIs expose no per-call stop reason.',
     )
   } else {
+    const truncated = reported.filter((c) => c.finishReason === 'length').length
     lines.push(
-      `Truncated calls (hit output limit): ${reported.filter((c) => c.finishReason === 'length').length}`,
-      `Finish reasons: ${summarizeCounts(reported.map((c) => c.finishReason ?? ''))}` +
-        (reported.length < calls.length
-          ? ` (${calls.length - reported.length} call(s) reported none)`
+      `Truncated calls (hit output limit): ${truncated} of the ${reported.length} call(s) that ` +
+        `reported a finish reason` +
+        (silent > 0
+          ? `; the other ${silent} reported none, so truncation is UNKNOWN for those and this ` +
+            `count is not a step-wide total`
           : ''),
+      `Finish reasons: ${summarizeCounts(reported.map((c) => c.finishReason))}`,
     )
   }
   const last = calls[0] // newest first

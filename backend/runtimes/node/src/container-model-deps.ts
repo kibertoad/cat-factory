@@ -329,8 +329,9 @@ export function buildNodeModelDeps(input: NodeModelDepsInput) {
     agentKindRegistry,
     ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
     // Symmetric with the Worker's `selectAgentExecutor`: the inline executor files its provided
-    // context to the same sink the container executor does.
-    ...(input.agentContextRecorder ? { agentContextRecorder: input.agentContextRecorder } : {}),
+    // context to the same sink the container executor does. A required key, so this facade cannot
+    // drop it back to nothing without failing to typecheck.
+    agentContextRecorder: input.agentContextRecorder,
     logger,
   })
 

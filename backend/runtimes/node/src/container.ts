@@ -777,21 +777,21 @@ interface NodeLateBindings {
 }
 
 /**
- * Fill every slot of {@link NodeLateBindings}, once, at the point in the root where all of them
- * exist.
- *
- * One call rather than an assignment per slot, so a new deferred value is added HERE and cannot be
- * declared on the interface, read by an early collaborator, and then never published: that hole is
- * silent by construction, since an unfilled slot reads exactly like a deployment that wired the
- * capability off.
+ * Every slot of {@link NodeLateBindings}, each REQUIRED as a key while its value may still be
+ * absent. That is what makes {@link publishLateBindings} total: adding a deferred slot above and
+ * forgetting to publish it stops compiling, where the same omission on a bag of optional fields
+ * compiles into a hole nothing can see — an unfilled slot reads exactly like a deployment that
+ * wired the capability off.
  */
-function publishLateBindings(
-  slots: NodeLateBindings,
-  resolve: ResolveBinaryArtifactStore,
-  agentContextRecorder: AgentContextRecorder | undefined,
-): void {
-  slots.resolve = resolve
-  slots.agentContextRecorder = agentContextRecorder
+type PublishedLateBindings = { [K in keyof NodeLateBindings]-?: NodeLateBindings[K] }
+
+/**
+ * Fill every slot of {@link NodeLateBindings}, once, at the point in the root where all of them
+ * exist. One call rather than an assignment per slot, and one TOTAL object rather than a positional
+ * list, so each slot is named at the call site and none can be skipped.
+ */
+function publishLateBindings(slots: NodeLateBindings, values: PublishedLateBindings): void {
+  Object.assign(slots, values)
 }
 
 interface NodeContainerFinalizeBundle {
@@ -877,6 +877,24 @@ interface NodeContainerFinalizeBundle {
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
   userSecrets: NodeModelDepsResult['userSecrets']
   traceSink: NodeModelDepsResult['traceSink']
+}
+
+/**
+ * Settle the gate-provider registry, once every module that contributes to it has run.
+ *
+ * The two halves belong together and in this order. Test-injected providers are applied LAST so
+ * they override the config wiring (the cross-runtime conformance suite drives the externalized CI
+ * gate over a faked verdict; in local mode a PAT-backed CI provider is wired earlier and would
+ * otherwise win) — production leaves `gateProviders` undefined, so that is a no-op outside tests.
+ * Then every gate still left as a silent pass-through is named in the logs, because the failure
+ * shape of an unwired gate is a deployment auto-merging without ever checking CI.
+ */
+function finalizeGateProviders(
+  providerRegistry: NodeAppRegistriesResult['providerRegistry'],
+  gateProviders: NodeContainerOptions['gateProviders'],
+): void {
+  applyGateProviders(providerRegistry, gateProviders)
+  warnUnwiredGates(providerRegistry, logger)
 }
 
 function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerContainer {
@@ -996,20 +1014,16 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     binaryStoreRegistry: options.binaryStoreRegistry,
     caches: options.caches,
   })
-  publishLateBindings(artifactStore, resolveBinaryArtifactStore, agentContextObservability)
+  publishLateBindings(artifactStore, {
+    resolve: resolveBinaryArtifactStore,
+    agentContextRecorder: agentContextObservability,
+  })
 
   // Runner-pool URL/host guard, scoped to its own config (independent of the environment
   // allow-list); absent => strict public-https.
   const runnerUrlPolicy = resolveUrlSafetyPolicy(config.runners)
 
-  // Apply any test-injected gate providers LAST, so they override the config wiring above (the
-  // cross-runtime conformance suite drives the externalized CI gate over a faked verdict; in
-  // local mode a PAT-backed CI provider is wired above and would otherwise win). Production
-  // leaves `gateProviders` undefined, so this is a no-op outside tests.
-  applyGateProviders(providerRegistry, options.gateProviders)
-  // Surface any gate left as a silent pass-through (no provider wired) so a misconfigured
-  // deployment is visible in the logs instead of quietly auto-merging without checking CI.
-  warnUnwiredGates(providerRegistry, logger)
+  finalizeGateProviders(providerRegistry, options.gateProviders)
 
   // pg-boss-backed async GitHub ingest (webhook/resync/backfill) when the durable engine is
   // wired; inline fallback with no boss. Built once so the engine's skill-freshness fan-out

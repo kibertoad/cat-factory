@@ -28,9 +28,19 @@ const WS = 'ws1'
  * the pair here rather than pulling in the built-in catalog also states what the rule is about:
  * the cap belongs to the companion MACHINE, so a deployment's own pair hits it identically.
  */
-function pairRegistry(): AgentKindRegistry {
+function pairRegistry(
+  producerSurface: 'container-explore' | 'container-coding',
+): AgentKindRegistry {
   const registry = defaultAgentKindRegistry()
-  registry.register({ kind: 'architect', systemPrompt: 'You design.' })
+  // The producer's SURFACE is load-bearing for the stall rule and nothing else here: it is what
+  // says whether the step's `output` is the work (an explore returns its plan) or merely a summary
+  // of work that went into a branch (`container-coding`). Declared rather than defaulted so a case
+  // asserting one behaviour can never be reading the other by accident.
+  registry.register({
+    kind: 'architect',
+    systemPrompt: 'You design.',
+    agent: { surface: producerSurface },
+  })
   registry.register({ kind: 'architect-companion', systemPrompt: 'You grade designs.' })
   registry.registerCompanion({
     kind: 'architect-companion',
@@ -83,8 +93,11 @@ const BLOCK = { id: 'blk_1', title: 'A task' } as Block
  * for a person, and `settle` whether it advanced. Exactly one of them fires in each case, which is
  * what makes "did the policy decide" observable rather than inferred from the returned shape.
  */
-function harness(autonomy: 'attended' | 'unattended') {
-  const registry = pairRegistry()
+function harness(
+  autonomy: 'attended' | 'unattended',
+  producerSurface: 'container-explore' | 'container-coding' = 'container-explore',
+) {
+  const registry = pairRegistry(producerSurface)
   const park = vi.fn(async () => ({ kind: 'awaiting_decision' as const, decisionId: 'appr_1' }))
   const settle = vi.fn(async () => ({ kind: 'continue' as const }))
   const controller = new CompanionController({
@@ -213,8 +226,10 @@ describe('a companion loop that has stopped making progress', () => {
       progress: 1,
       decision: null,
       output: 'the design',
-      // What it was handed to revise, byte-identical to what it returned.
-      rework: { previousProposal: 'the design', feedback: 'still vague' },
+      // What it was handed to revise, byte-identical to what it returned. `reviewer` because this
+      // loop asked for it: a human-requested re-run consumes no budget and is not this rule's
+      // business (see `companionProgress.logic.ts`).
+      rework: { previousProposal: 'the design', feedback: 'still vague', requestedBy: 'reviewer' },
     } as PipelineStep
     inst.steps[1] = step({
       companion: {
@@ -284,5 +299,55 @@ describe('a companion loop that has stopped making progress', () => {
     expect(park).not.toHaveBeenCalled()
     expect(settle).not.toHaveBeenCalled()
     expect(inst.steps[1]!.companion?.stalled).toBeUndefined()
+  })
+
+  it('keeps looping when the producer delivers a COMMIT rather than its reply', async () => {
+    // The shipped `reviewer`/`coder` pair. Byte-identical summaries across two rounds at an unmoved
+    // rating is the exact evidence this rule fires on, and for a `container-coding` producer it is
+    // no evidence at all: the work went to the branch, which is why its reviewer clones the repo.
+    // Cutting that loop short would abandon rework rounds on a coder that had pushed real changes.
+    const { controller, park, settle } = harness('attended', 'container-coding')
+    const inst = stalledInstance()
+
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      { ...BELOW },
+    )
+
+    expect(result.kind).toBe('continue')
+    expect(park).not.toHaveBeenCalled()
+    expect(settle).not.toHaveBeenCalled()
+    expect(inst.steps[1]!.companion?.stalled).toBeUndefined()
+  })
+
+  it('keeps looping when a HUMAN asked for the re-run', async () => {
+    // `requestChanges` on the companion's gate re-runs the producer with a person's own feedback and
+    // spends none of the automatic budget, so a standstill read off it would abandon rounds that
+    // were never used — and it is the one rework where somebody is genuinely waiting for an answer.
+    const { controller, park, settle } = harness('attended')
+    const inst = stalledInstance()
+    ;(inst.steps[0] as PipelineStep).rework = {
+      previousProposal: 'the design',
+      feedback: 'make it simpler',
+      requestedBy: 'human',
+    }
+
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      { ...BELOW },
+    )
+
+    expect(result.kind).toBe('continue')
+    expect(park).not.toHaveBeenCalled()
+    expect(inst.steps[1]!.companion?.stalled).toBeUndefined()
+    expect(settle).not.toHaveBeenCalled()
   })
 })

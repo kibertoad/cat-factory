@@ -99,12 +99,14 @@ export interface AiAgentExecutorDependencies {
    * The agent-context observability sink, so an inline dispatch records the complete context it
    * gave its agent exactly as a container dispatch does.
    *
-   * Optional in the same sense as the container executor's: a facade that retains no telemetry
-   * wires none. Its ABSENCE used to be the whole story though — nothing anywhere called this for
-   * an inline kind — which is why the snapshot table held container kinds only and every reader
-   * of it silently mis-explained the gap. See `inline-context-record.ts`.
+   * REQUIRED as a key while nullable as a value, like `CoreDependencies.logger`: a facade that
+   * retains no telemetry passes `undefined` and says so in code, but one that simply forgot fails
+   * to typecheck. The bug this closes was a pure wiring omission — the container executor was given
+   * a recorder and the inline one was not, so the snapshot table held container kinds only and the
+   * one reader that notices blamed a disabled switch — and an optional key is exactly what let that
+   * omission compile. See `inline-context-record.ts`.
    */
-  agentContextRecorder?: AgentContextRecorder
+  agentContextRecorder: AgentContextRecorder | undefined
   /** Where a dropped snapshot reports itself. Absent ⇒ `noopLogger`. */
   logger?: Logger
 }

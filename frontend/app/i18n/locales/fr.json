@@ -1403,6 +1403,8 @@
       "closeEsc": "Fermer (Esc)",
       "companionCapHeading": "{agent} a atteint sa limite de {attempts} tentatives de retravail, toujours en dessous du seuil {threshold}.",
       "companionCapDetail": "Effectuer un tour de retravail automatique supplémentaire, passer à l'étape suivante en acceptant la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
+      "companionStalledHeading": "{agent} a arrêté la boucle de retravail après {attempts} tours sur {maxAttempts} : la dernière révision est revenue inchangée et la note est restée sous le seuil {threshold}.",
+      "companionStalledDetail": "Les tours restants n'ont pas été utilisés car ils ne feraient que répéter un verdict déjà rendu. Effectuer tout de même un tour supplémentaire, passer à l'étape suivante en acceptant la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
       "infraAttempts": "Tentatives d'infrastructure",
       "hideInfraAttempts": "Masquer les tentatives d'infrastructure",
       "executionHistory": "Historique d'exécution",

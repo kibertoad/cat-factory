@@ -285,7 +285,10 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
       // "the CLI did not say" — the point being that it is not `stop`, which would assert the
       // model finished of its own accord. `raw` is left undefined for the same reason: there was
       // no vendor string to carry. The row this model FILES records null rather than `other`,
-      // since the store's column is nullable and can state the absence exactly.
+      // since the store's column is nullable and can state the absence exactly — and the pairing
+      // is what `readFinishReason` keys off, so the middleware's aggregate row (the one a
+      // deployment with a trace sink and no metric store still gets) records the same null rather
+      // than the placeholder.
       const reason = result.finishReason
       return {
         content: result.text ? [{ type: 'text', text: result.text }] : [],
@@ -360,11 +363,11 @@ export class CliInlineLanguageModel implements LanguageModelV3, SelfReportingLan
    *   usage, or (the routine case) Claude Code costing every turn's INPUT while leaving its output
    *   at the message-start snapshot. This is the case a plain "aggregate only when nothing was
    *   costed" rule got wrong: the uncosted spend simply vanished, under-counting the step with
-   *   nothing saying so. The container harness reaches the same answer by the other route — its
-   *   `attributeCumulativeUsage` grows the LAST call by the per-side shortfall, since it has a call
-   *   list to grow and no step-level row — and the two agree on the rule that matters: a shortfall
-   *   is recorded somewhere, per class, rather than discarded. Here it is its own row, and the
-   *   inconsistent narration is logged.
+   *   nothing saying so. The container harness now reaches the same answer the same way
+   *   (`unaccountedUsageCall` builds one job-level metric out of the per-side shortfall), and both
+   *   keep the shortfall OFF the measured turns: growing a real call by tokens it did not produce
+   *   makes a derived number indistinguishable from a reported one everywhere a per-call figure is
+   *   read. Here it is its own row, and the inconsistent narration is logged.
    *
    * No `turnIndex`: this is not a turn within the sequence, it stands for the step.
    */

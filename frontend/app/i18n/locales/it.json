@@ -2067,6 +2067,8 @@
       "closeEsc": "Chiudi (Esc)",
       "companionCapHeading": "{agent} ha raggiunto il suo limite di {attempts} tentativi di rielaborazione, ancora al di sotto della soglia {threshold}.",
       "companionCapDetail": "Esegui un altro ciclo di rielaborazione automatica, procedi al passaggio successivo accettando l'output attuale, oppure arresta e reimposta l'attivita' cosi' da poter modificare gli input e reinviare.",
+      "companionStalledHeading": "{agent} ha interrotto il ciclo di rielaborazione dopo {attempts} round su {maxAttempts}: l'ultima revisione e' tornata identica e il punteggio e' rimasto sotto la soglia {threshold}.",
+      "companionStalledDetail": "I round rimanenti non sono stati usati perche' avrebbero solo ripetuto un verdetto gia' espresso. Esegui comunque un altro round, procedi al passaggio successivo accettando l'output attuale, oppure arresta e reimposta l'attivita' cosi' da poter modificare gli input e reinviare.",
       "infraAttempts": "Tentativi di infrastruttura",
       "hideInfraAttempts": "Nascondi i tentativi di infrastruttura",
       "executionHistory": "Cronologia delle esecuzioni",

@@ -16,7 +16,7 @@ import {
   parseCompanionAssessment,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { companionFor, companionTargets } from '@cat-factory/agents'
+import { companionFor, companionTargets, deliverableIsReply } from '@cat-factory/agents'
 import type { SpendService } from '@cat-factory/spend'
 import { extractJson } from '../requirements/requirements.logic.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
@@ -331,11 +331,19 @@ export class CompanionController {
     //
     // `stalled` is recorded beside `exceeded` rather than in place of it: they reach the same gate
     // for opposite reasons, and only this one says the run had rounds left and abandoned them.
+    const producerStep = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
     const stalled =
-      producerIndex >= 0 &&
+      producerStep !== undefined &&
       companionLoopStalled({
-        producer: instance.steps[producerIndex],
+        producer: producerStep,
         verdicts: companion.verdicts,
+        // Answered from the REGISTRY, so a deployment's own producer kind is judged by its own
+        // declaration: only a kind whose deliverable is its reply can be found standing still by
+        // comparing that reply. See `deliverableIsReply`.
+        producerDeliverableIsReply: deliverableIsReply(
+          producerStep.agentKind,
+          this.deps.agentKindRegistry,
+        ),
       })
     if (stalled) {
       companion.stalled = true
