@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// The pipeline-PURPOSE control: what the pipeline being built exists to do (build, document,
-// review, research, plan). It sits beside `AgentTierSelect` at the top of the agent palette
+// The pipeline-PURPOSE control: what the pipeline being built exists to do (build, fix a bug,
+// document, review, research, plan). It sits beside `AgentTierSelect` at the top of the agent palette
 // because the two are the same kind of dial (each narrows the catalog below to what is worth
 // offering), and a filter the user cannot see is a catalog that looks incomplete for no reason.
 //
@@ -25,6 +25,7 @@ const emit = defineEmits<{ (e: 'update:purpose', purpose: PipelinePurpose): void
 // typed-message-keys check covers them, the same shape `AgentTierSelect` uses for its tiers.
 const PURPOSE_LABELS = computed<Record<PipelinePurpose, string>>(() => ({
   build: t('pipeline.builder.purposeOption.build'),
+  bugfix: t('pipeline.builder.purposeOption.bugfix'),
   document: t('pipeline.builder.purposeOption.document'),
   review: t('pipeline.builder.purposeOption.review'),
   research: t('pipeline.builder.purposeOption.research'),

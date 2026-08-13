@@ -4842,6 +4842,7 @@
       "purposeUnrecognized": "Non reconnu ({purpose})",
       "purposeOption": {
         "build": "Développement",
+        "bugfix": "Correction de bug",
         "document": "Documentation",
         "review": "Revue",
         "research": "Recherche",
@@ -4910,7 +4911,7 @@
       "skillNoneAvailable": "Aucune compétence disponible. Reliez une source de compétences dans les paramètres du compte.",
       "skillMissing": "Cette compétence n'est plus dans le catalogue ; choisissez-en une autre.",
       "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer.",
-      "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou définissez l'objectif sur Développement.",
+      "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou choisissez un objectif qui livre du code (Développement ou Correction de bug).",
       "promptEditTooltip": "Modifier l'invite système de cet agent",
       "promptEditedTooltip": "L'invite système de cet agent est modifiée pour cet espace de travail",
       "consensusGroups": "Groupes de consensus",

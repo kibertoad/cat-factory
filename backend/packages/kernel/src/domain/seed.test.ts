@@ -491,8 +491,8 @@ describe('seedPipelines — purpose classification is total and matches the engi
         .map((p) => p.id)
 
     const forFeature = offered('feature')
-    // The ladder plus the bug/ralph presets are all reachable...
-    for (const id of ['pl_build', 'pl_simple', 'pl_full', 'pl_bugfix', 'pl_ralph']) {
+    // The ladder plus the ralph preset are all reachable...
+    for (const id of ['pl_build', 'pl_simple', 'pl_full', 'pl_ralph']) {
       expect(forFeature, `${id} must be offered on a feature task`).toContain(id)
     }
     // ...and the presets that cannot ship code are not. `pl_initiative*` are the ones the engine
@@ -508,8 +508,21 @@ describe('seedPipelines — purpose classification is total and matches the engi
     ]) {
       expect(forFeature, `${id} must not be offered on a feature task`).not.toContain(id)
     }
-    // A `bug` task gets the same set as a feature (both ship code).
-    expect(offered('bug')).toEqual(forFeature)
+    // A `bug` task gets the same set PLUS the two bugfix presets, and that is the ONLY thing the
+    // two programmatic types differ on: "Triage & fix bug" investigates a defect REPORT and writes
+    // a failing reproduction test, neither of which a feature can supply.
+    //
+    // The pair is NAMED rather than re-derived from `purpose === 'bugfix'`. Deriving it from the
+    // same classifier the gate reads makes the assertion hold by construction (it cannot fail on
+    // any catalog edit), where the mistake worth catching is precisely a classifier one:
+    // reclassifying a triage preset back to `build` puts it in front of every feature task, and
+    // the derived form passes because both sides move together. A third bugfix preset joining the
+    // list is the decision this is meant to surface, not an accident it should absorb.
+    const bugOnly = offered('bug').filter((id) => !forFeature.includes(id))
+    expect(bugOnly).toEqual(['pl_bugfix', 'pl_bug_triage'])
+    // ...and the bug picker is otherwise a strict SUPERSET. `arrayContaining` rather than
+    // `.every(...).toBe(true)`, which prints "expected false to be true" and names no id.
+    expect(offered('bug')).toEqual(expect.arrayContaining(forFeature))
     // The pre-existing narrowings still hold, and stay disjoint from the programmatic set.
     expect(offered('document')).toEqual(['pl_document', 'pl_document_quick', 'pl_business_docs'])
     expect(offered('review')).toEqual(['pl_review'])

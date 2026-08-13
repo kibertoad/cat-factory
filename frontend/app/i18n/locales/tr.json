@@ -4842,6 +4842,7 @@
       "purposeUnrecognized": "Tanınmayan ({purpose})",
       "purposeOption": {
         "build": "Geliştirme",
+        "bugfix": "Hata düzeltme",
         "document": "Dokümantasyon",
         "review": "İnceleme",
         "research": "Araştırma",
@@ -4910,7 +4911,7 @@
       "skillNoneAvailable": "Kullanılabilir beceri yok. Hesap ayarlarında bir beceri kaynağı bağlayın.",
       "skillMissing": "Bu beceri artık katalogda yok; başka birini seçin.",
       "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir.",
-      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya amacı Geliştirme olarak değiştirin.",
+      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya kod teslim eden bir amaca geçin (Geliştirme ya da Hata düzeltme).",
       "promptEditTooltip": "Bu ajanın sistem istemini düzenle",
       "promptEditedTooltip": "Bu ajanın sistem istemi bu çalışma alanı için düzenlenmiş",
       "consensusGroups": "Uzlaşı grupları",

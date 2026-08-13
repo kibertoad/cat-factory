@@ -272,9 +272,12 @@ export const pipelines = pgTable(
     // How the pipeline may be LAUNCHED: `'one-off'` / `'recurring'` / `'both'` (mirror of D1
     // migration 0037); NULL/absent ⇒ unrestricted (`'both'`).
     availability: text('availability'),
-    // The pipeline's use-case classifier: `'build'` / `'document'` / `'review'` / `'research'` /
-    // `'planning'` (mirror of D1 migration 0056_pipeline_purpose). NULL/absent ⇒ unclassified.
-    // Drives the task pickers (a `document` task offers only `'document'`) and the builder palette.
+    // The pipeline's use-case classifier, plain TEXT holding a member of contracts'
+    // `PIPELINE_PURPOSES`, today `'build'` / `'bugfix'` / `'document'` / `'review'` /
+    // `'research'` / `'planning'` (the column mirrors D1 migration 0056_pipeline_purpose, which
+    // predates the `'bugfix'` member; that picklist is the authority, not this list).
+    // NULL/absent ⇒ unclassified. Drives the task pickers (a `document` task offers only
+    // `'document'`, and a `feature` task everything but `'bugfix'`) and the builder palette.
     purpose: text('purpose'),
     // The workspace's DECLARED default pipeline per resolution scope (mirror of D1 migration
     // 0091_pipeline_defaults): `is_default` for a run somebody started in the app, and

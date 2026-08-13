@@ -348,8 +348,12 @@ picking what each of them runs on are halves of the same job.
 The builder's palette narrows on two axes, and both controls sit on one row above the catalog
 (`PipelinePurposeSelect` above `AgentTierSelect`), each with its own "n hidden" hint so neither
 narrowing reads as an empty catalog. The tier says how deep to look; the **purpose** says what
-the pipeline is for (`build` / `document` / `review` / `research` / `planning`), and the palette
-drops the categories that purpose has no use for. It reaches past the palette: the saved-pipeline
+the pipeline is for (`build` / `bugfix` / `document` / `review` / `research` / `planning`), and the
+palette drops the categories that purpose has no use for. `bugfix` is the one pair that shares a
+row with another member: it ships code exactly as `build` does, and differs only in being offered
+to a `bug` task and withheld from a `feature` one, because a preset that investigates a defect
+report and writes a failing reproduction test has neither input on a feature. It reaches past the
+palette: the saved-pipeline
 library in the builder's third column lists the pipelines built for the purpose being edited, so
 one dial narrows both ends of the slideover. The purpose is not a view preference either: it is
 saved on the pipeline and also decides which task pickers offer it, which is why the control
