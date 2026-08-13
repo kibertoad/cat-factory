@@ -108,6 +108,13 @@ export const agentPresentationSchema = v.object({
    * builder will SAVE (`purposeAllowsAgentCategory`), so a kind that opts out of a purpose
    * stays editable in a stored pipeline that already uses it.
    *
+   * `build` and `bugfix` are read as ONE purpose here, one way (`classifierSuits`): naming
+   * `build` also offers the kind to every bugfix palette, because the two are the same work and
+   * differ only in the task type their pipelines are offered to. So there is deliberately no way
+   * to declare "general builds but not defect work": that is not a distinction about the kind's
+   * work, which is all this list may express. Naming `bugfix` alone is a claim about the
+   * defect-report context specifically and does NOT buy the kind into `build`.
+   *
    * An EMPTY list is refused rather than accepted, because the reader treats "declared nothing"
    * and "declared an empty list" as the same thing (the category alone decides, so the kind is
    * offered at every purpose that section admits) and that is the exact inverse of what an author

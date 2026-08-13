@@ -37,9 +37,14 @@ export const VISUAL_CONFIRM_AGENT_KIND = 'visual-confirmation'
 /** The visual step kinds: a pipeline carrying any of these is a "visual" pipeline. */
 export const VISUAL_STEP_KINDS = [UI_TESTER_AGENT_KIND, VISUAL_CONFIRM_AGENT_KIND] as const
 
-/** Whether an agent kind drives a rendered UI (`tester-ui` / `visual-confirmation`). */
+/**
+ * Whether an agent kind drives a rendered UI. Reads {@link VISUAL_STEP_KINDS} rather than
+ * re-spelling the disjunction, so a third visual kind added to that list is seen by both
+ * predicates below instead of leaving the frame gate quietly offering a UI-driving pipeline on a
+ * frame with no UI.
+ */
 function isVisualStepKind(kind: string): boolean {
-  return kind === UI_TESTER_AGENT_KIND || kind === VISUAL_CONFIRM_AGENT_KIND
+  return (VISUAL_STEP_KINDS as readonly string[]).includes(kind)
 }
 
 /**

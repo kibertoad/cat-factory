@@ -4460,7 +4460,7 @@
       "skillNoneAvailable": "Keine Skills verfügbar. Verknüpfe eine Skill-Quelle in den Kontoeinstellungen.",
       "skillMissing": "Dieser Skill ist nicht mehr im Katalog; wähle einen anderen.",
       "skillNeedsPick": "Ein Skill-Schritt braucht einen ausgewählten Skill, bevor du speichern kannst.",
-      "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder setzen Sie den Zweck auf Entwicklung.",
+      "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder wählen Sie einen Zweck, der Code liefert (Entwicklung oder Fehlerbehebung).",
       "promptEditTooltip": "Systemprompt dieses Agenten bearbeiten",
       "promptEditedTooltip": "Der Systemprompt dieses Agenten ist für diesen Arbeitsbereich bearbeitet",
       "consensusGroups": "Konsensgruppen",

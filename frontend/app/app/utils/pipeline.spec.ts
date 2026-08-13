@@ -6,9 +6,12 @@ import {
   PIPELINE_PURPOSES,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
+  pipelineMatchesPurpose,
+  pipelineRunsVisualStep,
   purposeAllowsAgentCategory,
   purposeSuggestsAgentCategory,
   purposeSuggestsAgentKind,
+  resolveRunServiceScope,
 } from '@cat-factory/contracts'
 import type { PipelinePurpose } from '@cat-factory/contracts'
 import type { Block, Pipeline } from '~/types/domain'
@@ -303,6 +306,10 @@ describe('purposeSuggestsAgentKind (what the palette actually filters on)', () =
     const bugOnly = { category: 'build', purposes: ['bugfix'] } as const
     expect(purposeSuggestsAgentKind('bugfix', bugOnly)).toBe(true)
     expect(purposeSuggestsAgentKind('build', bugOnly)).toBe(false)
+    // ONE relation, not one per surface: the saved-pipeline library reads it through the same
+    // helper, so a draft cannot find the build ladder in its palette and not in its library.
+    expect(pipelineMatchesPurpose({ purpose: 'build' } as Pipeline, 'bugfix')).toBe(true)
+    expect(pipelineMatchesPurpose({ purpose: 'bugfix' } as Pipeline, 'build')).toBe(false)
   })
 
   it('is a declaration, not an exemption from the category', () => {
@@ -401,7 +408,35 @@ describe('pipelineAllowedForFrame (the visual gate)', () => {
   })
 
   it('offers it on a frontend frame too, where the UI pass is exactly what runs', () => {
+    // Stated as the premise, not just the answer: on this frame the condition ADMITS the browser
+    // pass, so the gate is passing on the frame half rather than on the step being scoped out.
+    // Without it the case reads identically against the pre-fix implementation, which reached the
+    // same `true` down the other branch and asserted nothing about the change.
+    expect(pipelineRunsVisualStep(buildRung, resolveRunServiceScope([frontendFrame]))).toBe(true)
     expect(pipelineAllowedForFrame(buildRung, frontendFrame, [frontendFrame])).toBe(true)
+  })
+
+  it('offers everything on a service frame a FRONTEND binds as its backend', () => {
+    // The other half of `frameAllowsVisualPipeline`, and the branch with the widest reach: the
+    // linked frontend is the UI a change to this service is validated through, so the frame has a
+    // UI and even an unconditional visual pipeline may run on it.
+    const boundService = { id: 'blk_api', level: 'frame', type: 'service' } as Block
+    const binder = {
+      id: 'blk_fe',
+      level: 'frame',
+      type: 'frontend',
+      frontendConfig: {
+        backendBindings: [
+          { envVar: 'API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+        ],
+      },
+    } as Block
+    const blocks = [boundService, binder]
+    const visual = pipeline({ purpose: 'build', agentKinds: ['coder', 'visual-confirmation'] })
+    expect(pipelineAllowedForFrame(buildRung, boundService, blocks)).toBe(true)
+    expect(pipelineAllowedForFrame(visual, boundService, blocks)).toBe(true)
+    // ...and it is the BINDING that does it, not the mere presence of a frontend on the board.
+    expect(pipelineAllowedForFrame(visual, boundService, [boundService, frontendFrame])).toBe(false)
   })
 
   it('still hides a pipeline whose visual step is UNCONDITIONAL on a frame with no UI', () => {

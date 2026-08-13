@@ -417,7 +417,15 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
  * deliberately does not name), the build rung this interface mode defaults to. Basic mode gets the
  * fixed Standard build, advanced the Adaptive one; `defaultBuildPipelineId` owns that rule so the
  * create form and the task card's plain "Start" cannot disagree about it. Empty when the resolved
- * preset is not in this workspace's library (an older seed, or a retired rung).
+ * preset is not in this workspace's library (an older seed, or a retired rung) or when the picker
+ * would not OFFER it for `type`.
+ *
+ * That second check is why it re-runs the picker's own predicate rather than scanning the whole
+ * library: a workspace whose declared interactive default is a bugfix preset would otherwise open a
+ * `feature` form on a selection with no matching row, and create the task pinned to a pipeline the
+ * same screen says is not allowed for its type. Parameterised by `type` rather than reading
+ * `selectablePipelines`, so the answer cannot depend on whether the watcher fires before or after
+ * the ref it filters on has settled.
  *
  * ONE definition, read by both the type watcher and the open-reset. They used to compute it
  * separately, the reset consulting `DEFAULT_PIPELINE_FOR_TYPE` alone and falling to `''` for every
@@ -434,7 +442,10 @@ function defaultPipelineIdFor(type: TaskTypeChoice): string {
     // and the task card's plain Start still cannot disagree (see `declaredDefaultId`).
     pipelines.declaredDefaultId('interactive') ??
     defaultBuildPipelineId(uiMode.isAdvanced)
-  return pipelines.pipelines.some((p) => p.id === preset) ? preset : ''
+  const resolved = pipelines.pipelines.find((p) => p.id === preset)
+  const offered =
+    !!resolved && pipelineAllowedForManualStart(resolved, frame.value, board.blocks, type, 'task')
+  return offered ? preset : ''
 }
 
 watch(taskType, (next) => {

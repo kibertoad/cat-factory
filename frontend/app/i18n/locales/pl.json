@@ -4903,7 +4903,7 @@
       "skillNoneAvailable": "Brak dostępnych umiejętności. Połącz źródło umiejętności w ustawieniach konta.",
       "skillMissing": "Tej umiejętności nie ma już w katalogu; wybierz inną.",
       "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać.",
-      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie.",
+      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na takie, które dostarcza kod (Programowanie lub Poprawka błędu).",
       "promptEditTooltip": "Edytuj prompt systemowy tego agenta",
       "promptEditedTooltip": "Prompt systemowy tego agenta jest zmieniony dla tego obszaru roboczego",
       "consensusGroups": "Grupy konsensusu",

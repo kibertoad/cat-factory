@@ -2,6 +2,7 @@ import {
   frameAllowsVisualPipeline,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
+  pipelineHasVisualStep,
   pipelineRunsVisualStep,
   resolveRunServiceScope,
 } from '@cat-factory/contracts'
@@ -114,18 +115,27 @@ export { pipelineAllowedForBlockLevel, pipelineAllowedForTaskType }
  * conditional tester pair: each rung lists a `tester-ui` scoped to `frontend`, which a backend
  * task skips.
  *
+ * The coarse {@link pipelineHasVisualStep} runs FIRST and is the only work an ordinary pipeline
+ * costs: this is called once per row of every pipeline picker, recomputed on each task-type change
+ * and each live board push, and the other two halves each walk the whole block list or allocate a
+ * scope. A pipeline listing no visual step at all can reach neither answer, so nothing is decided
+ * before it that it could decide differently.
+ *
  * The scope is derived from the FRAME alone, where the engine also folds in the task's involved
- * services. That cannot disagree here: an involved service is always a non-frontend (a frontend
- * frame has no connection neighbours, see `RunServiceScope`), so it can only ever re-confirm the
+ * services. That cannot disagree here: an involved service is always a non-frontend (only a
+ * `service` frame survives `validInvolvedServiceFrames`), so it can only ever re-confirm the
  * `backend` half this frame already sets — and on a frontend frame the gate passes on the frame
- * itself. An unresolved frame yields an empty scope, which admits every condition and is then
- * refused by the frame half, exactly as the engine refuses it.
+ * itself. `runServiceScope.test.ts` pins that filter as the invariant this omission rests on, so
+ * widening it fails there rather than here, where the symptom would be a rung this offers and the
+ * run-start gate then refuses. An unresolved frame yields an empty scope, which admits every
+ * condition and is then refused by the frame half, exactly as the engine refuses it.
  */
 export function pipelineAllowedForFrame(
   pipeline: Pipeline,
   frame: Block | undefined,
   blocks: readonly Block[],
 ): boolean {
+  if (!pipelineHasVisualStep(pipeline)) return true
   if (frameAllowsVisualPipeline(frame, blocks)) return true
   return !pipelineRunsVisualStep(pipeline, resolveRunServiceScope(frame ? [frame] : []))
 }

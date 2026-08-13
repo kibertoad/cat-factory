@@ -40,6 +40,10 @@ export * from './pipeline-purpose-vocabulary.js'
 // compatibility (asserted in the tests): the palette may hide what the save gate
 // tolerates, never the reverse, which would offer a kind that cannot then be saved.
 //
+// `build` and `bugfix` are ONE classifier to three of those four surfaces: the same work, split
+// only so the pickers can tell them apart. {@link classifierSuits} states that relation once, so a
+// palette and a library looking at the same draft cannot answer it differently.
+//
 // Every pipeline carries one: `purpose` is mandatory at every write boundary (the entity, the
 // create request, the seed spec and therefore every `PipelineRegistry` registration), and the row
 // mapper resolves the pre-mandatory NULLs the back-fill missed. So none of these predicates has an
@@ -78,6 +82,28 @@ const CODE_SHIPPING_PURPOSES: readonly PipelinePurpose[] = ['build', 'bugfix']
  */
 function classifierFor(purpose: Pipeline['purpose'] | null | undefined): PipelinePurpose | null {
   return purpose && isPipelinePurpose(purpose) ? purpose : null
+}
+
+/**
+ * Whether something classified `own` suits a context being judged AT `classifier`: exact match,
+ * plus the single relation "`build` satisfies `bugfix`", one way.
+ *
+ * The two members are the same WORK (a bug fix designs, implements, tests and merges exactly as a
+ * build does), and are split only so the pickers can withhold a defect-report preset from a feature
+ * task ({@link pipelineAllowedForTaskType}). So anything classified `build` is at home in a bugfix
+ * context: every palette kind whose `purposes` list predates the member (the Bug Investigator
+ * declares `build`, most absurdly of all), and the whole build ladder in the saved-pipeline library
+ * of a bugfix draft, which would otherwise open holding two rows.
+ *
+ * The reverse does NOT hold: naming `bugfix` claims the defect-report context specifically and says
+ * nothing about a general build.
+ *
+ * ONE definition, read by both surfaces that narrow by purpose ({@link purposeSuggestsAgentKind},
+ * {@link pipelineMatchesPurpose}), because the palette and the library answering the same question
+ * differently is what a user reads as one of them being broken.
+ */
+function classifierSuits(own: PipelinePurpose, classifier: PipelinePurpose): boolean {
+  return own === classifier || (classifier === 'bugfix' && own === 'build')
 }
 
 /**
@@ -194,14 +220,9 @@ export interface AgentPurposeRelevance {
  * refuses one at registration, so this reading cannot double as a way of saying "offer me
  * nowhere", which is what someone typing `purposes: []` means and the opposite of what it does.
  *
- * `build` also SATISFIES `bugfix`, one-way, and that is the whole of what those two members mean
- * to a kind. A declaration is a claim about the WORK a kind suits, and the two purposes are the
- * same work: a `bugfix` pipeline designs, implements, tests and merges exactly as a `build` one
- * does, and is split from it only so the pickers can withhold a defect-report preset from a
- * feature task. Without this the new member would silently empty out a bugfix palette, hiding
- * every kind whose list predates it — the Bug Investigator, which declares `build`, most absurdly
- * of all. The reverse does NOT hold: a kind naming only `bugfix` is claiming the defect-report
- * context specifically, and nothing about a general build.
+ * A declaration is matched through {@link classifierSuits}, so declaring `build` also answers for
+ * `bugfix`: the two members are the same work, and without that the new one would silently empty
+ * out a bugfix palette.
  */
 export function purposeSuggestsAgentKind(
   purpose: Pipeline['purpose'],
@@ -211,8 +232,8 @@ export function purposeSuggestsAgentKind(
   if (classifier === null) return true
   if (kind.category && !purposeSuggestsAgentCategory(purpose, kind.category)) return false
   const declared = kind.purposes?.filter((p) => isPipelinePurpose(p)) ?? []
-  if (declared.length === 0 || declared.includes(classifier)) return true
-  return classifier === 'bugfix' && declared.includes('build')
+  if (declared.length === 0) return true
+  return declared.some((p) => classifierSuits(p, classifier))
 }
 
 /**
@@ -231,8 +252,9 @@ export function purposeSuggestsAgentKind(
  *    {@link pipelineAllowedForTaskType} draws, and for the same reason.
  *
  * Unlike the pickers' gate this narrows a list somebody is BROWSING rather than one they are about
- * to run from, so it may be exact where that one is permissive: two known purposes never mix, and
- * the caller states how many rows the dial is holding back and offers the way out of it.
+ * to run from, so it may be exact where that one is permissive: two known purposes mix only where
+ * {@link classifierSuits} says they are the same work, and the caller states how many rows the dial
+ * is holding back and offers the way out of it.
  */
 export function pipelineMatchesPurpose(
   pipeline: Pick<Pipeline, 'purpose'>,
@@ -242,7 +264,7 @@ export function pipelineMatchesPurpose(
   if (classifier === null) return true
   const own = classifierFor(pipeline.purpose)
   if (own === null) return true
-  return own === classifier
+  return classifierSuits(own, classifier)
 }
 
 /**
