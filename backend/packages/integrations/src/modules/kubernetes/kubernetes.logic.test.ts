@@ -8,6 +8,7 @@ import {
   classifyPodStartupFailure,
   describePodStatus,
   describePodTermination,
+  podExitedCleanly,
   podName,
   proxyUrl,
   resolveImage,
@@ -199,6 +200,75 @@ describe('describePodTermination', () => {
     // A blank message is nothing said, not an account: reporting it verbatim would announce a
     // pod-level explanation and then give none.
     expect(describePodTermination({ status: { phase: 'Failed', message: '   ' } })).toBe('')
+  })
+})
+
+describe('podExitedCleanly', () => {
+  // The distinction the local and Cloudflare transports already draw, read off the one field a
+  // pod exposes it in. A runner pod's only workload is the harness, so a container that ended 0
+  // with the job still in flight is a harness something STOPPED: the engine fails that run at
+  // once instead of spending its crash budget re-running the agent into whatever stopped it.
+  it('reads a clean exit as the harness having been shut down', () => {
+    expect(
+      podExitedCleanly({
+        status: {
+          phase: 'Succeeded',
+          containerStatuses: [
+            { name: 'executor', state: { terminated: { reason: 'Completed', exitCode: 0 } } },
+          ],
+        },
+      }),
+    ).toBe(true)
+  })
+
+  it('refuses a non-zero exit and a signal death alike', () => {
+    expect(
+      podExitedCleanly({
+        status: { containerStatuses: [{ state: { terminated: { exitCode: 137 } } }] },
+      }),
+    ).toBe(false)
+    // Exit code 0 WITH a signal is the kubelet killing a container that was mid-shutdown; the
+    // zero is then an artefact of how it died, not an account of it leaving.
+    expect(
+      podExitedCleanly({
+        status: { containerStatuses: [{ state: { terminated: { exitCode: 0, signal: 15 } } }] },
+      }),
+    ).toBe(false)
+  })
+
+  it('lets the kubelet overrule the container: a pod TAKEN AWAY is an eviction', () => {
+    // A pod-level reason is the kubelet's own account of removing the pod, which no container
+    // status reports. Whatever the workload managed to exit with on the way out, this is a loss
+    // the engine should answer with a fresh pod rather than by failing the run.
+    expect(
+      podExitedCleanly({
+        status: {
+          phase: 'Failed',
+          reason: 'Evicted',
+          containerStatuses: [{ state: { terminated: { exitCode: 0 } } }],
+        },
+      }),
+    ).toBe(false)
+  })
+
+  it('answers false when nothing terminated, so an unreadable pod is never a shutdown', () => {
+    // Absent is not zero: a pod already deleted or garbage-collected, or one still running,
+    // says nothing about how the workload ended and must stay an eviction.
+    expect(podExitedCleanly({ status: { phase: 'Running' } })).toBe(false)
+    expect(podExitedCleanly(null)).toBe(false)
+    // A previous incarnation's clean exit is not this one's: `lastState` is deliberately unread.
+    expect(
+      podExitedCleanly({
+        status: {
+          containerStatuses: [
+            {
+              state: { waiting: { reason: 'CrashLoopBackOff' } },
+              lastState: { terminated: { exitCode: 0 } },
+            },
+          ],
+        },
+      }),
+    ).toBe(false)
   })
 })
 

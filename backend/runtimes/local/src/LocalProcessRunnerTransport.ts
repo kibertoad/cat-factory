@@ -95,8 +95,8 @@ const MAX_TRACKED_JOB_GENERATIONS = 1_000
 
 export interface LocalProcessRunnerTransportOptions {
   /**
-   * Path to the executor-harness HTTP server entry (its `server.js`/`server.ts`). Spawned
-   * as `node <entry>`; with a `.ts` entry, Node's type-stripping (Node 24+) runs it.
+   * Path to the executor-harness HTTP server entry (its `harness-server.js`/`harness-server.ts`).
+   * Spawned as `node <entry>`; with a `.ts` entry, Node's type-stripping (Node 24+) runs it.
    */
   harnessEntry: string
   /** Node executable to spawn the harness with. Default `process.execPath`. */
@@ -394,19 +394,6 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
   }
 
   /**
-   * How the harness process that was serving `jobId` ended, or a statement that nothing is known.
-   *
-   * Never silently empty, and never somebody else's death. Three answers, because they need three
-   * different next steps: here is the exit and the stderr that preceded it; the process is gone
-   * but no record of THIS job's process survives (a later one has since died and taken the slot);
-   * and this backend never dispatched the job at all, so it cannot say which process had it.
-   *
-   * The generation check is what separates the second from the first. A single retained record
-   * plus a respawning process is exactly the setup where "the last exit" and "this job's exit"
-   * quietly stop being the same thing, and reporting one as the other puts a wrong cause of death
-   * on the run with no sign that it is wrong.
-   */
-  /**
    * Whether the harness process THIS job was dispatched to exited cleanly (code 0, no signal).
    *
    * Generation-checked for the same reason the post-mortem is: one retained exit record plus a
@@ -422,6 +409,19 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     return exit.code === 0 && !exit.signal
   }
 
+  /**
+   * How the harness process that was serving `jobId` ended, or a statement that nothing is known.
+   *
+   * Never silently empty, and never somebody else's death. Three answers, because they need three
+   * different next steps: here is the exit and the stderr that preceded it; the process is gone
+   * but no record of THIS job's process survives (a later one has since died and taken the slot);
+   * and this backend never dispatched the job at all, so it cannot say which process had it.
+   *
+   * The generation check is what separates the second from the first. A single retained record
+   * plus a respawning process is exactly the setup where "the last exit" and "this job's exit"
+   * quietly stop being the same thing, and reporting one as the other puts a wrong cause of death
+   * on the run with no sign that it is wrong.
+   */
   private describeJobsProcessExit(jobId: string, opts?: { preface?: string }): string | undefined {
     const dispatchedTo = this.jobGenerations.get(jobId)
     const exit = this.lastExit

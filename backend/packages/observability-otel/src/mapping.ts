@@ -732,6 +732,7 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'sweep.failed': 'cat_factory.platform.sweep_failures',
   'container.dispatch_failed': 'cat_factory.platform.container_dispatch_failures',
   'container.evicted': 'cat_factory.platform.container_evictions',
+  'container.harness_shutdown': 'cat_factory.platform.container_harness_shutdowns',
   'container.branch_contended': 'cat_factory.platform.container_branch_contentions',
   'container.capability_unsupported': 'cat_factory.platform.container_capability_unsupported',
   'container.capability_unknown': 'cat_factory.platform.container_capability_unknown',
@@ -776,6 +777,9 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'sweep.failed': '{failure}',
   'container.dispatch_failed': '{failure}',
   'container.evicted': '{eviction}',
+  // One harness STOPPED under a job, which is one whole run ended: unlike an eviction beside it,
+  // nothing retries, so the unit is the shutdown itself rather than a recovery attempt.
+  'container.harness_shutdown': '{shutdown}',
   // One REFUSED push, which is one whole agent run about to be spent again: the unit a reader
   // multiplies by an agent run's cost, not a failure the run itself reports.
   'container.branch_contended': '{refusal}',

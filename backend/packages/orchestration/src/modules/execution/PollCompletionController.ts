@@ -189,13 +189,6 @@ export class PollCompletionController {
     // `update.detail` is the transport's container post-mortem (exit state + log tail). It only
     // surfaces if the eviction budget is spent; a recovered eviction re-dispatches and needs no
     // diagnostic.
-    // Asked BEFORE the eviction recovery, and answered without spending any of its budget: a
-    // harness that exited cleanly mid-job was stopped by something a fresh container meets again.
-    const shutdown = containerShutdownFailure(update)
-    if (shutdown) {
-      await this.markContainerErrored(workspaceId, instance, step)
-      return { kind: 'job_failed', ...shutdown }
-    }
     const recovered = await this.recoverContainerEviction(workspaceId, instance, step, update)
     if (recovered) return recovered
     // A push to the work branch that was REFUSED because the branch moved under the run is the
@@ -222,6 +215,19 @@ export class PollCompletionController {
         update.error,
       )
       if (settled) return settled
+    }
+    // A harness that exited cleanly mid-job was stopped by something a fresh container meets
+    // again, so this fails the run outright rather than spending an eviction budget on it. It is
+    // asked HERE, below every branch that settles a job WITHOUT failing the run, because those
+    // branches are about whose job died rather than about how: a killed Challenge Investigator is
+    // still a non-critical second opinion, and failing the human's in-flight curation over it
+    // would trade one wrong recovery for a worse one. It cannot be reached by the eviction
+    // recovery above either way (`harnessShutdown` is never set beside `evicted`), so nothing
+    // above it spends a retry on this failure.
+    const shutdown = containerShutdownFailure(update)
+    if (shutdown) {
+      await this.markContainerErrored(workspaceId, instance, step)
+      return { kind: 'job_failed', ...shutdown }
     }
     // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
     // to classify it (→ AgentFailureKind), falling back to the error-string regex when an

@@ -59,6 +59,21 @@ export type OperationalCounter =
   /** A container job settled as evicted/crashed. Dimensioned by the eviction kind. */
   | 'container.evicted'
   /**
+   * A container job settled because the harness serving it EXITED CLEANLY while it was still in
+   * flight: something stopped the harness (an operator, a host restart, or the agent's own
+   * commands matching the harness process).
+   *
+   * Its own counter rather than a third `container.evicted` dimension, because it is not one: an
+   * eviction is a container the platform lost and recovers by dispatching a fresh one, this is a
+   * container something in the deployment deliberately stopped and the engine fails the run over
+   * on the FIRST occurrence. Folding it in would inflate the eviction rate an operator sizes
+   * their infrastructure by with deaths no infrastructure change can prevent.
+   *
+   * UNDIMENSIONED, for the reason `container.branch_contended` is: the only split worth having
+   * (which backend saw it) is free-form, and the ids ride the log line at the increment site.
+   */
+  | 'container.harness_shutdown'
+  /**
    * A container job settled because its push to the work branch was REFUSED: the branch moved
    * under the run (a second dispatch for the same block, or a rewrite of commits an earlier run
    * published). The engine re-dispatches once, so the cost of each one is a whole agent run spent

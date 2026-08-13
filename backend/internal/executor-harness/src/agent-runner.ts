@@ -318,7 +318,7 @@ function streamCli(
         // `entry.abort`), the way `settlePiRun` already reads it on the Pi path.
         //
         // Carry the tail on the rejection so a caller that REPLACES this message with a more
-        // specific cause (the no-progress guard's diagnostic) can still append it — the stderr
+        // specific cause (the no-progress guard's diagnostic) can still append it: the stderr
         // is often the only evidence of what the CLI was doing when it was killed.
         reject(Object.assign(new Error(abortReasonOf(opts.signal)), { stderrTail }))
         return

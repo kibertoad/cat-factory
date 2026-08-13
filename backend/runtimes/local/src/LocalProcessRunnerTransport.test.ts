@@ -276,6 +276,40 @@ describe('LocalProcessRunnerTransport: a harness process that stopped serving a 
     expect(view.detail).not.toContain('still serving other local runs')
   })
 
+  it('calls a shutdown a shutdown even when a replacement process answers the poll', async () => {
+    // The same gap as the test above, for the OTHER reading. One killed harness must not settle
+    // two ways depending on which job polls first: the sibling that polls before the re-dispatch
+    // sees a dead process and reports a shutdown, while the one that polls after gets its 404
+    // from the replacement. What decides is the process THIS job was handed to, which the
+    // dispatch generation records, not whichever process happens to be answering now.
+    const first = fakeChildWithStderr()
+    const second = fakeChildWithStderr()
+    const children = [first, second]
+    let jobsAre404 = false
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/') && jobsAre404) return new Response('no such job', { status: 404 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => children.shift()) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6022,
+    })
+    await transport.dispatch({ runId: 'r2', jobId: 'b' }, {}, 'agent')
+
+    first.emit('exit', 0, null) // something stopped the harness; it handled the signal and left
+    await transport.dispatch({ runId: 'r1', jobId: 'a2' }, {}, 'agent')
+    jobsAre404 = true
+
+    const view = await transport.poll({ runId: 'r2', jobId: 'b' })
+    expect(view.harnessShutdown).toBe(true)
+    expect(view.evicted).toBeUndefined()
+    expect(view.error).not.toMatch(/evicted or crashed/)
+  })
+
   it('refuses to hand a job a LATER process’s death', async () => {
     // Retaining the record and misattributing it are one edit apart. Only the process a job was
     // actually dispatched to can explain that job, so a record from a generation the job never

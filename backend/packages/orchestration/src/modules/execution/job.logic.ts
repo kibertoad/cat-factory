@@ -1,5 +1,10 @@
 import type { AgentFailureKind, ContainerEvictionKind } from '@cat-factory/kernel'
-import { DispatchError, DomainError, getErrorMessage } from '@cat-factory/kernel'
+import {
+  DispatchError,
+  DomainError,
+  getErrorMessage,
+  HARNESS_SHUTDOWN_ERROR,
+} from '@cat-factory/kernel'
 
 /**
  * The fields of a FAILED job view that the shared container-eviction recovery reads. Grouped
@@ -49,7 +54,10 @@ export function containerShutdownFailure(
   failure: ContainerFailureView,
 ): ContainerShutdownFailure | null {
   if (!failure.harnessShutdown) return null
-  const error = failure.error ?? 'The harness shut down while this job was still running'
+  // Kernel's own wording for the fallback, not a second sentence saying the same thing: the
+  // transports all report this condition with that constant, and one condition worded two ways
+  // is a condition an operator cannot search for.
+  const error = failure.error ?? HARNESS_SHUTDOWN_ERROR
   return { error, failureKind: 'harness_shutdown', detail: failure.detail ?? error }
 }
 

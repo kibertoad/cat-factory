@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -1086,11 +1086,17 @@ describe.skipIf(!unix)('runClaudeCode failure reporting', () => {
 // prompted this: the agent pattern-killed the harness itself) filed its failure against a
 // watchdog that never fired.
 describe.skipIf(!unix)('what an aborted run reports', () => {
-  /** A fake CLI that never finishes on its own, so only the abort can end the run. */
-  function hangingCli(name: string): void {
+  /**
+   * A fake CLI that never finishes on its own, so only the abort can end the run. It touches
+   * `spawnedMarker` first, which is what the test waits on: the abort has to reach a RUNNING
+   * child, and a wall-clock guess at when that happens is a race on a loaded machine.
+   */
+  function hangingCli(name: string, spawnedMarker: string): void {
     writeFileSync(
       join(binDir, name),
-      '#!/usr/bin/env node\nprocess.stdin.resume()\nprocess.stdin.on("data", () => {})\n' +
+      '#!/usr/bin/env node\n' +
+        `require('node:fs').writeFileSync(${JSON.stringify(spawnedMarker)}, 'up')\n` +
+        'process.stdin.resume()\nprocess.stdin.on("data", () => {})\n' +
         'setInterval(() => {}, 1000)\n',
       { mode: 0o755 },
     )
@@ -1098,7 +1104,8 @@ describe.skipIf(!unix)('what an aborted run reports', () => {
 
   /** Start a hanging run, abort it with `reason` once it is up, and answer how it failed. */
   async function abortedMessage(reason?: Error): Promise<string> {
-    hangingCli('claude')
+    const spawnedMarker = join(cwd, 'cli-spawned')
+    hangingCli('claude', spawnedMarker)
     const controller = new AbortController()
     const run = runClaudeCode({
       cwd,
@@ -1108,9 +1115,11 @@ describe.skipIf(!unix)('what an aborted run reports', () => {
       ambientAuth: true,
       signal: controller.signal,
     })
-    // Let the spawn land, so the abort kills a RUNNING child rather than taking the
-    // already-aborted-at-entry shortcut, which is a different rejection.
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // Wait for the child to SAY it is up, so the abort kills a running one rather than taking
+    // the already-aborted-at-entry shortcut, which is a different rejection. Gated on the
+    // child's own signal rather than a fixed sleep: the sleep passes on an idle machine and
+    // flakes on a contended one, and a flake here reads as the runner mislabelling an abort.
+    while (!existsSync(spawnedMarker)) await new Promise((resolve) => setTimeout(resolve, 5))
     controller.abort(reason)
     return run.then(
       () => '(resolved)',

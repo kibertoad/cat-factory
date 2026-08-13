@@ -16,13 +16,27 @@ describe('abortReasonOf', () => {
     expect(abortReasonOf(controller.signal)).toBe('harness shutting down (SIGTERM)')
   })
 
-  it('names no watchdog when there is no reason to read', () => {
+  it('falls back when there is no reason to read', () => {
     const controller = new AbortController()
     controller.abort()
-    // A DOMException (`AbortError`), not an Error, and it says only "This operation was aborted":
-    // the fallback has to cover it, and covering it by guessing a cause is the bug.
-    expect(abortReasonOf(controller.signal)).not.toMatch(/watchdog/i)
-    expect(abortReasonOf(undefined)).not.toMatch(/watchdog/i)
+    // A reasonless abort still sets one: an `AbortError` DOMException, which on Node IS an Error
+    // and says only "This operation was aborted". Asserted as the FALLBACK rather than merely as
+    // "not a watchdog", because that weaker check passed while the contentless platform sentence
+    // was being quoted back as if it were a cause.
+    expect(abortReasonOf(controller.signal)).toBe('agent run aborted')
+    expect(abortReasonOf(undefined)).toBe('agent run aborted')
+  })
+
+  it('keeps a timeout abort, which does say something', () => {
+    // The other reason the platform supplies. Unlike a bare abort it names what happened, so the
+    // predicate that drops the contentless one must not take this with it.
+    const signal = AbortSignal.timeout(0)
+    return new Promise<void>((resolve) => {
+      signal.addEventListener('abort', () => {
+        expect(abortReasonOf(signal)).toMatch(/timeout/i)
+        resolve()
+      })
+    })
   })
 
   it('ignores a reason that carries no message', () => {

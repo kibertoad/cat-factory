@@ -150,6 +150,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
       // bare "container evicted or crashed" has nothing to work from — the raw status line plus
       // this provider's fix-it remedy is what names the real problem. `evicted or crashed` stays
       // a SUBSTRING, which is all `isContainerEvictionError` needs.
+      //
+      // It stays an EVICTION even where a harness shutdown is what actually happened. This
+      // backend sees a scheduler's status vocabulary and nothing underneath it: there is no exit
+      // code anywhere in a 404, and inferring "shut down" from a status word would report every
+      // reclaimed runner as one. Same rule as the Apple `container` runtime locally: an absent
+      // code is not a zero, so the deployment keeps the reading that costs a fresh pool member
+      // rather than the run. The two backends that CAN read an exit code (the local transports,
+      // Kubernetes' `state.terminated`) mint `harnessShutdown` instead.
       if (error instanceof RunnerPoolApiError && (error.status === 404 || error.status === 410)) {
         return {
           state: 'failed',
