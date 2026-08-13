@@ -1,5 +1,12 @@
 # @cat-factory/workspaces
 
+## 0.28.2
+
+### Patch Changes
+
+- Updated dependencies [792ecde]
+  - @cat-factory/kernel@0.296.1
+
 ## 0.28.1
 
 ### Patch Changes
