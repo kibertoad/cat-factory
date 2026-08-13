@@ -142,6 +142,16 @@ const boardItems = computed(() =>
 const boardFromService = computed(() => isBoardFromService(descriptor.value))
 
 /**
+ * The container field's label, which asks a different question per tracker: a repo-less one only
+ * decides where the picked bug lands, while a repo-backed one is also choosing what gets scanned.
+ * A map of literals, like `STATUS_KEYS` below, so both keys stay statically visible.
+ */
+const CONTAINER_LABEL_KEYS = { service: 'bugHunt.huntIn', board: 'bugHunt.adoptInto' } as const
+const containerLabelKey = computed(() =>
+  boardFromService.value ? CONTAINER_LABEL_KEYS.service : CONTAINER_LABEL_KEYS.board,
+)
+
+/**
  * The service this hunt is scoped to has no repository linked, so it has no issues to read. The
  * one scan failure worded here instead of in a toast: it names something to fix on this board,
  * and it belongs beside the scope it invalidates.
@@ -409,18 +419,22 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
              when the frame this hunt was opened from is the only legal target; a choice (scoped
              to that frame) when it has modules, or over the whole board when the hunt was opened
              standalone. -->
+        <!-- Two blocks rather than one with a computed `keypath`: the i18n extractor reads a
+             bound keypath as the key itself, so a dynamic one is a key missing from every
+             locale. Every other `<i18n-t>` in the SPA names its key statically for that reason. -->
         <p v-if="containerStated" class="text-xs text-slate-400">
-          <i18n-t
-            :keypath="boardFromService ? 'bugHunt.huntingIn' : 'bugHunt.adoptingInto'"
-            tag="span"
-            scope="global"
-          >
+          <i18n-t v-if="boardFromService" keypath="bugHunt.huntingIn" tag="span" scope="global">
+            <template #container>
+              <span class="font-medium text-slate-200">{{ pinnedContainer!.title }}</span>
+            </template>
+          </i18n-t>
+          <i18n-t v-else keypath="bugHunt.adoptingInto" tag="span" scope="global">
             <template #container>
               <span class="font-medium text-slate-200">{{ pinnedContainer!.title }}</span>
             </template>
           </i18n-t>
         </p>
-        <UFormField v-else :label="t(boardFromService ? 'bugHunt.huntIn' : 'bugHunt.adoptInto')">
+        <UFormField v-else :label="t(containerLabelKey)">
           <USelect v-model="containerId" :items="containerItems" class="w-full" />
         </UFormField>
 
