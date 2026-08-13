@@ -31,6 +31,21 @@ overrides:
   # removed), so pinning one 0.6.0 keeps every core-owned type a single identity everywhere.
   # Prune once every consumer's core range is bumped to include ^0.6.0 upstream.
   '@modular-frontend/core': 0.6.0
+  # `esbuild` is an OPTIONAL PEER of vite (`^0.27.0 || ^0.28.0`) and a loose dep of tsx
+  # (`~0.28.0`) and nitropack (`^0.28.0`), while wrangler and @cloudflare/vitest-pool-workers
+  # both pin it EXACTLY at 0.28.1. Left to float, a re-resolve gives the peer slot the newer
+  # 0.28.2 and the tree gains a SECOND esbuild beside the exact-pinned one. That copy is not
+  # merely redundant: pnpm resolves an auto-installed peer without its own optionalDependencies,
+  # so the platform binary package (@esbuild/<os>-<arch>) is never installed and esbuild's own
+  # postinstall validation aborts the whole install with `Expected "0.28.2" but got "<other>"`.
+  # Pinning the three loose consumers to the version the Cloudflare toolchain pins keeps one
+  # esbuild across the vite/vitest/wrangler stack. Deliberately SCOPED, not top-level: drizzle-kit
+  # (`^0.25.10`), @intlify/bundle-utils (`^0.25.4`) and fontless (`^0.27.0`) declare narrower
+  # ranges a blanket override would force them out of. Move these in lockstep with whatever
+  # wrangler pins on the next bump.
+  'vite>esbuild': 0.28.1
+  'tsx>esbuild': 0.28.1
+  'nitropack>esbuild': 0.28.1
   '@vue/compiler-core': 3.5.41
   '@vue/compiler-dom': 3.5.41
   '@vue/compiler-sfc': 3.5.41

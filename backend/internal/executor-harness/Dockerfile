@@ -91,7 +91,7 @@ RUN echo 'harness:100000:65536' > /etc/subuid \
 # CLI is missing or non-functional at runtime. We then assert both CLIs actually
 # run so a broken install fails the build instead of every subscription job.
 ARG PI_VERSION=0.84.1
-ARG CLAUDE_CODE_VERSION=2.1.226
+ARG CLAUDE_CODE_VERSION=2.1.229
 ARG CODEX_VERSION=0.147.0
 RUN --mount=type=secret,id=extra_ca,target=/tmp/extra_ca.crt \
     sh -eu -c 'apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl && rm -rf /var/lib/apt/lists/*; \
