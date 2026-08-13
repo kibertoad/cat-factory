@@ -6,13 +6,16 @@
 // panels' drawer, or `executionId` for a run's "Infrastructure attempts" drawer (which
 // surfaces that run's container/runner/env attempts).
 //
-// In `executionId` mode the drawer LIVE-tracks: while the run is active (`live`) it
-// silently re-polls so each container spin-up / tear-down appears with its timestamp as
-// it happens, and it does one final poll when the run goes terminal to catch the last
-// tear-down row (written just before the terminal event), after which the auto-poll
-// stops. Background polls never spin the refresh button (they're silent), but the manual
-// refresh control stays available even once the run is terminal — so a tear-down row that
-// was missed or not yet persisted at the terminal instant can always be refetched.
+// In `executionId` mode the drawer LIVE-tracks: while the engine is driving the run (`live`,
+// from `runIsActive`) it silently re-polls so each container spin-up / tear-down appears with
+// its timestamp as it happens, and it does one final poll when the run stops being driven, to
+// catch the last tear-down row (written just before the terminal event), after which the
+// auto-poll stops. "Stops being driven" covers a PARK as well as a terminal state: a run waiting
+// on a human decision or a raised spend budget writes no further attempts until it resumes, and
+// the same watch restarts the poll when it does. Background polls never spin the refresh button
+// (they're silent), but the manual refresh control stays available even once the run is terminal,
+// so a tear-down row that was missed or not yet persisted at the terminal instant can always be
+// refetched.
 import { onBeforeUnmount, onMounted, watch } from 'vue'
 import type {
   ProvisioningOperation,
@@ -23,7 +26,10 @@ import type {
 const props = defineProps<{
   subsystem?: ProvisioningSubsystem
   executionId?: string
-  /** Run-details mode only: whether the run is still active (drives live polling). */
+  /**
+   * Run-details mode only: whether the engine is still driving the run (`runIsActive`), which
+   * drives the background poll. A terminal OR parked run writes no further attempts.
+   */
   live?: boolean
 }>()
 
@@ -68,8 +74,8 @@ watch(
     // clears, `live` and `executionId` fall away in the same tick, so stop the interval
     // unconditionally or it leaks (firing no-op reloads) for the component's lifetime.
     stopPolling()
-    // On the active→terminal transition, poll once more (silently) to pick up the
-    // tear-down row the engine writes just before it emits the terminal state.
+    // On the active→stopped transition (parked or terminal), poll once more (silently) to pick
+    // up the tear-down row the engine writes just before it emits that state.
     if (wasLive && props.executionId != null) reload(true)
   },
   { immediate: true },

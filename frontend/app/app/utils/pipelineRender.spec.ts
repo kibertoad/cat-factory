@@ -1,8 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { binaryCandidateStatusSchema, stepSkipReasonSchema } from '@cat-factory/contracts'
+import {
+  binaryCandidateStatusSchema,
+  executionStatusSchema,
+  stepSkipReasonSchema,
+} from '@cat-factory/contracts'
 import type { ExecutionInstance, PipelineStep } from '~/types/execution'
 import { missingI18nKeys } from '../../test/i18nKeys'
-import { REDIRECT_PARK_PRESENTATION, dedicatedParkView, stepSkipReasonKey } from './pipelineRender'
+import {
+  REDIRECT_PARK_PRESENTATION,
+  dedicatedParkView,
+  runIsActive,
+  stepSkipReasonKey,
+} from './pipelineRender'
 
 /** A minimal coder step; the predicate only reads approval/followUps/forkDecision. */
 const step = (over: Partial<PipelineStep>): PipelineStep =>
@@ -227,5 +236,31 @@ describe('stepSkipReasonKey', () => {
     )
     expect(keys).toHaveLength(stepSkipReasonSchema.options.length + 1)
     expect(missingI18nKeys([...keys, 'pipeline.progress.skipped.unknown'])).toEqual([])
+  })
+})
+
+describe('runIsActive', () => {
+  it('answers true for exactly the one status the engine is driving under', () => {
+    // Derived from the vocabulary the engine writes, not a hand-listed set: a status added to the
+    // picklist fails here until someone decides whether infrastructure can move under it. That
+    // decision is what every animated infra indicator is gated on, so defaulting a new member
+    // either way silently is the failure this pins.
+    expect(executionStatusSchema.options.filter(runIsActive)).toEqual(['running'])
+  })
+
+  it('treats a PARK as inactive, not only a terminal state', () => {
+    // The distinction that makes this more than `status !== 'done' && status !== 'failed'`: a run
+    // waiting on a human decision (`blocked`) or on a raised spend budget (`paused`) is asleep in
+    // the durable driver. Nothing is cold-booting or being torn down under it, so a container left
+    // `starting` or an environment left `provisioning` must stop claiming otherwise.
+    expect(runIsActive('blocked')).toBe(false)
+    expect(runIsActive('paused')).toBe(false)
+  })
+
+  it('answers false when the run has no status to read', () => {
+    // The overlays render before/after their run resolves, and an unknown run is not a running
+    // one: the indicator must start still and begin turning once the run says it is being driven.
+    expect(runIsActive(null)).toBe(false)
+    expect(runIsActive(undefined)).toBe(false)
   })
 })
