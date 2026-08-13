@@ -5,6 +5,7 @@ import type {
   BinaryGeneratorCapability,
   BinaryGeneratorCredential,
   BinaryGeneratorDefinition,
+  BinaryGeneratorTransport,
   BinaryModality,
 } from '@cat-factory/contracts'
 import { summarizeContract } from './foundational-services.js'
@@ -14,7 +15,7 @@ import { summarizeContract } from './foundational-services.js'
  * one name from the layer it is already wiring against (the same courtesy
  * `FoundationalServiceDefinition` does for the estate registry).
  */
-export type { BinaryGeneratorDefinition }
+export type { BinaryGeneratorDefinition, BinaryGeneratorTransport }
 
 // App-owned registry of the GENERATIVE BINARY INTEGRATIONS a deployment ships in code — the
 // image / music / video generation APIs a binary-generating agent kind calls to produce its
@@ -76,6 +77,18 @@ export interface BinaryGeneratorView {
    */
   credentials: BinaryGeneratorCredential[]
   contracts: ApiContractSummary[]
+  /**
+   * How the integration is reached. ABSENT means `api`, exactly as it does on the definition:
+   * projected as the optional it is rather than defaulted to `'api'` here, so the one place that
+   * decides what an absent value means stays `isHarnessTransport` instead of becoming this
+   * projection plus every reader that trusts it.
+   */
+  transport?: BinaryGeneratorTransport
+  /**
+   * Which agent CLI serves a `harness` transport. Absent for an `api` one, which the schema
+   * refuses to let mean anything else.
+   */
+  harness?: string
 }
 
 /**
@@ -161,6 +174,8 @@ export class BinaryGeneratorRegistry {
         ...(definition.guidance ? { guidance: definition.guidance } : {}),
         credentials: [...(definition.credentials ?? [])],
         contracts: summarized.map((c) => c.summary),
+        ...(definition.transport ? { transport: definition.transport } : {}),
+        ...(definition.harness ? { harness: definition.harness } : {}),
       })
       documents.set(
         definition.id,

@@ -217,4 +217,51 @@ describe('generative binary integration registry validation', () => {
   it('requires at least one content type — a generator that produces nothing is not one', () => {
     expect(problemsFor([{ ...valid, modalities: [] }])).toHaveLength(1)
   })
+
+  // The HARNESS transport's one rule that needs more than the definition itself: the schema can
+  // check that a harness is NAMED, but only this layer can see kernel's closed `HarnessKind` list.
+  describe('harness transport', () => {
+    const harnessServed = {
+      id: 'codex-images',
+      name: 'Codex image generation',
+      summary: 'gpt-image-2 through the Codex CLI.',
+      description: 'Served by the agent CLI itself; no API and no key.',
+      modalities: ['image' as const],
+      mediaTypes: ['image/png'],
+      transport: 'harness' as const,
+      harness: 'codex',
+    }
+
+    it('accepts an integration served by a harness this build runs', () => {
+      expect(problemsFor([harnessServed])).toEqual([])
+    })
+
+    it('refuses a harness this build does not run', () => {
+      // A typo pins the step to a CLI no dispatch resolves, so every run selecting it is refused
+      // at admission with a message naming a harness that does not exist. The remedy is one string
+      // in the deployment's own code, which is what boot validation is for.
+      const problems = problemsFor([{ ...harnessServed, harness: 'codecs' }])
+      expect(problems).toHaveLength(1)
+      expect(problems[0]?.code).toBe('binary_generator_unknown_harness')
+      expect(problems[0]?.message).toContain('codecs')
+      expect(problems[0]?.message).toContain('codex')
+    })
+
+    it('refuses a harness this build DOES run but which cannot generate', () => {
+      // The failure that reads as a working registration: `claude-code` passes every structural
+      // check, admission resolves a claude-code step and admits it, the dispatch sets the flag,
+      // the runner ignores it, and the brief tells the agent to collect from a staging directory
+      // nothing created. The run then reports a model problem for one string of deployment code.
+      const problems = problemsFor([{ ...harnessServed, harness: 'claude-code' }])
+      expect(problems).toHaveLength(1)
+      expect(problems[0]?.code).toBe('binary_generator_unknown_harness')
+      expect(problems[0]?.message).toContain('no built-in generation tool')
+      // And it names what CAN serve one, since that is the whole remedy.
+      expect(problems[0]?.message).toContain('codex')
+    })
+
+    it('never raises it for an ordinary api integration', () => {
+      expect(problemsFor([valid])).toEqual([])
+    })
+  })
 })

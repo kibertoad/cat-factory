@@ -5,12 +5,14 @@ import {
   binaryFormatCoverage,
   binaryModalityOverlaps,
   binaryValueCoverage,
+  isHarnessTransport,
   requiredBinaryCapabilities,
 } from '@cat-factory/contracts'
 import type {
   BinaryGenerationOptions,
   BinaryGeneratorCapability,
   BinaryGeneratorCredential,
+  BinaryGeneratorTransport,
   BinaryModality,
   BinaryOutputConfig,
   BinaryUnacceptedValue,
@@ -18,6 +20,7 @@ import type {
 } from '@cat-factory/contracts'
 import type { BinaryGeneratorView } from './binary-generator-registry.js'
 import {
+  BINARY_GENERATED_PATH,
   BINARY_GENERATOR_CONTEXT_DIR,
   binaryGeneratorContextFileFor,
 } from './binary-output-paths.js'
@@ -70,6 +73,21 @@ export interface ResolvedBinaryGenerator {
    * from the context alone and has neither the registry nor the step to look the definition up in.
    */
   credentials: ResolvedBinaryGeneratorCredential[]
+  /**
+   * How this integration is reached, and which CLI serves it when the answer is `harness`.
+   *
+   * Here for the reason {@link credentials} is and `capabilities` deliberately is NOT: the
+   * executor rebuilds a dispatch from the context alone, and this is a fact it has to ACT on
+   * rather than merely repeat. A harness-served generator needs its CLI's own generation tool
+   * switched on for the job, and nothing else on the wire says so.
+   *
+   * The executor keys off `transport` alone and never off a CLI NAME: which tool to enable is the
+   * harness's own business, and admission has already refused any step whose model resolves to a
+   * different one. A `harness === 'codex'` test in the backend would be that decision made twice,
+   * in the half that would then have to grow a branch per CLI.
+   */
+  transport?: BinaryGeneratorTransport
+  harness?: string
 }
 
 /**
@@ -112,7 +130,23 @@ export function dispatchBinaryGenerators(
       ...(credential.envName ? { envName: credential.envName } : {}),
       ...(credential.required === false ? { required: false } : {}),
     })),
+    ...(generator.transport ? { transport: generator.transport } : {}),
+    ...(generator.harness ? { harness: generator.harness } : {}),
   }))
+}
+
+/**
+ * Whether this dispatch needs the agent CLI's OWN generation tool switched on.
+ *
+ * Asked of the resolved selection rather than of the harness, because the selection is what says
+ * the step exists to generate: the CLI having a tool is not a reason to pay for it, and the tool
+ * bills the leased subscription at several times an ordinary turn. False for every dispatch that
+ * selected only API-transport integrations, which is byte-for-byte the prior behaviour.
+ */
+export function dispatchNeedsHarnessGeneration(
+  generators: readonly ResolvedBinaryGenerator[] | undefined,
+): boolean {
+  return (generators ?? []).some((generator) => isHarnessTransport(generator))
 }
 
 /** One way a step's generative-integration selection fails against the registry. */
@@ -166,6 +200,34 @@ export type BinaryGeneratorSelectionIssue =
    * {@link binaryValueCoverage}'s `unverifiable` and is reported rather than refused.
    */
   | { problem: 'option_value_unaccepted'; value: BinaryUnacceptedValue }
+  /**
+   * A HARNESS-transport integration whose CLI is not the one this step will dispatch under.
+   *
+   * The axis every other member of this union does not cover: those judge whether the integration
+   * can do the WORK, this judges whether it will be REACHABLE at all. A harness-served generator
+   * is a tool built into one agent CLI (Codex's `image_gen`), so a step whose model resolves to a
+   * different harness has selected an integration whose tool simply is not in the process — and
+   * nothing downstream notices. The agent is briefed on a generator it cannot call, tries, and
+   * reports the failure as its own.
+   *
+   * The requirement is DERIVED from the step's resolved model, never declared on the step, for
+   * the reason the whole design refuses declared requirements: a declaration is a second place to
+   * keep the truth, and the model already decides the harness. It is also why "can produce
+   * images" is NOT a flag on the model catalog — the capability belongs to the integration, and
+   * which harness serves it is the only fact the model contributes.
+   *
+   * Only ever raised when the harness is KNOWN. An unresolved model is the third outcome this
+   * design uses everywhere else (`unverifiable`): reported by nobody and refused by nobody,
+   * because a guess about which CLI a step will run under is worse than an absence.
+   */
+  | {
+      problem: 'generator_harness_unavailable'
+      generatorId: string
+      /** The CLI the integration declares serves it. */
+      requiredHarness: string
+      /** The CLI this step's model actually resolves to. */
+      resolvedHarness: string
+    }
 
 /** A step's selection, resolved against the registry's views. */
 export interface ResolvedBinaryGeneratorSelection {
@@ -220,12 +282,32 @@ export function resolveBinaryGeneratorSelection(
 export function binaryGeneratorSelectionIssues(
   config: BinaryOutputConfig | undefined,
   generators: readonly BinaryGeneratorView[],
+  resolvedHarness?: string,
 ): BinaryGeneratorSelectionIssue[] {
   const { selected, unresolvedIds } = resolveBinaryGeneratorSelection(config, generators)
   const issues: BinaryGeneratorSelectionIssue[] = unresolvedIds.map((generatorId) => ({
     problem: 'unknown_generator' as const,
     generatorId,
   }))
+  // The REACHABILITY axis, checked before the capability ones because it is the coarser fault and
+  // it SHORT-CIRCUITS them: a generator the step's CLI does not carry covers nothing, so every
+  // coverage judgement below would restate one misconfiguration as several, each with its own
+  // remedy, on a surface that renders every problem it recognises. Skipped entirely when the
+  // caller could not resolve the harness — see the issue's own doc for why a guess is worse than
+  // an absence. The unresolved-id issues above ride along because they are a different fault
+  // about different ids, and fixing this one would not surface them.
+  if (resolvedHarness) {
+    for (const generator of selected) {
+      if (!isHarnessTransport(generator) || generator.harness === resolvedHarness) continue
+      issues.push({
+        problem: 'generator_harness_unavailable',
+        generatorId: generator.id,
+        requiredHarness: generator.harness ?? '',
+        resolvedHarness,
+      })
+    }
+    if (issues.some((issue) => issue.problem === 'generator_harness_unavailable')) return issues
+  }
   const covered = new Set(selected.flatMap((generator) => generator.modalities))
   for (const modality of config?.modalities ?? []) {
     if (!covered.has(modality)) issues.push({ problem: 'modality_uncovered', modality })
@@ -389,6 +471,9 @@ export function describeBinaryGeneratorSelectionIssues(
     if (issue.problem === 'capability_unsupported') {
       return `this step's generation options ask for ${describeCapability(issue.capability)}, and no selected integration supports it: remove the option, or select an integration that declares the capability`
     }
+    if (issue.problem === 'generator_harness_unavailable') {
+      return `'${issue.generatorId}' generates through the ${issue.requiredHarness} agent CLI, but this step's model runs on ${issue.resolvedHarness}: the generator's tool is not in that process at all. Pin the step (or the block) to a ${issue.requiredHarness} model, or select an integration this step's harness can reach`
+    }
     if (issue.problem === 'option_value_unaccepted') {
       const { option, requested, accepted } = issue.value
       return `this step asks for ${VALUE_OPTION_LABELS[option]} of ${requested}, which no selected integration accepts: each of them states the values it takes, and between them those are ${accepted.join(', ')}. Ask for one of those, or select an integration that renders this one`
@@ -449,11 +534,20 @@ export function renderBinaryGeneratorSection(input: {
         )
       }
       lines.push(...acceptedValueLines(generator))
+      // A harness-served integration answers the endpoint/credential/contract questions in one
+      // different way, so it takes a different block rather than three suppressed lines: the
+      // API-shaped renderer's answers are not merely empty here, they are wrong.
+      const harnessServed = isHarnessTransport(generator)
+      if (harnessServed) lines.push(...harnessLines(generator))
       if (generator.endpoint) lines.push(`- Endpoint: ${generator.endpoint}`)
       lines.push(`- ${generator.summary}`)
       if (generator.description.trim()) lines.push('', generator.description.trim())
       if (generator.guidance?.trim()) lines.push('', generator.guidance.trim())
-      lines.push('', ...credentialLines(generator), ...contractLines(generator), '')
+      lines.push(
+        '',
+        ...(harnessServed ? [] : [...credentialLines(generator), ...contractLines(generator)]),
+        '',
+      )
     }
     lines.push(...overlapLines(selected))
   }
@@ -755,6 +849,26 @@ function requirementLines(
  * at all" would strand a working endpoint on the most ordinary misconfiguration there is, which
  * is the failure `required: false` exists to prevent.
  */
+/**
+ * What a HARNESS-SERVED integration's entry says instead of endpoint/credential/contract lines.
+ *
+ * All three of those would be actively wrong here, and the credential line is the one that does
+ * damage: with no credentials declared, the API-shaped renderer says "call it unauthenticated as
+ * its contract describes", which sends the agent looking for an HTTP endpoint that does not exist
+ * and turns a working capability into a reported gap.
+ *
+ * It also names the staging directory, because the CLI's own tool does not tell the model where it
+ * wrote — that is the whole reason the harness redirects the output. An agent that generated
+ * successfully and cannot find the file reports the same failure as one that never generated.
+ */
+function harnessLines(generator: BinaryGeneratorView): string[] {
+  return [
+    `- Served by your own \`${generator.harness}\` agent CLI: generate with its built-in generation tool. There is no API to call, no endpoint, and no credential — the run is already authenticated.`,
+    `- Output lands in \`${BINARY_GENERATED_PATH}/\`. Collect the files from there and store each one through the storage service above. Nothing else moves them, so a file you leave there is an artifact this step did not deliver.`,
+    `- If the tool is unavailable in this session, say so and report which artifacts you could not produce. Do NOT substitute another generator, and do not describe an image you did not make.`,
+  ]
+}
+
 function credentialLines(generator: BinaryGeneratorView): string[] {
   const credentials = generator.credentials
   if (credentials.length === 0) {

@@ -6,6 +6,7 @@ import {
   binaryValueCoverage,
   conflictingOutputSizeOptions,
   isBinaryModality,
+  isHarnessTransport,
   modalityCarriesPixelDimensions,
   normalizeMediaType,
   requiredBinaryCapabilities,
@@ -455,6 +456,17 @@ export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
 // ---------------------------------------------------------------------------
 
 /**
+ * What this half of the surface needs to know about a registered integration: what it produces,
+ * what it can be asked for, and how it is REACHED. Named once rather than spelled as a `Pick` at
+ * each of the three signatures that take it, which is how `transport` came to be carried on the
+ * wire and read by nobody.
+ */
+type GeneratorCandidate = Pick<
+  RegisteredBinaryGenerator,
+  'id' | 'modalities' | 'mediaTypes' | 'capabilities' | 'accepts' | 'transport' | 'harness'
+>
+
+/**
  * One thing wrong with a binary-generating step's selection, as the builder can see it.
  *
  * The two `*_service` members mirror the kernel's `BinaryOutputConfigIssue.problem` values
@@ -559,6 +571,22 @@ export type BinaryOutputPickIssue =
    */
   | 'option_value_unverifiable'
   /**
+   * A selected integration is served by an agent CLI rather than an API, so the step only works on
+   * a model that runs THAT CLI (kernel refuses the mismatch at run start as
+   * `generator_harness_unavailable`).
+   *
+   * ADVISORY here, and it is the one member whose disposition differs from the backend's ON
+   * PURPOSE rather than as a softening. A pipeline is a TEMPLATE: the model is resolved per block
+   * at dispatch, from a pin this surface is not editing, so the builder genuinely cannot know
+   * which CLI a step will run under and a refusal here would be a claim it cannot make. What it
+   * CAN state is the constraint the selection carries, which is what turns the run-start refusal
+   * from a surprise into something the person picking already knew.
+   *
+   * Kept apart from `generator_overlap` (the other advisory about the selection itself) because
+   * the remedy is somewhere else entirely: the step's or block's MODEL, not its prompt.
+   */
+  | 'generator_harness_required'
+  /**
    * The step states an exact output size AND another option that restates the delivered
    * dimensions (`aspectRatio`, `upscale`). A refusal, mirroring `assertUnambiguousOutputSize` at
    * pipeline save.
@@ -605,6 +633,12 @@ export interface BinaryOutputPickState {
    *  which field to delete. Computed through contracts' own rule, so this cannot come to a
    *  different answer from the save that refuses it. */
   conflictingSizeOptions: readonly ConflictingOutputSizeOption[]
+  /**
+   * The selected integrations an agent CLI serves, each with the CLI that serves it, so the
+   * advisory can name both the integration and the model constraint it carries. Grouped by
+   * harness would read better in one line and lose which id is which, which is the fix.
+   */
+  harnessServedGenerators: readonly { id: string; harness: string }[]
 }
 
 /**
@@ -630,10 +664,7 @@ export interface BinaryOutputPickState {
  */
 function generatorPickIssues(
   config: BinaryOutputConfig | undefined,
-  generators: readonly Pick<
-    RegisteredBinaryGenerator,
-    'id' | 'modalities' | 'mediaTypes' | 'capabilities' | 'accepts'
-  >[],
+  generators: readonly GeneratorCandidate[],
   unavailable: boolean,
 ): {
   issues: BinaryOutputPickIssue[]
@@ -647,6 +678,7 @@ function generatorPickIssues(
   unacceptedValues: BinaryUnacceptedValue[]
   partiallyAcceptedValues: BinaryPartiallyAcceptedValue[]
   unverifiableValues: BinaryValueOption[]
+  harnessServed: { id: string; harness: string }[]
 } {
   const none = {
     unknownGeneratorIds: [],
@@ -659,6 +691,7 @@ function generatorPickIssues(
     unacceptedValues: [],
     partiallyAcceptedValues: [],
     unverifiableValues: [],
+    harnessServed: [],
   }
   if (unavailable) return { issues: ['generators_unavailable'], ...none }
   const byId = new Map(generators.map((g) => [g.id, g]))
@@ -690,6 +723,14 @@ function generatorPickIssues(
   // beside it, so the line this surface shows and the refusal the backend raises are one
   // judgement rather than two that agree until somebody edits one of them.
   const value = binaryValueCoverage(config?.generation, selected)
+  // The REACHABILITY constraint, read off the same resolved selection. `isHarnessTransport` rather
+  // than `transport === 'harness'`, so an integration registered before the field existed is not
+  // read as harness-served; the `?? ''` can only be reached by a snapshot from a newer mothership,
+  // since the schema refuses a harness transport that names no CLI.
+  const harnessServed = selected
+    .filter(isHarnessTransport)
+    .map((generator) => ({ id: generator.id, harness: generator.harness ?? '' }))
+    .filter((entry) => entry.harness !== '')
   const issues: BinaryOutputPickIssue[] = []
   if (unknownGeneratorIds.length) issues.push('unknown_generator')
   if (uncovered.length) issues.push('modality_uncovered')
@@ -701,6 +742,7 @@ function generatorPickIssues(
   if (value.unaccepted.length) issues.push('option_value_unaccepted')
   if (value.partial.length) issues.push('option_value_partial')
   if (value.unverifiable.length) issues.push('option_value_unverifiable')
+  if (harnessServed.length) issues.push('generator_harness_required')
   return {
     issues,
     unknownGeneratorIds,
@@ -713,6 +755,7 @@ function generatorPickIssues(
     unacceptedValues: value.unaccepted,
     partiallyAcceptedValues: value.partial,
     unverifiableValues: value.unverifiable,
+    harnessServed,
   }
 }
 
@@ -747,10 +790,7 @@ export function binaryOutputPickIssues(
   // that registers no integrations cannot satisfy a step that selects one. So a call site that
   // omits this FLAGS a selection rather than passing it — the loud direction — and the default
   // stays a legitimate value rather than a hole.
-  generators: readonly Pick<
-    RegisteredBinaryGenerator,
-    'id' | 'modalities' | 'mediaTypes' | 'capabilities' | 'accepts'
-  >[] = [],
+  generators: readonly GeneratorCandidate[] = [],
   // Whether the deployment's integrations could not be READ. Defaulted to `false` — the honest
   // default, since every deployment but a mothership-mode node reads them in-process and cannot
   // fail — so an omitting call site judges the list it was given rather than claiming an outage.
@@ -791,6 +831,7 @@ export function binaryOutputPickIssues(
       partiallyAcceptedValues: generative.partiallyAcceptedValues,
       unverifiableValues: generative.unverifiableValues,
       conflictingSizeOptions,
+      harnessServedGenerators: generative.harnessServed,
     }
   }
 
@@ -821,5 +862,6 @@ export function binaryOutputPickIssues(
     partiallyAcceptedValues: generative.partiallyAcceptedValues,
     unverifiableValues: generative.unverifiableValues,
     conflictingSizeOptions,
+    harnessServedGenerators: generative.harnessServed,
   }
 }

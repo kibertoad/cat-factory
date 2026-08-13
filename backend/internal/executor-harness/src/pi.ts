@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { appendFile, mkdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { killChildProcess, spawnDetached } from './process.js'
@@ -337,12 +337,22 @@ export async function materializeContextFiles(
  * One helper rather than a copy per materialiser: every writer into that directory owes the same
  * exclude, and a new one that forgot it would leak the platform's own files into a customer's
  * repository with nothing failing.
+ *
+ * IDEMPOTENT BY CONTENT, because that is the only shape that survives its own design: several
+ * materialisers legitimately run in one job (context files, skill resources, the codex image
+ * staging), so a blind append writes the same line two or three times per run, and on a persistent
+ * checkout it accretes one copy per run forever. Re-read and skip rather than tracking who called
+ * first, which would be a second piece of state to keep right.
  */
 export async function excludeContextDir(cwd: string): Promise<void> {
   const gitRoot = await findGitRoot(cwd)
   if (!gitRoot) return
+  const excludeFile = join(gitRoot, '.git', 'info', 'exclude')
+  const entry = `${CONTEXT_DIR}/`
   try {
-    await appendFile(join(gitRoot, '.git', 'info', 'exclude'), `\n${CONTEXT_DIR}/\n`, 'utf8')
+    const current = await readFile(excludeFile, 'utf8').catch(() => '')
+    if (current.split('\n').some((line) => line.trim() === entry)) return
+    await appendFile(excludeFile, `\n${entry}\n`, 'utf8')
   } catch {
     // No writable .git/info; the files simply stay untracked (still not auto-added on most flows).
   }

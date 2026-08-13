@@ -4,6 +4,7 @@ import {
   FOLLOW_UPS_FILE,
   PR_DESCRIPTION_FILE,
   DESIGN_RENDER_DIR,
+  GENERATED_BINARY_DIR,
   REFERENCE_SCREENSHOT_DIR,
 } from '@cat-factory/agents'
 
@@ -98,4 +99,6 @@ export const HARNESS_SENTINEL_PATHS = {
   referenceScreenshots: REFERENCE_SCREENSHOT_DIR,
   /** Where a building run's design pictures are downloaded to, and read from. */
   designRenders: DESIGN_RENDER_DIR,
+  /** Where a harness-served generator's output is staged for the agent to store. */
+  generatedBinaries: GENERATED_BINARY_DIR,
 } as const

@@ -23,7 +23,6 @@ import {
 import type { PiRunStats } from './pi-reduction.js'
 import {
   claudeAllowedToolPatterns,
-  codexMcpConfigToml,
   mcpServerSecretValues,
   observeClaudeMcpInit,
   writeClaudeMcpConfig,
@@ -31,6 +30,7 @@ import {
   type ObservedMcpServer,
   type SkillSpec,
 } from './agent-capabilities.js'
+import { codexImageGapNote, createCodexHome, disposeCodexHome } from './codex-home.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
 import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
 import { killChildProcess, spawnDetached } from './process.js'
@@ -108,6 +108,21 @@ export interface SubscriptionRunOptions {
    * carries this job's credentials. Absent ⇒ the CLI's built-in tools only.
    */
   mcpServers?: McpServerSpec[]
+  /**
+   * CODEX ONLY: enable the CLI's built-in `image_gen` tool for this job, and redirect what it
+   * writes into the checkout (see `codex-images.ts`).
+   *
+   * Opt-in per job rather than a property of the image, because the tool bills against the leased
+   * ChatGPT plan at 3-5x an ordinary turn: every non-generating run would pay for a capability it
+   * was never asked for. Set when the dispatch resolved a HARNESS-transport binary generator whose
+   * `harness` is `codex`, which is the one signal that says this step exists to make pictures.
+   *
+   * A no-op under `ambientAuth`: there is no per-run `CODEX_HOME` to write a config into or
+   * redirect, and the alternative — reconfiguring the developer's own `~/.codex` and staging into
+   * their real output directory — is the HOME-global mutation this harness never makes. The
+   * backend states the capability as unavailable there rather than half-enabling it.
+   */
+  generateImages?: boolean
   /**
    * Extra environment for the CLI child, scoped to this job (the tester's secrets, a
    * private-registry npmrc pointer). Merged over the inherited `process.env` at spawn, so the
@@ -1181,52 +1196,23 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   // this one value rather than one being reconstructed from the other.
   let cumulative: CodexCumulativeUsage | undefined
 
-  // Codex reads its credentials from $CODEX_HOME/auth.json with file-backed
-  // storage. CRITICAL: this home must live OUTSIDE the cloned checkout (`opts.cwd`)
-  // — the blueprint/requirements/conflict-resolver handlers finish with
-  // `git add -A` + push, which would otherwise stage and publish the decrypted
-  // subscription `auth.json` (access + refresh tokens) to the PR branch. An
-  // isolated, per-run temp dir keeps the credential out of the working tree and is
-  // removed in `finally`.
-  //
-  // KNOWN LIMITATION: Codex refreshes its OAuth access token in-place by rewriting
-  // this `auth.json` mid-run. Because the home is a per-run temp dir wiped in
-  // `finally`, that refreshed credential is discarded and never written back to the
-  // pool — there is no write-back path. The stored bundle keeps working as long as
-  // its refresh token stays valid (ChatGPT refresh tokens are long-lived and reused,
-  // not rotated per refresh today), so each run re-refreshes from the same stored
-  // copy; if OpenAI ever rotates refresh tokens on use, a pooled Codex token would
-  // eventually need to be re-connected by the user. Claude OAuth tokens (from
-  // `claude setup-token`) are long-lived and unaffected.
-  // Native (ambient) mode: run the developer's installed `codex` with its OWN login —
-  // no isolated CODEX_HOME, no injected auth.json. Otherwise write the leased credential
-  // to a per-run temp home kept OUTSIDE the checkout (and removed in `finally`).
-  if (!opts.ambientAuth && !opts.subscriptionToken) {
-    throw new Error('codex harness requires a subscription token (or ambientAuth)')
-  }
-  const codexHome = opts.ambientAuth ? undefined : await mkdtemp(join(tmpdir(), 'cf-codex-'))
-  if (codexHome) {
-    await writeFile(join(codexHome, 'auth.json'), opts.subscriptionToken!, { mode: 0o600 })
-    // Tool servers (MCP) ride the SAME per-run config.toml, so they are scoped to this job and
-    // torn down with the home. Under AMBIENT auth there is no per-run home — and writing servers
-    // into the developer's own `~/.codex/config.toml` would outlive the run and race a concurrent
-    // job — so an ambient codex run gets no MCP servers; the backend states them as unavailable
-    // the same way it does for a harness with no MCP client at all.
-    // Registered before the CLI starts, for the same reason the claude path does it: a server that
-    // fails to launch puts its own command line into the stderr tail we keep.
-    if (opts.mcpServers?.length) registerKnownSecrets(mcpServerSecretValues(opts.mcpServers))
-    const mcpToml = opts.mcpServers?.length ? codexMcpConfigToml(opts.mcpServers) : ''
-    await writeFile(
-      join(codexHome, 'config.toml'),
-      `cli_auth_credentials_store = "file"\n${mcpToml ? `\n${mcpToml}` : ''}`,
-      { encoding: 'utf8', mode: 0o600 },
-    )
-  }
+  // The per-run `CODEX_HOME` — the credential, the config and the generated-output redirect — is
+  // a lifecycle of its own, in `codex-home.ts`. Ambient mode answers no home: the developer's
+  // own CLI login, with nothing written and nothing to tear down.
+  const { home: codexHome, images } = await createCodexHome(opts)
 
   // Codex has no system-prompt flag, so fold the composed role + best-practice
   // context into the prompt itself (Claude Code instead rides --append-system-prompt,
   // falling back to this same fold when the prompt overflows argv).
-  const prompt = foldSystemPrompt(opts.systemPrompt, opts.userPrompt)
+  //
+  // An image capability that could NOT be honoured is stated in the same fold, because the
+  // backend's brief has already promised it and only this half knows it is missing. Absent for
+  // every ordinary run, which is byte-for-byte the prompt it composed before.
+  const gap = codexImageGapNote(images)
+  const prompt = foldSystemPrompt(
+    opts.systemPrompt,
+    gap ? `${opts.userPrompt}\n\n${gap}` : opts.userPrompt,
+  )
   // This stream's tool-silence window (see the claude runner for the shape); opened just before
   // the CLI starts and closed in the `finally` below.
   let toolWindow: ToolProgressWindow = NO_TOOL_WINDOW
@@ -1351,17 +1337,7 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     throw withAgentReport(err, summary, secrets)
   } finally {
     toolWindow.close()
-    if (codexHome) {
-      // Lift the CLI session transcripts (`sessions/`) out for short-lived retention BEFORE the
-      // home is deleted — the credential (`auth.json`) lives at the home root, never in
-      // `sessions/`, so this keeps the debugging artifact without leaking it. Best-effort.
-      await retainSessionTranscripts(codexHome, ['sessions'], {
-        label: 'codex',
-        ...(opts.log ? { log: opts.log } : {}),
-      })
-      // Never leave the decrypted credential on disk past the run.
-      await rm(codexHome, { recursive: true, force: true }).catch(() => {})
-    }
+    if (codexHome) await disposeCodexHome(codexHome, opts, images)
   }
 }
 

@@ -313,6 +313,13 @@ async function snapshotBinaryGenerators(
     // a step's aspect ratio and output size against it, so omitting it would leave the picker
     // silent about a value the only selected endpoint refuses.
     ...(view.accepts ? { accepts: view.accepts } : {}),
+    // The REACHABILITY facts, carried for the same reason again: a harness-served integration is
+    // only available to a step whose model resolves to that CLI, and the picker is where someone
+    // can still act on that. Omitted here, the constraint would first appear as a refused run
+    // start against a selection the product's own picker offered. Neither field names a
+    // credential, an endpoint or a contract, so the omissions this projection exists for hold.
+    ...(view.transport ? { transport: view.transport } : {}),
+    ...(view.harness ? { harness: view.harness } : {}),
   }))
   return generators.length > 0 ? { generators } : {}
 }

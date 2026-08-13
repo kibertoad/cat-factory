@@ -340,6 +340,8 @@ export {
 // half: the two halves import each other, so a value read across that cycle at module-init time
 // is a boot crash the typecheck cannot see (see `domain/binary-output-paths.ts`).
 export {
+  AGENT_CONTEXT_DIR,
+  BINARY_GENERATED_PATH,
   BINARY_GENERATOR_CONTEXT_DIR,
   BINARY_OUTPUT_BRIEF_FILE,
   BINARY_OUTPUT_CONTEXT_DIR,
@@ -405,6 +407,7 @@ export {
   describeCapability,
   describeBinaryGeneratorSelectionIssues,
   dispatchBinaryGenerators,
+  dispatchNeedsHarnessGeneration,
   resolveBinaryGeneratorSelection,
 } from './domain/binary-generators.js'
 
@@ -721,6 +724,8 @@ export {
   type ResolvedToolServer,
   type SkillVersionPin,
   type UnavailableToolServer,
+  BINARY_GENERATING_HARNESSES,
+  HARNESS_GENERATES_BINARIES,
   MCP_HARNESS_TRANSPORTS,
   MCP_OAUTH_DEFAULT_HEADER,
   MCP_OAUTH_DEFAULT_HEADER_TEMPLATE,
@@ -733,6 +738,7 @@ export {
   isLoopbackMcpHttpUrl,
   isValidMcpServerId,
   isValidMcpToolName,
+  harnessServesBinaryGeneration,
   mcpCredentialChannel,
   mcpHarnessServesTransport,
   mcpServableHarnesses,

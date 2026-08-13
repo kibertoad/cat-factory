@@ -134,6 +134,97 @@ tenant-editable state with rows behind it, while an integration is deployment co
 credential attached. What they DO share is the contract vocabulary (`uploadApiContractSchema`) and
 the renderer, so an agent reads one kind of contract file whatever registry it came from.
 
+### Two transports, because not every generator is an API
+
+`transport` discriminates how an integration is REACHED: `api` (the default, and what every
+definition above means) is a metered vendor endpoint the agent's own code calls with an injected
+credential; `harness` is a tool built into the agent CLI the step dispatches under. Codex carries
+one (`image_gen`, gpt-image-2), and it is available ONLY on ChatGPT subscription auth: an
+`OPENAI_API_KEY` session is routed to the Images API and never offered the tool. So it is the one
+generative path a deployment can offer with no vendor key anywhere.
+
+A DISCRIMINATOR rather than "an integration with no endpoint", because those are different claims
+and only one is checkable. An `api` definition missing its endpoint has said "nobody filled this
+in"; a `harness` one has said "there is no endpoint, and here is what serves it". Left implicit,
+the second reads as the first and the step is admitted to run under a CLI with no such tool.
+
+Three consequences, each of which is a rule somewhere:
+
+- **A harness transport may declare no `endpoint`, `credentials` or `contracts`** (schema check).
+  The first two would only mislead the brief; the CREDENTIAL is the one that bites, because its
+  value is injected into the agent's process, so declaring one means a variable the deployment
+  believes authenticates something and that nothing ever reads. The auth is the leased
+  subscription the run already used.
+- **A harness transport may name only a CLI that actually GENERATES** (`harnessServesBinaryGeneration`,
+  boot validation). "This build runs that CLI" and "that CLI has a generation tool" are two
+  questions, and admitting the first lets a definition naming `pi` or `claude-code` pass every
+  structural check, resolve, dispatch with the flag set, produce nothing, and brief the agent to
+  collect from a staging directory nothing created. The run then reports a model problem for one
+  string of deployment code.
+- **Reachability is an admission axis of its own** (`generator_harness_unavailable`), because every
+  other issue judges whether the integration can do the WORK and this judges whether it is in the
+  process at all. The requirement is DERIVED from the step's resolved model
+  (`RunAdmission.resolveStepHarnesses`), never declared. An unresolved model raises nothing: the
+  third outcome the format, capability and value axes all take, because a guess about which CLI a
+  step will run under is worse than an absence. It also SHORT-CIRCUITS the coverage axes, since an
+  unreachable generator covers nothing and every one of them would restate the same fault.
+
+  The derivation is a second copy of the dispatch precedence, and every way it can drift refuses a
+  run that would have worked. Both halves bite: `resolveStepModelRef` falls THROUGH an unresolvable
+  block pin rather than stopping at one, and `ModelRouter.resolveEffectiveRef` applies
+  "subscriptions always win" ON TOP of a catalog flavour order that puts `subscription` LAST, so a
+  dual-mode model on a workspace holding a token for its vendor dispatches on the subscription
+  harness while the bare catalog order resolves it to a metered route. Miss either and the guard
+  refuses a codex-served generator on a step that is about to run codex, or goes quiet on exactly
+  the stale pin most likely to be wrong.
+
+- **"Can generate images" is NOT a flag on the model catalog**, and that was the tempting shortcut.
+  It is a property of the TOOL, which the vendor provisions per session and per plan tier and which
+  demonstrably is not always offered (openai/codex#36832: the app exposes `image_gen` while the CLI
+  filters it out on the same config). A boolean on a model row would be a guarantee nothing here
+  can verify, persisted on blocks via `modelId`, going stale the moment the vendor changes gating.
+  What the model legitimately contributes is WHICH CLI runs, which is exactly what the derivation
+  above reads.
+
+**Where the bytes land is the platform's problem, not the model's.** Codex writes to
+`$CODEX_HOME/generated_images/` and exposes no path, URL or artifact id for it to the model
+(openai/codex#28887, #28898, #28873, #28849, all open), and `codex exec --json` surfaces no
+structured tool bodies at all — so asking the agent where it put the file is the thing that does
+not work. `$CODEX_HOME` is also where the decrypted subscription credential lives, so sending the
+agent to look there would point a prompt-injectable process at it. The harness therefore
+REDIRECTS: `generated_images` is created as a symlink into `.cat-context/binary-output/generated/`
+before the CLI starts, so the file is simply there when the tool returns, with no polling and no
+race. A post-run sweep backs that up for a redirect that could not be made, and NAMES what it
+found, because an image that arrived too late for the agent to store is a different fact from a run
+that generated none.
+
+**The tool is opt-in per job** (`generateImages` on the job body, set when the dispatch resolved a
+harness-served generator). It bills the leased plan at 3-5x an ordinary turn, so an always-on image
+capability would charge every run for one it never uses. The backend keys off the TRANSPORT and
+never off a CLI name; which tool to enable is the harness's own business.
+
+**And it is a handshake CAPABILITY** (`HARNESS_BODY_CAPABILITIES`), not merely an optional field.
+The test that decides membership is whether the PROMPT would lie, and here it does: the generator
+brief names the staging directory unconditionally, so a runner pool one image behind ignores the
+flag while the agent is told where to collect from. That is the blind run the handshake exists to
+refuse, and without membership the dispatch cannot even see the question.
+
+**A capability that cannot be honoured is STATED, twice over.** Under `ambientAuth` there is no
+per-run home to configure or redirect and the developer's own `~/.codex` is never touched, so the
+tool is simply not there: `createCodexHome` answers the outcome rather than a bare home, and
+`codexImageGapNote` folds one sentence into the prompt naming what is missing and pointing at the
+brief's own "if the tool is unavailable, say so" instruction. A refused REDIRECT (an existing
+directory, a filesystem that will not make a link) gets its own wording, because the tool is on and
+its output is unreachable until the post-run sweep, which is a different fact and a different fix.
+The teardown report reads the same outcome, so a rescued file is never called a late arrival when
+the redirect never existed.
+
+**The builder states the constraint it cannot check.** A pipeline is a template and the model is
+resolved per block at dispatch, so the picker cannot judge whether a step will run the required CLI.
+It says which CLI serves each harness-backed candidate (in the label) and which the current
+selection therefore needs (`generator_harness_required`, ADVISORY), which is what keeps the
+admission refusal from arriving as a surprise about a selection the product's own picker offered.
+
 ### Content types are a closed vocabulary
 
 `BinaryModality` is `image | audio | video | 3d | document`, closed where the catalog's capability
@@ -1004,8 +1095,17 @@ controller both facades mount.
 
 ## Remaining work
 
-- [ ] **A worked example generator** in `backend/internal/example-custom-agent`, once a real
-      image-generation harness path exists to demonstrate against.
+- [ ] **A worked example generator** in `backend/internal/example-custom-agent`. The harness path it
+      was waiting on now exists (`transport: 'harness'`), so this is unblocked: the example should
+      register a codex-served image generator and a step selecting it.
+- [ ] **A conformance assertion for the harness pin**, driving a run whose model resolves to the
+      wrong CLI and asserting the `generator_harness_unavailable` refusal on both facades. The rule
+      is pure and unit-tested, but nothing yet pins that BOTH facades reach it through admission.
+- [ ] **An `unavailable` disposition for a codex session that was never offered the tool.** Today an
+      unprovisioned `image_gen` (openai/codex#28102, #37496, #19133, all open) reaches the agent as
+      a tool that simply is not there, and the brief tells it to say so — which relies on the model
+      reporting honestly. A platform-side signal would need the CLI to expose its resolved tool
+      list, which it does not; worth revisiting when it does.
 - [ ] **A conformance assertion for the capability projection** on the snapshot's
       `binaryGenerators`, alongside the existing `binaryOutput` trait one. It needs a
       `binaryGeneratorRegistry` option on the conformance harness, which no suite has needed yet;

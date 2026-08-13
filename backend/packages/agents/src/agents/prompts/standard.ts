@@ -6,6 +6,8 @@ import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext, DesignImageUnavailableReason } from '@cat-factory/kernel'
 import {
+  AGENT_CONTEXT_DIR,
+  BINARY_GENERATED_PATH,
   CONTEXT_BUDGET,
   estimateTokens,
   freshnessHeaderLines,
@@ -409,8 +411,12 @@ export function customTaskTypeSection(context: AgentRunContext): string {
  * container agent can read what it needs on demand rather than carrying every body in
  * its prompt. Kept in sync with the harness's own constant (executor-harness has no
  * dependency on this package).
+ *
+ * Re-exported from kernel rather than spelled again here: kernel RENDERS paths under this
+ * directory into the prompts it composes (the binary-generator brief), so a second literal at
+ * this layer would be a copy the harness contract suite pins while kernel's own goes unchecked.
  */
-export const CONTEXT_DIR = '.cat-context'
+export const CONTEXT_DIR = AGENT_CONTEXT_DIR
 
 /**
  * Subdirectory of {@link CONTEXT_DIR} holding the REFERENCE DESIGN images a run was handed: the
@@ -438,6 +444,29 @@ export const REFERENCE_SCREENSHOT_DIR = `${CONTEXT_DIR}/reference-screenshots`
  * constant exists twice and the copies are pinned byte-for-byte by the harness contract suite.
  */
 export const DESIGN_RENDER_DIR = `${CONTEXT_DIR}/design-renders`
+
+/**
+ * Subdirectory of {@link CONTEXT_DIR} where a HARNESS-SERVED binary generator's output is staged
+ * for the agent to pick up and store.
+ *
+ * It exists because the alternative is worse in two distinct ways. Codex writes its `image_gen`
+ * output under `$CODEX_HOME` and exposes no path for it to the model, so an agent told to "upload
+ * what you generated" has nothing to act on; and `$CODEX_HOME` is where the run's decrypted
+ * subscription credential lives, so sending the agent to look there would point a
+ * prompt-injectable process at it. The harness redirects the tool's output here instead, and this
+ * is the ONE path the brief names.
+ *
+ * Under {@link CONTEXT_DIR}, so it inherits the git exclude that keeps a not-yet-uploaded artifact
+ * out of the `git add -A` a coding run ends with. Written by the harness, which depends on no
+ * workspace package, so (like {@link CONTEXT_DIR}) the constant exists twice and the copies are
+ * pinned byte-for-byte by the harness contract suite.
+ *
+ * The WHOLE path comes from kernel's own vocabulary rather than being reassembled here, because
+ * the brief the agent reads is rendered in kernel and this constant is what the contract suite
+ * pins: reassembling it would leave three copies of one path with only two of them checked, and a
+ * rename would ship green with the brief naming a directory nothing writes.
+ */
+export const GENERATED_BINARY_DIR = BINARY_GENERATED_PATH
 
 /**
  * The design pictures this dispatch holds, and what became of them.

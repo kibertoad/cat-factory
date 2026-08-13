@@ -12,6 +12,7 @@ import { CONTEXT_DIR } from '../src/pi.js'
 import { PR_DESCRIPTION_FILE } from '../src/pr-description.js'
 import { REFERENCE_SCREENSHOT_DIR } from '../src/reference-screenshots.js'
 import { DESIGN_RENDER_DIR } from '../src/design-images.js'
+import { GENERATED_BINARY_DIR } from '../src/codex-images.js'
 
 // The harness image builds from `src/` plus typescript alone, so it can carry no runtime
 // dependency on a workspace package: every path both halves must agree about is computed
@@ -182,6 +183,11 @@ describe('harness ⇄ backend sentinel paths', () => {
       HARNESS_SENTINEL_PATHS.referenceScreenshots,
     ],
     ['design renders directory', DESIGN_RENDER_DIR, HARNESS_SENTINEL_PATHS.designRenders],
+    [
+      'generated binaries directory',
+      GENERATED_BINARY_DIR,
+      HARNESS_SENTINEL_PATHS.generatedBinaries,
+    ],
   ]
 
   for (const [name, harness, backend] of PAIRS) {

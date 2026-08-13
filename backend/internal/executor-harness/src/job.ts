@@ -29,6 +29,7 @@ import {
   type ImageFileSpec,
   type ImageManifestSpec,
 } from './context-manifests.js'
+import { parseArtifactUpload, type ArtifactUploadSpec } from './artifact-upload.js'
 
 // Re-exported so a handler describing a job keeps ONE import site (the env-pair shape is a job
 // body field like any other; only its VALIDATION moved out).
@@ -40,6 +41,9 @@ export type { McpServerSpec, SkillResourceSpec, SkillSpec }
 // Same rule for the two staged-file manifests: their shapes and their defensive parsing moved to
 // `context-manifests.ts`, but they remain job body fields, so this stays the import site.
 export type { ContextFileSpec, ImageFileSpec, ImageManifestSpec }
+
+// The return leg of the same seam, for the same reason (`artifact-upload.ts`).
+export type { ArtifactUploadSpec }
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -738,6 +742,17 @@ export interface AgentJob extends HarnessAuthFields {
    */
   designImages?: ImageManifestSpec
   /**
+   * Where this job uploads the artifacts it PRODUCES (see {@link ArtifactUploadSpec}) — the
+   * outbound leg of the seam {@link AgentJob.referenceScreenshots} and {@link
+   * AgentJob.designImages} are the inbound legs of. Surfaced to the agent as
+   * `ARTIFACT_UPLOAD_URL` / `ARTIFACT_UPLOAD_TOKEN`, which the capturing prompts already name.
+   *
+   * Sent only for a kind the backend gave a browser image to, so absent is the NORMAL case and
+   * means this run produces no platform-held bytes. SECRET-BEARING (`token` is the run's container
+   * session token), so it is registered for redaction before it reaches any child.
+   */
+  artifactUpload?: ArtifactUploadSpec
+  /**
    * Private package-registry auth (npm private orgs, GitHub Packages), rendered into
    * `~/.npmrc` before the run so the checkout's installs — the agent's own and the
    * frontend-infra stand-up's — resolve private dependencies. Hosts are hard-allowlisted
@@ -760,6 +775,16 @@ export interface AgentJob extends HarnessAuthFields {
    * built-in tools only.
    */
   mcpServers?: McpServerSpec[]
+  /**
+   * Enable the codex CLI's own `image_gen` tool for this job, and stage what it writes into
+   * `.cat-context/binary-output/generated/` where the agent can reach it.
+   *
+   * Set when the dispatch resolved a HARNESS-transport binary generator served by codex. Opt-in
+   * per job because the tool bills the leased ChatGPT plan at several times an ordinary turn, so
+   * an always-on image capability would charge every run for one it never uses. Ignored by the
+   * Pi and claude-code runners, neither of which has such a tool. Absent ⇒ no image tool.
+   */
+  generateImages?: boolean
   /**
    * Tester kinds only: sensitive test credentials injected into the run's ENVIRONMENT (out of
    * band) as `{ key, value }` env pairs, so the tester's shell can read `$KEY` without the value
@@ -1226,6 +1251,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     contextFiles: parseContextFiles(o.contextFiles),
     referenceScreenshots: parseImageManifest(o.referenceScreenshots),
     designImages: parseImageManifest(o.designImages),
+    artifactUpload: parseArtifactUpload(o.artifactUpload),
     packageRegistries: parsePackageRegistries(o.packageRegistries),
     skills: parseSkillSpecs(o.skills),
     mcpServers: parseMcpServerSpecs(o.mcpServers),
@@ -1270,6 +1296,7 @@ interface ParsedAgentJobParts {
   contextFiles: ReturnType<typeof parseContextFiles>
   referenceScreenshots: ReturnType<typeof parseImageManifest>
   designImages: ReturnType<typeof parseImageManifest>
+  artifactUpload: ReturnType<typeof parseArtifactUpload>
   packageRegistries: ReturnType<typeof parsePackageRegistries>
   skills: ReturnType<typeof parseSkillSpecs>
   mcpServers: ReturnType<typeof parseMcpServerSpecs>
@@ -1329,6 +1356,7 @@ function assembleAgentJob(
     contextFiles,
     referenceScreenshots,
     designImages,
+    artifactUpload,
     packageRegistries,
     skills,
     mcpServers,
@@ -1358,6 +1386,7 @@ function assembleAgentJob(
     ...(contextFiles.length ? { contextFiles } : {}),
     ...(referenceScreenshots ? { referenceScreenshots } : {}),
     ...(designImages ? { designImages } : {}),
+    ...(artifactUpload ? { artifactUpload } : {}),
     ...(packageRegistries.length ? { packageRegistries } : {}),
     ...(skills ? { skills } : {}),
     ...(mcpServers ? { mcpServers } : {}),
@@ -1390,6 +1419,7 @@ function collectOptionalRequestFields(o: Record<string, unknown>): Partial<Agent
     ...(typeof o.githubApiBase === 'string' ? { githubApiBase: o.githubApiBase } : {}),
     ...(typeof o.webToolsGuidance === 'string' ? { webToolsGuidance: o.webToolsGuidance } : {}),
     ...(o.webSearch === true ? { webSearch: true } : {}),
+    ...(o.generateImages === true ? { generateImages: true } : {}),
     ...(o.full === true ? { full: true } : {}),
     ...(typeof o.mergeBase === 'string' && o.mergeBase ? { mergeBase: o.mergeBase } : {}),
     ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),

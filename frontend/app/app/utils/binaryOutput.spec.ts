@@ -711,6 +711,39 @@ describe('binaryOutputPickIssues, generative half', () => {
     expect(pick.generatorOverlaps).toEqual([{ modality: 'image', generatorIds: ['retro', 'flux'] }])
   })
 
+  it('states a HARNESS-served integration as advice, naming the CLI the step then needs', () => {
+    // Advice and not a refusal on purpose: a pipeline is a template, and the model that decides
+    // which CLI a step runs under is chosen per task, not here. What the surface CAN say is the
+    // constraint the selection carries, which is the whole difference between this being known in
+    // advance and arriving as a refused run start against a selection this picker offered.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['codex-images'] },
+      catalog,
+      true,
+      [
+        {
+          id: 'codex-images',
+          modalities: ['image' as const],
+          transport: 'harness',
+          harness: 'codex',
+        },
+      ],
+    )
+    expect(pick.issues).toEqual(['generator_harness_required'])
+    expect(pick.harnessServedGenerators).toEqual([{ id: 'codex-images', harness: 'codex' }])
+  })
+
+  it('says nothing about an API integration, which every CLI reaches over HTTP', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).not.toContain('generator_harness_required')
+    expect(pick.harnessServedGenerators).toEqual([])
+  })
+
   it('reads a repeated id as ONE integration, exactly as the backend resolves it', () => {
     // A step naming one integration twice holds one producer, so there is no choice to advise
     // about, and the unknown-id list must not name the same missing id twice either.

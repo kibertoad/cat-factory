@@ -1,7 +1,10 @@
 import type { BinaryGeneratorRegistry } from '@cat-factory/kernel'
 import {
+  BINARY_GENERATING_HARNESSES,
   describeFoundationalProblem,
+  harnessServesBinaryGeneration,
   isAllowedMcpHttpUrl,
+  isHarnessKind,
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
 import {
@@ -162,6 +165,33 @@ function checkBinaryGeneratorDetails(definition: BinaryGeneratorDefinition): Reg
           `refused, and one selecting it for the listed modalities would be told it can emit this.`,
       )
     }
+  }
+  // The transport's one rule that needs more than the definition: whether the named CLI actually
+  // carries a generation tool. Here rather than in the contracts schema because kernel owns both
+  // the harness list and which of them generate, and contracts (which kernel imports) can see
+  // neither.
+  //
+  // Judged against the GENERATING harnesses rather than every harness this build runs, because the
+  // two failures are indistinguishable downstream and both are silent: a definition naming `pi` or
+  // `claude-code` passes every structural check, admission resolves the step's model to that same
+  // CLI and admits it, the dispatch sets the generation flag, the runner ignores it, and the
+  // agent's brief tells it to collect output from a staging directory nothing created. The run
+  // then reports a model or vendor problem for what is one string in the deployment's own code.
+  //
+  // An error rather than a warning, and an early one, for that reason: boot validation is the only
+  // place this is cheap to fix.
+  if (definition.harness && !harnessServesBinaryGeneration(definition.harness)) {
+    const known = isHarnessKind(definition.harness)
+    invalid(
+      'binary_generator_unknown_harness',
+      `Generative binary integration "${definition.id}" is served by harness ` +
+        `"${definition.harness}", which ` +
+        (known
+          ? `this build runs but which carries no built-in generation tool`
+          : `is not one this build runs`) +
+        `. Only ${BINARY_GENERATING_HARNESSES.join(', ')} can serve a harness-transport ` +
+        `integration; a step selecting this one would dispatch and produce nothing.`,
+    )
   }
   // The same fault one axis finer: a declaration whose two halves contradict each other, where
   // every reader believes a different half. An `accepts` set states which values the endpoint

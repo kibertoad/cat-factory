@@ -12,6 +12,7 @@ import type {
   TestSecretSpec,
 } from './job.js'
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
+import { artifactUploadEnv } from './artifact-upload.js'
 import { configurePackageRegistries } from './package-registries.js'
 import { captureRedactedOutput, redactSecrets, registerKnownSecrets } from './redact.js'
 import {
@@ -317,9 +318,13 @@ export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise
     // not the other would be an integration that works or 401s depending on how its step was
     // registered. Per-job env like everything else here — never `process.env`, which the shared
     // native host process makes a cross-job leak.
+    // The platform's own artifact ingest, layered on for EVERY mode for the same reason: which
+    // kinds get the seam is the backend's call (it keys off the kind's declared `ui` image), so a
+    // mode check here would be that decision made twice, in the half that cannot see the registry.
     const scoped = withAgentEnv(opts, {
       ...registryEnv,
       ...secretEnv(job.generatorSecrets),
+      ...artifactUploadEnv(job.artifactUpload),
     })
     if (job.mode === 'preview') return await runPreviewMode(job, scoped)
     return job.mode === 'coding'

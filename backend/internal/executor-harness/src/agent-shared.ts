@@ -27,12 +27,14 @@ export function mergeEffort(
 export function agentCapabilities(job: AgentJob): {
   skills?: SkillSpec[]
   mcpServers?: McpServerSpec[]
+  generateImages?: boolean
   referenceScreenshots?: ImageManifestSpec
   designImages?: ImageManifestSpec
 } {
   return {
     ...(job.skills?.length ? { skills: job.skills } : {}),
     ...(job.mcpServers?.length ? { mcpServers: job.mcpServers } : {}),
+    ...(job.generateImages ? { generateImages: true } : {}),
     ...(job.referenceScreenshots ? { referenceScreenshots: job.referenceScreenshots } : {}),
     ...(job.designImages ? { designImages: job.designImages } : {}),
   }

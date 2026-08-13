@@ -23,6 +23,7 @@ import {
 import {
   frameAllowsVisualPipeline,
   frameProfile,
+  isHarnessTransport,
   isLocalRunner,
   pipelineHasVisualStep,
   stepConditionSatisfied,
@@ -250,7 +251,14 @@ export class RunAdmission {
     // its output; its GENERATIVE half against the deployment's integration registry, or it
     // dispatches with nothing to make the output WITH. (The selection's PRESENCE is a structural
     // fault validatePipelineShape refused above.)
-    await this.assertBinaryOutputSelected(workspaceId, shape.agentKinds, shape.stepOptions, enabled)
+    await this.assertBinaryOutputSelected(
+      workspaceId,
+      block,
+      shape.agentKinds,
+      shape.stepOptions,
+      enabled,
+      initiatedBy,
+    )
 
     // A workspace that delegates container agents to a runner pool needs that pool registered
     // (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and when delegation is off.
@@ -766,9 +774,11 @@ export class RunAdmission {
    */
   private async assertBinaryOutputSelected(
     workspaceId: string,
+    block: Block,
     agentKinds: readonly string[],
     stepOptions: readonly (StepOptions | null)[] | undefined,
     enabled: readonly boolean[] | undefined,
+    initiatedBy: string | null | undefined,
   ): Promise<void> {
     const steps = agentKinds.flatMap((kind, i) => {
       const config = stepOptions?.[i]?.binaryOutput
@@ -781,7 +791,14 @@ export class RunAdmission {
     // integration nobody registered is refused even on a deployment with no catalog seam wired —
     // and refusing it BEFORE the catalog read means the operator hears about the fault they can
     // fix in their own build rather than about the workspace's catalog.
-    await this.assertBinaryGeneratorsSelected(steps)
+    await this.assertBinaryGeneratorsSelected(steps, () =>
+      this.resolveStepHarnesses(
+        workspaceId,
+        block,
+        steps.map((step) => step.kind),
+        initiatedBy,
+      ),
+    )
     const resolver = this.foundationalServiceResolver
     if (!resolver) return
     const catalog = await resolver.catalogFor(workspaceId)
@@ -830,10 +847,19 @@ export class RunAdmission {
    */
   private async assertBinaryGeneratorsSelected(
     steps: readonly { kind: string; config: NonNullable<StepOptions['binaryOutput']> }[],
+    resolveHarnesses: () => Promise<ReadonlyMap<string, string>>,
   ): Promise<void> {
     const generators = (await this.binaryGeneratorSource?.views()) ?? []
+    // Resolved only when the deployment registers something the answer could refuse. It is a
+    // THUNK rather than a resolved map because a resolution costs a provider-capability read plus
+    // a workspace-default lookup per step, and every deployment registering only API-transport
+    // integrations would otherwise pay for it on every start of every pipeline carrying a
+    // binary-output step, to check a rule that cannot fire.
+    const harnessByKind = generators.some(isHarnessTransport)
+      ? await resolveHarnesses()
+      : new Map<string, string>()
     for (const { kind, config } of steps) {
-      const issues = binaryGeneratorSelectionIssues(config, generators)
+      const issues = binaryGeneratorSelectionIssues(config, generators, harnessByKind.get(kind))
       const first = issues[0]
       if (!first) continue
       throw new ConflictError(
@@ -847,6 +873,89 @@ export class RunAdmission {
         },
       )
     }
+  }
+
+  /**
+   * Which agent CLI each named step will dispatch under.
+   *
+   * Derived rather than declared, and that is the whole design decision behind the harness pin: a
+   * model's harness is already a fact of the catalog, so a `canGenerateImages`-style flag on the
+   * model table would be a second copy of a truth nobody can verify — the tool is provisioned by
+   * the vendor per session, not by anything this build can see. What the model legitimately
+   * contributes is WHICH CLI runs, and that is exactly what this reads.
+   *
+   * It must therefore answer what `ModelRouter.resolveDispatchRef` will answer, and the two halves
+   * of that are both easy to get wrong in the direction that REFUSES a run which would have worked:
+   *
+   *  - The precedence FALLS THROUGH an unresolvable block pin (`resolveStepModelRef`), it does not
+   *    stop at one. Reading `block.modelId ?? default` skips the check on a stale pin — the block
+   *    most likely to be misconfigured — while dispatch happily runs the workspace default.
+   *  - "Subscriptions always win" then overrides the catalog's own flavour order, which places
+   *    `subscription` LAST: a dual-mode model on a workspace holding a token for its vendor
+   *    resolves `direct` here and dispatches on the subscription harness, so the guard would
+   *    refuse a codex-served generator on a step that is about to run codex.
+   *
+   * Applied through `subscriptionOptionFor` + `caps.subscriptionVendors`, the same approximation
+   * {@link modelIdIsMetered} uses for the same override, so admission has ONE reading of it.
+   *
+   * A kind whose model does not resolve is simply ABSENT from the map, never guessed at: the
+   * caller reads a missing entry as "unverifiable" and refuses nothing, which is the same third
+   * outcome the format, capability and value axes all take. That also covers dispatch's LAST tier,
+   * the per-kind env routing, which carries no catalog id and is deliberately ungated here exactly
+   * as it is in {@link assertProvidersConfiguredForPipeline}.
+   */
+  private async resolveStepHarnesses(
+    workspaceId: string,
+    block: Block,
+    agentKinds: readonly string[],
+    initiatedBy: string | null | undefined,
+  ): Promise<ReadonlyMap<string, string>> {
+    const harnesses = new Map<string, string>()
+    if (!this.resolveProviderCapabilities) return harnesses
+    const caps = await this.resolveProviderCapabilities(
+      workspaceId,
+      initiatedBy,
+      block.modelPresetId,
+    )
+    // Resolved per kind, because a block with no (usable) pin takes the workspace's per-kind
+    // default and two binary-output steps in one chain can legitimately run different models.
+    const refs = await Promise.all(
+      agentKinds.map(async (kind) => {
+        const pinned = this.effectiveModelRef(block.modelId, caps)
+        if (pinned) return pinned
+        const defaultId = await this.resolveWorkspaceModelDefault?.(
+          workspaceId,
+          kind,
+          block.modelPresetId,
+        )
+        return this.effectiveModelRef(defaultId, caps)
+      }),
+    )
+    agentKinds.forEach((kind, i) => {
+      const ref = refs[i]
+      // `harness` absent on a resolved ref means the default Pi harness, which is a RESOLVED
+      // answer rather than a missing one — spelled out here so a Pi-served step is checked
+      // rather than silently skipped.
+      if (ref) harnesses.set(kind, ref.harness ?? 'pi')
+    })
+    return harnesses
+  }
+
+  /**
+   * One model id resolved the way the DISPATCH will resolve it, subscription override included.
+   *
+   * The override applies only to a model that resolved WITHOUT a harness, which is exactly
+   * `resolveEffectiveRef`'s own condition: a ref that already carries one came off the
+   * subscription flavour, so there is nothing to swap it for.
+   */
+  private effectiveModelRef(
+    id: string | undefined,
+    caps: ProviderCapabilities,
+  ): ModelRef | undefined {
+    const ref = resolveModelRef(id, caps)
+    if (!ref || ref.harness) return ref
+    const sub = subscriptionOptionFor(id)
+    return sub && caps.subscriptionVendors.has(sub.vendor) ? sub.ref : ref
   }
 
   /**
@@ -1030,5 +1139,14 @@ function namedSubject(issue: BinaryGeneratorSelectionIssue): Record<string, stri
       // is wrong and the value says what about it. A client keying on `option` alone would report
       // "the aspect ratio is unsupported" about an option every selected integration supports.
       return { option: issue.value.option, requestedValue: issue.value.requested }
+    case 'generator_harness_unavailable':
+      // THREE fields for the same reason: the generator alone reads as "this integration is
+      // broken" when the integration is fine and the step's MODEL is what does not reach it, so
+      // both harnesses ride along and the client can name the actual choice a human has to make.
+      return {
+        generatorId: issue.generatorId,
+        requiredHarness: issue.requiredHarness,
+        resolvedHarness: issue.resolvedHarness,
+      }
   }
 }

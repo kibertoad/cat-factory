@@ -628,7 +628,7 @@
         "pipeline_schedule_intake_unconfigured": "Hata alımı adımı işini zamanlamanın sorun alımı ayarlarından alır ve bağlı zamanlamada bu ayar yok. Önce zamanlamada sorun alımını yapılandırın.",
         "foundational_service_exists": "Bu kimliğe sahip bir temel hizmet bu kapsamda zaten kayıtlı. Var olan kaydı açıp düzenleyin — iki hizmet aynı kimliği paylaşamaz, çünkü kimlik bir mimarın tasarımında andığı addır.",
         "binary_output_service_invalid": "İkili çıktılar üreten bir adım, bu çalışma alanının kataloğunda çözümlenemeyen bir temel hizmet seçiyor: kimlik bilinmiyor ya da seçilen depolama hizmeti asset-storage yeteneğini taşımıyor. Adımın seçimini düzeltin veya hizmeti kaydedin, sonra yeniden başlatın.",
-        "binary_output_generator_invalid": "İkili çıktı üreten bir adım, bu dağıtımın kaydetmediği bir üretken entegrasyon seçiyor ya da seçilen entegrasyonların hiçbiri adımın teslim etmesi gereken içerik türünü üretmiyor. Üretken entegrasyonlar bu çalışma alanında değil, dağıtımın kodunda kaydedilir: entegrasyonu kaydedin veya adımın seçimini düzeltin, sonra yeniden başlatın.",
+        "binary_output_generator_invalid": "İkili çıktı üreten bir adım, bu kurulumun kaydetmediği bir üretken entegrasyon seçiyor; seçili entegrasyonlardan hiçbiri adımın teslim etmesi gereken içerik türünü üretmiyor; ya da bunlardan biri, bu adımın modelinin çalışmadığı bir aracı CLI tarafından üretiliyor. Üretken entegrasyonlar bu çalışma alanında değil, kurulumun kodunda kaydedilir: entegrasyonu kaydedin, adımın seçimini düzeltin ya da adıma gereken CLI üzerinde çalışan bir model sabitleyin, sonra yeniden başlatın.",
         "foundational_service_not_inherited": "Devre dışı bırakma, hesaptan devralınan bir hizmet için geçerlidir. Bu kimlik bu pano tarafından kaydedilmiş, dolayısıyla devre dışı bırakılacak bir şey yok - bunun yerine panonun kendi kaydını silin.",
         "input_gate_not_parked": "Bu çalışma artık giriş denetimini beklemiyor. Biri onu yanıtlamış ya da çalışma ilerlemiş olabilir.",
         "input_gate_parked": "Bu çalıştırma girdi kontrolünde bekliyor ve onay akışı bunu yanıtlayamaz. Çalıştırmadaki bildirimi kullanın: görevi düzeltip yeniden kontrol edin ya da yine de çalıştırın.",
@@ -4937,6 +4937,8 @@
       "binaryOutputMediaTypeUnusable": "Kaydedilmedi, çünkü bunlar ortam türü değil: {entries}. Her birini type/subtype olarak yazın.",
       "binaryOutputGeneratorMissing": "Bu kurulum şu üretken entegrasyonları kaydetmiyor: {ids}. Bunlar bu çalışma alanında değil, kurulumun kodunda kaydedilir.",
       "binaryOutputGeneratorOverlap": "Seçili entegrasyonlardan birden fazlası aynı içerik türünü üretiyor ({overlaps}). Bunda bir sakınca yok, ancak artık hangisinin çağrılacağına içerik türü karar vermiyor: bu adımın isteminde hangisinin ne için kullanılacağını belirtin, yoksa ajan birini seçip onu kullanmayı sürdürür.",
+      "binaryOutputGeneratorVia": "{harness} üzerinden",
+      "binaryOutputGeneratorHarness": "Bu entegrasyonlar bir API yerine bir aracı CLI tarafından üretilir ({generators}); bu nedenle bu adım yalnızca o CLI üzerinde çalışan bir modelle işler. Başka bir modelle başlatılan çalıştırma başlangıçta reddedilir.",
       "binaryOutputModalityUncovered": "Seçili entegrasyonların hiçbiri, bu adımın teslim etmesi gereken {modalities} içeriğini üretmiyor.",
       "binaryOutputModalityRetired": "{modality} (artık sunulmuyor — bu adımın içerik türlerini yeniden seçin)",
       "binaryOutputModality": {
