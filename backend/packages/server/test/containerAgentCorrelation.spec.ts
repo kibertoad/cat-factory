@@ -203,6 +203,20 @@ describe('container seam correlation', () => {
     ])
   })
 
+  it('counts a REFUSED work-branch push, the other settle the engine re-dispatches', async () => {
+    // The recovery makes this invisible everywhere else: the step is re-dispatched, the run reports
+    // as a clean success, and the whole agent run it cost twice shows up in no per-run signal. The
+    // remedy the harness prints tells the operator to check for a second live run on the block,
+    // which is a RECURRENCE, and only a rate can answer that.
+    const contended = makeExecutor({
+      view: { state: 'failed', failureCause: 'branch-contended', error: 'push refused' },
+    })
+    await contended.executor.pollJob(handle)
+    expect(contended.metrics.drain()).toEqual([
+      { counter: 'container.branch_contended', dimensions: {}, value: 1 },
+    ])
+  })
+
   it('dimensions a dispatch failure by the DISPATCH kind, never by a stray `evicted`', () => {
     const metrics = createOperationalMetricsCollector()
     const jobLog = containerJobLog(createRecordingLogger(), { jobId: 'job_1' }, metrics)

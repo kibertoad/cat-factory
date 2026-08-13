@@ -78,7 +78,7 @@ const INLINE_TYPE_NAMES = {
   'blockId,createdAt,detail,error,executionId,id,operation,outcome,providerId,subsystem,targetId,workspaceId':
     'DebugInfraLogEntry',
   'agentKind,createdAt,executionId,id,provider,query,resultCount,workspaceId': 'DebugSearchQuery',
-  'agentKind,evictionRecoveries,finishedAt,firstEvictionDetail,hasStructuredResult,index,lastActivityAt,model,outputChars,progress,skipped,startedAt,state,subtasks,toolServers':
+  'agentKind,branchContentionRecoveries,evictionRecoveries,finishedAt,firstEvictionDetail,hasStructuredResult,index,lastActivityAt,model,outputChars,progress,skipped,startedAt,state,subtasks,toolServers':
     'DebugRunStep',
   'agentKind,observed,unavailable,wired': 'DebugStepToolServers',
   'id,label,tools,transport': 'DebugWiredToolServer',
