@@ -442,6 +442,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.cache.delete(ref.runId)
         return true
       },
+      exitedCleanly: () => this.exitedCleanly(resolved.containerId),
       // Ignores the eviction cause on purpose: a per-RUN container serves this run and nothing
       // else, so its output is this run's on either branch. Only the shared pool member has to
       // ask (see {@link pooledPostMortem}).
@@ -686,6 +687,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.dropMember(member)
         return true
       },
+      exitedCleanly: () => this.exitedCleanly(member.containerId),
       // Same last chance to read the dying member as the per-run path: this is the only
       // moment its exit state and log tail are still readable, and a pooled member is where
       // a long coding step actually runs on a warm deployment. Without it the whole class of
@@ -962,6 +964,21 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   }
 
   /**
+   * Whether a container that has stopped serving a job exited CLEANLY (code 0), which on an
+   * image whose only workload is the harness means the harness was SHUT DOWN mid-job rather than
+   * crashing or being reclaimed. Anything else, including a runtime that reports no exit code at
+   * all, answers false and leaves the failure an eviction.
+   *
+   * A remove (`docker rm -f`, our own release path) kills with SIGKILL and reports 137, so this
+   * cannot mistake the engine's own teardown for a shutdown; a 0 means the process handled a
+   * signal and left, and the only thing in the container that does that is the harness.
+   */
+  private async exitedCleanly(containerId: string): Promise<boolean> {
+    const exit = await this.adapter.exitState(this.exec, containerId)
+    return exit?.code === 0
+  }
+
+  /**
    * The post-mortem for a container that died MID-RUN (see `pollHarnessJob`'s `postMortem`):
    * its exit state plus a tail of its own stdout/stderr. This is the only moment the logs are
    * still readable — `release()` removes the container once the run settles — and without them
@@ -982,7 +999,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     if (!exit && !logs) return undefined
     const parts = [
       exit
-        ? `Container ${containerId} exited while the job was running. Exit: ${exit}`
+        ? `Container ${containerId} exited while the job was running. Exit: ${exit.description}`
         : `Container ${containerId} stopped serving the job; the runtime reports no exit state for it (it may still be running).`,
     ]
     if (logs) parts.push(`Container logs:\n${logs}`)

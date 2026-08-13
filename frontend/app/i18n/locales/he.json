@@ -1785,6 +1785,7 @@
       "dispatch": "שיגור",
       "environment": "סביבה",
       "evicted": "פונתה",
+      "harness_shutdown": "כיבוי ה-Harness",
       "timeout": "פסק זמן",
       "agent": "סוכן",
       "job_failed": "המשימה נכשלה",

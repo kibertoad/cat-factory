@@ -16,6 +16,14 @@ import { HARNESS_VERSION } from './version.js'
 // Nothing here holds long-lived secrets: the per-job GitHub + proxy tokens arrive
 // in the request body and live only for the duration of the job in an ephemeral
 // workspace.
+//
+// THE FILE NAME IS LOAD-BEARING, and so is {@link PROCESS_TITLE} below. This process is
+// PID 1 of the job container, running as the same uid as the agent's own shell, so any
+// pattern kill the agent runs can reach it. It used to be `dist/server.js`, which is
+// also what an ordinary Node service builds to: a coder run that had just smoke-tested
+// the service it wrote ran `pkill -f 'node dist/server.js'` to stop it, matched PID 1,
+// and shut the harness down mid-job. The engine could only see a container that
+// vanished, so it reported an eviction and re-dispatched into the same trap.
 
 const PORT = Number(process.env.PORT ?? 8080)
 
@@ -202,8 +210,24 @@ const server = createServer((req, res) => {
   })()
 })
 
+/**
+ * What this process calls itself once it is running, and the second half of the naming defence
+ * described in the header (the file name is the first).
+ *
+ * Setting it rewrites BOTH halves of what a pattern kill matches on Linux: `/proc/<pid>/cmdline`
+ * becomes this string in full, and `/proc/<pid>/comm` its first 15 characters. So neither
+ * `pkill -f 'node dist/…'` (cmdline) nor a bare `pkill node` (name) can name the harness, and a
+ * hand-rolled `/proc` sweep for the agent's own service finds only that service.
+ *
+ * It is deliberately NOT a path: an agent looking for what it started searches for what it
+ * started, and nothing an agent runs is called this.
+ */
+export const PROCESS_TITLE = 'cat-factory-harness'
+
 // Only auto-listen when run as the entry point (tests import handleRun directly).
 if (process.env.NODE_ENV !== 'test') {
+  // Before `listen`, so no job can be accepted while this process still answers to `node`.
+  process.title = PROCESS_TITLE
   server.listen(PORT, BIND_HOST, () => {
     console.log(`executor-harness listening on ${BIND_HOST ?? ''}:${PORT}`)
   })

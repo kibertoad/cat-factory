@@ -1785,6 +1785,7 @@
       "dispatch": "Gönderim",
       "environment": "Ortam",
       "evicted": "Tahliye edildi",
+      "harness_shutdown": "Harness kapatıldı",
       "timeout": "Zaman aşımı",
       "agent": "Aracı",
       "job_failed": "İş başarısız",

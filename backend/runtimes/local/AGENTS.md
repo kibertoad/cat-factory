@@ -36,7 +36,10 @@ transport + the GitHub token/client seams differ.
   how a stopped container ended so a mid-run death leaves a post-mortem (plus a scrubbed `logs()`
   tail) onto the failed view's `detail`, since `release()` removes it as the run settles. A
   re-dispatch removes it too, so the FIRST death's post-mortem is retained on
-  `PipelineStep.firstEvictionDetail`. Each adapter also exposes a `localDind` capability threaded
+  `PipelineStep.firstEvictionDetail`. `exitState()`'s `code` is the one half that is a VERDICT
+  rather than a diagnostic: `0` means the harness exited cleanly with a job still in flight, which
+  the transport reports as `harnessShutdown` instead of an eviction (terminal, never retried), so
+  a runtime that cannot read an exit code leaves it ABSENT rather than defaulting it. Each adapter also exposes a `localDind` capability threaded
   into `ExecutionService` as `localTestInfraSupported`, so a runtime that can't nest containers
   refuses a local-infra Tester run at start.
 - `github.ts`, `link-repo.ts` / `linkRepo.ts`, `installations.ts`: the PAT-backed GitHub

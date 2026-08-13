@@ -259,6 +259,31 @@ describe('CloudflareContainerTransport 404 classification', () => {
     expect(view.error).toBe('Job not found (container evicted or crashed)')
   })
 
+  it('reports a workload that exited 0 as a shutdown rather than a crash', async () => {
+    // A container whose only workload is the harness cannot exit 0 while a job is in flight
+    // unless something stopped it, and a fresh container meets that same something. Only read
+    // where NOTHING else explains the stop: a reclaim we asked for records no observation at all,
+    // and a named cause is churn, which recovers on the transient budget.
+    const view = await new CloudflareContainerTransport(
+      namespace404({ exit: { code: 0, reason: 'exit' } }),
+    ).poll(ref)
+
+    expect(view.harnessShutdown).toBe(true)
+    expect(view.evicted).toBeUndefined()
+    expect(view.error).not.toMatch(/evicted or crashed/)
+  })
+
+  it('keeps a rollout drain a transient eviction even when it exited 0', async () => {
+    // The precedence that makes the rule above safe: infrastructure churn is named, recovers on
+    // the larger budget, and must not be re-read as somebody shutting the harness down.
+    const view = await new CloudflareContainerTransport(
+      namespace404({ cause: 'rollout', exit: { code: 0, reason: 'exit' } }),
+    ).poll(ref)
+
+    expect(view.evicted).toBe('transient')
+    expect(view.harnessShutdown).toBeUndefined()
+  })
+
   it('attaches the container exit state to an otherwise unexplained crash', async () => {
     // The D1 finding on the DEPLOYED runtime: every container death reached the operator as the
     // bare sentinel string. The verdict is unchanged (a crash still spends the crash budget);

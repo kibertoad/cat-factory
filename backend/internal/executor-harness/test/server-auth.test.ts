@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 // gate in `server.ts` and one line above it would compile, pass every other test, and ship.
 
 process.env.HARNESS_SHARED_SECRET = 'test-secret'
-const { server } = await import('../src/server.js')
+const { server } = await import('../src/harness-server.js')
 
 let base: string
 

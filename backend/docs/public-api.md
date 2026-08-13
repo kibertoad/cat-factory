@@ -1194,8 +1194,11 @@ the branch it will actually hit first.
 
 **Poll until `status` is `succeeded` or `failed`.** On a failure, read `failureKind` before deciding
 to retry: a `preflight` refusal (the target repository already has content, nothing is connected)
-cannot be retried into success, where an `evicted` container can. `failureDetail` and `failureHint`
-carry the platform's own diagnosis verbatim, so prefer relaying them over paraphrasing them.
+cannot be retried into success, where an `evicted` container can. `harness_shutdown` sits with the
+first group rather than the second: the container's harness exited cleanly with the job still
+running, so something stopped it and a retry meets that same something. `failureDetail` and
+`failureHint` carry the platform's own diagnosis verbatim, so prefer relaying them over paraphrasing
+them.
 
 #### Connecting a cluster, and pointing a service at its manifests
 

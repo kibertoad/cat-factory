@@ -256,6 +256,7 @@ export function buildFailureMeta(view: RunnerJobView): {
   detail?: string
   backend?: string
   evicted?: ContainerEvictionKind
+  harnessShutdown?: true
   validationReport?: unknown
   reproductionReport?: unknown
   toolServers?: unknown
@@ -270,6 +271,9 @@ export function buildFailureMeta(view: RunnerJobView): {
     ...(view.detail ? { detail: view.detail } : {}),
     ...(view.backend ? { backend: view.backend } : {}),
     ...(view.evicted ? { evicted: view.evicted } : {}),
+    // Forwarded beside `evicted` and never with it: the transport reports EITHER a container it
+    // lost or a harness that was shut down under the job, and the engine recovers only the first.
+    ...(view.harnessShutdown ? { harnessShutdown: view.harnessShutdown } : {}),
     ...(validationReport ? { validationReport } : {}),
     ...(reproductionReport ? { reproductionReport } : {}),
     // Read off the VIEW alone, unlike the two reports above: the observation is a fact about the

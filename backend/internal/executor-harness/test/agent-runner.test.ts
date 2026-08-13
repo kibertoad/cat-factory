@@ -1078,6 +1078,57 @@ describe.skipIf(!unix)('runClaudeCode failure reporting', () => {
   })
 })
 
+// An abort is not always a watchdog. `JobRegistry.abortAll` fires one at every running job when
+// something shuts the harness down, and a backend-requested stop fires one at a single job; only
+// the signal's reason tells those apart, because a watchdog kill is relabelled downstream from
+// the structured `killReason` and these two have no such label. The runner used to reject with a
+// hard-coded "agent run aborted by watchdog", so a container killed mid-job (in the incident that
+// prompted this: the agent pattern-killed the harness itself) filed its failure against a
+// watchdog that never fired.
+describe.skipIf(!unix)('what an aborted run reports', () => {
+  /** A fake CLI that never finishes on its own, so only the abort can end the run. */
+  function hangingCli(name: string): void {
+    writeFileSync(
+      join(binDir, name),
+      '#!/usr/bin/env node\nprocess.stdin.resume()\nprocess.stdin.on("data", () => {})\n' +
+        'setInterval(() => {}, 1000)\n',
+      { mode: 0o755 },
+    )
+  }
+
+  /** Start a hanging run, abort it with `reason` once it is up, and answer how it failed. */
+  async function abortedMessage(reason?: Error): Promise<string> {
+    hangingCli('claude')
+    const controller = new AbortController()
+    const run = runClaudeCode({
+      cwd,
+      model: 'claude-opus-5',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      signal: controller.signal,
+    })
+    // Let the spawn land, so the abort kills a RUNNING child rather than taking the
+    // already-aborted-at-entry shortcut, which is a different rejection.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    controller.abort(reason)
+    return run.then(
+      () => '(resolved)',
+      (err: Error) => err.message,
+    )
+  }
+
+  it('names the caller that aborted it', async () => {
+    expect(await abortedMessage(new Error('harness shutting down (SIGTERM)'))).toBe(
+      'harness shutting down (SIGTERM)',
+    )
+  })
+
+  it('blames no watchdog when the abort named no reason', async () => {
+    expect(await abortedMessage()).not.toMatch(/watchdog/i)
+  })
+})
+
 // Stuck-run audit F13. The tool-silence window is opened by the CLI runner itself and beaten
 // from where each stream reports tool activity — NOT from `onSpan`. That distinction is the
 // finding: `runCodex` builds no `ToolCallTracker` and emits no spans at all, so a span-keyed

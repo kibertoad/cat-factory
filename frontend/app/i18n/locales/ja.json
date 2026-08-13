@@ -1785,6 +1785,7 @@
       "dispatch": "ディスパッチ",
       "environment": "環境",
       "evicted": "退避",
+      "harness_shutdown": "Harness 停止",
       "timeout": "タイムアウト",
       "agent": "エージェント",
       "job_failed": "ジョブ失敗",

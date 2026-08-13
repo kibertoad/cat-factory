@@ -6,7 +6,11 @@ import type {
   PipelineStep,
 } from '@cat-factory/kernel'
 import { failureKindFromHarnessCause } from '@cat-factory/kernel'
-import { type ContainerFailureView, MAX_BRANCH_CONTENTION_RECOVERIES } from './job.logic.js'
+import {
+  type ContainerFailureView,
+  containerShutdownFailure,
+  MAX_BRANCH_CONTENTION_RECOVERIES,
+} from './job.logic.js'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import { HUMAN_TEST_AGENT_KIND, isTesterKind, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
 import type { AdvanceResult } from './advance.js'
@@ -185,6 +189,13 @@ export class PollCompletionController {
     // `update.detail` is the transport's container post-mortem (exit state + log tail). It only
     // surfaces if the eviction budget is spent; a recovered eviction re-dispatches and needs no
     // diagnostic.
+    // Asked BEFORE the eviction recovery, and answered without spending any of its budget: a
+    // harness that exited cleanly mid-job was stopped by something a fresh container meets again.
+    const shutdown = containerShutdownFailure(update)
+    if (shutdown) {
+      await this.markContainerErrored(workspaceId, instance, step)
+      return { kind: 'job_failed', ...shutdown }
+    }
     const recovered = await this.recoverContainerEviction(workspaceId, instance, step, update)
     if (recovered) return recovered
     // A push to the work branch that was REFUSED because the branch moved under the run is the

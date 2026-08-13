@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ACTIVITY_PERSIST_THROTTLE_MS,
   classifyDispatchFailure,
+  containerShutdownFailure,
   evictionFailureDetail,
   isContainerEvictionError,
   MAX_EVICTION_RECOVERIES,
@@ -198,5 +199,34 @@ describe('classifyDispatchFailure', () => {
       expect(c.error).toContain('predates this dispatch route')
       expect(c.error).not.toContain('minutes of work')
     })
+  })
+})
+
+// The one container-loss shape with NO recovery. An eviction spends a budget on a fresh
+// container; a harness that was shut down under the job fails the run on the first occurrence,
+// because whatever stopped it is still there on the next attempt and each attempt costs a full
+// agent run. (The run that named this spent its whole budget re-dispatching an agent whose own
+// cleanup command killed the harness every time.)
+describe('containerShutdownFailure', () => {
+  it('answers null for every view that is not a shutdown', () => {
+    expect(containerShutdownFailure({})).toBeNull()
+    expect(containerShutdownFailure({ error: CRASH_EVICTION, evicted: 'crash' })).toBeNull()
+    expect(containerShutdownFailure({ error: 'Implementation failed' })).toBeNull()
+  })
+
+  it('classifies a shutdown as its own failure kind, not an eviction', () => {
+    const failure = containerShutdownFailure({
+      error: 'The executor-harness shut down while this job was still running',
+      harnessShutdown: true,
+      detail: 'Container abc exited while the job was running. Exit: exit code 0',
+    })
+    expect(failure?.failureKind).toBe('harness_shutdown')
+    expect(failure?.error).toContain('shut down')
+    expect(failure?.detail).toContain('exit code 0')
+  })
+
+  it('falls back to the error as the detail rather than reporting none', () => {
+    const failure = containerShutdownFailure({ error: 'harness gone', harnessShutdown: true })
+    expect(failure?.detail).toBe('harness gone')
   })
 })

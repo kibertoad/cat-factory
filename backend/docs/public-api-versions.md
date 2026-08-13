@@ -755,3 +755,18 @@ under the run; the engine re-dispatches the step once, and the run then reports 
 success. The only trace that a whole agent run was spent twice, in tokens and in wall clock, is this
 number. It sits beside `evictionRecoveries`, which exists for the same reason and answers the same
 kind of question: reading the step alone, a re-dispatched run is indistinguishable from a clean one.
+
+## 1.53.0
+
+1.53.0, not 1.52.1: one additive enum member, `harness_shutdown`, in the run failure-kind
+vocabulary (`GET /api/v1/debug/runs/{runId}`, the bootstrap-job projection, and any surface
+carrying a failure kind). Nothing existing changes shape or meaning, and the SDKs tolerate unknown
+enum values by design, so a consumer built against 1.52.0 keeps parsing.
+
+**What a consumer NOTICES is a population change**: a class of failure that used to arrive as
+`evicted` now arrives under its own name. A container whose harness exited CLEANLY while a job was
+still running was indistinguishable, to the engine, from one that vanished, so it was reported as
+an eviction and re-dispatched on the crash budget. Those two need opposite handling: an eviction is
+worth one fresh container, and a shutdown is caused by something that is still there on the next
+attempt (a host restart, an operator, or, in the run that named this, the agent's own cleanup
+command killing the harness process). A dashboard that counts `evicted` will see that count fall.

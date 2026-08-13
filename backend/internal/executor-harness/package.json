@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/executor-harness",
-  "version": "1.118.0",
+  "version": "1.119.0",
   "description": "Container payload: a thin TypeScript wrapper that runs the Pi coding agent against a cloned repo and opens a PR. Runs in the Cloudflare Container (and, in local native mode, as a host process); carries no secrets.",
   "repository": {
     "type": "git",
@@ -12,9 +12,9 @@
     "src"
   ],
   "type": "module",
-  "main": "./dist/server.js",
+  "main": "./dist/harness-server.js",
   "exports": {
-    ".": "./dist/server.js",
+    ".": "./dist/harness-server.js",
     "./embed": "./src/embed.ts",
     "./claude-call-aggregator": {
       "types": "./dist/claude-call-aggregator.d.ts",
@@ -28,7 +28,7 @@
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "pnpm run build",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
-    "start": "node dist/server.js",
+    "start": "node dist/harness-server.js",
     "test": "vitest run",
     "test:run": "vitest run",
     "test:acceptance": "vitest run --config vitest.acceptance.config.ts",

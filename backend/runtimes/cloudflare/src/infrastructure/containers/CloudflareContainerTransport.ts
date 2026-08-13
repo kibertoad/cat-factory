@@ -1,6 +1,7 @@
 import {
   composePostMortem,
   CONTAINER_EVICTION_ERROR,
+  HARNESS_SHUTDOWN_ERROR,
   harnessDispatchError,
   readRunnerDispatchAck,
   type RunnerDispatchAck,
@@ -63,7 +64,22 @@ const TRANSIENT_EVICTION_ERROR: Record<ContainerStopCause, string> = {
  */
 function evictionView(observed: StopObservation): RunnerJobView {
   const detail = composePostMortem([describeContainerExit(observed.exit, observed.cause)])
-  const { cause } = observed
+  const { cause, exit } = observed
+  // A workload that EXITED 0 with the job still in flight did not crash and was not reclaimed:
+  // the harness was shut down, and the run is over rather than one container short. Read only
+  // where nothing else explains the stop: a reclaim we performed is a SIGKILL and never lands
+  // here as a 0 (`observationForStop` records nothing for a stop this container asked for), and
+  // a cause that IS named is churn, which recovers. Local's container/native transports read the
+  // same fact off their own runtimes; the wording and the field come from kernel so all three
+  // report one thing.
+  if (!cause && exit?.reason === 'exit' && exit.code === 0) {
+    return {
+      state: 'failed',
+      error: HARNESS_SHUTDOWN_ERROR,
+      harnessShutdown: true,
+      ...(detail ? { detail } : {}),
+    }
+  }
   return {
     state: 'failed',
     error: cause ? TRANSIENT_EVICTION_ERROR[cause] : EVICTION_ERROR,

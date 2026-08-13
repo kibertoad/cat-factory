@@ -1,6 +1,7 @@
 import {
   type ContainerEndpoint,
   type ContainerExec,
+  type ContainerExitState,
   type ContainerRuntimeAdapter,
   formatContainerLogs,
   HARNESS_PORT,
@@ -218,14 +219,20 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     }
   }
 
-  async exitState(exec: ContainerExec, containerId: string): Promise<string | undefined> {
+  async exitState(
+    exec: ContainerExec,
+    containerId: string,
+  ): Promise<ContainerExitState | undefined> {
     // Apple `container inspect` reports a coarse status only (no exit code, no OOM flag), so
-    // the post-mortem gets the terminal status verbatim rather than the Docker-shaped detail.
+    // the post-mortem gets the terminal status verbatim rather than the Docker-shaped detail,
+    // and `code` stays ABSENT rather than guessed. That absence is load-bearing: a stopped
+    // container here could equally be a crash or a clean shutdown, and the reading that costs
+    // less when wrong is the eviction (one fresh container) rather than a terminal failure.
     const inspected = await exec(['inspect', containerId]).catch(() => undefined)
     if (!inspected) return undefined
     const { status, running } = parseInspect(inspected.stdout)
     if (running || !status) return undefined
-    return `status ${status}`
+    return { description: `status ${status}` }
   }
 
   async logs(exec: ContainerExec, containerId: string): Promise<string> {

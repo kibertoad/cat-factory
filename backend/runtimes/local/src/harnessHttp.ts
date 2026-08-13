@@ -1,5 +1,6 @@
 import {
   CONTAINER_EVICTION_ERROR,
+  HARNESS_SHUTDOWN_ERROR,
   harnessDispatchError,
   readRunnerDispatchAck,
   type HarnessCallMetric,
@@ -147,6 +148,13 @@ export type EvictionCause = 'unreachable' | 'job_unknown'
  * it) with its stdout — the only record of WHY the harness process exited — destroyed, leaving
  * a bare "container evicted or crashed" and nothing to diagnose from. It is handed the
  * {@link EvictionCause} so it can refuse to attribute a live backend's output to this run.
+ *
+ * `exitedCleanly` (optional) is asked ONLY once the backend is confirmed gone, and separates the
+ * two ways that happens: a harness that CRASHED or was reclaimed, versus one that exited 0 while
+ * this job was still running, i.e. was shut down. Only the caller can tell (it owns the process
+ * or the container), and only the second reading is terminal. See {@link HARNESS_SHUTDOWN_ERROR}.
+ * A caller that cannot tell leaves it out and every death stays an eviction, which is the reading
+ * that costs a fresh container rather than a run.
  */
 export async function pollHarnessJob(opts: {
   fetchImpl: typeof fetch
@@ -156,6 +164,7 @@ export async function pollHarnessJob(opts: {
   timeoutMs: number
   label: string
   isDead: () => boolean | Promise<boolean>
+  exitedCleanly?: () => boolean | Promise<boolean>
   postMortem?: (cause: EvictionCause) => Promise<string | undefined>
 }): Promise<RunnerJobView> {
   let res: Response
@@ -169,7 +178,12 @@ export async function pollHarnessJob(opts: {
       },
     )
   } catch (err) {
-    if (await opts.isDead()) return evictionView(await postMortemOf(opts, 'unreachable'))
+    if (await opts.isDead()) {
+      const detail = await postMortemOf(opts, 'unreachable')
+      // Asked only on THIS branch. A 404 below comes from a harness that is alive and answering,
+      // so it cannot have exited at all, cleanly or otherwise.
+      return (await opts.exitedCleanly?.()) ? shutdownView(detail) : evictionView(detail)
+    }
     throw err
   }
   if (res.status === 404) return evictionView(await postMortemOf(opts, 'job_unknown'))
@@ -185,6 +199,22 @@ function evictionView(detail: string | undefined): RunnerJobView {
     state: 'failed',
     error: EVICTION_ERROR,
     evicted: 'crash',
+    ...(detail ? { detail } : {}),
+  }
+}
+
+/**
+ * The terminal SHUTDOWN view: the harness exited cleanly with this job still in flight.
+ *
+ * Deliberately carries no `evicted` verdict, because it is not one and the engine's recovery is
+ * keyed on that field: something stopped the harness, and re-dispatching the same step into a
+ * fresh one only reproduces whatever did.
+ */
+function shutdownView(detail: string | undefined): RunnerJobView {
+  return {
+    state: 'failed',
+    error: HARNESS_SHUTDOWN_ERROR,
+    harnessShutdown: true,
     ...(detail ? { detail } : {}),
   }
 }

@@ -111,3 +111,18 @@ export function toolSilenceAbortMessage(toolSilenceMs: number): string {
     `${Math.round(toolSilenceMs / 1000)}s`
   )
 }
+
+/**
+ * What an aborted CLI run says about WHY, read off the signal that killed it.
+ *
+ * Every abort funnels through one `AbortController` whose reason the caller supplies (a
+ * watchdog's own phrase, `harness shutting down (SIGTERM)`, a backend-requested stop), so the
+ * signal is the only place that distinction survives the kill. A watchdog abort is relabelled
+ * further downstream from the structured `killReason`, which is precisely why the fallback here
+ * must NOT name one: an abort with nothing else to say is not a timeout, and saying it was sends
+ * whoever reads the job's failure looking for a watchdog that never fired.
+ */
+export function abortReasonOf(signal: AbortSignal | undefined): string {
+  const reason = signal?.reason
+  return reason instanceof Error && reason.message.trim() ? reason.message : 'agent run aborted'
+}
