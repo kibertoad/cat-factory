@@ -11,15 +11,22 @@
 // API key would hand both halves to anyone who read one file. A resumed pass asks again, which is
 // the correct cost.
 //
-// The header rides EVERY request the client makes once a password is held, rather than being
+// The header rides EVERY request the client makes once a password is HELD, rather than being
 // attached at the one call that first needed it: a pass answers parked decisions for hours after
 // the start, each of those wakes the durable driver and re-mints the run's activation, and each
 // therefore needs the password again. The server never keeps it between calls.
+//
+// **When it starts riding them is a separate question, and the answer is the first `428`.** The
+// up-front ask collects the password before the pass opens (`personalPasswordAsk.ts`) because that is
+// when a person is at the terminal; it PRIMES the holder rather than filling it, so the credential
+// still first leaves this process at the call that needs it and not on the fourteen preflight probes,
+// the repository reads and the decision polls that precede one. See {@link PersonalUnlock.prime}.
 
 import { closeSync, openSync, writeSync } from 'node:fs'
 import { ReadStream } from 'node:tty'
 import { personalPasswordProblem } from '@cat-factory/contracts'
 import { CatFactoryCredentialRequiredError } from '@cat-factory/sdk'
+import { OperatorRefusal } from './operatorText.ts'
 
 /** The header the platform reads the personal password from (`PERSONAL_PASSWORD_HEADER`). */
 const PERSONAL_PASSWORD_HEADER = 'X-Personal-Password'
@@ -42,6 +49,17 @@ export interface PersonalUnlock {
   headers(): Record<string, string>
   /** Ask for the password (once per pass), naming why. Rejects when there is no terminal to ask. */
   obtain(reason: string): Promise<void>
+  /**
+   * COLLECT the password now, to be held at the first call that needs it.
+   *
+   * The up-front ask (`personalPasswordAsk.ts`) exists because a person is at the terminal when a
+   * pass starts and by design not twenty minutes later. What it must not also do is decide WHERE the
+   * password goes: primed rather than held, the header still starts riding at the first `428`, so a
+   * pass's fourteen preflight probes, its service reads and its decision polls carry no credential
+   * they have no use for. {@link obtain} consults what this collected instead of prompting again, so
+   * the operator is asked exactly once either way.
+   */
+  prime(reason: string): Promise<void>
   /** Whether a password has already been supplied this pass. */
   held(): boolean
 }
@@ -50,17 +68,29 @@ export interface PersonalUnlock {
  * Build the holder. The password lives in this closure; nothing returns it, so the only way out is
  * the request header — which is what keeps "held in memory only" a property of the code rather
  * than a rule someone has to remember at each call site.
+ *
+ * Two variables rather than one, and the split is the whole of {@link PersonalUnlock.prime}: only
+ * `password` is what {@link PersonalUnlock.headers} sends, so a collected-but-not-yet-needed secret is
+ * structurally unable to ride a request. It also keeps `held()` answering the question
+ * {@link withPersonalUnlock} asks of it (has a password already been TRIED and still refused), which a
+ * single variable would have answered "yes" before the first call was made.
  */
 export function createPersonalUnlock(
   readSecret: (prompt: string) => Promise<string> = readSecretFromTty,
 ): PersonalUnlock {
   let password: string | undefined
+  let primed: string | undefined
   return {
     headers: (): Record<string, string> =>
       password ? { [PERSONAL_PASSWORD_HEADER]: password } : {},
     held: () => password !== undefined,
     async obtain(reason) {
-      password = checked(await readSecret(promptFor(reason)))
+      // Checked at collection time, so a too-short entry is refused while the operator is still at
+      // the terminal rather than twenty minutes into the pass.
+      password = primed ?? checked(await readSecret(promptFor(reason)))
+    },
+    async prime(reason) {
+      primed = checked(await readSecret(promptFor(reason)))
     },
   }
 }
@@ -468,8 +498,12 @@ function finish(terminal: { write: (text: string) => void }, settle: () => void)
  * terminal it cannot use degrades to asking again at the dispatch that needs one, while somebody
  * pressing Ctrl-C is a person saying "not this pass", and starting an afternoon-long run anyway
  * would be reading a refusal as consent.
+ *
+ * An {@link OperatorRefusal}, because it is the one thing the up-front ask re-throws and the boundary
+ * that catches it also catches whatever a bug in that ask would throw: one sentence is the whole
+ * message here, and stack frames under "you pressed Ctrl-C" would be noise.
  */
-export class PersonalPasswordDeclined extends Error {
+export class PersonalPasswordDeclined extends OperatorRefusal {
   constructor() {
     super('Cancelled at the personal-password prompt.')
     this.name = 'PersonalPasswordDeclined'

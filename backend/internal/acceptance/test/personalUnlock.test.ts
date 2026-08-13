@@ -74,6 +74,26 @@ describe('createPersonalUnlock', () => {
     await unlock.obtain('because')
     expect(unlock.headers()).toEqual({ 'X-Personal-Password': 'hunter2' })
   })
+
+  it('primes without holding, so a collected password rides no request until one needs it', async () => {
+    // The property the up-front ask depends on. Asking at the start is about the OPERATOR being at
+    // the terminal; it may not also decide where the secret goes, or a pass collects the password and
+    // then attaches it to fourteen preflight probes, every repository read and every decision poll.
+    const readSecret = vi.fn(async (_prompt: string) => 'hunter2')
+    const unlock = createPersonalUnlock(readSecret)
+
+    await unlock.prime('this pass runs on your personal subscription')
+
+    expect(readSecret).toHaveBeenCalledTimes(1)
+    expect(unlock.held()).toBe(false)
+    expect(unlock.headers()).toEqual({})
+  })
+
+  it('refuses a primed password the platform would not accept, while the operator is still there', async () => {
+    const unlock = createPersonalUnlock(async () => 'short')
+    await expect(unlock.prime('because')).rejects.toThrow(/at least 6 characters/)
+    expect(unlock.held()).toBe(false)
+  })
 })
 
 describe('withPersonalUnlock', () => {
@@ -82,6 +102,24 @@ describe('withPersonalUnlock', () => {
     const unlock = createPersonalUnlock(readSecret)
     await expect(withPersonalUnlock(unlock, 'Starting', async () => 'ok')).resolves.toBe('ok')
     expect(readSecret).not.toHaveBeenCalled()
+  })
+
+  it('spends a primed password at the first 428 rather than prompting a second time', async () => {
+    // The other half of priming: the operator is asked ONCE either way. A pass that collected the
+    // password up front and then prompted again at the first dispatch would be asking a terminal
+    // nobody has been sitting at for twenty minutes.
+    const readSecret = vi.fn(async (_prompt: string) => 'hunter2')
+    const unlock = createPersonalUnlock(readSecret)
+    await unlock.prime('up front')
+    const call = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(credentialRequired('claude'))
+      .mockResolvedValueOnce('started')
+
+    await expect(withPersonalUnlock(unlock, 'Starting the scaffold', call)).resolves.toBe('started')
+
+    expect(readSecret).toHaveBeenCalledTimes(1)
+    expect(unlock.headers()).toEqual({ 'X-Personal-Password': 'hunter2' })
   })
 
   it('prompts on a 428 and retries the call once', async () => {

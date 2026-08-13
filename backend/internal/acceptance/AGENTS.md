@@ -13,10 +13,12 @@ delivered it and CLOSED it, against a LIVE local deployment with nothing faked. 
 `node:assert/strict`, bailing at the first failure. What that replaced, and the four properties the
 driver now owns (order, bail, the gate before every scenario, no timeout):
 [ADR 0057](../../docs/adr/0057-acceptance-standalone-runner.md).
-Type stripping is Node's own, so the scripts carry no `--experimental-strip-types` and the package
-declares `engines.node >= 24`, matching the repository floor. Nothing checks that at runtime by
-design: below 24 the entry point does not load at all, and Node 24+ is a supported-platform
-statement rather than a condition the suite degrades around. Needs a running deployment, a k3s cluster
+Type stripping is Node's own, so THIS package's scripts carry no `--experimental-strip-types` (three
+sibling internal harnesses still do) and it declares `engines.node >= 24`, matching the repository
+floor. Nothing checks that at runtime by design: Node 24+ is a supported-platform statement rather than
+a condition the suite degrades around. Trap: the loader is NOT what enforces it. Type stripping is on by
+default from 22.18 and 23.6, so every command loads and runs below the floor, and `node src/…` working
+is no evidence of the version. Needs a running deployment, a k3s cluster
 and real model credentials; `src/config.ts` refuses with the whole list of missing VARIABLES, and
 `src/prerequisites.ts` then refuses with the whole list of unsatisfied DEPLOYMENT conditions, each
 carrying the steps and commands that fix it.
@@ -62,13 +64,17 @@ is about models omitted ENTIRELY (locally-run endpoints), so labelling from it c
 model invisible and sends an operator to re-mint a token that will change nothing. `src/presets.ts`
 owns the three-way verdict both commands share. `src/personalUnlock.ts` holds the password for the
 process and nothing else writes it down, and the header rides EVERY request through the client's
-`fetch` seam rather than being attached at the call that first needed it: answering a park re-mints
-the run's activation server-side, so a pass needs it for hours after the start.
+`fetch` seam ONCE HELD rather than being attached at the call that first needed it: answering a park
+re-mints the run's activation server-side, so a pass needs it for hours after the start. **When it
+starts riding them is a separate question and the answer is the first `428`**, which is why the up-front
+ask PRIMES the holder (`prime`) instead of filling it: asking early is about where the operator is, and
+held from the ask the credential travelled on fourteen preflight probes and every read of an afternoon
+before anything needed it.
 
 **Asked ONCE per pass, up front in `src/runAcceptance.ts`, which is also where the pass's run id is
 settled.** In one process the ask could now be lazy and still be made once; it stays up front because a
 person is at the terminal when a pass STARTS and by design not twenty minutes in, when the first
-dispatch would discover the model needs a password. It asks THROUGH the holder (`unlock.obtain`), so
+dispatch would discover the model needs a password. It asks THROUGH the holder (`unlock.prime`), so
 nothing hands a password back as a value: the suite has no such function any more, which is what makes
 "written nowhere" structural rather than a rule to remember. The wiring is thin; every judgement lives
 in `src/personalPasswordAsk.ts`, where it is unit-tested, because every one of them is a degradation.
@@ -170,9 +176,25 @@ first.** With no run id it reports the pass that wrote to the state directory mo
 watched, which is by construction the one that recorded no fact and so never claimed the pointer.
 Asked through the pointer it answered "no acceptance pass found" while that attempt's journal sat in
 the directory it named. A pass that created nothing still closes its report by naming the pass that
-did, so the resume line is never an invitation to start over. **And a pass is identified by its FILE
-NAME**: the `runId` inside a ledger is a copy of it, so a disagreement means a copied or renamed
-file, and `WorldStore` refuses rather than guessing which half is right.
+did, so the resume line is never an invitation to start over. Trap: `status` reads the same `.env` the
+pass does, so `ACCEPTANCE_RUN_ID` reaches it too, and **the ARGUMENT asks a question where the
+environment only PINS a default** (`resolveStatusTarget`, unit-tested). A named id is that pass either
+way; a `latest` on the command line refuses when the pointer names nothing, because that is the
+question asked, while a `latest` LINE in the `.env` (which the README offers as the dialect-free way to
+resume) falls through to the pass that ran last rather than refusing about a question nobody asked.
+**And a pass is identified by its FILE NAME**: the `runId` inside a ledger is a copy of it, so a
+disagreement means a copied or renamed file, and `WorldStore` refuses rather than guessing which half
+is right.
+
+**Every line every command prints goes to STDOUT, refusals included, and no command calls
+`process.exit`.** Both halves of one rule: an afternoon-long pass is piped to a file (`| tee pass.log`),
+`tee` captures one stream and `process.exit` does not drain it, so a refusal on stderr or a report cut
+mid-write is missing from exactly the log somebody kept. The exit code carries the verdict; the stream
+carries the answer. Trap: an exit code says whether a scenario RAN (1) or whether the pass refused to
+start (2), never whether anything was created, which is read off the ledger. And a boundary picks its
+describer off `OperatorRefusal` rather than off which boundary it is: a refusal this suite authored
+prints whole, and anything else is named as a suite bug and keeps its frames, since a `TypeError`
+rendered as a refusal is one contentless sentence with no file and no line.
 
 **It is NOT in CI and must never become so.** `test:run` points at `vitest.config.ts`, which
 collects `test/**/*.test.ts` only: this package's own unit tests. The scenarios are not tests to any

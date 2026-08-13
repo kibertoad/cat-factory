@@ -24,7 +24,12 @@
 import assert from 'node:assert/strict'
 import type { Harness } from '../harness.ts'
 import { scrubbed } from '../operatorText.ts'
-import { advisoryNotes, formatPreflightLine, formatPrerequisiteFailure } from '../preflight.ts'
+import {
+  advisoryNotes,
+  formatPreflightFailure,
+  formatPreflightLine,
+  formatPrerequisiteFailure,
+} from '../preflight.ts'
 import { PREREQUISITES } from '../prerequisites.ts'
 import type { Scenario } from '../scenarioRunner.ts'
 
@@ -47,30 +52,43 @@ export function preflightScenario(harness: Harness): Scenario {
         () => prerequisites.evaluate(),
       )
 
+      // The refusal the GATE would raise, computed once from the report this scenario just paid for:
+      // every blocking prerequisite with its own remedy, which is rule 4 ("report every failing claim,
+      // not just the first"). Null when nothing blocks.
+      //
+      // It is what a failing step below carries, rather than that step's own prerequisite alone. A
+      // step throws and the driver bails, so the one-remedy form delivered a single fix and then ended
+      // the pass: an operator with three red prerequisites paid a round trip per item, while the
+      // terser gate seconds behind this scenario would have printed all three. The scenario written to
+      // ADD granularity may not report less than the refusal it reports on.
+      const refusal = formatPreflightFailure(report)
+
       // One step per prerequisite, named from the registry rather than restated here: a prerequisite
       // added to `PREREQUISITES` gains its own step with no second edit, which is what stops this
       // file from drifting into a stale subset of the gate it reports on.
       //
       // The one-line verdict for EVERY prerequisite is already on screen by now (the evaluation
-      // above prints each as it resolves), so the step that fails is where the numbered remedy goes
-      // rather than where the news arrives.
+      // above prints each as it resolves, through the pass's own log seam), so the step that fails is
+      // where the numbered remedies go rather than where the news arrives. Which is also why an
+      // unsatisfied ADVISORY needs nothing here: its verdict line is already printed, the closing step
+      // records it in the journal, and a second copy from this loop went to a different stream than
+      // every other line of the pass.
       for (const prerequisite of PREREQUISITES) {
         await step(`${prerequisite.id}: ${prerequisite.what}`, async () => {
           const result = report.results.find((entry) => entry.id === prerequisite.id)
           assert.ok(result, `preflight recorded no result for '${prerequisite.id}'`)
           // An advisory is REPORTED and never fails: `pipeline-catalog` is the worked example, where
           // a board that has not adopted a pipeline materialises it on first start.
-          if (result.disposition === 'advisory') {
-            if (result.verdict.status !== 'satisfied') console.warn(formatPreflightLine(result))
-            return
-          }
-          // The message is the FULL failure (problem, then numbered steps and commands) rather than
-          // the one-line summary: this is the report a person reads when exactly one prerequisite is
-          // red, and sending them to another file for the fix wastes the report.
+          if (result.disposition === 'advisory') return
+          // The FULL failures (problem, then numbered steps and commands) rather than one-line
+          // summaries: this is the report a person reads when a prerequisite is red, and sending them
+          // to another file for the fix wastes the report. `refusal` covers exactly the required
+          // prerequisites that are not satisfied, which this one is whenever this assertion fires; its
+          // own rendering is the answer for the case where the report somehow blocks on nothing.
           assert.equal(
             result.verdict.status,
             'satisfied',
-            `\n${formatPrerequisiteFailure(result)}\n`,
+            `\n${refusal ?? formatPrerequisiteFailure(result)}\n`,
           )
         })
       }

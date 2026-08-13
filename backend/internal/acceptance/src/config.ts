@@ -15,6 +15,8 @@
 // half-built pass off a board is often doing it because the cluster it named is gone, and a cleanup
 // that refuses until the abandoned thing is configured again is a cleanup nobody can run.
 
+import { OperatorRefusal } from './operatorText.ts'
+
 /** A k3s/Kubernetes apiserver the `deployer` step provisions per-PR namespaces against. */
 export type ClusterConfig = {
   apiServerUrl: string
@@ -365,11 +367,18 @@ export function stateDirFrom(env: EnvRecord): string {
   return trimmed(env.ACCEPTANCE_STATE_DIR) ?? '.acceptance'
 }
 
-/** Resolve or throw, with every problem in one message. */
+/**
+ * Resolve or refuse, with every problem in one message.
+ *
+ * An {@link OperatorRefusal} rather than a bare `Error`, because the boundary that catches this also
+ * catches whatever the resolution itself can throw, and the two are printed differently: this list is
+ * the whole message and a stack above it is noise, while a bug in the resolution is unreadable without
+ * one.
+ */
 export function requireConfig(env: EnvRecord = process.env): AcceptanceConfig {
   const resolution = resolveConfig(env)
   if (resolution.ok) return resolution.config
-  throw new Error(unconfigured(resolution.problems))
+  throw new OperatorRefusal(unconfigured(resolution.problems))
 }
 
 function unconfigured(problems: readonly string[]): string {

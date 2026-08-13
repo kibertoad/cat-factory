@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { formatDuration } from '../src/deadline.ts'
 import type { JournalEvent } from '../src/journal.ts'
 import { resumeInvocation } from '../src/operatorText.ts'
-import { formatPassStatus, summarisePass } from '../src/status.ts'
+import { formatPassStatus, resolveStatusTarget, summarisePass } from '../src/status.ts'
 import { emptyWorld, type World } from '../src/world.ts'
 
 // What is pinned here is the REDUCTION, because the status command's whole value is answering
@@ -38,6 +38,78 @@ function summarise(input: {
     latestRunId: input.latestRunId ?? null,
   })
 }
+
+describe('resolveStatusTarget', () => {
+  // Three questions, and the reason they are worth pinning is that two of them are asked by DEFAULT:
+  // the bare command, and the bare command in a checkout whose `.env` pins a resume target. Answered
+  // through the `latest` pointer, the report someone wants most (the attempt they just watched, which
+  // by construction recorded no fact) is the one it cannot reach.
+
+  const target = (overrides: Partial<Parameters<typeof resolveStatusTarget>[0]> = {}) =>
+    resolveStatusTarget({
+      argument: undefined,
+      pinned: undefined,
+      latestRunId: null,
+      mostRecentRunId: null,
+      ...overrides,
+    })
+
+  it('reports the named pass, whatever is on disk', () => {
+    expect(target({ argument: 'friday-rerun', latestRunId: 'other' })).toEqual({
+      kind: 'pass',
+      runId: 'friday-rerun',
+    })
+  })
+
+  it('resolves an explicit `latest` through the pointer', () => {
+    expect(target({ argument: 'latest', latestRunId: 'run-a', mostRecentRunId: 'run-b' })).toEqual({
+      kind: 'pass',
+      runId: 'run-a',
+    })
+  })
+
+  it('refuses an explicit `latest` the pointer cannot answer, which is the question that was asked', () => {
+    expect(target({ argument: 'latest', mostRecentRunId: 'run-b' })).toEqual({
+      kind: 'none',
+      reason: 'latest-names-none',
+    })
+  })
+
+  it('reports the pass that ran LAST when nothing named one', () => {
+    expect(target({ latestRunId: 'run-a', mostRecentRunId: 'run-b' })).toEqual({
+      kind: 'pass',
+      runId: 'run-b',
+    })
+  })
+
+  it('honours a pinned run id as the default subject', () => {
+    expect(target({ pinned: 'run-a', mostRecentRunId: 'run-b' })).toEqual({
+      kind: 'pass',
+      runId: 'run-a',
+    })
+  })
+
+  it('falls back to the pass that ran last when a PINNED `latest` names none', () => {
+    // The `.env` line resumes the next pass; it does not ask this command about the pointer. Refusing
+    // here would answer "'latest' names none" and exit 1 about the very attempt whose journal is
+    // sitting in the directory, which is what the bare form exists to report.
+    expect(target({ pinned: 'latest', mostRecentRunId: 'run-b' })).toEqual({
+      kind: 'pass',
+      runId: 'run-b',
+    })
+  })
+
+  it('prefers the pointer over the most recent pass when `latest` is pinned and resolvable', () => {
+    expect(target({ pinned: 'latest', latestRunId: 'run-a', mostRecentRunId: 'run-b' })).toEqual({
+      kind: 'pass',
+      runId: 'run-a',
+    })
+  })
+
+  it('separates an empty state directory from a pointer that names nothing', () => {
+    expect(target()).toEqual({ kind: 'none', reason: 'no-pass' })
+  })
+})
 
 describe('summarisePass', () => {
   it('groups events into phases in the order they were first seen', () => {
