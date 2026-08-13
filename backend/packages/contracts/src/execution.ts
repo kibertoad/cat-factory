@@ -33,12 +33,8 @@ import {
 import { resolvedFrontendBindingSchema } from './frontend.js'
 import { agentKindSchema, agentStateSchema } from './primitives.js'
 import { stepOptionsSchema } from './entities.js'
-import {
-  companionVerdictSchema,
-  decisionSchema,
-  stepApprovalSchema,
-  stepReviewCommentSchema,
-} from './step-decisions.js'
+import { companionStateSchema } from './companion-state.js'
+import { decisionSchema, stepApprovalSchema, stepReviewCommentSchema } from './step-decisions.js'
 import { workspaceRoleSchema } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
@@ -677,59 +673,8 @@ export const pipelineStepSchema = v.object({
    * otherwise.
    */
   approval: v.optional(v.nullable(stepApprovalSchema)),
-  /**
-   * Live state of a companion step that reviews a preceding producer step. Set when
-   * this step's `agentKind` is a companion kind. `threshold` is the quality bar the
-   * companion's latest rating (the last `verdicts` entry) must reach; `attempts`
-   * counts only the AUTOMATIC reworks performed, and once it reaches `maxAttempts` the
-   * step parks on the iteration-cap gate (`exceeded`) for a human rather than failing.
-   * A human "request changes" on the companion's gate also re-runs the producer but does
-   * NOT consume `attempts` (only the automatic loop is budgeted). Absent for non-companion steps.
-   */
-  companion: v.optional(
-    v.nullable(
-      v.object({
-        /** The quality bar (0..1) the latest verdict's rating must reach; seeded from the pipeline. */
-        threshold: v.number(),
-        /** The automatic rework budget: once `attempts` reaches this the gate parks for a human (`exceeded`). */
-        maxAttempts: v.number(),
-        /**
-         * How many AUTOMATIC reworks the companion has driven so far (the producer is
-         * looped back once per failed verdict). Human "request changes" cycles are not
-         * counted. Defaults to 0; once it reaches `maxAttempts` the step parks on the
-         * iteration-cap gate (`exceeded`) — an "extra round" raises `maxAttempts` by one.
-         */
-        attempts: v.optional(v.number(), 0),
-        /**
-         * One standardized {@link companionVerdictSchema} per grading cycle, in order —
-         * the full sequence of correction iterations (the producer is re-run after each
-         * rejected verdict), including any human-driven ones. Empty before the first
-         * grade; the last entry is the latest.
-         */
-        verdicts: v.array(companionVerdictSchema),
-        /**
-         * Set true when the automatic rework budget (`maxAttempts`) was spent with the
-         * rating still below the bar: instead of failing the run, the step parks on its
-         * approval gate for a human to resolve via the shared iteration-cap surface
-         * (one more round / proceed anyway / stop & reset). Cleared once the human grants
-         * an extra round (the loop resumes). Absent until/unless the cap is hit.
-         */
-        exceeded: v.optional(v.boolean()),
-        /**
-         * Set true when the run's risk policy ANSWERED that cap instead of parking on it
-         * (`autonomy: 'unattended'`), taking the "proceed anyway" choice a person would have been
-         * offered. Mutually exclusive with `exceeded` in practice: one records a cap waiting on a
-         * human, the other a cap already settled without one.
-         *
-         * It exists so the two are never confused by a reader. The last `verdicts` entry says the
-         * producer was below the bar either way, and without this flag a run that advanced anyway
-         * is indistinguishable from one whose companion quietly stopped grading. Rendered on the
-         * step and read by whoever reviews the resulting pull request.
-         */
-        capSettledByPolicy: v.optional(v.boolean()),
-      }),
-    ),
-  ),
+  /** @see companionStateSchema. Absent for non-companion steps. */
+  companion: v.optional(v.nullable(companionStateSchema)),
   /**
    * The REVIEW-GATE sibling of `companion.capSettledByPolicy`: set on a `requirements-review` /
    * clarity step whose iterative review spent its whole reviewer-pass budget and whose risk

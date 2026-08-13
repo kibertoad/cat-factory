@@ -214,6 +214,42 @@ describe('InstrumentedModelProvider — the metric-recorder exit', () => {
     expect(bodies.promptText).toContain('hi')
   })
 
+  it("records NOTHING for the SDK's `other` placeholder when no vendor reason came with it", async () => {
+    // `other` is the closed union's catch-all, so it is what a model answers when its backend named
+    // no stop reason at all — every call a subscription CLI serves. That model files its own rows
+    // with a null reason; without this the middleware's row (which a deployment with a trace sink
+    // and no metric store still gets) claimed `other`, so one absence read as two different values.
+    // A real `other` carries the vendor's own string in `raw` and is kept as-is.
+    const c = collectors()
+    const provider = new InstrumentedModelProvider({
+      inner: {
+        resolve: () =>
+          new MockLanguageModelV3({
+            doGenerate: async () => ({
+              content: [{ type: 'text' as const, text: 'done' }],
+              finishReason: { unified: 'other' as const, raw: undefined },
+              usage: USAGE,
+              warnings: [],
+            }),
+          }),
+      },
+      recordCall: c.recordCall,
+      workspaceBodiesEnabled: allowBodies,
+    })
+
+    await generateText({
+      model: provider.resolve(ref),
+      prompt: 'hi',
+      providerOptions: catFactoryObservability({
+        agentKind: 'doc-researcher',
+        workspaceId: 'ws_1',
+      }),
+    })
+    await flushEmit()
+
+    expect(c.recorded[0]).toMatchObject({ ok: true, finishReason: null })
+  })
+
   it('counts the tools the request offered', async () => {
     const c = collectors()
     const provider = new InstrumentedModelProvider({

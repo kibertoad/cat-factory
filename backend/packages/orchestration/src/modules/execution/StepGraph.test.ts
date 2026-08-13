@@ -63,6 +63,42 @@ describe('StepGraph.loopCompanionProducer', () => {
   })
 })
 
+describe('StepGraph.rerunProducerThrough', () => {
+  it('clears the flags recording how the loop ENDED, since it has just been re-armed', () => {
+    // Every re-arm funnels through here: the automatic below-threshold round, the human-granted
+    // extra round, and `requestChanges` on a companion's gate. Each of these flags is a claim about
+    // a loop that stopped, and all three outlive their round unless cleared — leaving a run that
+    // went on to converge saying that a person is still being waited on, that the producer stopped
+    // responding, and that policy waved it past the bar.
+    const graph = new StepGraph(clock)
+    const inst = instance([
+      step({ agentKind: 'coder', state: 'done', output: 'prev' }),
+      step({
+        agentKind: 'reviewer',
+        state: 'waiting_decision',
+        companion: {
+          threshold: 0.8,
+          maxAttempts: 3,
+          attempts: 1,
+          verdicts: [{ rating: 0.4, threshold: 0.8, passed: false, feedback: 'no' }],
+          exceeded: true,
+          stalled: true,
+          capSettledByPolicy: true,
+        } as never,
+      }),
+    ])
+    graph.rerunProducerThrough(inst, 0, 1, rework)
+    const companion = inst.steps[1]!.companion!
+    expect(companion.exceeded).toBeUndefined()
+    expect(companion.stalled).toBeUndefined()
+    expect(companion.capSettledByPolicy).toBeUndefined()
+    // The graded history and the budget are NOT part of "how it ended" and must survive: the next
+    // round shows the verdicts back to the companion as its memory of what it already asked for.
+    expect(companion.verdicts).toHaveLength(1)
+    expect([companion.attempts, companion.maxAttempts]).toEqual([1, 3])
+  })
+})
+
 describe('StepGraph.resetStepForRerun', () => {
   it('clears the liveness heartbeat so a re-run does not render a stale "active Ns ago"', () => {
     const graph = new StepGraph(clock)
