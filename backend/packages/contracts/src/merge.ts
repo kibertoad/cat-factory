@@ -6,6 +6,7 @@ import {
   type ChangeClass,
   type RuleableChangeClass,
 } from './mergeTrackRecord.js'
+import { DEFAULT_COMPANION_MAX_ATTEMPTS } from './companion.js'
 import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
 import { DEFAULT_MIN_AUTO_ANSWER_CONFIDENCE } from './requirements.js'
 import { WORKSPACE_ROLES, workspaceRoleSchema, type WorkspaceRole } from './workspace-members.js'
@@ -429,6 +430,29 @@ export const riskPolicySchema = v.object({
    */
   maxTesterQualityIterations: v.pipe(v.number(), v.integer(), v.minValue(1)),
   /**
+   * How many automatic REWORK rounds a companion (`reviewer`, `architect-companion`,
+   * `spec-companion`, a deployment's own) may drive before it stops grading and parks for a person
+   * to pick (one more round / proceed anyway / stop and reset). One round = the producing step
+   * re-runs with the verdict's findings folded in and the companion re-grades, so this is the
+   * number of RE-RUNS, not of gradings: the first grading is free.
+   *
+   * `0` means the loop never runs on its own: the first verdict BELOW the bar goes straight to the
+   * park (or, under `autonomy: 'unattended'`, straight to `proceed`), and one at or above it
+   * advances, comments and all. It is a real posture rather than a disabled feature, and the reason
+   * this budget has a floor of 0 where `maxRequirementIterations` has 1: an iterative review with no
+   * passes has graded nothing, while a companion with no rework rounds has still delivered its
+   * verdict.
+   *
+   * The rule that a first batch of comments always buys a round, whatever it scored, is subordinate
+   * to this number rather than beside it. Otherwise `0` parked every companion step (a review with
+   * nothing at all to say is the rare one) instead of the ones that missed their bar.
+   *
+   * A HUMAN-granted extra round is charged to nobody: `resolveCompanionExceeded` raises the step's
+   * own budget by one, so this caps what the platform spends unasked and never what a person may
+   * ask for.
+   */
+  companionMaxReworks: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /**
    * How long (minutes) the post-release-health gate watches the deployed release's
    * Datadog monitors/SLOs before declaring it healthy and advancing.
    */
@@ -621,6 +645,13 @@ const releaseWindowSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.max
 const releaseAttemptsSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
 const graceMinutesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1440))
 const bouncesSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
+/**
+ * The companion rework budget. Same bounds as {@link bouncesSchema} today and deliberately its own
+ * schema, like every sibling budget above: a judge bounce buys another verdict on work that already
+ * exists, a companion round buys a container dispatch that rewrites it, so an operator who later
+ * asks for more of one is not asking for more of the other.
+ */
+const companionReworksSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10))
 
 /** Create a new merge threshold preset in a workspace. */
 export const createRiskPolicySchema = v.object({
@@ -632,6 +663,8 @@ export const createRiskPolicySchema = v.object({
   maxRequirementIterations: iterationsSchema,
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
   maxTesterQualityIterations: v.optional(iterationsSchema, 3),
+  /** Automatic companion rework rounds; absent ⇒ {@link DEFAULT_COMPANION_MAX_ATTEMPTS}. */
+  companionMaxReworks: v.optional(companionReworksSchema, DEFAULT_COMPANION_MAX_ATTEMPTS),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
@@ -673,6 +706,7 @@ export const updateRiskPolicySchema = v.object({
   maxRequirementIterations: v.optional(iterationsSchema),
   maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
   maxTesterQualityIterations: v.optional(iterationsSchema),
+  companionMaxReworks: v.optional(companionReworksSchema),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),

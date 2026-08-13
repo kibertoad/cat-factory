@@ -133,6 +133,7 @@ function rowToRiskPolicy(row: RiskPolicyRow): RiskPolicy {
     maxRequirementConcernAllowed:
       row.max_requirement_concern_allowed as RiskPolicy['maxRequirementConcernAllowed'],
     maxTesterQualityIterations: row.max_tester_quality_iterations,
+    companionMaxReworks: row.companion_max_reworks,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
@@ -227,6 +228,7 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
       max_requirement_iterations: preset.maxRequirementIterations,
       max_requirement_concern_allowed: preset.maxRequirementConcernAllowed,
       max_tester_quality_iterations: preset.maxTesterQualityIterations,
+      companion_max_reworks: preset.companionMaxReworks,
       release_watch_window_minutes: preset.releaseWatchWindowMinutes,
       release_max_attempts: preset.releaseMaxAttempts,
       human_review_grace_minutes: preset.humanReviewGraceMinutes,
@@ -287,6 +289,7 @@ export class DrizzleRiskPolicyRepository implements RiskPolicyRepository {
             max_requirement_iterations: values.max_requirement_iterations,
             max_requirement_concern_allowed: values.max_requirement_concern_allowed,
             max_tester_quality_iterations: values.max_tester_quality_iterations,
+            companion_max_reworks: values.companion_max_reworks,
             release_watch_window_minutes: values.release_watch_window_minutes,
             release_max_attempts: values.release_max_attempts,
             human_review_grace_minutes: values.human_review_grace_minutes,

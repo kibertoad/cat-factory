@@ -25,6 +25,7 @@ const preset = (over: Partial<RiskPolicyLibraryEntry> = {}): RiskPolicyLibraryEn
     maxRequirementIterations: 6,
     maxRequirementConcernAllowed: 'none',
     maxTesterQualityIterations: 3,
+    companionMaxReworks: 3,
     releaseWatchWindowMinutes: 30,
     releaseMaxAttempts: 1,
     humanReviewGraceMinutes: 10,
