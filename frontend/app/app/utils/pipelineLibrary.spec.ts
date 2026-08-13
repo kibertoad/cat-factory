@@ -82,6 +82,22 @@ describe('narrowPipelineLibrary', () => {
     expect(shown.archivedInScope).toBe(1)
   })
 
+  it('lists a build pipeline in a BUGFIX library, but not the reverse', () => {
+    // The one relation `classifierSuits` admits, read here through the same helper the palette
+    // reads: a bugfix draft is doing build work, so the whole ladder belongs in front of it, and
+    // exact matching would open that library holding the two bugfix presets alone, the same
+    // near-empty catalog the palette rule exists to prevent. A build draft is NOT doing defect
+    // work, so the bugfix rows stay behind the dial, counted and one click away.
+    const lib = [...LIBRARY, row('bugfix-a', 'bugfix')]
+    expect(narrowPipelineLibrary(lib, { purpose: 'bugfix' }).offered.map((p) => p.id)).toEqual([
+      'build-a',
+      'bugfix-a',
+    ])
+    const atBuild = narrowPipelineLibrary(lib, { purpose: 'build' })
+    expect(atBuild.offered.map((p) => p.id)).toEqual(['build-a'])
+    expect(atBuild.hiddenByPurpose).toBe(4)
+  })
+
   it('narrows by neither purpose this build cannot name', () => {
     // Same disposition as the palette's: an unrecognised value is one this build has nothing to
     // narrow BY and nothing to narrow it AGAINST, never a reason to guess a current member. A

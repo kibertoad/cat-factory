@@ -103,6 +103,36 @@ describe('resolveScopeForRun', () => {
     })
   })
 
+  it('drops a FRONTEND peer, the invariant the SPA derives its own scope from', async () => {
+    // The board fixture above cannot express this today: `serviceConnectionsError` refuses a
+    // connection whose target is not a service frame, so a frontend peer is unreachable through the
+    // product. It is built by hand precisely BECAUSE the guard is about the day that stops being
+    // true: `validInvolvedServiceFrames`' own `type === 'service'` filter is the only thing left
+    // dropping it, and `connectionNeighborIds` checks no type at all.
+    //
+    // The SPA's visual gate (`frontend/app/app/utils/pipeline.ts`, `pipelineAllowedForFrame`)
+    // computes its scope from the enclosing FRAME alone, with no involved-service term, and that
+    // omission is sound only while a peer can re-confirm `backend` and never add `frontend`. Widen
+    // the filter and the two classifiers answer differently: the engine sees `frontend: true`, so a
+    // `tester-ui` scoped to a frontend service is admitted and the frame gate 409s
+    // `visual_pipeline_no_frontend`, while the picker still offers the rung. That is the
+    // offer-then-refuse shape the surface gate exists to prevent, so it has to fail HERE first.
+    const blocks: Block[] = [
+      block({ id: 'frame_ui', type: 'frontend', level: 'frame' }),
+      block({
+        id: 'frame_api',
+        type: 'service',
+        level: 'frame',
+        serviceConnections: [{ serviceBlockId: 'frame_ui' }],
+      }),
+    ]
+    const task = block({ id: 'task_api', parentId: 'frame_api', involvedServiceIds: ['frame_ui'] })
+    expect(await resolveScopeForRun(async () => [...blocks, task], WS, task)).toEqual({
+      frontend: false,
+      backend: true,
+    })
+  })
+
   it('ignores an involved service that is no longer connected', async () => {
     // The same read-time stale filter the agent context uses: an id that is no longer a neighbour
     // is inert, so a removed connection cannot silently switch a verification pass back on.

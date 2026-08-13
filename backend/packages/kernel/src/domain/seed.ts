@@ -594,9 +594,14 @@ function buildOtherDeliveryPipelines(): Pipeline[] {
     definePipeline({
       id: 'pl_bugfix',
       name: 'Triage & fix bug',
-      purpose: 'build',
-      // Bumped for the reseed offer that adopts the `repro-test` step into existing workspaces.
-      version: 4,
+      // Not `build`: its front half has no input on a task that reports no defect, so the
+      // classifier keeps it out of the `feature` picker (`pipelineAllowedForTaskType`) while a
+      // `bug` task still gets the whole build ladder beside it.
+      purpose: 'bugfix',
+      // Bumped for the reseed offer that adopts the `repro-test` step into existing workspaces,
+      // then again for the `bugfix` purpose classifier (a board that has not reseeded goes on
+      // offering it to feature tasks, since every gate reads the stored row).
+      version: 5,
       description:
         'Investigate a bug report against the codebase, triage it for fixability with you, write a failing reproduction test, then fix, review, and ship the PR.',
       steps: [
@@ -697,15 +702,18 @@ function buildBuildVariantPipelines(): Pipeline[] {
       // investigator auto-advances and the conflicts/ci/merger tail self-drives.
       id: 'pl_bug_triage',
       name: 'Bug triage (recurring)',
-      purpose: 'build',
+      // The recurring twin of `pl_bugfix`, so it carries the same classifier. It never reaches a
+      // task picker (`availability: 'recurring'`), but the builder's saved-pipeline library
+      // narrows by purpose too, and the two belong side by side there.
+      purpose: 'bugfix',
       description:
         'A recurring run that pulls one open issue from your tracker board, investigates and clarifies it, then fixes, tests, and ships the PR, reclaiming the environment it stood up.',
       availability: 'recurring',
       // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Only
       // `clarity-review` is a human gate; version bumped for the reseed offer, then again for the
       // pipeline-description reseed, then again for the purpose classifier reseed, then again for
-      // the terminal `disposer`.
-      version: 5,
+      // the terminal `disposer`, then again for the `bugfix` purpose.
+      version: 6,
       steps: [
         'bug-intake',
         'bug-investigator',

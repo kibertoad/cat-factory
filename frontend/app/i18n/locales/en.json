@@ -4998,6 +4998,7 @@
       },
       "purposeOption": {
         "build": "Build",
+        "bugfix": "Bug fix",
         "document": "Documentation",
         "review": "Review",
         "research": "Research",
@@ -5069,7 +5070,7 @@
       "skillNoneAvailable": "No skills available. Link a skill source in account settings.",
       "skillMissing": "This skill is no longer in the catalog; pick another.",
       "skillNeedsPick": "A Skill step needs a skill selected before you can save.",
-      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build.",
+      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them, or switch to a purpose that ships code (Build or Bug fix).",
       "promptEditTooltip": "Edit this agent's system prompt",
       "promptEditedTooltip": "This agent's system prompt is edited for this workspace",
       "consensusGroups": "Consensus groups",
