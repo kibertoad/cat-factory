@@ -4739,7 +4739,9 @@
     "tracker": "トラッカー",
     "board": "ボード",
     "pickBoard": "ボードを選択",
-    "boardPlaceholder": "プロジェクトキー、チーム ID または owner/repo",
+    "boardPlaceholder": "プロジェクトキーまたはチーム ID",
+    "boardFromService": "このサービスにリンクされたリポジトリ",
+    "boardNeedsRepo": "このサービスにはリポジトリがリンクされていないため、探索できる課題がありません。サービスパネルからリンクしてください。",
     "boardsFailed": "ボードを読み込めませんでした: {reason}",
     "issueType": "課題タイプ",
     "issueTypeHelp": "既定は bug です。課題タイプを持たないトラッカーでは無視されます。",
@@ -4748,6 +4750,8 @@
     "labelsHelp": "カンマ区切り。すべて付いている必要があります。",
     "adoptInto": "選んだバグの追加先",
     "adoptingInto": "選んだバグは {container} に追加されます",
+    "huntIn": "探索するサービス",
+    "huntingIn": "{container} にリンクされたリポジトリを探索します。選んだバグもそこに追加されます。",
     "run": "ハント",
     "running": "ボードを読み取り、見つかったものを評価しています…",
     "huntFailed": "ハントに失敗しました",
@@ -4760,6 +4764,7 @@
     "noCandidates": "このボードには条件に合う未割り当ての未解決バグがありません。",
     "ratings": "影響度 {impact}/5、複雑さ {complexity}/5、確信度 {confidence}",
     "viaModel": "{model} による評価です。",
+    "scannedBoard": "{board} を走査しました。",
     "truncated": "一致したバグのうち最初の {count} 件のみを走査しました。このボードにはさらにあります。",
     "comments": "コメント {count} 件 | コメント {count} 件",
     "confidence": {
@@ -4773,6 +4778,10 @@
       "failed": "評価を完了できなかったため、未評価のまま表示しています。",
       "over_budget": "このワークスペースは利用予算を超えているため、評価は行われませんでした。",
       "empty": "評価する対象がありません。"
+    },
+    "refusal": {
+      "boardFromService": "このトラッカーは選択したサービスにリンクされたリポジトリを走査するため、独自のボードはありません。",
+      "missingBoard": "調査するボードを選択してください。"
     }
   },
   "pipeline": {

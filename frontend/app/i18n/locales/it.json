@@ -4296,7 +4296,9 @@
     "tracker": "Tracker",
     "board": "Bacheca",
     "pickBoard": "Scegli una bacheca",
-    "boardPlaceholder": "Chiave progetto, id team oppure owner/repo",
+    "boardPlaceholder": "Chiave progetto o id team",
+    "boardFromService": "Il repository collegato a questo servizio",
+    "boardNeedsRepo": "A questo servizio non è collegato alcun repository, quindi non ci sono issue da cercare. Collegane uno dal pannello del servizio.",
     "boardsFailed": "Impossibile caricare le board: {reason}",
     "issueType": "Tipo di ticket",
     "issueTypeHelp": "Per impostazione predefinita bug. Ignorato dai tracker senza tipi di ticket.",
@@ -4305,6 +4307,8 @@
     "labelsHelp": "Separate da virgole. Devono essere tutte presenti.",
     "adoptInto": "Aggiungi il bug scelto a",
     "adoptingInto": "Il bug scelto viene aggiunto a {container}",
+    "huntIn": "Servizio da esaminare",
+    "huntingIn": "Viene esaminato il repository collegato a {container}; il bug scelto viene aggiunto lì.",
     "run": "Cerca",
     "running": "Lettura della bacheca e valutazione di quanto trovato…",
     "huntFailed": "La caccia non è riuscita",
@@ -4317,6 +4321,7 @@
     "noCandidates": "Nessun bug aperto e non assegnato corrisponde su questa bacheca.",
     "ratings": "Impatto {impact}/5, complessità {complexity}/5, confidenza {confidence}",
     "viaModel": "Valutato da {model}.",
+    "scannedBoard": "Esaminato {board}.",
     "truncated": "Sono stati esaminati solo i primi {count} bug corrispondenti; questa bacheca ne contiene altri.",
     "comments": "{count} commento | {count} commenti",
     "confidence": {
@@ -4330,6 +4335,10 @@
       "failed": "La valutazione non è stata completata, quindi non sono valutati.",
       "over_budget": "Questo spazio di lavoro ha superato il budget di spesa, quindi non sono stati valutati.",
       "empty": "Nulla da valutare."
+    },
+    "refusal": {
+      "boardFromService": "Questo tracker analizza il repository a cui è collegato il servizio scelto, quindi non ha una board propria.",
+      "missingBoard": "Scegli la board su cui cercare."
     }
   },
   "pipeline": {

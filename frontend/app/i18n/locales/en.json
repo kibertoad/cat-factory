@@ -4897,7 +4897,9 @@
     "tracker": "Tracker",
     "board": "Board",
     "pickBoard": "Pick a board",
-    "boardPlaceholder": "Project key, team id or owner/repo",
+    "boardPlaceholder": "Project key or team id",
+    "boardFromService": "The repository this service is linked to",
+    "boardNeedsRepo": "This service has no repository linked, so it has no issues to hunt. Link one from the service panel.",
     "boardsFailed": "Boards could not be loaded: {reason}",
     "issueType": "Issue type",
     "issueTypeHelp": "Defaults to bug. Ignored by trackers with no issue types.",
@@ -4906,6 +4908,8 @@
     "labelsHelp": "Comma separated. All of them must be present.",
     "adoptInto": "Add the picked bug to",
     "adoptingInto": "The picked bug lands in {container}",
+    "huntIn": "Service to hunt",
+    "huntingIn": "Hunting the repository linked to {container}; the picked bug lands there too.",
     "run": "Hunt",
     "running": "Reading the board and rating what it finds…",
     "huntFailed": "The hunt failed",
@@ -4918,6 +4922,7 @@
     "noCandidates": "No open, unassigned bugs matched on this board.",
     "ratings": "Impact {impact}/5, complexity {complexity}/5, {confidence} confidence",
     "viaModel": "Rated by {model}.",
+    "scannedBoard": "Scanned {board}.",
     "truncated": "Only the first {count} matching bugs were scanned; this board holds more.",
     "comments": "{count} comment | {count} comments",
     "@comments": {
@@ -4934,6 +4939,10 @@
       "failed": "The rating could not be completed, so these are unrated.",
       "over_budget": "This workspace is over its spend budget, so these were not rated.",
       "empty": "Nothing to rate."
+    },
+    "refusal": {
+      "boardFromService": "This tracker scans the repository the chosen service is linked to, so it has no board of its own.",
+      "missingBoard": "Pick the board to hunt on."
     }
   },
   "pipeline": {

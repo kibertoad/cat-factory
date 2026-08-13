@@ -12,6 +12,7 @@ import {
   makeReadyReviewWithOpenItem,
   makeToolServerDispatchProbe,
   mintSession,
+  seedFrameRepoLink,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
 import { buildTestContainer, makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
@@ -19,6 +20,8 @@ import { FakeTaskSourceProvider } from '../fakes/FakeTaskSourceProvider'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
+import { D1GitHubInstallationRepository } from '../../src/infrastructure/repositories/D1GitHubInstallationRepository'
+import { D1RepoProjectionRepository } from '../../src/infrastructure/repositories/D1RepoProjectionRepository'
 import { D1PipelineRepository } from '../../src/infrastructure/repositories/D1PipelineRepository'
 import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
 import { D1WorkspaceRepository } from '../../src/infrastructure/repositories/D1WorkspaceRepository'
@@ -208,6 +211,17 @@ const harness: ConformanceHarness = {
         ),
       seedService: (service) => new D1ServiceRepository({ db: env.DB }).insert(service),
       getService: (id) => new D1ServiceRepository({ db: env.DB }).get(id),
+      // The writes live in the shared `seedFrameRepoLink`; this names only which of THIS facade's
+      // stores they land in.
+      linkFrameRepo: (input) =>
+        seedFrameRepoLink(
+          {
+            installations: new D1GitHubInstallationRepository({ db: env.DB }),
+            projection: new D1RepoProjectionRepository({ db: env.DB }),
+            services: new D1ServiceRepository({ db: env.DB }),
+          },
+          input,
+        ),
       localModelEndpoints: () => {
         const svc = buildTestContainer({
           agentExecutor: new FakeAgentExecutor(),

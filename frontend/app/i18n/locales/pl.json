@@ -4739,7 +4739,9 @@
     "tracker": "System zgłoszeń",
     "board": "Tablica",
     "pickBoard": "Wybierz tablicę",
-    "boardPlaceholder": "Klucz projektu, identyfikator zespołu lub owner/repo",
+    "boardPlaceholder": "Klucz projektu lub identyfikator zespołu",
+    "boardFromService": "Repozytorium powiązane z tą usługą",
+    "boardNeedsRepo": "Ta usługa nie ma powiązanego repozytorium, więc nie ma w niej zgłoszeń do przeszukania. Powiąż je w panelu usługi.",
     "boardsFailed": "Nie udało się wczytać tablic: {reason}",
     "issueType": "Typ zgłoszenia",
     "issueTypeHelp": "Domyślnie bug. Ignorowane przez systemy bez typów zgłoszeń.",
@@ -4748,6 +4750,8 @@
     "labelsHelp": "Oddzielone przecinkami. Wszystkie muszą występować.",
     "adoptInto": "Dodaj wybrany błąd do",
     "adoptingInto": "Wybrany błąd trafi do {container}",
+    "huntIn": "Usługa do przeszukania",
+    "huntingIn": "Przeszukiwane jest repozytorium powiązane z {container}; tam też trafi wybrany błąd.",
     "run": "Poluj",
     "running": "Odczytywanie tablicy i ocenianie znalezionych zgłoszeń…",
     "huntFailed": "Polowanie nie powiodło się",
@@ -4760,6 +4764,7 @@
     "noCandidates": "Na tej tablicy nie ma pasujących otwartych, nieprzypisanych błędów.",
     "ratings": "Wpływ {impact}/5, złożoność {complexity}/5, pewność {confidence}",
     "viaModel": "Ocenione przez {model}.",
+    "scannedBoard": "Przeszukano {board}.",
     "truncated": "Przeszukano tylko pierwsze pasujące zgłoszenia w liczbie {count}; ta tablica zawiera ich więcej.",
     "comments": "{count} komentarz | {count} komentarze | {count} komentarzy",
     "confidence": {
@@ -4773,6 +4778,10 @@
       "failed": "Nie udało się dokończyć oceny, więc te zgłoszenia są nieocenione.",
       "over_budget": "Ta przestrzeń robocza przekroczyła budżet wydatków, więc nie zostały ocenione.",
       "empty": "Nie ma czego oceniać."
+    },
+    "refusal": {
+      "boardFromService": "Ten tracker przeszukuje repozytorium powiązane z wybraną usługą, więc nie ma własnej tablicy.",
+      "missingBoard": "Wybierz tablicę, na której chcesz szukać."
     }
   },
   "pipeline": {

@@ -32,7 +32,10 @@ prerequisites are configured.
   `tasks/` also holds the two issue
   PULLS, structural twins differing only in who decides: `BugIntakeService.ts` (the recurring
   step claims the oldest match unattended) and `BugHuntService.ts` (a human picks from a rated
-  board scan), both over the `listBugCandidates` / `listBoards` provider capabilities.
+  board scan), both over the `listBugCandidates` provider capability. `listBoards` backs the
+  hunt's board picker and belongs ONLY to a repo-LESS source: a repo-backed one hunts the
+  repository its service frame is linked to, and offering its reachable repositories as boards
+  would aim a hunt at one no service on that board points to.
 - `environments/`: ephemeral-environment provisioning (the heaviest module) + `kubernetes/`,
   `runners/` (the self-hosted runner-pool transports).
 - `compose/`: the Docker Compose environment backend + the STACK RECIPE machinery. `compose-sources.ts`

@@ -34,6 +34,8 @@ const jiraDescriptor: TaskSourceState = {
   enabled: true,
   supportsIntake: true,
   ignoredIntakePredicates: [],
+  // Jira issues belong to a project, not a repository, so a hunt on it picks a board.
+  repoBacked: false,
   // Jira carries its own credentials, so it rides no VCS connection.
   ridesVcsProvider: null,
 }

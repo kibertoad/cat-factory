@@ -527,31 +527,3 @@ describe('GitLabIssuesProvider.listBugCandidates', () => {
     expect(candidates.map((c) => c.externalId)).toEqual(['group/sub/web#6'])
   })
 })
-
-describe('GitLabIssuesProvider.listBoards', () => {
-  it('offers each reachable project under its full path, so two same-named projects are distinct', async () => {
-    const { client } = fakeClient({
-      projects: [
-        { owner: 'group/sub', name: 'web' },
-        { owner: 'other', name: 'web' },
-      ],
-    })
-    const provider = new GitLabIssuesProvider({
-      gitlabClient: client,
-      installations: connectionRepo('gitlab'),
-    })
-
-    expect(await provider.listBoards({}, 'ws1')).toEqual([
-      { id: 'group/sub/web', name: 'web', key: 'group/sub/web' },
-      { id: 'other/web', name: 'web', key: 'other/web' },
-    ])
-  })
-
-  it('lists nothing when the workspace has no GitLab connection', async () => {
-    const provider = new GitLabIssuesProvider({
-      gitlabClient: fakeClient({}).client,
-      installations: connectionRepo('github'),
-    })
-    expect(await provider.listBoards({}, 'ws1')).toEqual([])
-  })
-})

@@ -4296,7 +4296,9 @@
     "tracker": "Tracker",
     "board": "Board",
     "pickBoard": "Board auswählen",
-    "boardPlaceholder": "Projektschlüssel, Team-ID oder owner/repo",
+    "boardPlaceholder": "Projektschlüssel oder Team-ID",
+    "boardFromService": "Das mit diesem Service verknüpfte Repository",
+    "boardNeedsRepo": "Mit diesem Service ist kein Repository verknüpft, es gibt also keine Tickets zu durchsuchen. Verknüpfe eines im Service-Panel.",
     "boardsFailed": "Boards konnten nicht geladen werden: {reason}",
     "issueType": "Vorgangstyp",
     "issueTypeHelp": "Standard ist bug. Wird von Trackern ohne Vorgangstypen ignoriert.",
@@ -4305,6 +4307,8 @@
     "labelsHelp": "Durch Komma getrennt. Alle müssen vorhanden sein.",
     "adoptInto": "Ausgewählten Fehler hinzufügen zu",
     "adoptingInto": "Der ausgewählte Fehler landet in {container}",
+    "huntIn": "Zu durchsuchender Service",
+    "huntingIn": "Durchsucht wird das mit {container} verknüpfte Repository; dort landet auch der ausgewählte Fehler.",
     "run": "Jagen",
     "running": "Board wird gelesen und die Funde werden bewertet…",
     "huntFailed": "Die Jagd ist fehlgeschlagen",
@@ -4317,6 +4321,7 @@
     "noCandidates": "Auf diesem Board gab es keine offenen, nicht zugewiesenen Fehler.",
     "ratings": "Auswirkung {impact}/5, Aufwand {complexity}/5, Konfidenz {confidence}",
     "viaModel": "Bewertet von {model}.",
+    "scannedBoard": "{board} durchsucht.",
     "truncated": "Es wurden nur die ersten {count} passenden Fehler geprüft; dieses Board enthält mehr.",
     "comments": "{count} Kommentar | {count} Kommentare",
     "confidence": {
@@ -4330,6 +4335,10 @@
       "failed": "Die Bewertung konnte nicht abgeschlossen werden, daher sind diese unbewertet.",
       "over_budget": "Dieser Arbeitsbereich hat sein Ausgabenbudget überschritten, daher wurden diese nicht bewertet.",
       "empty": "Nichts zu bewerten."
+    },
+    "refusal": {
+      "boardFromService": "Dieser Tracker durchsucht das Repository, mit dem der gewählte Service verknüpft ist, und hat daher kein eigenes Board.",
+      "missingBoard": "Wähle das Board aus, auf dem gesucht werden soll."
     }
   },
   "pipeline": {

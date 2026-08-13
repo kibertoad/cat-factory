@@ -390,6 +390,34 @@ export interface ConformanceApp {
   /** Read a service back by id (null once reclaimed), for the frame-deletion reclaim assertion. */
   getService(id: string): Promise<Service | null>
   /**
+   * Link a service FRAME to a repository, so `resolveRepoTarget` resolves for that frame and
+   * every block under it.
+   *
+   * ONE method for what is three stores expressing one fact (the workspace's VCS installation,
+   * the repo projection row, the frame's own service→repo link), because a suite that had to
+   * write them separately would be encoding this facade's storage shape rather than asserting
+   * behaviour. Each facade implements it over its OWN repositories, which is what makes an
+   * assertion built on it a real cross-runtime one: the ancestry walk reads three different
+   * stores per runtime and a mapping that drifts in any of them fails here.
+   *
+   * Patches the service the frame ALREADY has (every top-level frame gets one at creation)
+   * rather than inserting a second: `getByFrameBlock` is an unordered single-row read, so two
+   * rows for one frame would resolve nondeterministically.
+   *
+   * **Pass a frame the test CREATED, never a seeded one.** `getByFrameBlock` matches on the frame
+   * id alone (block ids are unique per workspace, not per database) and every seeded board in a
+   * facade's shared test database reuses the same fixed ids, so `blk_auth` names one service row
+   * per workspace created so far and this would patch an arbitrary one of them.
+   */
+  linkFrameRepo(input: {
+    workspaceId: string
+    frameBlockId: string
+    installationId: number
+    githubId: number
+    owner: string
+    name: string
+  }): Promise<void>
+  /**
    * The facade's user-identity + onboarding services over its real store, so the suite
    * can assert identity/invitation behaviour parity (the unauthenticated HTTP `call`
    * path can't reach the authenticated identity layer).
