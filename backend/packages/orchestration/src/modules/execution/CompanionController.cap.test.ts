@@ -3,9 +3,10 @@ import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel
 import { defaultAgentKindRegistry, type AgentKindRegistry } from '@cat-factory/agents'
 import { CompanionController } from './CompanionController.js'
 
-// The REWORK CAP: what a companion does when its automatic budget is spent and the producer is
-// still below the bar. There are exactly two answers and the run's risk policy picks between them,
-// so both are asserted here against the same setup, one flag apart.
+// The REWORK CAP: what a companion does when its automatic budget is spent and the verdict still
+// did not pass. There are exactly two answers and the run's risk policy picks between them, so both
+// are asserted here against the same setup, one flag apart — except where an open MUST-FIX finding
+// is what stopped the loop, which the last group covers: that park is not the policy's to answer.
 //
 // It is worth a test of its own because the failure it guards is silent in both directions. An
 // unattended policy that still parks leaves an API-started run waiting on a person who is not
@@ -139,15 +140,64 @@ function harness(
 const BELOW = { output: '', custom: { rating: 0.4, summary: 'the design is still vague' } }
 
 /**
- * A verdict ABOVE the threshold that still raised a point, which is what a real review almost
- * always looks like: a grade the producer cleared plus something to fix next time.
+ * A verdict ABOVE the threshold that still raised a real point, which is what a review almost always
+ * looks like: a grade the producer cleared plus a gap worth one more pass.
  */
 const ABOVE_WITH_COMMENTS = {
   output: '',
   custom: {
     rating: 0.95,
     summary: 'the design holds up; one gap worth closing',
-    comments: [{ anchorId: 'architect-companion-1', body: 'name the failure mode here' }],
+    comments: [
+      { anchorId: 'architect-companion-1', severity: 'major', body: 'name the failure mode here' },
+    ],
+  },
+}
+
+/**
+ * The same cleared grade with NOTHING but a nit. The reviewer is told a `minor` is never worth
+ * holding anything for, so this is the batch that must not cost a round.
+ */
+const ABOVE_WITH_NIT_ONLY = {
+  output: '',
+  custom: {
+    rating: 0.95,
+    summary: 'the design holds up; one wording nit',
+    comments: [
+      { anchorId: 'architect-companion-1', severity: 'minor', body: 'rename this section' },
+    ],
+  },
+}
+
+/**
+ * The same cleared grade, but one of its points is a MUST-FIX. A real reviewer produces this
+ * constantly: the work is broadly sound and one thing in it must not ship.
+ */
+const ABOVE_WITH_BLOCKER = {
+  output: '',
+  custom: {
+    rating: 0.95,
+    summary: 'the design holds up, but the failure mode is unhandled',
+    comments: [
+      { anchorId: 'architect-companion-1', severity: 'blocker', body: 'unhandled partial write' },
+    ],
+  },
+}
+
+/**
+ * A must-fix finding raised at a rating that did NOT move, which is where the two stopping rules
+ * meet: the loop has given up AND the reviewer says the work must not go on as it stands. The `0.4`
+ * matches the previous verdict in the stall setup, because a rating that moved is a grader changing
+ * its mind and the standstill rule leaves that loop alone.
+ */
+const UNMOVED_WITH_BLOCKER = {
+  output: '',
+  custom: {
+    rating: 0.4,
+    summary: 'the design is still vague, and the failure mode is still unhandled',
+    comments: [
+      { anchorId: 'architect-companion-1', severity: 'blocker', body: 'unhandled partial write' },
+    ],
   },
 }
 
@@ -300,6 +350,69 @@ describe('a companion loop that has stopped making progress', () => {
     expect(inst.steps[1]!.companion?.stalled).toBe(true)
     expect(inst.steps[1]!.companion?.capSettledByPolicy).toBe(true)
     expect(inst.steps[1]!.companion?.exceeded).toBeUndefined()
+  })
+
+  it('is NOT settled by policy while a must-fix finding is open', async () => {
+    // The one case the two stopping rules answer differently, and the merge of them is where it
+    // arises: giving up on the remaining rounds is the automation reporting that it gave up (which
+    // an unattended policy may answer), while a `blocker` is a review saying this must not ship
+    // (which it may not). The early stop takes the cap's exit, so the REASON has to be re-decided
+    // for the abandoned budget rather than assumed to be a spent one.
+    const { controller, park, settle } = harness('unattended')
+    const inst = stalledInstance()
+
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      { ...UNMOVED_WITH_BLOCKER },
+    )
+
+    expect(park).toHaveBeenCalledOnce()
+    expect(settle).not.toHaveBeenCalled()
+    expect(result.kind).toBe('awaiting_decision')
+    const companion = inst.steps[1]!.companion
+    // Stalled AND waiting: the loop stopped early on its own evidence, and the park it took is
+    // still a person's to answer. A `capSettledByPolicy` stamp here would be the false claim.
+    expect(companion?.stalled).toBe(true)
+    expect(companion?.exceeded).toBe(true)
+    expect(companion?.capSettledByPolicy).toBeUndefined()
+  })
+
+  it('parks rather than advancing when it stalled at a rating that cleared the bar', async () => {
+    // The exit picks WHICH park and can never pick "advance". Asked instead to RE-DECIDE with the
+    // budget emptied, the rule answered `pass` for exactly this state: the first-batch loop is the
+    // one reason to rework that survives a cleared rating, and suppressing it for want of budget
+    // leaves the rating alone to decide. The caller only ever branches on `park`, so that `pass`
+    // came back as the rework it had just declared unproductive — a stalled loop looping again with
+    // one warn line saying it had stopped.
+    //
+    // Pinned as this unit's invariant rather than a sequence the engine produces today: a reviewer
+    // loop charges a round, so `attempts` is past 0 by the time a second verdict exists.
+    const { controller, park, loop } = harness('attended')
+    const inst = stalledInstance()
+    const companion = inst.steps[1]!.companion!
+    companion.attempts = 0
+    companion.verdicts = [{ rating: 0.95, threshold: 0.8, passed: false, feedback: 'one gap' }]
+
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      {
+        ...ABOVE_WITH_COMMENTS,
+      },
+    )
+
+    expect(loop).not.toHaveBeenCalled()
+    expect(park).toHaveBeenCalledOnce()
+    expect(result.kind).toBe('awaiting_decision')
+    expect(companion.stalled).toBe(true)
+    expect(companion.exceeded).toBe(true)
   })
 
   it('keeps looping when the producer changed the work, even at an unmoved rating', async () => {
@@ -492,6 +605,24 @@ describe('a first batch of comments', () => {
     expect(inst.steps[1]!.companion?.verdicts.at(-1)?.passed).toBe(false)
   })
 
+  it('does NOT loop the producer over a batch of nothing but nits', async () => {
+    // The reviewer's own instruction says a `minor` is never worth holding anything for, and a
+    // review that ends with one polish note is the common case. Looping there spent a full producer
+    // re-run plus a re-grading call on work already rated 95%, and made the grade the reviewer chose
+    // decide nothing it could predict.
+    const { controller, loop, park, settle } = harness('attended', 3)
+    const inst = fresh()
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
+      ...ABOVE_WITH_NIT_ONLY,
+    })
+
+    expect(settle).toHaveBeenCalledOnce()
+    expect(loop).not.toHaveBeenCalled()
+    expect(park).not.toHaveBeenCalled()
+    expect(inst.steps[1]!.companion?.verdicts.at(-1)?.passed).toBe(true)
+  })
+
   it('advances on a rating that cleared the bar when the policy buys no round', async () => {
     // The whole point of `companionMaxReworks: 0`: the first verdict below the bar goes straight to
     // the person who decides. A verdict ABOVE the bar is not that verdict, and forcing the loop
@@ -524,5 +655,97 @@ describe('a first batch of comments', () => {
 
     expect(settle).toHaveBeenCalledOnce()
     expect(inst.steps[1]!.companion?.capSettledByPolicy).toBeUndefined()
+  })
+})
+
+// A MUST-FIX finding against the rating that would otherwise wave it through. This is the reason
+// findings are graded at all: the rating is one number over the whole deliverable, so a review can
+// score work above its bar and still have named something that must not ship, and before the
+// severity existed the engine could not tell those two verdicts apart.
+
+describe('a blocker finding', () => {
+  it('reworks the producer even on a rating that cleared the bar', async () => {
+    const { controller, loop, park, settle } = harness('attended', 3)
+    const inst = instance()
+    // NOT the first batch: the first-batch rule already loops on any comment, so a blocker asserted
+    // there would pass for the wrong reason. Second round onward the rating alone used to decide.
+    inst.steps[1] = step({
+      companion: {
+        threshold: 0.8,
+        maxAttempts: 3,
+        attempts: 1,
+        verdicts: [{ rating: 0.4, threshold: 0.8, passed: false, feedback: 'too vague' }],
+      },
+    })
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
+      ...ABOVE_WITH_BLOCKER,
+    })
+
+    expect(loop).toHaveBeenCalledOnce()
+    expect(park).not.toHaveBeenCalled()
+    expect(settle).not.toHaveBeenCalled()
+    // The recorded verdict says 0.95 against a 0.8 bar and did NOT pass, which reads as a
+    // contradiction until you see the blocker stored beside it — which is why it is stored.
+    const verdict = inst.steps[1]!.companion?.verdicts.at(-1)
+    expect(verdict?.passed).toBe(false)
+    expect(verdict?.rating).toBe(0.95)
+    expect(verdict?.comments?.[0]?.severity).toBe('blocker')
+  })
+
+  it('parks for a person once the budget is spent, cleared rating and all', async () => {
+    const { controller, park, settle } = harness('attended', 1)
+    const inst = instance()
+
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      {
+        ...ABOVE_WITH_BLOCKER,
+      },
+    )
+
+    expect(park).toHaveBeenCalledOnce()
+    expect(settle).not.toHaveBeenCalled()
+    expect(result.kind).toBe('awaiting_decision')
+    expect(inst.steps[1]!.companion?.exceeded).toBe(true)
+  })
+
+  it('is NOT answered by an unattended policy, unlike a spent budget', async () => {
+    // The line ADR 0053 draws, applied to the second way this loop stops. An unattended policy
+    // answers the automation reporting that it gave up; a reviewer's must-fix is not that. Taking
+    // "proceed anyway" here would be overruling a review nobody read, on work the reviewer said
+    // must not go further — and `capSettledByPolicy` would then be stamped on a PASSING rating,
+    // which reads as "a bar went unmet and policy waived it" about a bar that was met.
+    const { controller, park, settle } = harness('unattended', 1)
+    const inst = instance()
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
+      ...ABOVE_WITH_BLOCKER,
+    })
+
+    expect(park).toHaveBeenCalledOnce()
+    expect(settle).not.toHaveBeenCalled()
+    expect(inst.steps[1]!.companion?.exceeded).toBe(true)
+    expect(inst.steps[1]!.companion?.capSettledByPolicy).toBeUndefined()
+  })
+
+  it('holds the run even where the policy buys no rework rounds', async () => {
+    // `companionMaxReworks: 0` is the posture that lets a cleared rating with ordinary comments
+    // advance (asserted above). It says "do not spend model calls looping", never "accept whatever
+    // comes back", so a must-fix still stops — it just stops at the person straight away.
+    const { controller, loop, park, settle } = harness('unattended', 0)
+    const inst = fresh()
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
+      ...ABOVE_WITH_BLOCKER,
+    })
+
+    expect(loop).not.toHaveBeenCalled()
+    expect(park).toHaveBeenCalledOnce()
+    expect(settle).not.toHaveBeenCalled()
   })
 })

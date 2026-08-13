@@ -1,4 +1,5 @@
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { blockingReviewComments } from '@cat-factory/contracts'
 import { PipelineRegistry } from '@cat-factory/kernel'
 import type { ExecutionInstance, Pipeline, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -926,6 +927,53 @@ function registerApprovalAnsweringTests(harness: ConformanceHarness): void {
     const advanced = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
     expect(advanced.steps[0]!.approval?.status).toBe('approved')
     expect(advanced.steps[0]!.state).toBe('done')
+  })
+
+  it('shows an external caller the MUST-FIX findings a `proceed` would overrule', async () => {
+    // The companion cap reached on an open `blocker`, projected. `exceeded: true` already told a
+    // caller to answer with `resolve-exceeded`; what it could not tell it was WHY, because the only
+    // prose on the decision is `proposal` — the companion's verdict summary, which the shipped
+    // reviewer prompt forbids from restating the individual findings. So `proceed` accepted work
+    // whose stated must-fixes the caller had never seen, on the one park the platform's own
+    // unattended policies refuse precisely because a person is supposed to read it.
+    const app = harness.makeApp({
+      confidence: 1,
+      companionRating: 0.9,
+      companionBlockingFinding: true,
+    })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build + blocking companion',
+      purpose: 'build',
+      agentKinds: ['coder', 'reviewer'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(parked.status).toBe('blocked')
+
+    const decideAuth = await mintPublicApiKey(app, wsId, 'decide', 'decisions')
+    const listed = await app.call<{
+      decisions: {
+        kind: string
+        exceeded?: boolean
+        blockingFindings?: { body: string; anchorId: string | null }[]
+      }[]
+    }>('GET', `/api/v1/runs/${parked.id}/decisions`, undefined, decideAuth)
+    expect(listed.status).toBe(200)
+    const gate = listed.body.decisions.find((d) => d.kind === 'approval-gate')!
+    expect(gate.exceeded).toBe(true)
+    const engineFindings = blockingReviewComments(
+      parked.steps.find((s) => s.agentKind === 'reviewer')!.companion?.verdicts.at(-1)?.comments,
+    )
+    expect(engineFindings.length).toBeGreaterThan(0)
+    // The SAME points the engine held the run on, read through the shared rule rather than counted
+    // twice: an API that reported a must-fix the engine did not act on, or missed one it did, would
+    // be describing a different decision from the one it is offering to answer.
+    expect(gate.blockingFindings?.map((f) => f.body)).toEqual(engineFindings.map((f) => f.body))
+    expect(gate.blockingFindings?.[0]?.anchorId).toBe(engineFindings[0]?.anchorId ?? null)
   })
 
   it('reports a park a dedicated surface owns as ITS kind, never as an approval gate', async () => {

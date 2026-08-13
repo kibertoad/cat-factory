@@ -4,14 +4,15 @@ import type { AgentKindRegistry } from '../kinds/registry.js'
 import {
   FINAL_ANSWER_IN_REPLY,
   FRAGMENT_ADHERENCE_GUIDANCE,
-  REVIEW_SUMMARY_LAYOUT,
+  REVIEW_FINDINGS_LAYOUT,
 } from './shared.js'
 import { anchoredQualityScale } from './review-rounds.js'
 
 // System prompt for a companion agent, parameterised by the producer kind it
-// reviews. The companion returns a single overall quality rating (0..1) plus prose
-// feedback and optional per-item challenges, all as JSON the engine validates with
-// `companionAssessmentSchema`.
+// reviews. The companion returns its findings as severity-graded `comments` plus a
+// single overall quality rating (0..1) and a short verdict summary, all as JSON the
+// engine validates with `companionAssessmentSchema`. The two halves are read
+// independently: a `blocker` comment holds the step whatever the rating says.
 
 /** The companion system prompt for `kind`, or undefined when `kind` is not a companion. */
 export function companionSystemPrompt(
@@ -101,15 +102,21 @@ export function companionSystemPrompt(
           'the task is purely technical and rightly produced no business specs, and `false`',
           'when business requirements were warranted (whether or not the writer produced them).',
           'If you DISPUTE a "no new specs" claim for a task that does have business behaviour,',
-          'rate it below the bar with a summary saying so, so the writer is looped back.',
+          'raise it as a `blocker` comment naming the behaviour that needs specifying, so the',
+          'writer is looped back on it.',
         ]
       : []),
     '',
     'Respond with ONLY a JSON object of shape',
-    '{"rating":0.0,"summary":"…","comments":[{"anchorId":"…","body":"…"}]}: `rating` is the',
-    'overall score, `summary` is your justification plus the concrete changes the step should',
-    'make, and `comments` (optional) anchors specific challenges to an item id when the',
-    'reviewed output is structured (e.g. a spec requirement / acceptance-criterion id).',
+    '{"rating":0.0,"summary":"…","comments":[{"severity":"blocker"|"major"|"minor",',
+    '"body":"…","anchorId":"…"}]}: `rating` is the overall score, `summary` is your verdict on',
+    'the work as a whole, and `comments` is one entry per point you raise, each graded by how',
+    'urgently it must be fixed. `anchorId` is optional and only applies where the reviewed',
+    'output is structured (e.g. a spec requirement / acceptance-criterion id).',
+    'THE TWO ARE READ SEPARATELY: the rating decides whether the work as a whole meets the bar,',
+    'and any `blocker` comment sends it back to be fixed regardless of that rating. So grade the',
+    'work honestly on the scale above rather than lowering the rating to force a fix, and raise',
+    'a `blocker` for anything that must not proceed rather than hoping a low rating conveys it.',
     ...(kind === 'spec-companion'
       ? ['Include `technicalCorroborated` (true/false) as described above.']
       : []),
@@ -118,11 +125,11 @@ export function companionSystemPrompt(
     // below. Only the code `reviewer` does this; the other companions review different artifacts.
     ...(kind === 'reviewer' ? ['Include a `fragmentAdherence` array as described below.'] : []),
     'No prose outside the JSON, no code fences.',
-    // `summary` is the whole review as far as a human is concerned: `comments` only exist when
-    // the graded output has ids to anchor to, and nothing else on the step carries the findings.
-    // So the shape of that one string is the shape of the review, and it gets said here.
+    // `comments` + `summary` together ARE the review: nothing else on the step carries the
+    // findings, and the severities are what the engine reads to decide whether the run moves on.
+    // So the shape of both, and what each severity commits to, gets said here.
     '',
-    REVIEW_SUMMARY_LAYOUT,
+    REVIEW_FINDINGS_LAYOUT,
     ...(kind === 'reviewer' ? ['', FRAGMENT_ADHERENCE_GUIDANCE] : []),
     '',
     FINAL_ANSWER_IN_REPLY,

@@ -1367,6 +1367,13 @@
       "awaitingChoice": "Bir kullanıcı seçimi bekleniyor",
       "approvalGate": "Onay kapısı",
       "companionReview": "Yardımcı incelemesi",
+      "findingSeverity": {
+        "blocker": "Mutlaka düzeltilmeli",
+        "major": "Düzeltilmeli",
+        "minor": "Küçük",
+        "ungraded": "Yorum",
+        "unrecognized": "Tanınmayan düzey ({level})"
+      },
       "correctionIterations": "{count} düzeltme yinelemesi. | {count} düzeltme yinelemesi.",
       "state": {
         "pending": "Beklemede",
@@ -1403,7 +1410,9 @@
       "closeEsc": "Kapat (Esc)",
       "companionCapHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, hâlâ {threshold} barının altında.",
       "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
-      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan {threshold} barının altında kaldı.",
+      "companionCapBlockedHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık. | {agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık.",
+      "companionCapBlockedDetail": "Devam etmek, bu bulgular düzeltilmeden işi kabul etmek demektir; bu yüzden bu çalışmanın risk politikası bu seçimi sizin yerinize asla yapmaz. Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyla yine de devam edin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
+      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan hiç değişmedi.",
       "companionStalledDetail": "Kalan turlar kullanılmadı, çünkü yalnızca verilmiş bir kararı yineleyeceklerdi. Yine de bir tur daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "infraAttempts": "Altyapı denemeleri",
       "hideInfraAttempts": "Altyapı denemelerini gizle",
