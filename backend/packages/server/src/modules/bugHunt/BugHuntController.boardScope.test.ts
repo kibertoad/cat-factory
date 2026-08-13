@@ -36,12 +36,24 @@ const PROVIDERS: TaskSourceProvider[] = [
  */
 function harness(opts: { linkedBlock?: string } = {}) {
   const scans: { source: TaskSourceKind; board: string }[] = []
+  const resolved: string[] = []
   const tasks = {
     registry: {
       get: (kind: TaskSourceKind) => PROVIDERS.find((p) => p.kind === kind),
       list: () => PROVIDERS,
     },
     bugHuntService: {
+      // The real guard, byte for byte: an unregistered source is refused here rather than by
+      // whatever the board question would otherwise have made of it.
+      requireProvider(source: TaskSourceKind) {
+        const found = PROVIDERS.find((p) => p.kind === source)
+        if (!found) {
+          throw new ValidationError(
+            `The '${source}' source cannot back a bug hunt on this deployment.`,
+          )
+        }
+        return found
+      },
       async hunt(_workspaceId: string, source: TaskSourceKind, input: { board: string }) {
         scans.push({ source, board: input.board })
         return { source, board: input.board, candidates: [], scanned: 0, truncated: false }
@@ -52,6 +64,7 @@ function harness(opts: { linkedBlock?: string } = {}) {
   const container = {
     tasks,
     resolveRepoTarget: async (_workspaceId: string, blockId: string) => {
+      resolved.push(blockId)
       if (blockId !== opts.linkedBlock) {
         // Exactly what the real resolver raises for a block under no repo-linked service.
         throw new ValidationError('Block is not under a repo-linked service')
@@ -77,7 +90,7 @@ function harness(opts: { linkedBlock?: string } = {}) {
     return { status: res.status, body: await res.json() }
   }
 
-  return { hunt, scans }
+  return { hunt, scans, resolved }
 }
 
 describe('bug hunt board scope', () => {
@@ -95,7 +108,7 @@ describe('bug hunt board scope', () => {
   })
 
   it('refuses a board NAMED for a repo-backed source rather than scanning somewhere else', async () => {
-    const { hunt, scans } = harness({ linkedBlock: 'blk-1' })
+    const { hunt, scans, resolved } = harness({ linkedBlock: 'blk-1' })
 
     const { status, body } = await hunt('github', {
       containerId: 'blk-1',
@@ -105,6 +118,26 @@ describe('bug hunt board scope', () => {
     expect(status).toBe(422)
     expect(body.error.details.reason).toBe('board_from_service')
     expect(scans).toEqual([])
+    // Decidable from the body alone, so it lands BEFORE the repository read. Resolving first
+    // would answer a stale client sitting on an unlinked service with "link a repo", send them
+    // to fix that, and only then tell them the board they named was never allowed.
+    expect(resolved).toEqual([])
+  })
+
+  it('refuses a source this deployment cannot hunt, rather than asking it for a board', async () => {
+    // The board question is answered off the provider's own declaration, so an unregistered or
+    // unwired source has no answer to give: it must reach the refusal that names the missing
+    // capability, not `missing_board`, whose fix ("pick a board") is impossible on a surface that
+    // renders no board control for it.
+    const { hunt, scans, resolved } = harness({ linkedBlock: 'blk-1' })
+
+    const { status, body } = await hunt('acme:servicenow', { containerId: 'blk-1', board: null })
+
+    expect(status).toBe(422)
+    expect(body.error.details?.reason).toBeUndefined()
+    expect(body.error.message).toContain('cannot back a bug hunt')
+    expect(scans).toEqual([])
+    expect(resolved).toEqual([])
   })
 
   it('refuses a repo-backed hunt from a service with no repository linked', async () => {

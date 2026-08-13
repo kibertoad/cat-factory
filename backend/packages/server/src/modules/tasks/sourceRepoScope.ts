@@ -1,5 +1,9 @@
 import type { TaskSourceKind, TaskSourceReadReason } from '@cat-factory/contracts'
-import { ValidationError, type TaskSearchRepoScope } from '@cat-factory/kernel'
+import {
+  ValidationError,
+  type TaskSearchRepoScope,
+  type TaskSourceProvider,
+} from '@cat-factory/kernel'
 import type { Context } from 'hono'
 import type { TasksModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
@@ -30,7 +34,9 @@ import { param } from '../../http/params.js'
  * the registry, and the failure when it is not is silent in exactly the wrong direction: the
  * provider refuses every search for want of a scope this function decided not to resolve, so a
  * source that imports fine can never be searched. An UNREGISTERED source resolves no scope and
- * reaches the service, which is where an unconfigured source is refused.
+ * reaches the service, which is where an unconfigured source is refused. That works for a SEARCH,
+ * whose scope is an optional narrowing; a hunt cannot borrow it, because there the same `null`
+ * would decide the board itself, so {@link resolveHuntBoard} takes a resolved provider instead.
  */
 export async function resolveSourceRepoScope<E extends AppEnv>(
   c: Context<E>,
@@ -40,6 +46,18 @@ export async function resolveSourceRepoScope<E extends AppEnv>(
 ): Promise<TaskSearchRepoScope | null> {
   const provider = tasks.registry.get(source)
   if (!provider?.repoScope) return null
+  return requireRepoScope(c, blockId)
+}
+
+/**
+ * The repository a block reads for, or the refusal naming the link that is missing. Split out
+ * from {@link resolveSourceRepoScope} so a caller that has ALREADY established the source is
+ * repo-backed gets a total answer rather than one it has to re-narrow.
+ */
+async function requireRepoScope<E extends AppEnv>(
+  c: Context<E>,
+  blockId: string,
+): Promise<TaskSearchRepoScope> {
   const resolve = c.get('container').resolveRepoTarget
   let target: Awaited<ReturnType<NonNullable<typeof resolve>>> = null
   try {
@@ -67,33 +85,46 @@ export async function resolveSourceRepoScope<E extends AppEnv>(
 }
 
 /**
- * The board a hunt scans: the resolved repository for a repo-backed source, else the board the
- * caller named.
+ * The board a hunt scans: the repository the container's service frame is linked to for a
+ * repo-backed source, else the board the caller named.
+ *
+ * Takes the RESOLVED provider rather than a source id, because "no provider" is not a board
+ * question at all: an unregistered or unwired source is refused by the service that owns the
+ * registry, naming the capability this deployment lacks. Answering here instead told the caller
+ * to pick a board on a surface that renders none.
  *
  * Both mismatches are REFUSED rather than reconciled, because each one means the caller and the
  * platform disagree about what is being scanned. A board named for a repo-backed source would be
  * ignored in favour of the service's repository, which answers a request to scan one place with a
  * scan of another; and a repo-less source with no board has nothing to narrow at all, which is the
- * unscoped vendor search every layer of this path exists to prevent.
+ * unscoped vendor search every layer of this path exists to prevent. Both are decidable from the
+ * request BODY, so both land before the repository read: a stale client that names a board AND
+ * sits on an unlinked service would otherwise be sent to fix the link, retry, and only then be
+ * told the board it named was never allowed.
  *
  * A repository becomes a board scope as its `owner/name` slug on BOTH repo-backed vendors: it is
  * exactly what their intake query legs (`githubRepo`, a GitLab `path_with_namespace`) are split
  * back out of, and a GitLab owner carrying a nested group path composes into the same shape.
  */
-export function huntBoardScope(scope: TaskSearchRepoScope | null, named: string | null): string {
-  if (scope) {
-    if (named !== null) {
-      throw new ValidationError(
-        'This source hunts the repository its service is linked to, so it cannot be given a board.',
-        { reason: 'board_from_service' satisfies TaskSourceReadReason },
-      )
+export async function resolveHuntBoard<E extends AppEnv>(
+  c: Context<E>,
+  provider: TaskSourceProvider,
+  input: { containerId: string; board: string | null },
+): Promise<string> {
+  if (!provider.repoScope) {
+    if (input.board === null) {
+      throw new ValidationError('Pick the board to hunt for bugs on.', {
+        reason: 'missing_board' satisfies TaskSourceReadReason,
+      })
     }
-    return `${scope.owner}/${scope.repo}`
+    return input.board
   }
-  if (named === null) {
-    throw new ValidationError('Pick the board to hunt for bugs on.', {
-      reason: 'missing_board' satisfies TaskSourceReadReason,
-    })
+  if (input.board !== null) {
+    throw new ValidationError(
+      'This source hunts the repository its service is linked to, so it cannot be given a board.',
+      { reason: 'board_from_service' satisfies TaskSourceReadReason },
+    )
   }
-  return named
+  const scope = await requireRepoScope(c, input.containerId)
+  return `${scope.owner}/${scope.repo}`
 }

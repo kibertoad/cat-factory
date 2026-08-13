@@ -58,6 +58,28 @@ A service frame with no repository linked has no issues to hunt: that is
 `details.reason: 'repo_not_linked'`, the same refusal the issue search raises, worded on the hunt
 form beside the scope it invalidates rather than thrown as a toast.
 
+### Every refusal lands as soon as it is decidable
+
+`POST /hunts` refuses in a fixed order, and the order is the point: each step costs more than the
+one before it, and a hunt is the platform's first billable model call that is not behind a run
+start.
+
+1. **The SOURCE**, on the registry (`BugHuntService.requireProvider`, pure). What a hunt's board
+   even IS comes off the provider's declared `repoScope`, so a source this deployment cannot hunt
+   has no board question to answer. Asking it anyway produced `missing_board` ("pick the board"),
+   whose fix is impossible on a surface that renders no board control for that source.
+2. **The BOARD SHAPE**, from the request body alone (`resolveHuntBoard`): a board named for a
+   repo-backed source, or missing for a repo-less one. Both land before any repository read, so a
+   stale client that names a board AND sits on an unlinked service is not first sent to fix the
+   link, only to be told on the retry that the board it named was never allowed.
+3. **The REPOSITORY** for a repo-backed source: the `resolveRepoTarget` ancestry walk, one
+   installation read plus the workspace's repo projection.
+4. **The CONTAINER**, in the service: one point-read asserting this workspace holds the block an
+   adopted candidate would land in. It is the same 404 `TaskLinkService.createTaskFromIssue`
+   raises, asked before the vendor read and the rating rather than after them, so a request that
+   was never adoptable spends nothing. Whether that container may HOLD a task stays with the
+   create (`BoardService.addTask`), which is that rule's one authority.
+
 `BugHuntController` (`@cat-factory/server`) is member-tier, deliberately NOT mounted alongside the
 admin-gated `TaskSourceController`: a hunt neither reads nor edits a connection, and what it does
 (create a task, start a run) is exactly what the member tier is for. Gating it on

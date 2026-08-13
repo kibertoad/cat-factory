@@ -4769,6 +4769,10 @@
       "failed": "L'évaluation n'a pas pu aboutir, ils sont donc non évalués.",
       "over_budget": "Cet espace de travail a dépassé son budget de dépenses, ces bogues n'ont donc pas été évalués.",
       "empty": "Rien à évaluer."
+    },
+    "refusal": {
+      "boardFromService": "Ce traqueur analyse le dépôt auquel le service choisi est lié : il n'a donc pas de tableau propre.",
+      "missingBoard": "Choisissez le tableau sur lequel chercher."
     }
   },
   "pipeline": {

@@ -49,7 +49,59 @@ import {
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
 import { DrizzleDocumentRepository } from '../src/repositories/documents.js'
 import { DrizzleTaskRepository } from '../src/repositories/tasks.js'
+import { DrizzleGitHubInstallationRepository } from '../src/repositories/containerExecution.js'
+import { DrizzleRepoProjectionRepository } from '../src/repositories/github.js'
 import { createApp } from '../src/server.js'
+
+/**
+ * Link a service frame to a repository over this facade's own stores, satisfying the
+ * `ConformanceApp.linkFrameRepo` contract (which documents why the frame must be one the test
+ * created). Module-level rather than a closure in the app factory: it needs nothing but the db
+ * handle, and the factory sits at its function-size budget.
+ */
+async function linkFrameRepo(
+  db: DrizzleDb,
+  input: {
+    workspaceId: string
+    frameBlockId: string
+    installationId: number
+    githubId: number
+    owner: string
+    name: string
+  },
+): Promise<void> {
+  const { workspaceId, frameBlockId, installationId, githubId, owner, name } = input
+  await new DrizzleGitHubInstallationRepository(db).upsert({
+    installationId,
+    workspaceId,
+    accountId: null,
+    accountLogin: owner,
+    targetType: 'Organization',
+    appId: null,
+    provider: 'github',
+    cachedToken: null,
+    tokenExpiresAt: null,
+    accessToken: null,
+    createdAt: 1,
+    deletedAt: null,
+  })
+  await new DrizzleRepoProjectionRepository(db).upsertMany(workspaceId, [
+    {
+      githubId,
+      installationId,
+      owner,
+      name,
+      defaultBranch: 'main',
+      private: false,
+      linkedVia: 'app',
+      syncedAt: 1,
+    },
+  ])
+  const services = new DrizzleServiceRepository(db)
+  const service = await services.getByFrameBlock(frameBlockId)
+  if (!service) throw new Error(`No service owns frame '${frameBlockId}'`)
+  await services.update(service.id, { installationId, repoGithubId: githubId })
+}
 
 const BASE = 'https://cat-factory.test'
 
@@ -514,6 +566,7 @@ export function makeConformanceApp(
     accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,
     getService,
+    linkFrameRepo: (input) => linkFrameRepo(db, input),
     ...containerServiceProbes(container),
   }
 }

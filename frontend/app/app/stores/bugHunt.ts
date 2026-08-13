@@ -69,7 +69,10 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
       boardsError.value = e instanceof Error ? e.message : String(e)
       boardsErrorReason.value = apiErrorReason(e)
     } finally {
-      boardsLoading.value = false
+      // Only the listing the picker is still showing owns the flag. A superseded one clearing it
+      // unconditionally would report the tracker now being loaded as done, which is the same
+      // mistake in the opposite direction from the one `dropBoards` avoids.
+      if (boardsSource.value === source) boardsLoading.value = false
     }
   }
 
@@ -85,6 +88,11 @@ export const useBugHuntStore = defineStore('bugHunt', () => {
     boards.value = []
     boardsError.value = null
     boardsErrorReason.value = null
+    // The listing in flight belongs to the tracker being left, and its `finally` will not run
+    // until it settles — indefinitely, if that tracker hangs. Clearing the flag with the rest of
+    // the state is what makes "land on nothing" true of the WHOLE listing rather than of four of
+    // its five fields, so a reader gating on it cannot wait on a request nobody is waiting for.
+    boardsLoading.value = false
   }
 
   /** Run a hunt and keep its ranked result. Returns false when the scan itself failed. */

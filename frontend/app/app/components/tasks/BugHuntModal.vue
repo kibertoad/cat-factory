@@ -50,6 +50,8 @@ const { t, d, n } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
 const hunt = useBugHuntStore()
+const board = useBoardStore()
+const github = useGitHubStore()
 const toast = useToast()
 const { present } = usePipelineErrorToast()
 
@@ -142,14 +144,23 @@ const boardItems = computed(() =>
 const boardFromService = computed(() => isBoardFromService(descriptor.value))
 
 /**
- * The container field's label, which asks a different question per tracker: a repo-less one only
- * decides where the picked bug lands, while a repo-backed one is also choosing what gets scanned.
- * A map of literals, like `STATUS_KEYS` below, so both keys stay statically visible.
+ * WHICH repository a repo-backed hunt will read, named before it runs.
+ *
+ * The premise of this whole branch is that the platform picks the board on the user's behalf, so
+ * withholding the value until the results block (`scannedBoard`) states it only after a billable
+ * scan has already been paid for. Resolved the way the backend resolves it — walk the chosen
+ * container up to its service frame, read that frame's repo link — so the two cannot name
+ * different repositories. Null while the projection is still loading or the service holds no
+ * link; the field then says what it always said, and the not-linked case stays the backend's to
+ * refuse (`boardNeedsRepo`), since an unloaded projection and an unlinked service look identical
+ * from here.
  */
-const CONTAINER_LABEL_KEYS = { service: 'bugHunt.huntIn', board: 'bugHunt.adoptInto' } as const
-const containerLabelKey = computed(() =>
-  boardFromService.value ? CONTAINER_LABEL_KEYS.service : CONTAINER_LABEL_KEYS.board,
-)
+const scopedRepo = computed(() => {
+  const container = containerId.value ? board.getBlock(containerId.value) : undefined
+  const frame = container ? board.serviceOf(container) : undefined
+  const repo = frame ? github.repoForBlock(frame.id) : undefined
+  return repo ? `${repo.owner}/${repo.name}` : null
+})
 
 /**
  * The service this hunt is scoped to has no repository linked, so it has no issues to read. The
@@ -169,10 +180,30 @@ const boardIsFreeText = computed(
   () => !hunt.boardsLoading && hunt.boardsErrorReason === BOARDS_UNSUPPORTED,
 )
 
+/**
+ * The refusals this surface words ITSELF, keyed on the backend's reason.
+ *
+ * The backend does not localize prose, so a reason with no entry here renders the server's
+ * untranslated English — the honest last resort for a cause this modal was not built to explain,
+ * and the wrong answer for one it was. Both entries are reachable only from a client that
+ * disagrees with the backend about which sources are repo-backed (a stale SPA build, a raced
+ * `repoBacked` read), which is exactly when a user is least served by raw backend prose.
+ * `repo_not_linked` is deliberately absent: it is not a message but a warning rendered beside the
+ * scope it invalidates.
+ */
+const REFUSAL_KEYS: Partial<Record<TaskSourceReadReason, string>> = {
+  board_from_service: 'bugHunt.refusal.boardFromService',
+  missing_board: 'bugHunt.refusal.missingBoard',
+}
+function refusalText(reason: string | null, fallback: string | null): string | null {
+  const key = reason ? REFUSAL_KEYS[reason as TaskSourceReadReason] : undefined
+  return key ? t(key) : fallback
+}
+
 /** A board read that failed for a reason the user has to fix — shown, never silently swallowed. */
 const boardsFailure = computed(() =>
   !hunt.boardsLoading && hunt.boardsError !== null && !boardIsFreeText.value
-    ? hunt.boardsError
+    ? refusalText(hunt.boardsErrorReason, hunt.boardsError)
     : null,
 )
 
@@ -233,8 +264,12 @@ watch(containerId, () => {
  */
 function loadBoardsFor(next: TaskSourceKind | undefined) {
   if (!next) return
-  if (isBoardFromService(tasks.descriptorFor(next))) hunt.dropBoards(next)
-  else hunt.loadBoards(next)
+  if (isBoardFromService(tasks.descriptorFor(next))) {
+    hunt.dropBoards(next)
+    // The repo projection is lazy and nothing on the board opens it, so the field that names the
+    // repository this hunt will read asks for it here — only on the branch that has one.
+    void github.ensureLoaded().catch(() => {})
+  } else hunt.loadBoards(next)
 }
 
 async function runHunt() {
@@ -244,7 +279,7 @@ async function runHunt() {
   if (!ok && !huntNeedsRepo.value) {
     toast.add({
       title: t('bugHunt.huntFailed'),
-      description: hunt.huntError ?? undefined,
+      description: refusalText(hunt.huntErrorReason, hunt.huntError) ?? undefined,
       icon: 'i-lucide-triangle-alert',
       color: 'error',
     })
@@ -366,7 +401,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
               class="flex items-center gap-1.5 py-1 text-sm text-slate-300"
             >
               <UIcon name="i-lucide-folder-git-2" class="h-4 w-4 shrink-0" />
-              <span class="truncate">{{ t('bugHunt.boardFromService') }}</span>
+              <span class="truncate">{{ scopedRepo ?? t('bugHunt.boardFromService') }}</span>
             </p>
             <!-- A tracker that can't enumerate its boards gets a free-text field rather than
                  an empty picker, so the hunt is still usable. -->
@@ -434,7 +469,13 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             </template>
           </i18n-t>
         </p>
-        <UFormField v-else :label="t(containerLabelKey)">
+        <!-- Two fields rather than one with a computed key, for the reason the two blocks above
+             are two: the i18n extractor reads a bound key as the key itself, so a dynamic one
+             leaves BOTH real keys unreferenced and a dead-key sweep prunes them. -->
+        <UFormField v-else-if="boardFromService" :label="t('bugHunt.huntIn')">
+          <USelect v-model="containerId" :items="containerItems" class="w-full" />
+        </UFormField>
+        <UFormField v-else :label="t('bugHunt.adoptInto')">
           <USelect v-model="containerId" :items="containerItems" class="w-full" />
         </UFormField>
 

@@ -19,6 +19,8 @@ import { FakeTaskSourceProvider } from '../fakes/FakeTaskSourceProvider'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
+import { D1GitHubInstallationRepository } from '../../src/infrastructure/repositories/D1GitHubInstallationRepository'
+import { D1RepoProjectionRepository } from '../../src/infrastructure/repositories/D1RepoProjectionRepository'
 import { D1PipelineRepository } from '../../src/infrastructure/repositories/D1PipelineRepository'
 import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
 import { D1WorkspaceRepository } from '../../src/infrastructure/repositories/D1WorkspaceRepository'
@@ -208,6 +210,45 @@ const harness: ConformanceHarness = {
         ),
       seedService: (service) => new D1ServiceRepository({ db: env.DB }).insert(service),
       getService: (id) => new D1ServiceRepository({ db: env.DB }).get(id),
+      linkFrameRepo: async ({
+        workspaceId,
+        frameBlockId,
+        installationId,
+        githubId,
+        owner,
+        name,
+      }) => {
+        await new D1GitHubInstallationRepository({ db: env.DB }).upsert({
+          installationId,
+          workspaceId,
+          accountId: null,
+          accountLogin: owner,
+          targetType: 'Organization',
+          appId: null,
+          provider: 'github',
+          cachedToken: null,
+          tokenExpiresAt: null,
+          accessToken: null,
+          createdAt: 1,
+          deletedAt: null,
+        })
+        await new D1RepoProjectionRepository({ db: env.DB }).upsertMany(workspaceId, [
+          {
+            githubId,
+            installationId,
+            owner,
+            name,
+            defaultBranch: 'main',
+            private: false,
+            linkedVia: 'app',
+            syncedAt: 1,
+          },
+        ])
+        const services = new D1ServiceRepository({ db: env.DB })
+        const service = await services.getByFrameBlock(frameBlockId)
+        if (!service) throw new Error(`No service owns frame '${frameBlockId}'`)
+        await services.update(service.id, { installationId, repoGithubId: githubId })
+      },
       localModelEndpoints: () => {
         const svc = buildTestContainer({
           agentExecutor: new FakeAgentExecutor(),

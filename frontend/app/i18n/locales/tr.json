@@ -4769,6 +4769,10 @@
       "failed": "Değerlendirme tamamlanamadı, bu yüzden bunlar değerlendirilmedi.",
       "over_budget": "Bu çalışma alanı harcama bütçesini aştığı için bunlar değerlendirilmedi.",
       "empty": "Değerlendirilecek bir şey yok."
+    },
+    "refusal": {
+      "boardFromService": "Bu izleyici, seçilen hizmete bağlı depoyu tarar; bu yüzden kendine ait bir panosu yoktur.",
+      "missingBoard": "Aranacak panoyu seçin."
     }
   },
   "pipeline": {

@@ -4769,6 +4769,10 @@
       "failed": "No se ha podido completar la valoración, así que están sin valorar.",
       "over_budget": "Este espacio de trabajo ha superado su presupuesto de gasto, así que no se han valorado.",
       "empty": "Nada que valorar."
+    },
+    "refusal": {
+      "boardFromService": "Este rastreador analiza el repositorio al que está vinculado el servicio elegido, así que no tiene un tablero propio.",
+      "missingBoard": "Elige el tablero en el que buscar."
     }
   },
   "pipeline": {

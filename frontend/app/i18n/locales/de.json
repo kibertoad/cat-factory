@@ -4326,6 +4326,10 @@
       "failed": "Die Bewertung konnte nicht abgeschlossen werden, daher sind diese unbewertet.",
       "over_budget": "Dieser Arbeitsbereich hat sein Ausgabenbudget überschritten, daher wurden diese nicht bewertet.",
       "empty": "Nichts zu bewerten."
+    },
+    "refusal": {
+      "boardFromService": "Dieser Tracker durchsucht das Repository, mit dem der gewählte Service verknüpft ist, und hat daher kein eigenes Board.",
+      "missingBoard": "Wähle das Board aus, auf dem gesucht werden soll."
     }
   },
   "pipeline": {

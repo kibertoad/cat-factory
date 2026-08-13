@@ -4930,6 +4930,10 @@
       "failed": "The rating could not be completed, so these are unrated.",
       "over_budget": "This workspace is over its spend budget, so these were not rated.",
       "empty": "Nothing to rate."
+    },
+    "refusal": {
+      "boardFromService": "This tracker scans the repository the chosen service is linked to, so it has no board of its own.",
+      "missingBoard": "Pick the board to hunt on."
     }
   },
   "pipeline": {

@@ -112,6 +112,88 @@ export function defineBugHuntConformance(harness: ConformanceHarness): void {
       expect(source.boardCalls).toEqual([])
     })
 
+    /**
+     * A workspace holding a service frame of its OWN, so the repo link lands on a frame id no
+     * other workspace in this facade's shared test database also carries (see `linkFrameRepo`:
+     * the seeded ids repeat, and the service store matches on the frame id alone).
+     */
+    async function repoBackedSetup() {
+      const source = new FakeTaskSourceProvider('github')
+      const app = harness.makeApp({ confidence: 1 }, { taskSourceProviders: [source] })
+      const { workspace } = await app.createWorkspace()
+      const frame = await app.call<Block>('POST', `/workspaces/${workspace.id}/blocks`, {
+        type: 'service',
+        position: { x: 0, y: 0 },
+      })
+      return { app, source, wsId: workspace.id, frameId: frame.body.id }
+    }
+
+    it('scans the repository the container is linked to, resolving it on the facade own store', async () => {
+      // The board of a repo-backed hunt is not sent by the client: the facade walks the named
+      // container up to its service frame and reads that frame's repo link, over three of its own
+      // stores (installation, projection, service). A facade that maps any of them differently —
+      // or stops wiring `resolveRepoTarget` — scans the wrong repository or refuses every hunt,
+      // and a stub in a server-package unit test cannot see either.
+      const { app, source, wsId, frameId } = await repoBackedSetup()
+      await app.linkFrameRepo({
+        workspaceId: wsId,
+        frameBlockId: frameId,
+        installationId: 4242,
+        githubId: 909,
+        owner: 'acme',
+        name: 'web',
+      })
+      source.set('acme/web#7', { title: 'Checkout crashes', labels: ['bug'], assignee: null })
+
+      const res = await app.call<BugHuntResult>(
+        'POST',
+        `/workspaces/${wsId}/bug-hunt/github/hunts`,
+        {
+          containerId: frameId,
+          board: null,
+        },
+      )
+
+      expect(res.status).toBe(200)
+      // The `owner/name` slug BOTH repo-backed vendors' query legs are split back out of, on the
+      // response the SPA names the scan by and on the query the provider was actually handed.
+      expect(res.body.board).toBe('acme/web')
+      expect(source.candidateCalls[0]?.query.board.githubRepo).toBe('acme/web')
+    })
+
+    it('refuses a repo-backed hunt whose container is under no repo-linked service', async () => {
+      // The frame has a service with no repo link, which is what an unlinked board looks like on
+      // every facade. Refused rather than widened: an unscoped vendor search reads every
+      // repository the credential can reach.
+      const { app, source, wsId, frameId } = await repoBackedSetup()
+
+      const res = await app.call<{ error: { details?: { reason?: string } } }>(
+        'POST',
+        `/workspaces/${wsId}/bug-hunt/github/hunts`,
+        { containerId: frameId, board: null },
+      )
+
+      expect(res.status).toBe(422)
+      expect(res.body.error.details?.reason).toBe('repo_not_linked')
+      expect(source.candidateCalls).toEqual([])
+    })
+
+    it('refuses a hunt into a container this workspace does not hold, before it spends', async () => {
+      // A hunt is the platform's first billable model call that is not behind a run start, so a
+      // request nothing could ever be adopted out of must cost neither the vendor read nor the
+      // rating. Driven on a repo-LESS source, where nothing else would have touched the id.
+      const { app, source, wsId } = await setup({ assessor: fakeAssessor() })
+      source.set('PROJ-11', { title: 'Search times out', labels: ['bug'], assignee: null })
+
+      const res = await app.call('POST', `/workspaces/${wsId}/bug-hunt/jira/hunts`, {
+        containerId: 'blk_not_here',
+        board: 'PROJ',
+      })
+
+      expect(res.status).toBe(404)
+      expect(source.candidateCalls).toEqual([])
+    })
+
     it('ranks a board unassigned-only, best ratio first, and pushes the predicates down', async () => {
       const { app, source, wsId } = await setup({ assessor: fakeAssessor() })
       source.set('PROJ-1', { title: 'Checkout crashes', labels: ['bug'], assignee: null })

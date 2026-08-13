@@ -4769,6 +4769,10 @@
       "failed": "Nie udało się dokończyć oceny, więc te zgłoszenia są nieocenione.",
       "over_budget": "Ta przestrzeń robocza przekroczyła budżet wydatków, więc nie zostały ocenione.",
       "empty": "Nie ma czego oceniać."
+    },
+    "refusal": {
+      "boardFromService": "Ten tracker przeszukuje repozytorium powiązane z wybraną usługą, więc nie ma własnej tablicy.",
+      "missingBoard": "Wybierz tablicę, na której chcesz szukać."
     }
   },
   "pipeline": {

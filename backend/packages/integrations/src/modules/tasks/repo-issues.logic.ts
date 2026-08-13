@@ -10,8 +10,8 @@ import { MAX_CANDIDATE_DESCRIPTION_CHARS } from './tasks.logic.js'
 // What is HERE is what has no vendor in it. A hunt candidate is a shape the PLATFORM defined,
 // built from fields both vendors already normalise into `GitHubIssueSearchHit`, so a second copy
 // per source is not a place where a difference is expressed: it is a place where a difference can
-// appear by accident, in a projection the ranking model then reads as if the two boards were
-// described the same way.
+// appear by accident, in the rows the ranking model then rates as if both sources had described
+// their issues the same way.
 
 /**
  * Build a repo-backed source's search-hit → {@link BugCandidate} mapper.

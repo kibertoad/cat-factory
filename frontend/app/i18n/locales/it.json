@@ -4326,6 +4326,10 @@
       "failed": "La valutazione non è stata completata, quindi non sono valutati.",
       "over_budget": "Questo spazio di lavoro ha superato il budget di spesa, quindi non sono stati valutati.",
       "empty": "Nulla da valutare."
+    },
+    "refusal": {
+      "boardFromService": "Questo tracker analizza il repository a cui è collegato il servizio scelto, quindi non ha una board propria.",
+      "missingBoard": "Scegli la board su cui cercare."
     }
   },
   "pipeline": {

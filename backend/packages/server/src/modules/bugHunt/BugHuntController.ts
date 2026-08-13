@@ -17,7 +17,7 @@ import { runInitiatorRole } from '../../http/runAdmission.js'
 import { blockEditAuthority } from '../../http/workspaceAccess.js'
 import { personalGateForBlock, readPersonalPassword } from '../providers/personalCredentialGate.js'
 import { requireCapability } from '../../http/guards.js'
-import { huntBoardScope, resolveSourceRepoScope } from '../tasks/sourceRepoScope.js'
+import { resolveHuntBoard } from '../tasks/sourceRepoScope.js'
 
 // ---------------------------------------------------------------------------
 // Bug hunt: pick a connected tracker, scope the scan, get its open + unassigned bugs ranked by
@@ -79,12 +79,17 @@ export function bugHuntController(): Hono<AppEnv> {
     const tasks = requireTasks(c)
     const source = sourceParam(c)
     const { containerId, board, ...predicates } = c.req.valid('json')
+    // The source is settled FIRST, on the registry the service owns: what a hunt's board even is
+    // depends on the provider, so a source this deployment cannot hunt has no board question to
+    // answer and gets the refusal that names the capability instead.
+    const provider = tasks.bugHuntService.requireProvider(source)
     // Resolved BEFORE the scan, and it can refuse: a repo-backed source whose service frame has
     // no linked repository has no issues to hunt, and answering that with an unscoped vendor
     // search would read every repository the credential can reach.
-    const scope = await resolveSourceRepoScope(c, tasks, source, containerId)
+    const resolvedBoard = await resolveHuntBoard(c, provider, { containerId, board })
     const result = await tasks.bugHuntService.hunt(param(c, 'workspaceId'), source, {
-      board: huntBoardScope(scope, board),
+      board: resolvedBoard,
+      containerId,
       ...predicates,
     })
     return c.json(result, 200)
