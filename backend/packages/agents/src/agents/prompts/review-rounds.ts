@@ -1,3 +1,5 @@
+import { REVIEW_COMMENT_SEVERITY_RANK, type ReviewCommentSeverity } from '@cat-factory/contracts'
+
 // ---------------------------------------------------------------------------
 // What a REPEATED grading loop says to itself, in one place.
 //
@@ -21,7 +23,7 @@ export interface PriorReviewRound {
   rating: number
   passed: boolean
   summary: string
-  comments?: { quotedSource?: string; body: string }[]
+  comments?: { quotedSource?: string; body: string; severity?: ReviewCommentSeverity }[]
 }
 
 /**
@@ -128,6 +130,10 @@ const EARLIER_ROUND_CHARS = 1_200
  * its prose than the rest; every earlier one is still NAMED, because a point raised in round 1 and
  * quietly dropped by round 3 is exactly the regression this exists to catch. A trimmed round says
  * so inline rather than ending mid-sentence, so nothing reads as a grader that had little to say.
+ *
+ * Each point carries the SEVERITY it was raised at, worst first, because that is what the round
+ * actually decided: a `[blocker]` from round 1 is the reason the loop is still running, and read
+ * as an undifferentiated bullet it competes for attention with a nit raised in the same breath.
  */
 export function renderPriorReviewRounds(rounds: readonly PriorReviewRound[]): string[] {
   const lines: string[] = []
@@ -136,16 +142,32 @@ export function renderPriorReviewRounds(rounds: readonly PriorReviewRound[]): st
     const verdict = round.passed ? 'met the bar' : 'did not meet the bar'
     lines.push('', `Round ${round.round} — rated ${round.rating.toFixed(2)}, ${verdict}:`)
     lines.push(clip(round.summary.trim() || '(no summary given)', isLatest))
-    for (const comment of round.comments ?? []) {
+    for (const comment of worstFirst(round.comments)) {
       const target = comment.quotedSource?.trim()
+      const grade = comment.severity ? `[${comment.severity}] ` : ''
       lines.push(
         target
-          ? `- On "${clip(target, false)}": ${clip(comment.body, isLatest)}`
-          : `- ${clip(comment.body, isLatest)}`,
+          ? `- ${grade}On "${clip(target, false)}": ${clip(comment.body, isLatest)}`
+          : `- ${grade}${clip(comment.body, isLatest)}`,
       )
     }
   }
   return lines
+}
+
+/**
+ * Severity-graded comments, worst first; an ungraded one (a person's) sorts last.
+ *
+ * Local rather than contracts' `bySeverityWorstFirst` because these are the prompt's own
+ * structural shape (`quotedSource` + `body` + an optional grade) rather than the persisted
+ * comment: this package renders what it was handed and does not know the wire type.
+ */
+function worstFirst<T extends { severity?: ReviewCommentSeverity }>(
+  comments: readonly T[] | undefined,
+): T[] {
+  const rank = (comment: T) =>
+    comment.severity ? REVIEW_COMMENT_SEVERITY_RANK[comment.severity] : -1
+  return [...(comments ?? [])].sort((a, b) => rank(b) - rank(a))
 }
 
 /** Trim one field, STATING that it was trimmed (a silent cut reads as a shorter original). */

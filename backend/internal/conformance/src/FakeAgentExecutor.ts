@@ -155,6 +155,13 @@ export interface FakeAgentOptions {
    */
   companionMalformed?: boolean
   /**
+   * When true, the point every companion raises is graded `blocker` (a must-fix) rather than the
+   * ordinary `major`. Combined with a PASSING `companionRating` it produces the verdict a rating
+   * alone cannot express — work that scored above its bar and still contains something the
+   * reviewer says must not ship — which is what the engine's blocking-findings rule exists for.
+   */
+  companionBlockingFinding?: boolean
+  /**
    * The assessment the `merger` step reports. When omitted, the fake derives one
    * from `confidence` so existing tests keep their semantics: high confidence
    * (≥ 0.8) yields a within-threshold assessment (auto-merge → `done`), and low
@@ -428,24 +435,37 @@ export class FakeAgentExecutor implements AgentExecutor {
         ? (seq[Math.min(this.companionCalls, seq.length - 1)] ?? 1)
         : (this.options.companionRating ?? 1)
       this.companionCalls += 1
-      // A downrating critic also returns anchor-based per-item comments (the shape the
-      // real Spec Reviewer emits: `{anchorId, body}`, with NO `quotedSource`). Emitting
-      // them here exercises the actual `companionAssessmentSchema`/`stepReviewCommentSchema`
-      // parse the engine runs — guarding the regression where an anchor-only comment made
-      // the verdict unparseable and the rating silently defaulted to a passing 1.
+      // A critic with something to say returns anchor-based per-item comments (the shape the real
+      // Spec Reviewer emits: `{anchorId, severity, body}`, with NO `quotedSource`). Emitting them
+      // here exercises the actual `companionAssessmentSchema`/`stepReviewCommentSchema` parse the
+      // engine runs — guarding the regression where an anchor-only comment made the verdict
+      // unparseable and the rating silently defaulted to a passing 1.
+      //
+      // A BLOCKING finding is emitted on demand rather than derived from the rating, because the
+      // pair the engine has to tell apart is exactly "cleared the bar with a must-fix open" vs
+      // "cleared the bar with a nit": tying severity to the rating would make that unreachable.
+      const blocking = this.options.companionBlockingFinding
       const comments =
-        rating < 1 ? [{ anchorId: `${context.agentKind}-1`, body: 'address this gap' }] : undefined
+        rating < 1 || blocking
+          ? [
+              {
+                anchorId: `${context.agentKind}-1`,
+                severity: blocking ? 'blocker' : 'major',
+                body: 'address this gap',
+              },
+            ]
+          : undefined
       // The spec-companion corroborates the writer's business-vs-technical determination
       // when configured, so the engine's `technical`-label inference can be exercised.
       const corroborated =
         context.agentKind === 'spec-companion' ? this.options.technicalCorroborated : undefined
-      // The summary carries the LAYOUT the shipped companion prompt asks for (a verdict line, then
-      // a bolded group with one bullet per point), because that string is what the run panel
-      // renders as markdown: a fake that answers in one flat line cannot tell a panel that renders
-      // it from one that dumps it. See `REVIEW_SUMMARY_LAYOUT`.
+      // The summary is a VERDICT and never a restatement of the findings, which is what the
+      // shipped companion prompt asks for (see `REVIEW_FINDINGS_LAYOUT`): the points live in
+      // `comments`, and the panel renders both. A fake that answered in one flat paragraph
+      // carrying its own points could not tell those two renderings apart.
       const summary =
-        `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%\n\n` +
-        (rating < 1 ? '**Must fix**\n- **The gap**: address this gap in the next pass.' : '')
+        `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%` +
+        (comments ? '\n\nThe work is broadly sound; one point is worth taking further.' : '')
       return {
         output: JSON.stringify({
           rating,

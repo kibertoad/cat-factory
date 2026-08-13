@@ -16,6 +16,7 @@ import type {
   PeerPullRequest,
   ReferenceRepo,
   ReferenceScreenshotSet,
+  ReviewCommentSeverity,
   AprioriBranch,
   ServiceProvisioning,
   StepSubtasks,
@@ -660,7 +661,9 @@ export interface AgentRunContext {
    * proposal to address the feedback rather than start from scratch. `comments` are
    * GitHub-review-style notes on specific blocks of the proposal (a human review carries the
    * verbatim `quotedSource` it targets; a companion's anchor-based comment omits it), folded into
-   * the prompt alongside the freeform `feedback`.
+   * the prompt alongside the freeform `feedback`. A reviewer's comment carries the `severity` it
+   * graded the point at, so a producer working through a long list knows which ones are holding
+   * the run rather than guessing from the prose; a person's comment carries none.
    *
    * `requestedBy` says which of the two loops this is — a person's "request changes" or an
    * automatic reviewer's round — because the prompt has to say so and cannot infer it: BOTH arrive
@@ -670,7 +673,7 @@ export interface AgentRunContext {
   revision?: {
     previousProposal: string
     feedback: string
-    comments?: { quotedSource?: string; body: string }[]
+    comments?: { quotedSource?: string; body: string; severity?: ReviewCommentSeverity }[]
     requestedBy: 'human' | 'reviewer'
   }
   /**
@@ -704,7 +707,7 @@ export interface AgentRunContext {
       rating: number
       passed: boolean
       summary: string
-      comments?: { quotedSource?: string; body: string }[]
+      comments?: { quotedSource?: string; body: string; severity?: ReviewCommentSeverity }[]
     }[]
   }
   /**

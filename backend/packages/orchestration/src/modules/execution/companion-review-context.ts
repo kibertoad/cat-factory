@@ -32,6 +32,7 @@ function toRounds(
       ? {
           comments: verdict.comments.map((comment) => ({
             ...(comment.quotedSource ? { quotedSource: comment.quotedSource } : {}),
+            ...(comment.severity ? { severity: comment.severity } : {}),
             body: comment.body,
           })),
         }
@@ -132,6 +133,9 @@ function revisionSlice(step: PipelineStep): { revision?: AgentRunContext['revisi
         ? {
             comments: source.comments.map((c) => ({
               ...(c.quotedSource ? { quotedSource: c.quotedSource } : {}),
+              // A reviewer's grade rides through to the producer; a person's comment has none, and
+              // an absent one stays absent rather than being defaulted to a level nobody chose.
+              ...(c.severity ? { severity: c.severity } : {}),
               body: c.body,
             })),
           }

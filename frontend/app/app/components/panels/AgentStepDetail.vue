@@ -13,7 +13,7 @@ import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue
 import BinaryOutputReport from '~/components/binaryOutput/BinaryOutputReport.vue'
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
-import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
+import { UI_TESTER_AGENT_KIND, blockingReviewComments } from '@cat-factory/contracts'
 import type { GateApprovalRefusal } from '@cat-factory/contracts'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
@@ -171,6 +171,16 @@ const proposalEditable = computed(() => step.value?.outputIsRendered !== true)
 // approve/request-changes/reject rail, it shows the shared iteration-cap prompt
 // (one more round / proceed / stop & reset), resolved through its own endpoint.
 const companionExceeded = computed(() => approvalPending.value && !!step.value?.companion?.exceeded)
+/**
+ * The must-fix findings the reviewer left open on its last round.
+ *
+ * They are why the two cap prompts read differently, and the difference is not cosmetic: a cap
+ * reached on the rating alone is the loop reporting that this is as good as it got, while an open
+ * blocker is the reviewer saying the work must not go on as it stands. That second one is also the
+ * park no risk policy will answer, so the person reading it is the only route past it and should
+ * be told what they are being asked to overrule.
+ */
+const blockingFindings = computed(() => blockingReviewComments(latestVerdict.value?.comments))
 // A park a DEDICATED window owns (fork choice / follow-up triage): the generic approve
 // resolver refuses these server-side, so the rail is replaced by a redirect to that window.
 // Computed live, since a coder step can park on one WHILE this overlay is already open
@@ -492,13 +502,27 @@ async function copyOutput() {
               <IterationCapPrompt
                 v-if="companionExceeded"
                 :heading="
-                  t('panels.stepDetail.companionCapHeading', {
-                    agent: agent.label,
-                    attempts: step.companion?.maxAttempts,
-                    threshold: pctOf(latestVerdict?.threshold ?? 0),
-                  })
+                  blockingFindings.length
+                    ? t(
+                        'panels.stepDetail.companionCapBlockedHeading',
+                        {
+                          agent: agent.label,
+                          attempts: step.companion?.maxAttempts,
+                          count: blockingFindings.length,
+                        },
+                        blockingFindings.length,
+                      )
+                    : t('panels.stepDetail.companionCapHeading', {
+                        agent: agent.label,
+                        attempts: step.companion?.maxAttempts,
+                        threshold: pctOf(latestVerdict?.threshold ?? 0),
+                      })
                 "
-                :detail="t('panels.stepDetail.companionCapDetail')"
+                :detail="
+                  blockingFindings.length
+                    ? t('panels.stepDetail.companionCapBlockedDetail')
+                    : t('panels.stepDetail.companionCapDetail')
+                "
                 :loading="resolvingCap"
                 @resolve="resolveCompanionCap"
               />

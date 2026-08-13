@@ -2033,6 +2033,12 @@
       "awaitingChoice": "Wartet auf eine menschliche Wahl",
       "approvalGate": "Freigabe-Gate",
       "companionReview": "Begleiter-Prüfung",
+      "findingSeverity": {
+        "blocker": "Muss behoben werden",
+        "major": "Sollte behoben werden",
+        "minor": "Geringfügig",
+        "ungraded": "Kommentar"
+      },
       "correctionIterations": "{count} Korrekturiteration. | {count} Korrekturiterationen.",
       "state": {
         "pending": "Ausstehend",
@@ -2069,6 +2075,8 @@
       "closeEsc": "Schließen (Esc)",
       "companionCapHeading": "{agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, noch unter der {threshold}-Schwelle.",
       "companionCapDetail": "Führe eine weitere automatische Überarbeitungsrunde durch, fahre mit dem nächsten Schritt fort und akzeptiere die aktuelle Ausgabe, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
+      "companionCapBlockedHeading": "{agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, {count} zwingender Befund ist weiterhin offen. | {agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, {count} zwingende Befunde sind weiterhin offen.",
+      "companionCapBlockedDetail": "Fortfahren akzeptiert die Arbeit mit diesen ungelösten Befunden, deshalb trifft die Risikorichtlinie dieses Laufs diese Wahl nie für dich. Führe eine weitere automatische Überarbeitungsrunde durch, fahre trotzdem mit der aktuellen Ausgabe fort, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
       "infraAttempts": "Infrastruktur-Versuche",
       "hideInfraAttempts": "Infrastruktur-Versuche ausblenden",
       "executionHistory": "Ausführungshistorie",

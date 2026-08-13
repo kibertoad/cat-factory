@@ -133,7 +133,24 @@ const ABOVE_WITH_COMMENTS = {
   custom: {
     rating: 0.95,
     summary: 'the design holds up; one gap worth closing',
-    comments: [{ anchorId: 'architect-companion-1', body: 'name the failure mode here' }],
+    comments: [
+      { anchorId: 'architect-companion-1', severity: 'minor', body: 'name the failure mode here' },
+    ],
+  },
+}
+
+/**
+ * The same cleared grade, but one of its points is a MUST-FIX. A real reviewer produces this
+ * constantly: the work is broadly sound and one thing in it must not ship.
+ */
+const ABOVE_WITH_BLOCKER = {
+  output: '',
+  custom: {
+    rating: 0.95,
+    summary: 'the design holds up, but the failure mode is unhandled',
+    comments: [
+      { anchorId: 'architect-companion-1', severity: 'blocker', body: 'unhandled partial write' },
+    ],
   },
 }
 
@@ -356,5 +373,90 @@ describe('a first batch of comments', () => {
 
     expect(settle).toHaveBeenCalledOnce()
     expect(inst.steps[1]!.companion?.capSettledByPolicy).toBeUndefined()
+  })
+})
+
+// A MUST-FIX finding against the rating that would otherwise wave it through. This is the reason
+// findings are graded at all: the rating is one number over the whole deliverable, so a review can
+// score work above its bar and still have named something that must not ship, and before the
+// severity existed the engine could not tell those two verdicts apart.
+
+describe('a blocker finding', () => {
+  it('reworks the producer even on a rating that cleared the bar', async () => {
+    const { controller, loop, park, settle } = harness('attended', 3)
+    const inst = instance()
+    // NOT the first batch: the first-batch rule already loops on any comment, so a blocker asserted
+    // there would pass for the wrong reason. Second round onward the rating alone used to decide.
+    inst.steps[1] = step({
+      companion: {
+        threshold: 0.8,
+        maxAttempts: 3,
+        attempts: 1,
+        verdicts: [{ rating: 0.4, threshold: 0.8, passed: false, feedback: 'too vague' }],
+      },
+    })
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
+      ...ABOVE_WITH_BLOCKER,
+    })
+
+    expect(loop).toHaveBeenCalledOnce()
+    expect(park).not.toHaveBeenCalled()
+    expect(settle).not.toHaveBeenCalled()
+    // The recorded verdict says 0.95 against a 0.8 bar and did NOT pass, which reads as a
+    // contradiction until you see the blocker stored beside it — which is why it is stored.
+    const verdict = inst.steps[1]!.companion?.verdicts.at(-1)
+    expect(verdict?.passed).toBe(false)
+    expect(verdict?.rating).toBe(0.95)
+    expect(verdict?.comments?.[0]?.severity).toBe('blocker')
+  })
+
+  it('parks for a person once the budget is spent, cleared rating and all', async () => {
+    const { controller, park, settle } = harness('attended', 1)
+    const inst = instance()
+
+    const result = await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
+      ...ABOVE_WITH_BLOCKER,
+    })
+
+    expect(park).toHaveBeenCalledOnce()
+    expect(settle).not.toHaveBeenCalled()
+    expect(result.kind).toBe('awaiting_decision')
+    expect(inst.steps[1]!.companion?.exceeded).toBe(true)
+  })
+
+  it('is NOT answered by an unattended policy, unlike a spent budget', async () => {
+    // The line ADR 0053 draws, applied to the second way this loop stops. An unattended policy
+    // answers the automation reporting that it gave up; a reviewer's must-fix is not that. Taking
+    // "proceed anyway" here would be overruling a review nobody read, on work the reviewer said
+    // must not go further — and `capSettledByPolicy` would then be stamped on a PASSING rating,
+    // which reads as "a bar went unmet and policy waived it" about a bar that was met.
+    const { controller, park, settle } = harness('unattended', 1)
+    const inst = instance()
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
+      ...ABOVE_WITH_BLOCKER,
+    })
+
+    expect(park).toHaveBeenCalledOnce()
+    expect(settle).not.toHaveBeenCalled()
+    expect(inst.steps[1]!.companion?.exceeded).toBe(true)
+    expect(inst.steps[1]!.companion?.capSettledByPolicy).toBeUndefined()
+  })
+
+  it('holds the run even where the policy buys no rework rounds', async () => {
+    // `companionMaxReworks: 0` is the posture that lets a cleared rating with ordinary comments
+    // advance (asserted above). It says "do not spend model calls looping", never "accept whatever
+    // comes back", so a must-fix still stops — it just stops at the person straight away.
+    const { controller, loop, park, settle } = harness('unattended', 0)
+    const inst = fresh()
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
+      ...ABOVE_WITH_BLOCKER,
+    })
+
+    expect(loop).not.toHaveBeenCalled()
+    expect(park).toHaveBeenCalledOnce()
+    expect(settle).not.toHaveBeenCalled()
   })
 })

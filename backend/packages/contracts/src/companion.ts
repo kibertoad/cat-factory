@@ -6,13 +6,24 @@ import { fragmentAdherenceSchema } from './fragment-adherence.js'
 // Companion-agent wire contracts. A companion agent reviews the outcome of an
 // immediately-preceding producer step (e.g. an architect design, a spec's
 // acceptance scenarios, or a coder's change), challenges its quality and
-// completeness, and returns a single overall quality rating in 0..1 plus
-// actionable feedback. The execution engine compares the rating against the
-// step's configured threshold (default 0.8): at or above it the run proceeds to
-// the human gate / next step; below it the producer step is re-run with the
-// companion's feedback folded in, and once the rework budget is exhausted the step
-// parks on a human iteration-cap gate (one more round / proceed anyway / stop & reset)
-// instead of failing.
+// completeness, and returns its findings as severity-graded `comments` plus a
+// single overall quality rating in 0..1.
+//
+// TWO things decide whether the run moves on, and the engine reads them in this
+// order (kernel's `disposeCompanionVerdict`):
+//
+//  1. Any `blocker`-severity comment holds the step, WHATEVER the rating. A rating
+//     is one number over a whole deliverable, so a review that found something
+//     genuinely unshippable could still average above the bar; a graded finding is
+//     the reviewer saying which points that number must not absorb.
+//  2. Otherwise the rating is compared against the step's configured threshold
+//     (default 0.8): at or above it the run proceeds to the human gate / next step.
+//
+// Either way of not passing re-runs the producer with the companion's feedback
+// folded in, and once the rework budget is exhausted the step parks on a human
+// iteration-cap gate (one more round / proceed anyway / stop & reset) instead of
+// failing. An unattended risk policy may answer that park when the loop merely ran
+// out of rounds, never when a blocker is still open.
 // ---------------------------------------------------------------------------
 
 /** The default quality bar a companion's rating must reach for the run to proceed. */

@@ -19,7 +19,7 @@ import { roleSystemPrompt } from './prompts/roles.js'
 import {
   FINAL_ANSWER_IN_REPLY,
   PLATFORM_IS_NOT_THE_PRODUCT,
-  REVIEW_SUMMARY_LAYOUT,
+  REVIEW_FINDINGS_LAYOUT,
 } from './prompts/shared.js'
 import {
   ACCOUNTING_REVIEW_DIRECTIVE,
@@ -27,6 +27,7 @@ import {
   PRIOR_ROUNDS_DIRECTIVE,
   renderPriorReviewRounds,
 } from './prompts/review-rounds.js'
+import { REVIEW_COMMENT_SEVERITY_RANK } from '@cat-factory/contracts'
 import {
   customTaskTypeSection,
   environmentSection,
@@ -56,17 +57,18 @@ import {
  * override replaces the track prompt, so for a built-in kind it silently takes the inline copy
  * with it. See {@link restoreShippedInvariants}.
  *
- * {@link REVIEW_SUMMARY_LAYOUT} belongs here for the same reason the final-answer rule does: it is
- * a fact about how the platform READS a reviewer's reply, not editorial content. The `summary` it
- * shapes is rendered as markdown blocks in the run panel, and the escaping sentence it carries is
- * what keeps a multi-line verdict from arriving as invalid JSON. A workspace that edits its
- * reviewer prompt for an unrelated reason would otherwise send every later verdict back to one
- * unskimmable paragraph, with nothing in the editor saying why.
+ * {@link REVIEW_FINDINGS_LAYOUT} belongs here for the same reason the final-answer rule does: it
+ * is a fact about how the platform READS a reviewer's reply, not editorial content. The severities
+ * it asks for are what the ENGINE acts on (a `blocker` holds the step), the `summary` it shapes is
+ * rendered as markdown in the run panel, and the escaping sentence it carries is what keeps a
+ * multi-line verdict from arriving as invalid JSON. A workspace that edits its reviewer prompt for
+ * an unrelated reason would otherwise get ungraded findings back — every point reaching the engine
+ * as equally urgent — with nothing in the editor saying why.
  */
 const OVERRIDE_PRESERVED_FRAGMENTS = [
   READ_ONLY_GUARDRAIL,
   FINAL_ANSWER_IN_REPLY,
-  REVIEW_SUMMARY_LAYOUT,
+  REVIEW_FINDINGS_LAYOUT,
 ] as const
 
 /**
@@ -285,12 +287,28 @@ function withRevision(prompt: string, context: AgentRunContext): string {
   ]
   // Per-block comments the reviewer left on specific parts of the proposal. Each
   // quotes the exact text it targets, so the agent can locate and revise it.
+  //
+  // Worst first, and each one labelled with the urgency it was raised at, because that is what
+  // decides whether this rework ends the loop: a `blocker` left open sends the work straight back
+  // however much else was addressed. A person's comment carries no grade and is simply unlabelled
+  // — they are already holding the run, so there is nothing for a label to add.
   if (revision.comments?.length) {
+    const graded = [...revision.comments].sort(
+      (a, b) =>
+        (b.severity ? REVIEW_COMMENT_SEVERITY_RANK[b.severity] : -1) -
+        (a.severity ? REVIEW_COMMENT_SEVERITY_RANK[a.severity] : -1),
+    )
     lines.push('', 'Comments on specific parts of your proposal:')
-    for (const c of revision.comments) {
+    if (graded.some((c) => c.severity === 'blocker')) {
+      lines.push(
+        'Every comment marked [blocker] MUST be resolved in this revision: while one is open the',
+        'work does not move on. Deal with those first, then the rest.',
+      )
+    }
+    for (const c of graded) {
       lines.push(
         '',
-        'On this part:',
+        `On this part:${c.severity ? ` [${c.severity}]` : ''}`,
         c.quotedSource || '(empty)',
         'Comment:',
         c.body || '(none given)',

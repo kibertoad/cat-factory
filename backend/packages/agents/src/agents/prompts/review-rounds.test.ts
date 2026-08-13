@@ -227,4 +227,32 @@ describe('renderPriorReviewRounds', () => {
     const [first, second] = lines.split('Round 2')
     expect(second!.length).toBeGreaterThan(first!.length)
   })
+
+  it('labels each point with its grade and puts the worst first', () => {
+    // A round's history is what tells the next pass which of its earlier asks are still holding the
+    // run. Rendered as undifferentiated bullets, the must-fix from round 1 competes for attention
+    // with the nit raised in the same breath, and both sides of the loop re-triage from scratch.
+    const lines = renderPriorReviewRounds([
+      {
+        round: 1,
+        rating: 0.6,
+        passed: false,
+        summary: 'mostly sound',
+        comments: [
+          { body: 'rename this', severity: 'minor' },
+          { body: 'a person said so' },
+          { body: 'unhandled partial write', severity: 'blocker' },
+          { body: 'thin coverage', severity: 'major' },
+        ],
+      },
+    ])
+    const bullets = lines.filter((line) => line.startsWith('- '))
+    expect(bullets).toEqual([
+      '- [blocker] unhandled partial write',
+      '- [major] thin coverage',
+      '- [minor] rename this',
+      // A human's comment has no grade, so it carries no label rather than a guessed one.
+      '- a person said so',
+    ])
+  })
 })

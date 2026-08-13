@@ -1458,6 +1458,12 @@
       "awaitingChoice": "Awaiting a human choice",
       "approvalGate": "Approval gate",
       "companionReview": "Companion review",
+      "findingSeverity": {
+        "blocker": "Must fix",
+        "major": "Should fix",
+        "minor": "Minor",
+        "ungraded": "Comment"
+      },
       "correctionIterations": "{count} correction iteration. | {count} correction iterations.",
       "state": {
         "pending": "Pending",
@@ -1494,6 +1500,8 @@
       "closeEsc": "Close (Esc)",
       "companionCapHeading": "{agent} hit its {attempts}-attempt rework limit, still below the {threshold} bar.",
       "companionCapDetail": "Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
+      "companionCapBlockedHeading": "{agent} hit its {attempts}-attempt rework limit with {count} must-fix finding still open. | {agent} hit its {attempts}-attempt rework limit with {count} must-fix findings still open.",
+      "companionCapBlockedDetail": "Proceeding accepts the work with those findings unfixed, which is why this run’s risk policy will never take that choice for you. Do one more automatic rework round, proceed anyway on the current output, or stop and reset the task so you can edit the inputs and resubmit.",
       "infraAttempts": "Infrastructure attempts",
       "hideInfraAttempts": "Hide infrastructure attempts",
       "executionHistory": "Execution history",

@@ -1348,6 +1348,12 @@
       "awaitingChoice": "Oczekiwanie na wybór człowieka",
       "approvalGate": "Bramka zatwierdzenia",
       "companionReview": "Recenzja towarzysza",
+      "findingSeverity": {
+        "blocker": "Blokujące",
+        "major": "Do poprawy",
+        "minor": "Drobne",
+        "ungraded": "Komentarz"
+      },
       "correctionIterations": "{count} iteracja korekty. | {count} iteracje korekty. | {count} iteracji korekty.",
       "state": {
         "pending": "Oczekuje",
@@ -1403,6 +1409,8 @@
       "closeEsc": "Zamknij (Esc)",
       "companionCapHeading": "{agent} osiągnął limit {attempts} prób przeróbki, wciąż poniżej progu {threshold}.",
       "companionCapDetail": "Wykonaj jeszcze jedną automatyczną rundę przeróbki, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
+      "companionCapBlockedHeading": "{agent} osiągnął limit {attempts} prób przeróbki, a {count} uwaga blokująca pozostaje otwarta. | {agent} osiągnął limit {attempts} prób przeróbki, a {count} uwagi blokujące pozostają otwarte. | {agent} osiągnął limit {attempts} prób przeróbki, a {count} uwag blokujących pozostaje otwartych.",
+      "companionCapBlockedDetail": "Kontynuacja oznacza przyjęcie pracy z tymi nienaprawionymi uwagami, dlatego polityka ryzyka tego przebiegu nigdy nie podejmie takiej decyzji za ciebie. Wykonaj jeszcze jedną automatyczną rundę przeróbki, kontynuuj mimo to z bieżącym wynikiem, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
       "infraAttempts": "Próby infrastrukturalne",
       "hideInfraAttempts": "Ukryj próby infrastrukturalne",
       "executionHistory": "Historia wykonania",

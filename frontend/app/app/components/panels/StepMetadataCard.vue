@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { bySeverityWorstFirst, type ReviewCommentSeverity } from '@cat-factory/contracts'
 import type { AgentState, PipelineStep, CompanionVerdict, StepApproval } from '~/types/execution'
 import { subtaskIconClass } from '~/utils/pipelineRender'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
@@ -64,6 +65,22 @@ const ITEM_ICON: Record<string, string> = {
 }
 
 const pctOf = (n: number) => `${Math.round(n * 100)}%`
+
+/**
+ * The colour each finding grade renders at. `ungraded` is its own member rather than a fallback
+ * arm: a person's comment carries no severity and neither does a verdict recorded before reviewers
+ * graded anything, and painting either of those `major` would put a level on the screen that
+ * nobody chose. An exhaustive `Record` so a severity added to the contract fails to compile here.
+ */
+const SEVERITY_COLOR: Record<ReviewCommentSeverity | 'ungraded', 'error' | 'warning' | 'neutral'> = {
+  blocker: 'error',
+  major: 'warning',
+  minor: 'neutral',
+  ungraded: 'neutral',
+}
+
+/** One round's findings, worst first — the order the reviewer's asks should be worked in. */
+const findingsOf = (verdict: CompanionVerdict) => bySeverityWorstFirst(verdict.comments ?? [])
 
 const APPROVAL_STATUS_KEYS: Record<StepApproval['status'], string> = {
   pending: 'panels.stepMeta.approvalStatus.pending',
@@ -283,9 +300,11 @@ async function copyRunId() {
           {{ latestVerdict?.passed ? '≥' : '<' }} {{ pctOf(latestVerdict!.threshold) }}
         </UBadge>
       </div>
-      <!-- One card per correction round: the score on its own line, then the reviewer's
-           challenge as rendered markdown. The feedback used to trail the score inside the same
-           line, which turned a multi-point review into one unreadable run of text. -->
+      <!-- One card per correction round: the score on its own line, then the reviewer's verdict
+           as rendered markdown, then its graded findings worst first. The feedback used to trail
+           the score inside the same line, which turned a multi-point review into one unreadable
+           run of text; the findings used not to be rendered at all, so a "must fix" holding the
+           run was invisible to the person being asked to resolve it. -->
       <ol class="mt-2 space-y-2">
         <li
           v-for="(v, i) in companionVerdicts"
@@ -312,6 +331,27 @@ async function copyRunId() {
             :text="v.feedback"
             class="mt-1.5 pe-6 text-[12px] leading-relaxed text-slate-300"
           />
+          <ul v-if="findingsOf(v).length" class="mt-2 space-y-1.5">
+            <li
+              v-for="(finding, fi) in findingsOf(v)"
+              :key="fi"
+              data-testid="companion-finding"
+              class="flex gap-2"
+            >
+              <UBadge
+                :color="SEVERITY_COLOR[finding.severity ?? 'ungraded']"
+                variant="subtle"
+                size="sm"
+                class="mt-px h-4 shrink-0"
+              >
+                {{ t(`panels.stepMeta.findingSeverity.${finding.severity ?? 'ungraded'}`) }}
+              </UBadge>
+              <MarkdownProse
+                :text="finding.body"
+                class="min-w-0 text-[12px] leading-relaxed text-slate-300"
+              />
+            </li>
+          </ul>
         </li>
       </ol>
       <p v-if="companionVerdicts.length > 1" class="mt-1 text-[11px] text-slate-500">
