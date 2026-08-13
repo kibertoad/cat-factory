@@ -8,6 +8,7 @@ import {
   classifyPushRejection,
   describeGitFailure,
   pushBranch,
+  unpublishedWorkBranchTip,
   workBranchLease,
 } from '../src/git.js'
 import { HarnessFailure } from '../src/failure.js'
@@ -106,6 +107,27 @@ describe('pushBranch leasing', () => {
       cwd: work,
     }).catch(() => null)
     expect(tracking).toBeNull()
+  })
+
+  it('has nothing to publish at the pre-run tip, or at the tip it last published', async () => {
+    // What makes the 60s checkpoint a LOSS WINDOW rather than a push rate. Without the second
+    // condition the tick re-pushed an unchanged branch forever: an hour-long run committing eight
+    // times spent ~60 authenticated round trips to say "Everything up-to-date" ~52 times.
+    const { stdout: base } = await exec('git', ['rev-parse', 'HEAD'], { cwd: work })
+    const baseSha = base.trim()
+    const tip = (publishedSha?: string): Promise<string | undefined> =>
+      unpublishedWorkBranchTip({ dir: work, baseSha, publishedSha })
+    // A pass that has committed nothing must leave NO branch behind: a zero-diff branch pushed here
+    // is what a later retry resumes and then cannot open a PR for.
+    expect(await tip(undefined)).toBeUndefined()
+    await commit(work, 'src.ts', 'export const a = 1\n', 'agent work')
+    const published = await push(work)
+    expect(await tip(undefined)).toBe(published)
+    expect(await tip(published)).toBeUndefined()
+    // And it wakes up again the moment the agent commits, so the durability guarantee is unchanged.
+    await commit(work, 'more.ts', 'export const b = 1\n', 'agent work 2')
+    expect(await tip(published)).not.toBeUndefined()
+    expect(await tip(published)).not.toBe(published)
   })
 
   it('lands a rewrite of the checkpoint it published, and refuses the same push unleased', async () => {

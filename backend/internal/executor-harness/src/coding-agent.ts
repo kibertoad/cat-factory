@@ -24,6 +24,7 @@ import {
   pushBranch,
   refreshFromBaseIfClean,
   remoteBranchExists,
+  unpublishedWorkBranchTip,
   workBranchLease,
 } from './git.js'
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
@@ -281,7 +282,8 @@ function followUpPollIntervalMs(): number {
  * concurrently: overlapping pushes race on the remote ref and can make a push fail with a
  * ref-lock / non-fast-forward error — which, on the FINAL push, would fail the whole run even
  * though the work is committed. `pushWorkOnce` coalesces concurrent callers onto one push and only
- * pushes once the branch has advanced past `baseSha`.
+ * pushes what is UNPUBLISHED ({@link unpublishedWorkBranchTip}: past `baseSha`, and not already the
+ * tip the last push published).
  *
  * Every push after the first LEASES against the sha this pass published (see
  * {@link pushBranch}), because the checkpoint makes the harness its own competing writer: it
@@ -301,11 +303,14 @@ function followUpPollIntervalMs(): number {
  * withheld, the push goes out plain, git refuses it, and the engine re-dispatches onto the branch
  * as it stands. A rewrite this pass cannot prove is its own is never forced away.
  *
- * Only push once the branch has advanced past its pre-run tip: pushing while it still sits at
- * `baseSha` would create the work branch at the base commit (a zero-diff branch), which a later
- * retry would see via `remoteBranchExists` and treat as resumable work — then fail to open a PR
- * ("no commits between base and head"). So a run that never commits leaves NO branch behind,
- * preserving the clean no-op outcome.
+ * What is pushable is {@link unpublishedWorkBranchTip}'s question, and both of its answers matter
+ * here. A branch still at `baseSha` must not be pushed at all, or a later retry resumes a zero-diff
+ * branch and cannot open a PR for it. A branch already at the published tip has nothing to add, and
+ * skipping it is what keeps the interval a LOSS WINDOW rather than a push rate: an hour-long run
+ * that commits eight times pushes eight times, not sixty. That skip is invisible to the outcome by
+ * construction: `finalizeCodingRun` decides `pushed` from the BRANCH (advanced this pass, or
+ * resumed), never from whether the final call issued a `git push`, because a tip the checkpoint
+ * already published is published.
  */
 function createWorkBranchPusher(args: {
   dir: string
@@ -327,7 +332,7 @@ function createWorkBranchPusher(args: {
   const pushWorkOnce = (): Promise<void> => {
     if (pushInFlight) return pushInFlight
     pushInFlight = (async () => {
-      if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
+      if (!(await unpublishedWorkBranchTip({ dir, baseSha, publishedSha, signal }))) return
       // The rule the lease is entitled to lives beside the push ({@link workBranchLease}); the
       // warn is here, because a withheld lease is how a rewrite this pass cannot claim fails the
       // push it is about to make, and the run's log is where that is read.

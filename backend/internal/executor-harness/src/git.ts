@@ -1209,6 +1209,37 @@ export async function branchContainsCommit(
 }
 
 /**
+ * The work branch's tip when it holds something UNPUBLISHED, else undefined: the answer to whether a
+ * checkpoint tick has anything to do. Two ways of having nothing:
+ *
+ *  - the tip is still `baseSha`, so this pass has committed nothing. Pushing here would create the
+ *    work branch at the base commit, and a later retry would see that zero-diff branch via
+ *    `remoteBranchExists`, resume it as work, and fail to open a PR ("no commits between base and
+ *    head"). A pass that never commits must leave NO branch behind.
+ *  - the tip is `publishedSha`, so the last push already published it. Without this the checkpoint
+ *    re-pushed an unchanged branch on every tick: an hour-long run committing eight times issued
+ *    ~60 pushes, ~52 of them a full authenticated round trip answering "Everything up-to-date",
+ *    each one counting against the host's push rate limits.
+ *
+ * That second condition is also what keeps the INTERVAL the right knob. It expresses the acceptable
+ * loss window when a container dies (a property of the deployment's infra churn), not a rate: gated
+ * this way, the tick publishes at most one push per commit the agent makes, whatever the model or
+ * the run's length, so nothing here needs to be tuned per model.
+ */
+export async function unpublishedWorkBranchTip(args: {
+  dir: string
+  /** The branch tip this pass started from. */
+  baseSha: string
+  /** The sha this pass published, if any ({@link pushBranch}'s return). */
+  publishedSha: string | undefined
+  signal?: AbortSignal
+}): Promise<string | undefined> {
+  const head = await headCommit(args.dir, args.signal)
+  if (head === args.baseSha || head === args.publishedSha) return undefined
+  return head
+}
+
+/**
  * The lease a work-branch push is entitled to (the `opts` {@link pushBranch} takes): the sha this
  * pass last published, and nothing at all before it has published one.
  *

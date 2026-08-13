@@ -43,6 +43,13 @@ own "use `git pull`" hint, which is advice for a person at a terminal. Each refu
 the new `container.branch_contended` operational counter, since a re-dispatch that a run reports as
 a clean success is invisible per run and costs a whole agent run twice.
 
+The checkpoint also stops re-pushing an unchanged branch. Its gate was "the branch advanced past the
+pre-run tip", which stays true forever once it has, so every tick issued a push: an hour-long run
+that commits eight times spent ~60 authenticated round trips, ~52 of them answering "Everything
+up-to-date" and each counting against the host's push rate limits. It now pushes only an
+UNPUBLISHED tip, which makes the interval a loss window rather than a rate (one push per commit the
+agent makes, whatever the model or the run's length) and leaves the durability guarantee unchanged.
+
 The `build` prompt bumps to v6 with the matching half of the rule stated to the agent: add commits,
 never rewrite them.
 

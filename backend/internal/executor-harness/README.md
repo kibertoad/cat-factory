@@ -117,12 +117,16 @@ PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 
 ### The work-branch push is CHECKPOINTED, so it is lease-guarded
 
-Step 8's push is not the run's first: the harness pushes the agent's committed work every
-`JOB_CHECKPOINT_INTERVAL_MS` (60s) so an evicted container's work survives on the branch and a
-retry resumes on top of it. That makes the harness its own competing writer. A commit is published
-within a minute of being made, the agent cannot observe that from inside the container, and
-amending or resetting it afterwards is ordinary git hygiene, so the final push used to be refused
-as a non-fast-forward and failed the whole run with its work already on the branch.
+Step 8's push is not the run's first: every `JOB_CHECKPOINT_INTERVAL_MS` (60s) the harness pushes
+whatever the agent has committed and NOT yet published, so an evicted container's work survives on
+the branch and a retry resumes on top of it. The interval is a **loss window**, not a push rate:
+`unpublishedWorkBranchTip` skips a tick whose branch tip is already published, so a long run pushes
+once per commit the agent makes rather than once a minute, and nothing here needs tuning per model.
+
+That makes the harness its own competing writer. A commit is published within a minute of being
+made, the agent cannot observe that from inside the container, and amending or resetting it
+afterwards is ordinary git hygiene, so the final push used to be refused as a non-fast-forward and
+failed the whole run with its work already on the branch.
 
 Every push after the first therefore carries `--force-with-lease` against **the sha this pass
 itself published**, never a tip it merely cloned. Two rules make that bound real, and both are
