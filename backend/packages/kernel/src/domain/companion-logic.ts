@@ -1,4 +1,8 @@
-import { hasBlockingReviewComments, type StepReviewComment } from '@cat-factory/contracts'
+import {
+  hasBlockingReviewComments,
+  hasReviewCommentsBeyondNits,
+  type StepReviewComment,
+} from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // The PURE half of the companion machine (the `judge-logic.ts` counterpart): given a parsed
@@ -29,6 +33,24 @@ import { hasBlockingReviewComments, type StepReviewComment } from '@cat-factory/
  * change away from re-pointing the decision silently.
  */
 export type CompanionParkReason = 'budget_spent' | 'blocking_findings'
+
+/**
+ * WHICH reason a companion parks for, given the findings its latest round raised.
+ *
+ * One function rather than a branch at each park site, because a second copy is how a loop that
+ * ABANDONED its budget early comes to report the spent budget it merely resembles. Both places that
+ * stop for a person read it: {@link disposeCompanionVerdict} when the rounds run out, and the
+ * engine's unproductive-loop exit when it gives the rest of them up.
+ *
+ * It is total over the findings and answers with a reason ALWAYS, which is the other half of the
+ * point: asking the disposition rule to re-decide with an emptied budget can answer `pass`, and a
+ * caller that expected a park reason then reads "advance" as "hold".
+ */
+export function companionParkReasonFor(
+  comments: readonly StepReviewComment[] | undefined,
+): CompanionParkReason {
+  return hasBlockingReviewComments(comments) ? 'blocking_findings' : 'budget_spent'
+}
 
 /** What {@link disposeCompanionVerdict} needs to decide. */
 export interface CompanionDispositionInput {
@@ -63,10 +85,14 @@ export interface CompanionDispositionResult {
  *
  *  - no producer to grade → `pass` (nothing was reviewed, so nothing can be held);
  *  - any `blocker` finding → `rework` while a round is left, else `park` (`blocking_findings`);
- *  - the FIRST batch raising any finding at all → `rework` while a round is left. That first batch
- *    is worth a round even from a producer that scored well, and it is the whole reason a
- *    threshold governs the SECOND pass onward. A policy buying no rounds has already answered
- *    that, so with no budget the rating decides alone;
+ *  - the FIRST batch raising anything the reviewer did not call a nit → `rework` while a round is
+ *    left. That first batch is worth a round even from a producer that scored well, and it is the
+ *    whole reason a threshold governs the SECOND pass onward. A policy buying no rounds has already
+ *    answered that, so with no budget the rating decides alone. MINOR-ONLY is deliberately not
+ *    enough (`hasReviewCommentsBeyondNits`): the reviewer is told a `minor` is "a nit, polish or
+ *    suggestion, never worth holding anything for" (agents' `REVIEW_FINDINGS_LAYOUT`), so a rule
+ *    that spent a producer re-run plus a re-grading call on one would make that instruction false,
+ *    and the grade would then decide nothing a reviewer could predict;
  *  - at or above the threshold → `pass`;
  *  - below it → `rework` while a round is left, else `park` (`budget_spent`).
  *
@@ -85,9 +111,13 @@ export function disposeCompanionVerdict(
   if (hasBlockingReviewComments(comments)) {
     return hasBudget
       ? { disposition: 'rework' }
-      : { disposition: 'park', parkReason: 'blocking_findings' }
+      : { disposition: 'park', parkReason: companionParkReasonFor(comments) }
   }
-  if (attempts === 0 && (comments?.length ?? 0) > 0 && hasBudget) return { disposition: 'rework' }
+  if (attempts === 0 && hasBudget && hasReviewCommentsBeyondNits(comments)) {
+    return { disposition: 'rework' }
+  }
   if (rating >= threshold) return { disposition: 'pass' }
-  return hasBudget ? { disposition: 'rework' } : { disposition: 'park', parkReason: 'budget_spent' }
+  return hasBudget
+    ? { disposition: 'rework' }
+    : { disposition: 'park', parkReason: companionParkReasonFor(comments) }
 }

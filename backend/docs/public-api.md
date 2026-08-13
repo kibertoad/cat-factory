@@ -1499,8 +1499,16 @@ Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   up for a person — the simplest park, and the one any pipeline can carry. Carries the
   `approvalId` every action addresses, the `stepKind` and `stepIndex` whose output is being judged,
   the `proposal` itself, and the last `feedback`. **`exceeded: true` changes the verb**: the gate is
-  a quality companion at its automatic-rework cap, the plain approve is refused (`409`), and
-  `resolve-exceeded` is what settles it.
+  a quality companion whose automatic rework loop stopped without the work being accepted, the plain
+  approve is refused (`409`), and `resolve-exceeded` is what settles it.
+
+  **`blockingFindings` is what a `proceed` would overrule.** Non-empty, it means the reviewer named
+  points it says must be fixed before the work goes further, and answering `proceed` accepts the work
+  with them open. That is the one park the platform's own unattended risk policies never answer for a
+  person, so an integration that resolves it is taking a decision no automation here will take. Empty
+  (with `exceeded: true`) means the loop merely ran out of rounds under the quality bar. Read them
+  rather than the `proposal`: a companion's summary is a verdict and does not restate its own
+  findings.
 
   **`requiredApprovals` / `recordedApprovals` are why an `approve` may legitimately not advance the
   run.**

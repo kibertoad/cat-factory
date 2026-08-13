@@ -755,3 +755,22 @@ under the run; the engine re-dispatches the step once, and the run then reports 
 success. The only trace that a whole agent run was spent twice, in tokens and in wall clock, is this
 number. It sits beside `evictionRecoveries`, which exists for the same reason and answers the same
 kind of question: reading the step alone, a re-dispatched run is indistinguishable from a clean one.
+
+## 1.53.0
+
+1.53.0, not 1.52.1: one additive field, `blockingFindings`, on the `approval-gate` entry of
+`GET /api/v1/runs/{runId}/decisions`. Nothing existing changes shape or meaning, and a consumer built
+against 1.52.0 ignores it.
+
+**It closes a gap between what a caller may decide and what it can see.** A companion gate reporting
+`exceeded: true` is answered with `resolve-exceeded`, and one of the three choices is `proceed`. Until
+now the only prose on that decision was `proposal`, the companion's verdict SUMMARY, which the shipped
+reviewer prompt forbids from restating the individual findings: the graded points lived only in
+internal step state. So an integration answering `proceed` was accepting work whose stated must-fixes
+it had never been shown. The engine's own unattended risk policies refuse that park for exactly this
+reason, which made an external caller the one route past it and the one most in need of the detail.
+
+Each entry carries the reviewer's note and the `anchorId` it targets; severity is not carried because
+every entry is a `blocker` by construction. An empty array with `exceeded: true` is the OTHER cap: the
+rework rounds ran out with the rating under the bar, which is a loop giving up rather than a review
+objecting.

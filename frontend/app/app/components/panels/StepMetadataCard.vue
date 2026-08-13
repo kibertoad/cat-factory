@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { bySeverityWorstFirst, type ReviewCommentSeverity } from '@cat-factory/contracts'
+import {
+  bySeverityWorstFirst,
+  isReviewCommentSeverity,
+  type ReviewCommentSeverity,
+} from '@cat-factory/contracts'
 import type { AgentState, PipelineStep, CompanionVerdict, StepApproval } from '~/types/execution'
+import type { BadgeColor } from '~/utils/badge'
 import { subtaskIconClass } from '~/utils/pipelineRender'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
 import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
@@ -70,18 +75,66 @@ const pctOf = (n: number) => `${Math.round(n * 100)}%`
  * The colour each finding grade renders at. `ungraded` is its own member rather than a fallback
  * arm: a person's comment carries no severity and neither does a verdict recorded before reviewers
  * graded anything, and painting either of those `major` would put a level on the screen that
- * nobody chose. An exhaustive `Record` so a severity added to the contract fails to compile here.
+ * nobody chose. `unrecognized` is the same argument for the other direction (see
+ * {@link findingGrade}). An exhaustive `Record` so a severity added to the contract fails to
+ * compile here, typed against the shared `BadgeColor` rather than a hand-picked subset of it.
  */
-const SEVERITY_COLOR: Record<ReviewCommentSeverity | 'ungraded', 'error' | 'warning' | 'neutral'> =
-  {
-    blocker: 'error',
-    major: 'warning',
-    minor: 'neutral',
-    ungraded: 'neutral',
-  }
+const SEVERITY_COLOR: Record<ReviewCommentSeverity | 'ungraded' | 'unrecognized', BadgeColor> = {
+  blocker: 'error',
+  major: 'warning',
+  minor: 'neutral',
+  ungraded: 'neutral',
+  unrecognized: 'neutral',
+}
 
-/** One round's findings, worst first — the order the reviewer's asks should be worked in. */
-const findingsOf = (verdict: CompanionVerdict) => bySeverityWorstFirst(verdict.comments ?? [])
+/**
+ * How one finding's grade renders: the level itself, or which of the two NON-levels it is.
+ *
+ * `unrecognized` is what a level this build has retired reads as. The severity vocabulary is closed
+ * but persisted, and a stored verdict is mapped onto the type rather than re-parsed, so the schema's
+ * `major` fallback never runs on this path (contracts' `isReviewCommentSeverity` states the rule).
+ * Left unnarrowed the value indexes both maps and comes back `undefined`, which renders an unstyled
+ * badge over a raw i18n key; guessed onto a current level it would show an urgency nobody graded, on
+ * the panel asking a person to act on it. So it is NAMED, and the copy carries the stored value.
+ */
+function findingGrade(severity: string | undefined): {
+  key: ReviewCommentSeverity | 'ungraded' | 'unrecognized'
+  level: string
+} {
+  if (severity === undefined) return { key: 'ungraded', level: '' }
+  if (isReviewCommentSeverity(severity)) return { key: severity, level: severity }
+  return { key: 'unrecognized', level: severity }
+}
+
+/**
+ * Each round paired with its findings, worst first (the order the reviewer's asks should be worked
+ * in) and each finding with its resolved grade.
+ *
+ * A `computed` rather than methods the template calls, because a run panel re-renders on every
+ * pushed instance update while the template needs the list twice per round (the `v-if` and the
+ * `v-for`) and the grade three times per finding: as methods that is a copy, a sort and a narrowing
+ * per reader per push, all off state that only changes when a verdict lands.
+ */
+const verdictRounds = computed(() =>
+  props.companionVerdicts.map((verdict) => ({
+    verdict,
+    findings: bySeverityWorstFirst(verdict.comments ?? []).map((finding) => ({
+      body: finding.body,
+      grade: findingGrade(finding.severity),
+    })),
+  })),
+)
+
+/**
+ * Whether this round's rating actually reached its bar.
+ *
+ * Distinct from the verdict's own `passed`, which is what the ENGINE decided and can be `false` at a
+ * rating well above the threshold: an open `blocker` holds the step whatever the number says. The
+ * two were one expression, so the panel printed a false inequality over the findings that explained
+ * it. `>=` matches kernel's `disposeCompanionVerdict`, where a threshold typed by an operator must be
+ * met exactly by a rating equal to it.
+ */
+const ratingMeetsBar = (verdict: CompanionVerdict) => verdict.rating >= verdict.threshold
 
 const APPROVAL_STATUS_KEYS: Record<StepApproval['status'], string> = {
   pending: 'panels.stepMeta.approvalStatus.pending',
@@ -296,9 +349,13 @@ async function copyRunId() {
         <span class="text-[11px] uppercase tracking-wide text-slate-500">
           {{ t('panels.stepMeta.companionReview') }}
         </span>
+        <!-- The COLOUR is the verdict (`passed`) and the GLYPH is the arithmetic, which are no
+             longer the same fact: a round holding an open `blocker` fails at a rating that cleared
+             its bar, and reading the inequality off `passed` printed "95% < 80%" over the findings
+             explaining why. -->
         <UBadge :color="latestVerdict?.passed ? 'success' : 'warning'" variant="subtle" size="sm">
           {{ pctOf(latestVerdict!.rating) }}
-          {{ latestVerdict?.passed ? '≥' : '<' }} {{ pctOf(latestVerdict!.threshold) }}
+          {{ ratingMeetsBar(latestVerdict!) ? '≥' : '<' }} {{ pctOf(latestVerdict!.threshold) }}
         </UBadge>
       </div>
       <!-- One card per correction round: the score on its own line, then the reviewer's verdict
@@ -308,7 +365,7 @@ async function copyRunId() {
            run was invisible to the person being asked to resolve it. -->
       <ol class="mt-2 space-y-2">
         <li
-          v-for="(v, i) in companionVerdicts"
+          v-for="({ verdict: v, findings }, i) in verdictRounds"
           :key="i"
           data-testid="companion-verdict"
           class="relative rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
@@ -324,28 +381,29 @@ async function copyRunId() {
               {{ i + 1 }}
             </span>
             <span :class="v.passed ? 'text-emerald-300' : 'text-amber-300'">
-              {{ pctOf(v.rating) }} {{ v.passed ? '≥' : '<' }} {{ pctOf(v.threshold) }}
+              {{ pctOf(v.rating) }} {{ ratingMeetsBar(v) ? '≥' : '<' }} {{ pctOf(v.threshold) }}
             </span>
           </div>
           <MarkdownProse
             v-if="v.feedback"
             :text="v.feedback"
+            data-testid="companion-verdict-summary"
             class="mt-1.5 pe-6 text-[12px] leading-relaxed text-slate-300"
           />
-          <ul v-if="findingsOf(v).length" class="mt-2 space-y-1.5">
+          <ul v-if="findings.length" class="mt-2 space-y-1.5">
             <li
-              v-for="(finding, fi) in findingsOf(v)"
+              v-for="(finding, fi) in findings"
               :key="fi"
               data-testid="companion-finding"
               class="flex gap-2"
             >
               <UBadge
-                :color="SEVERITY_COLOR[finding.severity ?? 'ungraded']"
+                :color="SEVERITY_COLOR[finding.grade.key]"
                 variant="subtle"
                 size="sm"
                 class="mt-px h-4 shrink-0"
               >
-                {{ t(`panels.stepMeta.findingSeverity.${finding.severity ?? 'ungraded'}`) }}
+                {{ t(`panels.stepMeta.findingSeverity.${finding.grade.key}`, finding.grade) }}
               </UBadge>
               <MarkdownProse
                 :text="finding.body"

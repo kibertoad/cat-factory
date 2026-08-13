@@ -5,12 +5,17 @@ import type {
   Block,
   CompanionDispositionInput,
   CompanionDispositionResult,
+  CompanionParkReason,
   ExecutionInstance,
   IdGenerator,
   Logger,
   PipelineStep,
 } from '@cat-factory/kernel'
-import { DEFAULT_RISK_POLICY, disposeCompanionVerdict } from '@cat-factory/kernel'
+import {
+  companionParkReasonFor,
+  DEFAULT_RISK_POLICY,
+  disposeCompanionVerdict,
+} from '@cat-factory/kernel'
 import {
   type CompanionAssessment,
   type DispatchToolServers,
@@ -388,8 +393,11 @@ export class CompanionController {
     }
 
     // NOT PASSED: the exit this round takes, which is the cap's own once the loop has stopped
-    // getting anywhere (see {@link exitForUnproductiveLoop}, which also records that on the step).
-    const exit = this.exitForUnproductiveLoop({
+    // getting anywhere (see {@link parkForUnproductiveLoop}, which also records that on the step).
+    //
+    // A stalled loop can only ever PARK, never advance: the rounds it is giving up are rounds the
+    // budget still holds, so nothing here re-decides whether the work was good enough.
+    const stalledPark = this.parkForUnproductiveLoop({
       workspaceId,
       instance,
       block,
@@ -399,6 +407,9 @@ export class CompanionController {
       decision,
       dispositionInput,
     })
+    const exit: CompanionDispositionResult = stalledPark
+      ? { disposition: 'park', parkReason: stalledPark }
+      : decision
 
     // NOT PASSED with the automatic budget spent (or abandoned as above) → DON'T get stuck. Park on
     // a human decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
@@ -465,8 +476,9 @@ export class CompanionController {
   }
 
   /**
-   * The exit a NOT-PASSED round takes, upgrading a `rework` to the cap's park when the loop has
-   * stopped getting anywhere, and recording that on the step.
+   * The cap park a NOT-PASSED round takes INSTEAD of its `rework` when the loop has stopped getting
+   * anywhere, recording that on the step; `undefined` when the loop is still productive and the
+   * caller's own disposition stands.
    *
    * NOT GETTING ANYWHERE means the producer handed back the very text it was asked to revise and
    * the rating did not move, so every round still on the budget would buy another copy of a verdict
@@ -476,17 +488,21 @@ export class CompanionController {
    * policy already has an answer for it, and inventing a second exit would mean a second set of
    * resolutions for the SPA and the risk policy to know about.
    *
-   * WHICH cap exit is decided rather than assembled here: the same rule, asked what it would say
-   * with nothing left to spend. So a `blocker` still open when the loop gave up parks as
-   * `blocking_findings`, the one reason no policy may answer, instead of as the spent budget it
-   * merely resembles. Only a `rework` is converted, since a `pass` was not a loop failing to
-   * converge and a `park` has already named its own reason.
+   * It answers a park REASON rather than a disposition, and that is the point of its shape: a
+   * `blocker` still open when the loop gave up parks as `blocking_findings`, the one reason no
+   * policy may answer, instead of as the spent budget it merely resembles — while a loop that
+   * stalled can never come back as "advance". Asking the disposition rule to re-decide against an
+   * emptied budget did exactly that: with the first-batch branch suppressed for want of budget, a
+   * rating at or above the bar answered `pass`, and the caller (which only ever branches on `park`)
+   * read it as the rework it had just declared unproductive. The reason comes from kernel's
+   * `companionParkReasonFor`, the same total rule `disposeCompanionVerdict` parks through, so the
+   * two cannot drift.
    *
    * `companion.stalled` is recorded beside `exceeded` rather than in place of it: the two reach the
    * same gate for opposite reasons, and only this one says the run had rounds left and abandoned
    * them.
    */
-  private exitForUnproductiveLoop(args: {
+  private parkForUnproductiveLoop(args: {
     workspaceId: string
     instance: ExecutionInstance
     block: Block
@@ -495,10 +511,12 @@ export class CompanionController {
     producerIndex: number
     decision: CompanionDispositionResult
     dispositionInput: CompanionDispositionInput
-  }): CompanionDispositionResult {
+  }): CompanionParkReason | undefined {
     const { workspaceId, instance, block, step, companion, producerIndex, decision } = args
     const producer = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
-    if (decision.disposition !== 'rework' || !producer) return decision
+    // Only a `rework` is converted: a `pass` was not a loop failing to converge, and a `park` has
+    // already named its own reason.
+    if (decision.disposition !== 'rework' || !producer) return undefined
     const stalled = companionLoopStalled({
       producer,
       verdicts: companion.verdicts,
@@ -510,7 +528,7 @@ export class CompanionController {
         this.deps.agentKindRegistry,
       ),
     })
-    if (!stalled) return decision
+    if (!stalled) return undefined
     companion.stalled = true
     this.deps.logger?.warn('companion rework loop stopped early: no progress', {
       workspaceId,
@@ -521,10 +539,7 @@ export class CompanionController {
       maxAttempts: companion.maxAttempts,
       rating: companion.verdicts[companion.verdicts.length - 1]?.rating,
     })
-    return disposeCompanionVerdict({
-      ...args.dispositionInput,
-      maxAttempts: companion.attempts,
-    })
+    return companionParkReasonFor(args.dispositionInput.comments)
   }
 
   /**

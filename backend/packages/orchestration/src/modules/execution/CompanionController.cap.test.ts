@@ -140,8 +140,8 @@ function harness(
 const BELOW = { output: '', custom: { rating: 0.4, summary: 'the design is still vague' } }
 
 /**
- * A verdict ABOVE the threshold that still raised a point, which is what a real review almost
- * always looks like: a grade the producer cleared plus something to fix next time.
+ * A verdict ABOVE the threshold that still raised a real point, which is what a review almost always
+ * looks like: a grade the producer cleared plus a gap worth one more pass.
  */
 const ABOVE_WITH_COMMENTS = {
   output: '',
@@ -149,7 +149,22 @@ const ABOVE_WITH_COMMENTS = {
     rating: 0.95,
     summary: 'the design holds up; one gap worth closing',
     comments: [
-      { anchorId: 'architect-companion-1', severity: 'minor', body: 'name the failure mode here' },
+      { anchorId: 'architect-companion-1', severity: 'major', body: 'name the failure mode here' },
+    ],
+  },
+}
+
+/**
+ * The same cleared grade with NOTHING but a nit. The reviewer is told a `minor` is never worth
+ * holding anything for, so this is the batch that must not cost a round.
+ */
+const ABOVE_WITH_NIT_ONLY = {
+  output: '',
+  custom: {
+    rating: 0.95,
+    summary: 'the design holds up; one wording nit',
+    comments: [
+      { anchorId: 'architect-companion-1', severity: 'minor', body: 'rename this section' },
     ],
   },
 }
@@ -366,6 +381,40 @@ describe('a companion loop that has stopped making progress', () => {
     expect(companion?.capSettledByPolicy).toBeUndefined()
   })
 
+  it('parks rather than advancing when it stalled at a rating that cleared the bar', async () => {
+    // The exit picks WHICH park and can never pick "advance". Asked instead to RE-DECIDE with the
+    // budget emptied, the rule answered `pass` for exactly this state: the first-batch loop is the
+    // one reason to rework that survives a cleared rating, and suppressing it for want of budget
+    // leaves the rating alone to decide. The caller only ever branches on `park`, so that `pass`
+    // came back as the rework it had just declared unproductive — a stalled loop looping again with
+    // one warn line saying it had stopped.
+    //
+    // Pinned as this unit's invariant rather than a sequence the engine produces today: a reviewer
+    // loop charges a round, so `attempts` is past 0 by the time a second verdict exists.
+    const { controller, park, loop } = harness('attended')
+    const inst = stalledInstance()
+    const companion = inst.steps[1]!.companion!
+    companion.attempts = 0
+    companion.verdicts = [{ rating: 0.95, threshold: 0.8, passed: false, feedback: 'one gap' }]
+
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      {
+        ...ABOVE_WITH_COMMENTS,
+      },
+    )
+
+    expect(loop).not.toHaveBeenCalled()
+    expect(park).toHaveBeenCalledOnce()
+    expect(result.kind).toBe('awaiting_decision')
+    expect(companion.stalled).toBe(true)
+    expect(companion.exceeded).toBe(true)
+  })
+
   it('keeps looping when the producer changed the work, even at an unmoved rating', async () => {
     const { controller, park, settle } = harness('attended')
     const inst = stalledInstance()
@@ -554,6 +603,24 @@ describe('a first batch of comments', () => {
     expect(park).not.toHaveBeenCalled()
     expect(settle).not.toHaveBeenCalled()
     expect(inst.steps[1]!.companion?.verdicts.at(-1)?.passed).toBe(false)
+  })
+
+  it('does NOT loop the producer over a batch of nothing but nits', async () => {
+    // The reviewer's own instruction says a `minor` is never worth holding anything for, and a
+    // review that ends with one polish note is the common case. Looping there spent a full producer
+    // re-run plus a re-grading call on work already rated 95%, and made the grade the reviewer chose
+    // decide nothing it could predict.
+    const { controller, loop, park, settle } = harness('attended', 3)
+    const inst = fresh()
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
+      ...ABOVE_WITH_NIT_ONLY,
+    })
+
+    expect(settle).toHaveBeenCalledOnce()
+    expect(loop).not.toHaveBeenCalled()
+    expect(park).not.toHaveBeenCalled()
+    expect(inst.steps[1]!.companion?.verdicts.at(-1)?.passed).toBe(true)
   })
 
   it('advances on a rating that cleared the bar when the policy buys no round', async () => {

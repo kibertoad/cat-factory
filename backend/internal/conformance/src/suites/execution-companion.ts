@@ -101,10 +101,10 @@ function registerCompanionGateTests(harness: ConformanceHarness): void {
   })
 
   it('always loops the producer on the FIRST batch when the review raised comments, even above threshold', async () => {
-    // First review batch: ANY comments loop the producer back regardless of rating —
-    // so the first round of findings is always handed to the implementer. The
-    // threshold only governs the SECOND pass onward. A steady 0.85 (above the 0.8
-    // bar) WITH comments therefore loops once, then passes the second grade.
+    // First review batch: a finding the reviewer did not call a nit loops the producer back
+    // regardless of rating, so the first round of real findings is always handed to the
+    // implementer. The threshold only governs the SECOND pass onward. A steady 0.85 (above the
+    // 0.8 bar) WITH the fake's `major` point therefore loops once, then passes the second grade.
     const app = harness.makeApp({ confidence: 1, companionRatings: [0.85, 0.85] })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
@@ -347,6 +347,48 @@ function registerCompanionCapTests(harness: ConformanceHarness): void {
     expect(companionStep.companion?.maxAttempts).toBe(budgetAtCap + 1)
     expect(companionStep.companion?.exceeded).toBeFalsy()
     expect(companionStep.companion?.verdicts.at(-1)?.passed).toBe(true)
+  })
+
+  it('hands the graded findings to the producer on the round a person granted', async () => {
+    // The round a person paid for has to name what it is for. The companion's SUMMARY is a verdict
+    // and is forbidden from restating the individual points (agents' `REVIEW_FINDINGS_LAYOUT`), so a
+    // loop-back carrying only the summary reaches the producer naming none of the asks — and the
+    // park most likely to be resolved this way is the one an open `blocker` caused, where the
+    // producer is being sent back to close exactly that point.
+    const app = harness.makeApp({
+      confidence: 1,
+      companionRating: 0.9,
+      companionBlockingFinding: true,
+    })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build + rescued blocking companion',
+      purpose: 'build',
+      agentKinds: ['coder', 'reviewer'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    const gate = parked.steps.find((s) => s.agentKind === 'reviewer')!
+    const graded = gate.companion!.verdicts.at(-1)!.comments ?? []
+    const blocker = graded.find((c) => c.severity === 'blocker')!
+
+    const res = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/executions/${parked.id}/steps/${gate.approval!.id}/resolve-exceeded`,
+      { choice: 'extra-round' },
+    )
+    expect(res.status).toBe(200)
+
+    // The producer is looped back carrying the verdict's own comments, graded, not just its prose.
+    const producer = res.body.steps.find((s) => s.agentKind === 'coder')!
+    expect(producer.rework?.comments?.some((c) => c.severity === 'blocker')).toBe(true)
+    expect(producer.rework?.comments?.some((c) => c.body === blocker.body)).toBe(true)
+    // …and it is the REVIEWER's round, not the person's: the feedback being answered is the
+    // companion's verdict, which is what the prompt must say a producer is revising against.
+    expect(producer.rework?.requestedBy).toBe('reviewer')
   })
 
   it('proceeds past the companion cap, advancing with the current output', async () => {

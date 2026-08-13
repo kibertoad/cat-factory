@@ -42,13 +42,18 @@ test.describe('companion rework loop (iteration cap)', () => {
 
     // The parked step is the COMPANION, and its metadata card is where a human reads why the loop
     // never converged: one card per correction round, each carrying the reviewer's verdict and its
-    // findings, graded by urgency. Both halves are asserted as RENDERED rather than merely present
-    // — the grade as its own badge, and the finding's markdown as a real bold element — because the
-    // failure this guards is a review arriving as one unreadable run of text.
+    // findings, graded by urgency. All three halves are asserted as RENDERED rather than merely
+    // present — the grade as its own badge, and the verdict's and the finding's markdown as real
+    // elements — because the failure this guards is a review arriving as one unreadable run of text.
     const detail = page.getByTestId('step-detail')
     await openAttention(card, detail)
     const rounds = detail.getByTestId('companion-verdict')
     await expect(rounds.first()).toBeVisible()
+    // The VERDICT summary goes through the markdown reader too, and it is the half with no
+    // structure of its own to give it away: a finding that stopped rendering loses its bold title,
+    // while a summary that stopped rendering just shows its own backticks.
+    const summary = rounds.first().getByTestId('companion-verdict-summary')
+    await expect(summary.locator('code').first()).toHaveText('handler.ts')
     const finding = rounds.first().getByTestId('companion-finding').first()
     // `Should fix`, not `Must fix`: this run failed on its RATING, and the fake grades its point
     // accordingly. A must-fix would be a different park, one no risk policy answers.

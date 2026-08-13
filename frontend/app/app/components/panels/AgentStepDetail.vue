@@ -191,6 +191,11 @@ const blockingFindings = computed(() => blockingReviewComments(latestVerdict.val
 // not reach its limit, so only it may say so) and the DETAIL says what this person is being asked
 // to decide (an open blocker outranks a bar that went unmet, and its copy claims nothing about
 // rounds). Neither slot can then state something untrue of the park it is describing.
+//
+// Which is why the stalled heading claims nothing about the RATING either. Standing still is
+// unchanged output at an unmoved rating (`companionLoopStalled`), never a rating under the bar: a
+// round held by an open blocker fails at a rating that cleared it, and the copy said "the rating
+// held below the 80% bar" over a 95% one. What the number was is on the verdict card above.
 const companionStalled = computed(() => companionExceeded.value && !!step.value?.companion?.stalled)
 // A park a DEDICATED window owns (fork choice / follow-up triage): the generic approve
 // resolver refuses these server-side, so the rail is replaced by a redirect to that window.
@@ -522,7 +527,6 @@ async function copyOutput() {
                         agent: agent.label,
                         attempts: step.companion?.attempts,
                         maxAttempts: step.companion?.maxAttempts,
-                        threshold: pctOf(latestVerdict?.threshold ?? 0),
                       })
                     : blockingFindings.length
                       ? t(

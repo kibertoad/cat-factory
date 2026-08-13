@@ -255,4 +255,68 @@ describe('renderPriorReviewRounds', () => {
       '- a person said so',
     ])
   })
+
+  it('names an anchored point by its item id rather than as an empty quote', () => {
+    // A companion anchors to a structured item and quotes nothing, so the quote is the WRONG half to
+    // render it by: the two anchors are alternatives, not a preferred one plus a fallback.
+    const lines = renderPriorReviewRounds([
+      {
+        round: 1,
+        rating: 0.6,
+        passed: false,
+        summary: 'mostly sound',
+        comments: [{ anchorId: 'AC-2', severity: 'major', body: 'still open' }],
+      },
+    ])
+    expect(lines.filter((line) => line.startsWith('- '))).toEqual([
+      '- [major] On item `AC-2`: still open',
+    ])
+  })
+})
+
+describe('the points a producer is sent back with', () => {
+  const revised = (comments: NonNullable<AgentRunContext['revision']>['comments']) =>
+    userPromptFor(
+      context({
+        agentKind: 'architect',
+        revision: {
+          previousProposal: 'v1',
+          feedback: 'the design needs another pass',
+          requestedBy: 'reviewer',
+          comments,
+        },
+      }),
+      registry(),
+    )
+
+  it('names the item an ANCHOR-ONLY point targets, which is every companion finding', () => {
+    // The shape every shipped companion prompt asks for is `{anchorId, severity, body}` with no
+    // quoted source. Rendered against the quote alone, each of those became `On this part:` over a
+    // literal `(empty)` — a `[blocker]` the producer is ordered to resolve first, pointing nowhere.
+    const prompt = revised([
+      { anchorId: 'REQ-4', severity: 'blocker', body: 'the retry path is unhandled' },
+    ])
+    expect(prompt).toContain('On item `REQ-4`: [blocker]')
+    expect(prompt).not.toContain('(empty)')
+    expect(prompt).toContain('Every comment marked [blocker] MUST be resolved')
+  })
+
+  it('keeps a QUOTED point on its own line, since it is verbatim source of any length', () => {
+    const prompt = revised([{ quotedSource: '## Rollout\nflip the flag', body: 'name the owner' }])
+    expect(prompt).toContain('On this part:\n## Rollout\nflip the flag')
+  })
+
+  it('addresses a point that anchors NEITHER way to the proposal as a whole', () => {
+    const prompt = revised([{ severity: 'major', body: 'no failure modes anywhere' }])
+    expect(prompt).toContain('On your proposal overall: [major]')
+  })
+
+  it('orders worst first and says nothing about blockers when there are none', () => {
+    const prompt = revised([
+      { body: 'rename this', severity: 'minor' },
+      { body: 'thin coverage', severity: 'major' },
+    ])
+    expect(prompt.indexOf('thin coverage')).toBeLessThan(prompt.indexOf('rename this'))
+    expect(prompt).not.toContain('MUST be resolved in this revision')
+  })
 })

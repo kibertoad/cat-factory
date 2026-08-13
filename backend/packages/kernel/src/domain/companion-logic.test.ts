@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { StepReviewComment } from '@cat-factory/contracts'
-import { disposeCompanionVerdict, type CompanionDispositionInput } from './companion-logic.js'
+import {
+  companionParkReasonFor,
+  disposeCompanionVerdict,
+  type CompanionDispositionInput,
+} from './companion-logic.js'
 
 // The companion loop's whole decision, in the one place it is made. The case that matters most is
 // the one a rating alone cannot express: a review that found something unshippable while grading
@@ -71,24 +75,44 @@ describe('disposeCompanionVerdict', () => {
     expect(decision.parkReason).toBe('blocking_findings')
   })
 
-  it('spends the first round on any findings, and only the first', () => {
-    const first = { ...base, attempts: 0, comments: [comment('minor')] }
+  it('spends the first round on a finding worth acting on, and only the first', () => {
+    const first = { ...base, attempts: 0, comments: [comment('major')] }
     expect(disposeCompanionVerdict(first).disposition).toBe('rework')
-    // Second pass onward the rating decides: a nit that survived one round is not worth another.
+    // Second pass onward the rating decides: a point that survived one round is not worth another.
     expect(disposeCompanionVerdict({ ...first, attempts: 1 }).disposition).toBe('pass')
     // …and a policy that buys no round has already answered the first-batch question too.
     expect(disposeCompanionVerdict({ ...first, maxAttempts: 0 }).disposition).toBe('pass')
   })
 
-  it('treats an ungraded comment as neither blocking nor absent', () => {
-    // A person's comment carries no severity. It is worth the first-batch round like any finding,
-    // and it can never hold the run — only a reviewer's explicit `blocker` does that.
+  it('does NOT spend a round on a first batch of nothing but nits', () => {
+    // The reviewer is told a `minor` is never worth holding anything for. Looping the producer over
+    // one would cost a full re-run plus a re-grading call and make that instruction false, so a
+    // minor-only batch leaves the rating to decide from the first round.
+    const nits = { ...base, attempts: 0, comments: [comment('minor'), comment('minor')] }
+    expect(disposeCompanionVerdict(nits).disposition).toBe('pass')
+    // The nits do not change what a rating below the bar already meant, either.
+    expect(disposeCompanionVerdict({ ...nits, rating: 0.4 }).disposition).toBe('rework')
+  })
+
+  it('treats an ungraded comment as neither blocking nor a nit', () => {
+    // A comment with no severity is a point whose urgency is UNKNOWN, not one known to be low: it
+    // is worth the first-batch round, and it can never hold the run — only an explicit `blocker`
+    // does that.
     expect(
       disposeCompanionVerdict({ ...base, attempts: 0, comments: [comment()] }).disposition,
     ).toBe('rework')
     expect(
       disposeCompanionVerdict({ ...base, attempts: 3, comments: [comment()] }).disposition,
     ).toBe('pass')
+  })
+
+  it('names the park reason from the findings alone, for a caller with no budget left', () => {
+    // The engine asks this DIRECTLY when it abandons a loop that stopped converging, where the
+    // rounds are not spent but are being given up. It answers a reason always, which is what stops
+    // that caller getting an "advance" back from a loop it has just declared unproductive.
+    expect(companionParkReasonFor([comment('blocker'), comment('minor')])).toBe('blocking_findings')
+    expect(companionParkReasonFor([comment('major')])).toBe('budget_spent')
+    expect(companionParkReasonFor(undefined)).toBe('budget_spent')
   })
 
   it('passes with no producer, whatever the verdict said', () => {

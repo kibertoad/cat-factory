@@ -1,4 +1,5 @@
-import { REVIEW_COMMENT_SEVERITY_RANK, type ReviewCommentSeverity } from '@cat-factory/contracts'
+import { hasBlockingReviewComments, reviewCommentSeverityRank } from '@cat-factory/contracts'
+import type { ReviewedPoint } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // What a REPEATED grading loop says to itself, in one place.
@@ -23,7 +24,7 @@ export interface PriorReviewRound {
   rating: number
   passed: boolean
   summary: string
-  comments?: { quotedSource?: string; body: string; severity?: ReviewCommentSeverity }[]
+  comments?: ReviewedPoint[]
 }
 
 /**
@@ -143,11 +144,11 @@ export function renderPriorReviewRounds(rounds: readonly PriorReviewRound[]): st
     lines.push('', `Round ${round.round} — rated ${round.rating.toFixed(2)}, ${verdict}:`)
     lines.push(clip(round.summary.trim() || '(no summary given)', isLatest))
     for (const comment of worstFirst(round.comments)) {
-      const target = comment.quotedSource?.trim()
+      const target = reviewedPointTarget(comment)
       const grade = comment.severity ? `[${comment.severity}] ` : ''
       lines.push(
         target
-          ? `- ${grade}On "${clip(target, false)}": ${clip(comment.body, isLatest)}`
+          ? `- ${grade}On ${clip(target, false)}: ${clip(comment.body, isLatest)}`
           : `- ${grade}${clip(comment.body, isLatest)}`,
       )
     }
@@ -156,18 +157,76 @@ export function renderPriorReviewRounds(rounds: readonly PriorReviewRound[]): st
 }
 
 /**
- * Severity-graded comments, worst first; an ungraded one (a person's) sorts last.
+ * Render the points a producer must answer THIS round, worst first.
  *
- * Local rather than contracts' `bySeverityWorstFirst` because these are the prompt's own
- * structural shape (`quotedSource` + `body` + an optional grade) rather than the persisted
- * comment: this package renders what it was handed and does not know the wire type.
+ * The counterpart of {@link renderPriorReviewRounds} (settled history) and deliberately its
+ * neighbour: one loop's two renderings, ordered by the same rule, naming an anchor the same way.
+ * Each point gets its own block rather than a bullet, because a `body` is markdown that may itself
+ * carry lists.
+ *
+ * The blocker directive is stated once, above the list, and only when there IS one: a producer told
+ * on every round that blockers must be resolved first learns nothing from the sentence, and the
+ * engine's own rule is exactly this (kernel's `disposeCompanionVerdict` holds the step while one is
+ * open, whatever the rating).
  */
-function worstFirst<T extends { severity?: ReviewCommentSeverity }>(
-  comments: readonly T[] | undefined,
-): T[] {
-  const rank = (comment: T) =>
-    comment.severity ? REVIEW_COMMENT_SEVERITY_RANK[comment.severity] : -1
-  return [...(comments ?? [])].sort((a, b) => rank(b) - rank(a))
+export function renderRevisionComments(comments: readonly ReviewedPoint[]): string[] {
+  const lines = ['', 'Comments on specific parts of your proposal:']
+  if (hasBlockingReviewComments(comments)) {
+    lines.push(
+      'Every comment marked [blocker] MUST be resolved in this revision: while one is open the',
+      'work does not move on. Deal with those first, then the rest.',
+    )
+  }
+  for (const comment of worstFirst(comments)) {
+    const grade = comment.severity ? ` [${comment.severity}]` : ''
+    const quoted = comment.quotedSource?.trim()
+    const anchor = comment.anchorId?.trim()
+    // A quoted block goes on its own line, because it is verbatim source of arbitrary length; an
+    // anchor is a short id and reads as part of the heading. A point with NEITHER is addressed to
+    // the proposal as a whole, which is what it is: the alternative shipped as `On this part:` over
+    // a literal `(empty)`, telling a producer to fix a specific part while showing it none — and
+    // that was every companion finding, since a companion anchors by id and quotes nothing.
+    if (quoted) lines.push('', `On this part:${grade}`, quoted)
+    else if (anchor) lines.push('', `On item \`${anchor}\`:${grade}`)
+    else lines.push('', `On your proposal overall:${grade}`)
+    lines.push('Comment:', comment.body || '(none given)')
+  }
+  return lines
+}
+
+/**
+ * WHAT a point is about, as a prompt can name it, or `undefined` when the point named nothing.
+ *
+ * The two anchors are not interchangeable and neither may be rendered as the other: a human review
+ * quotes the prose it targets, so it reads back quoted, while a companion names a structured item's
+ * id, which is a locator the producer looks up. A point with neither is rendered as the standalone
+ * note it is, rather than against an empty target — the failure mode a `(empty)` placeholder
+ * produced, where a producer was told to fix a specific part and shown nothing.
+ */
+function reviewedPointTarget(comment: ReviewedPoint): string | undefined {
+  const quoted = comment.quotedSource?.trim()
+  if (quoted) return `"${quoted}"`
+  const anchor = comment.anchorId?.trim()
+  return anchor ? `item \`${anchor}\`` : undefined
+}
+
+/**
+ * Severity-graded points, worst first; an ungraded one (a person's) sorts last.
+ *
+ * Generic over the shape rather than taking contracts' `StepReviewComment`, because the prompt layer
+ * renders what it was handed: a {@link ReviewedPoint} carries no `srcStart`/`srcEnd` and the
+ * persisted comment carries no reason to reach a prompt. The RANKING is contracts' own
+ * (`reviewCommentSeverityRank`), so a level this build no longer knows sinks to the ungraded end
+ * here exactly as it does in the panel, rather than sorting by `NaN`.
+ *
+ * Shared by both renderers here: {@link renderPriorReviewRounds} orders a settled round's points and
+ * {@link renderRevisionComments} the ones a producer must answer now. Two copies of one ranking is
+ * how a severity added to the vocabulary comes to sort differently in the two halves of one loop.
+ */
+function worstFirst<T extends { severity?: string }>(comments: readonly T[] | undefined): T[] {
+  return [...(comments ?? [])].sort(
+    (a, b) => reviewCommentSeverityRank(b.severity) - reviewCommentSeverityRank(a.severity),
+  )
 }
 
 /** Trim one field, STATING that it was trimmed (a silent cut reads as a shorter original). */

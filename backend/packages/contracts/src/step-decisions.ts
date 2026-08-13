@@ -51,6 +51,50 @@ export const REVIEW_COMMENT_SEVERITY_RANK: Record<ReviewCommentSeverity, number>
   blocker: 2,
 }
 
+const REVIEW_COMMENT_SEVERITY_SET: ReadonlySet<string> = new Set(
+  reviewCommentSeveritySchema.options,
+)
+
+/**
+ * Whether a value is still a member of the vocabulary — DERIVED from the picklist, so it cannot
+ * drift from it the way a hand-written second list would.
+ *
+ * The vocabulary is closed but PERSISTED (a verdict's `comments`, a gate's `comments`, a step's
+ * `rework.comments`), and the schema's `severity` fallback does NOT cover those reads: a stored run
+ * row is mapped onto {@link StepReviewComment} by the facade repositories, never re-parsed, so the
+ * fallback runs on the MODEL REPLY and nowhere else. A member retired from the union therefore goes
+ * on existing in saved rows with its type claiming otherwise, and every `Record<ReviewCommentSeverity, …>`
+ * over it is total against the TYPE and partial against the DATA. Narrow with this at the read
+ * boundary and render the negative case as the unrecognised level it is.
+ *
+ * A retired member here is NAMED rather than dropped or mapped onto a current one, for the reason
+ * `isBinaryModality` names its own: nothing knows which surviving level was meant, and the reader
+ * that meets a stale value first is the panel asking a person to act on the finding. What it must
+ * never do is claim an urgency nobody graded. It carries no mechanical force either (a stale value
+ * is not a `blocker`), so retiring a member means restating the stored rows in the same change;
+ * this is what keeps the interim honest instead of invisible.
+ */
+export function isReviewCommentSeverity(value: string): value is ReviewCommentSeverity {
+  return REVIEW_COMMENT_SEVERITY_SET.has(value)
+}
+
+/** Where an ungraded comment (and an unrecognised level) sorts: below every graded one. */
+export const UNGRADED_REVIEW_COMMENT_RANK = -1
+
+/**
+ * The rank a comment's severity sorts and compares at: {@link REVIEW_COMMENT_SEVERITY_RANK} while
+ * the vocabulary holds it, and {@link UNGRADED_REVIEW_COMMENT_RANK} when the comment carries no
+ * severity (a person's) or one this build no longer knows ({@link isReviewCommentSeverity}).
+ *
+ * The ONE place that lookup happens, so an unrecognised value cannot reach the `Record` raw and
+ * come back `undefined` — which sorts by `NaN` and compares false against every floor at once.
+ */
+export function reviewCommentSeverityRank(severity: string | undefined): number {
+  return severity !== undefined && isReviewCommentSeverity(severity)
+    ? REVIEW_COMMENT_SEVERITY_RANK[severity]
+    : UNGRADED_REVIEW_COMMENT_RANK
+}
+
 /**
  * One GitHub-review-style comment left on a specific block or item of an agent's
  * proposal — either by a human reviewing an approval gate, or by a quality
@@ -97,6 +141,11 @@ export const stepReviewCommentSchema = v.object({
    * as its safe default" rule the judge and PR-review findings use. `major` rather than either
    * extreme on purpose: a typo must not manufacture a hard stop, and it must not silently retire
    * one either, so it lands where the point still costs a rework round without holding the run.
+   *
+   * That fallback covers the MODEL REPLY, which is the only input this schema parses. A stored row
+   * is mapped onto the type by the facade repositories rather than re-parsed, so a value this build
+   * has retired reaches a reader with the fallback never having run: narrow those reads with
+   * {@link isReviewCommentSeverity} / {@link reviewCommentSeverityRank}.
    */
   severity: v.optional(v.fallback(reviewCommentSeveritySchema, 'major')),
   /** The reviewer's note on this block / item. */
@@ -125,11 +174,29 @@ export function hasBlockingReviewComments(
   return (comments ?? []).some((comment) => comment.severity === 'blocker')
 }
 
+/**
+ * Whether a review raised anything it did NOT call a nit.
+ *
+ * What separates a batch worth sending back to the producer from one that only had polish to offer:
+ * a `minor` is stated to the reviewer as "never worth holding anything for", so a rule that spent a
+ * producer re-run plus a re-grading call on one would make that instruction false (kernel's
+ * `disposeCompanionVerdict` is the reader).
+ *
+ * Everything that is not the nit level counts, which puts an UNGRADED comment and a level this build
+ * has retired on the acting side. Both are cases where the urgency is unknown rather than known to
+ * be low, and the cheap error is one wasted round against a point silently dropped.
+ */
+export function hasReviewCommentsBeyondNits(
+  comments: readonly StepReviewComment[] | undefined,
+): boolean {
+  return (comments ?? []).some((comment) => comment.severity !== 'minor')
+}
+
 /** `comments` ordered worst severity first; an ungraded comment sorts last. Stable within a level. */
 export function bySeverityWorstFirst(comments: readonly StepReviewComment[]): StepReviewComment[] {
-  const rank = (comment: StepReviewComment) =>
-    comment.severity ? REVIEW_COMMENT_SEVERITY_RANK[comment.severity] : -1
-  return [...comments].sort((a, b) => rank(b) - rank(a))
+  return [...comments].sort(
+    (a, b) => reviewCommentSeverityRank(b.severity) - reviewCommentSeverityRank(a.severity),
+  )
 }
 
 /**

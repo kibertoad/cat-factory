@@ -481,9 +481,16 @@ export class FakeAgentExecutor implements AgentExecutor {
       // shipped companion prompt asks for (see `REVIEW_FINDINGS_LAYOUT`): the points live in
       // `comments`, and the panel renders both. A fake that answered in one flat paragraph
       // carrying its own points could not tell those two renderings apart.
+      //
+      // It carries the INLINE MARKDOWN that prompt asks a verdict to use for identifiers, because
+      // the summary goes through the same reader the findings do and nothing else asserts that it
+      // does (the e2e rework-loop spec asserts the rendered `<code>`). Its own markdown used to be
+      // the `**Must fix**` group headings, and dropping those left the summary rendering untested.
       const summary =
         `[${context.agentKind}] rated ${(rating * 100).toFixed(0)}%` +
-        (comments ? '\n\nThe work is broadly sound; one point is worth taking further.' : '')
+        (comments
+          ? '\n\nThe work is broadly sound; one point in `handler.ts` is worth taking further.'
+          : '')
       return {
         output: JSON.stringify({
           rating,

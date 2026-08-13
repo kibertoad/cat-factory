@@ -490,6 +490,7 @@ export {
   type CompanionDispositionInput,
   type CompanionDispositionResult,
   type CompanionParkReason,
+  companionParkReasonFor,
   disposeCompanionVerdict,
 } from './domain/companion-logic.js'
 

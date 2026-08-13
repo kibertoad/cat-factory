@@ -1371,7 +1371,8 @@
         "blocker": "Mutlaka düzeltilmeli",
         "major": "Düzeltilmeli",
         "minor": "Küçük",
-        "ungraded": "Yorum"
+        "ungraded": "Yorum",
+        "unrecognized": "Tanınmayan düzey ({level})"
       },
       "correctionIterations": "{count} düzeltme yinelemesi. | {count} düzeltme yinelemesi.",
       "state": {
@@ -1411,7 +1412,7 @@
       "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "companionCapBlockedHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık. | {agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık.",
       "companionCapBlockedDetail": "Devam etmek, bu bulgular düzeltilmeden işi kabul etmek demektir; bu yüzden bu çalışmanın risk politikası bu seçimi sizin yerinize asla yapmaz. Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyla yine de devam edin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
-      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan {threshold} barının altında kaldı.",
+      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan hiç değişmedi.",
       "companionStalledDetail": "Kalan turlar kullanılmadı, çünkü yalnızca verilmiş bir kararı yineleyeceklerdi. Yine de bir tur daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "infraAttempts": "Altyapı denemeleri",
       "hideInfraAttempts": "Altyapı denemelerini gizle",

@@ -1352,7 +1352,8 @@
         "blocker": "Blokujące",
         "major": "Do poprawy",
         "minor": "Drobne",
-        "ungraded": "Komentarz"
+        "ungraded": "Komentarz",
+        "unrecognized": "Nierozpoznany poziom ({level})"
       },
       "correctionIterations": "{count} iteracja korekty. | {count} iteracje korekty. | {count} iteracji korekty.",
       "state": {
@@ -1411,7 +1412,7 @@
       "companionCapDetail": "Wykonaj jeszcze jedną automatyczną rundę przeróbki, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
       "companionCapBlockedHeading": "{agent} osiągnął limit {attempts} prób przeróbki, a {count} uwaga blokująca pozostaje otwarta. | {agent} osiągnął limit {attempts} prób przeróbki, a {count} uwagi blokujące pozostają otwarte. | {agent} osiągnął limit {attempts} prób przeróbki, a {count} uwag blokujących pozostaje otwartych.",
       "companionCapBlockedDetail": "Kontynuacja oznacza przyjęcie pracy z tymi nienaprawionymi uwagami, dlatego polityka ryzyka tego przebiegu nigdy nie podejmie takiej decyzji za ciebie. Wykonaj jeszcze jedną automatyczną rundę przeróbki, kontynuuj mimo to z bieżącym wynikiem, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
-      "companionStalledHeading": "{agent} zatrzymał pętlę przeróbek po {attempts} z {maxAttempts} rund: ostatnia poprawka wróciła bez zmian, a ocena pozostała poniżej progu {threshold}.",
+      "companionStalledHeading": "{agent} zatrzymał pętlę przeróbek po {attempts} z {maxAttempts} rund: ostatnia poprawka wróciła bez zmian, a ocena się nie zmieniła.",
       "companionStalledDetail": "Pozostałe rundy nie zostały wykorzystane, bo tylko powtórzyłyby już wydaną ocenę. Wykonaj mimo to jeszcze jedną rundę, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
       "infraAttempts": "Próby infrastrukturalne",
       "hideInfraAttempts": "Ukryj próby infrastrukturalne",

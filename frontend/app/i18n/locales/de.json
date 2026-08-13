@@ -2037,7 +2037,8 @@
         "blocker": "Muss behoben werden",
         "major": "Sollte behoben werden",
         "minor": "Geringfügig",
-        "ungraded": "Kommentar"
+        "ungraded": "Kommentar",
+        "unrecognized": "Unbekannte Stufe ({level})"
       },
       "correctionIterations": "{count} Korrekturiteration. | {count} Korrekturiterationen.",
       "state": {
@@ -2077,7 +2078,7 @@
       "companionCapDetail": "Führe eine weitere automatische Überarbeitungsrunde durch, fahre mit dem nächsten Schritt fort und akzeptiere die aktuelle Ausgabe, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
       "companionCapBlockedHeading": "{agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, {count} zwingender Befund ist weiterhin offen. | {agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, {count} zwingende Befunde sind weiterhin offen.",
       "companionCapBlockedDetail": "Fortfahren akzeptiert die Arbeit mit diesen ungelösten Befunden, deshalb trifft die Risikorichtlinie dieses Laufs diese Wahl nie für dich. Führe eine weitere automatische Überarbeitungsrunde durch, fahre trotzdem mit der aktuellen Ausgabe fort, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
-      "companionStalledHeading": "{agent} hat die Überarbeitungsschleife nach {attempts} von {maxAttempts} Runden gestoppt: Die letzte Überarbeitung kam unverändert zurück und die Bewertung blieb unter der {threshold}-Schwelle.",
+      "companionStalledHeading": "{agent} hat die Überarbeitungsschleife nach {attempts} von {maxAttempts} Runden gestoppt: Die letzte Überarbeitung kam unverändert zurück und die Bewertung hat sich nicht verändert.",
       "companionStalledDetail": "Die restlichen Runden bleiben ungenutzt, weil sie nur ein bereits abgegebenes Urteil wiederholen würden. Führe trotzdem eine weitere Runde durch, fahre mit dem nächsten Schritt fort und akzeptiere die aktuelle Ausgabe, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
       "infraAttempts": "Infrastruktur-Versuche",
       "hideInfraAttempts": "Infrastruktur-Versuche ausblenden",

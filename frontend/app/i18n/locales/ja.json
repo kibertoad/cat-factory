@@ -1371,7 +1371,8 @@
         "blocker": "要修正",
         "major": "修正推奨",
         "minor": "軽微",
-        "ungraded": "コメント"
+        "ungraded": "コメント",
+        "unrecognized": "未知のレベル ({level})"
       },
       "correctionIterations": "{count} 回の修正イテレーション。 | {count} 回の修正イテレーション。",
       "state": {
@@ -1411,7 +1412,7 @@
       "companionCapDetail": "自動の再作業をもう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
       "companionCapBlockedHeading": "{agent} は {attempts} 回の再作業上限に達しましたが、要修正の指摘が {count} 件残っています。 | {agent} は {attempts} 回の再作業上限に達しましたが、要修正の指摘が {count} 件残っています。",
       "companionCapBlockedDetail": "このまま進めると、これらの指摘が未修正のまま作業を受け入れることになります。そのため、この実行のリスクポリシーがこの選択を代わりに行うことはありません。自動の再作業をもう1回実行するか、現在の出力のまま進めるか、タスクを停止してリセットし、入力を編集して再送信してください。",
-      "companionStalledHeading": "{agent} は {maxAttempts} 回のうち {attempts} 回で再作業ループを停止しました。直前の修正が変更されずに返され、評価も {threshold} の基準を下回ったままでした。",
+      "companionStalledHeading": "{agent} は {maxAttempts} 回のうち {attempts} 回で再作業ループを停止しました。直前の修正が変更されずに返され、評価も動きませんでした。",
       "companionStalledDetail": "残りの回数は、すでに出された判定を繰り返すだけなので使われていません。それでももう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
       "infraAttempts": "インフラの試行",
       "hideInfraAttempts": "インフラの試行を非表示",

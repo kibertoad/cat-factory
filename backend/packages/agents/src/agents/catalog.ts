@@ -26,8 +26,8 @@ import {
   FEEDBACK_ACCOUNTING_DIRECTIVE,
   PRIOR_ROUNDS_DIRECTIVE,
   renderPriorReviewRounds,
+  renderRevisionComments,
 } from './prompts/review-rounds.js'
-import { REVIEW_COMMENT_SEVERITY_RANK } from '@cat-factory/contracts'
 import {
   customTaskTypeSection,
   environmentSection,
@@ -285,36 +285,15 @@ function withRevision(prompt: string, context: AgentRunContext): string {
     'Reviewer feedback:',
     revision.feedback || '(none given)',
   ]
-  // Per-block comments the reviewer left on specific parts of the proposal. Each
-  // quotes the exact text it targets, so the agent can locate and revise it.
+  // Per-block comments the reviewer left on specific parts of the proposal, each naming what it
+  // targets so the agent can locate and revise it.
   //
-  // Worst first, and each one labelled with the urgency it was raised at, because that is what
-  // decides whether this rework ends the loop: a `blocker` left open sends the work straight back
-  // however much else was addressed. A person's comment carries no grade and is simply unlabelled
-  // — they are already holding the run, so there is nothing for a label to add.
-  if (revision.comments?.length) {
-    const graded = [...revision.comments].sort(
-      (a, b) =>
-        (b.severity ? REVIEW_COMMENT_SEVERITY_RANK[b.severity] : -1) -
-        (a.severity ? REVIEW_COMMENT_SEVERITY_RANK[a.severity] : -1),
-    )
-    lines.push('', 'Comments on specific parts of your proposal:')
-    if (graded.some((c) => c.severity === 'blocker')) {
-      lines.push(
-        'Every comment marked [blocker] MUST be resolved in this revision: while one is open the',
-        'work does not move on. Deal with those first, then the rest.',
-      )
-    }
-    for (const c of graded) {
-      lines.push(
-        '',
-        `On this part:${c.severity ? ` [${c.severity}]` : ''}`,
-        c.quotedSource || '(empty)',
-        'Comment:',
-        c.body || '(none given)',
-      )
-    }
-  }
+  // Rendered by `renderRevisionComments`, beside the renderer for the ROUNDS BEFORE this one: worst
+  // first (because a `blocker` left open sends the work straight back however much else was
+  // addressed), labelled with the urgency it was raised at, and anchored the way the reviewer
+  // anchored it. A person's comment carries no grade and is simply unlabelled: they are already
+  // holding the run, so there is nothing for a label to add.
+  if (revision.comments?.length) lines.push(...renderRevisionComments(revision.comments))
   return lines.join('\n')
 }
 

@@ -54,6 +54,32 @@ import type {
 // Modelling the work as a port keeps the engine free of LLM/infra concerns and
 // lets the integration tests drive it with a deterministic fake.
 
+/**
+ * One point a review left on a specific part of an agent's work, as a PROMPT needs it: what it
+ * targets, how urgently, and the note itself.
+ *
+ * The prompt-facing projection of the persisted `StepReviewComment`, carrying the two ways a point
+ * anchors and neither of the persisted re-anchoring internals (`srcStart` / `srcEnd`, which locate a
+ * block in a rendering no agent sees). BOTH anchors travel, because the two reviewers anchor
+ * differently and a producer told to fix a specific point must be able to find it: a human review
+ * quotes the verbatim `quotedSource` it targets, while a companion grading structured items names
+ * the item's `anchorId` and quotes nothing. Dropping the second one left every companion finding
+ * rendered against an empty target.
+ *
+ * Named rather than inlined at each site because three of them state the same shape and one of them
+ * silently stated a narrower one.
+ */
+export interface ReviewedPoint {
+  /** Verbatim source of the prose block the point targets, when the reviewed output was prose. */
+  quotedSource?: string
+  /** Id of the structured item it targets (a spec requirement, an acceptance criterion). */
+  anchorId?: string
+  /** The urgency it was graded at; absent on a person's comment, which carries no grading. */
+  severity?: ReviewCommentSeverity
+  /** The note itself. */
+  body: string
+}
+
 export interface AgentRunContext {
   agentKind: AgentKind
   pipelineName: string
@@ -660,10 +686,11 @@ export interface AgentRunContext {
    * plus the feedback. Present only on the re-run it drove; the agent should revise its previous
    * proposal to address the feedback rather than start from scratch. `comments` are
    * GitHub-review-style notes on specific blocks of the proposal (a human review carries the
-   * verbatim `quotedSource` it targets; a companion's anchor-based comment omits it), folded into
-   * the prompt alongside the freeform `feedback`. A reviewer's comment carries the `severity` it
-   * graded the point at, so a producer working through a long list knows which ones are holding
-   * the run rather than guessing from the prose; a person's comment carries none.
+   * verbatim `quotedSource` it targets; a companion's anchor-based comment names an `anchorId`
+   * instead), folded into the prompt alongside the freeform `feedback`. A reviewer's comment
+   * carries the `severity` it graded the point at, so a producer working through a long list knows
+   * which ones are holding the run rather than guessing from the prose; a person's carries none.
+   * See {@link ReviewedPoint}.
    *
    * `requestedBy` says which of the two loops this is — a person's "request changes" or an
    * automatic reviewer's round — because the prompt has to say so and cannot infer it: BOTH arrive
@@ -673,7 +700,7 @@ export interface AgentRunContext {
   revision?: {
     previousProposal: string
     feedback: string
-    comments?: { quotedSource?: string; body: string; severity?: ReviewCommentSeverity }[]
+    comments?: ReviewedPoint[]
     requestedBy: 'human' | 'reviewer'
   }
   /**
@@ -707,7 +734,7 @@ export interface AgentRunContext {
       rating: number
       passed: boolean
       summary: string
-      comments?: { quotedSource?: string; body: string; severity?: ReviewCommentSeverity }[]
+      comments?: ReviewedPoint[]
     }[]
   }
   /**

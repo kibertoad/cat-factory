@@ -39,6 +39,11 @@ export const FINAL_ANSWER_IN_REPLY =
  * it (kernel's `disposeCompanionVerdict` holds the step while a `blocker` is open) and where the
  * panel can group and colour it, which prose never allowed.
  *
+ * Each level therefore STATES what it costs, because the engine acts on all three and a reviewer
+ * that cannot predict the consequence cannot grade deliberately. They are kept in step with
+ * `disposeCompanionVerdict` by hand and in one direction: this text may describe less than the rule
+ * does, never more.
+ *
  * With the points structured, the summary must NOT restate them: the panel renders both, so a
  * duplicated review means writing everything twice in two orderings that can disagree. Same rule
  * the judge and the `pr-reviewer` have always followed ("do NOT restate the findings there").
@@ -59,8 +64,10 @@ export const REVIEW_FINDINGS_LAYOUT =
   'the producer is sent back to fix it and the run does NOT advance, whatever you rate the work ' +
   'overall, so reserve it for what genuinely must not ship and never use it for a preference.\n' +
   '- "major" — should be fixed: a real gap or weakness a reviewer would ask about, but not one ' +
-  'that makes the work unusable as it stands.\n' +
-  '- "minor" — a nit, polish or suggestion. Worth saying, never worth holding anything for.\n' +
+  'that makes the work unusable as it stands. On a FIRST review one of these buys the producer a ' +
+  'revision pass even when you rate the work above its bar, so keep the level for a real gap.\n' +
+  '- "minor" — a nit, polish or suggestion. Worth saying, never worth holding anything for: on its ' +
+  'own it costs the producer no revision round and never stops the run.\n' +
   'Write each `body` as Markdown starting with a bolded short title, then one or two sentences ' +
   'saying what is wrong and the concrete change to make. Put code, paths, identifiers and ' +
   'commands in INLINE backticks. If the work is sound, return `comments` as an empty array ' +

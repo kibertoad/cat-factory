@@ -3,6 +3,7 @@
 '@cat-factory/kernel': minor
 '@cat-factory/agents': minor
 '@cat-factory/orchestration': minor
+'@cat-factory/server': minor
 '@cat-factory/conformance': minor
 '@cat-factory/app': minor
 ---
@@ -51,6 +52,37 @@ badge beside each, which is new: `comments` were persisted and fed back into lat
 to nobody, so the point holding a run was invisible to the person being asked to resolve it. Both
 sides of the rework loop read the grades too — the producer is told which comments are blocking and
 works them first, and a re-grading companion sees its earlier rounds' points labelled.
+
+**Every surface that a person or an integration answers this park from names the findings, because
+the summary no longer can.** With the prose groups gone, three places were reading the review out of
+a channel that stopped carrying it. The extra round a person grants at the cap loops the producer
+back with the verdict's graded `comments` attached, as the automatic rework path already did, so the
+round somebody just paid for names the points it is for. The `approval-gate` entry of
+`GET /api/v1/runs/{runId}/decisions` gains a `blockingFindings` array (spec `1.53.0`, additive), so a
+caller answering `resolve-exceeded` with `proceed` can read the must-fixes it would be overruling
+rather than inferring them from a verdict paragraph. And a companion's findings anchor to a
+structured item by id rather than by quoting prose, which the producer prompt was rendering against
+an empty target: an anchored point now names its item, and a point that anchors neither way is
+addressed to the proposal as a whole.
+
+**A first batch of nothing but nits no longer costs a round.** The rule that spends one round on a
+first review's findings asked only whether there were any, so a reviewer that followed its own
+instruction (a `minor` is "never worth holding anything for"), rated work above the bar and attached
+one polish note bought a full producer re-run plus a re-grading call. It now takes a point the
+reviewer did NOT call a nit, and the prompt states what each level costs so the grade decides
+something a reviewer can predict. An ungraded point still counts: its urgency is unknown rather than
+known to be low.
+
+The panel's verdict badge derives its `>=` / `<` glyph from the comparison rather than from
+`passed`, which are no longer the same fact: a round held by an open blocker fails at a rating that
+cleared its bar, and reading one off the other printed `95% < 80%` above the findings explaining it.
+The cap prompt's stalled wording drops its claim about the rating for the same reason.
+
+A severity read off a STORED row is narrowed through `isReviewCommentSeverity` rather than trusted:
+the schema's `major` fallback runs on the model reply, which is the only thing it parses, so a level
+retired from the vocabulary would reach an exhaustive `Record` and come back `undefined`. Such a
+value now sorts with the ungraded, carries no mechanical force, and is NAMED as unrecognised on the
+panel instead of being painted as a level nobody chose.
 
 `REVIEW_SUMMARY_LAYOUT` is replaced by `REVIEW_FINDINGS_LAYOUT`; a deployment appending the old
 constant to its own companion prompt should append the new one, and one relying on the shared
