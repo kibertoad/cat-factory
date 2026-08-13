@@ -41,15 +41,19 @@ test.describe('companion rework loop (iteration cap)', () => {
     await expect(card).toHaveAttribute('data-status', 'blocked', { timeout: RUN_TERMINAL_TIMEOUT })
 
     // The parked step is the COMPANION, and its metadata card is where a human reads why the loop
-    // never converged: one card per correction round, each rendering the reviewer's verdict as
-    // markdown. It used to trail the score inside the same line, which made a multi-point review
-    // one unreadable run of text — so what is asserted is the RENDER (the fake's `**Must fix**`
-    // arriving as a real bold element), not merely that the text is present.
+    // never converged: one card per correction round, each carrying the reviewer's verdict and its
+    // findings, graded by urgency. Both halves are asserted as RENDERED rather than merely present
+    // — the grade as its own badge, and the finding's markdown as a real bold element — because the
+    // failure this guards is a review arriving as one unreadable run of text.
     const detail = page.getByTestId('step-detail')
     await openAttention(card, detail)
     const rounds = detail.getByTestId('companion-verdict')
     await expect(rounds.first()).toBeVisible()
-    await expect(rounds.first().locator('strong').first()).toHaveText('Must fix')
+    const finding = rounds.first().getByTestId('companion-finding').first()
+    // `Should fix`, not `Must fix`: this run failed on its RATING, and the fake grades its point
+    // accordingly. A must-fix would be a different park, one no risk policy answers.
+    await expect(finding).toContainText('Should fix')
+    await expect(finding.locator('strong').first()).toHaveText('The gap')
     // Leave the overlay the way a user does, so the board underneath is actionable again.
     await page.keyboard.press('Escape')
     await expect(detail).toBeHidden()

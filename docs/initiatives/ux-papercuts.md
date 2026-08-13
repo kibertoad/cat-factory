@@ -652,17 +652,18 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   summary, a finding's detail, an assessment) goes through the reader. When prose has to carry
   something verbatim, the model fences it and the reader renders the fence.
 - **A review VERDICT needs the prompt half too: rendering markdown cannot invent structure the
-  model never wrote.** A reviewer whose `summary` is the whole review (the companions) carries
-  `REVIEW_SUMMARY_LAYOUT` (`@cat-factory/agents`, `prompts/shared.ts`), which asks for a verdict
-  line then `**Must fix**` / `**Should fix**` / `**Minor**` bullet groups instead of one paragraph
-  numbering its points inline. Adding a reviewer of that kind means appending that fragment
-  (pinned by `prompts/review-summary.test.ts`, override path included); a reviewer that already
-  reports structured findings beside a short summary (every judge, `pr-reviewer`, the tester) is
-  deliberately EXCLUDED and needs only the render half, since the view renders that array itself
-  and the layout would have every point written twice. Kernel's `extractJson` repairs the raw line
-  breaks a multi-line summary invites, so the layout cannot cost a verdict to a quoting slip — but
-  only as a SECOND pass, after every candidate has been read as written, or a repaired example
-  shape shadows the real verdict.
+  model never wrote.** The companions carry `REVIEW_FINDINGS_LAYOUT` (`@cat-factory/agents`,
+  `prompts/shared.ts`), which asks for one severity-graded `comments` entry per point and keeps
+  the `summary` a short verdict that does not restate them. It replaced a layout asking for
+  `**Must fix**` / `**Should fix**` / `**Minor**` bullet groups INSIDE the summary: the right
+  grouping in a channel only a human reads, so the engine saw a must-fix and a nit as the same
+  thing. Adding a reviewer of that kind means appending the fragment (pinned by
+  `prompts/review-findings.test.ts`, override path included); one that already reports graded
+  findings of its own (every judge, `pr-reviewer`, the tester) is deliberately EXCLUDED and needs
+  only the render half. Kernel's `extractJson` repairs the raw line breaks a multi-line summary
+  invites, so the contract cannot cost a verdict to a quoting slip — but only as a SECOND pass,
+  after every candidate has been read as written, or a repaired example shape shadows the real
+  verdict.
 - **Content-heavy `UModal`s guard against discarding typed input via `useUnsavedGuard`
   (never a bare store-close on dismiss).** A controlled `UModal` whose `open` is a
   store-backed writable computed routes its dismiss paths (the setter's `if (!v) …`, and any

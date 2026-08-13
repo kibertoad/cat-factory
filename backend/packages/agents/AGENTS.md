@@ -10,11 +10,11 @@
   `FINAL_ANSWER_IN_REPLY` and the sentinel-file guidances `EFFORT_REPORT_GUIDANCE`,
   `FOLLOW_UP_GUIDANCE`, and `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding
   agent writes to `.cat-pr-description.md`, which the harness lifts onto the PR it opens), plus
-  `REVIEW_SUMMARY_LAYOUT`, carried by the COMPANIONS — the reviewers whose `summary` IS the whole
-  review — so that verdict arrives as a verdict line plus grouped bullets rather than one
-  paragraph, and preserved across a workspace override; a reviewer that reports structured
-  findings beside its summary (every judge, `pr-reviewer`, the tester) is deliberately excluded,
-  since the view renders that array itself),
+  `REVIEW_FINDINGS_LAYOUT`, carried by the COMPANIONS, which asks each point for its own
+  severity-graded `comments` entry (a `blocker` holds the run) and keeps the `summary` a verdict
+  rather than a second copy of the list; preserved across a workspace override. A reviewer that
+  already reports graded findings of its own (every judge, `pr-reviewer`, the tester) is
+  deliberately excluded),
   `runtime/` (`runRepoOps`, the custom-agent pre/post-op runner).
   `kinds/built-in-container.ts` registers every BUILT-IN CONTAINER kind (`coder`, the testers,
   the in-place fixers, the conflict-resolver, `merger`, `on-call`, the read-only explorers) as an

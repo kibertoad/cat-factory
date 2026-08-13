@@ -72,12 +72,13 @@ const pctOf = (n: number) => `${Math.round(n * 100)}%`
  * graded anything, and painting either of those `major` would put a level on the screen that
  * nobody chose. An exhaustive `Record` so a severity added to the contract fails to compile here.
  */
-const SEVERITY_COLOR: Record<ReviewCommentSeverity | 'ungraded', 'error' | 'warning' | 'neutral'> = {
-  blocker: 'error',
-  major: 'warning',
-  minor: 'neutral',
-  ungraded: 'neutral',
-}
+const SEVERITY_COLOR: Record<ReviewCommentSeverity | 'ungraded', 'error' | 'warning' | 'neutral'> =
+  {
+    blocker: 'error',
+    major: 'warning',
+    minor: 'neutral',
+    ungraded: 'neutral',
+  }
 
 /** One round's findings, worst first — the order the reviewer's asks should be worked in. */
 const findingsOf = (verdict: CompanionVerdict) => bySeverityWorstFirst(verdict.comments ?? [])

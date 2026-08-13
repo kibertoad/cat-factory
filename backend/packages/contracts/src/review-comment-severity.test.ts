@@ -73,9 +73,10 @@ describe('reading a set of comments', () => {
       undefined,
     ])
     // Stable within a level, so two blockers keep the order the reviewer raised them in.
-    expect(bySeverityWorstFirst(comments).slice(0, 2).map((c) => c.body)).toEqual([
-      'must fix',
-      'must fix too',
-    ])
+    expect(
+      bySeverityWorstFirst(comments)
+        .slice(0, 2)
+        .map((c) => c.body),
+    ).toEqual(['must fix', 'must fix too'])
   })
 })

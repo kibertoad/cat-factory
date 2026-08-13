@@ -465,7 +465,11 @@ export class FakeAgentExecutor implements AgentExecutor {
               {
                 anchorId: `${context.agentKind}-1`,
                 severity: blocking ? 'blocker' : 'major',
-                body: 'address this gap',
+                // Markdown, with the bolded short title the shipped prompt asks each finding to
+                // open with: the panel renders a finding through the same reader as the summary,
+                // and a fake writing flat text cannot tell a panel that renders it from one that
+                // dumps it (the e2e rework-loop spec asserts the rendered `<strong>`).
+                body: '**The gap**: address this gap in the next pass.',
               },
             ]
           : undefined

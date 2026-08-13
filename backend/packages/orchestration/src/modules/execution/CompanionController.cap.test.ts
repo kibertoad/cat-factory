@@ -3,9 +3,10 @@ import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel
 import { defaultAgentKindRegistry, type AgentKindRegistry } from '@cat-factory/agents'
 import { CompanionController } from './CompanionController.js'
 
-// The REWORK CAP: what a companion does when its automatic budget is spent and the producer is
-// still below the bar. There are exactly two answers and the run's risk policy picks between them,
-// so both are asserted here against the same setup, one flag apart.
+// The REWORK CAP: what a companion does when its automatic budget is spent and the verdict still
+// did not pass. There are exactly two answers and the run's risk policy picks between them, so both
+// are asserted here against the same setup, one flag apart — except where an open MUST-FIX finding
+// is what stopped the loop, which the last group covers: that park is not the policy's to answer.
 //
 // It is worth a test of its own because the failure it guards is silent in both directions. An
 // unattended policy that still parks leaves an API-started run waiting on a person who is not
@@ -415,9 +416,16 @@ describe('a blocker finding', () => {
     const { controller, park, settle } = harness('attended', 1)
     const inst = instance()
 
-    const result = await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, {
-      ...ABOVE_WITH_BLOCKER,
-    })
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      {
+        ...ABOVE_WITH_BLOCKER,
+      },
+    )
 
     expect(park).toHaveBeenCalledOnce()
     expect(settle).not.toHaveBeenCalled()

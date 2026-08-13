@@ -126,9 +126,7 @@ export function hasBlockingReviewComments(
 }
 
 /** `comments` ordered worst severity first; an ungraded comment sorts last. Stable within a level. */
-export function bySeverityWorstFirst(
-  comments: readonly StepReviewComment[],
-): StepReviewComment[] {
+export function bySeverityWorstFirst(comments: readonly StepReviewComment[]): StepReviewComment[] {
   const rank = (comment: StepReviewComment) =>
     comment.severity ? REVIEW_COMMENT_SEVERITY_RANK[comment.severity] : -1
   return [...comments].sort((a, b) => rank(b) - rank(a))

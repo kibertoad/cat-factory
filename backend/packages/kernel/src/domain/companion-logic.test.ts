@@ -83,12 +83,12 @@ describe('disposeCompanionVerdict', () => {
   it('treats an ungraded comment as neither blocking nor absent', () => {
     // A person's comment carries no severity. It is worth the first-batch round like any finding,
     // and it can never hold the run — only a reviewer's explicit `blocker` does that.
-    expect(disposeCompanionVerdict({ ...base, attempts: 0, comments: [comment()] }).disposition).toBe(
-      'rework',
-    )
-    expect(disposeCompanionVerdict({ ...base, attempts: 3, comments: [comment()] }).disposition).toBe(
-      'pass',
-    )
+    expect(
+      disposeCompanionVerdict({ ...base, attempts: 0, comments: [comment()] }).disposition,
+    ).toBe('rework')
+    expect(
+      disposeCompanionVerdict({ ...base, attempts: 3, comments: [comment()] }).disposition,
+    ).toBe('pass')
   })
 
   it('passes with no producer, whatever the verdict said', () => {

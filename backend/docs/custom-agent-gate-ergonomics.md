@@ -82,8 +82,8 @@ dependency floor.
 
 ## Companions (registering a rework pair)
 
-A companion GRADES the immediately-preceding producer's output and, below the step's threshold,
-loops THAT producer back for automatic rework on a bounded budget before any human is asked.
+A companion GRADES the immediately-preceding producer's output and, when that grading does not
+pass, loops THAT producer back for automatic rework on a bounded budget before any human is asked.
 Choose it over a [judge](../../docs/initiatives/judge-registry.md) when the remedy is the producer
 running again rather than a verdict being disposed.
 
@@ -98,11 +98,20 @@ of its own. Several things bite:
   wrong ANSWER rather than a missing argument, which is why it survives a typecheck.
 - **The PROMPT is the platform's**, not the registration's: every companion runs the shared
   companion prompt (`companionSystemPrompt`), which weaves in the pairing's `reviews` label, the
-  JSON verdict shape, and `REVIEW_SUMMARY_LAYOUT` (the block layout the `summary` is rendered as,
-  since that one string IS the review a human reads). So a registration contributes the label and
-  the threshold, and a deployment companion cannot drift into a verdict the run panel renders as a
-  wall of text — not even through a per-workspace prompt override, which
-  `OVERRIDE_PRESERVED_FRAGMENTS` puts the layout back over.
+  JSON verdict shape, and `REVIEW_FINDINGS_LAYOUT` (one severity-graded `comments` entry per point,
+  and a `summary` that is a verdict rather than a second copy of the list). So a registration
+  contributes the label and the threshold, and a deployment companion's findings arrive graded like
+  every other one's, not even a per-workspace prompt override can drop that
+  (`OVERRIDE_PRESERVED_FRAGMENTS` puts the contract back over an edited prompt).
+- **A `blocker` finding holds the run, whatever the rating.** The two halves of a verdict are read
+  independently (kernel's `disposeCompanionVerdict`): a rating is one number over a whole
+  deliverable, so a review can score work above its bar and still have named something that must
+  not ship. While a blocker is open the producer is reworked; with the budget spent the step parks,
+  and THAT park is the one an unattended risk policy will not answer, because accepting the work
+  anyway overrules a review rather than reporting that the automation gave up (kernel's
+  `CompanionParkReason`). Nothing is registered for this: grading is in the shared prompt, so a
+  deployment's own pairing gets it. What a registration should not do is teach its reviewer to
+  express urgency by lowering the rating instead.
 - **Adjacency is an invariant**, enforced by `assertValidCompanionPlacement`: the engine grades the
   immediate predecessor, so a companion separated from its producer would grade whatever happens to
   sit in front of it. The same reasoning drives the cascade-skip rule in
@@ -127,7 +136,8 @@ of its own. Several things bite:
   (`resolveCompanionExceeded`), so a later read would report a ceiling the step no longer has.
   `0` is a posture rather than an off switch: the companion still grades, and its first verdict
   below the bar goes straight to the iteration-cap park (or to `proceed` under
-  `autonomy: 'unattended'`) instead of buying a round.
+  `autonomy: 'unattended'`) instead of buying a round. It does not widen what counts as a pass: a
+  blocker under a `0` budget parks immediately rather than being accepted.
 - **The first-batch rule is SUBORDINATE to that budget.** A companion's first batch of comments
   loops its producer back whatever the rating was, because that first set of findings is worth a
   round even from work that scored well. The round is bought from `companionMaxReworks`, so with
