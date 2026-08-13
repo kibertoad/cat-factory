@@ -35,12 +35,12 @@ function expectShippedPolicyIdentity(preset: RiskPolicy): void {
  * by default, and every budget column round-tripping. Returns the default preset's id, which is all
  * the caller needs from it afterwards.
  *
- * One helper because these assertions are one claim — creating a board wrote the catalog and nothing
- * dropped a column on the way — and because they belong to the SEED rather than to the
+ * One helper because these assertions are one claim (creating a board wrote the catalog and nothing
+ * dropped a column on the way), and because they belong to the SEED rather than to the
  * single-default invariant the test goes on to exercise against presets it creates itself.
  */
 function expectSeededCatalog(policies: RiskPolicy[]): string {
-  // Exactly the catalog, no more and no less — the property that actually breaks when a facade's
+  // Exactly the catalog, no more and no less: the property that actually breaks when a facade's
   // seed writer drops a built-in or writes one twice.
   expect(policies.map((p) => p.id).sort()).toEqual(SEEDED_IDS)
   const balanced = policies.find((p) => p.id === 'mp_balanced')!
@@ -58,7 +58,7 @@ function expectSeededCatalog(policies: RiskPolicy[]): string {
   expect(balanced.judgeMinScore).toBe(0.7)
   expect(balanced.judgeMaxBounces).toBe(1)
   expect(manual.judgeMaxBounces).toBe(0)
-  // Every class falls back to the score ceilings and no role changes that — byte-for-byte the
+  // Every class falls back to the score ceilings and no role changes that, byte-for-byte the
   // historical policy.
   expectShippedPolicyIdentity(balanced)
   expectShippedPolicyIdentity(manual)

@@ -47,9 +47,11 @@ export interface ResolvedRunRiskPolicy {
   maxRequirementConcernAllowed: RequirementConcernLevel
   maxTesterQualityIterations: number
   /**
-   * How many automatic REWORK rounds a companion may drive before it parks for a person. Read
-   * ONCE per companion step, on its first grading (`CompanionController.applyAssessment`), which is
-   * why a human-granted extra round survives: the grant raises the step's own budget afterwards.
+   * How many automatic REWORK rounds a companion may drive before it parks for a person. Read once
+   * per companion step, on the grading that records its FIRST verdict
+   * (`CompanionController.applyAssessment`), and never again: a human granting an extra round at the
+   * cap does it by raising the step's own budget, so a later read would report a ceiling the step no
+   * longer has.
    */
   companionMaxReworks: number
   releaseWatchWindowMinutes: number

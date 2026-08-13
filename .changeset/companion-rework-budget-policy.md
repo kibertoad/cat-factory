@@ -22,14 +22,21 @@ policy editor beside the requirement-iteration budget.
 
 `0` is a real posture rather than a disabled loop: the companion still grades and still writes its
 verdict, and the first verdict below the bar goes straight to the iteration-cap park (or to
-`proceed`, on a policy whose `autonomy` is `unattended`) instead of buying a round.
+`proceed`, on a policy whose `autonomy` is `unattended`) instead of buying a round. A verdict at or
+above the bar advances, comments and all. That last part is the one place this number changed an
+existing rule rather than parameterising it: a companion's FIRST batch of comments loops the producer
+back whatever it scored, and that rule now asks whether there is a round to spend before it fires.
+Left alone, `0` would have parked every companion step, since a review with nothing at all to say is
+the rare one.
 
-Two things about WHEN it is read. A step is seeded with the catalog default at run start, where no
-policy is resolved, so the resolved value is adopted onto `step.companion.maxAttempts` at the
-companion's first grading, the same way the Tester's quality budget is adopted on its first report.
-That read is guarded to the first grading on purpose: a human granting an extra round at the cap does
-it by raising that same field, so a re-read on a later cycle would silently revoke the round they
-were just given.
+A step is seeded with the catalog default at run start, where no policy is resolved, so the resolved
+value is adopted onto `step.companion.maxAttempts` at the companion's first grading, the same way the
+Tester's quality budget is adopted on its first report. That read happens once per step, keyed on the
+step having recorded no verdict yet: a human granting an extra round at the cap does it by raising
+that same field (and the grant charges the round immediately), so a later read would report a ceiling
+the step no longer has. Keyed on the attempt count instead, it also fired a second time after a human
+"request changes" on a gated companion, which re-runs the producer while deliberately charging no
+round.
 
 No behaviour changes by default. The column default and all three built-in seeds carry the 3 the
 engine held, so a stored policy and a freshly seeded one are byte-for-byte identical and no seed

@@ -3143,7 +3143,7 @@
         "ciMaxAttempts": "CI 修正の試行回数",
         "maxRequirementIterations": "要件のイテレーション回数",
         "maxRequirementConcernAllowed": "この水準以下の懸念を自動承認",
-        "companionMaxReworks": "コンパニオンの手直し回数",
+        "companionMaxReworks": "コンパニオンの再作業回数",
         "autoMerge": "自動マージ"
       },
       "newPreset": "新しいポリシー",
@@ -3155,7 +3155,7 @@
         "impact": "影響度%",
         "ciFix": "CI 修正",
         "reqIter": "要件イテレ",
-        "companionRework": "手直し",
+        "companionRework": "再作業",
         "autoPass": "この水準以下を自動承認"
       },
       "add": "追加",

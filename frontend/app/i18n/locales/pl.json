@@ -3001,7 +3001,7 @@
         "ciMaxAttempts": "Próby naprawy CI",
         "maxRequirementIterations": "Iteracje wymagań",
         "maxRequirementConcernAllowed": "Automatyczne zaliczenie zastrzeżeń do",
-        "companionMaxReworks": "Rundy poprawek towarzysza",
+        "companionMaxReworks": "Rundy przeróbek towarzysza",
         "autoMerge": "Auto-scalanie"
       },
       "newPreset": "Nowa zasada",
@@ -3013,7 +3013,7 @@
         "impact": "Wpływ%",
         "ciFix": "Napr. CI",
         "reqIter": "Iter. wym.",
-        "companionRework": "Poprawki",
+        "companionRework": "Przeróbki",
         "autoPass": "Auto-zalicz do"
       },
       "add": "Dodaj",

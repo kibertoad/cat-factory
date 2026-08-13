@@ -538,7 +538,7 @@
         "ciMaxAttempts": "Tentativi di correzione CI",
         "maxRequirementIterations": "Iterazioni sui requisiti",
         "maxRequirementConcernAllowed": "Auto-pass per criticita pari o inferiori a",
-        "companionMaxReworks": "Cicli di revisione del companion",
+        "companionMaxReworks": "Cicli di rielaborazione del companion",
         "autoMerge": "Auto-merge"
       },
       "autoMergeOnHint": "Mergia automaticamente quando rientra nei limiti del criterio.",
@@ -552,7 +552,7 @@
         "impact": "Impatto%",
         "ciFix": "Corr. CI",
         "reqIter": "Iter req",
-        "companionRework": "Revis.",
+        "companionRework": "Rielab.",
         "autoPass": "Auto-pass pari o inferiore a"
       },
       "add": "Aggiungi",
