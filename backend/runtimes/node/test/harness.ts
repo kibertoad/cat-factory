@@ -19,6 +19,8 @@ import {
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
   mintSession,
+  seedFrameRepoLink,
+  type FrameRepoLinkRepositories,
 } from '@cat-factory/conformance'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
@@ -54,53 +56,16 @@ import { DrizzleRepoProjectionRepository } from '../src/repositories/github.js'
 import { createApp } from '../src/server.js'
 
 /**
- * Link a service frame to a repository over this facade's own stores, satisfying the
- * `ConformanceApp.linkFrameRepo` contract (which documents why the frame must be one the test
- * created). Module-level rather than a closure in the app factory: it needs nothing but the db
- * handle, and the factory sits at its function-size budget.
+ * The three stores one frame→repo link is written across, over this facade's Drizzle repositories.
+ * The writes themselves live in `seedFrameRepoLink` (shared with the other facades); this names
+ * only which stores they land in.
  */
-async function linkFrameRepo(
-  db: DrizzleDb,
-  input: {
-    workspaceId: string
-    frameBlockId: string
-    installationId: number
-    githubId: number
-    owner: string
-    name: string
-  },
-): Promise<void> {
-  const { workspaceId, frameBlockId, installationId, githubId, owner, name } = input
-  await new DrizzleGitHubInstallationRepository(db).upsert({
-    installationId,
-    workspaceId,
-    accountId: null,
-    accountLogin: owner,
-    targetType: 'Organization',
-    appId: null,
-    provider: 'github',
-    cachedToken: null,
-    tokenExpiresAt: null,
-    accessToken: null,
-    createdAt: 1,
-    deletedAt: null,
-  })
-  await new DrizzleRepoProjectionRepository(db).upsertMany(workspaceId, [
-    {
-      githubId,
-      installationId,
-      owner,
-      name,
-      defaultBranch: 'main',
-      private: false,
-      linkedVia: 'app',
-      syncedAt: 1,
-    },
-  ])
-  const services = new DrizzleServiceRepository(db)
-  const service = await services.getByFrameBlock(frameBlockId)
-  if (!service) throw new Error(`No service owns frame '${frameBlockId}'`)
-  await services.update(service.id, { installationId, repoGithubId: githubId })
+function frameRepoLinkRepos(db: DrizzleDb): FrameRepoLinkRepositories {
+  return {
+    installations: new DrizzleGitHubInstallationRepository(db),
+    projection: new DrizzleRepoProjectionRepository(db),
+    services: new DrizzleServiceRepository(db),
+  }
 }
 
 const BASE = 'https://cat-factory.test'
@@ -566,7 +531,7 @@ export function makeConformanceApp(
     accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,
     getService,
-    linkFrameRepo: (input) => linkFrameRepo(db, input),
+    linkFrameRepo: (input) => seedFrameRepoLink(frameRepoLinkRepos(db), input),
     ...containerServiceProbes(container),
   }
 }

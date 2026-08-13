@@ -19,6 +19,8 @@ import {
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
   mintSession,
+  seedFrameRepoLink,
+  type FrameRepoLinkRepositories,
 } from '@cat-factory/conformance'
 import {
   type DrizzleDb,
@@ -34,6 +36,8 @@ import {
   createDbClient,
   createDrizzleRepositories,
   migrate,
+  DrizzleGitHubInstallationRepository,
+  DrizzleRepoProjectionRepository,
 } from '@cat-factory/node-server'
 import type { ServerContainer } from '@cat-factory/server'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -563,6 +567,17 @@ export function makeConformanceApp(
     accountRiskPolicyRepository: () => new DrizzleAccountRiskPolicyRepository(db),
     seedService,
     getService,
+    // The writes live in the shared `seedFrameRepoLink`; this names only which of THIS facade's
+    // stores they land in (the same Drizzle repositories the Node facade builds over).
+    linkFrameRepo: (input) =>
+      seedFrameRepoLink(
+        {
+          installations: new DrizzleGitHubInstallationRepository(db),
+          projection: new DrizzleRepoProjectionRepository(db),
+          services: createDrizzleRepositories(db, SEED_CLOCK).serviceRepository,
+        } satisfies FrameRepoLinkRepositories,
+        input,
+      ),
     ...containerServiceProbes(container),
   }
 }

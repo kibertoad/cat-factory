@@ -12,6 +12,7 @@ import {
   makeReadyReviewWithOpenItem,
   makeToolServerDispatchProbe,
   mintSession,
+  seedFrameRepoLink,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
 import { buildTestContainer, makeApp, fragmentLibraryDeps, tasksDeps } from '../helpers'
@@ -210,45 +211,17 @@ const harness: ConformanceHarness = {
         ),
       seedService: (service) => new D1ServiceRepository({ db: env.DB }).insert(service),
       getService: (id) => new D1ServiceRepository({ db: env.DB }).get(id),
-      linkFrameRepo: async ({
-        workspaceId,
-        frameBlockId,
-        installationId,
-        githubId,
-        owner,
-        name,
-      }) => {
-        await new D1GitHubInstallationRepository({ db: env.DB }).upsert({
-          installationId,
-          workspaceId,
-          accountId: null,
-          accountLogin: owner,
-          targetType: 'Organization',
-          appId: null,
-          provider: 'github',
-          cachedToken: null,
-          tokenExpiresAt: null,
-          accessToken: null,
-          createdAt: 1,
-          deletedAt: null,
-        })
-        await new D1RepoProjectionRepository({ db: env.DB }).upsertMany(workspaceId, [
+      // The writes live in the shared `seedFrameRepoLink`; this names only which of THIS facade's
+      // stores they land in.
+      linkFrameRepo: (input) =>
+        seedFrameRepoLink(
           {
-            githubId,
-            installationId,
-            owner,
-            name,
-            defaultBranch: 'main',
-            private: false,
-            linkedVia: 'app',
-            syncedAt: 1,
+            installations: new D1GitHubInstallationRepository({ db: env.DB }),
+            projection: new D1RepoProjectionRepository({ db: env.DB }),
+            services: new D1ServiceRepository({ db: env.DB }),
           },
-        ])
-        const services = new D1ServiceRepository({ db: env.DB })
-        const service = await services.getByFrameBlock(frameBlockId)
-        if (!service) throw new Error(`No service owns frame '${frameBlockId}'`)
-        await services.update(service.id, { installationId, repoGithubId: githubId })
-      },
+          input,
+        ),
       localModelEndpoints: () => {
         const svc = buildTestContainer({
           agentExecutor: new FakeAgentExecutor(),
