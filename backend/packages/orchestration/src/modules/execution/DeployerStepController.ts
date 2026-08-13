@@ -18,7 +18,7 @@ import type {
   ProvisionArgs,
   ProvisionDispatch,
 } from '@cat-factory/integrations'
-import { deployEvictionEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
+import { deployDispatchEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
 import type { ContainerFailureView } from './job.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND } from './ci.logic.js'
@@ -352,7 +352,7 @@ export class DeployerStepController {
     // of double-dispatching. The frame discriminator keeps each fanned-out job distinct.
     const ref: RunnerJobRef = {
       runId: instance.id,
-      jobId: deployJobId(instance.id, deployEvictionEpoch(step), next.frameId),
+      jobId: deployJobId(instance.id, deployDispatchEpoch(step), next.frameId),
     }
     const peerEnvUrls = buildPeerEnvUrls(targets, done)
     let dispatch: ProvisionDispatch

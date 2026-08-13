@@ -138,6 +138,9 @@ export class IterationCapController {
             this.deps.stepGraph.loopCompanionProducer(inst, i, {
               previousProposal: producer?.output ?? '',
               feedback: s.companion.verdicts.at(-1)?.feedback ?? '',
+              // A human GRANTED the round, but the feedback the producer must answer is the
+              // companion's last verdict, so that is who it is answering.
+              requestedBy: 'reviewer',
             })
           },
         )

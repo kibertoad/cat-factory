@@ -51,7 +51,7 @@ describe('initialPrReviewState', () => {
       // A fresh review starts with no captured slice reports: they accrue as the harness publishes
       // each slice, and inheriting a previous attempt's would credit work this run never did.
       sliceReviews: [],
-      // Nobody has resumed a fresh review, so it contributes nothing to the dispatch epoch.
+      // Nobody has nudged a fresh review yet.
       resumeAttempts: 0,
       findings: [],
       selectedFindingIds: [],

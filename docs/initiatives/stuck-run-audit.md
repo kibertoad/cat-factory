@@ -432,9 +432,10 @@ instance.id`. The whole point of the card is that it is a `blocked` run's ONLY r
     or crashed" has nothing to act on. `evicted or crashed` stays a SUBSTRING, which is all
     the dispatch-time `isContainerEvictionError` needs: the wording itself is now kernel's
     `CONTAINER_EVICTION_ERROR` rather than a constant copied into all four transports.
-  - **An eviction recovery re-dispatches under a FRESH job id** (`dispatchEpochFor` now counts
-    `evictionRecoveries` + `transientEvictionRecoveries`, which the deploy path's
-    `deployEvictionEpoch` had always done). Without it the recovery was close to a no-op for
+  - **An eviction recovery re-dispatches under a FRESH job id** (`dispatchEpochFor` counts the
+    run's prior dispatches of the kind, so the recovery's own dispatch advances it; it originally
+    counted `evictionRecoveries` + `transientEvictionRecoveries`, which the deploy path's
+    `deployDispatchEpoch` had always done). Without it the recovery was close to a no-op for
     exactly the backend this finding is about: a pool is asked to keep routing **sticky by job
     id**, so re-dispatching under the same id routes the retry back to the dead job, the next
     poll 404s again, the budget (1) is spent, and the run fails `evicted`; faster and more

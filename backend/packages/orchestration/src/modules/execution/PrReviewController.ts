@@ -125,9 +125,9 @@ export class PrReviewController {
       slices,
       findings,
     })
-    // Carried across the terminal write so a later `fix`/`post` re-dispatch keeps minting a
-    // distinct harness job id (see `dispatchEpochFor`), and so the window can still say the
-    // review needed nudging. `resumePendingSlices` is deliberately NOT carried: both literals
+    // Carried across the terminal write so the window can still say the review needed nudging (the
+    // job ids a later `fix`/`post` re-dispatch mints are the run's own concern — see
+    // `dispatchEpochFor`). `resumePendingSlices` is deliberately NOT carried: both literals
     // below omit it, which clears it, because this dispatch has now aggregated and any FURTHER
     // dispatch off this step is no longer a resume.
     const resumeAttempts = step.prReview?.resumeAttempts ?? 0
@@ -240,8 +240,9 @@ export class PrReviewController {
           ...review,
           status: 'reviewing',
           sliceReviews,
-          // Monotonic, and load-bearing: it is this step's contribution to the dispatch epoch, so
-          // the re-dispatch mints a job id the wedged job cannot be re-attached to.
+          // Monotonic: how many times a human has nudged this review, which the window reports.
+          // The re-dispatch mints a job id the wedged job cannot be re-attached to on its own
+          // terms — the epoch counts the run's prior `pr-reviewer` jobs (see `dispatchEpochFor`).
           resumeAttempts: (review.resumeAttempts ?? 0) + 1,
           resumePendingSlices: hasPriorWork ? pending : undefined,
         }

@@ -490,8 +490,9 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
 - cat-factory dispatches one job per pipeline **step** and polls it on the durable
   driver's cadence (`JOB_POLL_INTERVAL`, default 15s). A run executes a _sequence_ of
   steps, each its own pool job (distinct `jobId` = `<executionId>-<agentKind>`, suffixed
-  `-<n>` on a retry round), so a busy workspace produces many short-lived jobs: size your
-  pool for concurrency, not for one job per run.
+  `-<n>` past the run's first job of that kind: a retry round, or the same helper kind
+  escalated off a second step), so a busy workspace produces many short-lived jobs: size
+  your pool for concurrency, not for one job per run.
 - **Your scheduler owns capacity.** Queue jobs when the pool is saturated and report
   them as `running` until a runner picks them up; cat-factory will keep polling.
 - Keep routing **sticky by `jobId`** so re-dispatches (Workflows replay, a sweeper

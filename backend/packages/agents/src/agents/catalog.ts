@@ -21,7 +21,12 @@ import {
   PLATFORM_IS_NOT_THE_PRODUCT,
   REVIEW_SUMMARY_LAYOUT,
 } from './prompts/shared.js'
-import { PRIOR_ROUNDS_DIRECTIVE, renderPriorReviewRounds } from './prompts/review-rounds.js'
+import {
+  ACCOUNTING_REVIEW_DIRECTIVE,
+  FEEDBACK_ACCOUNTING_DIRECTIVE,
+  PRIOR_ROUNDS_DIRECTIVE,
+  renderPriorReviewRounds,
+} from './prompts/review-rounds.js'
 import {
   customTaskTypeSection,
   environmentSection,
@@ -237,9 +242,26 @@ export function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry
 }
 
 /**
- * When a human requested changes on this step's gated proposal, append their
- * feedback and the previous proposal so the agent revises rather than restarts.
- * Applied to every inline agent kind (standard-phase and generic alike).
+ * Who asked for the revision, said in one sentence. An exhaustive `Record`, so a third kind of
+ * reviewer fails to compile here rather than silently borrowing one of these two framings.
+ *
+ * The distinction is load-bearing in both directions: a companion's automatic round framed as a
+ * person's request tells the agent somebody is waiting on work no person has read, and a real
+ * "request changes" flattened into "your work was reviewed" loses the one fact that outranks the
+ * feedback itself.
+ */
+const REVISION_REQUESTER_FRAMING: Record<
+  NonNullable<AgentRunContext['revision']>['requestedBy'],
+  string
+> = {
+  human: 'A person reviewed your previous proposal and requested changes.',
+  reviewer: 'An automated reviewer graded your previous proposal and asked for changes.',
+}
+
+/**
+ * When changes were requested on this step's previous proposal — by a person on its gate, or by
+ * the reviewer that grades it — append the feedback and that proposal so the agent revises rather
+ * than restarts. Applied to every inline agent kind (standard-phase and generic alike).
  */
 function withRevision(prompt: string, context: AgentRunContext): string {
   const revision = context.revision
@@ -247,9 +269,13 @@ function withRevision(prompt: string, context: AgentRunContext): string {
   const lines = [
     prompt,
     '',
-    'A human reviewed your previous proposal and requested changes. Revise that',
-    'proposal to address their feedback — keep what still holds, change what they',
+    // Falls back to the reviewer framing for a rework row written before `requestedBy` existed:
+    // it is the common case, and it is the false-human claim that this exists to stop.
+    REVISION_REQUESTER_FRAMING[revision.requestedBy] ?? REVISION_REQUESTER_FRAMING.reviewer,
+    'Revise that proposal to answer the feedback: keep what still holds, change what was',
     'flagged. Do not start from scratch.',
+    '',
+    FEEDBACK_ACCOUNTING_DIRECTIVE,
     '',
     'Your previous proposal:',
     revision.previousProposal || '(empty)',
@@ -344,8 +370,12 @@ function withPriorReview(prompt: string, context: AgentRunContext): string {
     grading
       ? PRIOR_ROUNDS_DIRECTIVE
       : 'Keep every earlier point that was already addressed addressed. Where an earlier point ' +
-        'is still open, deal with it in this revision too, not only the feedback above.',
+        'is still open, deal with it in this revision too, not only the feedback above, and ' +
+        'account for it in the same way.',
   ]
+  // Only the grader, and only here: an accounting can exist only once a round has been answered,
+  // which is exactly the condition this whole section renders under.
+  if (grading) lines.push('', ACCOUNTING_REVIEW_DIRECTIVE)
   // How much rope is left, stated to the GRADER only. A producer told "this is the last round"
   // optimises for the grader rather than for the work; a grader that knows it is holding the run
   // has the context to weigh a marginal call, which is the call this loop keeps getting wrong.

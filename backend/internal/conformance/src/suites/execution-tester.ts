@@ -240,6 +240,12 @@ function registerTesterPipelineTests(harness: ConformanceHarness): void {
       {
         asyncKinds: ['coder', 'tester-api'],
         asyncPolls: 1,
+        // On a container-reusing runner, whose harness JobRegistry survives between rounds: the
+        // QC re-run bumps no gate counter of its own (the report was ACCEPTED, so the fixer loop
+        // never moved) and does not go through a step reset, so it is the loop most exposed to
+        // re-attaching to the first Tester job and re-auditing a byte-identical report until the
+        // whole QC budget is spent without a single re-test.
+        pooledContainer: true,
         testReports: [shallow, thorough],
         pullRequest: { url: 'https://gh/pr/2', number: 2, branch: 'cat-factory/task_login' },
       },

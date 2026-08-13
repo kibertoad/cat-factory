@@ -76,16 +76,16 @@ export interface AgentRunContext {
   /** Index of this step within the pipeline. */
   stepIndex: number
   /**
-   * Monotonic per-step dispatch counter, folded into the harness job id so a step that is
-   * RE-dispatched within one run (the Tester→Fixer loop's re-test, a fixer round, a polling
-   * gate's helper attempt) never collides with — and so never RE-ATTACHES to — a prior
-   * round's completed harness job. The harness keys its `JobRegistry` by the backend-supplied
-   * job id and re-attaches to an existing entry rather than re-running (replay idempotency),
-   * and a container-reusing transport (a warm local pool / a self-hosted runner pool) keeps
-   * that registry alive across rounds because reclaiming a pooled member does NOT destroy it.
-   * Without a per-round epoch the re-test would replay the first round's stale report. Derived
-   * from the step's own round counter; absent/0 for a step dispatched once (the id is then
-   * unsuffixed, so single-dispatch steps are unaffected).
+   * How many jobs of THIS agent kind the run has already dispatched, folded into the harness job
+   * id so no dispatch can collide with — and so never RE-ATTACHES to — an earlier one's completed
+   * job. The harness keys its `JobRegistry` by the backend-supplied job id and re-attaches to an
+   * existing entry rather than re-running (replay idempotency), and a container-reusing transport
+   * (a warm local pool / a self-hosted runner pool) keeps that registry alive across rounds
+   * because reclaiming a pooled member does NOT destroy it. So a reused id replays a finished job:
+   * the Tester re-test that returned the first round's stale report, a companion rework round
+   * re-grading a byte-identical artifact. Monotonic by construction (the engine reads the run's own
+   * per-kind dispatch record) and absent/0 for the run's FIRST job of a kind, whose id is then
+   * unsuffixed.
    */
   dispatchEpoch?: number
   /** Whether this is the pipeline's last step (drives task finalisation). */
@@ -655,18 +655,23 @@ export interface AgentRunContext {
    */
   resolvedDecision: { question: string; chosen: string } | null
   /**
-   * When a human reviewed this step's gated proposal and requested changes, the
-   * previous proposal plus their feedback. Present only on a re-run triggered by
-   * "Request changes"; the agent should revise its previous proposal to address
-   * the feedback rather than start from scratch. `comments` are GitHub-review-style
-   * notes on specific blocks of the proposal (a human review carries the verbatim
-   * `quotedSource` it targets; a companion's anchor-based comment omits it), folded
-   * into the prompt alongside the freeform `feedback`.
+   * When this step's previous proposal was reviewed and changes were requested, that proposal
+   * plus the feedback. Present only on the re-run it drove; the agent should revise its previous
+   * proposal to address the feedback rather than start from scratch. `comments` are
+   * GitHub-review-style notes on specific blocks of the proposal (a human review carries the
+   * verbatim `quotedSource` it targets; a companion's anchor-based comment omits it), folded into
+   * the prompt alongside the freeform `feedback`.
+   *
+   * `requestedBy` says which of the two loops this is — a person's "request changes" or an
+   * automatic reviewer's round — because the prompt has to say so and cannot infer it: BOTH arrive
+   * here, and a companion rework round framed as "a human reviewed your proposal" tells the agent
+   * somebody is waiting on work no person has read.
    */
   revision?: {
     previousProposal: string
     feedback: string
     comments?: { quotedSource?: string; body: string }[]
+    requestedBy: 'human' | 'reviewer'
   }
   /**
    * The rounds this step's companion loop has ALREADY been through, oldest first — the memory

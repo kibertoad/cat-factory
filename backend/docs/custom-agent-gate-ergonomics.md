@@ -108,6 +108,20 @@ of its own. Three things bite:
   sit in front of it. The same reasoning drives the cascade-skip rule in
   [`pipeline-catalog-collapse.md`](../../docs/initiatives/pipeline-catalog-collapse.md), where a
   skipped producer takes its companion with it.
+- **A rework round re-dispatches the producer for real**, and nothing has to be registered for that:
+  `dispatchEpochFor` mints the harness job id off the run's own record of what it has dispatched
+  (`recordDispatchAttribution`'s per-kind count), so every round gets an id of its own. It used to be
+  a hand-maintained sum of per-loop counters, which the companion loop was never added to (its round
+  count lives on the COMPANION step and is not readable from the producer at all), so a
+  container-backed producer re-attached to its FIRST completed job every round: the harness replays a
+  job id it already holds, and a companion then re-graded a byte-identical artifact until the budget
+  ran out. Anything new that re-runs a step inherits the fix; nothing needs a counter of its own.
+- **The producer answers in its REPLY.** `FEEDBACK_ACCOUNTING_DIRECTIVE` makes it account for every
+  point (changed, or argued down with a reason) as a "Response to review" section in the reply, never
+  in a committed artifact, because that reply is what the next round folds in as prior work — for a
+  `container-explore` companion too, which reads it beside the checkout. The grader is told to hold
+  that accounting to the WORK, and NOT to treat a missing one as a finding: a producer whose
+  deliverable is a pushed commit legitimately answers with the change alone.
 
 ## Boot-time registration validation
 

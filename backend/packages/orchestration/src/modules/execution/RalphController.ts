@@ -117,7 +117,7 @@ export class RalphController {
     if (decision === 'retry' && isAsyncAgentExecutor(executor) && block) {
       // Reclaim the finished iteration's container so the next one boots fresh — the per-run
       // container would otherwise re-attach to the completed job (idempotent dispatch by run id)
-      // and replay its result. The dispatch epoch (from the now-incremented attempts) also
+      // and replay its result. The dispatch epoch (which counts the iteration just recorded) also
       // changes the job id, but reclaiming keeps a container-reusing transport honest too.
       await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
       return this.dispatchIteration(workspaceId, instance, step, block, verdict)

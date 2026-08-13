@@ -403,6 +403,53 @@ function registerCompanionAndFailureTests(harness: ConformanceHarness): void {
     expect(companionStep.companion?.attempts).toBe(1)
   })
 
+  it('genuinely RE-RUNS both sides of the loop on a container-reusing runner', async () => {
+    // The regression the dispatch epoch exists for, end to end. `pooledContainer` models a runner
+    // whose harness `JobRegistry` survives between rounds (reclaiming a pooled member does NOT
+    // destroy it), so a re-dispatch under an already-used job id re-attaches and REPLAYS the
+    // earlier round's completed result: no container session, no model call. On a real run that
+    // froze an `architect` under its companion at 0.76 for four rounds while the companion, itself
+    // replayed, re-graded a byte-identical artifact and correctly never moved its rating.
+    //
+    // 0.7 then 0.9 is the tell. Round 2 can only read the SECOND rating if the reviewer's job is
+    // genuinely fresh, so a run that converges here is one where both the producer and the
+    // reviewer actually re-ran. Both are async so both mint job ids; the epochs assert the
+    // mechanism directly, since a REPLAYED round is otherwise invisible from the outside.
+    const dispatched: { agentKind: string; epoch: number }[] = []
+    const app = harness.makeApp({
+      asyncKinds: ['coder', 'reviewer'],
+      asyncPolls: 1,
+      pooledContainer: true,
+      companionRatings: [0.7, 0.9],
+      onContext: (c) => dispatched.push({ agentKind: c.agentKind, epoch: c.dispatchEpoch ?? 0 }),
+      pullRequest: { url: 'https://gh/pr/7', number: 7, branch: 'cat-factory/task_login' },
+    })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build + companion rework',
+      purpose: 'build',
+      agentKinds: ['coder', 'reviewer'],
+    })
+    const start = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+    expect(start.status).toBe(201)
+
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(exec.status).toBe('done')
+    const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+    // Round 1 rated 0.7 (below the 0.8 bar → rework), round 2 read the NEXT rating and passed.
+    expect(companionStep.companion?.verdicts.map((v) => v.rating)).toEqual([0.7, 0.9])
+    expect(companionStep.companion?.attempts).toBe(1)
+    // The producer really was sent twice, under two different job ids.
+    const coderEpochs = dispatched.filter((d) => d.agentKind === 'coder').map((d) => d.epoch)
+    expect(coderEpochs).toEqual([0, 1])
+    expect(dispatched.filter((d) => d.agentKind === 'reviewer').map((d) => d.epoch)).toEqual([0, 1])
+  })
+
   it('fails the run when a companion verdict cannot be parsed (no silent 100% pass)', async () => {
     // The bug: a truncated/malformed reviewer reply was silently treated as a perfect
     // pass (rating 1 ≥ threshold) and the real review was dropped. Now an unparseable

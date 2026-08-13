@@ -67,6 +67,7 @@ import { connectionDescription } from '@cat-factory/contracts'
 import type { ResolvedValidationChecks } from '@cat-factory/contracts'
 import { reproductionFor, validationChecksFor } from './builder-validation-context.js'
 import { stepObservations, type StepObservations } from './builder-step-observations.js'
+import { dispatchEpochSlice } from './step-fold.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
@@ -92,47 +93,6 @@ import {
   resolveLinkedContext as resolveLinkedContextFor,
 } from './linked-context.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
-
-/**
- * The step's per-round dispatch epoch (see {@link AgentRunContext.dispatchEpoch}). A
- * looping step carries its round count on its own gate state: the Tester→Fixer loop on
- * `step.test.attempts` (incremented per fixer round) and a polling gate's helper loop on
- * `step.gate.attempts` (incremented per helper dispatch). Either uniquely tags each
- * re-dispatch, so the harness job id changes round to round and a re-test never re-attaches
- * to a prior round's completed job. A step with neither (dispatched once) is epoch 0.
- *
- * Eviction recoveries count too — the deploy path has always done this
- * (`deployEvictionEpoch`, whose comment calls itself "analogous to the agent path's
- * `dispatchEpochFor`"), and the agent path owes the same for a stronger reason. A pool is
- * told to keep routing STICKY BY JOB ID (see `backend/docs/runner-pool-integration.md` §7) so
- * a replay or sweeper re-drive reaches the same job — correct for a live job, and exactly
- * wrong after an eviction, where reusing the id routes the recovery straight back to the dead
- * job instead of onto a fresh member. That would make the whole eviction-recovery budget a
- * no-op for pool-backed runs. A fresh id is right for every other transport too: nothing can
- * re-attach to a container that no longer exists.
- *
- * Every component is monotonic per step, so the sum is monotonic and each re-dispatch after
- * any increment mints a strictly larger epoch — two different rounds can never collide on one id.
- */
-export function dispatchEpochFor(step: PipelineStep): number {
-  const evictions = (step.evictionRecoveries ?? 0) + (step.transientEvictionRecoveries ?? 0)
-  // A manually RESUMED PR review counts for the same reason an eviction recovery does, and more
-  // sharply: the whole point of the resume is that the previous job is WEDGED, so re-attaching to
-  // it (which is what a container-reusing transport does for a known job id) would replace the
-  // stuck run with itself. The review is the only step kind carrying none of the loop counters
-  // above, so without this term its epoch would stay 0 across every resume.
-  const resumes = step.prReview?.resumeAttempts ?? 0
-  const base =
-    (step.test?.attempts ?? step.gate?.attempts ?? step.ralph?.attempts ?? 0) + evictions + resumes
-  // The optional fork-decision phase dispatches the read-only proposer on the coder step
-  // BEFORE the Coder itself (Phase A then Phase B). Both dispatch on the same step, so once
-  // the phase resolves (`chosen` / `single_path`) bump the epoch by one — the Phase-B Coder
-  // then gets a distinct harness job id and never re-attaches to the proposer's completed job
-  // on a container-reusing transport (the same guarantee fixer/helper rounds get).
-  const status = step.forkDecision?.status
-  const forkResolved = status === 'chosen' || status === 'single_path'
-  return base + (forkResolved ? 1 : 0)
-}
 
 /**
  * Resolves already-selected fragment ids to their bodies against the merged
@@ -528,13 +488,10 @@ export class AgentContextBuilder {
       // (individual-usage) subscription for the step. Null on system/dev runs.
       ...(initiatedBy != null ? { initiatedByUserId: initiatedBy } : {}),
       stepIndex: instance.currentStep,
-      // Per-step dispatch epoch (see AgentRunContext.dispatchEpoch): the count of fixer/helper
-      // rounds this step has been through, so a re-dispatched job (the Tester re-test after a
-      // fixer round, a gate's helper retry) gets a FRESH harness job id and runs anew rather
-      // than re-attaching to its prior round's completed job on a container-reusing transport.
-      // Both counters increment once per round, so they uniquely tag each re-dispatch; a step
-      // dispatched once has neither and stays at epoch 0 (unsuffixed id, unchanged behaviour).
-      ...(dispatchEpochFor(step) > 0 ? { dispatchEpoch: dispatchEpochFor(step) } : {}),
+      // How many jobs of THIS kind (a helper off this step resolves its OWN) the run has already
+      // dispatched, so every re-dispatch mints a fresh harness job id and runs anew instead of
+      // re-attaching to an earlier round's completed job. See {@link dispatchEpochSlice}.
+      ...dispatchEpochSlice(instance, agentKind),
       isFinalStep,
       ...dispatchSettings,
       // The future-looking Follow-up companion is enabled for this (coder) step: the

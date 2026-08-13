@@ -160,23 +160,23 @@ type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
  * forward.
  */
 /**
- * The harness job id for one pipeline step: the run (execution) id plus the agent
- * kind. A run executes a sequence of steps that all share the one per-run container,
- * so each needs an id that is UNIQUE WITHIN THE RUN — the harness keys its per-kind
- * job registries by it, and two steps sharing an id alias there (the bug where an
- * `architect` /explore poll read back the `spec-writer`'s /spec result). The run is
+ * The harness job id for one dispatch: the run (execution) id, the agent kind, and — past the
+ * first job of that kind in the run — the `dispatchEpoch`. A run executes a sequence of steps that
+ * all share the one per-run container, so each job needs an id that is UNIQUE WITHIN THE RUN: the
+ * harness keys its per-kind job registries by it, and two jobs sharing an id alias there (the bug
+ * where an `architect` /explore poll read back the `spec-writer`'s /spec result). The run itself is
  * addressed separately by the execution id (the {@link RunnerJobRef.runId}).
  *
- * A step RE-dispatched within the run (the Tester→Fixer loop's re-test, a fixer round, a
- * polling gate's helper retry, a container-eviction recovery) carries a non-zero
- * `dispatchEpoch` so each round gets a distinct id. The harness re-attaches to an EXISTING job
- * id rather than re-running (replay idempotency), and a container-reusing transport (a warm
- * local pool / a self-hosted runner pool) keeps that registry alive across rounds — reclaiming
- * a pooled member does NOT destroy it — so without the epoch a re-test would replay the first
- * round's stale report (the bug where the Tester appeared to "pass regardless" and never
- * actually re-ran), and an eviction recovery would land back on the job whose runner just died
- * rather than on a fresh one. Epoch 0 (a step dispatched once) keeps the original unsuffixed
- * id, so single-dispatch steps are unaffected. See {@link AgentRunContext.dispatchEpoch}.
+ * The epoch is what makes that uniqueness total, because the engine dispatches one kind more than
+ * once per run in two ways: a step RE-dispatched (a Tester re-test after a fixer round, a gate's
+ * helper retry, a companion's rework round, an eviction recovery) and the same helper kind
+ * escalated off DIFFERENT steps (`fixer` serves four gates). The harness re-attaches to an EXISTING
+ * job id rather than re-running (replay idempotency), and a container-reusing transport — a warm
+ * local pool, a self-hosted runner pool — keeps that registry alive across rounds, since reclaiming
+ * a pooled member does NOT destroy it. So a reused id replays a completed job: the Tester that
+ * appeared to "pass regardless" and never re-tested, an eviction recovery landing back on the job
+ * whose runner just died. `dispatchEpochFor` counts the run's prior dispatches of the kind, so the
+ * id names the n-th job of that kind and the run's first keeps the unsuffixed shape.
  */
 function stepJobId(executionId: string, agentKind: string, dispatchEpoch = 0): string {
   const base = `${executionId}-${agentKind}`
