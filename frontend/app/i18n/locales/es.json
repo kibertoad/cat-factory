@@ -1411,6 +1411,8 @@
       "companionCapDetail": "Haz una ronda más de reelaboración automática, avanza al siguiente paso aceptando la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
       "companionCapBlockedHeading": "{agent} alcanzó su límite de {attempts} intentos de reelaboración con {count} hallazgo obligatorio aún sin resolver. | {agent} alcanzó su límite de {attempts} intentos de reelaboración con {count} hallazgos obligatorios aún sin resolver.",
       "companionCapBlockedDetail": "Continuar acepta el trabajo con esos hallazgos sin resolver, por eso la política de riesgo de esta ejecución nunca tomará esa decisión por ti. Haz una ronda más de reelaboración automática, continúa igualmente con la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
+      "companionStalledHeading": "{agent} detuvo el bucle de reelaboración tras {attempts} de {maxAttempts} rondas: la última revisión volvió sin cambios y la puntuación se mantuvo por debajo del umbral de {threshold}.",
+      "companionStalledDetail": "Las rondas restantes quedaron sin usar porque solo repetirían un veredicto ya emitido. Haz una ronda más de todos modos, avanza al siguiente paso aceptando la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
       "infraAttempts": "Intentos de infraestructura",
       "hideInfraAttempts": "Ocultar intentos de infraestructura",
       "executionHistory": "Historial de ejecución",

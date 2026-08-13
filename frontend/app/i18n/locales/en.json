@@ -1502,6 +1502,8 @@
       "companionCapDetail": "Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
       "companionCapBlockedHeading": "{agent} hit its {attempts}-attempt rework limit with {count} must-fix finding still open. | {agent} hit its {attempts}-attempt rework limit with {count} must-fix findings still open.",
       "companionCapBlockedDetail": "Proceeding accepts the work with those findings unfixed, which is why this run’s risk policy will never take that choice for you. Do one more automatic rework round, proceed anyway on the current output, or stop and reset the task so you can edit the inputs and resubmit.",
+      "companionStalledHeading": "{agent} stopped the rework loop after {attempts} of {maxAttempts} rounds: the last revision came back unchanged and the rating held below the {threshold} bar.",
+      "companionStalledDetail": "The remaining rounds were left unspent because they would only repeat a verdict already given. Do one more round anyway, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
       "infraAttempts": "Infrastructure attempts",
       "hideInfraAttempts": "Hide infrastructure attempts",
       "executionHistory": "Execution history",

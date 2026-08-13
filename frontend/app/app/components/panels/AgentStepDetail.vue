@@ -174,13 +174,24 @@ const companionExceeded = computed(() => approvalPending.value && !!step.value?.
 /**
  * The must-fix findings the reviewer left open on its last round.
  *
- * They are why the two cap prompts read differently, and the difference is not cosmetic: a cap
+ * They are why the cap prompts read differently, and the difference is not cosmetic: a cap
  * reached on the rating alone is the loop reporting that this is as good as it got, while an open
  * blocker is the reviewer saying the work must not go on as it stands. That second one is also the
  * park no risk policy will answer, so the person reading it is the only route past it and should
  * be told what they are being asked to overrule.
  */
 const blockingFindings = computed(() => blockingReviewComments(latestVerdict.value?.comments))
+// The SAME park, reached for the opposite reason: the loop was abandoned with rounds still on the
+// budget because the producer handed back the work it was asked to change and the rating did not
+// move. The three choices are identical, so this only picks the wording — the cap copy states a
+// spent limit, which is a false claim about this park (`companion.stalled`).
+//
+// It can hold TOGETHER with `blockingFindings`, and that pair is what splits the wording across
+// the two slots rather than ranking them: the HEADING says how the loop ended (a stalled one did
+// not reach its limit, so only it may say so) and the DETAIL says what this person is being asked
+// to decide (an open blocker outranks a bar that went unmet, and its copy claims nothing about
+// rounds). Neither slot can then state something untrue of the park it is describing.
+const companionStalled = computed(() => companionExceeded.value && !!step.value?.companion?.stalled)
 // A park a DEDICATED window owns (fork choice / follow-up triage): the generic approve
 // resolver refuses these server-side, so the rail is replaced by a redirect to that window.
 // Computed live, since a coder step can park on one WHILE this overlay is already open
@@ -497,31 +508,44 @@ async function copyOutput() {
                 :step-index="ctx?.stepIndex ?? null"
               />
 
-              <!-- companion rework budget spent: the shared iteration-cap decision
-                   (one more round / proceed with the current output / stop & reset) -->
+              <!-- companion rework budget spent, OR the loop abandoned early as unproductive,
+                   with or without must-fix findings still open: the shared iteration-cap decision
+                   (one more round / proceed with the current output / stop & reset). One prompt,
+                   and the two slots are picked on different facts — the choices are the same but
+                   the reason is not, the spent-limit wording is untrue of a stalled loop, and an
+                   open blocker is what the person is actually being asked to overrule. -->
               <IterationCapPrompt
                 v-if="companionExceeded"
                 :heading="
-                  blockingFindings.length
-                    ? t(
-                        'panels.stepDetail.companionCapBlockedHeading',
-                        {
-                          agent: agent.label,
-                          attempts: step.companion?.maxAttempts,
-                          count: blockingFindings.length,
-                        },
-                        blockingFindings.length,
-                      )
-                    : t('panels.stepDetail.companionCapHeading', {
+                  companionStalled
+                    ? t('panels.stepDetail.companionStalledHeading', {
                         agent: agent.label,
-                        attempts: step.companion?.maxAttempts,
+                        attempts: step.companion?.attempts,
+                        maxAttempts: step.companion?.maxAttempts,
                         threshold: pctOf(latestVerdict?.threshold ?? 0),
                       })
+                    : blockingFindings.length
+                      ? t(
+                          'panels.stepDetail.companionCapBlockedHeading',
+                          {
+                            agent: agent.label,
+                            attempts: step.companion?.maxAttempts,
+                            count: blockingFindings.length,
+                          },
+                          blockingFindings.length,
+                        )
+                      : t('panels.stepDetail.companionCapHeading', {
+                          agent: agent.label,
+                          attempts: step.companion?.maxAttempts,
+                          threshold: pctOf(latestVerdict?.threshold ?? 0),
+                        })
                 "
                 :detail="
                   blockingFindings.length
                     ? t('panels.stepDetail.companionCapBlockedDetail')
-                    : t('panels.stepDetail.companionCapDetail')
+                    : companionStalled
+                      ? t('panels.stepDetail.companionStalledDetail')
+                      : t('panels.stepDetail.companionCapDetail')
                 "
                 :loading="resolvingCap"
                 @resolve="resolveCompanionCap"

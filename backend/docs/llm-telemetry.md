@@ -20,7 +20,16 @@ The sinks:
 - **`agent_context_snapshots`**: the complete context an agent was PROVIDED per dispatch,
   including the full content of injected `.cat-context/*` files, which the agent reads via tools
   and which therefore never reach proxy telemetry. A redacted allow-list projection, never a
-  token or credential-bearing URL.
+  token or credential-bearing URL. Filed by BOTH executors: a container dispatch records its job
+  body's projection, an inline one records the prompts it composed plus an empty file list (an
+  inline call has no checkout to inject into). Wiring only the container half is what once left
+  every companion and inline document kind absent from this table, and the one reader that notices
+  (`KaizenService`) blamed a disabled switch for it. **Still absent: the services that call
+  `generateText` themselves rather than through an agent-kind dispatch** (the judges, the
+  requirements and clarity reviewers, the tester-quality reviewer, the bug-hunt assessor, the
+  document interviewer, Kaizen's own grader). Each composes its prompts at its own call site, so a
+  snapshot there is a separate piece of work; a step of one of those kinds reads as "no snapshot
+  available", which is why that message names no cause.
 - **`agent_search_queries`**: one row per web search a container agent PERFORMED.
 - **`agent_tool_calls`**: one row per tool invocation an agent MADE, in the order it made them:
   the TRAJECTORY. Where the snapshot keeps what an agent was given and `llm_call_metrics` what

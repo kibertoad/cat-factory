@@ -180,12 +180,21 @@ function readRequestMaxTokens(params: unknown): number | null {
  *
  * `unified` is the one stored: it is what makes `length` comparable across providers, which
  * is the whole reason a truncated-output signal can be computed at all.
+ *
+ * `other` with NO `raw` is read as NOTHING REPORTED. The unified union is closed and has no
+ * "unknown" member, so `other` is the only thing a model can answer when its backend named no stop
+ * reason at all — which is every call a subscription CLI serves (`CliInlineLanguageModel`, whose own
+ * rows record null). Storing the placeholder here made the same absence read as two different values
+ * in two stores, the trace sink claiming a classification nobody made. A vendor string in `raw` is
+ * what distinguishes a real `other` from that, so it is kept.
  */
 function readFinishReason(result: unknown): string | null {
   const reason = (result as { finishReason?: unknown })?.finishReason
   if (typeof reason === 'string') return reason
-  const unified = (reason as { unified?: unknown } | undefined)?.unified
-  return typeof unified === 'string' ? unified : null
+  const object = reason as { unified?: unknown; raw?: unknown } | undefined
+  const unified = object?.unified
+  if (typeof unified !== 'string') return null
+  return unified === 'other' && typeof object?.raw !== 'string' ? null : unified
 }
 
 /**

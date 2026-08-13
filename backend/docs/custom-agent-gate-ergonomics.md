@@ -106,10 +106,13 @@ of its own. Several things bite:
 - **A `blocker` finding holds the run, whatever the rating.** The two halves of a verdict are read
   independently (kernel's `disposeCompanionVerdict`): a rating is one number over a whole
   deliverable, so a review can score work above its bar and still have named something that must
-  not ship. While a blocker is open the producer is reworked; with the budget spent the step parks,
-  and THAT park is the one an unattended risk policy will not answer, because accepting the work
-  anyway overrules a review rather than reporting that the automation gave up (kernel's
-  `CompanionParkReason`). Nothing is registered for this: grading is in the shared prompt, so a
+  not ship. While a blocker is open the producer is reworked; once the rounds are gone the step
+  parks, and THAT park is the one an unattended risk policy will not answer, because accepting the
+  work anyway overrules a review rather than reporting that the automation gave up (kernel's
+  `CompanionParkReason`). A loop `companionLoopStalled` stops EARLY reaches the same park on the
+  rounds it abandoned, so the reason is re-decided for that abandoned budget rather than assumed to
+  be a spent one: giving up is the automation's to report, an open blocker is not, and a stalled
+  loop can carry both. Nothing is registered for this: grading is in the shared prompt, so a
   deployment's own pairing gets it. What a registration should not do is teach its reviewer to
   express urgency by lowering the rating instead.
 - **Adjacency is an invariant**, enforced by `assertValidCompanionPlacement`: the engine grades the

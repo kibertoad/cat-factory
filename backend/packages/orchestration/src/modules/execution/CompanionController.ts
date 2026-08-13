@@ -3,6 +3,8 @@ import type {
   AgentRunResult,
   AgentTokenUsage,
   Block,
+  CompanionDispositionInput,
+  CompanionDispositionResult,
   ExecutionInstance,
   IdGenerator,
   Logger,
@@ -15,11 +17,12 @@ import {
   parseCompanionAssessment,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { companionFor, companionTargets } from '@cat-factory/agents'
+import { companionFor, companionTargets, deliverableIsReply } from '@cat-factory/agents'
 import type { SpendService } from '@cat-factory/spend'
 import { extractJson } from '../requirements/requirements.logic.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import { companionLoopStalled } from './companionProgress.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import { resolvesOwnCaps, type ResolvedRunRiskPolicy, type RunPolicyScope } from './policy-types.js'
 import { buildStepApproval } from './stepApproval.js'
@@ -141,6 +144,9 @@ export interface CompanionControllerDeps {
  *   - `park` → the iteration-cap gate for a human (one more round / proceed / stop & reset), NOT
  *     a failure. An unattended risk policy answers that park when the loop merely ran out of
  *     rounds, never while a `blocker` is open.
+ * A `rework` the loop has stopped getting anywhere with (`companionLoopStalled`) takes that same
+ * park EARLY, on the rounds it abandoned, and is decided by the same rule so an open `blocker`
+ * still parks as one.
  * An unparseable verdict (even after the repair retry) fails the run (`companion_rejected`)
  * rather than silently passing. Extracted out of `ExecutionService`; the shared step-graph
  * primitives it calls (`loopCompanionProducer`, the parking gate, the block/instance writes)
@@ -342,14 +348,18 @@ export class CompanionController {
     // What this round means for the run, decided in ONE place (kernel's `disposeCompanionVerdict`,
     // the judge's sibling): a `blocker` finding holds the step whatever the rating, the first
     // batch of findings is worth a round, and only then does the rating meet the bar or not.
-    const decision = disposeCompanionVerdict({
+    //
+    // The input is NAMED because a stalled loop below asks the same rule the same question with
+    // one field changed, and re-listing it there would be two copies of what this round was.
+    const dispositionInput: CompanionDispositionInput = {
       rating,
       threshold: companion.threshold,
       comments: assessment?.comments,
       attempts: companion.attempts,
       maxAttempts: companion.maxAttempts,
       hasProducer: producerIndex >= 0,
-    })
+    }
+    const decision = disposeCompanionVerdict(dispositionInput)
 
     // Fold this cycle's verdict (+ the reviewer/spec-companion side-signals) into the step —
     // see {@link recordCompanionVerdict}.
@@ -377,13 +387,27 @@ export class CompanionController {
       })
     }
 
-    // NOT PASSED with the automatic budget spent → DON'T get stuck. Park on a human decision (one
-    // more round / proceed anyway / stop & reset) — the same iteration-cap surface the requirements
-    // reviewer uses at its cap. Only AUTOMATIC reworks count against the budget (`attempts`); human
-    // "request changes" cycles on a gated companion re-run the producer without consuming it.
-    // `step.output` already holds the companion's latest feedback; the `exceeded` flag + the parked
-    // approval gate let the SPA render the three choices (via `resolveCompanionExceeded`).
-    if (decision.disposition === 'park') {
+    // NOT PASSED: the exit this round takes, which is the cap's own once the loop has stopped
+    // getting anywhere (see {@link exitForUnproductiveLoop}, which also records that on the step).
+    const exit = this.exitForUnproductiveLoop({
+      workspaceId,
+      instance,
+      block,
+      step,
+      companion,
+      producerIndex,
+      decision,
+      dispositionInput,
+    })
+
+    // NOT PASSED with the automatic budget spent (or abandoned as above) → DON'T get stuck. Park on
+    // a human decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
+    // surface the requirements reviewer uses at its cap. Only AUTOMATIC reworks count against the
+    // budget (`attempts`); human "request changes" cycles on a gated companion re-run the producer
+    // without consuming it. `step.output` already holds the companion's latest feedback; the
+    // `exceeded` flag + the parked approval gate let the SPA render the three choices (via
+    // `resolveCompanionExceeded`).
+    if (exit.disposition === 'park') {
       step.companion = companion
       // …unless the run's policy says nobody is coming AND the automation is merely reporting that
       // it gave up. `proceed` is one of the three choices the gate offers a person, and it is the
@@ -396,9 +420,10 @@ export class CompanionController {
       // Narrowed to `budget_spent`, which is the whole safety property of the other reason: a
       // reviewer that named a `blocker` said this work must not go further, and overruling that is
       // a JUDGEMENT rather than a decision to stop retrying. No policy takes it (kernel's
-      // `CompanionParkReason`), so a blocked step waits for a person under either posture.
+      // `CompanionParkReason`), so a blocked step waits for a person under either posture — whether
+      // the budget ran out under that blocker or the loop abandoned the rest of it.
       if (
-        decision.parkReason === 'budget_spent' &&
+        exit.parkReason === 'budget_spent' &&
         (await this.settlesCapUnattended({ workspaceId, instance, block, step, companion, policy }))
       ) {
         return this.resolvePassedCompanion({
@@ -437,6 +462,69 @@ export class CompanionController {
       blockStatus: 'in_progress',
     })
     return { kind: 'continue' }
+  }
+
+  /**
+   * The exit a NOT-PASSED round takes, upgrading a `rework` to the cap's park when the loop has
+   * stopped getting anywhere, and recording that on the step.
+   *
+   * NOT GETTING ANYWHERE means the producer handed back the very text it was asked to revise and
+   * the rating did not move, so every round still on the budget would buy another copy of a verdict
+   * already given (`companionLoopStalled` holds the rule and the run that motivated it). Stopping
+   * EARLY takes the same exit as spending the budget, deliberately: the question a person is asked
+   * at the cap (one more round / proceed / stop & reset) is exactly the question here, an unattended
+   * policy already has an answer for it, and inventing a second exit would mean a second set of
+   * resolutions for the SPA and the risk policy to know about.
+   *
+   * WHICH cap exit is decided rather than assembled here: the same rule, asked what it would say
+   * with nothing left to spend. So a `blocker` still open when the loop gave up parks as
+   * `blocking_findings`, the one reason no policy may answer, instead of as the spent budget it
+   * merely resembles. Only a `rework` is converted, since a `pass` was not a loop failing to
+   * converge and a `park` has already named its own reason.
+   *
+   * `companion.stalled` is recorded beside `exceeded` rather than in place of it: the two reach the
+   * same gate for opposite reasons, and only this one says the run had rounds left and abandoned
+   * them.
+   */
+  private exitForUnproductiveLoop(args: {
+    workspaceId: string
+    instance: ExecutionInstance
+    block: Block
+    step: PipelineStep
+    companion: NonNullable<PipelineStep['companion']>
+    producerIndex: number
+    decision: CompanionDispositionResult
+    dispositionInput: CompanionDispositionInput
+  }): CompanionDispositionResult {
+    const { workspaceId, instance, block, step, companion, producerIndex, decision } = args
+    const producer = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
+    if (decision.disposition !== 'rework' || !producer) return decision
+    const stalled = companionLoopStalled({
+      producer,
+      verdicts: companion.verdicts,
+      // Answered from the REGISTRY, so a deployment's own producer kind is judged by its own
+      // declaration: only a kind whose deliverable is its reply can be found standing still by
+      // comparing that reply. See `deliverableIsReply`.
+      producerDeliverableIsReply: deliverableIsReply(
+        producer.agentKind,
+        this.deps.agentKindRegistry,
+      ),
+    })
+    if (!stalled) return decision
+    companion.stalled = true
+    this.deps.logger?.warn('companion rework loop stopped early: no progress', {
+      workspaceId,
+      runId: instance.id,
+      blockId: block.id,
+      agentKind: step.agentKind,
+      attempts: companion.attempts,
+      maxAttempts: companion.maxAttempts,
+      rating: companion.verdicts[companion.verdicts.length - 1]?.rating,
+    })
+    return disposeCompanionVerdict({
+      ...args.dispositionInput,
+      maxAttempts: companion.attempts,
+    })
   }
 
   /**

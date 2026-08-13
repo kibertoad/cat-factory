@@ -32,6 +32,13 @@ only `budget_spent` reaches the policy. The run panel's cap prompt states which 
 because the person answering an unanswerable-by-policy park should know what they are being asked to
 overrule.
 
+That vocabulary is also what a loop stopped EARLY as unproductive (`companionLoopStalled`) now
+resolves against. Abandoning the rounds still on the budget takes the cap's park, so the reason is
+re-decided for the abandoned budget instead of being assumed to be a spent one: a standstill is the
+automation reporting that it gave up, an open `blocker` is not, and a stalled loop routinely carries
+both (the run that motivated the stall rule had two must-fix items open the whole way). So an
+unattended policy answers a stalled quality loop and still waits for a person on a blocked one.
+
 An out-of-vocabulary severity from a model reads as `major`, the same "unreadable severity reads as
 its safe default" rule the judge and PR-review findings use: the whole assessment is one parse, and
 an unparseable companion verdict fails the run, which is far worse than one point landing a level
