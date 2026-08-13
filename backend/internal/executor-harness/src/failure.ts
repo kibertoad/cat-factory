@@ -26,6 +26,12 @@
  *                           went quiet, this one says the model rabbit-holed while streaming.
  *  - `agent`              — the agent ran but produced an unusable/failed result, or threw.
  *  - `git`                — a git operation failed (clone/push/merge/PR).
+ *  - `branch-contended`   — a push to the work branch was REFUSED because the branch carries
+ *                           commits this push would drop (a second writer, or a rewrite of an
+ *                           earlier run's history). Split out of `git` because it is the one git
+ *                           fault the ENGINE can recover from on its own: re-dispatching the step
+ *                           resumes the branch as it now stands, where every other `git` failure
+ *                           would only fail again.
  *  - `api`                — an upstream API call failed (e.g. the GitHub/GitLab PR/MR REST call).
  *  - `llm-upstream`       — the model provider rejected every call (auth/quota/rate-limit) and Pi
  *                           exhausted its retries, so the run never produced a result.
@@ -38,6 +44,7 @@ export const FAILURE_CAUSES = [
   'no-tool-progress',
   'agent',
   'git',
+  'branch-contended',
   'api',
   'llm-upstream',
   'no-usable-output',

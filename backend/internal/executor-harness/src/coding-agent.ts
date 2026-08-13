@@ -282,6 +282,16 @@ function followUpPollIntervalMs(): number {
  * though the work is committed. `pushWorkOnce` coalesces concurrent callers onto one push and only
  * pushes once the branch has advanced past `baseSha`.
  *
+ * Every push after the first LEASES against the sha this pass published (see
+ * {@link pushBranch}), because the checkpoint makes the harness its own competing writer: it
+ * publishes a commit within a minute of the agent making it, and the agent is then free to amend,
+ * reset or rebase that commit — perfectly ordinary git hygiene, and the delivery contract asks it
+ * to validate AFTER committing, which is exactly the sequence that produces an amend. Without the
+ * lease the final push is refused as a non-fast-forward and the whole run fails with its work
+ * already on the branch. The lease is what keeps that recovery from becoming a blanket `--force`:
+ * a SECOND writer (a concurrent dispatch for the same block) still refuses the push, which is the
+ * "never clobber another run's commits" property the resume design leans on.
+ *
  * Only push once the branch has advanced past its pre-run tip: pushing while it still sits at
  * `baseSha` would create the work branch at the base commit (a zero-diff branch), which a later
  * retry would see via `remoteBranchExists` and treat as resumable work — then fail to open a PR
@@ -301,11 +311,27 @@ function createWorkBranchPusher(args: {
 } {
   const { dir, spec, baseSha, logger, signal } = args
   let pushInFlight: Promise<void> | null = null
+  // The sha THIS pass last published to the work branch, and the only value it will ever lease a
+  // force push against. Starts unset even on a RESUMED branch: the tip we merely cloned is an
+  // earlier run's work, so a rewrite of it is refused (and re-driven) rather than forced away.
+  let publishedSha: string | undefined
   const pushWorkOnce = (): Promise<void> => {
     if (pushInFlight) return pushInFlight
     pushInFlight = (async () => {
       if (!(await branchHasCommitsSince(dir, baseSha, signal))) return
-      await pushBranch(dir, spec.pushBranch, spec.ghToken, signal)
+      const pushed = await pushBranch(
+        dir,
+        spec.pushBranch,
+        spec.ghToken,
+        signal,
+        publishedSha ? { expectRemoteSha: publishedSha } : {},
+      )
+      // A push that lands but whose tracking ref cannot be read leaves the next push UNLEASED
+      // (a plain push, i.e. the pre-lease behaviour) rather than leasing against a stale guess,
+      // which would refuse the very rewrite the lease exists to allow. Warn, because a rewrite
+      // after this point would then fail the run as contention it did not cause.
+      if (!pushed) logger.warn('coding-agent: pushed but could not read the published sha')
+      publishedSha = pushed
     })().finally(() => {
       pushInFlight = null
     })

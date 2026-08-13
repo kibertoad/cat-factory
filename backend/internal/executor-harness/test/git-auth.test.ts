@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   NON_INTERACTIVE_CREDENTIAL_ARGS,
+  classifyPushRejection,
   cloneRepo,
   describeGitFailure,
   isGitTimeoutKill,
@@ -121,5 +122,40 @@ describe('describeGitFailure (F1: auth/access remedies)', () => {
 
   it('returns undefined for an unrecognized failure (keeps just the raw stderr)', () => {
     expect(describeGitFailure('fatal: the remote end hung up unexpectedly')).toBeUndefined()
+  })
+})
+
+describe('classifyPushRejection (a refused push is not a generic git fault)', () => {
+  // The two shapes git prints for a refused push, and the third that only LOOKS like one. The
+  // real-git pair in `git-push-lease.test.ts` pins that git actually emits these; this table pins
+  // what each one classifies to, including the case the ordering exists for.
+  it('reads a host-side REFUSAL as neither shape (re-dispatching cannot help)', () => {
+    // GitHub's protected-branch message contains the words "non-fast-forward push", so this is the
+    // case that would misclassify as a rewrite — and be re-dispatched to fail identically.
+    const stderr =
+      'remote: error: GH006: Protected branch update failed for refs/heads/main.\n' +
+      'remote: error: refusing to allow a non-fast-forward push to a protected branch\n' +
+      ' ! [remote rejected] main -> main (protected branch hook declined)'
+    expect(classifyPushRejection(stderr)).toBeUndefined()
+    // It keeps the write-access remedy, which is the one that names the actual fix.
+    expect(describeGitFailure(stderr)).toMatch(/lacks WRITE access/i)
+  })
+
+  it('reads an ordinary git failure as neither shape', () => {
+    expect(classifyPushRejection('fatal: the remote end hung up unexpectedly')).toBeUndefined()
+  })
+
+  it('never advises `git pull`, which no autonomous run can act on', () => {
+    // git's own hint for both shapes is "use 'git pull' before pushing again" — advice for a
+    // person at a terminal. The remedy has to name what the PLATFORM does instead.
+    for (const stderr of [
+      ' ! [rejected] b -> b (non-fast-forward)',
+      ' ! [rejected] b -> b (stale info)',
+    ]) {
+      const remedy = describeGitFailure(stderr)
+      expect(remedy).toBeDefined()
+      expect(remedy).not.toMatch(/git pull/i)
+      expect(remedy).toMatch(/re-dispatches the step/i)
+    }
   })
 })

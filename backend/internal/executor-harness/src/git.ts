@@ -113,6 +113,68 @@ function gitSubcommand(args: string[]): string {
 }
 
 /**
+ * Why a push to the work branch was REFUSED. Both mean the branch carries commits this push
+ * would drop, and git tells them apart by whether our object database HOLDS the tip the remote
+ * reports: it does for a tip our own checkout created, so the two are distinguishable and need
+ * different remedies (see {@link PUSH_REJECTION_REMEDIES}).
+ *
+ *  - `local-rewrite` — we HAVE the remote's tip and are no longer descended from it, i.e. this
+ *    checkout amended / reset / rebased a commit that had already been pushed. Git labels it
+ *    `(non-fast-forward)`.
+ *  - `remote-writer` — the remote's tip is a commit this checkout has never seen (`(fetch first)`),
+ *    or our lease found the branch moved past what we published (`(stale info)`): a SECOND writer
+ *    owns the branch.
+ */
+export type PushRejection = 'local-rewrite' | 'remote-writer'
+
+/**
+ * Whether `stderr` is a REFUSED push, and which shape. Ordered: the lease/fetch-first shapes are
+ * checked first, because a `(stale info)` refusal also prints the generic "failed to push some
+ * refs" line the non-fast-forward shape shares. Pure, so both branches are unit-tested against
+ * real git output rather than inferred.
+ */
+export function classifyPushRejection(stderr: string): PushRejection | undefined {
+  // A HOST-side refusal is not contention, and re-dispatching cannot help: branch protection, a
+  // pre-receive hook or a token policy is declining the write itself, and GitHub's protected-branch
+  // message says "refusing to allow a non-fast-forward push", which would otherwise read as a
+  // rewrite. Git's own labels separate the two cleanly — `! [remote rejected]` is the server
+  // declining, `! [rejected]` is git's own fast-forward/lease check — so such a failure stays a
+  // plain `git` fault with the write-access remedy below.
+  if (/remote rejected|protected branch|hook declined|refusing to allow/i.test(stderr)) {
+    return undefined
+  }
+  if (/\(stale info\)|\(fetch first\)|remote contains work that you do not/i.test(stderr)) {
+    return 'remote-writer'
+  }
+  if (
+    /\(non-fast-forward\)|tip of your current branch is behind|branch tip is behind/i.test(stderr)
+  ) {
+    return 'local-rewrite'
+  }
+  return undefined
+}
+
+/**
+ * The remedy each {@link PushRejection} earns. A `Record`, so a new rejection shape cannot be
+ * classified without saying what a human should do about it. Neither is "run `git pull`", which is
+ * what git's own hint advises and is advice for a person at a terminal, not for an autonomous run.
+ */
+const PUSH_REJECTION_REMEDIES: Record<PushRejection, string> = {
+  'local-rewrite':
+    'The push was refused because this checkout rewrote history that had already been pushed to the ' +
+    'work branch (an amend, reset or rebase of an existing commit). The platform checkpoint-pushes ' +
+    "the agent's commits while it works, and it force-pushes ONLY over the commits the same run " +
+    'published, so this rejection is a rewrite of commits an EARLIER run put on the branch. The ' +
+    'engine re-dispatches the step to resume from the branch as it stands; work already on the ' +
+    'branch is never dropped.',
+  'remote-writer':
+    'The push was refused because another writer advanced this work branch while the run was ' +
+    'working (a second dispatch for the same block, or a person pushing to it). Nothing is lost: ' +
+    "the other writer's commits stay on the branch and the engine re-dispatches the step so the " +
+    'agent resumes on top of them. If it recurs, check whether two runs are active for the same block.',
+}
+
+/**
  * Classify the common shapes of git's own stderr into an actionable remedy, else undefined
  * (an unrecognized failure keeps just its raw stderr). This is the FIRST-WRAP-POINT for
  * unavoidable third-party text (per the error-message initiative's I6): git's stderr is the
@@ -123,6 +185,10 @@ function gitSubcommand(args: string[]): string {
  */
 export function describeGitFailure(stderr: string): string | undefined {
   const s = stderr.toLowerCase()
+  // A refused push first: its stderr carries neither an auth nor an access shape, so a miss here
+  // would leave the operator git's own "use 'git pull' before pushing again" hint and nothing else.
+  const rejection = classifyPushRejection(stderr)
+  if (rejection) return PUSH_REJECTION_REMEDIES[rejection]
   // Rate-limit / abuse-detection first: the host returns these as a 403, which would
   // otherwise fall into the write-access shape below and be mislabeled as a permission
   // problem — but the fix is to wait, not to grant access.
@@ -200,13 +266,24 @@ function gitFailure(err: unknown, args: string[], aborted: boolean): HarnessFail
   }
   const stderr = typeof e?.stderr === 'string' ? e.stderr : (e?.stderr?.toString() ?? '')
   const base = e instanceof Error ? e.message : String(err)
-  const combined = stderr.trim() ? `${base}\n${stderr.trim()}` : base
-  // Append a cause + fix for the recognized auth/access shapes, keeping the raw (scrubbed)
-  // stderr above it as the detail. The remedy is static text with no secrets, so it is added
-  // after redaction.
+  // `execFile` builds its rejection message as `Command failed: <cmd>\n<stderr>`, so for the
+  // ordinary non-zero exit the stderr is ALREADY in `base` — appending it again printed every
+  // git failure's output twice, which reads as two attempts. Append only what `base` lacks
+  // (a killed/other rejection whose message carries no output).
+  const tail = stderr.trim()
+  const combined = tail && !base.includes(tail) ? `${base}\n${tail}` : base
+  // Append a cause + fix for the recognized auth/access/push-rejection shapes, keeping the raw
+  // (scrubbed) stderr above it as the detail. The remedy is static text with no secrets, so it is
+  // added after redaction.
   const remedy = describeGitFailure(combined)
   const message = remedy ? `${redactSecrets(combined)}\n${remedy}` : redactSecrets(combined)
-  const failure = new HarnessFailure('git', message)
+  // A REFUSED push is not a generic `git` fault: the branch moved under this run, which the engine
+  // recovers from by re-dispatching the step onto the branch as it now stands. It gets its own
+  // structured cause so that recovery keys off a classification rather than this message.
+  const failure = new HarnessFailure(
+    classifyPushRejection(combined) ? 'branch-contended' : 'git',
+    message,
+  )
   if (e?.stack) failure.stack = redactSecrets(e.stack)
   return failure
 }
@@ -1056,18 +1133,55 @@ export async function fetchPullRequestHead(opts: {
 /**
  * Push the work branch to origin. The remote URL carries only the username, so
  * the token is supplied here via the askpass env (never in argv).
+ *
+ * Returns the sha now PUBLISHED on the branch, read back from the remote-tracking ref a
+ * successful push updates — so it is exactly what the remote holds, not what HEAD happened to be
+ * before the push (the agent can commit in between). `undefined` when the ref could not be read;
+ * the caller then leases nothing rather than leasing against a guess.
+ *
+ * `expectRemoteSha` turns the push into a LEASED force (`--force-with-lease=<branch>:<sha>`), which
+ * is how a run whose own checkpoint push it has since rewritten still lands. It is deliberately NOT
+ * a plain `--force`: the lease succeeds only while the remote still holds the sha THIS run
+ * published, so a second writer's commits refuse the push (`(stale info)`) instead of being
+ * clobbered. Callers therefore pass only a sha this same pass published; leasing against a tip we
+ * merely CLONED would force over an earlier run's work.
  */
 export async function pushBranch(
   dir: string,
   branch: string,
   ghToken: string,
   signal?: AbortSignal,
-): Promise<void> {
-  await git(['push', '-u', 'origin', branch], {
+  opts: { expectRemoteSha?: string } = {},
+): Promise<string | undefined> {
+  const lease = opts.expectRemoteSha ? [`--force-with-lease=${branch}:${opts.expectRemoteSha}`] : []
+  await git(['push', ...lease, '-u', 'origin', branch], {
     cwd: dir,
     signal,
     env: await authEnv(ghToken),
   })
+  return remoteTrackingSha(dir, branch, signal)
+}
+
+/**
+ * The sha the local remote-tracking ref holds for `branch` (`refs/remotes/origin/<branch>`), or
+ * undefined when there is none (never pushed/fetched) or it could not be read. `git push` updates
+ * it for every ref it successfully pushed, which is what makes it an exact record of what this
+ * checkout published — see {@link pushBranch}.
+ */
+async function remoteTrackingSha(
+  dir: string,
+  branch: string,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  try {
+    const out = await git(['rev-parse', '--verify', `refs/remotes/origin/${branch}`], {
+      cwd: dir,
+      signal,
+    })
+    return out.trim() || undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**

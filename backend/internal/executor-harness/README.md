@@ -115,6 +115,23 @@ Bootstrap differs at the ends: it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
 PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 
+### The work-branch push is CHECKPOINTED, so it is lease-guarded
+
+Step 8's push is not the run's first: the harness pushes the agent's committed work every
+`JOB_CHECKPOINT_INTERVAL_MS` (60s) so an evicted container's work survives on the branch and a
+retry resumes on top of it. That makes the harness its own competing writer. A commit is published
+within a minute of being made, the agent cannot observe that from inside the container, and
+amending or resetting it afterwards is ordinary git hygiene — so the final push used to be refused
+as a non-fast-forward and failed the whole run with its work already on the branch.
+
+Every push after the first therefore carries `--force-with-lease` against **the sha this pass
+itself published** (read back from its own remote-tracking ref), never a tip it merely cloned. The
+run's own rewrite lands; a SECOND writer's commits still refuse the push. A refused push is not
+reported as a generic `git` fault but as the `branch-contended` failure cause, which the engine
+recovers from by re-dispatching the step onto the branch as it now stands (bounded by
+`MAX_BRANCH_CONTENTION_RECOVERIES`). The agents are told the matching half of the rule: add
+commits, never rewrite them (`PLATFORM_DELIVERY_CONTRACT`).
+
 ### Reference designs
 
 A job body for a kind that CAPTURES views (the UI tester, or a deployment's own browser-driven kind)
@@ -296,7 +313,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/pi.ts`        | Pi provider config, non-interactive run, JSON-line event + todo-progress parsing, global `AGENTS.md` guidance. |
 | `src/pi-reduction.ts` | Reducing a Pi event stream to what the run PRODUCED (summary, stats, diagnostics, terminal failure), FOLDED as records stream rather than over a retained array — memory is O(largest record), not O(records). The array-taking entry points offline tooling uses are defined in terms of the same reducer. |
 | `src/tool-silence.ts` | The tool-silence watchdog (F13) and the `ToolProgressWindow` an agent stream opens, beats and closes. Separate from the phase marker on purpose: a window is only meaningful while something able to reset it is running. |
-| `src/git.ts`       | clone / branch / commit / push + GitHub PR creation; bootstrap history reset + force-push.              |
+| `src/git.ts`       | clone / branch / commit / push (lease-guarded, see below) + GitHub PR creation; bootstrap history reset + force-push. |
 | `src/bootstrap.ts` | The `/bootstrap` handler (clone-or-empty → adapt → reinit + force-push).                                |
 | `src/blueprint.ts` | The `/blueprint` handler (decompose → render `blueprints/` → commit on branch).                         |
 | `src/embed.ts`     | Bundled assets/templates written into the workspace.                                                    |

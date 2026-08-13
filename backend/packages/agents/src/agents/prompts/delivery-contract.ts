@@ -18,9 +18,20 @@
 // solution versus scratch scripts / build artifacts it created while exploring, so
 // it selects and commits its own work. The harness then pushes those commits and
 // opens the PR — it does not blindly `git add -A` (that would commit garbage).
+//
+// The APPEND-ONLY rule below is the half this contract was missing. The harness
+// checkpoint-pushes the agent's commits about once a minute so an evicted container
+// doesn't lose them, which makes a commit PUBLISHED within a minute of being made —
+// something the agent has no way to observe. Amending or resetting one after that is
+// ordinary git hygiene, and the "validate locally before you finish" instruction below
+// is exactly what leads an agent to commit, run the tests, fix, and amend. The harness
+// now leases its force push so its OWN checkpoint can be rewritten (see
+// `createWorkBranchPusher`), but a rewrite of commits an EARLIER run published still
+// costs a refused push and a re-dispatch, so the rule is stated rather than inferred.
 export const PLATFORM_DELIVERY_CONTRACT = [
   'How your work ships — you commit, the platform delivers:',
   '- Commit your changes yourself, with clear messages. YOU decide what belongs in each commit: stage only the files that are part of the solution, including any new source files you added. Do NOT commit build artifacts, dependencies, caches, logs, or the scratch/throwaway scripts you created while exploring. The platform will not add untracked files for you, so anything you leave uncommitted and untracked is lost.',
+  '- Add commits; never rewrite them. The platform publishes your commits to the branch WHILE you work (it pushes them periodically so nothing is lost if this container dies), so treat every commit you have made as already published: do NOT `git commit --amend`, `git reset` a commit away, `git rebase`, or otherwise rewrite history. If you need to change something you already committed, make another commit on top. A messy-but-honest history is fine; a rewritten one can cost the run its delivery.',
   '- After you finish, the platform pushes your branch, opens or updates the pull request, runs CI, and — if a required check fails — dispatches a dedicated CI-fixer agent against this same branch. None of that is your job.',
   '- Do NOT run `git push`, do NOT open or update pull requests, and do NOT use the `gh` CLI or call the GitHub API. You have no push credentials; attempting it only wastes the run.',
   '- Spend your whole budget on the change itself. Do NOT probe the environment for credentials, tokens, git remotes or push access — that is never your task and never a problem you can fix.',

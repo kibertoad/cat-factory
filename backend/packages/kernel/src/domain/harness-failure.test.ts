@@ -18,6 +18,7 @@ describe('failureKindFromHarnessCause', () => {
     for (const cause of [
       'agent',
       'git',
+      'branch-contended',
       'api',
       'llm-upstream',
       'no-usable-output',

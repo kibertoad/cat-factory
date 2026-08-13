@@ -60,10 +60,23 @@ The layers, in order of where they bite:
 The agent's tool loop only edits files in the checkout. Every git operation (clone, branch,
 commit, push) is executed by the **harness**, not the agent, via `execFile('git', [...])` with a
 fixed argv and no shell (`backend/internal/executor-harness/src/git.ts`). The push is exactly
-`git push -u origin <branch>` (`pushBranch`), and the branch name comes off the **job body composed
-by the backend at dispatch** (`job.pushBranch ?? job.newBranch ?? job.branch`), never from model
-output. A hallucinated "argument" in the model's reply therefore has nowhere to become a remote, a
-branch, a refspec, or a flag.
+`git push [--force-with-lease=<branch>:<sha>] -u origin <branch>` (`pushBranch`), and the branch
+name comes off the **job body composed by the backend at dispatch**
+(`job.pushBranch ?? job.newBranch ?? job.branch`), never from model output. A hallucinated
+"argument" in the model's reply therefore has nowhere to become a remote, a branch, a refspec, or a
+flag.
+
+**The force is bounded by a lease, and the lease is bounded to what the same run published.** The
+harness checkpoint-pushes the agent's commits while it works, so it is its own competing writer: the
+agent can amend a commit that is already on the branch, which a plain push then refuses. The
+optional `--force-with-lease` is what lets that land, and the `<sha>` it expects is only ever a sha
+THIS pass pushed and read back from its own remote-tracking ref (`createWorkBranchPusher`) — never a
+tip the run merely cloned, and never a value derived from model output. So the widest thing a
+compromised run gains is the ability to overwrite commits it itself published moments earlier, on
+the one branch it was already allowed to push; a second writer's commits (another dispatch, a
+person) refuse the push as `(stale info)`, and any other ref is untouchable. `--force` with no lease
+appears nowhere on this path (the only unconditional force in the harness is the bootstrap
+`reinitAndPush` onto a repo the Worker pre-flighted as empty).
 
 Where a model-authored string legitimately must become a git or shell argument (the declared test
 paths in the bugfix reproduction proof, tracker board slugs), it is validated for **git magic, not

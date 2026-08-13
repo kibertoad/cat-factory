@@ -62,6 +62,20 @@ export const MAX_EVICTION_RECOVERIES = 1
 export const MAX_TRANSIENT_EVICTION_RECOVERIES = 5
 
 /**
+ * Recovery budget for a step whose push to the work branch was REFUSED because the branch moved
+ * under it (the harness reports `branch-contended`). Re-dispatching resumes the branch as it now
+ * stands, which is exactly what resolves the race the rejection reports: the other writer's
+ * commits are already there, so the agent works on top of them instead of against them.
+ *
+ * Set to 1, and deliberately lower than the transient-eviction budget: the two failure shapes look
+ * alike but recur differently. Infra churn is a window that passes, whereas the one contention
+ * shape the harness cannot resolve itself is an agent REWRITING history it did not publish, which
+ * is deterministic — a second attempt does the same thing again. One retry buys the genuine race
+ * its resolution without funding a loop, and the failure past it names the cause precisely.
+ */
+export const MAX_BRANCH_CONTENTION_RECOVERIES = 1
+
+/**
  * Throttle window (ms) for persisting a container step's liveness heartbeat as its
  * `lastActivityAt`. The harness heartbeat advances on every stdout chunk and the driver polls
  * every ~15s, so persisting on every poll would rewrite the run needlessly; instead the engine

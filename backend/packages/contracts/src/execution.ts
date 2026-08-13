@@ -1276,6 +1276,13 @@ export const pipelineStepSchema = v.object({
    */
   transientEvictionRecoveries: v.optional(v.number()),
   /**
+   * How many times this step's push to the work branch was refused because the branch had moved
+   * under it (the harness's `branch-contended` cause) and was recovered by re-dispatching the step,
+   * which resumes the branch as it now stands. Bounded by `MAX_BRANCH_CONTENTION_RECOVERIES`; past
+   * it the run fails with the harness's rejection and its remedy. Absent/0 until the first refusal.
+   */
+  branchContentionRecoveries: v.optional(v.number()),
+  /**
    * The transport's post-mortem of the FIRST container to die on this step (its exit state plus
    * a tail of its own logs). Retained across recoveries: a re-dispatch removes the dead
    * container immediately, so evidence from the first death — usually the informative one, the

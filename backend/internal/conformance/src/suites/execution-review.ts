@@ -595,6 +595,46 @@ function registerCompanionAndFailureTests(harness: ConformanceHarness): void {
     const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
     expect(coderStep.container?.status).toBe('errored')
   })
+
+  it('re-dispatches a step whose work-branch push was refused, instead of failing the run', async () => {
+    // `branch-contended` is the one git fault the engine can resolve by itself: the refused push
+    // means the branch already carries commits, so a fresh dispatch RESUMES it and the agent
+    // continues on top rather than against them. Asserted on both runtimes because the recovery is
+    // a persisted step counter plus a re-dispatch, and a facade that dropped either would instead
+    // fail the run on a rejection the harness deliberately made recoverable.
+    const app = harness.makeApp({
+      confidence: 1,
+      asyncKinds: ['coder'],
+      pollFailKinds: ['coder'],
+      pollFailCause: 'branch-contended',
+      // Only the first job fails: the point is that the SECOND one runs. Failing forever would
+      // assert nothing about the recovery, since an unrecovered run also ends `failed`.
+      pollFailOnce: true,
+    })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build only',
+      purpose: 'build',
+      agentKinds: ['coder'],
+    })
+    const start = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+    expect(start.status).toBe(201)
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    // The run finished its work rather than dying on delivery mechanics. `?? null` because the two
+    // facades spell "no failure recorded" differently (an absent field vs a persisted null), and
+    // what this asserts is that neither holds one.
+    expect(exec.status).toBe('done')
+    expect(exec.failure ?? null).toBeNull()
+    // And the recovery is on the record: an invisible re-dispatch reads exactly like a run that
+    // never contended, which is what a post-mortem would need to tell apart.
+    const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
+    expect(coderStep.branchContentionRecoveries).toBe(1)
+  })
 }
 
 /**
