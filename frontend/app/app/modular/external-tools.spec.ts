@@ -38,6 +38,7 @@ const GATES: NavGates = {
   accountsEnabled: true,
   isAccountAdmin: true,
   advancedMode: true,
+  fullSurface: true,
   boardHasService: true,
   boardHasTask: true,
   boardHasRun: true,

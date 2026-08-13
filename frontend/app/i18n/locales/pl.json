@@ -32,6 +32,25 @@
     "switchTo": "Przełącz na {mode}",
     "pinned": "Ustawione przez to wdrożenie"
   },
+  "uiRole": {
+    "switcher": "Twoja rola",
+    "roles": {
+      "engineer": "Inżynier",
+      "productManager": "Menedżer produktu",
+      "designer": "Projektant"
+    },
+    "hints": {
+      "engineer": "Wszystko: planowanie pracy, uruchamianie, przegląd i scalanie oraz konfiguracja platformy, na której to działa.",
+      "productManager": "Te same powierzchnie co u inżyniera: planowanie pracy, uruchamianie i prowadzenie jej aż do scalenia.",
+      "designer": "Prostsza tablica: usługi, które już na niej są, praca w toku i nowe zadania z projektu lub zgłoszenia."
+    },
+    "prompt": {
+      "title": "Nad czym pracujesz?",
+      "intro": "Wybierz najbliższą opcję, a aplikacja otworzy się na powierzchniach potrzebnych do tej pracy. To zmienia to, co WIDZISZ, a nie to, co możesz zrobić.",
+      "change": "Możesz to zmienić w dowolnym momencie u góry panelu bocznego.",
+      "later": "Nie teraz"
+    }
+  },
   "common": {
     "loading": "Ładowanie…",
     "save": "Zapisz",
@@ -2376,6 +2395,7 @@
         "shortcuts": "Skróty klawiszowe",
         "bugHunt": "Polowanie na błędy",
         "toggleUiMode": "Zmień tryb interfejsu",
+        "chooseRole": "Zmień swoją rolę",
         "foundationalServices": "Usługi fundamentalne",
         "notificationSettings": "Zarządzaj routingiem powiadomień"
       },
@@ -2400,6 +2420,7 @@
         "shortcuts": "skróty klawiatura klawisze pomoc",
         "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane",
         "toggleUiMode": "interfejs tryb podstawowy zaawansowany pokaż ukryj",
+        "chooseRole": "rola inżynier menedżer produktu projektant persona prostszy widok",
         "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
         "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
         "notificationSettings": "powiadomienia e-mail routing kanały skrzynka"
@@ -7424,6 +7445,7 @@
       "failedRun": "Nieudane uruchomienie",
       "infrastructure": "Backend wykonawczy podłączony do tego workspace’u",
       "advancedTier": "Zaawansowany tryb interfejsu",
+      "fullSurface": "Rola inżyniera lub menedżera produktu",
       "designSource": "Podłączone źródło projektów"
     },
     "overlay": {
@@ -7464,6 +7486,10 @@
           "toolbar": {
             "title": "Sterowanie tablicą",
             "body": "Tymi przyciskami przybliżasz, oddalasz lub dopasowujesz całą tablicę do widoku."
+          },
+          "role": {
+            "title": "Twoja rola",
+            "body": "Tablica dostosowuje się do twojej pracy: inżynierowie i menedżerowie produktu widzą wszystkie powierzchnie, projektanci prostszą, która wprowadza pracę i ją śledzi. Możesz to zmienić tutaj w każdej chwili."
           },
           "interfaceTier": {
             "title": "Tryb podstawowy i zaawansowany",

@@ -15,6 +15,7 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [What it is](#what-it-is)
 - [Tech stack](#tech-stack)
 - [Layout](#layout)
+- [Roles (engineer / product manager / designer)](#roles-engineer--product-manager--designer)
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
 - [Agent tiers (basic / intermediate / advanced)](#agent-tiers-basic--intermediate--advanced)
 - [In-app tutorial tours](#in-app-tutorial-tours)
@@ -239,6 +240,63 @@ surface rather than a toast, and are tracked as G4 in
 
 A status → chip map feeding a `<UBadge :color="…">` types its values as `BadgeColor` (`utils/badge.ts`), which is derived from `UBadge`'s own prop type rather than restated as a literal union. Typed `string`, the binding does not compile and the reflex is `as any` at each call site: seven of them had accumulated. That cast also accepts a colour Nuxt UI does not define, which renders as an unstyled badge with nothing failing.
 
+## Roles (engineer / product manager / designer)
+
+The outermost of the three narrowing axes, and the only one the app **asks about**: on a first-ever
+launch it puts up one question, "what do you work on?", offering `engineer`, `product-manager` and
+`designer` with a line each on what picking it gives you. Vocabulary, resolution and the
+presentation table are in `app/utils/uiRole.ts`; the choice and its once-per-session prompt live in
+the `uiRole` store.
+
+Two roles, three names. `engineer` and `product-manager` both map to the **`full`** surface, and
+that is the product decision rather than an oversight: the two do the same job in this app (plan
+work on a board, run it, review and merge it), and what makes the question answerable is the copy a
+person recognises themselves in. `designer` maps to **`intake`**: the services already on the board,
+the work in flight on them, and the routes that bring new work IN (a new task, a task from a tracker
+ticket, a task from a design). None of the platform configuration behind that. They are separate
+`UiRole` members precisely so one of them can gain a surface the other does not without a migration.
+
+- **The default is the FULL surface, and an unanswered question changes nothing.** Closing the prompt
+  writes no choice, so the next launch asks again and the person keeps the whole product in the
+  meantime. There is deliberately no "don't ask me again": an unanswered question costs nothing,
+  where a wrongly-recorded one costs somebody destinations they need. It is also why the prompt
+  yields to every startup advisory (and why the tour offer, in turn, yields to it: the role decides
+  which surfaces exist, so a tour picked ahead of it could be about half a product).
+- **It is not authorization.** Workspace RBAC (ADR 0025) decides what a request may do and is
+  enforced server-side; this decides what the SPA OFFERS, and every role's surface is still gated by
+  the caller's permissions on top. Nothing here can widen what a person may do, and everything it
+  hides is something they may well be allowed to open, which is why the **way back is reachable from
+  inside the narrowed role**: the switcher at the top of the sidebar (rendered in every role) plus a
+  command-palette entry, both `intake`.
+- **There is NO deployment env pin**, unlike the interface tier. Which tier a fleet of kiosk-ish
+  deployments shows is a decision an operator can reasonably make; which JOB the person at the
+  keyboard does is not something a build can know.
+- **A narrowed role CAPS the interface tier at basic** (`resolveUiMode` takes the surface and answers
+  `basic` for `intake`, ahead of the env pin). Resolved rather than merely hidden, so every
+  `isAdvanced` reader inside a surface agrees with the narrowed nav without restating the role, and
+  the tier switcher is dropped for that role: a control that flipped a tier the resolver fixes would
+  be the same lie it refuses to be under an env pin.
+
+The seams, and what a new feature should use rather than reading the store ad hoc:
+
+- **A nav destination** declares `intake: true` in `app/modular/nav-contributions.ts` to survive a
+  narrowed role. It is **opt-in**, so a destination added later defaults to the full-surface roles:
+  getting that wrong costs one flag, where the other default is a persona that stopped being simple
+  without anyone deciding to un-simplify it. Today's set is three (`tutorial`,
+  `keyboard-shortcuts`, `ui-role`), and `nav-contributions.spec.ts` pins it against a table naming
+  each one's reason, so adding a fourth forces the claim to be written down. The `fullSurface` gate
+  rides the same reactive `NavGates` service as `advancedMode`, so a role switch re-gates all three
+  shells with no reload; all three axes (role, tier, `gate`) must pass.
+- **A surface that narrows inline** reads `useUiRoleStore().fullSurface` (the frame header's bug-hunt
+  button, the palette's per-connection integration commands). Same rule as the tier: what remains
+  must be exactly what the full surface would have shown, only less of it.
+- **A tutorial tour whose step clicks a non-`intake` nav entry declares
+  `TUTORIAL_REQUIREMENTS.fullSurface`.** Which tours those are is not a judgement call:
+  `tutorial-tours.spec.ts` derives the pairing from `navItemVisible`, so a tour that gains such a
+  step fails until the requirement is declared. A single STEP that the role removes (the orientation
+  tour's interface-tier step) declares `when` instead, so it is dropped rather than reported as an
+  abridged tour.
+
 ## Interface modes (basic / advanced)
 
 The SPA renders at one of two **interface tiers**. `basic` (the default) is the everyday
@@ -247,6 +305,8 @@ options that only exist to override a workspace-level default are left at that d
 the nav is trimmed to what that loop needs. `advanced` shows everything. The tier resolves in
 a fixed order, first match wins:
 
+0. **The [role](#roles-engineer--product-manager--designer)'s surface**, as a ceiling: an `intake`
+   role renders `basic` whatever the two below say.
 1. **`NUXT_PUBLIC_UI_MODE`** (`basic` | `advanced`): the deployment pin. Like
    `NUXT_PUBLIC_API_BASE` it is baked in at **build** time (`ssr: false`), and while it is
    set the in-app switcher is a read-only indicator, since a preference the resolver ignores
@@ -274,8 +334,8 @@ hoc where it can be avoided:
 
 - **A nav destination** declares `advanced: true` in `app/modular/nav-contributions.ts`. The
   shared `navSlotFilter` drops it in basic mode across all three shells (sidebar, command
-  palette, toolbar), independently of its RBAC `gate`: both must pass. A consumer module's
-  own contributions take the same flag. The bar is **whether the everyday delivery loop needs
+  palette, toolbar), independently of its RBAC `gate` and of the role's `intake` flag: all
+  three must pass. A consumer module's own contributions take the same flag. The bar is **whether the everyday delivery loop needs
   it**, and marking an item does one of two distinguishable things:
   - **Reached another way**; a shortcut whose surface a basic destination also opens, so
     nothing is lost (the Merge / Service-best-practices palette entries into Workspace

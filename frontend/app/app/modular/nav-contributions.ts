@@ -112,6 +112,18 @@ export interface NavGates {
    */
   advancedMode: boolean
   /**
+   * The person's ROLE sees the whole product (`stores/uiRole.ts`): true for `engineer` and
+   * `product-manager`, false for the `intake` surface a `designer` gets.
+   *
+   * Read by {@link navSlotFilter} for every item that does NOT declare
+   * {@link NavContribution.intake}, i.e. the narrowing is opt-IN for the small surface rather
+   * than opt-out for the large one. Stated positively (a role that sees everything, not a
+   * "restricted" flag) for the same reason `advancedMode` is: this is the third axis a
+   * contribution answers to, and one of the three reading inverted is a destination shown to
+   * exactly the person it was hidden from.
+   */
+  fullSurface: boolean
+  /**
    * The open board has at least one service frame. Availability, not permission: a
    * surface that operates ON a service (today the task-creation tutorial tour) has
    * nothing to point at until one exists, and offering it anyway means a walkthrough
@@ -206,6 +218,7 @@ export const NAV_ACTIONS = [
   'shortcuts',
   'tutorial',
   'toggleUiMode',
+  'chooseRole',
 ] as const
 
 export type NavActionId = (typeof NAV_ACTIONS)[number]
@@ -234,6 +247,17 @@ export interface NavContribution {
    * axes stay independently assertable. Absent = visible in both tiers.
    */
   advanced?: boolean
+  /**
+   * Offered on the INTAKE surface: the narrowed set a `designer` role gets (see
+   * `utils/uiRole.ts`). Absent = the full-surface roles only.
+   *
+   * Opt-in, and that direction is the point: a destination added later defaults to the roles
+   * that configure the platform, so a new entry can never quietly widen the simplified surface:
+   * the cost of getting it wrong is one flag, where the other default is a persona that stopped
+   * being simple without anyone deciding to un-simplify it. Independent of {@link advanced} and
+   * of {@link gate}: all three must pass.
+   */
+  intake?: boolean
   /**
    * First-party action id, resolved to a `run()` against the host `ui` store by
    * `useNavContributions`. A consumer module that has its own stores instead
@@ -292,6 +316,13 @@ const S = (...s: NavSurface[]) => s as readonly NavSurface[]
  * (`fragments`), the ephemeral-env + runner plumbing (`infrastructure`, which is also the only route
  * to the guided per-service Compose environment setup), and the workspace/model configuration
  * a run actually reads (`workspace-settings`, `model-config`).
+ *
+ * `intake: true` marks the OTHER axis (see `utils/uiRole.ts`): the three entries a narrowed role
+ * keeps. It is opt-in, and the set is short on purpose, because the intake surface brings work IN and
+ * watches it, and every destination here that is not `tutorial`, `keyboard-shortcuts` or
+ * `ui-role` configures the platform the work runs on. What that role creates instead lives on the
+ * BOARD (a frame's add-task / from-ticket / from-design buttons), which is why dropping nearly
+ * the whole sidebar costs it nothing it is there to do.
  */
 export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
   {
@@ -575,6 +606,10 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'nav.tutorials',
     icon: 'i-lucide-graduation-cap',
     surfaces: S('sidebar', 'command'),
+    // On the intake surface too, and it is the surface that needs it most: a narrowed role has
+    // the fewest destinations to learn the product from, and the delivery-loop tours are exactly
+    // the ones it can take (the platform half gates on the full surface: see `tutorial-tours.ts`).
+    intake: true,
     action: 'tutorial',
     testId: 'nav-tutorial',
     sidebar: { group: 'help', order: 10 },
@@ -594,6 +629,9 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'layout.commandBar.cmd.shortcuts',
     icon: 'i-lucide-keyboard',
     surfaces: S('command'),
+    // Help, like the tutorials: the cheatsheet describes the board and the palette, which every
+    // role has, and nothing it lists is a destination the intake surface hides.
+    intake: true,
     action: 'shortcuts',
     command: {
       group: 'workspace',
@@ -611,11 +649,34 @@ export const NAV_CONTRIBUTIONS: readonly NavContribution[] = [
     labelKey: 'layout.commandBar.cmd.toggleUiMode',
     icon: 'i-lucide-toggle-right',
     surfaces: S('command'),
+    // Deliberately NOT `intake`: a narrowed role's tier is CAPPED at basic (see `resolveUiMode`),
+    // so this entry would flip a preference the resolver then ignores, the same lie the sidebar
+    // switcher refuses to be under an env pin. The way out of a narrowed role is the entry below,
+    // which changes the surface for real.
     action: 'toggleUiMode',
     command: {
       group: 'workspace',
       order: 90,
       keywordsKey: 'layout.commandBar.keywords.toggleUiMode',
+    },
+  },
+  {
+    // The way BACK from a narrowed role, and the reason the intake surface is safe to ship: the
+    // role decides which surfaces exist at all, so a person who picked `designer` and then needs
+    // a pipeline has to be able to say so from inside that surface. Palette-only because the
+    // sidebar already carries the switcher itself (`UiRoleSwitcher`, above the destinations it
+    // gates, in EVERY role) rather than a shortcut to this question, the same relationship
+    // `ui-mode` has with the tier switcher.
+    id: 'ui-role',
+    labelKey: 'layout.commandBar.cmd.chooseRole',
+    icon: 'i-lucide-user-round-cog',
+    surfaces: S('command'),
+    intake: true,
+    action: 'chooseRole',
+    command: {
+      group: 'workspace',
+      order: 95,
+      keywordsKey: 'layout.commandBar.keywords.chooseRole',
     },
   },
 ]
@@ -633,10 +694,10 @@ export const navigationModule = defineModule({
 /**
  * Does a shell render this contribution under `gates`?
  *
- * The two axes a destination is gated on, in ONE place. They are independent and BOTH must
- * pass: an `advanced` item is dropped in basic mode, and every item still answers to its own
- * `gate`. Order doesn't matter (it's a conjunction) but the tier is checked first, since it's
- * the cheaper read.
+ * The three axes a destination is gated on, in ONE place. They are independent and ALL must
+ * pass: an `advanced` item is dropped in basic mode, an item that is not `intake` is dropped for
+ * a narrowed role, and every item still answers to its own `gate`. Order doesn't matter (it's a
+ * conjunction) but the two flag reads come first, since they're the cheaper ones.
  *
  * Named rather than inlined in {@link navSlotFilter} because a second reader has to agree with
  * it exactly: a tutorial tour whose step CLICKS a nav entry declares the requirement that
@@ -647,7 +708,11 @@ export const navigationModule = defineModule({
  * no such control.
  */
 export function navItemVisible(item: NavContribution, gates: NavGates): boolean {
-  return (item.advanced ? gates.advancedMode : true) && (item.gate ? item.gate(gates) : true)
+  return (
+    (item.advanced ? gates.advancedMode : true) &&
+    (gates.fullSurface || item.intake === true) &&
+    (item.gate ? item.gate(gates) : true)
+  )
 }
 
 /**

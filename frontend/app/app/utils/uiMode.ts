@@ -1,14 +1,17 @@
+import type { RoleSurface } from '~/utils/uiRole'
+
 /**
  * The interface tier the SPA renders at: `basic` shows the everyday surface, `advanced`
  * shows every destination and every run/pipeline option. Pure resolution logic, kept out
  * of the store so it is testable without Pinia or a Nuxt runtime.
  *
- * Precedence is fixed and NOT negotiable per surface: the deployment's env value always
- * wins over the browser-stored user choice, which wins over the `basic` default. That
- * ordering is what lets an operator pin a fleet of kiosk-ish deployments to one tier
- * without a per-browser reset, so `setMode` is a no-op while the env pin is present
+ * Precedence is fixed and NOT negotiable per surface: the ROLE's surface caps the tier, then
+ * the deployment's env value wins over the browser-stored user choice, which wins over the
+ * `basic` default. That ordering is what lets an operator pin a fleet of kiosk-ish deployments
+ * to one tier without a per-browser reset, so `setMode` is a no-op while the env pin is present
  * rather than writing a preference the resolver would then ignore.
  */
+
 export const UI_MODES = ['basic', 'advanced'] as const
 
 export type UiMode = (typeof UI_MODES)[number]
@@ -37,8 +40,23 @@ export function parseUiMode(raw: unknown): UiMode | null {
   return (UI_MODES as readonly string[]).includes(value) ? (value as UiMode) : null
 }
 
-/** Apply the precedence: env pin → browser-stored user choice → {@link DEFAULT_UI_MODE}. */
-export function resolveUiMode(env: UiMode | null, stored: UiMode | null): UiMode {
+/**
+ * Apply the precedence: the ROLE's surface as a ceiling, then env pin → browser-stored user
+ * choice → {@link DEFAULT_UI_MODE}.
+ *
+ * The role (`utils/uiRole.ts`) sits ABOVE the env pin rather than beside it, because it is a
+ * ceiling and not a preference: an `intake` role is offered the delivery surface and none of the
+ * platform configuration behind it, and the advanced tier's whole content is that configuration.
+ * Resolved here rather than by hiding the tier switcher alone, so every `isAdvanced` reader
+ * inside a surface (the override fields, the authoring affordances) agrees with the nav
+ * without each one restating the role.
+ */
+export function resolveUiMode(
+  env: UiMode | null,
+  stored: UiMode | null,
+  surface: RoleSurface = 'full',
+): UiMode {
+  if (surface === 'intake') return 'basic'
   return env ?? stored ?? DEFAULT_UI_MODE
 }
 

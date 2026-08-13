@@ -38,6 +38,31 @@
     },
     "pinned": "Set by this deployment"
   },
+  "uiRole": {
+    "switcher": "Your role",
+    "@switcher": {
+      "description": "Label above the picker that chooses which job the person does (Engineer, Product manager, Designer). It tunes which surfaces the app shows; it is NOT a permission or a job title in an org chart."
+    },
+    "roles": {
+      "engineer": "Engineer",
+      "productManager": "Product manager",
+      "designer": "Designer",
+      "@designer": {
+        "description": "A product/UX designer: the person who makes the designs the work is built from. Not a 'designer' in any other sense."
+      }
+    },
+    "hints": {
+      "engineer": "Everything: plan work, run it, review and merge it, and set up the platform it runs on.",
+      "productManager": "The same surfaces as an engineer: plan work, run it, and follow it through to a merge.",
+      "designer": "A simpler board: the services already on it, the work in flight, and new tasks from a design or a ticket."
+    },
+    "prompt": {
+      "title": "What do you work on?",
+      "intro": "Pick the closest match and the app opens on the surfaces that job needs. This changes what you SEE, never what you are allowed to do.",
+      "change": "You can change this at any time from the top of the sidebar.",
+      "later": "Not now"
+    }
+  },
   "common": {
     "loading": "Loading…",
     "save": "Save",
@@ -2501,6 +2526,7 @@
         "shortcuts": "Keyboard shortcuts",
         "bugHunt": "Bug hunt",
         "toggleUiMode": "Switch interface mode",
+        "chooseRole": "Change your role",
         "foundationalServices": "Foundational services",
         "notificationSettings": "Manage notification routing"
       },
@@ -2525,6 +2551,7 @@
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
         "bugHunt": "bug hunt triage backlog issue tracker unassigned",
         "toggleUiMode": "interface mode basic advanced simple expert show hide",
+        "chooseRole": "role engineer product manager designer persona simpler view",
         "tutorial": "tutorial onboarding tour guide help learn basics",
         "foundationalServices": "shared capability platform service api contract openapi catalog",
         "notificationSettings": "notifications email routing channels inbox"
@@ -7698,6 +7725,7 @@
       "failedRun": "A run that failed",
       "infrastructure": "An execution backend connected to this workspace",
       "advancedTier": "The advanced interface mode",
+      "fullSurface": "The Engineer or Product manager role",
       "designSource": "A connected design source"
     },
     "overlay": {
@@ -7744,6 +7772,10 @@
           "toolbar": {
             "title": "Board controls",
             "body": "Zoom in and out or fit the whole board into view with these controls."
+          },
+          "role": {
+            "title": "Your role",
+            "body": "The board is tuned to the job you do. Engineers and product managers get every surface; designers get a simpler one that brings work in and follows it. Change it here whenever you like."
           },
           "interfaceTier": {
             "title": "Basic and advanced",
