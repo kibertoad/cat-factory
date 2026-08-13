@@ -83,10 +83,11 @@ const BLOCK = { id: 'blk_1', title: 'A task' } as Block
  * for a person, and `settle` whether it advanced. Exactly one of them fires in each case, which is
  * what makes "did the policy decide" observable rather than inferred from the returned shape.
  */
-function harness(autonomy: 'attended' | 'unattended') {
+function harness(autonomy: 'attended' | 'unattended', companionMaxReworks = 1) {
   const registry = pairRegistry()
   const park = vi.fn(async () => ({ kind: 'awaiting_decision' as const, decisionId: 'appr_1' }))
   const settle = vi.fn(async () => ({ kind: 'continue' as const }))
+  const loop = vi.fn()
   const controller = new CompanionController({
     contextBuilder: {} as never,
     agentKindRegistry: registry,
@@ -104,14 +105,14 @@ function harness(autonomy: 'attended' | 'unattended') {
     } as never,
     stepGraph: {
       finishStep: () => {},
-      loopCompanionProducer: () => {},
+      loopCompanionProducer: loop,
       pauseStepForInput: (s: PipelineStep) => {
         s.state = 'waiting_decision'
       },
     } as never,
-    resolveRiskPolicy: async () => ({ autonomy }),
+    resolveRiskPolicy: async () => ({ companionMaxReworks, autonomy }),
   })
-  return { controller, park, settle }
+  return { controller, park, settle, loop }
 }
 
 /** A verdict BELOW the step's 0.8 threshold, so the cap branch is the one reached. */
@@ -181,6 +182,72 @@ describe('a companion at its rework cap', () => {
     // the human is offered approve / request-changes rather than the three cap choices.
     expect(inst.steps[1]!.approval?.status).toBe('pending')
     expect(inst.steps[1]!.companion?.exceeded).toBeUndefined()
+    expect(park).not.toHaveBeenCalled()
+  })
+})
+
+// WHERE the budget comes from. The step is seeded with the catalog default at run start, before any
+// policy is resolved, so a policy that states a different ceiling has to be adopted somewhere — and
+// the guard on that read is the whole subtlety: adopt it once, or a re-read silently takes back the
+// extra round a person just granted.
+
+describe('the rework budget', () => {
+  /** A companion step that has graded nothing yet, carrying the run-start default. */
+  function fresh(): ExecutionInstance {
+    const inst = instance()
+    inst.steps[1] = step({
+      companion: { threshold: 0.8, maxAttempts: 3, attempts: 0, verdicts: [] },
+    })
+    return inst
+  }
+
+  it('is adopted from the risk policy on the first grading', async () => {
+    const { controller, loop } = harness('attended', 5)
+    const inst = fresh()
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, { ...BELOW })
+
+    expect(inst.steps[1]!.companion?.maxAttempts).toBe(5)
+    expect(loop).toHaveBeenCalledOnce()
+  })
+
+  it('parks on the first verdict when the policy allows no automatic rework', async () => {
+    const { controller, park, loop } = harness('attended', 0)
+    const inst = fresh()
+
+    const result = await controller.resolveContainerVerdict(
+      WS,
+      inst,
+      inst.steps[1]!,
+      BLOCK,
+      false,
+      {
+        ...BELOW,
+      },
+    )
+
+    // `0` is a posture, not a disabled loop: the verdict still landed, it just goes to the person
+    // this policy says decides instead of being spent on a round.
+    expect(loop).not.toHaveBeenCalled()
+    expect(park).toHaveBeenCalledOnce()
+    expect(result.kind).toBe('awaiting_decision')
+    expect(inst.steps[1]!.companion?.exceeded).toBe(true)
+  })
+
+  it('does not revoke an extra round a person granted mid-loop', async () => {
+    // The state `resolveCompanionExceeded` leaves behind: the policy's 3 rounds are spent and the
+    // grant raised THIS step's budget to 4. Re-reading the policy here would lower it back to 3 and
+    // park the run on the round somebody had just paid for.
+    const { controller, park, loop } = harness('attended', 3)
+    const inst = instance()
+    inst.steps[1] = step({
+      companion: { threshold: 0.8, maxAttempts: 4, attempts: 3, verdicts: [] },
+    })
+
+    await controller.resolveContainerVerdict(WS, inst, inst.steps[1]!, BLOCK, false, { ...BELOW })
+
+    expect(inst.steps[1]!.companion?.maxAttempts).toBe(4)
+    expect(loop).toHaveBeenCalledOnce()
     expect(park).not.toHaveBeenCalled()
   })
 })

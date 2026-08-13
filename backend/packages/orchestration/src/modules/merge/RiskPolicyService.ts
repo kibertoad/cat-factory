@@ -282,6 +282,7 @@ export class RiskPolicyService {
       maxRequirementIterations: input.maxRequirementIterations,
       maxRequirementConcernAllowed: input.maxRequirementConcernAllowed,
       maxTesterQualityIterations: input.maxTesterQualityIterations,
+      companionMaxReworks: input.companionMaxReworks,
       releaseWatchWindowMinutes: input.releaseWatchWindowMinutes,
       releaseMaxAttempts: input.releaseMaxAttempts,
       humanReviewGraceMinutes: input.humanReviewGraceMinutes,
@@ -344,6 +345,9 @@ export class RiskPolicyService {
         : {}),
       ...(patch.maxTesterQualityIterations !== undefined
         ? { maxTesterQualityIterations: patch.maxTesterQualityIterations }
+        : {}),
+      ...(patch.companionMaxReworks !== undefined
+        ? { companionMaxReworks: patch.companionMaxReworks }
         : {}),
       ...(patch.releaseWatchWindowMinutes !== undefined
         ? { releaseWatchWindowMinutes: patch.releaseWatchWindowMinutes }

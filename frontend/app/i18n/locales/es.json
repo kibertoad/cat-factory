@@ -3001,6 +3001,7 @@
         "ciMaxAttempts": "Intentos de corrección de CI",
         "maxRequirementIterations": "Iteraciones de requisitos",
         "maxRequirementConcernAllowed": "Aprobación automática de inquietudes hasta",
+        "companionMaxReworks": "Rondas de corrección del acompañante",
         "autoMerge": "Fusión automática"
       },
       "newPreset": "Nueva política",
@@ -3012,6 +3013,7 @@
         "impact": "Impacto%",
         "ciFix": "Corr. CI",
         "reqIter": "Iter. req.",
+        "companionRework": "Correcc.",
         "autoPass": "Aprob. auto. hasta"
       },
       "add": "Añadir",

@@ -24,7 +24,7 @@ import {
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionFor } from '@cat-factory/agents'
-import { DEFAULT_COMPANION_MAX_ATTEMPTS, pipelineHasVisualStep } from '@cat-factory/contracts'
+import { pipelineHasVisualStep } from '@cat-factory/contracts'
 import type { PipelineAdoption } from '../pipelines/pipelineAdoption.js'
 import { adHocPipelineFor } from '../pipelines/adHocPipeline.js'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
@@ -297,13 +297,15 @@ export class RunLifecycleController {
           // ORIGINAL index `i`, so it stays aligned to the kind even when earlier steps are
           // disabled. Today it carries the requirements-review `autoRecommend` toggle.
           ...(pipeline.stepOptions?.[i] ? { stepOptions: pipeline.stepOptions[i] } : {}),
-          // A companion step carries its quality bar + rework budget, seeded from the
-          // pipeline's per-step threshold (else the companion's default).
+          // A companion step carries its quality bar + rework budget: the bar from the pipeline's
+          // per-step threshold (else the companion's default), the budget from the catalog default
+          // here and refreshed from the task's resolved risk policy on the first grading
+          // (`CompanionController`), exactly as the Tester's quality budget is on its first report.
           ...(companionDef
             ? {
                 companion: {
                   threshold: pipeline.thresholds?.[i] ?? companionDef.defaultThreshold,
-                  maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+                  maxAttempts: DEFAULT_RISK_POLICY.companionMaxReworks,
                   attempts: 0,
                   verdicts: [],
                 },

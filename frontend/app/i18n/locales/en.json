@@ -3275,6 +3275,7 @@
         "ciMaxAttempts": "CI-fix attempts",
         "maxRequirementIterations": "Requirement iterations",
         "maxRequirementConcernAllowed": "Auto-pass concerns at or below",
+        "companionMaxReworks": "Companion rework rounds",
         "autoMerge": "Auto-merge"
       },
       "autoMergeOnHint": "Merge automatically when within the policy limits.",
@@ -3288,6 +3289,7 @@
         "impact": "Impact%",
         "ciFix": "CI-fix",
         "reqIter": "Req iter",
+        "companionRework": "Rework",
         "autoPass": "Auto-pass at or below"
       },
       "add": "Add",

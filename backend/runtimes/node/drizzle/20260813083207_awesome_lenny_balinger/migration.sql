@@ -1,0 +1,2 @@
+ALTER TABLE "merge_threshold_presets" ADD COLUMN "companion_max_reworks" integer DEFAULT 3 NOT NULL;--> statement-breakpoint
+ALTER TABLE "account_risk_policies" ADD COLUMN "companion_max_reworks" integer DEFAULT 3 NOT NULL;

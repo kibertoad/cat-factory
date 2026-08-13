@@ -30,6 +30,7 @@ interface AccountRiskPolicyRow {
   max_requirement_iterations: number
   max_requirement_concern_allowed: string
   max_tester_quality_iterations: number
+  companion_max_reworks: number
   release_watch_window_minutes: number
   release_max_attempts: number
   human_review_grace_minutes: number
@@ -66,6 +67,7 @@ function rowToPolicy(row: AccountRiskPolicyRow): AccountRiskPolicy {
     maxRequirementIterations: row.max_requirement_iterations,
     maxRequirementConcernAllowed: row.max_requirement_concern_allowed as RequirementConcernLevel,
     maxTesterQualityIterations: row.max_tester_quality_iterations,
+    companionMaxReworks: row.companion_max_reworks,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
@@ -146,13 +148,13 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
         `INSERT INTO account_risk_policies
            (account_id, id, name, max_complexity, max_risk, max_impact, ci_max_attempts,
             max_requirement_iterations, max_requirement_concern_allowed,
-            max_tester_quality_iterations,
+            max_tester_quality_iterations, companion_max_reworks,
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
             judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
             submission_classes_by_role, version, autonomy, min_auto_answer_confidence,
             created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (account_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -162,6 +164,7 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
            max_requirement_iterations = excluded.max_requirement_iterations,
            max_requirement_concern_allowed = excluded.max_requirement_concern_allowed,
            max_tester_quality_iterations = excluded.max_tester_quality_iterations,
+           companion_max_reworks = excluded.companion_max_reworks,
            release_watch_window_minutes = excluded.release_watch_window_minutes,
            release_max_attempts = excluded.release_max_attempts,
            human_review_grace_minutes = excluded.human_review_grace_minutes,
@@ -188,6 +191,7 @@ export class D1AccountRiskPolicyRepository implements AccountRiskPolicyRepositor
         policy.maxRequirementIterations,
         policy.maxRequirementConcernAllowed,
         policy.maxTesterQualityIterations,
+        policy.companionMaxReworks,
         policy.releaseWatchWindowMinutes,
         policy.releaseMaxAttempts,
         policy.humanReviewGraceMinutes,

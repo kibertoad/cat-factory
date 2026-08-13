@@ -926,6 +926,51 @@ function registerCompanionCapTests(harness: ConformanceHarness): void {
     expect(stray.status).toBe(409)
   })
 
+  it('spends the rework budget stated by the task risk policy, not a hard-coded one', async () => {
+    // The budget is POLICY, and a step is seeded with the catalog default before any policy is
+    // resolved, so the adoption happens on the companion's first grading. `0` is the value that
+    // makes the whole chain observable in one run: a policy row → the task's pin → the resolved
+    // preset → the step's budget → the cap branch. With the hard-coded ceiling still in force the
+    // run would instead spend three rework rounds (three more container dispatches) before parking
+    // in the same place, so this asserts the SPEND, which is the reason the knob exists.
+    const app = harness.makeApp({ confidence: 1, companionRating: 0.4 })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const policy = await app.call<RiskPolicy>('POST', `/workspaces/${wsId}/risk-policies`, {
+      name: 'No automatic rework',
+      maxComplexity: 0.5,
+      maxRisk: 0.4,
+      maxImpact: 0.5,
+      ciMaxAttempts: 10,
+      maxRequirementIterations: 6,
+      maxRequirementConcernAllowed: 'none',
+      companionMaxReworks: 0,
+    })
+    expect(policy.status).toBe(201)
+    await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+      riskPolicyId: policy.body.id,
+    })
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build + un-reworked companion',
+      purpose: 'build',
+      agentKinds: ['coder', 'reviewer'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    const companionStep = exec.steps.find((s) => s.agentKind === 'reviewer')!
+    expect(companionStep.companion?.maxAttempts).toBe(0)
+    // Not one rework round, and exactly one verdict: the companion graded, and what it found went
+    // to the person this policy says decides instead of back to the coder.
+    expect(companionStep.companion?.attempts).toBe(0)
+    expect(companionStep.companion?.verdicts).toHaveLength(1)
+    expect(companionStep.companion?.exceeded).toBe(true)
+    expect(exec.status).toBe('blocked')
+    expect(exec.failure).toBeFalsy()
+  })
+
   it('grants one more round at the companion cap, then completes when it passes', async () => {
     // `extra-round` raises the budget by one and loops the producer back through the
     // companion to re-grade. Four low grades drive to the cap; the post-extra-round

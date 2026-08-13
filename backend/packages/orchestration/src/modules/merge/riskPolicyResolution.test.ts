@@ -23,6 +23,7 @@ function policy(over: Partial<RiskPolicy> = {}): RiskPolicy {
     maxRequirementIterations: 4,
     maxRequirementConcernAllowed: 'none',
     maxTesterQualityIterations: 3,
+    companionMaxReworks: 3,
     releaseWatchWindowMinutes: 30,
     releaseMaxAttempts: 1,
     humanReviewGraceMinutes: 10,

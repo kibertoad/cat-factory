@@ -90,15 +90,17 @@ export interface CompanionControllerDeps {
   /** The pure step mutators (start/finish/park a step + the companion rework loop). */
   stepGraph: StepGraph
   /**
-   * The run's risk policy, read for ONE decision here: whether the rework cap parks for a person
-   * or is answered by policy ({@link CompanionController.settlesCapUnattended}). Structurally
-   * typed to the one field it reads, so this collaborator stays independent of the merge module.
+   * The run's risk policy, read for TWO decisions here: how many automatic rework rounds this
+   * companion may drive ({@link CompanionController.applyAssessment}), and whether exhausting them
+   * parks for a person or is answered by policy
+   * ({@link CompanionController.settlesCapUnattended}). Structurally typed to the fields it reads,
+   * so this collaborator stays independent of the merge module.
    */
   resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
     run: RunPolicyScope,
-  ) => Promise<{ autonomy?: RunAutonomy }>
+  ) => Promise<{ companionMaxReworks: number; autonomy?: RunAutonomy }>
   /** Facade logger; absent in tests, where the cap decision is asserted off the step instead. */
   logger?: Logger
   /**
@@ -267,11 +269,28 @@ export class CompanionController {
     const { producerIndex, assessment, result } = grading
     const companion = step.companion ?? {
       threshold: companionFor(step.agentKind, this.deps.agentKindRegistry)?.defaultThreshold ?? 0.8,
+      // The shipped ceiling, replaced by the task's own the moment the refresh below runs (which it
+      // does on this same cycle, since a step with no companion state has spent no attempts).
       maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
       attempts: 0,
       verdicts: [],
     }
     const feedback = assessment?.summary ?? ''
+
+    // FIRST grading of this step: adopt the rework budget the task's resolved risk policy states.
+    // The step was seeded with the catalog default at run start, where no policy resolver is wired,
+    // and this is the same "refresh the budget from the preset once" the Tester's quality gate does
+    // on its first report.
+    //
+    // Guarded on `attempts === 0`, and that guard is load-bearing twice over. A human granted an
+    // extra round past the cap by RAISING this step's budget (`resolveCompanionExceeded`), so a
+    // re-read on a later cycle would revoke the round they were just given. And the prompts that
+    // show the loop its remaining rounds (`priorReviewFor`) render nothing on a first grading, so a
+    // budget adopted here is the one every prompt and every cap check in this loop goes on to see.
+    if (companion.attempts === 0) {
+      const policy = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
+      companion.maxAttempts = policy.companionMaxReworks
+    }
 
     // There IS a producer to grade but the companion's own verdict never parsed (even
     // after the repair retry): do NOT silently treat that as a perfect pass. That is the
