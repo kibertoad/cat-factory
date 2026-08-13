@@ -31,10 +31,10 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^5.0.54",
+    "@ai-sdk/amazon-bedrock": "^5.0.55",
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "ai": "^7.0.62"
+    "ai": "^7.0.64"
   },
   "devDependencies": {
     "typescript": "7.0.2",
