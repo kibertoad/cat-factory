@@ -1403,6 +1403,8 @@
       "closeEsc": "סגור (Esc)",
       "companionCapHeading": "{agent} הגיע למגבלת {attempts} ניסיונות עיבוד מחדש, ועדיין מתחת לרף {threshold}.",
       "companionCapDetail": "בצע סבב עיבוד אוטומטי נוסף, המשך לשלב הבא תוך קבלת הפלט הנוכחי, או עצור ואפס את המשימה כדי לערוך את הקלטים ולשלוח מחדש.",
+      "companionStalledHeading": "{agent} עצר את לופ העיבוד מחדש לאחר {attempts} מתוך {maxAttempts} סבבים: הגרסה האחרונה חזרה ללא שינוי והדירוג נשאר מתחת לרף {threshold}.",
+      "companionStalledDetail": "הסבבים שנותרו לא נוצלו מפני שהם רק יחזרו על שיפוט שכבר ניתן. אפשר לבצע סבב נוסף בכל זאת, להמשיך לשלב הבא תוך קבלת הפלט הנוכחי, או לעצור ולאפס את המשימה כדי לערוך את הקלטים ולשלוח מחדש.",
       "infraAttempts": "ניסיונות תשתית",
       "hideInfraAttempts": "הסתר ניסיונות תשתית",
       "executionHistory": "היסטוריית הרצה",
@@ -3143,6 +3145,7 @@
         "ciMaxAttempts": "ניסיונות תיקון CI",
         "maxRequirementIterations": "איטרציות דרישות",
         "maxRequirementConcernAllowed": "מעבר אוטומטי בחששות ברף או מתחתיו",
+        "companionMaxReworks": "סבבי עיבוד מחדש של המלווה",
         "autoMerge": "מיזוג אוטומטי"
       },
       "newPreset": "מדיניות חדשה",
@@ -3154,6 +3157,7 @@
         "impact": "השפעה%",
         "ciFix": "תיקון CI",
         "reqIter": "איטרציות דרישות",
+        "companionRework": "עיבוד מחדש",
         "autoPass": "מעבר אוטומטי ברף או מתחתיו"
       },
       "add": "הוסף",

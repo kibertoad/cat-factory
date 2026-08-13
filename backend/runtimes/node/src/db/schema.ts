@@ -992,6 +992,11 @@ export const riskPolicies = pgTable(
       .notNull()
       .default('none'),
     max_tester_quality_iterations: integer('max_tester_quality_iterations').notNull().default(3),
+    // How many automatic rework rounds a companion (reviewer / architect-companion /
+    // spec-companion) may drive before it parks for a person (mirror of D1's
+    // `companion_max_reworks`). The default is the ceiling the engine hard-coded before this was
+    // policy, so an un-edited row behaves exactly as it did.
+    companion_max_reworks: integer('companion_max_reworks').notNull().default(3),
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),

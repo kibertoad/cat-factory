@@ -15,7 +15,10 @@
   paragraph, and preserved across a workspace override; a reviewer that reports structured
   findings beside its summary (every judge, `pr-reviewer`, the tester) is deliberately excluded,
   since the view renders that array itself),
-  `runtime/` (`runRepoOps`, the custom-agent pre/post-op runner).
+  `runtime/` (`AiAgentExecutor`, the INLINE dispatch path; `runRepoOps`, the custom-agent
+  pre/post-op runner; `inline-context-record.ts`, which projects an inline dispatch into the
+  `agent_context_snapshots` telemetry row its container sibling has always filed, and whose header
+  names the inline SERVICE calls still absent from that table).
   `kinds/built-in-container.ts` registers every BUILT-IN CONTAINER kind (`coder`, the testers,
   the in-place fixers, the conflict-resolver, `merger`, `on-call`, the read-only explorers) as an
   ordinary `AgentKindDefinition` declaring its `AgentStepSpec`, which is what let the server's

@@ -1403,6 +1403,8 @@
       "closeEsc": "Kapat (Esc)",
       "companionCapHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, hâlâ {threshold} barının altında.",
       "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
+      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan {threshold} barının altında kaldı.",
+      "companionStalledDetail": "Kalan turlar kullanılmadı, çünkü yalnızca verilmiş bir kararı yineleyeceklerdi. Yine de bir tur daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "infraAttempts": "Altyapı denemeleri",
       "hideInfraAttempts": "Altyapı denemelerini gizle",
       "executionHistory": "Yürütme geçmişi",
@@ -3143,6 +3145,7 @@
         "ciMaxAttempts": "CI düzeltme denemeleri",
         "maxRequirementIterations": "Gereksinim yinelemeleri",
         "maxRequirementConcernAllowed": "Şu düzeyde veya altında otomatik geç",
+        "companionMaxReworks": "Yardımcı yeniden çalışma turları",
         "autoMerge": "Otomatik birleştirme"
       },
       "newPreset": "Yeni ilke",
@@ -3154,6 +3157,7 @@
         "impact": "Etki%",
         "ciFix": "CI düzeltme",
         "reqIter": "Grks. yin.",
+        "companionRework": "Yen. çalışma",
         "autoPass": "Şu düzeyde veya altında otomatik geç"
       },
       "add": "Ekle",

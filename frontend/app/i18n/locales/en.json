@@ -1494,6 +1494,8 @@
       "closeEsc": "Close (Esc)",
       "companionCapHeading": "{agent} hit its {attempts}-attempt rework limit, still below the {threshold} bar.",
       "companionCapDetail": "Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
+      "companionStalledHeading": "{agent} stopped the rework loop after {attempts} of {maxAttempts} rounds: the last revision came back unchanged and the rating held below the {threshold} bar.",
+      "companionStalledDetail": "The remaining rounds were left unspent because they would only repeat a verdict already given. Do one more round anyway, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
       "infraAttempts": "Infrastructure attempts",
       "hideInfraAttempts": "Hide infrastructure attempts",
       "executionHistory": "Execution history",
@@ -3275,6 +3277,7 @@
         "ciMaxAttempts": "CI-fix attempts",
         "maxRequirementIterations": "Requirement iterations",
         "maxRequirementConcernAllowed": "Auto-pass concerns at or below",
+        "companionMaxReworks": "Companion rework rounds",
         "autoMerge": "Auto-merge"
       },
       "autoMergeOnHint": "Merge automatically when within the policy limits.",
@@ -3288,6 +3291,7 @@
         "impact": "Impact%",
         "ciFix": "CI-fix",
         "reqIter": "Req iter",
+        "companionRework": "Rework",
         "autoPass": "Auto-pass at or below"
       },
       "add": "Add",

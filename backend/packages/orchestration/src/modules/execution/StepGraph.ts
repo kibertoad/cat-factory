@@ -176,6 +176,13 @@ export class StepGraph {
    * work instead of re-attaching to its evicted job), the producer is handed the
    * `rework` feedback + started, and the instance cursor is moved back to the producer.
    * Shared by the automatic companion loop and the human "request changes" path.
+   *
+   * It also CLEARS the companion flags that record how a loop ENDED (`exceeded`, `stalled`,
+   * `capSettledByPolicy`), because this is the one funnel every re-arm goes through and the loop
+   * demonstrably has not ended. Left set, each would go on making a false claim about a run that
+   * went on to converge: that a person is still being waited on, that the producer stopped
+   * responding, that policy waved the run past the bar. The next cycle recomputes all three from
+   * its own evidence, so re-arming them costs nothing if the condition persists.
    */
   rerunProducerThrough(
     instance: ExecutionInstance,
@@ -185,6 +192,12 @@ export class StepGraph {
   ): void {
     for (let i = producerIndex; i <= companionIndex; i++) {
       this.resetStepForRerun(instance.steps[i]!)
+    }
+    const companion = instance.steps[companionIndex]?.companion
+    if (companion) {
+      companion.exceeded = undefined
+      companion.stalled = undefined
+      companion.capSettledByPolicy = undefined
     }
     const producer = instance.steps[producerIndex]!
     producer.rework = rework

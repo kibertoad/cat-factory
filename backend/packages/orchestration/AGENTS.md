@@ -70,7 +70,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   import retained for the designs a task links, folded into its gallery beside the hand-uploaded
   references, with the collision, precedence and gap rules that fold implies),
   plus `RunStateMachine`, `StepGraph`, the companion/review
-  controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
+  controllers (`CompanionController` drives the rework loop; its stop conditions are the budget
+  AND `companionProgress.logic.ts`, which ends a loop that has stopped converging, since
+  `attempts < maxAttempts` bounds how LONG a loop runs and says nothing about whether it is
+  getting anywhere), and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
   `PrVerificationReportController` + `prReport.logic.ts` (the **PR verification report**:
   composed from the settled run's own state and published onto EACH pull request the run opened
   through the `PrVerificationReportPublisher` port; a cross-service run's peer PRs get their own

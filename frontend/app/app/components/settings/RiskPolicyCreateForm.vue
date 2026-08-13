@@ -43,6 +43,7 @@ function submit() {
     ciMaxAttempts: draft.ciMaxAttempts,
     maxRequirementIterations: draft.maxRequirementIterations,
     maxRequirementConcernAllowed: draft.maxRequirementConcernAllowed,
+    companionMaxReworks: draft.companionMaxReworks,
     autoMergeEnabled: draft.autoMergeEnabled,
     autonomy: draft.unattended ? 'unattended' : 'attended',
     minAutoAnswerConfidence: draft.minAutoAnswerConfidence / 100,
@@ -124,6 +125,18 @@ function submit() {
           type="number"
           :min="1"
           :max="20"
+          size="sm"
+        />
+      </label>
+      <label class="block w-20">
+        <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+          {{ t('settings.riskPolicy.create.companionRework') }}
+        </span>
+        <UInput
+          v-model.number="draft.companionMaxReworks"
+          type="number"
+          :min="0"
+          :max="10"
           size="sm"
         />
       </label>

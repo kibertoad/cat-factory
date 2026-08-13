@@ -747,6 +747,37 @@ describe('makeHarnessCallRecorder', () => {
     // same job produces the SAME ids (a duplicate insert the store then rejects).
     expect(repo.recorded.map((m) => m.id)).toEqual(['exec-coder-hc-0', 'exec-coder-hc-1'])
   })
+
+  it('files a job-level remainder row with NO turn index, keeping its id from `seq`', async () => {
+    // The harness reports what its CLI's terminal cumulative attributed to no turn as one metric
+    // flagged `standsForJob`. It is not a position in the loop, and a reader ordering a step's calls
+    // by turn must not be handed one it never occupied — the same split the inline CLI model makes
+    // between its per-call rows and its single step-level row. The ID still comes from `seq`, so the
+    // terminal repeat of an already-drained row stays a no-op rather than a second row.
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: 'exec-coder',
+      calls: [
+        metric({ seq: 0, responseText: 'a' }),
+        metric({ seq: 1, standsForJob: true, promptText: '', messageCount: 0, responseText: '' }),
+      ],
+    })
+
+    expect(repo.recorded.map((m) => m.turnIndex)).toEqual([0, null])
+    expect(repo.recorded.map((m) => m.id)).toEqual(['exec-coder-hc-0', 'exec-coder-hc-1'])
+  })
 })
 
 describe('makeInlineCallRecorder', () => {

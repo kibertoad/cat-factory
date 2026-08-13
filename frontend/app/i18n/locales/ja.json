@@ -1403,6 +1403,8 @@
       "closeEsc": "閉じる (Esc)",
       "companionCapHeading": "{agent} は {attempts} 回の再作業上限に達しましたが、まだ {threshold} の基準を下回っています。",
       "companionCapDetail": "自動の再作業をもう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
+      "companionStalledHeading": "{agent} は {maxAttempts} 回のうち {attempts} 回で再作業ループを停止しました。直前の修正が変更されずに返され、評価も {threshold} の基準を下回ったままでした。",
+      "companionStalledDetail": "残りの回数は、すでに出された判定を繰り返すだけなので使われていません。それでももう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
       "infraAttempts": "インフラの試行",
       "hideInfraAttempts": "インフラの試行を非表示",
       "executionHistory": "実行履歴",
@@ -3143,6 +3145,7 @@
         "ciMaxAttempts": "CI 修正の試行回数",
         "maxRequirementIterations": "要件のイテレーション回数",
         "maxRequirementConcernAllowed": "この水準以下の懸念を自動承認",
+        "companionMaxReworks": "コンパニオンの再作業回数",
         "autoMerge": "自動マージ"
       },
       "newPreset": "新しいポリシー",
@@ -3154,6 +3157,7 @@
         "impact": "影響度%",
         "ciFix": "CI 修正",
         "reqIter": "要件イテレ",
+        "companionRework": "再作業",
         "autoPass": "この水準以下を自動承認"
       },
       "add": "追加",

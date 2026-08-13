@@ -234,7 +234,11 @@ export { BUILTIN_GATABLE_KINDS, isGatableKind } from './agents/kinds/gatable.js'
 // The ONE definition of "does this dispatch hand the agent a real checkout?", shared by the
 // composite executor's ROUTING and the engine's preOp context preparation so the two can never
 // disagree about whether an agent can read files or run git.
-export { dispatchDeliversCheckout, runsInContainer } from './agents/kinds/container-surface.js'
+export {
+  deliverableIsReply,
+  dispatchDeliversCheckout,
+  runsInContainer,
+} from './agents/kinds/container-surface.js'
 export { companionSystemPrompt } from './agents/prompts/companion.js'
 // The document-authoring agent kinds (doc-researcher / doc-outliner / doc-writer /
 // doc-finalizer), registered as a SIDE EFFECT of importing this module so they are

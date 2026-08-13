@@ -56,6 +56,7 @@ function executorFor(ref: ModelRef, opts: { runsInline?: boolean } = {}) {
     agentRouting: { default: { ref }, byKind: {} },
     resolveBlockModel: () => undefined,
     resolveBinaryArtifactStore: async () => store,
+    agentContextRecorder: undefined,
     ...(opts.runsInline ? { runsInline: () => true } : {}),
   })
   return { exec, captured }

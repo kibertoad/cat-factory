@@ -1403,6 +1403,8 @@
       "closeEsc": "Cerrar (Esc)",
       "companionCapHeading": "{agent} alcanzó su límite de {attempts} intentos de reelaboración, aún por debajo del umbral de {threshold}.",
       "companionCapDetail": "Haz una ronda más de reelaboración automática, avanza al siguiente paso aceptando la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
+      "companionStalledHeading": "{agent} detuvo el bucle de reelaboración tras {attempts} de {maxAttempts} rondas: la última revisión volvió sin cambios y la puntuación se mantuvo por debajo del umbral de {threshold}.",
+      "companionStalledDetail": "Las rondas restantes quedaron sin usar porque solo repetirían un veredicto ya emitido. Haz una ronda más de todos modos, avanza al siguiente paso aceptando la salida actual, o detén y restablece la tarea para que puedas editar las entradas y reenviarla.",
       "infraAttempts": "Intentos de infraestructura",
       "hideInfraAttempts": "Ocultar intentos de infraestructura",
       "executionHistory": "Historial de ejecución",
@@ -3001,6 +3003,7 @@
         "ciMaxAttempts": "Intentos de corrección de CI",
         "maxRequirementIterations": "Iteraciones de requisitos",
         "maxRequirementConcernAllowed": "Aprobación automática de inquietudes hasta",
+        "companionMaxReworks": "Rondas de reelaboración del acompañante",
         "autoMerge": "Fusión automática"
       },
       "newPreset": "Nueva política",
@@ -3012,6 +3015,7 @@
         "impact": "Impacto%",
         "ciFix": "Corr. CI",
         "reqIter": "Iter. req.",
+        "companionRework": "Reelab.",
         "autoPass": "Aprob. auto. hasta"
       },
       "add": "Añadir",

@@ -732,6 +732,7 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'sweep.failed': 'cat_factory.platform.sweep_failures',
   'container.dispatch_failed': 'cat_factory.platform.container_dispatch_failures',
   'container.evicted': 'cat_factory.platform.container_evictions',
+  'container.branch_contended': 'cat_factory.platform.container_branch_contentions',
   'container.capability_unsupported': 'cat_factory.platform.container_capability_unsupported',
   'container.capability_unknown': 'cat_factory.platform.container_capability_unknown',
   'container.blind_job_not_stopped': 'cat_factory.platform.container_blind_job_not_stopped',
@@ -775,6 +776,9 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'sweep.failed': '{failure}',
   'container.dispatch_failed': '{failure}',
   'container.evicted': '{eviction}',
+  // One REFUSED push, which is one whole agent run about to be spent again: the unit a reader
+  // multiplies by an agent run's cost, not a failure the run itself reports.
+  'container.branch_contended': '{refusal}',
   // One DISPATCH refused / unverifiable, not one run: a step re-dispatched by a gate helper
   // contributes several, which is exactly what the rate should show.
   'container.capability_unsupported': '{dispatch}',

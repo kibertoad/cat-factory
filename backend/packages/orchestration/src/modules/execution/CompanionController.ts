@@ -7,22 +7,22 @@ import type {
   IdGenerator,
   Logger,
   PipelineStep,
-  RunAutonomy,
 } from '@cat-factory/kernel'
+import { DEFAULT_RISK_POLICY } from '@cat-factory/kernel'
 import {
   type CompanionAssessment,
-  DEFAULT_COMPANION_MAX_ATTEMPTS,
   type DispatchToolServers,
   parseCompanionAssessment,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { companionFor, companionTargets } from '@cat-factory/agents'
+import { companionFor, companionTargets, deliverableIsReply } from '@cat-factory/agents'
 import type { SpendService } from '@cat-factory/spend'
 import { extractJson } from '../requirements/requirements.logic.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
+import { companionLoopStalled } from './companionProgress.logic.js'
 import type { RunStateMachine } from './RunStateMachine.js'
-import { resolvesOwnCaps, type RunPolicyScope } from './policy-types.js'
+import { resolvesOwnCaps, type ResolvedRunRiskPolicy, type RunPolicyScope } from './policy-types.js'
 import { buildStepApproval } from './stepApproval.js'
 import { recordInlineToolServers } from './step-fold.logic.js'
 import type { StepGraph } from './StepGraph.js'
@@ -51,6 +51,25 @@ function parseContainerVerdict(result: AgentRunResult): CompanionAssessment | un
     }
   }
   return parseCompanionOrUndefined(result.output)
+}
+
+/**
+ * The slice of the run's resolved risk policy this loop reads: the automatic rework budget, and
+ * whether policy answers the park that spending it raises. A `Pick` rather than a restated shape, so
+ * a field renamed on the resolved policy fails to compile here.
+ */
+type CompanionRiskPolicy = Pick<ResolvedRunRiskPolicy, 'companionMaxReworks' | 'autonomy'>
+
+/**
+ * Whether this companion may still spend an automatic rework round on its producer.
+ *
+ * ONE predicate for the TWO decisions that must agree about it: whether a first batch with comments
+ * is force-looped, and whether the cap has been reached. Split, they disagreed exactly where the
+ * budget is `0`. The force-loop marked the verdict failed and the cap branch then parked a producer
+ * whose rating had cleared the bar, for a round the policy had already said it would not buy.
+ */
+function hasReworkBudget(companion: NonNullable<PipelineStep['companion']>): boolean {
+  return companion.attempts < companion.maxAttempts
 }
 
 /** Sum the token usage of two model calls (for the companion's repair retry). */
@@ -90,15 +109,19 @@ export interface CompanionControllerDeps {
   /** The pure step mutators (start/finish/park a step + the companion rework loop). */
   stepGraph: StepGraph
   /**
-   * The run's risk policy, read for ONE decision here: whether the rework cap parks for a person
-   * or is answered by policy ({@link CompanionController.settlesCapUnattended}). Structurally
-   * typed to the one field it reads, so this collaborator stays independent of the merge module.
+   * The run's risk policy, read for TWO decisions here: how many automatic rework rounds this
+   * companion may drive ({@link CompanionController.applyAssessment}), and whether exhausting them
+   * parks for a person or is answered by policy
+   * ({@link CompanionController.settlesCapUnattended}). Both are answered from ONE resolution per
+   * grading, so a cap reached on a step's first verdict does not resolve the same policy twice.
+   * Structurally typed to the fields it reads, so this collaborator stays independent of the merge
+   * module.
    */
   resolveRiskPolicy: (
     workspaceId: string,
     block: Block,
     run: RunPolicyScope,
-  ) => Promise<{ autonomy?: RunAutonomy }>
+  ) => Promise<CompanionRiskPolicy>
   /** Facade logger; absent in tests, where the cap decision is asserted off the step instead. */
   logger?: Logger
   /**
@@ -267,7 +290,10 @@ export class CompanionController {
     const { producerIndex, assessment, result } = grading
     const companion = step.companion ?? {
       threshold: companionFor(step.agentKind, this.deps.agentKindRegistry)?.defaultThreshold ?? 0.8,
-      maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
+      // Never consulted: a step with a producer adopts the policy's budget below before any branch
+      // reads it, and one with no producer passes without a rework decision. Present because the
+      // shape requires a number, and it is the catalog's own so the two seeds cannot drift.
+      maxAttempts: DEFAULT_RISK_POLICY.companionMaxReworks,
       attempts: 0,
       verdicts: [],
     }
@@ -277,6 +303,9 @@ export class CompanionController {
     // after the repair retry): do NOT silently treat that as a perfect pass. That is the
     // bug where a truncated reviewer reply surfaced as "100% ≥ 80%" and dropped a real
     // review. Surface it for a human instead, recording the raw reply as the detail.
+    //
+    // Answered BEFORE the budget read below, because this path spends no round: resolving the
+    // task's policy to fill in a number the failure record never reads is work for nothing.
     if (producerIndex >= 0 && !assessment) {
       step.output = result.output || ''
       step.companion = companion
@@ -294,6 +323,27 @@ export class CompanionController {
           `was truncated or malformed) after a repair retry.`,
         detail: (result.output ?? '').slice(0, 2000) || undefined,
       }
+    }
+
+    // FIRST grading of this step: adopt the rework budget the task's resolved risk policy states.
+    // The step was seeded with the catalog default at run start, where no policy resolver is wired,
+    // and this is the same "refresh the budget from the preset once" the Tester's quality gate does
+    // on its first report.
+    //
+    // Guarded on having recorded NO verdict yet, which is the only reading of "first grading" that
+    // holds for both ways a step grades twice on an unspent budget. A human granted an extra round
+    // past the cap by RAISING this step's budget (`resolveCompanionExceeded`), and a human "request
+    // changes" on a gated companion re-runs the producer while charging no round at all
+    // (`requestStepChanges`), leaving `attempts` at 0 for the re-grade. Off `attempts` this read
+    // fired again on that second pass; off the verdict list it fires once per step, which is what
+    // every prompt and every cap check in this loop then goes on to see.
+    //
+    // The resolved value is HELD for the cap branch below, so a companion that reaches its cap on
+    // this same grading (a `0` budget does) resolves the policy once rather than twice.
+    let policy: CompanionRiskPolicy | undefined
+    if (producerIndex >= 0 && companion.verdicts.length === 0) {
+      policy = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
+      companion.maxAttempts = policy.companionMaxReworks
     }
 
     // Compute the pass/fail verdict for this cycle and fold it (+ the reviewer/spec-companion
@@ -320,14 +370,51 @@ export class CompanionController {
       })
     }
 
-    // BELOW THRESHOLD, automatic budget spent → DON'T get stuck. Park on a human
-    // decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
+    // BELOW THRESHOLD and NOT GETTING ANYWHERE: the producer handed back the very text it was
+    // asked to revise and the rating did not move, so every round still on the budget would buy
+    // another copy of a verdict already given (see `companionLoopStalled` for the run that
+    // motivated it). Stopping EARLY takes the same exit as spending the budget, deliberately: the
+    // question a person is asked at the cap ("one more round / proceed / stop & reset") is exactly
+    // the question here, an unattended policy already has an answer for it, and inventing a second
+    // exit would mean a second set of resolutions for the SPA and the policy to know about.
+    //
+    // `stalled` is recorded beside `exceeded` rather than in place of it: they reach the same gate
+    // for opposite reasons, and only this one says the run had rounds left and abandoned them.
+    const producerStep = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
+    const stalled =
+      producerStep !== undefined &&
+      companionLoopStalled({
+        producer: producerStep,
+        verdicts: companion.verdicts,
+        // Answered from the REGISTRY, so a deployment's own producer kind is judged by its own
+        // declaration: only a kind whose deliverable is its reply can be found standing still by
+        // comparing that reply. See `deliverableIsReply`.
+        producerDeliverableIsReply: deliverableIsReply(
+          producerStep.agentKind,
+          this.deps.agentKindRegistry,
+        ),
+      })
+    if (stalled) {
+      companion.stalled = true
+      this.deps.logger?.warn('companion rework loop stopped early: no progress', {
+        workspaceId,
+        runId: instance.id,
+        blockId: block.id,
+        agentKind: step.agentKind,
+        attempts: companion.attempts,
+        maxAttempts: companion.maxAttempts,
+        rating: companion.verdicts[companion.verdicts.length - 1]?.rating,
+      })
+    }
+
+    // BELOW THRESHOLD, automatic budget spent (or abandoned as above) → DON'T get stuck. Park on
+    // a human decision (one more round / proceed anyway / stop & reset) — the same iteration-cap
     // surface the requirements reviewer uses at its cap. Only AUTOMATIC reworks count
     // against the budget (`attempts`); human "request changes" cycles on a gated
     // companion re-run the producer without consuming it. `step.output` already holds the
     // companion's latest feedback; the `exceeded` flag + the parked approval gate let the
     // SPA render the three choices (resolved via `resolveCompanionExceeded`).
-    if (companion.attempts >= companion.maxAttempts) {
+    if (stalled || !hasReworkBudget(companion)) {
       step.companion = companion
       // …unless the run's policy says nobody is coming. `proceed` is one of the three choices the
       // gate offers a person, and it is the only one an unattended policy may take on their
@@ -336,7 +423,9 @@ export class CompanionController {
       // is what "accept the producer's current output" means everywhere else — so a companion step
       // the pipeline ALSO gated still raises its human approval gate here, exactly as it does when
       // the companion clears the bar on its own.
-      if (await this.settlesCapUnattended(workspaceId, instance, block, step, companion)) {
+      if (
+        await this.settlesCapUnattended({ workspaceId, instance, block, step, companion, policy })
+      ) {
         return this.resolvePassedCompanion({
           workspaceId,
           instance,
@@ -400,9 +489,17 @@ export class CompanionController {
     // `attempts` counts automatic reworks, so it is 0 on the first batch. Applies to every
     // companion (reviewer / spec-companion / architect-companion). Gated on a real producer
     // so the loop-back below always has a step to re-run.
+    //
+    // And gated on there BEING a round to spend, because that is all this rule is: the first batch
+    // of findings is worth a round even from a producer that scored well. A policy stating
+    // `companionMaxReworks: 0` has already answered that it buys no such round, so with no budget
+    // the rating decides alone. Otherwise a rating ABOVE the bar failed here and fell straight
+    // through to the cap, parking the run (or, unattended, stamping `capSettledByPolicy` on work
+    // that met its bar) over comments nobody was ever going to act on in this run.
     const firstBatch = companion.attempts === 0
     const hasComments = producerIndex >= 0 && (assessment?.comments?.length ?? 0) > 0
-    const passed = firstBatch && hasComments ? false : rating >= companion.threshold
+    const forcedLoop = firstBatch && hasComments && hasReworkBudget(companion)
+    const passed = forcedLoop ? false : rating >= companion.threshold
     // Append this cycle's standardized verdict (the same shape the requirements-rework
     // gate stores) so the whole correction sequence is visible, not just the latest.
     //
@@ -441,22 +538,27 @@ export class CompanionController {
    *
    * Reads the policy at the moment the cap is REACHED rather than at run start, matching every
    * other policy read in the engine: an operator who moves a task onto an attended policy while it
-   * is working gets the park, and one who moves it the other way stops waiting on it.
+   * is working gets the park, and one who moves it the other way stops waiting on it. `resolved` is
+   * the grading's own resolution when the caller already needed one (a cap reached on a first
+   * verdict), so the two decisions the policy answers cost one read rather than two.
    *
    * It STAMPS `capSettledByPolicy` rather than only logging, because the alternative is a run that
    * looks like it passed a bar it never met. The last `verdicts` entry already says the producer
    * was below the bar; without the stamp, a step that advanced anyway is indistinguishable from
    * one whose companion simply stopped grading, and the step is where whoever reviews the
-   * resulting pull request looks.
+   * resulting pull request looks. Which is also why only a verdict that FAILED reaches here: the
+   * stamp on a producer that met its bar would be the same false claim in the other direction.
    */
-  private async settlesCapUnattended(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    block: Block,
-    step: PipelineStep,
-    companion: NonNullable<PipelineStep['companion']>,
-  ): Promise<boolean> {
-    const policy = await this.deps.resolveRiskPolicy(workspaceId, block, instance)
+  private async settlesCapUnattended(args: {
+    workspaceId: string
+    instance: ExecutionInstance
+    block: Block
+    step: PipelineStep
+    companion: NonNullable<PipelineStep['companion']>
+    policy: CompanionRiskPolicy | undefined
+  }): Promise<boolean> {
+    const { workspaceId, instance, block, step, companion } = args
+    const policy = args.policy ?? (await this.deps.resolveRiskPolicy(workspaceId, block, instance))
     if (!resolvesOwnCaps(policy)) return false
     companion.capSettledByPolicy = true
     this.deps.logger?.info('companion rework cap settled by policy', {

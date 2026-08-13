@@ -3,7 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { claudeAssistantContent, isObject, numberOf, redactBody } from './claude-stream.js'
-import { createClaudeRunTelemetry, subagentDispatchId } from './claude-call-aggregator.js'
+import { claudeUsage, unaccountedUsageCall } from './usage-attribution.js'
+import {
+  createClaudeRunTelemetry,
+  subagentDispatchId,
+  type ClaudeRunTelemetry,
+} from './claude-call-aggregator.js'
 import {
   ToolCallTracker,
   type TrackedToolCall,
@@ -12,9 +17,7 @@ import {
 import { log, type Logger } from './logger.js'
 import { NO_TOOL_WINDOW, type ToolProgressWindow } from './tool-silence.js'
 import {
-  createCallMetricPublisher,
   publishCallMetric,
-  type CallMetricPublisher,
   type HarnessCallMetric,
   type PiRunOutcome,
   type TodoProgress,
@@ -200,24 +203,6 @@ export interface SubscriptionRunOptions {
    * session-transcript path is logged for the run when the isolated config home is torn down.
    */
   log?: Logger
-}
-
-/**
- * Fallback token attribution: if a CLI reported a cumulative total but no per-turn
- * usage (so every captured call has zero tokens), pin the whole total onto the LAST
- * call rather than dropping it — the run's tokens are still accounted, just not split
- * per turn. A no-op when the calls already carry per-turn tokens.
- */
-function attributeCumulativeUsage(
-  calls: HarnessCallMetric[],
-  usage: { inputTokens: number; outputTokens: number } | undefined,
-): void {
-  if (!usage || calls.length === 0) return
-  const anyTokens = calls.some((c) => c.inputTokens > 0 || c.outputTokens > 0)
-  if (anyTokens) return
-  const last = calls[calls.length - 1]!
-  last.inputTokens = usage.inputTokens
-  last.outputTokens = usage.outputTokens
 }
 
 /**
@@ -711,6 +696,75 @@ function carriesToolResult(content: unknown[]): boolean {
   return content.some((block) => isObject(block) && block.type === 'tool_result')
 }
 
+/** One claude-code run's per-call telemetry: what was captured, and how it is settled. */
+interface ClaudeCallCapture {
+  /** Every captured call, terminal-result order — the parent's, the subagents', the remainder. */
+  calls: HarnessCallMetric[]
+  telemetry: ClaudeRunTelemetry
+  /**
+   * File whatever the parent's narrated turns did not account for, once its terminal cumulative
+   * usage is known. A no-op when they add up. See {@link unaccountedUsageCall}.
+   */
+  settleUsage: (usage: { inputTokens: number; outputTokens: number } | undefined) => void
+}
+
+/**
+ * Open the per-call telemetry capture for one claude-code run.
+ *
+ * It reconstructs the full per-call request/response bodies from the stream.
+ * `--output-format stream-json --verbose` emits a near-verbatim Anthropic Messages envelope per
+ * response CONTENT BLOCK (not per call), so the aggregator folds the envelopes sharing a
+ * `message.id` back into one call and buffers that call's `user` tool_result turns — together the
+ * growing prompt transcript, in the shape the model was actually sent. It is SEEDED with the inputs
+ * the harness supplies (they never appear in the stream): the system + first user message when the
+ * prompt rides argv, or a single folded user turn when it doesn't, so the reconstruction never shows
+ * a system turn that was never sent. Bodies are credential-scrubbed (they can echo the leased token).
+ *
+ * The parent loop's calls are tracked SEPARATELY, by reference into the same list, because the
+ * terminal `result` event's cumulative usage covers only the parent conversation. In `ambientAuth`
+ * mode there is no transcript watcher, so the CLI's tagged subagent turns are captured here too and
+ * `calls` holds both; reconciling against that mixed list is what once billed a subagent for the
+ * parent's whole output shortfall.
+ */
+function openClaudeCallCapture(
+  opts: SubscriptionRunOptions,
+  stream: { prompt: string; folded: boolean; secrets: string[] },
+): ClaudeCallCapture {
+  const calls: HarnessCallMetric[] = []
+  const parentCalls: HarnessCallMetric[] = []
+  const publish = (metric: HarnessCallMetric): void =>
+    publishCallMetric(calls, metric, opts.onCallMetric)
+  // `watcherOwnsSubagents` tracks the `startSubagentWatcher` wiring in the caller: it is started
+  // only when the CLI has an isolated config home to watch, which an `ambientAuth` run does not
+  // have. The telemetry routes the CLI's tagged subagent turns accordingly — see
+  // `createClaudeRunTelemetry`.
+  const telemetry = createClaudeRunTelemetry({
+    seed: stream.folded
+      ? [{ role: 'user', content: stream.prompt }]
+      : [
+          { role: 'system', content: opts.systemPrompt },
+          { role: 'user', content: opts.userPrompt },
+        ],
+    secrets: stream.secrets,
+    watcherOwnsSubagents: !opts.ambientAuth,
+    publish: (metric) => {
+      parentCalls.push(metric)
+      publish(metric)
+    },
+    publishSubagent: publish,
+  })
+  return {
+    calls,
+    telemetry,
+    settleUsage: (usage) => {
+      // Published like any other call so the live drain records it too, which is also what stamps
+      // its `seq` and therefore its stable row id.
+      const remainder = unaccountedUsageCall(parentCalls, usage)
+      if (remainder) publish(remainder)
+    },
+  }
+}
+
 export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
   let summary = ''
@@ -729,34 +783,9 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     })
   }
 
-  // Reconstruct the full per-call request/response bodies for telemetry from the
-  // stream. `--output-format stream-json --verbose` emits a near-verbatim Anthropic
-  // Messages envelope per response CONTENT BLOCK (not per call), so the aggregator below
-  // folds the envelopes sharing a `message.id` back into one call and buffers that call's
-  // `user` tool_result turns — together the growing prompt transcript, in the shape the
-  // model was actually sent. We seed it with the inputs the harness supplies (they never
-  // appear in the stream): the system + first user message when the prompt rides argv, or
-  // a single folded user turn when it doesn't — so the reconstruction never shows a system
-  // turn that was never sent. Bodies are credential-scrubbed (they can echo the leased token).
   const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
-  const calls: HarnessCallMetric[] = []
-  // Streams each call as the CLI yields it, EXCEPT one whose tokens `attributeCumulativeUsage`
-  // may still rewrite below (a published call must be final — see the publisher).
-  const publisher = createCallMetricPublisher(calls, opts.onCallMetric)
-  // `watcherOwnsSubagents` tracks the `startSubagentWatcher` wiring below: it is started only when
-  // the CLI has an isolated config home to watch, which an `ambientAuth` run does not have. The
-  // telemetry routes the CLI's tagged subagent turns accordingly — see `createClaudeRunTelemetry`.
-  const telemetry = createClaudeRunTelemetry({
-    seed: folded
-      ? [{ role: 'user', content: prompt }]
-      : [
-          { role: 'system', content: opts.systemPrompt },
-          { role: 'user', content: opts.userPrompt },
-        ],
-    secrets,
-    watcherOwnsSubagents: !opts.ambientAuth,
-    publish: (metric) => publisher.publish(metric),
-  })
+  const capture = openClaudeCallCapture(opts, { prompt, folded, secrets })
+  const telemetry = capture.telemetry
 
   // ADR 0026 D2.1 + ADR 0027 Defect B: surface live slice progress from the two views the run
   // produces of the SAME slicing. The parent's subagent dispatches + their terminal tool_results
@@ -917,8 +946,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       summary,
       stats,
       stderrTail,
-      calls,
-      publisher,
+      capture,
       usage,
       subagents,
       expectSubagentCalls: telemetry.expectsWatcherCalls(),
@@ -926,11 +954,11 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     })
   } catch (err) {
     // The stream ended abnormally (guard trip, watchdog kill, CLI crash). Complete the call in
-    // flight anyway, and release whatever the publisher was withholding: a killed run never
-    // returns an outcome, so the live channel is the ONLY record of what it spent, and dropping
-    // its last turn is what the streaming exists to avoid.
+    // flight anyway: a killed run never returns an outcome, so the live channel is the ONLY record
+    // of what it spent, and dropping its last turn is what the streaming exists to avoid. No
+    // terminal `result` event arrived, so there is no cumulative total to reconcile against and no
+    // remainder row to file — every captured turn already streamed as it was completed.
     telemetry.flush()
-    publisher.flush()
     // A tripped no-progress guard aborted the CLI; streamCli rejects with its generic abort
     // message, so replace it with the guard's actionable diagnostic — carrying the stderr tail it
     // attached, since that is usually the only evidence of what the CLI was doing when it was
@@ -1088,9 +1116,8 @@ async function assembleClaudeOutcome(args: {
   summary: string
   stats: PiRunStats
   stderrTail: string
-  calls: HarnessCallMetric[]
-  /** The live-stream publisher, flushed once attribution has finalised the calls' tokens. */
-  publisher: CallMetricPublisher
+  /** This run's per-call telemetry, settled here with the terminal usage. */
+  capture: ClaudeCallCapture
   usage: { inputTokens: number; outputTokens: number } | undefined
   subagents: ReturnType<typeof startSubagentWatcher> | undefined
   /**
@@ -1102,14 +1129,11 @@ async function assembleClaudeOutcome(args: {
   expectSubagentCalls: boolean
   log?: Logger
 }): Promise<PiRunOutcome> {
-  const { summary, stats, stderrTail, calls, publisher, usage, subagents } = args
-  // The parent's cumulative-usage fallback applies to the PARENT calls only (before the
-  // subagent calls, which carry their own per-turn tokens, are concatenated).
-  attributeCumulativeUsage(calls, usage)
-  // The withheld calls are final only NOW, so stream them: the completion poll drains them
-  // alongside the result, and the backend records the attributed numbers rather than the zeros
-  // they carried while the run was in flight.
-  publisher.flush()
+  const { summary, stats, stderrTail, capture, usage, subagents } = args
+  const calls = capture.calls
+  // What the parent's narrated turns did not account for, as its OWN row (never tokens grafted onto
+  // a real turn).
+  capture.settleUsage(usage)
   // Final drain of any subagent transcript writes that landed after the last poll, then
   // fold the subagents' usage + per-call telemetry into the run's outcome.
   await subagents?.stop()
@@ -1136,21 +1160,6 @@ async function assembleClaudeOutcome(args: {
     ...(mergedUsage ? { usage: mergedUsage } : {}),
     ...(mergedCalls.length ? { callMetrics: mergedCalls } : {}),
   }
-}
-
-function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number } | undefined {
-  if (!isObject(raw)) return undefined
-  // Count every input bucket Anthropic bills: fresh input plus BOTH cache reads and
-  // cache writes (cache_creation_input_tokens), which are real consumed tokens — and
-  // are the dominant share on a long agent run. Omitting them under-weights a token's
-  // true load in the usage-aware rotation window.
-  const input =
-    numberOf(raw.input_tokens) +
-    numberOf(raw.cache_read_input_tokens) +
-    numberOf(raw.cache_creation_input_tokens)
-  const output = numberOf(raw.output_tokens)
-  if (input === 0 && output === 0) return undefined
-  return { inputTokens: input, outputTokens: output }
 }
 
 // ---------------------------------------------------------------------------

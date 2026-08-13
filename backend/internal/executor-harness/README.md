@@ -115,6 +115,38 @@ Bootstrap differs at the ends: it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
 PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 
+### The work-branch push is CHECKPOINTED, so it is lease-guarded
+
+Step 8's push is not the run's first: every `JOB_CHECKPOINT_INTERVAL_MS` (60s) the harness pushes
+whatever the agent has committed and NOT yet published, so an evicted container's work survives on
+the branch and a retry resumes on top of it. The interval is a **loss window**, not a push rate:
+`unpublishedWorkBranchTip` skips a tick whose branch tip is already published, so a long run pushes
+once per commit the agent makes rather than once a minute, and nothing here needs tuning per model.
+
+That makes the harness its own competing writer. A commit is published within a minute of being
+made, the agent cannot observe that from inside the container, and amending or resetting it
+afterwards is ordinary git hygiene, so the final push used to be refused as a non-fast-forward and
+failed the whole run with its work already on the branch.
+
+Every push after the first therefore carries `--force-with-lease` against **the sha this pass
+itself published**, never a tip it merely cloned. Two rules make that bound real, and both are
+easy to get wrong:
+
+- **The published sha comes from the push itself** (`pushBranch` names an explicit
+  `<sha>:refs/heads/<branch>` source and returns it), not from `refs/remotes/origin/<branch>`. A
+  fresh coding run clones a single branch, so `git push` creates no tracking ref for the work
+  branch and a lease read back from one never arms at all.
+- **The lease is withheld unless the branch still contains the tip this pass started from**
+  (`workBranchLease`). Once a checkpoint has landed, a rewrite reaching below that tip would lease
+  successfully against our own commit and carry an earlier run's work away with it.
+
+The run's own rewrite lands; a SECOND writer's commits, and a rewrite this pass cannot claim, still
+refuse the push. A refused push is not reported as a generic `git` fault but as the
+`branch-contended` failure cause, which the engine recovers from by re-dispatching the step onto
+the branch as it now stands (bounded by `MAX_BRANCH_CONTENTION_RECOVERIES`, counted as
+`container.branch_contended` and recorded on the step for the debug API). The agents are told the
+matching half of the rule: add commits, never rewrite them (`PLATFORM_DELIVERY_CONTRACT`).
+
 ### Reference designs
 
 A job body for a kind that CAPTURES views (the UI tester, or a deployment's own browser-driven kind)
@@ -296,13 +328,14 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/pi.ts`        | Pi provider config, non-interactive run, JSON-line event + todo-progress parsing, global `AGENTS.md` guidance. |
 | `src/pi-reduction.ts` | Reducing a Pi event stream to what the run PRODUCED (summary, stats, diagnostics, terminal failure), FOLDED as records stream rather than over a retained array — memory is O(largest record), not O(records). The array-taking entry points offline tooling uses are defined in terms of the same reducer. |
 | `src/tool-silence.ts` | The tool-silence watchdog (F13) and the `ToolProgressWindow` an agent stream opens, beats and closes. Separate from the phase marker on purpose: a window is only meaningful while something able to reset it is running. |
-| `src/git.ts`       | clone / branch / commit / push + GitHub PR creation; bootstrap history reset + force-push.              |
+| `src/git.ts`       | clone / branch / commit / push (lease-guarded: [The work-branch push is CHECKPOINTED, so it is lease-guarded](#the-work-branch-push-is-checkpointed-so-it-is-lease-guarded)) + GitHub PR creation; bootstrap history reset + force-push. |
 | `src/bootstrap.ts` | The `/bootstrap` handler (clone-or-empty → adapt → reinit + force-push).                                |
 | `src/blueprint.ts` | The `/blueprint` handler (decompose → render `blueprints/` → commit on branch).                         |
 | `src/embed.ts`     | Bundled assets/templates written into the workspace.                                                    |
 | `src/package-registries.ts` | Private-registry (npm) auth: renders the job's allowlisted entries into an npmrc; the user `~/.npmrc` in a container, a per-job file pointed at by `npm_config_userconfig` for a native job. |
 | `src/agent-runner.ts` | The subscription-harness runners (`runClaudeCode` / `runCodex`): talk direct to the vendor with a leased OAuth token, lift per-turn usage/telemetry off the CLI event stream. |
 | `src/claude-call-aggregator.ts` | Folds Claude Code's per-CONTENT-BLOCK `stream-json` envelopes back into the model calls they belong to (by `message.id`), reconstructs each call's request transcript, and routes subagent turns off the parent's chain. **Exported as the `./claude-call-aggregator` subpath and driven by the BACKEND too** (`runtimes/local`, for an inline step running on the developer's host `claude`), so it stays the ONE implementation: the per-envelope over-count it fixes inflated a measured 1.47M tokens to 5.53M, and both drivers have to learn that only once. That second driver is why the transcript is retained only to `MAX_TRANSCRIPT_CHARS` (stating what it stopped retaining) and why assembling bodies at all is a `bodies` switch: in a container the reconstruction is one job's memory in a box sized for it, in the backend it is per concurrent inline step in the orchestrator process. Unlike the compile-only `./embed`, this subpath is a `dist` import, which is why the package emits declarations, and why a consumer's typecheck depends on Turbo's `^build` edge having built this package first (see `tsconfig.json`'s `comment:buildOrder`). |
+| `src/usage-attribution.ts` | Reconciles a subscription CLI's TWO token channels: the per-turn usage its stream narrates and the cumulative total its terminal event reports. They disagree routinely and in one direction (Claude Code's per-turn `output_tokens` is the message-START snapshot, single digits), so whatever the turns did not account for becomes ONE extra metric standing for the job (`standsForJob`, filed with a null turn index) rather than tokens grafted onto a real turn, which would make a derived number read as a measured one. Reconciled against the PARENT loop's calls alone, since the terminal cumulative covers only that conversation. |
 | `src/transcript-retention.ts` | Lifts the CLI session transcripts (`projects/` / `sessions/`) out of the isolated, credential-bearing config home before it is deleted, and prunes them on a TTL (debugging artifact retention). |
 | `src/captured-command.ts` | The one way the harness runs a declared shell command on its own behalf: `sh -c` with a per-command watchdog, abort handling, conventional exit codes (124/127/130) and a scrub-then-bound output capture. Shared by both pre-PR verification phases so a fix to one cannot miss the other. |
 | `src/dependency-install.ts` | Dependency prepopulation: `prepopulateDependencies` is the ONE seam every checkout-having mode calls; it runs the service's install command before the agent's first turn, excludes what the install materialised from git so no `git add -A` can sweep a dependency tree into the PR, and builds the prompt note describing the outcome. Best-effort: every failure shape becomes a note, never a failed job. Generic: keyed off the job body, never the agent kind. |

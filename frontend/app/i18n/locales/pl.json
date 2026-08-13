@@ -1403,6 +1403,8 @@
       "closeEsc": "Zamknij (Esc)",
       "companionCapHeading": "{agent} osiągnął limit {attempts} prób przeróbki, wciąż poniżej progu {threshold}.",
       "companionCapDetail": "Wykonaj jeszcze jedną automatyczną rundę przeróbki, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
+      "companionStalledHeading": "{agent} zatrzymał pętlę przeróbek po {attempts} z {maxAttempts} rund: ostatnia poprawka wróciła bez zmian, a ocena pozostała poniżej progu {threshold}.",
+      "companionStalledDetail": "Pozostałe rundy nie zostały wykorzystane, bo tylko powtórzyłyby już wydaną ocenę. Wykonaj mimo to jeszcze jedną rundę, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
       "infraAttempts": "Próby infrastrukturalne",
       "hideInfraAttempts": "Ukryj próby infrastrukturalne",
       "executionHistory": "Historia wykonania",
@@ -3001,6 +3003,7 @@
         "ciMaxAttempts": "Próby naprawy CI",
         "maxRequirementIterations": "Iteracje wymagań",
         "maxRequirementConcernAllowed": "Automatyczne zaliczenie zastrzeżeń do",
+        "companionMaxReworks": "Rundy przeróbek towarzysza",
         "autoMerge": "Auto-scalanie"
       },
       "newPreset": "Nowa zasada",
@@ -3012,6 +3015,7 @@
         "impact": "Wpływ%",
         "ciFix": "Napr. CI",
         "reqIter": "Iter. wym.",
+        "companionRework": "Przeróbki",
         "autoPass": "Auto-zalicz do"
       },
       "add": "Dodaj",
