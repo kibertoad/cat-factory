@@ -1,5 +1,57 @@
 # @cat-factory/kernel
 
+## 0.299.1
+
+### Patch Changes
+
+- d5c1f1c: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.64`,
+  `@ai-sdk/openai@4.0.41`, `@ai-sdk/amazon-bedrock@5.0.55`). The Cloudflare toolchain moves
+  together again: `wrangler@4.122.0` and `@cloudflare/vitest-pool-workers@0.21.2`, whose bundled
+  wrangler tracks it. `@aws-sdk/client-s3` goes to 3.1109.0 and the SPA's store engine to
+  `pinia@4.0.3` / `@pinia/nuxt@1.0.2`.
+
+  `capnweb` moves 0.10.0 to 0.11.0 in the Gatekeeper Worker. The release is additive (stubs as
+  stream chunks, exact ArrayBuffer/DataView serialization, URL over RPC) and touches neither
+  `RpcTarget` nor `newWorkersRpcResponse`, the only two symbols we import. Its 0.11.1 patch, which
+  enforces an ASCII-only dist bundle so a consumer's `btoa()` cannot choke on the runtime, missed
+  the release-age window by two hours and is the first thing the next sweep should pick up.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- c67e924: A bug hunt on a repo-backed tracker scopes to the service's repository, not a picked board
+
+  GitHub Issues and GitLab Issues put every issue in one repository, and the only repository a hunt
+  may read is the one its service frame is linked to. Both now offer NO board control: the hunt
+  carries the container an adopted bug will land in, and the board is that container's service repo,
+  resolved through the same `resolveRepoTarget` walk an issue search scopes with (now shared as
+  `server/src/modules/tasks/sourceRepoScope.ts`). A board picker there could scan, rate and adopt a
+  bug from a repository nothing on the board points at, whose run would then open its PR somewhere
+  else entirely.
+
+  Internal wire break (`POST /workspaces/:ws/bug-hunt/:source/hunts`): the body now takes
+  `containerId` plus a REQUIRED, NULLABLE `board`. `null` is the only legal value for a repo-backed
+  source, and naming one there is refused (`details.reason: 'board_from_service'`) rather than
+  ignored; a repo-less source with no board is refused too. Board LISTING is refused for a repo-backed
+  source with the same reason, so `GitHubIssuesProvider.listBoards` and
+  `GitLabIssuesProvider.listBoards` are gone along with the shared `repoRefsToBoards` projection.
+  `TaskSourceState` gains `repoBacked` (derived from the provider's declared `repoScope`) so the SPA
+  knows which surface to render before it asks.
+
+  Every refusal now lands as soon as it is decidable, cheapest first: an unhuntable source on the
+  registry, then the board shape from the request body alone, then the repository walk, then the
+  container. So an unregistered source is refused by name instead of being told to pick a board it
+  has no control for, a board named beside an unlinked service no longer costs two round trips to
+  learn it was never allowed, and a `containerId` naming no block on this workspace refuses before
+  the vendor read and the ranking call rather than at adoption.
+
+- Updated dependencies [c67e924]
+  - @cat-factory/contracts@0.311.0
+
 ## 0.299.0
 
 ### Minor Changes
