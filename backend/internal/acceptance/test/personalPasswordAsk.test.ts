@@ -22,8 +22,9 @@ const pinnedOn = (overrides: Partial<PinnedPreset['model']> = {}): PinnedPreset 
 
 function harness(overrides: Partial<Parameters<typeof askForPersonalPassword>[0]> = {}) {
   const logs: string[] = []
-  // What the HOLDER took, which is the whole observable effect: nothing hands a password back any
-  // more (the ask fills the unlock's own closure), so a test watches the holder rather than a value.
+  // What the HOLDER was given, which is the whole observable effect: nothing hands a password back
+  // any more (the ask fills the unlock's own closure), so a test watches the holder rather than a
+  // value.
   const held: string[] = []
   const deps = {
     log: (message: string) => logs.push(message),
@@ -37,7 +38,7 @@ function harness(overrides: Partial<Parameters<typeof askForPersonalPassword>[0]
 }
 
 describe('askForPersonalPassword', () => {
-  it('asks once and leaves the password held for the whole pass', async () => {
+  it('asks once and leaves the password in the holder for the whole pass', async () => {
     const { deps, held } = harness()
 
     await askForPersonalPassword(deps)
@@ -91,6 +92,9 @@ describe('askForPersonalPassword', () => {
     expect(logs).toEqual([])
   })
 
+  // The other half of the rule that lets the ask HOLD what it collects: it only ever asks where the
+  // deployment CONFIRMED this pass will spend a subscription. Unconfirmed, nothing is asked and
+  // nothing is held, and the `428` path is the whole behaviour.
   it('leaves the ask to the first dispatch when the deployment could not be read', async () => {
     const hold = vi.fn(async (_reason: string) => {})
     const { deps, said } = harness({

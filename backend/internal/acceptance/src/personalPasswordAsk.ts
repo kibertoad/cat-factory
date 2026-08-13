@@ -27,9 +27,14 @@ export type PersonalPasswordAskDeps = {
    *
    * One seam rather than a read paired with a hand-over, which is what this was under vitest: the
    * password had to come back as a value so `provide` could send it down an RPC channel to each
-   * worker. In one process the holder is the same closure the lazy ask fills
-   * (`personalUnlock.ts`'s `obtain`), so nothing has to carry a copy and the suite no longer has a
-   * function that hands a password back at all.
+   * worker. In one process the holder is the same closure the lazy ask fills (`personalUnlock.ts`'s
+   * `obtain`), so nothing has to carry a copy and the suite no longer has a function that hands a
+   * password back at all.
+   *
+   * Held rather than collected-and-withheld, and the reason is the READER of this whole hook: an
+   * operator who starts a headless pass and leaves. Everything below has already established that
+   * this pass will spend their subscription, so from here the credential is simply something the pass
+   * has, on every request, with no later moment where a call site has to remember to reach for it.
    */
   hold: (reason: string) => Promise<void>
   /** What the operator reads while this happens. */
@@ -38,6 +43,11 @@ export type PersonalPasswordAskDeps = {
 
 /**
  * Ask once, or say why it did not.
+ *
+ * **The ask is CONDITIONAL on a confirmation, and that is what earns the right to hold the answer.**
+ * It happens only where the deployment answered and the pinned preset's base model is an
+ * individual-usage one, so a pass that is asked is a pass already known to be about to spend that
+ * subscription for hours. Where neither can be established, nothing is asked and nothing is held.
  *
  * Rejects for exactly one cause: {@link PersonalPasswordDeclined}. Everything else it can meet is
  * reported and returned from, which is what keeps this incapable of ending a pass that the
