@@ -737,6 +737,18 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     color: '#38bdf8',
     description: 'Fixes failing CI and pushes back to the PR branch.',
   },
+  // The deployer's escalation, and the ci-fixer's shape one step earlier in the pipeline: never a
+  // palette block (nobody authors it into a pipeline), but it runs an LLM over the checkout, so it
+  // needs display metadata for timelines and a pinnable per-workspace model.
+  'deploy-fixer': {
+    kind: 'deploy-fixer',
+    tier: 'basic',
+    label: 'Deploy Fixer',
+    icon: 'i-lucide-server-cog',
+    color: '#0ea5e9',
+    description:
+      'Repairs the deployment files a failed provision was rejected for and pushes back to the PR branch, then the environment is stood up again.',
+  },
   fixer: {
     kind: 'fixer',
     tier: 'basic',
@@ -826,6 +838,7 @@ export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
     'initiative-planner',
     'conflict-resolver',
     'ci-fixer',
+    'deploy-fixer',
     'fixer',
     'merger',
     'kaizen',

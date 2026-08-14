@@ -32,6 +32,25 @@
     "switchTo": "{mode} moduna geç",
     "pinned": "Bu dağıtım tarafından belirlendi"
   },
+  "uiRole": {
+    "switcher": "Rolünüz",
+    "roles": {
+      "engineer": "Mühendis",
+      "productManager": "Ürün yöneticisi",
+      "designer": "Tasarımcı"
+    },
+    "hints": {
+      "engineer": "Her şey: işi planlama, çalıştırma, inceleyip birleştirme ve işin üzerinde koştuğu platformu kurma.",
+      "productManager": "Mühendisle aynı yüzeyler: işi planlama, çalıştırma ve birleştirmeye kadar takip etme.",
+      "designer": "Daha yalın bir pano: panoda hâlihazırda bulunan servisler, süren işler ve bir tasarımdan ya da sorundan açılan yeni görevler."
+    },
+    "prompt": {
+      "title": "Ne üzerinde çalışıyorsunuz?",
+      "intro": "En yakın seçeneği seçin; uygulama o işin ihtiyaç duyduğu yüzeylerle açılır. Bu, NE GÖRDÜĞÜNÜZÜ değiştirir, ne yapabileceğinizi değil.",
+      "change": "Bunu kenar çubuğunun üstünden dilediğiniz zaman değiştirebilirsiniz.",
+      "later": "Şimdi değil"
+    }
+  },
   "common": {
     "loading": "Yükleniyor…",
     "save": "Kaydet",
@@ -2270,6 +2289,7 @@
         "pipeline_complete": "Onayla ve birleştir",
         "ci_failed": "Çalıştırmayı yeniden dene",
         "test_failed": "Çalıştırmayı yeniden dene",
+        "deploy_blocked": "Çalıştırmayı yeniden dene",
         "requirement_review": "Okundu olarak işaretle",
         "clarity_review": "Okundu olarak işaretle",
         "release_regression": "Onayla",
@@ -2452,6 +2472,7 @@
         "shortcuts": "Klavye kısayolları",
         "bugHunt": "Hata avı",
         "toggleUiMode": "Arayüz modunu değiştir",
+        "chooseRole": "Rolünüzü değiştirin",
         "foundationalServices": "Temel hizmetler",
         "notificationSettings": "Bildirim yönlendirmesini yönet"
       },
@@ -2476,6 +2497,7 @@
         "shortcuts": "kısayollar klavye tuşlar yardım",
         "bugHunt": "hata bug av önceliklendirme birikmiş kayıt atanmamış",
         "toggleUiMode": "arayüz mod temel gelişmiş göster gizle",
+        "chooseRole": "rol mühendis ürün yöneticisi tasarımcı persona daha yalın görünüm",
         "tutorial": "eğitim tur rehber yardım öğren tanıtım",
         "foundationalServices": "ortak yetenek platform hizmet api sözleşme openapi katalog",
         "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu"
@@ -4464,6 +4486,7 @@
       "pipeline_complete": "Pipeline tamamlandı",
       "ci_failed": "CI başarısız",
       "test_failed": "Testler başarısız",
+      "deploy_blocked": "Dağıtım engellendi",
       "requirement_review": "Gereksinim incelemesi",
       "clarity_review": "Netlik incelemesi",
       "release_regression": "Sürüm gerilemesi",
@@ -4527,6 +4550,7 @@
       "pipeline_complete": "Pipeline tamamlandı",
       "ci_failed": "CI başarısız",
       "test_failed": "Testler başarısız",
+      "deploy_blocked": "Dağıtım engellendi",
       "requirement_review": "Gereksinim incelemesi",
       "clarity_review": "Netlik incelemesi",
       "release_regression": "Sürüm gerilemesi",
@@ -7525,6 +7549,7 @@
       "failedRun": "Başarısız olmuş bir çalıştırma",
       "infrastructure": "Bu çalışma alanına bağlı bir yürütme arka ucu",
       "advancedTier": "Gelişmiş arayüz modu",
+      "fullSurface": "Mühendis veya Ürün yöneticisi rolü",
       "designSource": "Bağlı bir tasarım kaynağı"
     },
     "overlay": {
@@ -7565,6 +7590,10 @@
           "toolbar": {
             "title": "Pano denetimleri",
             "body": "Bu denetimlerle yakınlaşır, uzaklaşır veya tüm panoyu görünüme sığdırırsınız."
+          },
+          "role": {
+            "title": "Rolünüz",
+            "body": "Pano yaptığınız işe göre ayarlanır: mühendisler ve ürün yöneticileri tüm yüzeyleri görür, tasarımcılar ise işi içeri alıp takip eden daha yalın bir pano kullanır. Bunu buradan dilediğiniz zaman değiştirebilirsiniz."
           },
           "interfaceTier": {
             "title": "Temel ve gelişmiş",

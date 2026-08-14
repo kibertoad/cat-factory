@@ -2500,6 +2500,7 @@
         "pipeline_complete": "Conferma e unisci",
         "ci_failed": "Riprova l'esecuzione",
         "test_failed": "Riprova l'esecuzione",
+        "deploy_blocked": "Riprova l'esecuzione",
         "requirement_review": "Segna come letto",
         "clarity_review": "Segna come letto",
         "release_regression": "Conferma presa visione",
@@ -2676,6 +2677,7 @@
         "shortcuts": "Scorciatoie da tastiera",
         "bugHunt": "Caccia ai bug",
         "toggleUiMode": "Cambia modalità interfaccia",
+        "chooseRole": "Cambia il tuo ruolo",
         "foundationalServices": "Servizi fondamentali",
         "notificationSettings": "Gestisci l'instradamento delle notifiche"
       },
@@ -2700,6 +2702,7 @@
         "shortcuts": "scorciatoie da tastiera tasti hotkey cheatsheet aiuto",
         "bugHunt": "bug caccia triage backlog ticket non assegnati",
         "toggleUiMode": "interfaccia modalità base avanzata mostra nascondi",
+        "chooseRole": "ruolo ingegnere responsabile di prodotto designer profilo vista semplice",
         "tutorial": "tutorial tour guida aiuto imparare introduzione",
         "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo",
         "notificationSettings": "notifiche email instradamento canali casella"
@@ -5739,6 +5742,25 @@
     "switchTo": "Passa alla modalità {mode}",
     "pinned": "Impostato da questo deployment"
   },
+  "uiRole": {
+    "switcher": "Il tuo ruolo",
+    "roles": {
+      "engineer": "Ingegnere",
+      "productManager": "Responsabile di prodotto",
+      "designer": "Designer"
+    },
+    "hints": {
+      "engineer": "Tutto: pianificare il lavoro, eseguirlo, revisionarlo e fare il merge, e configurare la piattaforma che lo esegue.",
+      "productManager": "Le stesse superfici di un ingegnere: pianificare il lavoro, eseguirlo e seguirlo fino al merge.",
+      "designer": "Una board più semplice: i servizi già presenti, il lavoro in corso e nuove attività da un design o da una issue."
+    },
+    "prompt": {
+      "title": "Su cosa lavori?",
+      "intro": "Scegli l'opzione più vicina e l'app si aprirà sulle superfici che quel lavoro richiede. Cambia ciò che VEDI, non ciò che ti è permesso fare.",
+      "change": "Puoi cambiarlo quando vuoi dall'alto della barra laterale.",
+      "later": "Non ora"
+    }
+  },
   "common": {
     "loading": "Caricamento…",
     "save": "Salva",
@@ -6041,6 +6063,7 @@
       "pipeline_complete": "Pipeline completata",
       "ci_failed": "CI non riuscita",
       "test_failed": "Test non riusciti",
+      "deploy_blocked": "Deployment bloccato",
       "requirement_review": "Revisione dei requisiti",
       "clarity_review": "Revisione della chiarezza",
       "release_regression": "Regressione della release",
@@ -6104,6 +6127,7 @@
       "pipeline_complete": "Pipeline completata",
       "ci_failed": "CI non riuscita",
       "test_failed": "Test non riusciti",
+      "deploy_blocked": "Deployment bloccato",
       "requirement_review": "Revisione dei requisiti",
       "clarity_review": "Revisione della chiarezza",
       "release_regression": "Regressione della release",
@@ -7525,6 +7549,7 @@
       "failedRun": "Un’esecuzione fallita",
       "infrastructure": "Un backend di esecuzione collegato a questo workspace",
       "advancedTier": "La modalità interfaccia avanzata",
+      "fullSurface": "Il ruolo Ingegnere o Responsabile di prodotto",
       "designSource": "Una sorgente di design collegata"
     },
     "overlay": {
@@ -7565,6 +7590,10 @@
           "toolbar": {
             "title": "Controlli della board",
             "body": "Con questi controlli ingrandisci, riduci o adatti l’intera board alla vista."
+          },
+          "role": {
+            "title": "Il tuo ruolo",
+            "body": "La board si adatta al lavoro che fai: ingegneri e responsabili di prodotto vedono tutte le superfici, i designer una più semplice che porta dentro il lavoro e lo segue. Puoi cambiarlo qui quando vuoi."
           },
           "interfaceTier": {
             "title": "Base e avanzata",

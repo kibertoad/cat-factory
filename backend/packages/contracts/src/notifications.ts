@@ -20,6 +20,10 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          confirms the work as complete (and merges the PR).
 //   - `ci_failed`        — the `ci-fixer` agent exhausted its attempt budget and
 //                          CI is still red; a human takes over.
+//   - `deploy_blocked`   — the `deploy-fixer` agent exhausted its attempt budget and the
+//                          `deployer` step's environment still would not come up; the run
+//                          fails and a human takes over. The `ci_failed` shape one step
+//                          earlier in the pipeline, retry action included.
 //   - `test_failed`      — the `fixer` agent exhausted its attempt budget (or there
 //                          was no PR branch to fix) and the `tester` still withholds
 //                          its greenlight; a human takes over.
@@ -105,6 +109,7 @@ export const notificationTypeSchema = v.picklist([
   'merge_review',
   'pipeline_complete',
   'ci_failed',
+  'deploy_blocked',
   'test_failed',
   'requirement_review',
   'clarity_review',
@@ -137,8 +142,8 @@ export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
  * surface to the debt definition is a one-line change reviewed like any other contract change.
  *
  * Deliberately EXCLUDED: failure-remediation cards (`ci_failed`, `test_failed`,
- * `release_regression`) — "the machine needs help", not "a human owes a review" — and
- * block-less/system cards (`platform_health`, `infra_unreachable`, `budget_paused`,
+ * `release_regression`, `deploy_blocked`) — "the machine needs help", not "a human owes a
+ * review" — and block-less/system cards (`platform_health`, `infra_unreachable`, `budget_paused`,
  * `budget_threshold`, `key_drift`, `initiative`) that aren't tied to a reviewable task. `merge_tag_request` is excluded too: the PR
  * it concerns has ALREADY merged, so it is a post-hoc nudge for one tap — counting it as review
  * debt would friction task authoring over work that is finished.

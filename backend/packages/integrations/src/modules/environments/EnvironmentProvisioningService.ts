@@ -184,13 +184,36 @@ interface ResolvedProvision {
 }
 
 /**
+ * A settled environment plus the machine-readable cause when it settled FAILED.
+ *
+ * The pair exists because those two facts are produced together and consumed together, and only
+ * one of them is persisted. The handle is a row: it carries `lastError`, the prose a human reads.
+ * The reason is the provider's CLASSIFICATION, and the engine reads it to decide whether an
+ * automated fixer may be dispatched at the failure at all. Returning the handle alone is what
+ * dropped it: a provider that classified its failure correctly had its verdict discarded one call
+ * before the decision that needed it, and the loop then read every non-throwing failure as
+ * unclassified, indistinguishable from a provider that never opted in.
+ *
+ * Deliberately NOT a column on the environment row. The reason is consumed in the same call that
+ * produces it (a settle, immediately), so persisting it would add state with no reader and a
+ * migration on both runtimes to keep it in step.
+ *
+ * `null` whenever the environment is not failed, and equally when it failed and the provider
+ * classified nothing: "we could not tell" is never repo-fixable.
+ */
+export interface SettledProvision {
+  handle: EnvironmentHandle
+  reason: EnvironmentFailureReason | null
+}
+
+/**
  * The outcome of {@link EnvironmentProvisioningService.startProvision}: either the environment
- * was provisioned SYNCHRONOUSLY (the in-Worker REST path for raw manifests — `handle` is final)
- * or a CONTAINER-backed deploy job was dispatched (`ref`) and the caller must park on it and poll
- * via {@link EnvironmentProvisioningService.pollProvisionJob} until it settles.
+ * was provisioned SYNCHRONOUSLY (the in-Worker REST path for raw manifests, where the pair is
+ * final) or a CONTAINER-backed deploy job was dispatched (`ref`) and the caller must park on it
+ * and poll via {@link EnvironmentProvisioningService.pollProvisionJob} until it settles.
  */
 export type ProvisionDispatch =
-  | { kind: 'completed'; handle: EnvironmentHandle }
+  | ({ kind: 'completed' } & SettledProvision)
   | { kind: 'dispatched'; ref: RunnerJobRef }
 
 export interface ProvisionArgs {
@@ -355,7 +378,10 @@ export class EnvironmentProvisioningService {
       undefined,
       { resolveClone: true },
     )
-    return this.provisionSync(args, resolved, req)
+    // The handle alone: this entry point is the standalone/manual provision, which has no run to
+    // remediate and so nothing to hand a classification to. `startProvision` is the deployer's
+    // door and keeps the pair.
+    return (await this.provisionSync(args, resolved, req)).handle
   }
 
   /**
@@ -396,8 +422,7 @@ export class EnvironmentProvisioningService {
     }
     if (!job) {
       // Raw manifests / no async provider: the synchronous in-Worker REST path.
-      const handle = await this.provisionSync(args, resolved, req)
-      return { kind: 'completed', handle }
+      return { kind: 'completed', ...(await this.provisionSync(args, resolved, req)) }
     }
     if (!this.deps.deployJobClient) {
       // Provider-agnostic on purpose: ANY provider whose config needs a container-backed render
@@ -477,7 +502,7 @@ export class EnvironmentProvisioningService {
    * the `provisioning` row from {@link startProvision}). A failed view becomes a `failed` env
    * carrying the harness error, so the deployer step's details project it.
    */
-  async finalizeProvision(args: ProvisionArgs, view: RunnerJobView): Promise<EnvironmentHandle> {
+  async finalizeProvision(args: ProvisionArgs, view: RunnerJobView): Promise<SettledProvision> {
     const resolved = await this.resolveProvision(args)
     const capability = resolved.provider.asyncProvision
     if (!capability) {
@@ -690,7 +715,7 @@ export class EnvironmentProvisioningService {
     args: ProvisionArgs,
     resolved: ResolvedProvision,
     req: ProvisionEnvironmentRequest,
-  ): Promise<EnvironmentHandle> {
+  ): Promise<SettledProvision> {
     let provisioned: ProvisionedEnvironment
     try {
       provisioned = await resolved.provider.provision(req)
@@ -755,7 +780,7 @@ export class EnvironmentProvisioningService {
     provisioned: ProvisionedEnvironment,
     provisionType: ProvisionType | null,
     engine: InfraEngine | null,
-  ): Promise<EnvironmentHandle> {
+  ): Promise<SettledProvision> {
     const { workspaceId } = args
     // A (block, frame) pair holds at most one live environment: supersede any prior one, tearing
     // its real infra down when the new provision targets a different provider identity (else keep
@@ -807,7 +832,14 @@ export class EnvironmentProvisioningService {
       error: record.lastError,
       detail: JSON.stringify({ status: provisioned.status }),
     })
-    return recordToHandle(record)
+    // The classification rides BESIDE the row rather than on it: `lastError` is the prose a human
+    // reads and this is the class the engine acts on, and only the first is worth a column (see
+    // {@link SettledProvision}). Nulled on anything but a failure so a stale reason can never be
+    // read off a healthy environment.
+    return {
+      handle: recordToHandle(record),
+      reason: provisioned.status === 'failed' ? (provisioned.reason ?? null) : null,
+    }
   }
 
   /**

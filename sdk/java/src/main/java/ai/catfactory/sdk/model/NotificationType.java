@@ -17,6 +17,7 @@ public enum NotificationType {
     MERGE_REVIEW("merge_review"),
     PIPELINE_COMPLETE("pipeline_complete"),
     CI_FAILED("ci_failed"),
+    DEPLOY_BLOCKED("deploy_blocked"),
     TEST_FAILED("test_failed"),
     REQUIREMENT_REVIEW("requirement_review"),
     CLARITY_REVIEW("clarity_review"),

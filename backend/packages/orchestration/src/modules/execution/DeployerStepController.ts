@@ -3,7 +3,6 @@ import type {
   AgentRunResult,
   Block,
   BlockRepository,
-  EnvironmentHandle,
   ExecutionInstance,
   Logger,
   PipelineStep,
@@ -18,10 +17,12 @@ import type {
   EnvironmentProvisioningService,
   ProvisionArgs,
   ProvisionDispatch,
+  SettledProvision,
 } from '@cat-factory/integrations'
 import { deployDispatchEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
 import { type ContainerFailureView, containerShutdownFailure } from './job.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
+import type { DeployFixController } from './DeployFixController.js'
 import { TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND } from './ci.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
@@ -135,6 +136,11 @@ export interface DeployerStepControllerDeps {
     onBeforeRedispatch?: () => Promise<void>,
   ) => Promise<AdvanceResult | null>
   /**
+   * The remediation loop a failed PRIMARY-frame provision is offered to before it is reported as
+   * terminal. Absent means every provisioning failure is terminal exactly as before.
+   */
+  deployFix?: DeployFixController
+  /**
    * Where the two provisioning-lease releases below report a failure. Both are best-effort by
    * design, so without this a leaked lease (billed-but-useless compute, or a permanently held
    * self-hosted pool slot) is invisible. Absent ⇒ `noopLogger`.
@@ -160,6 +166,7 @@ export class DeployerStepController {
   private readonly applyContainerRunning: DeployerStepControllerDeps['applyContainerRunning']
   private readonly applySubtaskProgress: DeployerStepControllerDeps['applySubtaskProgress']
   private readonly recoverContainerEviction: DeployerStepControllerDeps['recoverContainerEviction']
+  private readonly deployFix?: DeployFixController
   private readonly log: Logger
 
   constructor(deps: DeployerStepControllerDeps) {
@@ -171,6 +178,7 @@ export class DeployerStepController {
     this.applyContainerRunning = deps.applyContainerRunning
     this.applySubtaskProgress = deps.applySubtaskProgress
     this.recoverContainerEviction = deps.recoverContainerEviction
+    this.deployFix = deps.deployFix
     this.log = (deps.logger ?? noopLogger).child({ scope: 'deployerStep' })
   }
 
@@ -372,7 +380,7 @@ export class DeployerStepController {
     }
     if (dispatch.kind === 'completed') {
       // Synchronous provision: record this frame's outcome, then continue to the next frame.
-      return this.settleDeployerFrame(ctx, next, dispatch.handle)
+      return this.settleDeployerFrame(ctx, next, dispatch)
     }
     // An async deploy job was dispatched: park on this frame. `dispatch` blocked until the job was
     // accepted, so the container is up; the live phase + the provisioned outcome arrive on the
@@ -468,14 +476,21 @@ export class DeployerStepController {
   private async settleDeployerFrame(
     ctx: DeployerFanOut,
     target: DeployTarget,
-    handle: EnvironmentHandle,
+    settled: SettledProvision,
   ): Promise<AdvanceResult> {
     const { workspaceId, instance, step } = ctx
+    const { handle, reason } = settled
     if (handle.status === 'failed') {
       return this.settleDeployerFailure(ctx, target, {
         url: handle.url,
         environmentId: handle.id,
         error: handle.lastError ?? 'Provisioning failed.',
+        // The classification the provider stated on a failure it did NOT throw. Carried here for
+        // the same reason the thrown path carries `getErrorReason(error)`: it is what decides
+        // whether the remediation loop may run, and a handle-borne failure that dropped it read as
+        // unclassified no matter what the provider had determined. Absent stays absent, which is
+        // never repo-fixable.
+        ...(reason ? { reason } : {}),
       })
     }
     if (handle.status !== 'ready' && !target.isPrimary) {
@@ -552,6 +567,26 @@ export class DeployerStepController {
       },
     }
     if (target.isPrimary) {
+      // Offer the failure to the remediation loop before reporting it as terminal. It escalates
+      // ONLY for a cause the provider classified as fixable in the checkout; every other cause
+      // (an unset connection setting, an unpublished image, a refused credential) answers `null`
+      // and takes the terminal path below byte-for-byte as it did before the loop existed. That
+      // precondition is the feature, not a refinement: see `DeployFixController`.
+      const remediated = await this.deployFix?.escalate({
+        workspaceId,
+        instance,
+        step,
+        block: ctx.block,
+        isFinalStep: ctx.isFinalStep,
+        failure: {
+          frameId: target.frameId,
+          frameTitle: target.frame.title,
+          provisioning: target.provisioning,
+          error,
+          reason,
+        },
+      })
+      if (remediated) return remediated
       return this.failDeployerStep(workspaceId, instance, step, target.frameId, {
         message: error,
         reason,
@@ -711,9 +746,9 @@ export class DeployerStepController {
         failureKind: shutdown.failureKind,
       })
     }
-    let handle
+    let settled: SettledProvision
     try {
-      handle = await this.environmentProvisioning!.finalizeProvision(
+      settled = await this.environmentProvisioning!.finalizeProvision(
         await this.deployerProvisionArgs(workspaceId, instance, block, target, ''),
         view,
       )
@@ -729,10 +764,10 @@ export class DeployerStepController {
     // Reflect the container's terminal state from the RESOLVED outcome, not the raw view: a `done`
     // view the provider maps to a FAILED env (e.g. the harness exited 0 but the namespace is
     // missing) must still show the container errored — keying off `view.state` alone missed that.
-    if (handle.status === 'failed' && step.container) {
+    if (settled.handle.status === 'failed' && step.container) {
       step.container = { ...step.container, status: 'errored' }
     }
-    return this.settleDeployerFrame(ctx, target, handle)
+    return this.settleDeployerFrame(ctx, target, settled)
   }
 
   /**

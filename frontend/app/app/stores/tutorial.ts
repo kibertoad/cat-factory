@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { createTutorialPrompt } from '~/stores/tutorial.prompt'
+import { createLaunchPrompt } from '~/stores/launchPrompt'
 import { createTutorialRecord } from '~/stores/tutorial.record'
 
 // `TutorialDecision` is deliberately NOT re-exported from here even though it used to live here:
@@ -37,9 +37,9 @@ export const useTutorialStore = defineStore(
   'tutorial',
   () => {
     const record = createTutorialRecord()
-    // The launch offer's own four-exit state machine (`stores/tutorial.prompt.ts`), which needs to
-    // know only WHETHER an answer exists.
-    const prompt = createTutorialPrompt({ hasDecision: () => record.decision.value !== null })
+    // The launch offer's own four-exit state machine (`stores/launchPrompt.ts`, shared with the
+    // role question), which needs to know only WHETHER an answer exists.
+    const prompt = createLaunchPrompt({ hasDecision: () => record.decision.value !== null })
     const { promptOpen } = prompt
     /**
      * The tutorial catalogue (every tour this deployment ships, startable at any time) is

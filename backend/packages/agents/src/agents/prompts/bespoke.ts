@@ -19,6 +19,25 @@ export interface BespokeSystemPrompt {
   /** What the agent is FOR. Replaced wholesale by a workspace override. */
   role: string
   /**
+   * What this kind DELIVERS, and therefore which invariants its {@link directives} half owes.
+   *
+   * - `'reply'`: the platform PARSES the visible reply (strict JSON, or a fixed-section
+   *   document). The output contract is stated in the directives, so an override cannot leave the
+   *   engine with nothing to parse.
+   * - `'side-effect'`: the product is a pushed commit and the platform reads nothing back. Such
+   *   a kind legitimately ends with no final text, which is why the answer-in-your-reply rule must
+   *   NOT be appended to it (the same judgement `SIDE_EFFECT_ROLE_KINDS` records on the
+   *   `roleSystemPrompt` path, for the same kinds of agent).
+   *
+   * DECLARED rather than read back out of the directives text. Every bespoke kind carried a
+   * parsed output contract until the `deploy-fixer` arrived, and a suite that asserted the
+   * contract of all of them then had two ways to accommodate it: exempt the one kind by name, or
+   * quietly weaken the assertion for all of them. Both hide the next kind that should have had
+   * one. With the answer declared, `promptOverrides.spec.ts` holds each half to its own bar and a
+   * kind cannot be added without choosing.
+   */
+  product: 'reply' | 'side-effect'
+  /**
    * What the platform DEPENDS on: the machine-parsed output contract, the answer-in-your-reply
    * rule, the read-only guardrail, the rules the engine enforces across a whole flow. Re-appended
    * on top of an override, so it cannot be edited away. Carries its own leading separator, exactly

@@ -158,16 +158,11 @@ describe('catalog', () => {
     for (const a of AGENT_ARCHETYPES) {
       expect(agentKindMeta(a.kind)).toBe(a)
     }
-    // Engine system kinds (present in seeded pipelines but not the palette) resolve
-    // to their system metadata rather than blowing up an undefined access.
-    for (const kind of [
-      'conflicts',
-      'conflict-resolver',
-      'ci',
-      'ci-fixer',
-      'merger',
-      'post-release-health',
-    ]) {
+    // Engine system kinds (present in seeded pipelines but not the palette) resolve to their
+    // system metadata rather than blowing up an undefined access. Read off the map itself rather
+    // than a hand-kept sample: a kind added there is exactly the one nobody thinks to add here,
+    // and it renders as a generic "Agent" until somebody notices.
+    for (const kind of Object.keys(SYSTEM_AGENT_META)) {
       expect(agentKindMeta(kind)).toBe(SYSTEM_AGENT_META[kind])
       expect(agentKindMeta(kind).icon).toEqual(expect.any(String))
     }

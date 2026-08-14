@@ -66,6 +66,17 @@ describe('useUiModeStore mode resolution', () => {
     expect(ui.mode).toBe('advanced')
   })
 
+  it('ignores an unrecognised RESTORED value on the same terms as the env one', () => {
+    // `storedMode`'s type says what `setMode` writes, not what the persistence plugin
+    // rehydrated: an older build's blob (or a hand-edited one) arrives typed as a `UiMode`.
+    // Left unparsed it resolves to neither tier, and `isAdvanced` then answers a question
+    // about a value that is not a tier at all.
+    const ui = useUiModeStore()
+    ui.storedMode = 'expert' as UiMode
+    expect(ui.mode).toBe('basic')
+    expect(ui.isAdvanced).toBe(false)
+  })
+
   it('toggleMode flips between the two tiers', () => {
     const ui = useUiModeStore()
     ui.toggleMode()
