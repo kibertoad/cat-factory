@@ -183,6 +183,39 @@ describe('KubernetesRunnerTransport.poll', () => {
     expect(result.detail).toContain('exit code 137')
   })
 
+  it('reports a pod whose workload exited 0 as a harness shutdown, not an eviction', async () => {
+    // The parity that matters for a self-hosted deployment: the same agent cleanup command that
+    // pattern-killed the harness in a Cloudflare container kills it in a runner pod, and the pod
+    // reports the exit code that tells the two apart. Read as an eviction, the engine spends its
+    // crash budget re-running the agent into the same wall and blames infrastructure.
+    stubFetch((method, url) => {
+      if (url.includes('/proxy/')) return new Response('not found', { status: 404 })
+      if (method === 'GET' && url.includes('/pods/cf-run-1')) {
+        return new Response(
+          JSON.stringify({
+            status: {
+              phase: 'Succeeded',
+              containerStatuses: [
+                { name: 'executor', state: { terminated: { reason: 'Completed', exitCode: 0 } } },
+              ],
+            },
+          }),
+          { status: 200 },
+        )
+      }
+      return undefined
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    const result = await transport.poll(ref)
+
+    expect(result.state).toBe('failed')
+    expect(result.harnessShutdown).toBe(true)
+    // Never both: the engine's recovery is keyed on `evicted`, and a retry here walks back into
+    // whatever stopped the harness.
+    expect(result.evicted).toBeUndefined()
+    expect(result.error).not.toMatch(/evicted or crashed/)
+  })
+
   it('distinguishes a pod that is GONE from one that cannot be read', async () => {
     // Three outcomes, three investigations. A vanished pod was deleted or GC'd by something
     // outside the run; an apiserver that will not answer means nobody looked at all. Reporting

@@ -13,6 +13,34 @@
 import { errorChainText, getErrorMessage, redactSecrets } from '@cat-factory/kernel'
 
 /**
+ * A refusal this suite AUTHORED: its message is the whole message, and it carries no location.
+ *
+ * The marker exists because the two describers below answer two different readers, and until this
+ * type the CHOICE between them was made by guessing from the call site. That guess holds wherever a
+ * site can only be reached by a refusal, and the sites that report the pass's OWN startup are not
+ * those: `openPass` catches the configuration refusal, the `latest`-names-nothing refusal and the
+ * copied-ledger refusal, and it also catches a `TypeError` out of the resolution that raises them. Read
+ * as a refusal, that bug prints as one sentence with no file and no line, which is the afternoon of
+ * guessing {@link thrownLocation} exists to prevent.
+ *
+ * So a refusal SAYS it is one, and everything else is reported as a bug in the suite. It is the shape
+ * kernel's own `DomainError` families take for the same reason: the disposition of a throw belongs to
+ * whoever threw it, not to whoever renders it.
+ *
+ * It is READ at the three boundaries in `runAcceptance.ts`, which is why the refusals reachable from
+ * them carry it: `requireConfig`, `resolveRunId`'s `latest`, `WorldStore`'s copied-ledger refusal and
+ * `PersonalPasswordDeclined`. A refusal raised from inside a SCENARIO needs no marker, because that
+ * path renders one way for everything it catches (`scenarioRunner.ts`) and the failure arrives with a
+ * journal, a summary and the closing words around it.
+ */
+export class OperatorRefusal extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'OperatorRefusal'
+  }
+}
+
+/**
  * A thrown value as text, with the ONE fallback for a chain that said nothing.
  *
  * `getErrorMessage` reads the whole cause chain (which is why nothing here rolls its own
@@ -53,6 +81,9 @@ export const MAX_PRINTED_FAILURE_CHARS = 20_000
  * once per site by NAME. Getting it wrong is silent in the direction that matters: a truncated
  * refusal reads as a complete one, which is how a remedy an operator never saw becomes "the suite
  * didn't say".
+ *
+ * A site that can be reached by BOTH a refusal and a suite bug picks between this and
+ * {@link failureWithLocation} off {@link OperatorRefusal}, never off which site it is.
  */
 export function describeFailure(error: unknown): string {
   return errorChainText(error, MAX_PRINTED_FAILURE_CHARS) || 'no reason reported'
@@ -69,8 +100,12 @@ export function describeFailure(error: unknown): string {
  *
  * The frames come second and are for the other kind of failure, a bug in the suite itself, where
  * `Cannot read properties of undefined` with no location is an afternoon of guessing. Vitest printed
- * both; so does this, at both of the two places that report an unexpected throw (a scenario's, in
- * `scenarioRunner.ts`, and the pass's own, in `runAcceptance.ts`).
+ * both; so does this, wherever an unexpected throw is reported (a scenario's, in `scenarioRunner.ts`,
+ * and each of the pass's own boundaries, in `runAcceptance.ts`).
+ *
+ * Which of the two a boundary reaches for is decided by {@link OperatorRefusal} rather than by the
+ * boundary: this one is the answer for a throw that is NOT a refusal, and a site that only ever meets
+ * refusals still names {@link describeFailure} explicitly.
  */
 export function failureWithLocation(error: unknown): string {
   const location = thrownLocation(error)

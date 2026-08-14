@@ -1,5 +1,246 @@
 # @cat-factory/orchestration
 
+## 0.272.1
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+  - @cat-factory/agents@0.131.0
+  - @cat-factory/spend@0.15.95
+  - @cat-factory/caching@0.20.22
+  - @cat-factory/integrations@0.162.1
+  - @cat-factory/prompt-fragments@1.0.77
+  - @cat-factory/sandbox@0.11.154
+  - @cat-factory/workspaces@0.28.10
+
+## 0.272.0
+
+### Minor Changes
+
+- 0ef48d1: Stop an agent's own cleanup command from killing the harness that supervises it, and report a
+  harness that WAS stopped as what it is.
+
+  A local acceptance run failed as "the container kept vanishing, treating as deterministic" after
+  two full coder passes. Nothing evicted anything. The harness ran as PID 1 with the command line
+  `node dist/server.js`, which is also where the Fastify service the coder was scaffolding built to;
+  the agent started that service in the background to smoke-test it over a real socket, then ran
+  `pkill -f 'node dist/server.js'` to stop it again. The image ships no `pkill`, so that failed with
+  `command not found` and the next turn used something that works without procps, which matched PID 1
+  and shut the harness down. The container exited 0, the engine could only see a backend that had
+  stopped answering, so it called it an eviction, spent its crash-recovery budget re-running the same
+  agent into the same wall, and blamed infrastructure churn.
+
+  **The harness no longer answers to a pattern kill aimed at anything else.** It runs from
+  `dist/harness-server.js` and sets `process.title = 'cat-factory-harness'`, which on Linux rewrites
+  both `/proc/<pid>/cmdline` and (truncated) `/proc/<pid>/comm`, so neither `pkill -f 'node dist/…'`
+  nor a bare `pkill node` nor a hand-rolled `/proc` sweep can name it. It is not a security boundary
+  and is not claimed as one: the agent shares the harness's uid, and separating them needs a PID 1
+  running as root, which this image deliberately does not have. What it removes is the accident.
+
+  **`procps` + `psmisc` are now in the image**, which reads backwards until you look at what the
+  absence caused: `pkill`/`pgrep`/`ps` are the narrow tools an agent reaches for first, and the
+  fallback it writes when they are missing is the unbounded one that took the harness down.
+
+  **A harness that exits cleanly mid-job is no longer an eviction.** Every transport that can read an
+  exit code (the local container and native-process legs, the Cloudflare per-run container, and a
+  Kubernetes runner pod's `state.terminated`) now distinguishes a workload that exited 0 with a job
+  still in flight from one that crashed or was reclaimed, and reports `harnessShutdown` instead of
+  `evicted`. The engine fails that run immediately with a new `harness_shutdown` failure kind
+  (additive to the public failure-kind vocabulary; OpenAPI surface 1.54.0) and a hint that names the
+  causes worth checking, rather than spending an automatic retry that walks back into whatever
+  stopped it. A backend that reports no exit code (Apple `container`, a manifest-driven runner pool
+  whose scheduler exposes only status words) keeps reporting an eviction, because an absent code is
+  not a zero.
+
+  The distinction is only ever drawn where NOTHING else explains the stop. Infrastructure churn is
+  named and recovers on its own budget, and it stays named even after its attribution window passes:
+  a rollout drain the harness answered by exiting 0, discovered minutes later by a re-driven poll, is
+  still that drain rather than a shutdown. The same rule orders the engine's own reading: a killed
+  job that some branch settles WITHOUT failing the run (a parked PR review's read-only Challenge
+  Investigator) keeps that settlement, since losing a human's in-flight curation is worse than the
+  retry this failure kind exists to prevent. `container.harness_shutdown` counts the class, kept out
+  of `container.evicted` so the eviction rate an operator sizes infrastructure by is not inflated by
+  deaths no infrastructure change prevents.
+
+  **An aborted agent run says who aborted it.** The Claude Code / Codex runner rejected with a
+  hard-coded "agent run aborted by watchdog" for every abort, including the shutdown handler's, so a
+  job killed by something else filed its failure against a watchdog that never fired. It now carries
+  the abort reason the caller supplied, the way the Pi runner already did, and an abort that supplied
+  none falls back to saying so rather than quoting the platform's own contentless "This operation was
+  aborted" (a reasonless `abort()` sets an `AbortError` that IS an `Error`, so the fallback was
+  unreachable).
+
+  The image moves to `cat-factory-executor:1.121.0` across the wrangler config, the publish script and
+  `RECOMMENDED_HARNESS_IMAGE`: the entrypoint rename and `procps` are only in effect once a deployment
+  runs a tag that contains them.
+
+  **The acceptance suite stops blaming the merge threshold for a failed run.** Its "the merge was
+  HELD" hint fired on "there is a pull request and the status is not done", which is also true of a
+  run that died three phases before any merge was considered; it is now offered only where nothing
+  else explains the stop.
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+  - @cat-factory/integrations@0.162.0
+  - @cat-factory/agents@0.130.2
+  - @cat-factory/caching@0.20.21
+  - @cat-factory/prompt-fragments@1.0.76
+  - @cat-factory/sandbox@0.11.153
+  - @cat-factory/spend@0.15.94
+  - @cat-factory/workspaces@0.28.9
+
+## 0.271.1
+
+### Patch Changes
+
+- d5c1f1c: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.64`,
+  `@ai-sdk/openai@4.0.41`, `@ai-sdk/amazon-bedrock@5.0.55`). The Cloudflare toolchain moves
+  together again: `wrangler@4.122.0` and `@cloudflare/vitest-pool-workers@0.21.2`, whose bundled
+  wrangler tracks it. `@aws-sdk/client-s3` goes to 3.1109.0 and the SPA's store engine to
+  `pinia@4.0.3` / `@pinia/nuxt@1.0.2`.
+
+  `capnweb` moves 0.10.0 to 0.11.0 in the Gatekeeper Worker. The release is additive (stubs as
+  stream chunks, exact ArrayBuffer/DataView serialization, URL over RPC) and touches neither
+  `RpcTarget` nor `newWorkersRpcResponse`, the only two symbols we import. Its 0.11.1 patch, which
+  enforces an ASCII-only dist bundle so a consumer's `btoa()` cannot choke on the runtime, missed
+  the release-age window by two hours and is the first thing the next sweep should pick up.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/agents@0.130.1
+  - @cat-factory/integrations@0.161.0
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/contracts@0.311.0
+  - @cat-factory/sandbox@0.11.152
+  - @cat-factory/caching@0.20.20
+  - @cat-factory/prompt-fragments@1.0.75
+  - @cat-factory/spend@0.15.93
+  - @cat-factory/workspaces@0.28.8
+
+## 0.271.0
+
+### Minor Changes
+
+- 056e18d: Hold a run while a companion's MUST-FIX finding is open, whatever the rating said.
+
+  A companion returned one number for a whole deliverable, and that number alone decided whether the
+  run moved on. So a reviewer that found something genuinely unshippable — an unhandled failure mode,
+  a requirement not met, a claim the work does not support — could still rate the change 0.9 against a
+  0.8 bar and watch the pipeline advance past it. The urgency it meant was in the summary prose, in
+  the `**Must fix**` group the prompt asked for, which is a channel only a person reads.
+
+  Reviews are now GRADED. Each point a companion raises is its own `comments` entry carrying a
+  `severity` of `blocker`, `major` or `minor` (the same three levels the prose groups named), and the
+  verdict's two halves are read independently by kernel's new `disposeCompanionVerdict`: any open
+  `blocker` reworks the producer whatever the rating, and the rating decides everything else. The
+  `summary` becomes a short whole-verdict paragraph rather than a second copy of the list, matching
+  what the judge prompt already does, since both are rendered together and a review written twice is
+  two orderings that can disagree.
+
+  **Spending the rework budget on a blocker parks for a person, and an unattended risk policy does not
+  answer that park.** ADR 0053's rule is that a policy may take the "proceed anyway" a person would
+  have been offered when an automatic loop reports it GAVE UP; a reviewer naming a must-fix is not
+  that, so accepting the work anyway would be overruling a review nobody read. The distinction is a
+  closed vocabulary (`CompanionParkReason`, the sibling of `JudgeParkReason`) rather than prose, and
+  only `budget_spent` reaches the policy. The run panel's cap prompt states which of the two it is,
+  because the person answering an unanswerable-by-policy park should know what they are being asked to
+  overrule.
+
+  That vocabulary is also what a loop stopped EARLY as unproductive (`companionLoopStalled`) now
+  resolves against. Abandoning the rounds still on the budget takes the cap's park, so the reason is
+  re-decided for the abandoned budget instead of being assumed to be a spent one: a standstill is the
+  automation reporting that it gave up, an open `blocker` is not, and a stalled loop routinely carries
+  both (the run that motivated the stall rule had two must-fix items open the whole way). So an
+  unattended policy answers a stalled quality loop and still waits for a person on a blocked one.
+
+  An out-of-vocabulary severity from a model reads as `major`, the same "unreadable severity reads as
+  its safe default" rule the judge and PR-review findings use: the whole assessment is one parse, and
+  an unparseable companion verdict fails the run, which is far worse than one point landing a level
+  off. `major` and not either extreme, so a typo can neither manufacture a hard stop nor retire a real
+  one. A comment with no severity at all (a person's "request changes" note, or one recorded before
+  this existed) stays ungraded and never blocks.
+
+  The findings now render. Each verdict card in the run panel lists them worst first with a severity
+  badge beside each, which is new: `comments` were persisted and fed back into later rounds but shown
+  to nobody, so the point holding a run was invisible to the person being asked to resolve it. Both
+  sides of the rework loop read the grades too — the producer is told which comments are blocking and
+  works them first, and a re-grading companion sees its earlier rounds' points labelled.
+
+  **Every surface that a person or an integration answers this park from names the findings, because
+  the summary no longer can.** With the prose groups gone, three places were reading the review out of
+  a channel that stopped carrying it. The extra round a person grants at the cap loops the producer
+  back with the verdict's graded `comments` attached, as the automatic rework path already did, so the
+  round somebody just paid for names the points it is for. The `approval-gate` entry of
+  `GET /api/v1/runs/{runId}/decisions` gains a `blockingFindings` array (spec `1.53.0`, additive), so a
+  caller answering `resolve-exceeded` with `proceed` can read the must-fixes it would be overruling
+  rather than inferring them from a verdict paragraph. And a companion's findings anchor to a
+  structured item by id rather than by quoting prose, which the producer prompt was rendering against
+  an empty target: an anchored point now names its item, and a point that anchors neither way is
+  addressed to the proposal as a whole.
+
+  **A first batch of nothing but nits no longer costs a round.** The rule that spends one round on a
+  first review's findings asked only whether there were any, so a reviewer that followed its own
+  instruction (a `minor` is "never worth holding anything for"), rated work above the bar and attached
+  one polish note bought a full producer re-run plus a re-grading call. It now takes a point the
+  reviewer did NOT call a nit, and the prompt states what each level costs so the grade decides
+  something a reviewer can predict. An ungraded point still counts: its urgency is unknown rather than
+  known to be low.
+
+  The panel's verdict badge derives its `>=` / `<` glyph from the comparison rather than from
+  `passed`, which are no longer the same fact: a round held by an open blocker fails at a rating that
+  cleared its bar, and reading one off the other printed `95% < 80%` above the findings explaining it.
+  The cap prompt's stalled wording drops its claim about the rating for the same reason.
+
+  A severity read off a STORED row is narrowed through `isReviewCommentSeverity` rather than trusted:
+  the schema's `major` fallback runs on the model reply, which is the only thing it parses, so a level
+  retired from the vocabulary would reach an exhaustive `Record` and come back `undefined`. Such a
+  value now sorts with the ungraded, carries no mechanical force, and is NAMED as unrecognised on the
+  panel instead of being painted as a level nobody chose.
+
+  `REVIEW_SUMMARY_LAYOUT` is replaced by `REVIEW_FINDINGS_LAYOUT`; a deployment appending the old
+  constant to its own companion prompt should append the new one, and one relying on the shared
+  companion prompt needs no change. Website: kibertoad/cat-factory-website#60.
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+  - @cat-factory/agents@0.130.0
+  - @cat-factory/integrations@0.160.17
+  - @cat-factory/prompt-fragments@1.0.74
+  - @cat-factory/sandbox@0.11.151
+  - @cat-factory/spend@0.15.92
+  - @cat-factory/workspaces@0.28.7
+  - @cat-factory/caching@0.20.19
+
+## 0.270.2
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+  - @cat-factory/agents@0.129.2
+  - @cat-factory/integrations@0.160.16
+  - @cat-factory/prompt-fragments@1.0.73
+  - @cat-factory/sandbox@0.11.150
+  - @cat-factory/spend@0.15.91
+  - @cat-factory/workspaces@0.28.6
+  - @cat-factory/caching@0.20.18
+
 ## 0.270.1
 
 ### Patch Changes

@@ -484,6 +484,16 @@ export {
   renderJudgeRework,
 } from './domain/judge-logic.js'
 
+// The COMPANION bucket's pure disposition, the judge's sibling: what a rework pair does with one
+// grading round, including the rule that a `blocker` finding holds the run whatever the rating.
+export {
+  type CompanionDispositionInput,
+  type CompanionDispositionResult,
+  type CompanionParkReason,
+  companionParkReasonFor,
+  disposeCompanionVerdict,
+} from './domain/companion-logic.js'
+
 // Typed provider registry: the deployment-supplied data sources a gate (or other
 // extension) probes, keyed by an opaque {@link ProviderToken}. Replaces the per-provider
 // module-global wire/get boilerplate. See `domain/provider-registry.ts`.
@@ -585,6 +595,16 @@ export {
   describeRegressedSignals,
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
+
+// Environment-failure classification, shared by every environment provider (the built-in backends
+// and any a deployment registers). See `domain/environment-failure.ts` for why it lives here
+// rather than beside the Kubernetes provider.
+export {
+  environmentFailure,
+  unresolvedPlaceholders,
+  describeUnfilledConfigPlaceholders,
+  type UnresolvedPlaceholder,
+} from './domain/environment-failure.js'
 
 // Per-step human-gate approval: who may resolve a gate and when a quorum is met. The rule lives in
 // `@cat-factory/contracts` because the SPA must agree about the answer (it disables the approve

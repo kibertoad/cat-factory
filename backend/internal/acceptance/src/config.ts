@@ -15,6 +15,33 @@
 // half-built pass off a board is often doing it because the cluster it named is gone, and a cleanup
 // that refuses until the abandoned thing is configured again is a cleanup nobody can run.
 
+import { OperatorRefusal } from './operatorText.ts'
+
+/**
+ * The two templates a pass falls back to, exported because the CHECKS offer them as the fix.
+ *
+ * Both `manifestTemplates.ts` remedies end on "unsetting the variable is also a fix, since the
+ * default below is what it falls back to", and that sentence is only true while the value it
+ * prints is the value {@link resolveConfig} actually falls back to. As two literals in two files
+ * it was true by coincidence: changing the fallback would have handed the operator a pasteable
+ * command setting something else, with nothing failing.
+ */
+export const DEFAULT_INGRESS_HOST_TEMPLATE = '{{namespace}}.127.0.0.1.nip.io'
+
+export const DEFAULT_IMAGE_TEMPLATE = 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}'
+
+/**
+ * The doc that owns the cluster half of this setup, for the same reason the two defaults above are
+ * here: four places cite it and one of them is a REMEDY an operator is told to open.
+ *
+ * `prerequisites.ts` and `manifestTemplates.ts` end their k3s refusals on it, `k3s.ts` cites it for
+ * the kustomize path it does not cover, and the `ACCEPTANCE_K3S_TOKEN` requirement below points at
+ * the RBAC it documents. Nothing joins a path in a string to a file on disk, and no guard here
+ * covers this one, so a rename is caught by nothing: what keeps the four honest is that there is
+ * one of them.
+ */
+export const K3S_DOC = 'backend/docs/local-k3s-environments.md'
+
 /** A k3s/Kubernetes apiserver the `deployer` step provisions per-PR namespaces against. */
 export type ClusterConfig = {
   apiServerUrl: string
@@ -30,6 +57,17 @@ export type ClusterConfig = {
    */
   ingressHostTemplate: string
   namespaceTemplate: string
+  /**
+   * What the manifests' `{{image}}` placeholder resolves to, per pull request.
+   *
+   * Configured rather than defaulted-away, and REQUIRED in effect: the scaffold briefs make
+   * `{{image}}` mandatory in every Deployment, and the platform renders a hole it cannot fill as
+   * the empty string, so a connection carrying no template applies `image: ""` and the apiserver
+   * refuses the Deployment. The default publishes under the pull request's own number because
+   * that is the one per-PR discriminator the provision knows AND a legal image tag: a provision
+   * carries no commit sha, and `{{branch}}` is `cat-factory/<taskId>`, which no tag may contain.
+   */
+  imageTemplate: string
 }
 
 /**
@@ -192,7 +230,7 @@ const RUN_REQUIRED: readonly Requirement[] = [
   { name: 'ACCEPTANCE_K3S_API_SERVER', purpose: 'kube-apiserver URL, e.g. https://127.0.0.1:6443' },
   {
     name: 'ACCEPTANCE_K3S_TOKEN',
-    purpose: 'ServiceAccount bearer token with the RBAC in backend/docs/local-k3s-environments.md',
+    purpose: `ServiceAccount bearer token with the RBAC in ${K3S_DOC}`,
   },
 ]
 
@@ -308,9 +346,14 @@ export function resolveConfig(env: EnvRecord): ConfigResolution {
         caCertPem,
         insecureSkipTlsVerify: insecure,
         ingressHostTemplate:
-          trimmed(env.ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE) ?? '{{namespace}}.127.0.0.1.nip.io',
+          trimmed(env.ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE) ?? DEFAULT_INGRESS_HOST_TEMPLATE,
         namespaceTemplate:
           trimmed(env.ACCEPTANCE_K3S_NAMESPACE_TEMPLATE) ?? 'cf-acc-{{pullNumber}}',
+        // GHCR under the repository's own owner, which needs no second credential decision: the
+        // workflow the briefs ask for pushes there with the `GITHUB_TOKEN` it already has. The
+        // `image-template` prerequisite renders this before a pass starts and says outright that
+        // it did not check whether anything publishes it, or whether the cluster may pull it.
+        imageTemplate: trimmed(env.ACCEPTANCE_K3S_IMAGE_TEMPLATE) ?? DEFAULT_IMAGE_TEMPLATE,
       },
       // The reporter half, resolved by the function `reset --purge-repos` calls rather than beside
       // it: a second spelling of the default REST base is a second thing to change on the day an
@@ -365,11 +408,18 @@ export function stateDirFrom(env: EnvRecord): string {
   return trimmed(env.ACCEPTANCE_STATE_DIR) ?? '.acceptance'
 }
 
-/** Resolve or throw, with every problem in one message. */
+/**
+ * Resolve or refuse, with every problem in one message.
+ *
+ * An {@link OperatorRefusal} rather than a bare `Error`, because the boundary that catches this also
+ * catches whatever the resolution itself can throw, and the two are printed differently: this list is
+ * the whole message and a stack above it is noise, while a bug in the resolution is unreadable without
+ * one.
+ */
 export function requireConfig(env: EnvRecord = process.env): AcceptanceConfig {
   const resolution = resolveConfig(env)
   if (resolution.ok) return resolution.config
-  throw new Error(unconfigured(resolution.problems))
+  throw new OperatorRefusal(unconfigured(resolution.problems))
 }
 
 function unconfigured(problems: readonly string[]): string {

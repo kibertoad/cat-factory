@@ -320,7 +320,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 
 | File               | Responsibility                                                                                          |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `src/server.ts`    | HTTP entry point; routes `/health`, `/run`, `/bootstrap`, `/blueprint`, `/jobs/{id}`.                   |
+| `src/harness-server.ts` | HTTP entry point; routes `/health`, `/run`, `/bootstrap`, `/blueprint`, `/jobs/{id}`. Its file name and the `cat-factory-harness` process title it sets are both deliberate: this process is PID 1 beside an agent that runs arbitrary shell as the same user, so it must not answer to a pattern kill aimed at the service the agent just built. |
 | `src/runner.ts`    | `JobRegistry`: async job lifecycle, idempotent on `jobId`, progress tracking, and the three per-job watchdogs (max-duration, inactivity, tool-silence).                          |
 | `src/jsonl-stream.ts` | The BOUNDS on a child CLI's streams, shared by both runners: `JsonlLineReader` frames its JSONL stdout while refusing to buffer a runaway record, `BoundedTail` keeps a capped tail of raw output for failure quoting. Both watchdog timers and the poll endpoints share one event loop with this parsing, so an unbounded buffer here is how a container stops answering polls with no watchdog having fired. |
 | `src/job.ts`       | Request types + validators for the job specs.                                                           |
@@ -387,8 +387,8 @@ self-contained.
 
 ## Published image (GHCR + Docker Hub)
 
-This package is published to npm (its zero-dependency `dist/server.js` is the
-entry `@cat-factory/local-server` spawns in local native mode). In addition, its
+This package is published to npm (its zero-dependency `dist/harness-server.js` is
+the entry `@cat-factory/local-server` spawns in local native mode). In addition, its
 **Docker image** is published publicly, multi-arch (`linux/amd64` +
 `linux/arm64`), to **both GHCR and Docker Hub** so anyone can pull it without
 building from source:

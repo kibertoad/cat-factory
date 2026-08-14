@@ -8,6 +8,7 @@ import { agentConfigValuesSchema } from './agent-config.js'
 import { agentMaxOutputTokensSchema } from './agent-settings.js'
 import { binaryOutputConfigSchema } from './binary-outputs.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
+import { deployFixConfigSchema } from './deploy-fix.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
@@ -859,6 +860,12 @@ export const stepOptionsSchema = v.object({
    * `pending` reclaim nothing will ever close. Ignored on every other kind.
    */
   retainEnvironment: v.optional(v.boolean()),
+  /**
+   * deployer steps only. How a repo-fixable provisioning failure is remediated: whether it
+   * escalates to the deploy-fixer at all, and how many rounds it gets. Absent means the loop runs
+   * with DEFAULT_DEPLOY_FIX_MAX_ATTEMPTS. Ignored on every other kind.
+   */
+  deployFix: v.optional(deployFixConfigSchema),
   /**
    * This step's GATE configuration: who may resolve its human approval gate and how many of
    * them must, plus the parameters of the registered gate its kind runs (see

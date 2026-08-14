@@ -6,13 +6,17 @@ import {
   PIPELINE_PURPOSES,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
+  pipelineMatchesPurpose,
+  pipelineRunsVisualStep,
   purposeAllowsAgentCategory,
   purposeSuggestsAgentCategory,
   purposeSuggestsAgentKind,
+  resolveRunServiceScope,
 } from '@cat-factory/contracts'
 import type { PipelinePurpose } from '@cat-factory/contracts'
 import type { Block, Pipeline } from '~/types/domain'
 import {
+  pipelineAllowedForFrame,
   pipelineAllowedForManualStart,
   pipelineAllowedForSchedule,
   pipelineConditionalCount,
@@ -136,6 +140,22 @@ describe('pipelineAllowedForTaskType', () => {
     }
   })
 
+  it('offers a bugfix preset to a bug task and withholds it from a feature', () => {
+    // "Triage & fix bug" investigates a defect REPORT, triages it with a person and writes a
+    // failing reproduction test before anything is fixed. A feature has no report to investigate
+    // and nothing red to turn green, so the front half of the run has no input at all. The bug
+    // task still gets the whole build ladder beside it — this narrows one preset, not the type.
+    const bugfix = pipeline({ purpose: 'bugfix' })
+    expect(pipelineAllowedForTaskType(bugfix, 'bug')).toBe(true)
+    expect(pipelineAllowedForTaskType(bugfix, 'feature')).toBe(false)
+    expect(pipelineAllowedForTaskType(pipeline({ purpose: 'build' }), 'bug')).toBe(true)
+    // And it stays out of the task types that demand their own explicit member.
+    expect(pipelineAllowedForTaskType(bugfix, 'document')).toBe(false)
+    expect(pipelineAllowedForTaskType(bugfix, 'review')).toBe(false)
+    // An un-narrowed type (spike, ralph, a deployment's own) is unrestricted as ever.
+    expect(pipelineAllowedForTaskType(bugfix, 'spike')).toBe(true)
+  })
+
   it('keeps a pipeline whose classifier this build cannot name on a feature / bug task', () => {
     // The one place this narrowing runs opposite to the document/review one, and it has to. The
     // value is persisted, so a deployment's own classifier (or one retired since the row was
@@ -189,8 +209,10 @@ describe('pipelineAllowedForBlockLevel (initiative binding)', () => {
 })
 
 describe('purposeAllowsAgentCategory (builder save gate)', () => {
-  it('a build pipeline, and one whose classifier this build cannot name, may use every category', () => {
-    for (const purpose of ['build', UNKNOWN_PURPOSE] as const) {
+  it('a code-shipping pipeline, and one whose classifier this build cannot name, may use every category', () => {
+    // `bugfix` rides with `build` here: the two differ only in the task type they are OFFERED to,
+    // and a bug fix designs, implements, tests and merges like any other change.
+    for (const purpose of ['build', 'bugfix', UNKNOWN_PURPOSE] as const) {
       for (const cat of AGENT_CATEGORIES) {
         expect(purposeAllowsAgentCategory(purpose, cat)).toBe(true)
       }
@@ -211,8 +233,8 @@ describe('purposeAllowsAgentCategory (builder save gate)', () => {
 })
 
 describe('purposeSuggestsAgentCategory (builder palette filter)', () => {
-  it('offers the whole catalog to a build pipeline, and to one it cannot name', () => {
-    for (const purpose of ['build', UNKNOWN_PURPOSE] as const) {
+  it('offers the whole catalog to a code-shipping pipeline, and to one it cannot name', () => {
+    for (const purpose of ['build', 'bugfix', UNKNOWN_PURPOSE] as const) {
       for (const cat of AGENT_CATEGORIES) {
         expect(purposeSuggestsAgentCategory(purpose, cat)).toBe(true)
       }
@@ -271,6 +293,23 @@ describe('purposeSuggestsAgentKind (what the palette actually filters on)', () =
     expect(purposeSuggestsAgentKind('document', author)).toBe(true)
     expect(purposeSuggestsAgentKind('review', author)).toBe(false)
     expect(purposeSuggestsAgentCategory('review', 'docs')).toBe(true)
+  })
+
+  it('reads a `build` declaration as covering `bugfix`, but not the other way round', () => {
+    // The two purposes are the same WORK, split only so the pickers can withhold a defect-report
+    // preset from a feature task. Every kind declaring `build` predates the split, so without
+    // this the bugfix palette would open nearly empty — the Bug Investigator included.
+    const builder = { category: 'build', purposes: ['build'] } as const
+    expect(purposeSuggestsAgentKind('bugfix', builder)).toBe(true)
+    expect(purposeSuggestsAgentKind('document', builder)).toBe(false)
+    // One-way: naming only `bugfix` claims the defect-report context, not builds in general.
+    const bugOnly = { category: 'build', purposes: ['bugfix'] } as const
+    expect(purposeSuggestsAgentKind('bugfix', bugOnly)).toBe(true)
+    expect(purposeSuggestsAgentKind('build', bugOnly)).toBe(false)
+    // ONE relation, not one per surface: the saved-pipeline library reads it through the same
+    // helper, so a draft cannot find the build ladder in its palette and not in its library.
+    expect(pipelineMatchesPurpose({ purpose: 'build' } as Pipeline, 'bugfix')).toBe(true)
+    expect(pipelineMatchesPurpose({ purpose: 'bugfix' } as Pipeline, 'build')).toBe(false)
   })
 
   it('is a declaration, not an exemption from the category', () => {
@@ -338,6 +377,80 @@ describe('a purpose or category this build does not recognise', () => {
     for (const purpose of PIPELINE_PURPOSES) {
       expect(purposeSuggestsAgentCategory(purpose, UNKNOWN_CATEGORY)).toBe(true)
     }
+  })
+})
+
+describe('pipelineAllowedForFrame (the visual gate)', () => {
+  const serviceFrame = { id: 'blk_svc', level: 'frame', type: 'service' } as Block
+  const frontendFrame = { id: 'blk_fe', level: 'frame', type: 'frontend' } as Block
+
+  // Every build rung ships the CONDITIONAL tester pair: the browser pass declares the frontend
+  // scope, the API pass the backend one, so one preset covers both kinds of service.
+  const buildRung = pipeline({
+    purpose: 'build',
+    agentKinds: ['coder', 'tester-api', 'tester-ui', 'merger'],
+    stepOptions: [
+      null,
+      { condition: { serviceScope: 'backend' } },
+      { condition: { serviceScope: 'frontend' } },
+      null,
+    ],
+  })
+
+  it('offers a build rung on a plain backend service — its UI pass is scoped out', () => {
+    // The regression: reading "does the pipeline LIST a visual step" hid Standard / Simple /
+    // Adaptive / Complex build from the pickers on every non-frontend service, while the engine
+    // would have started any of them (it drops the condition-excluded steps before its own gate).
+    expect(pipelineAllowedForFrame(buildRung, serviceFrame, [serviceFrame])).toBe(true)
+    expect(pipelineAllowedForManualStart(buildRung, serviceFrame, [serviceFrame], 'feature')).toBe(
+      true,
+    )
+  })
+
+  it('offers it on a frontend frame too, where the UI pass is exactly what runs', () => {
+    // Stated as the premise, not just the answer: on this frame the condition ADMITS the browser
+    // pass, so the gate is passing on the frame half rather than on the step being scoped out.
+    // Without it the case reads identically against the pre-fix implementation, which reached the
+    // same `true` down the other branch and asserted nothing about the change.
+    expect(pipelineRunsVisualStep(buildRung, resolveRunServiceScope([frontendFrame]))).toBe(true)
+    expect(pipelineAllowedForFrame(buildRung, frontendFrame, [frontendFrame])).toBe(true)
+  })
+
+  it('offers everything on a service frame a FRONTEND binds as its backend', () => {
+    // The other half of `frameAllowsVisualPipeline`, and the branch with the widest reach: the
+    // linked frontend is the UI a change to this service is validated through, so the frame has a
+    // UI and even an unconditional visual pipeline may run on it.
+    const boundService = { id: 'blk_api', level: 'frame', type: 'service' } as Block
+    const binder = {
+      id: 'blk_fe',
+      level: 'frame',
+      type: 'frontend',
+      frontendConfig: {
+        backendBindings: [
+          { envVar: 'API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+        ],
+      },
+    } as Block
+    const blocks = [boundService, binder]
+    const visual = pipeline({ purpose: 'build', agentKinds: ['coder', 'visual-confirmation'] })
+    expect(pipelineAllowedForFrame(buildRung, boundService, blocks)).toBe(true)
+    expect(pipelineAllowedForFrame(visual, boundService, blocks)).toBe(true)
+    // ...and it is the BINDING that does it, not the mere presence of a frontend on the board.
+    expect(pipelineAllowedForFrame(visual, boundService, [boundService, frontendFrame])).toBe(false)
+  })
+
+  it('still hides a pipeline whose visual step is UNCONDITIONAL on a frame with no UI', () => {
+    // The gate the conditional pair did not repeal: a `visual-confirmation` step with nothing to
+    // scope it out has no app to show a person, and the engine answers a 409.
+    const visual = pipeline({ purpose: 'build', agentKinds: ['coder', 'visual-confirmation'] })
+    expect(pipelineAllowedForFrame(visual, serviceFrame, [serviceFrame])).toBe(false)
+    expect(pipelineAllowedForFrame(visual, frontendFrame, [frontendFrame])).toBe(true)
+  })
+
+  it('hides a conditional visual pipeline when the frame cannot be resolved', () => {
+    // No frame ⇒ no scope to judge the condition against, so the step counts and the frame half
+    // refuses. The fail-safe direction, and the same answer the engine gives.
+    expect(pipelineAllowedForFrame(buildRung, undefined, [])).toBe(false)
   })
 })
 

@@ -137,7 +137,7 @@ describe('runScenarios', () => {
     expect(outcomes[0]?.failure?.step).toBe('the step that broke')
     // One step finished before the throw; the one after it never ran.
     expect(outcomes[0]?.steps).toBe(1)
-    expect(recorded.failures[0]?.text).toContain('the run never merged')
+    expect(recorded.failures[0]?.message).toContain('the run never merged')
     expect(recorded.logs.join('\n')).toContain('the run never merged')
   })
 
@@ -162,7 +162,7 @@ describe('runScenarios', () => {
       },
     ])
 
-    expect(recorded.failures[0]?.text).toContain(refusal)
+    expect(recorded.failures[0]?.message).toContain(refusal)
   })
 
   it('does not truncate a refusal at the budget a TOAST reads', async () => {
@@ -187,7 +187,7 @@ describe('runScenarios', () => {
     ])
 
     expect(long.length).toBeGreaterThan(2000)
-    expect(recorded.failures[0]?.text).toContain('THE LAST REMEDY')
+    expect(recorded.failures[0]?.message).toContain('THE LAST REMEDY')
   })
 
   it('adds the frames, so a bug in the suite is not an afternoon of guessing', async () => {
@@ -208,7 +208,33 @@ describe('runScenarios', () => {
       },
     ])
 
-    expect(recorded.failures[0]?.text).toMatch(/\n\s+at /)
+    // On the CONSOLE, and on the failure's `location` half rather than folded into its message: the
+    // journal records the message alone, and six frames collapsed onto one line made `status`'s
+    // answer to "where is this pass" unreadable.
+    expect(recorded.failures[0]?.location).toMatch(/^\s+at /)
+    expect(recorded.failures[0]?.message).not.toMatch(/\n\s+at /)
+    expect(recorded.logs.join('\n')).toMatch(/\n\s+at /)
+  })
+
+  it('carries no location for a refusal that has none to give', async () => {
+    // A thrown non-Error has no stack at all, and the two halves must stay honest about that: a
+    // `location` invented from nothing would render an empty frame block under every such failure.
+    const recorded = recorder()
+
+    await runScenarios(recorded.deps, [
+      {
+        id: '02-feature',
+        title: 'a feature',
+        gated: false,
+        run: async (step) =>
+          step('reads a report', async () => {
+            throw 'the deployment answered with an HTML error page'
+          }),
+      },
+    ])
+
+    expect(recorded.failures[0]?.message).toContain('HTML error page')
+    expect(recorded.failures[0]?.location).toBeNull()
   })
 
   it('runs the GATE before every gated scenario, and never for the report that is the gate', async () => {
@@ -242,7 +268,7 @@ describe('runScenarios', () => {
 
     expect(outcomes.map((outcome) => outcome.status)).toEqual(['failed', 'not-run'])
     expect(outcomes[0]?.failure?.step).toBe(GATE_STEP)
-    expect(outcomes[0]?.failure?.text).toContain('over budget')
+    expect(outcomes[0]?.failure?.message).toContain('over budget')
     expect(recorded.calls).not.toContain('log:  - files a task')
   })
 

@@ -6,7 +6,11 @@ import type {
   PipelineStep,
 } from '@cat-factory/kernel'
 import { failureKindFromHarnessCause } from '@cat-factory/kernel'
-import { type ContainerFailureView, MAX_BRANCH_CONTENTION_RECOVERIES } from './job.logic.js'
+import {
+  type ContainerFailureView,
+  containerShutdownFailure,
+  MAX_BRANCH_CONTENTION_RECOVERIES,
+} from './job.logic.js'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import { HUMAN_TEST_AGENT_KIND, isTesterKind, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
 import type { AdvanceResult } from './advance.js'
@@ -211,6 +215,19 @@ export class PollCompletionController {
         update.error,
       )
       if (settled) return settled
+    }
+    // A harness that exited cleanly mid-job was stopped by something a fresh container meets
+    // again, so this fails the run outright rather than spending an eviction budget on it. It is
+    // asked HERE, below every branch that settles a job WITHOUT failing the run, because those
+    // branches are about whose job died rather than about how: a killed Challenge Investigator is
+    // still a non-critical second opinion, and failing the human's in-flight curation over it
+    // would trade one wrong recovery for a worse one. It cannot be reached by the eviction
+    // recovery above either way (`harnessShutdown` is never set beside `evicted`), so nothing
+    // above it spends a retry on this failure.
+    const shutdown = containerShutdownFailure(update)
+    if (shutdown) {
+      await this.markContainerErrored(workspaceId, instance, step)
+      return { kind: 'job_failed', ...shutdown }
     }
     // Not an eviction: a genuine agent/job failure. Prefer the harness's STRUCTURED cause
     // to classify it (→ AgentFailureKind), falling back to the error-string regex when an

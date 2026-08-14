@@ -102,7 +102,13 @@ describe('LocalProcessRunnerTransport', () => {
     expect(view.state).toBe('done')
     expect(view.result?.prUrl).toBe('https://x/1')
   })
+})
 
+// What a job is TOLD when the host process serving it is gone, which is a different question from
+// whether it is gone: one process serves every concurrent local job, it can die in ways that need
+// different next steps (a crash, a kill, a clean shutdown), and it can also be alive and have
+// forgotten the job. Split from the block above at the file-size ratchet.
+describe('LocalProcessRunnerTransport: a harness process that stopped serving a job', () => {
   it('reports an eviction when the harness process has exited', async () => {
     const child = fakeChild()
     const fetchImpl = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
@@ -149,6 +155,34 @@ describe('LocalProcessRunnerTransport', () => {
     // the shared `describeProcessExit` wording is what lands rather than "code null".
     expect(view.detail).toContain('killed by SIGKILL')
     expect(view.detail).toContain('heap out of memory')
+  })
+
+  it('reports a harness that exited 0 mid-job as a shutdown, not an eviction', async () => {
+    // Native mode is where this bites hardest: the process is the developer's own, it serves
+    // EVERY concurrent local job, and the agent runs unsandboxed beside it, so an agent command
+    // that kills processes by name can stop it directly. A clean exit is not a crash, and the
+    // re-dispatch an eviction buys walks straight back into whatever stopped it.
+    const child = fakeChildWithStderr()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6013,
+    })
+    await transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')
+
+    child.emit('exit', 0, null) // the harness handled a signal and left
+
+    const view = await transport.poll({ runId: 'r', jobId: 'j' })
+    expect(view.state).toBe('failed')
+    expect(view.harnessShutdown).toBe(true)
+    expect(view.evicted).toBeUndefined()
+    expect(view.error).not.toMatch(/evicted or crashed/)
+    expect(view.detail).toContain('exited with code 0')
   })
 
   it('says the process printed nothing rather than leaving that half of the detail off', async () => {
@@ -242,6 +276,40 @@ describe('LocalProcessRunnerTransport', () => {
     expect(view.detail).not.toContain('still serving other local runs')
   })
 
+  it('calls a shutdown a shutdown even when a replacement process answers the poll', async () => {
+    // The same gap as the test above, for the OTHER reading. One killed harness must not settle
+    // two ways depending on which job polls first: the sibling that polls before the re-dispatch
+    // sees a dead process and reports a shutdown, while the one that polls after gets its 404
+    // from the replacement. What decides is the process THIS job was handed to, which the
+    // dispatch generation records, not whichever process happens to be answering now.
+    const first = fakeChildWithStderr()
+    const second = fakeChildWithStderr()
+    const children = [first, second]
+    let jobsAre404 = false
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/') && jobsAre404) return new Response('no such job', { status: 404 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => children.shift()) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6022,
+    })
+    await transport.dispatch({ runId: 'r2', jobId: 'b' }, {}, 'agent')
+
+    first.emit('exit', 0, null) // something stopped the harness; it handled the signal and left
+    await transport.dispatch({ runId: 'r1', jobId: 'a2' }, {}, 'agent')
+    jobsAre404 = true
+
+    const view = await transport.poll({ runId: 'r2', jobId: 'b' })
+    expect(view.harnessShutdown).toBe(true)
+    expect(view.evicted).toBeUndefined()
+    expect(view.error).not.toMatch(/evicted or crashed/)
+  })
+
   it('refuses to hand a job a LATER process’s death', async () => {
     // Retaining the record and misattributing it are one edit apart. Only the process a job was
     // actually dispatched to can explain that job, so a record from a generation the job never
@@ -295,7 +363,10 @@ describe('LocalProcessRunnerTransport', () => {
     expect(view.detail).toContain('clone failed')
     expect(view.detail).not.toContain('ghp_notarealtokenvalue01')
   })
+})
 
+// Spawning, the env a native child is given, and shutdown. Same reason for the split.
+describe('LocalProcessRunnerTransport: spawn, child env and shutdown', () => {
   it('folds the stderr into a dispatch that never got the harness healthy', async () => {
     // The other half of the same blindness: a harness that will not boot (a bad entry, a port
     // clash, a Node it refuses) says why on stderr, and the dispatch error used to name only the

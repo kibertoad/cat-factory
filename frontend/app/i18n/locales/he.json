@@ -1386,6 +1386,13 @@
       "awaitingChoice": "ממתין לבחירה אנושית",
       "approvalGate": "שער אישור",
       "companionReview": "סקירת מלווה",
+      "findingSeverity": {
+        "blocker": "חובה לתקן",
+        "major": "כדאי לתקן",
+        "minor": "מינורי",
+        "ungraded": "הערה",
+        "unrecognized": "רמה לא מזוהה ({level})"
+      },
       "correctionIterations": "מחזור תיקון אחד. | שני מחזורי תיקון. | {count} מחזורי תיקון.",
       "state": {
         "pending": "ממתין",
@@ -1422,7 +1429,9 @@
       "closeEsc": "סגור (Esc)",
       "companionCapHeading": "{agent} הגיע למגבלת {attempts} ניסיונות עיבוד מחדש, ועדיין מתחת לרף {threshold}.",
       "companionCapDetail": "בצע סבב עיבוד אוטומטי נוסף, המשך לשלב הבא תוך קבלת הפלט הנוכחי, או עצור ואפס את המשימה כדי לערוך את הקלטים ולשלוח מחדש.",
-      "companionStalledHeading": "{agent} עצר את לופ העיבוד מחדש לאחר {attempts} מתוך {maxAttempts} סבבים: הגרסה האחרונה חזרה ללא שינוי והדירוג נשאר מתחת לרף {threshold}.",
+      "companionCapBlockedHeading": "{agent} הגיע למגבלת {attempts} ניסיונות עיבוד מחדש, וממצא חובה אחד עדיין פתוח. | {agent} הגיע למגבלת {attempts} ניסיונות עיבוד מחדש, ושני ממצאי חובה עדיין פתוחים. | {agent} הגיע למגבלת {attempts} ניסיונות עיבוד מחדש, ו-{count} ממצאי חובה עדיין פתוחים.",
+      "companionCapBlockedDetail": "המשך פירושו קבלת העבודה בלי שהממצאים האלה תוקנו, ולכן מדיניות הסיכון של הריצה הזו לעולם לא תבחר בכך במקומך. בצע סבב עיבוד אוטומטי נוסף, המשך בכל זאת עם הפלט הנוכחי, או עצור ואפס את המשימה כדי לערוך את הקלטים ולשלוח מחדש.",
+      "companionStalledHeading": "{agent} עצר את לופ העיבוד מחדש לאחר {attempts} מתוך {maxAttempts} סבבים: הגרסה האחרונה חזרה ללא שינוי והדירוג לא זז.",
       "companionStalledDetail": "הסבבים שנותרו לא נוצלו מפני שהם רק יחזרו על שיפוט שכבר ניתן. אפשר לבצע סבב נוסף בכל זאת, להמשיך לשלב הבא תוך קבלת הפלט הנוכחי, או לעצור ולאפס את המשימה כדי לערוך את הקלטים ולשלוח מחדש.",
       "infraAttempts": "ניסיונות תשתית",
       "hideInfraAttempts": "הסתר ניסיונות תשתית",
@@ -1804,6 +1813,7 @@
       "dispatch": "שיגור",
       "environment": "סביבה",
       "evicted": "פונתה",
+      "harness_shutdown": "כיבוי ה-Harness",
       "timeout": "פסק זמן",
       "agent": "סוכן",
       "job_failed": "המשימה נכשלה",
@@ -2213,6 +2223,7 @@
         "pipeline_complete": "אשר ומזג",
         "ci_failed": "נסה הרצה שוב",
         "test_failed": "נסה הרצה שוב",
+        "deploy_blocked": "נסה הרצה שוב",
         "requirement_review": "סמן כנקרא",
         "clarity_review": "סמן כנקרא",
         "release_regression": "אשר",
@@ -3872,7 +3883,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "ארצות הברית",
@@ -4148,6 +4160,11 @@
           "step1": "פתח את platform.moonshot.ai → API Keys וצור מפתח.",
           "step2": "העתק את המפתח; הוא מאמת את נקודת הקצה של Moonshot התואמת ל-OpenAI."
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "פתח את console.x.ai → API Keys וצור מפתח.",
+          "step2": "העתק את המפתח; הוא מאמת את נקודת הקצה של xAI התואמת ל-OpenAI."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "פתח את openrouter.ai → Keys וצור מפתח API.",
@@ -4394,6 +4411,7 @@
       "pipeline_complete": "הצינור הושלם",
       "ci_failed": "CI נכשל",
       "test_failed": "הבדיקות נכשלו",
+      "deploy_blocked": "הפריסה חסומה",
       "requirement_review": "סקירת דרישות",
       "clarity_review": "סקירת בהירות",
       "release_regression": "רגרסיית שחרור",
@@ -4457,6 +4475,7 @@
       "pipeline_complete": "הצינור הושלם",
       "ci_failed": "CI נכשל",
       "test_failed": "הבדיקות נכשלו",
+      "deploy_blocked": "הפריסה חסומה",
       "requirement_review": "סקירת דרישות",
       "clarity_review": "סקירת בהירות",
       "release_regression": "רגרסיית שחרור",
@@ -4751,7 +4770,9 @@
     "tracker": "מערכת מעקב",
     "board": "לוח",
     "pickBoard": "בחר לוח",
-    "boardPlaceholder": "מפתח פרויקט, מזהה צוות או owner/repo",
+    "boardPlaceholder": "מפתח פרויקט או מזהה צוות",
+    "boardFromService": "המאגר המקושר לשירות הזה",
+    "boardNeedsRepo": "לשירות הזה לא מקושר מאגר, ולכן אין בו תקלות לסרוק. קשר מאגר מתוך פאנל השירות.",
     "boardsFailed": "לא ניתן היה לטעון את הלוחות: {reason}",
     "issueType": "סוג הפנייה",
     "issueTypeHelp": "ברירת המחדל היא bug. מתעלמים ממנו במערכות ללא סוגי פניות.",
@@ -4760,6 +4781,8 @@
     "labelsHelp": "מופרדות בפסיקים. כולן חייבות להופיע.",
     "adoptInto": "הוסף את הבאג הנבחר אל",
     "adoptingInto": "הבאג הנבחר יתווסף ל-{container}",
+    "huntIn": "השירות לסריקה",
+    "huntingIn": "נסרק המאגר המקושר ל-{container}; הבאג הנבחר יתווסף לשם.",
     "run": "צוד",
     "running": "קורא את הלוח ומעריך את מה שנמצא…",
     "huntFailed": "הציד נכשל",
@@ -4772,6 +4795,7 @@
     "noCandidates": "אין בלוח הזה באגים פתוחים ולא משויכים שתואמים.",
     "ratings": "השפעה {impact}/5, מורכבות {complexity}/5, רמת ודאות {confidence}",
     "viaModel": "הוערך על ידי {model}.",
+    "scannedBoard": "נסרק {board}.",
     "truncated": "נסרקו רק {count} הבאגים התואמים הראשונים; בלוח הזה יש עוד.",
     "comments": "תגובה אחת | שתי תגובות | {count} תגובות",
     "confidence": {
@@ -4785,6 +4809,10 @@
       "failed": "לא ניתן היה להשלים את ההערכה, ולכן אלה אינם מדורגים.",
       "over_budget": "סביבת העבודה חרגה מתקציב ההוצאות, ולכן הבאגים האלה לא דורגו.",
       "empty": "אין מה להעריך."
+    },
+    "refusal": {
+      "boardFromService": "הגששן סורק את המאגר שאליו מקושר השירות שנבחר, ולכן אין לו לוח משלו.",
+      "missingBoard": "בחרו את הלוח שבו לחפש."
     }
   },
   "pipeline": {
@@ -4855,6 +4883,7 @@
       "purposeUnrecognized": "לא מזוהה ({purpose})",
       "purposeOption": {
         "build": "פיתוח",
+        "bugfix": "תיקון באג",
         "document": "תיעוד",
         "review": "סקירה",
         "research": "מחקר",
@@ -4923,7 +4952,7 @@
       "skillNoneAvailable": "אין כישורים זמינים. קישר מקור כישורים בהגדרות החשבון.",
       "skillMissing": "כישור זה כבר אינו בקטלוג; בחר אחר.",
       "skillNeedsPick": "שלב Skill דורש כישור נבחר לפני שתוכל לשמור.",
-      "purposeStepsConflict": "מטרה זו אינה כותבת קוד ואינה מריצה בדיקות, אך הצינור עדיין כולל שלבי פיתוח או בדיקה. הסירו אותם או שנו את המטרה לפיתוח.",
+      "purposeStepsConflict": "מטרה זו אינה כותבת קוד ואינה מריצה בדיקות, אך הצינור עדיין כולל שלבי פיתוח או בדיקה. הסירו אותם או בחרו מטרה שמספקת קוד (פיתוח או תיקון באג).",
       "promptEditTooltip": "עריכת הנחיית המערכת של הסוכן הזה",
       "promptEditedTooltip": "הנחיית המערכת של הסוכן הזה נערכה עבור מרחב העבודה הזה",
       "consensusGroups": "קבוצות קונצנזוס",

@@ -15,7 +15,6 @@ import {
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
   type TaskSourceWritebackAdapter,
-  type TrackerBoard,
   UnavailableError,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -276,18 +275,6 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
       status: hit.state,
       excerpt: '',
     }))
-  }
-
-  /**
-   * List the projects the workspace's GitLab connection can reach, as hunt boards. No GitLab
-   * connection ⇒ an empty list, matching every other read on this provider (the connection
-   * authenticates out of band, so "not connected" is an absence rather than an error).
-   */
-  async listBoards(_credentials: TaskCredentials, workspaceId: string): Promise<TrackerBoard[]> {
-    const connection = await this.deps.installations.getByWorkspace(workspaceId)
-    if (!connection || connection.provider !== 'gitlab') return []
-    const page = await this.deps.gitlabClient.listInstallationRepos(connection.installationId)
-    return gitlabIssuesLogic.gitlabProjectsToBoards(page.items)
   }
 
   /**

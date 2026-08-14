@@ -1,4 +1,5 @@
-import type { AgentRunContext, PipelineStep } from '@cat-factory/kernel'
+import type { AgentRunContext, PipelineStep, ReviewedPoint } from '@cat-factory/kernel'
+import type { ReviewCommentSeverity } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionTargets, isCompanionKind } from '@cat-factory/agents'
 
@@ -28,15 +29,34 @@ function toRounds(
     rating: verdict.rating,
     passed: verdict.passed,
     summary: verdict.feedback,
-    ...(verdict.comments?.length
-      ? {
-          comments: verdict.comments.map((comment) => ({
-            ...(comment.quotedSource ? { quotedSource: comment.quotedSource } : {}),
-            body: comment.body,
-          })),
-        }
-      : {}),
+    ...(verdict.comments?.length ? { comments: verdict.comments.map(toReviewedPoint) } : {}),
   }))
+}
+
+/**
+ * One stored comment as a prompt needs it (kernel's {@link ReviewedPoint}).
+ *
+ * BOTH anchors travel. A companion grading structured items returns `anchorId` and no
+ * `quotedSource`, which is the shape every shipped companion prompt asks for, so a projection
+ * carrying only the quote rendered each of those findings against an empty target — a `[blocker]`
+ * the producer was ordered to resolve first, pointing at nothing. Absent fields stay absent rather
+ * than becoming empty strings: the renderer decides what to write when a point has no anchor, and
+ * it cannot tell `''` from "there was no anchor".
+ */
+function toReviewedPoint(comment: {
+  quotedSource?: string
+  anchorId?: string
+  severity?: ReviewCommentSeverity
+  body: string
+}): ReviewedPoint {
+  return {
+    ...(comment.quotedSource ? { quotedSource: comment.quotedSource } : {}),
+    ...(comment.anchorId ? { anchorId: comment.anchorId } : {}),
+    // A reviewer's grade rides through to the producer; a person's comment has none, and an absent
+    // one stays absent rather than being defaulted to a level nobody chose.
+    ...(comment.severity ? { severity: comment.severity } : {}),
+    body: comment.body,
+  }
 }
 
 /**
@@ -128,14 +148,7 @@ function revisionSlice(step: PipelineStep): { revision?: AgentRunContext['revisi
       // back without it. The reviewer framing is the safe answer there: it is the common case and
       // the failure it avoids — claiming a person is waiting — is the one being fixed.
       requestedBy: source.requestedBy ?? 'reviewer',
-      ...(source.comments?.length
-        ? {
-            comments: source.comments.map((c) => ({
-              ...(c.quotedSource ? { quotedSource: c.quotedSource } : {}),
-              body: c.body,
-            })),
-          }
-        : {}),
+      ...(source.comments?.length ? { comments: source.comments.map(toReviewedPoint) } : {}),
     },
   }
 }

@@ -121,6 +121,21 @@ export const STOP_MERGE_WINDOW_MS = 60_000
 export interface StopObservation {
   cause?: ContainerStopCause
   exit?: ContainerExitState
+  /**
+   * A cause the record DID name, but too late for it to excuse this eviction as churn.
+   *
+   * It exists because the two halves age on different windows (see {@link attributeStopCause}),
+   * so "no cause" is two different facts: the container never recognised one, or it recognised
+   * one and the poll arrived after the window. Only the first is evidence that a clean exit
+   * beside it was somebody shutting the harness down; the second is a drain we already know
+   * about, whose exit code is the drain's own mechanics. Collapsing them let a rollout found
+   * two minutes late be reported as a shutdown, which fails a healthy run with no retry.
+   *
+   * It grants NOTHING: the verdict is still the `crash` an unattributed stop gets, which is what
+   * the window expiring is for. Its only job is to keep the exit code from being read as an
+   * account of a death the record has already explained.
+   */
+  expiredCause?: ContainerStopCause
 }
 
 /**
@@ -221,13 +236,24 @@ export function attributeStopCause(
   // what lets a replay be idempotent without letting one reclaim excuse two deaths.
   if (claimedBy !== undefined && claimedBy !== claimant) return {}
   const age = now - at
+  const known = isContainerStopCause(cause) ? cause : undefined
+  const attributable = known !== undefined && age <= ATTRIBUTION_WINDOW_MS[known]
   return {
-    ...(isContainerStopCause(cause) && age <= ATTRIBUTION_WINDOW_MS[cause] ? { cause } : {}),
+    ...(attributable ? { cause: known } : {}),
+    // Named but out of its window: no budget, and no clean-exit reading either. See
+    // {@link StopObservation.expiredCause}.
+    ...(known !== undefined && !attributable ? { expiredCause: known } : {}),
     ...(isContainerExitState(exit) && age <= EXIT_ATTRIBUTION_WINDOW_MS ? { exit } : {}),
   }
 }
 
-/** Whether an observation carries anything at all (i.e. whether claiming it is worth a write). */
+/**
+ * Whether an observation carries anything at all (i.e. whether claiming it is worth a write).
+ *
+ * An {@link StopObservation.expiredCause} deliberately does not count: it spends nothing and
+ * excuses nothing, so a record reduced to one is as unclaimed as an absent record, and writing a
+ * claim for it would only re-date somebody else's observation.
+ */
 function isEmptyObservation(observation: StopObservation): boolean {
   return !observation.cause && !observation.exit
 }

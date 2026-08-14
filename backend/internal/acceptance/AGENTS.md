@@ -13,10 +13,12 @@ delivered it and CLOSED it, against a LIVE local deployment with nothing faked. 
 `node:assert/strict`, bailing at the first failure. What that replaced, and the four properties the
 driver now owns (order, bail, the gate before every scenario, no timeout):
 [ADR 0057](../../docs/adr/0057-acceptance-standalone-runner.md).
-Type stripping is Node's own, so the scripts carry no `--experimental-strip-types` and the package
-declares `engines.node >= 24`, matching the repository floor. Nothing checks that at runtime by
-design: below 24 the entry point does not load at all, and Node 24+ is a supported-platform
-statement rather than a condition the suite degrades around. Needs a running deployment, a k3s cluster
+Type stripping is Node's own, so THIS package's scripts carry no `--experimental-strip-types` (three
+sibling internal harnesses still do) and it declares `engines.node >= 24`, matching the repository
+floor. Nothing checks that at runtime by design: Node 24+ is a supported-platform statement rather than
+a condition the suite degrades around. Trap: the loader is NOT what enforces it. Type stripping is on by
+default from 22.18 and 23.6, so every command loads and runs below the floor, and `node src/…` working
+is no evidence of the version. Needs a running deployment, a k3s cluster
 and real model credentials; `src/config.ts` refuses with the whole list of missing VARIABLES, and
 `src/prerequisites.ts` then refuses with the whole list of unsatisfied DEPLOYMENT conditions, each
 carrying the steps and commands that fix it.
@@ -62,15 +64,21 @@ is about models omitted ENTIRELY (locally-run endpoints), so labelling from it c
 model invisible and sends an operator to re-mint a token that will change nothing. `src/presets.ts`
 owns the three-way verdict both commands share. `src/personalUnlock.ts` holds the password for the
 process and nothing else writes it down, and the header rides EVERY request through the client's
-`fetch` seam rather than being attached at the call that first needed it: answering a park re-mints
-the run's activation server-side, so a pass needs it for hours after the start.
+`fetch` seam once held rather than being attached at the call that first needed it: answering a park
+re-mints the run's activation server-side, so a pass needs it for hours after the start.
 
 **Asked ONCE per pass, up front in `src/runAcceptance.ts`, which is also where the pass's run id is
 settled.** In one process the ask could now be lazy and still be made once; it stays up front because a
 person is at the terminal when a pass STARTS and by design not twenty minutes in, when the first
-dispatch would discover the model needs a password. It asks THROUGH the holder (`unlock.obtain`), so
-nothing hands a password back as a value: the suite has no such function any more, which is what makes
-"written nowhere" structural rather than a rule to remember. The wiring is thin; every judgement lives
+dispatch would discover the model needs a password. Headless is the whole point of the suite, and an
+operator who starts one walks away, so a requirement that can be established while they are there is
+established there. It asks THROUGH the holder (`unlock.obtain`), so nothing hands a password back as a
+value: the suite has no such function any more, which is what makes "written nowhere" structural rather
+than a rule to remember. **The holder has ONE filling method on purpose.** Collecting up front and
+withholding until the first `428` narrows the exposure to a few reads against the one deployment the
+pass is pinned to (which consults the header only on the gated run calls), and pays for it by making
+"the pass has the credential" a rule each future call site remembers through `withPersonalUnlock`
+instead of a property of the client seam, discovered wrong hours later at a terminal nobody is at. The wiring is thin; every judgement lives
 in `src/personalPasswordAsk.ts`, where it is unit-tested, because every one of them is a degradation.
 Traps: the verdict reads `personalSubscription` and never `available`, because a
 selectable personal-subscription model is exactly the case that still answers `428`; a catalog it
@@ -170,9 +178,25 @@ first.** With no run id it reports the pass that wrote to the state directory mo
 watched, which is by construction the one that recorded no fact and so never claimed the pointer.
 Asked through the pointer it answered "no acceptance pass found" while that attempt's journal sat in
 the directory it named. A pass that created nothing still closes its report by naming the pass that
-did, so the resume line is never an invitation to start over. **And a pass is identified by its FILE
-NAME**: the `runId` inside a ledger is a copy of it, so a disagreement means a copied or renamed
-file, and `WorldStore` refuses rather than guessing which half is right.
+did, so the resume line is never an invitation to start over. Trap: `status` reads the same `.env` the
+pass does, so `ACCEPTANCE_RUN_ID` reaches it too, and **the ARGUMENT asks a question where the
+environment only PINS a default** (`resolveStatusTarget`, unit-tested). A named id is that pass either
+way; a `latest` on the command line refuses when the pointer names nothing, because that is the
+question asked, while a `latest` LINE in the `.env` (which the README offers as the dialect-free way to
+resume) falls through to the pass that ran last rather than refusing about a question nobody asked.
+**And a pass is identified by its FILE NAME**: the `runId` inside a ledger is a copy of it, so a
+disagreement means a copied or renamed file, and `WorldStore` refuses rather than guessing which half
+is right.
+
+**Every line every command prints goes to STDOUT, refusals included, and no command calls
+`process.exit`.** Both halves of one rule: an afternoon-long pass is piped to a file (`| tee pass.log`),
+`tee` captures one stream and `process.exit` does not drain it, so a refusal on stderr or a report cut
+mid-write is missing from exactly the log somebody kept. The exit code carries the verdict; the stream
+carries the answer. Trap: an exit code says whether a scenario RAN (1) or whether the pass refused to
+start (2), never whether anything was created, which is read off the ledger. And a boundary picks its
+describer off `OperatorRefusal` rather than off which boundary it is: a refusal this suite authored
+prints whole, and anything else is named as a suite bug and keeps its frames, since a `TypeError`
+rendered as a refusal is one contentless sentence with no file and no line.
 
 **It is NOT in CI and must never become so.** `test:run` points at `vitest.config.ts`, which
 collects `test/**/*.test.ts` only: this package's own unit tests. The scenarios are not tests to any
@@ -231,7 +255,15 @@ failed`), with the SDK's own deadline corrected to `timeout` since its abort mar
    and still ends `done`.
 3. **A wait that expires states its last observation.** `src/deadline.ts` is the suite's only
    clock, and the runner introduces no timeout of its own (the vitest one was disabled for the same
-   reason).
+   reason). A THROWN poll obeys the same rule: the deployment this suite polls restarts by design
+   (a supervisor repairs it, `node --watch` cycles it), and one such restart killed a 41-minute
+   pass on a single `ECONNREFUSED` while the run it was watching carried on. `src/deploymentOutage.ts`
+   makes an unanswered poll an observation for two minutes and journals the recovery; an ANSWER is
+   never waited through, because a refusal is evidence, and it is rethrown untouched so the SDK's
+   status and request id survive. Two corollaries bite: only the four transport causes shaped like
+   a restart are waited through (a DNS or TLS failure is its own diagnosis, and delaying it two
+   minutes to then blame a restart is worse than reporting it), and an outage is journalled but
+   never becomes the last OBSERVATION, since "it did not answer" is not evidence about the run.
 4. **Report every failing claim, not just the first.** A pass costs an afternoon.
 
 **The defect scenario 03 hunts is planted in the SPECIFICATION, not the code.** The two briefs in
@@ -241,6 +273,17 @@ way a real integration bug does. A defect planted in the implementation would be
 `pl_build`'s `reviewer` step and scenario 03 would find nothing. **So scenario 02 asserts the delivery
 machinery worked, never that the product is correct**. That claim is scenario 03's, and it is settled
 by fixing the bug.
+
+**Two values reach the agents through the BRIEFS as well as the engine**, and a brief that names a
+literal instead is the whole failure. The ingress host template and the image template are both
+holes the platform fills at provision time, so `k3s.ts` threads each into `instructions.ts` and a
+prerequisite renders each before a pass spends anything (`src/manifestTemplates.ts`). The image half
+is what a lost pass taught: the briefs make `{{image}}` mandatory, the platform substitutes it from
+the CONNECTION's `imageTemplate`, and an unfilled hole renders as the empty string, so a suite that
+configured no template deployed `image: ""` and the apiserver refused the Deployment three agents
+and one pull request in. The gate also STATES what it did not check: nothing here can see whether
+anything published that reference, or whether the cluster may pull it, and both present as an
+environment that provisions and never becomes ready.
 
 **Changing a brief means re-checking the symptom.** The briefs, the bug report and
 `test/evidence.test.ts` describe one specific off-by-one (page 2 repeats item 10, last page short).

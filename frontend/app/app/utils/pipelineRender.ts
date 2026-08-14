@@ -2,8 +2,37 @@
 // TaskPipelineMini, AgentStepDetail), so the "is this step still live?" logic stays
 // in one place rather than being re-derived as inline ternaries per component.
 
-import type { AgentState, ExecutionInstance, PipelineStep } from '~/types/execution'
+import type {
+  AgentState,
+  ExecutionInstance,
+  ExecutionStatus,
+  PipelineStep,
+} from '~/types/execution'
 import { isStepSkipReason } from '@cat-factory/contracts'
+
+/**
+ * Whether the engine is presently DRIVING this run, which is the one condition under which
+ * infrastructure can still be moving (a container cold-booting, an environment coming up or
+ * being torn down, a fresh provisioning attempt landing in the log).
+ *
+ * `running` is that condition and nothing else is. `done`/`failed` are terminal, and the other
+ * two are parks where the durable driver is asleep on an event: `blocked` waits on a human
+ * decision, `paused` on a spend budget that has to be raised. A parked run holds whatever infra
+ * state it stopped at, so nothing about it is in flight.
+ *
+ * This is what every ANIMATED infra indicator is gated on. A spinner is a claim that something is
+ * happening right now, so a container left `starting` or an environment left `provisioning` when
+ * its run stopped must keep its label (that IS the last thing the provider reported) and stop
+ * turning: the run's own status says why it stopped, and a perpetual spinner over a run nobody is
+ * driving reads as a live cold-boot that is simply taking a while. The same rule governs the
+ * infra-attempts drawer's background poll, which has nothing to re-read off a parked run.
+ *
+ * The step-level sibling is `stepIsRunning` (`useStepTimer`), which answers the narrower question
+ * of whether one step's clock should tick; this one is about the run as a whole.
+ */
+export function runIsActive(status: ExecutionStatus | null | undefined): boolean {
+  return status === 'running'
+}
 
 /**
  * Visual state of a conditionally-run companion attached to a gate step (today the

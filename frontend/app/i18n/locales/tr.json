@@ -1386,6 +1386,13 @@
       "awaitingChoice": "Bir kullanıcı seçimi bekleniyor",
       "approvalGate": "Onay kapısı",
       "companionReview": "Yardımcı incelemesi",
+      "findingSeverity": {
+        "blocker": "Mutlaka düzeltilmeli",
+        "major": "Düzeltilmeli",
+        "minor": "Küçük",
+        "ungraded": "Yorum",
+        "unrecognized": "Tanınmayan düzey ({level})"
+      },
       "correctionIterations": "{count} düzeltme yinelemesi. | {count} düzeltme yinelemesi.",
       "state": {
         "pending": "Beklemede",
@@ -1422,7 +1429,9 @@
       "closeEsc": "Kapat (Esc)",
       "companionCapHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, hâlâ {threshold} barının altında.",
       "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
-      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan {threshold} barının altında kaldı.",
+      "companionCapBlockedHeading": "{agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık. | {agent} {attempts} deneme yeniden çalışma sınırına ulaştı, mutlaka düzeltilmesi gereken {count} bulgu hâlâ açık.",
+      "companionCapBlockedDetail": "Devam etmek, bu bulgular düzeltilmeden işi kabul etmek demektir; bu yüzden bu çalışmanın risk politikası bu seçimi sizin yerinize asla yapmaz. Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyla yine de devam edin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
+      "companionStalledHeading": "{agent}, {maxAttempts} turun {attempts} turunda yeniden çalışma döngüsünü durdurdu: son revizyon değişmeden döndü ve puan hiç değişmedi.",
       "companionStalledDetail": "Kalan turlar kullanılmadı, çünkü yalnızca verilmiş bir kararı yineleyeceklerdi. Yine de bir tur daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "infraAttempts": "Altyapı denemeleri",
       "hideInfraAttempts": "Altyapı denemelerini gizle",
@@ -1804,6 +1813,7 @@
       "dispatch": "Gönderim",
       "environment": "Ortam",
       "evicted": "Tahliye edildi",
+      "harness_shutdown": "Harness kapatıldı",
       "timeout": "Zaman aşımı",
       "agent": "Aracı",
       "job_failed": "İş başarısız",
@@ -2213,6 +2223,7 @@
         "pipeline_complete": "Onayla ve birleştir",
         "ci_failed": "Çalıştırmayı yeniden dene",
         "test_failed": "Çalıştırmayı yeniden dene",
+        "deploy_blocked": "Çalıştırmayı yeniden dene",
         "requirement_review": "Okundu olarak işaretle",
         "clarity_review": "Okundu olarak işaretle",
         "release_regression": "Onayla",
@@ -3872,7 +3883,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "Amerika Birleşik Devletleri",
@@ -4148,6 +4160,11 @@
           "step1": "platform.moonshot.ai → API Keys adresini açın ve bir anahtar oluşturun.",
           "step2": "Anahtarı kopyalayın; OpenAI uyumlu Moonshot uç noktasının kimliğini doğrular."
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "console.x.ai → API Keys adresini açın ve bir anahtar oluşturun.",
+          "step2": "Anahtarı kopyalayın; OpenAI uyumlu xAI uç noktasının kimliğini doğrular."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "openrouter.ai → Keys adresini açın ve bir API anahtarı oluşturun.",
@@ -4394,6 +4411,7 @@
       "pipeline_complete": "Pipeline tamamlandı",
       "ci_failed": "CI başarısız",
       "test_failed": "Testler başarısız",
+      "deploy_blocked": "Dağıtım engellendi",
       "requirement_review": "Gereksinim incelemesi",
       "clarity_review": "Netlik incelemesi",
       "release_regression": "Sürüm gerilemesi",
@@ -4457,6 +4475,7 @@
       "pipeline_complete": "Pipeline tamamlandı",
       "ci_failed": "CI başarısız",
       "test_failed": "Testler başarısız",
+      "deploy_blocked": "Dağıtım engellendi",
       "requirement_review": "Gereksinim incelemesi",
       "clarity_review": "Netlik incelemesi",
       "release_regression": "Sürüm gerilemesi",
@@ -4751,7 +4770,9 @@
     "tracker": "Takip aracı",
     "board": "Pano",
     "pickBoard": "Bir pano seçin",
-    "boardPlaceholder": "Proje anahtarı, takım kimliği veya owner/repo",
+    "boardPlaceholder": "Proje anahtarı veya takım kimliği",
+    "boardFromService": "Bu servise bağlı depo",
+    "boardNeedsRepo": "Bu servise bağlı bir depo yok, dolayısıyla taranacak kayıt da yok. Servis panelinden bir depo bağlayın.",
     "boardsFailed": "Panolar yüklenemedi: {reason}",
     "issueType": "Kayıt türü",
     "issueTypeHelp": "Varsayılan olarak bug. Kayıt türü olmayan araçlarda yok sayılır.",
@@ -4760,6 +4781,8 @@
     "labelsHelp": "Virgülle ayrılır. Hepsinin bulunması gerekir.",
     "adoptInto": "Seçilen hatayı şuraya ekle",
     "adoptingInto": "Seçilen hata {container} içine eklenir",
+    "huntIn": "Taranacak servis",
+    "huntingIn": "{container} servisine bağlı depo taranıyor; seçilen hata da oraya eklenir.",
     "run": "Avla",
     "running": "Pano okunuyor ve bulunanlar değerlendiriliyor…",
     "huntFailed": "Av başarısız oldu",
@@ -4772,6 +4795,7 @@
     "noCandidates": "Bu panoda eşleşen açık ve atanmamış hata yok.",
     "ratings": "Etki {impact}/5, karmaşıklık {complexity}/5, güven {confidence}",
     "viaModel": "{model} tarafından değerlendirildi.",
+    "scannedBoard": "{board} tarandı.",
     "truncated": "Yalnızca eşleşen ilk {count} hata tarandı; bu panoda daha fazlası var.",
     "comments": "{count} yorum | {count} yorum",
     "confidence": {
@@ -4785,6 +4809,10 @@
       "failed": "Değerlendirme tamamlanamadı, bu yüzden bunlar değerlendirilmedi.",
       "over_budget": "Bu çalışma alanı harcama bütçesini aştığı için bunlar değerlendirilmedi.",
       "empty": "Değerlendirilecek bir şey yok."
+    },
+    "refusal": {
+      "boardFromService": "Bu izleyici, seçilen hizmete bağlı depoyu tarar; bu yüzden kendine ait bir panosu yoktur.",
+      "missingBoard": "Aranacak panoyu seçin."
     }
   },
   "pipeline": {
@@ -4855,6 +4883,7 @@
       "purposeUnrecognized": "Tanınmayan ({purpose})",
       "purposeOption": {
         "build": "Geliştirme",
+        "bugfix": "Hata düzeltme",
         "document": "Dokümantasyon",
         "review": "İnceleme",
         "research": "Araştırma",
@@ -4923,7 +4952,7 @@
       "skillNoneAvailable": "Kullanılabilir beceri yok. Hesap ayarlarında bir beceri kaynağı bağlayın.",
       "skillMissing": "Bu beceri artık katalogda yok; başka birini seçin.",
       "skillNeedsPick": "Bir Skill adımı, kaydedebilmeniz için seçilmiş bir beceri gerektirir.",
-      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya amacı Geliştirme olarak değiştirin.",
+      "purposeStepsConflict": "Bu amaç kod yazmaz ve test çalıştırmaz, ancak işlem hattında hâlâ uygulama veya test adımları var. Bunları kaldırın veya kod teslim eden bir amaca geçin (Geliştirme ya da Hata düzeltme).",
       "promptEditTooltip": "Bu ajanın sistem istemini düzenle",
       "promptEditedTooltip": "Bu ajanın sistem istemi bu çalışma alanı için düzenlenmiş",
       "consensusGroups": "Uzlaşı grupları",

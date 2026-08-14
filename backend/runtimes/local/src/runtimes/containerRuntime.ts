@@ -53,6 +53,22 @@ export interface ContainerEndpoint {
   port: number
 }
 
+/** How a stopped container ended, as far as its runtime can report it. */
+export interface ContainerExitState {
+  /** One line for the post-mortem: the exit code, plus an OOM kill where the runtime flags one. */
+  description: string
+  /**
+   * The workload's exit code, where the runtime reports one.
+   *
+   * ABSENT IS NOT ZERO. A `0` here is a verdict, not a detail: it means the harness exited
+   * cleanly while a job was still running, which is a SHUTDOWN rather than an eviction and is
+   * handled as terminal instead of being retried. Apple `container` reports a coarse status with
+   * no code, and a runtime that cannot tell must leave this undefined rather than default it, or
+   * every container death there is reported as somebody shutting the harness down.
+   */
+  code?: number
+}
+
 /** What a runtime can and cannot do, consumed by the engine's Tester gate. */
 export interface RuntimeCapabilities {
   /**
@@ -169,16 +185,16 @@ export interface ContainerRuntimeAdapter {
   /** Whether the container is currently running. */
   isRunning(exec: ContainerExec, containerId: string): Promise<boolean>
   /**
-   * A one-line summary of HOW a stopped container ended — exit code, and whether the runtime
-   * OOM-killed it — for the mid-run post-mortem. Resolves to `undefined` when the container is
-   * still running, was already reaped, or the runtime can't report it. Best-effort: this is a
-   * diagnostic, never a lifecycle signal (use {@link isRunning} for that).
+   * HOW a stopped container ended: the exit code, and whether the runtime OOM-killed it. Resolves
+   * `undefined` when the container is still running, was already reaped, or the runtime can't
+   * report it. Best-effort as a DIAGNOSTIC (use {@link isRunning} for liveness), but its
+   * {@link ContainerExitState.code} is read as a verdict: see that field.
    *
    * Worth having beside {@link logs}: a container killed by the runtime's cgroup limit exits
    * with an empty log tail, so the exit state is the ONLY thing separating "OOM-killed" from
    * "the agent process threw and printed nothing".
    */
-  exitState(exec: ContainerExec, containerId: string): Promise<string | undefined>
+  exitState(exec: ContainerExec, containerId: string): Promise<ContainerExitState | undefined>
   /**
    * A short tail of the container's logs (stdout+stderr), best-effort — resolves to `''`
    * on any error or when the runtime can't read them. Used to explain WHY a container

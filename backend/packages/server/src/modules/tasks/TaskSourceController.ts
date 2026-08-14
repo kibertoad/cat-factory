@@ -19,7 +19,6 @@ import {
   taskSourceKindSchema,
   updateTaskSourceWebhookContract,
   type TaskSourceKind,
-  type TaskSourceReadReason,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -38,6 +37,7 @@ import type { AppEnv } from '../../http/env.js'
 import { blockEditAuthority, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
+import { resolveSourceRepoScope } from './sourceRepoScope.js'
 
 /** Resolve the tasks module, or refuse with a 503 naming what isn't wired. */
 function requireTasks<E extends AppEnv>(c: Context<E>): TasksModule {
@@ -62,59 +62,8 @@ function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
 }
 
 /**
- * Resolve the repository a REPO-BACKED source's search runs against, from the search's
- * originating block (a service frame or a task/module under one). A service is always created
- * from (or with) a repo, so such a search REQUIRES the link: if it can't be resolved we refuse
- * rather than silently widening it (the task couldn't run against an unlinked service anyway,
- * and an unscoped vendor issue search reaches every repository the credential can see, which
- * under a PAT is all of public GitHub, or every project on the GitLab instance). `blockId` is
- * required by the contract, so there is no unscoped surface left to skip.
- *
- * Which sources are repo-backed is read off the provider's declared `repoScope`, never a source
- * id compared here. A list in this function is a second authority that has to be edited in step
- * with the registry, and the failure when it is not is silent in exactly the wrong direction:
- * the provider refuses every search for want of a scope this function decided not to resolve,
- * so a source that imports fine can never be searched. An UNREGISTERED source resolves no scope
- * and reaches `importService.search`, which is where an unconfigured source is refused (the same
- * division of labour {@link sourceParam} documents).
- */
-async function resolveSearchScope<E extends AppEnv>(
-  c: Context<E>,
-  tasks: TasksModule,
-  source: TaskSourceKind,
-  blockId: string,
-): Promise<TaskSearchRepoScope | null> {
-  const provider = tasks.registry.get(source)
-  if (!provider?.repoScope) return null
-  const resolve = c.get('container').resolveRepoTarget
-  let target: Awaited<ReturnType<NonNullable<typeof resolve>>> = null
-  try {
-    target = resolve ? await resolve(param(c, 'workspaceId'), blockId) : null
-  } catch (err) {
-    // `resolveRepoTarget` throws a ValidationError precisely when the block isn't under a
-    // repo-linked service — the case this endpoint refuses below. Anything else (an
-    // unexpected repo/DB failure) is NOT a "link a repo" problem, so let it propagate
-    // rather than mislabel it; only the documented not-linked outcome falls through.
-    if (!(err instanceof ValidationError)) throw err
-    target = null
-  }
-  if (!target) {
-    // A machine-readable reason so the SPA can render a localized message; the prose is the
-    // untranslated last resort (CLAUDE.md "Backend strings"). It names no vendor, because the
-    // link that is missing is the board's own service→repo link and the source asking for it
-    // may be any repo-backed one: naming GitHub here sends a GitLab deployment to an
-    // integration it does not run.
-    throw new ValidationError(
-      'This service is not linked to a repository. Link it to a repo before creating tasks from issues.',
-      { reason: 'repo_not_linked' satisfies TaskSourceReadReason },
-    )
-  }
-  return { owner: target.owner, repo: target.name }
-}
-
-/**
  * Resolve the repo scope for the imported-issue LIST from an optional block. Unlike
- * {@link resolveSearchScope} this NEVER throws: the list spans every source, so a
+ * {@link resolveSourceRepoScope} this NEVER throws: the list spans every source, so a
  * repo-less service (or an unwired repo resolver) simply yields no scope and the list
  * is returned unfiltered rather than refused: the search endpoint is where an
  * unlinked service is rejected. A resolved scope narrows the rows of every repo-backed
@@ -317,7 +266,7 @@ export function taskSourceController(): Hono<AppEnv> {
     const tasks = requireTasks(c)
     const source = sourceParam(c)
     const { query, blockId } = c.req.valid('json')
-    const scope = await resolveSearchScope(c, tasks, source, blockId)
+    const scope = await resolveSourceRepoScope(c, tasks, source, blockId)
     const results = await tasks.importService.search(param(c, 'workspaceId'), source, query, scope)
     return c.json({ results }, 200)
   })

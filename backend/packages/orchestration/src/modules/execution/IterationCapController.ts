@@ -138,12 +138,20 @@ export class IterationCapController {
             // step for re-run (`resetStepForRerun`), which NULLS `s.approval`, so reading
             // `s.approval.id` after would throw. The signal targets the gate's original approval.
             signalId = s.approval.id
+            const verdict = s.companion.verdicts.at(-1)
             this.deps.stepGraph.loopCompanionProducer(inst, i, {
               previousProposal: producer?.output ?? '',
-              feedback: s.companion.verdicts.at(-1)?.feedback ?? '',
+              feedback: verdict?.feedback ?? '',
               // A human GRANTED the round, but the feedback the producer must answer is the
               // companion's last verdict, so that is who it is answering.
               requestedBy: 'reviewer',
+              // …and the GRADED findings of that verdict ride with it, exactly as the automatic
+              // rework path sends them (`CompanionController.applyAssessment`). The summary is a
+              // verdict and is forbidden from restating the list (agents'
+              // `REVIEW_FINDINGS_LAYOUT`), so without this the round a person just paid for reaches
+              // the producer naming none of the points it must close — and the park this resolves
+              // is most often the one an open `blocker` caused.
+              ...(verdict?.comments?.length ? { comments: verdict.comments } : {}),
             })
           },
         )

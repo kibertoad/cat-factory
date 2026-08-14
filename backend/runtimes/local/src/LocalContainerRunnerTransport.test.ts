@@ -341,6 +341,49 @@ describe('LocalContainerRunnerTransport — poll, eviction and release', () => {
     expect(view.detail).toMatch(/agent: out of memory/)
   })
 
+  it('reports a container that exited 0 mid-job as a shutdown, not an eviction', async () => {
+    // The incident this exists for: an agent smoke-testing the service it had just built ran a
+    // pattern kill for `node dist/server.js` and matched the harness's own PID 1. The container
+    // exited 0, which the engine could only read as "it vanished", so it spent its eviction
+    // budget re-running an agent that killed its container every time. A clean exit with a job
+    // still in flight means something STOPPED the harness, and that survives a fresh container.
+    const exec: ContainerExec = (args) => {
+      if (args[0] === 'run') return Promise.resolve({ stdout: 'container-sd\n', stderr: '' })
+      if (args[0] === 'port') return Promise.resolve({ stdout: '127.0.0.1:49171\n', stderr: '' })
+      if (args[0] === 'inspect') {
+        return Promise.resolve({
+          stdout: args.includes('{{.State.Running}}') ? 'false\n' : 'false 0 false\n',
+          stderr: '',
+        })
+      }
+      if (args[0] === 'logs') {
+        return Promise.resolve({ stdout: '{"signal":"SIGTERM","msg":"shutting down"}', stderr: '' })
+      }
+      return Promise.resolve({ stdout: '', stderr: '' })
+    }
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) throw new Error('ECONNREFUSED')
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      image: 'harness:test',
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'job-sd', jobId: 'job-sd' }, {}, 'agent')
+    const view = await transport.poll({ runId: 'job-sd', jobId: 'job-sd' })
+    expect(view.state).toBe('failed')
+    expect(view.harnessShutdown).toBe(true)
+    // No eviction verdict at all: that field is what funds the fresh-container recovery, and the
+    // wording must not carry the sentinel the dispatch-time check matches either.
+    expect(view.evicted).toBeUndefined()
+    expect(view.error).not.toMatch(/evicted or crashed/)
+    // The post-mortem still rides along: it is what names WHO shut it down.
+    expect(view.detail).toMatch(/shutting down/)
+  })
+
   it('recreates the container when a stale one makes `docker port` exit non-zero', async () => {
     // The real regression: `docker port` FAILS (exit 1, "no public port … published") for an
     // exited container, and `find()` returns exited containers by design. That throw used to

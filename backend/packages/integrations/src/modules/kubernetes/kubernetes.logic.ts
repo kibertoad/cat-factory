@@ -554,6 +554,34 @@ export function describePodTermination(pod: unknown): string {
 }
 
 /**
+ * Whether a pod's workload EXITED CLEANLY, i.e. every container that has ended reports exit code
+ * 0 and no signal. On a runner pod, whose only workload is the executor-harness, that means the
+ * harness was SHUT DOWN while the job it was serving was still in flight, rather than crashing or
+ * being reclaimed. False for everything else: a non-zero exit, a signal, a pod nothing terminated,
+ * and a pod whose kubelet reports its OWN reason for taking it away (`Evicted`, `Shutdown`,
+ * `NodeAffinity`), which is an eviction whatever the container managed to report on the way out.
+ *
+ * `restartPolicy: Never` is what makes this readable at all: the pod object outlives the workload
+ * until `release` deletes it, so the poll that finds the job gone can still ask how it ended. A pod
+ * already deleted or garbage-collected answers false, because an absent account is not a zero (the
+ * same rule the Apple `container` runtime falls under locally).
+ */
+export function podExitedCleanly(pod: unknown): boolean {
+  const status = statusOf(pod)
+  if (readPodStatusText(status?.reason)) return false
+  let ended = 0
+  for (const cs of containerStatuses(status)) {
+    // `state.terminated` only: `lastState` is a PREVIOUS incarnation, and how an earlier life
+    // ended says nothing about the exit that just stopped serving this job.
+    const terminated = terminatedOf(cs, 'state')
+    if (!terminated) continue
+    ended += 1
+    if (terminated.exitCode !== 0 || terminated.signal !== undefined) return false
+  }
+  return ended > 0
+}
+
+/**
  * Validate the apiserver URL at the write boundary. Unlike the manifest pool's
  * STRICT policy (no private hosts), a kube-apiserver is routinely a private IP or
  * a cluster DNS name, so private hosts are ALLOWED here — the operator is

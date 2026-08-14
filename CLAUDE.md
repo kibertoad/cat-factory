@@ -164,8 +164,8 @@ Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
   `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On Windows
   the whole-tree run rewrites line endings across hundreds of files: expected, and git's normalization
-  absorbs it at commit time. Run it ONCE at the end and trust the result: do not diff, stash, or
-  investigate why an untouched file was reformatted (it sweeps up pre-existing drift).
+  absorbs it at commit time. Run it ONCE at the end and trust the result: never diff or stash it, ask
+  why an untouched file changed (it sweeps up drift), or RE-RUN tests/typecheck: whitespace is inert.
 
 ## Keep the runtimes symmetric
 

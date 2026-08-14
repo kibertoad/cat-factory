@@ -47,7 +47,9 @@ import {
 } from './adopt.ts'
 import type { DeploymentApi } from './deploymentApi.ts'
 import type { AcceptanceConfig } from './config.ts'
-import { buildK3sConnection, buildK3sSecrets, renderEnvironmentHost } from './k3s.ts'
+import { K3S_DOC } from './config.ts'
+import { buildK3sConnection, buildK3sSecrets } from './k3s.ts'
+import { MANIFEST_TEMPLATE_PREREQUISITES } from './manifestTemplates.ts'
 import {
   envAssignment,
   perPersonPrefixInvocation,
@@ -55,7 +57,13 @@ import {
   resumeInvocation,
   shellQuoted,
 } from './operatorText.ts'
-import type { Prerequisite, PrerequisiteVerdict, Remedy, RemedyCommand } from './preflight.ts'
+import {
+  type Prerequisite,
+  type Remedy,
+  type RemedyCommand,
+  satisfied,
+  unsatisfied,
+} from './preflight.ts'
 import { baseUrlStep } from './probeFailure.ts'
 import type { PassOwnership } from './world.ts'
 import { usablePresets } from './presets.ts'
@@ -102,15 +110,6 @@ export type PreflightContext = {
    */
   issueApiFor: (provider: PrReportRunProvider) => IssueApi | null
 }
-
-const satisfied = (detail: string): PrerequisiteVerdict => ({ status: 'satisfied', detail })
-const unsatisfied = (problem: string, remedy: Remedy): PrerequisiteVerdict => ({
-  status: 'unsatisfied',
-  problem,
-  remedy,
-})
-
-const K3S_DOC = 'backend/docs/local-k3s-environments.md'
 
 /**
  * A read-only `curl` through `/api/v1`, which is key-authed: reads `CAT_FACTORY_API_KEY` from the
@@ -1371,43 +1370,10 @@ export const PREREQUISITES: readonly Prerequisite<PreflightContext>[] = [
           )
     },
   },
-  {
-    id: 'ingress-template',
-    what: 'an environment URL can be derived from the configured host template',
-    disposition: 'required',
-    check: async ({ config }) => {
-      // Rendered against a sample namespace: the real one carries a pull-request number no run
-      // has produced yet. What it proves is that the template holds no hole the platform cannot
-      // fill, the failure that otherwise appears as an environment stuck `provisioning` behind a
-      // URL nobody can resolve.
-      const host = renderEnvironmentHost(config.cluster.ingressHostTemplate, 'cf-acc-1')
-      return host === null
-        ? unsatisfied(
-            `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE ('${config.cluster.ingressHostTemplate}') still ` +
-              `holds an unrendered placeholder after {{namespace}} is substituted`,
-            {
-              steps: [
-                'Build the template from {{namespace}} only: it is the one value known before a ' +
-                  'run opens its pull request, so {{branch}} and {{pullNumber}} leave a hole the ' +
-                  'suite cannot fill.',
-                'The default below needs no DNS: nip.io resolves <anything>.127.0.0.1 to loopback.',
-                'Unsetting the variable is also a fix, since the default is what it falls back to.',
-              ],
-              commands: [
-                {
-                  run: envAssignment(
-                    'ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE',
-                    '{{namespace}}.127.0.0.1.nip.io',
-                  ),
-                  purpose: 'use the documented default, which renders from {{namespace}} alone',
-                },
-              ],
-              docs: K3S_DOC,
-            },
-          )
-        : satisfied(`renders as '${host}'`)
-    },
-  },
+  // The two template gates, which read the CONFIG and nothing else, so they live beside each
+  // other in `manifestTemplates.ts` rather than here. Spread at this position because the order of
+  // this list is causal (see the header): they belong after the cluster the templates describe.
+  ...MANIFEST_TEMPLATE_PREREQUISITES,
   {
     id: 'pipeline-catalog',
     what: 'the board has already adopted the two pipelines this suite drives',

@@ -267,11 +267,22 @@ describe('DockerRuntimeAdapter', () => {
     // `{{.State.Running}} {{.State.ExitCode}} {{.State.OOMKilled}}`, the mid-run post-mortem's
     // only way to tell an OOM kill (empty log tail) from a process that threw and printed nothing.
     const oom = fakeExec({ inspect: 'false 137 true\n' })
-    expect(await adapter.exitState(oom.exec, 'cid')).toBe(
-      'exit code 137, OOM-killed by the container runtime',
-    )
+    expect(await adapter.exitState(oom.exec, 'cid')).toEqual({
+      description: 'exit code 137, OOM-killed by the container runtime',
+      code: 137,
+    })
     const plain = fakeExec({ inspect: 'false 1 false\n' })
-    expect(await adapter.exitState(plain.exec, 'cid')).toBe('exit code 1')
+    expect(await adapter.exitState(plain.exec, 'cid')).toEqual({
+      description: 'exit code 1',
+      code: 1,
+    })
+    // The code is PARSED, not just rendered: a 0 is what separates a harness that was SHUT DOWN
+    // mid-job (terminal) from one that crashed (recovered on the eviction budget).
+    const clean = fakeExec({ inspect: 'false 0 false\n' })
+    expect(await adapter.exitState(clean.exec, 'cid')).toEqual({
+      description: 'exit code 0',
+      code: 0,
+    })
     // Still running ⇒ no exit state (it is a diagnostic, never a lifecycle signal).
     const live = fakeExec({ inspect: 'true 0 false\n' })
     expect(await adapter.exitState(live.exec, 'cid')).toBeUndefined()
@@ -388,7 +399,9 @@ describe('AppleContainerRuntimeAdapter', () => {
     // Apple `container inspect` exposes no exit code and no OOM flag, so the post-mortem gets the
     // coarse status verbatim rather than the Docker-shaped detail.
     const stopped = fakeExec({ inspect: JSON.stringify({ status: 'stopped' }) })
-    expect(await adapter.exitState(stopped.exec, n('x'))).toBe('status stopped')
+    // No `code`, deliberately: an absent exit code must never read as a clean (0) exit, or every
+    // container death on this runtime would be reported as somebody shutting the harness down.
+    expect(await adapter.exitState(stopped.exec, n('x'))).toEqual({ description: 'status stopped' })
     const running = fakeExec({ inspect: JSON.stringify({ status: 'running' }) })
     expect(await adapter.exitState(running.exec, n('x'))).toBeUndefined()
     const gone: ContainerExec = () => Promise.reject(new Error('not found'))

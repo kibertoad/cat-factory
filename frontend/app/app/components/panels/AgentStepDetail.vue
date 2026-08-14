@@ -13,7 +13,7 @@ import StepFragmentAdherence from '~/components/panels/StepFragmentAdherence.vue
 import BinaryOutputReport from '~/components/binaryOutput/BinaryOutputReport.vue'
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
-import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
+import { UI_TESTER_AGENT_KIND, blockingReviewComments } from '@cat-factory/contracts'
 import type { GateApprovalRefusal } from '@cat-factory/contracts'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
@@ -25,6 +25,7 @@ import {
   REDIRECT_PARK_PRESENTATION,
   type RedirectParkView,
   dedicatedParkView,
+  runIsActive,
 } from '~/utils/pipelineRender'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 
@@ -125,13 +126,12 @@ const showHistory = ref(false)
 // "spinning up" phase, no spinner.
 const runFailed = computed(() => instance.value?.status === 'failed')
 
-// Whether the run is still doing something (can still spin infra up/down). A terminal
-// run (`done`/`failed`) has nothing left to provision, so the infra-attempts drawer
-// stops its background live-polling (manual refresh stays available).
-const runLive = computed(() => {
-  const status = instance.value?.status
-  return status != null && status !== 'done' && status !== 'failed'
-})
+// Whether the engine is still driving this run, and so can still spin infrastructure up or down.
+// One shared predicate drives every infra surface below: the attempts drawer's background poll
+// (manual refresh stays available regardless), the container card's cold-boot spinner, and the
+// environment panel's transition spinner. A run that is terminal OR parked has nothing in flight,
+// so none of those may keep animating.
+const runActive = computed(() => runIsActive(instance.value?.status))
 
 // Live elapsed-time clock for the open step.
 const { isRunning, durationLabel } = useStepTimer({
@@ -171,10 +171,31 @@ const proposalEditable = computed(() => step.value?.outputIsRendered !== true)
 // approve/request-changes/reject rail, it shows the shared iteration-cap prompt
 // (one more round / proceed / stop & reset), resolved through its own endpoint.
 const companionExceeded = computed(() => approvalPending.value && !!step.value?.companion?.exceeded)
+/**
+ * The must-fix findings the reviewer left open on its last round.
+ *
+ * They are why the cap prompts read differently, and the difference is not cosmetic: a cap
+ * reached on the rating alone is the loop reporting that this is as good as it got, while an open
+ * blocker is the reviewer saying the work must not go on as it stands. That second one is also the
+ * park no risk policy will answer, so the person reading it is the only route past it and should
+ * be told what they are being asked to overrule.
+ */
+const blockingFindings = computed(() => blockingReviewComments(latestVerdict.value?.comments))
 // The SAME park, reached for the opposite reason: the loop was abandoned with rounds still on the
 // budget because the producer handed back the work it was asked to change and the rating did not
 // move. The three choices are identical, so this only picks the wording — the cap copy states a
 // spent limit, which is a false claim about this park (`companion.stalled`).
+//
+// It can hold TOGETHER with `blockingFindings`, and that pair is what splits the wording across
+// the two slots rather than ranking them: the HEADING says how the loop ended (a stalled one did
+// not reach its limit, so only it may say so) and the DETAIL says what this person is being asked
+// to decide (an open blocker outranks a bar that went unmet, and its copy claims nothing about
+// rounds). Neither slot can then state something untrue of the park it is describing.
+//
+// Which is why the stalled heading claims nothing about the RATING either. Standing still is
+// unchanged output at an unmoved rating (`companionLoopStalled`), never a rating under the bar: a
+// round held by an open blocker fails at a rating that cleared it, and the copy said "the rating
+// held below the 80% bar" over a 95% one. What the number was is on the verdict card above.
 const companionStalled = computed(() => companionExceeded.value && !!step.value?.companion?.stalled)
 // A park a DEDICATED window owns (fork choice / follow-up triage): the generic approve
 // resolver refuses these server-side, so the rail is replaced by a redirect to that window.
@@ -476,6 +497,7 @@ async function copyOutput() {
                 <StepMetadataCard
                   :step="step"
                   :run-failed="runFailed"
+                  :run-active="runActive"
                   :duration-label="durationLabel"
                   :is-running="isRunning"
                   :step-number="stepNumber"
@@ -492,10 +514,12 @@ async function copyOutput() {
                 :step-index="ctx?.stepIndex ?? null"
               />
 
-              <!-- companion rework budget spent, OR the loop abandoned early as unproductive:
-                   the shared iteration-cap decision (one more round / proceed with the current
-                   output / stop & reset). One prompt, two headings — the choices are the same but
-                   the reason is not, and the spent-limit wording is untrue of a stalled loop. -->
+              <!-- companion rework budget spent, OR the loop abandoned early as unproductive,
+                   with or without must-fix findings still open: the shared iteration-cap decision
+                   (one more round / proceed with the current output / stop & reset). One prompt,
+                   and the two slots are picked on different facts — the choices are the same but
+                   the reason is not, the spent-limit wording is untrue of a stalled loop, and an
+                   open blocker is what the person is actually being asked to overrule. -->
               <IterationCapPrompt
                 v-if="companionExceeded"
                 :heading="
@@ -504,18 +528,29 @@ async function copyOutput() {
                         agent: agent.label,
                         attempts: step.companion?.attempts,
                         maxAttempts: step.companion?.maxAttempts,
-                        threshold: pctOf(latestVerdict?.threshold ?? 0),
                       })
-                    : t('panels.stepDetail.companionCapHeading', {
-                        agent: agent.label,
-                        attempts: step.companion?.maxAttempts,
-                        threshold: pctOf(latestVerdict?.threshold ?? 0),
-                      })
+                    : blockingFindings.length
+                      ? t(
+                          'panels.stepDetail.companionCapBlockedHeading',
+                          {
+                            agent: agent.label,
+                            attempts: step.companion?.maxAttempts,
+                            count: blockingFindings.length,
+                          },
+                          blockingFindings.length,
+                        )
+                      : t('panels.stepDetail.companionCapHeading', {
+                          agent: agent.label,
+                          attempts: step.companion?.maxAttempts,
+                          threshold: pctOf(latestVerdict?.threshold ?? 0),
+                        })
                 "
                 :detail="
-                  companionStalled
-                    ? t('panels.stepDetail.companionStalledDetail')
-                    : t('panels.stepDetail.companionCapDetail')
+                  blockingFindings.length
+                    ? t('panels.stepDetail.companionCapBlockedDetail')
+                    : companionStalled
+                      ? t('panels.stepDetail.companionStalledDetail')
+                      : t('panels.stepDetail.companionCapDetail')
                 "
                 :loading="resolvingCap"
                 @resolve="resolveCompanionCap"
@@ -558,7 +593,11 @@ async function copyOutput() {
 
               <!-- ephemeral environment lifecycle (spinning up / running / shut down /
                    errored + the exact error), when this step runs against one -->
-              <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
+              <EnvironmentStatusPanel
+                v-if="stepEnvironment"
+                :environment="stepEnvironment"
+                :run-active="runActive"
+              />
 
               <!-- frontend UI-test: how the frame's backend bindings resolved (env var →
                    live URL | mocked) + the run-start advisories (duplicate env vars /
@@ -605,7 +644,7 @@ async function copyOutput() {
                   v-if="showProvisioning"
                   class="mt-2"
                   :execution-id="executionId"
-                  :live="runLive"
+                  :live="runActive"
                 />
               </div>
 

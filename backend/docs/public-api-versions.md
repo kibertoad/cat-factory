@@ -755,3 +755,60 @@ under the run; the engine re-dispatches the step once, and the run then reports 
 success. The only trace that a whole agent run was spent twice, in tokens and in wall clock, is this
 number. It sits beside `evictionRecoveries`, which exists for the same reason and answers the same
 kind of question: reading the step alone, a re-dispatched run is indistinguishable from a clean one.
+
+## 1.53.0
+
+1.53.0, not 1.52.1: one additive field, `blockingFindings`, on the `approval-gate` entry of
+`GET /api/v1/runs/{runId}/decisions`. Nothing existing changes shape or meaning, and a consumer built
+against 1.52.0 ignores it.
+
+**It closes a gap between what a caller may decide and what it can see.** A companion gate reporting
+`exceeded: true` is answered with `resolve-exceeded`, and one of the three choices is `proceed`. Until
+now the only prose on that decision was `proposal`, the companion's verdict SUMMARY, which the shipped
+reviewer prompt forbids from restating the individual findings: the graded points lived only in
+internal step state. So an integration answering `proceed` was accepting work whose stated must-fixes
+it had never been shown. The engine's own unattended risk policies refuse that park for exactly this
+reason, which made an external caller the one route past it and the one most in need of the detail.
+
+Each entry carries the reviewer's note and the `anchorId` it targets; severity is not carried because
+every entry is a `blocker` by construction. An empty array with `exceeded: true` is the OTHER cap: the
+rework rounds ran out with the rating under the bar, which is a loop giving up rather than a review
+objecting.
+
+## 1.54.0
+
+1.54.0, not 1.53.0: one additive enum member, `harness_shutdown`, in the run failure-kind
+vocabulary (`GET /api/v1/debug/runs/{runId}`, the bootstrap-job projection, and any surface
+carrying a failure kind). Nothing existing changes shape or meaning, and the SDKs tolerate unknown
+enum values by design, so a consumer built against 1.53.0 keeps parsing.
+
+This one was authored as 1.53.0 and collided with `blockingFindings` above, which reached main
+first: both branches bumped the minor to the same number, so `API_VERSION` and the generated
+`docs/openapi.json` auto-merged byte-identically with no conflict, and the only thing that objected
+was this file's own section heading.
+
+**What a consumer NOTICES is a population change**: a class of failure that used to arrive as
+`evicted` now arrives under its own name. A container whose harness exited CLEANLY while a job was
+still running was indistinguishable, to the engine, from one that vanished, so it was reported as
+an eviction and re-dispatched on the crash budget. Those two need opposite handling: an eviction is
+worth one fresh container, and a shutdown is caused by something that is still there on the next
+attempt (a host restart, an operator, or, in the run that named this, the agent's own cleanup
+command killing the harness process). A dashboard that counts `evicted` will see that count fall.
+
+## 1.55.0
+
+One additive enum member, `deploy_blocked`, in the notification-type vocabulary
+(`GET /api/v1/notifications`, `POST /api/v1/notifications/{id}/act`, and the outbound
+notification-webhook delivery contract). Nothing existing changes shape or meaning, and the SDKs
+tolerate unknown enum values by design, so a consumer built against 1.54.0 keeps parsing.
+
+**What a consumer NOTICES is a new card in an existing population, with an existing action.** It is
+the `ci_failed` shape one step earlier in the pipeline: the machine gave up, the run failed, and
+`act` retries it. A caller that branches exhaustively on notification type will meet a value it does
+not know; one that treats unknown types as informational will simply leave the card open, which is
+the safe reading. It is also in `DEFAULT_NOTIFICATION_WEBHOOK_TYPES`, so an endpoint registered
+without an explicit type filter starts receiving it.
+
+Its `act` retries the run, which puts it in the class the individual-usage credential guard refuses
+headlessly: a workspace whose runs resolve to an individual-usage model gets a 409
+(`individual_model_unsupported`) here, exactly as it already does for `ci_failed` and `test_failed`.

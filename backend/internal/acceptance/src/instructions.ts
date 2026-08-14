@@ -24,6 +24,7 @@
 // **scenario 02 asserts that the DELIVERY MACHINERY worked, never that the product is defect-free.**
 // By construction it is not. See `src/scenarios/featureWithDefect.ts`.
 
+import type { ManifestTargets } from './k3s.ts'
 import { MANIFEST_DIR } from './k3s.ts'
 
 /**
@@ -78,14 +79,30 @@ export const SERVICE_DESCRIPTIONS: Record<'backend' | 'frontend', string> = {
  * (see `backend/docs/local-k3s-environments.md`); the agent must emit them VERBATIM rather than
  * resolving them, which is the instruction agents most often improve on unprompted.
  *
- * **The Ingress host is the CONFIGURED template**, never a literal. The platform derives an
- * environment's URL from the same `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` it hands the engine
- * (`k3s.ts`), so a brief naming a different host ships manifests serving one name behind a URL
- * built from another: an environment that never answers, on a deployment whose only fault was
- * overriding a documented variable. Nothing would fail: scenario 02 asserts the URL sits under the
- * configured suffix, and it would.
+ * **Both TEMPLATES are the CONFIGURED ones**, never literals, and for one reason stated twice.
+ * The platform derives an environment's URL from the same `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE`
+ * it hands the engine, and substitutes `{{image}}` from the same `ACCEPTANCE_K3S_IMAGE_TEMPLATE`
+ * (both in `k3s.ts`), so a brief naming a different host ships manifests serving one name behind a
+ * URL built from another, and a brief naming a different image asks for a workflow that publishes
+ * something the cluster will never pull. Neither would fail loudly: the first ends as an
+ * environment that never answers, the second as one whose pods sit in `ImagePullBackOff` until the
+ * rollout deadline.
+ *
+ * **The publish is triggered by the PULL REQUEST, which is forced by what the tag can be made of.**
+ * A provision knows no commit sha, so the reference is discriminated by pull-request number, and
+ * that number does not exist until the pull request does: a `push`-triggered workflow could not
+ * name the image the environment will pull. The cost is the head start a push-triggered build used
+ * to have. `pl_build` puts a whole `reviewer` pass between the pull request opening and the
+ * `deployer` step, which is normally more than a small image needs, and a provision that does lose
+ * the race backs off and pulls on a later attempt rather than failing: it presents as an
+ * environment that takes a few extra minutes to become ready.
+ *
+ * **The per-PR tag is MUTABLE, so `imagePullPolicy: Always` is not decoration.** A rebuild
+ * republishes the same reference, and a node that has already cached it would otherwise keep
+ * serving the code the pull request had an hour ago while every log line says the image is current.
  */
-function manifestBrief(servicePort: number, ingressHostTemplate: string): string {
+function manifestBrief(servicePort: number, targets: ManifestTargets): string {
+  const { ingressHostTemplate, imageTemplate } = targets
   return `
 Ship per-PR Kubernetes manifests in \`${MANIFEST_DIR}/\` as plain YAML documents (a Deployment, a
 Service and an Ingress). They are applied directly to the API server without any kustomize or helm
@@ -93,19 +110,26 @@ render step, so every file must be valid Kubernetes YAML exactly as committed.
 
 Rules that are NOT negotiable, because the platform renders them:
 - Use the literal placeholder \`{{image}}\` as the container image. Do not resolve it to a real
-  image reference; the platform substitutes it per environment.
+  image reference; the platform substitutes it per environment. Set \`imagePullPolicy: Always\` on
+  that container: the reference is republished under the same tag as the branch moves, so a node
+  that cached an earlier build would otherwise serve it.
 - Use the literal placeholder \`{{namespace}}\` wherever the namespace appears, and do not set a
   hard-coded \`namespace:\` on any resource.
 - The Ingress host must be exactly \`${ingressHostTemplate}\`, placeholders included and unresolved.
 - The Service must expose port ${servicePort} and the container must listen on ${servicePort}.
 - Give the Deployment a readiness probe on \`/health\`, and keep replicas at 1.
 
-Also ship a GitHub Actions workflow that builds the Dockerfile and pushes the image on every push
-to any branch, tagged with the commit SHA, so a branch always has an image to pull.`.trim()
+Also ship a GitHub Actions workflow that publishes the image this environment pulls. The platform
+renders \`{{image}}\` as \`${imageTemplate}\`, filling its placeholders from the pull request, so
+the workflow must build the Dockerfile and push exactly that reference (image names are lowercase).
+Trigger it on \`pull_request\` with types \`[opened, synchronize, reopened]\`, so the image exists
+from the moment the pull request does and every later push to the branch republishes it under the
+same tag. Nothing else may gate the publish: the environment is provisioned while the pull request
+is still open, so a workflow that only runs on merge publishes too late to be pulled at all.`.trim()
 }
 
 /** The backend scaffold brief. Note the 1-based \`offset\`: one half of the planted mismatch. */
-export function backendScaffoldBrief(ingressHostTemplate: string): string {
+export function backendScaffoldBrief(targets: ManifestTargets): string {
   return `
 Create a small, production-shaped HTTP backend service in TypeScript on Node 22, using Fastify.
 
@@ -121,11 +145,11 @@ Engineering expectations:
 - A README documenting every route with an example request and response.
 - Lint and typecheck scripts that pass.
 
-${manifestBrief(3000, ingressHostTemplate)}`.trim()
+${manifestBrief(3000, targets)}`.trim()
 }
 
 /** The frontend scaffold brief. Deliberately says nothing about pagination yet; the feature adds it. */
-export function frontendScaffoldBrief(backendRepo: string, ingressHostTemplate: string): string {
+export function frontendScaffoldBrief(backendRepo: string, targets: ManifestTargets): string {
   return `
 Create a small single-page web frontend in TypeScript using Vite and plain TypeScript (no UI
 framework), which renders the catalog served by the companion backend service (\`${backendRepo}\`).
@@ -143,7 +167,7 @@ Engineering expectations:
 - A README documenting how to run it and which environment variables it reads.
 - Lint and typecheck scripts that pass.
 
-${manifestBrief(8080, ingressHostTemplate)}`.trim()
+${manifestBrief(8080, targets)}`.trim()
 }
 
 /**

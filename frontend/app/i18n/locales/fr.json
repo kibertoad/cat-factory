@@ -1367,6 +1367,13 @@
       "awaitingChoice": "En attente d'un choix humain",
       "approvalGate": "Gate d'approbation",
       "companionReview": "Revue du compagnon",
+      "findingSeverity": {
+        "blocker": "À corriger absolument",
+        "major": "À corriger",
+        "minor": "Mineur",
+        "ungraded": "Commentaire",
+        "unrecognized": "Niveau non reconnu ({level})"
+      },
       "correctionIterations": "{count} itération de correction. | {count} itérations de correction.",
       "state": {
         "pending": "En attente",
@@ -1422,7 +1429,9 @@
       "closeEsc": "Fermer (Esc)",
       "companionCapHeading": "{agent} a atteint sa limite de {attempts} tentatives de retravail, toujours en dessous du seuil {threshold}.",
       "companionCapDetail": "Effectuer un tour de retravail automatique supplémentaire, passer à l'étape suivante en acceptant la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
-      "companionStalledHeading": "{agent} a arrêté la boucle de retravail après {attempts} tours sur {maxAttempts} : la dernière révision est revenue inchangée et la note est restée sous le seuil {threshold}.",
+      "companionCapBlockedHeading": "{agent} a atteint sa limite de {attempts} tentatives de retravail avec {count} point bloquant encore ouvert. | {agent} a atteint sa limite de {attempts} tentatives de retravail avec {count} points bloquants encore ouverts.",
+      "companionCapBlockedDetail": "Poursuivre revient à accepter le travail avec ces points non corrigés, c’est pourquoi la politique de risque de cette exécution ne prendra jamais cette décision à votre place. Effectuer un tour de retravail automatique supplémentaire, poursuivre malgré tout avec la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
+      "companionStalledHeading": "{agent} a arrêté la boucle de retravail après {attempts} tours sur {maxAttempts} : la dernière révision est revenue inchangée et la note n'a pas bougé.",
       "companionStalledDetail": "Les tours restants n'ont pas été utilisés car ils ne feraient que répéter un verdict déjà rendu. Effectuer tout de même un tour supplémentaire, passer à l'étape suivante en acceptant la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
       "infraAttempts": "Tentatives d'infrastructure",
       "hideInfraAttempts": "Masquer les tentatives d'infrastructure",
@@ -1804,6 +1813,7 @@
       "dispatch": "Envoi",
       "environment": "Environnement",
       "evicted": "Évincée",
+      "harness_shutdown": "Harness arrêté",
       "timeout": "Délai dépassé",
       "agent": "Agent",
       "job_failed": "Tâche échouée",
@@ -2213,6 +2223,7 @@
         "pipeline_complete": "Confirmer et fusionner",
         "ci_failed": "Relancer l'exécution",
         "test_failed": "Relancer l'exécution",
+        "deploy_blocked": "Relancer l'exécution",
         "requirement_review": "Marquer comme lu",
         "clarity_review": "Marquer comme lu",
         "release_regression": "Accuser réception",
@@ -3872,7 +3883,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "États-Unis",
@@ -4148,6 +4160,11 @@
           "step1": "Ouvrez platform.moonshot.ai → API Keys et créez une clé.",
           "step2": "Copiez la clé ; elle authentifie l'endpoint Moonshot compatible OpenAI."
         },
+        "xai": {
+          "label": "xAI (API Grok)",
+          "step1": "Ouvrez console.x.ai → API Keys et créez une clé.",
+          "step2": "Copiez la clé ; elle authentifie l'endpoint xAI compatible OpenAI."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "Ouvrez openrouter.ai → Keys et créez une clé d'API.",
@@ -4394,6 +4411,7 @@
       "pipeline_complete": "Pipeline termine",
       "ci_failed": "Echec de CI",
       "test_failed": "Echec des tests",
+      "deploy_blocked": "Déploiement bloqué",
       "requirement_review": "Revue des exigences",
       "clarity_review": "Revue de clarte",
       "release_regression": "Regression de version",
@@ -4457,6 +4475,7 @@
       "pipeline_complete": "Pipeline termine",
       "ci_failed": "Echec de CI",
       "test_failed": "Echec des tests",
+      "deploy_blocked": "Déploiement bloqué",
       "requirement_review": "Revue des exigences",
       "clarity_review": "Revue de clarte",
       "release_regression": "Regression de version",
@@ -4751,7 +4770,9 @@
     "tracker": "Gestionnaire de tickets",
     "board": "Tableau",
     "pickBoard": "Choisir un tableau",
-    "boardPlaceholder": "Clé de projet, id d'équipe ou owner/repo",
+    "boardPlaceholder": "Clé de projet ou id d'équipe",
+    "boardFromService": "Le dépôt lié à ce service",
+    "boardNeedsRepo": "Aucun dépôt n'est lié à ce service : il n'y a donc pas de tickets à explorer. Liez-en un depuis le panneau du service.",
     "boardsFailed": "Impossible de charger les tableaux : {reason}",
     "issueType": "Type de ticket",
     "issueTypeHelp": "Par défaut bug. Ignoré par les gestionnaires sans types de tickets.",
@@ -4760,6 +4781,8 @@
     "labelsHelp": "Séparées par des virgules. Toutes doivent être présentes.",
     "adoptInto": "Ajouter le bug retenu à",
     "adoptingInto": "Le bug retenu est ajouté à {container}",
+    "huntIn": "Service à explorer",
+    "huntingIn": "Exploration du dépôt lié à {container} ; le bug retenu y est ajouté.",
     "run": "Chasser",
     "running": "Lecture du tableau et évaluation des résultats…",
     "huntFailed": "La chasse a échoué",
@@ -4772,6 +4795,7 @@
     "noCandidates": "Aucun bug ouvert et non assigné ne correspond sur ce tableau.",
     "ratings": "Impact {impact}/5, complexité {complexity}/5, confiance {confidence}",
     "viaModel": "Évalué par {model}.",
+    "scannedBoard": "{board} exploré.",
     "truncated": "Seuls les {count} premiers bugs correspondants ont été parcourus ; ce tableau en contient davantage.",
     "comments": "{count} commentaire | {count} commentaires",
     "confidence": {
@@ -4785,6 +4809,10 @@
       "failed": "L'évaluation n'a pas pu aboutir, ils sont donc non évalués.",
       "over_budget": "Cet espace de travail a dépassé son budget de dépenses, ces bogues n'ont donc pas été évalués.",
       "empty": "Rien à évaluer."
+    },
+    "refusal": {
+      "boardFromService": "Ce traqueur analyse le dépôt auquel le service choisi est lié : il n'a donc pas de tableau propre.",
+      "missingBoard": "Choisissez le tableau sur lequel chercher."
     }
   },
   "pipeline": {
@@ -4855,6 +4883,7 @@
       "purposeUnrecognized": "Non reconnu ({purpose})",
       "purposeOption": {
         "build": "Développement",
+        "bugfix": "Correction de bug",
         "document": "Documentation",
         "review": "Revue",
         "research": "Recherche",
@@ -4923,7 +4952,7 @@
       "skillNoneAvailable": "Aucune compétence disponible. Reliez une source de compétences dans les paramètres du compte.",
       "skillMissing": "Cette compétence n'est plus dans le catalogue ; choisissez-en une autre.",
       "skillNeedsPick": "Une étape Skill a besoin d'une compétence sélectionnée avant de pouvoir enregistrer.",
-      "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou définissez l'objectif sur Développement.",
+      "purposeStepsConflict": "Cet objectif n'écrit aucun code et n'exécute aucun test, mais le pipeline contient encore des étapes d'implémentation ou de test. Supprimez-les ou choisissez un objectif qui livre du code (Développement ou Correction de bug).",
       "promptEditTooltip": "Modifier l'invite système de cet agent",
       "promptEditedTooltip": "L'invite système de cet agent est modifiée pour cet espace de travail",
       "consensusGroups": "Groupes de consensus",

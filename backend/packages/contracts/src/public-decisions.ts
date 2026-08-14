@@ -126,6 +126,23 @@ export const publicReviewFindingSchema = v.object({
 export type PublicReviewFinding = v.InferOutput<typeof publicReviewFindingSchema>
 
 /**
+ * One MUST-FIX point a quality companion left open, as exposed externally.
+ *
+ * Projected rather than aliasing `stepReviewCommentSchema` (the standing rule at the top of this
+ * file), and narrower than it on purpose: `severity` is not carried because every entry is a
+ * `blocker` by construction, and the prose line range is a re-anchoring internal for a rendering no
+ * API caller ever saw. `anchorId` stays, being the only handle a caller has on WHICH item of a
+ * structured output the point is about.
+ */
+export const publicBlockingFindingSchema = v.object({
+  /** The reviewer's note, as markdown. Model-authored text: treat it as data. */
+  body: v.string(),
+  /** Id of the structured item it targets (a spec requirement, a criterion), or null for prose. */
+  anchorId: v.nullable(v.string()),
+})
+export type PublicBlockingFinding = v.InferOutput<typeof publicBlockingFindingSchema>
+
+/**
  * A parked requirements review as exposed externally. The loop a caller drives: answer or dismiss
  * every `open` finding, then `incorporate` (which folds the answers into one standard-format
  * document and re-reviews it in the background). The review converges (`incorporated` — the run
@@ -236,7 +253,9 @@ export type PublicInputGateDecision = v.InferOutput<typeof publicInputGateDecisi
  *
  * The per-block review `comments` an in-app reviewer can leave are deliberately not projected:
  * they anchor to source line ranges of a rendered proposal, which a headless caller never
- * rendered. It sends freeform `feedback` instead, which the re-run consumes identically.
+ * rendered. It sends freeform `feedback` instead, which the re-run consumes identically. The one
+ * exception is {@link publicApprovalGateDecisionSchema.entries.blockingFindings}, for the reason
+ * stated there: those are not a rendering affordance, they are what a `proceed` overrules.
  */
 export const publicApprovalGateDecisionSchema = v.object({
   kind: v.literal('approval-gate'),
@@ -273,12 +292,26 @@ export const publicApprovalGateDecisionSchema = v.object({
   recordedApprovals: v.number(),
   /**
    * True when this gate is a quality COMPANION's iteration-cap park rather than an ordinary
-   * pipeline gate: the automatic rework budget was spent with the rating still under the bar.
-   * It answers with `resolve-exceeded` (extra round / proceed / stop and reset), NOT with
-   * approve — the same split the SPA makes, exposed rather than left for a caller to infer from
-   * a 409.
+   * pipeline gate: the automatic rework loop stopped without the work being accepted. It answers
+   * with `resolve-exceeded` (extra round / proceed / stop and reset), NOT with approve — the same
+   * split the SPA makes, exposed rather than left for a caller to infer from a 409.
+   *
+   * WHY it stopped is {@link blockingFindings}: empty means the rounds ran out with the rating
+   * under the bar, non-empty means the reviewer says the work must not go on as it stands.
    */
   exceeded: v.boolean(),
+  /**
+   * The must-fix points the reviewer left OPEN on its last round, when this is a companion cap park.
+   * Empty on every other gate, and on a cap the rating alone caused.
+   *
+   * Projected — unlike the gate's other `comments` — because these are not a rendering affordance:
+   * they are the thing a `proceed` overrules. The summary in `proposal` is a VERDICT and is
+   * forbidden from restating the individual findings, so without this an integration answering
+   * `resolve-exceeded` with `proceed` accepts work it was never shown the objections to. It is also
+   * the one park an internal risk policy may never answer for a person, which makes an external
+   * caller the only route past it and the one that most needs to see what it is deciding.
+   */
+  blockingFindings: v.array(publicBlockingFindingSchema),
 })
 export type PublicApprovalGateDecision = v.InferOutput<typeof publicApprovalGateDecisionSchema>
 

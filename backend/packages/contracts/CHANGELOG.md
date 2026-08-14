@@ -1,5 +1,236 @@
 # @cat-factory/contracts
 
+## 0.313.0
+
+### Minor Changes
+
+- 409238f: Add GLM-5.3, Gemini 3.7 Flash and Grok 4.6 to the model catalog, and re-baseline the spend
+  price table against what the providers currently charge.
+
+  New catalog entries: `glm-5.3` (subscription-only, GLM Coding Plan), `gemini-3.7-flash`
+  (OpenRouter) and `grok` (Grok 4.6, direct via a new `xai` provider or OpenRouter). GLM-4.7
+  Flash gains a Bedrock flavour (`zai.glm-4.7-flash`).
+
+  `xai` is a new direct provider: `XAI_API_KEY` joins the poolable key providers and the
+  reserved-env-key list, `XAI_BASE_URL` overrides the endpoint, and `grok` joins the model
+  family vocabulary the account model policy allows or blocks. A policy in `allowlist` mode
+  does not admit the new family until an admin adds it, which is the intended default.
+
+  Price corrections, several of which were metering runs BELOW their real cost: DeepSeek's V4
+  pair moves to the peak rates its 2026-08-16 peak/off-peak switch introduces, the OpenRouter
+  `deepseek/deepseek-v4-pro` alias nearly triples, and Cloudflare's now-published cached-input
+  rates for GLM-5.2 and the Kimi pair replace a derived floor that was ~1.9x too low. GLM-5.2
+  and Gemini 3.6 Flash on OpenRouter were overpriced and come down. Z.ai subscription refs
+  (`zai:*`) were falling through to the generic default price and now carry Z.ai's list rate.
+
+## 0.312.0
+
+### Minor Changes
+
+- 0ef48d1: Stop an agent's own cleanup command from killing the harness that supervises it, and report a
+  harness that WAS stopped as what it is.
+
+  A local acceptance run failed as "the container kept vanishing, treating as deterministic" after
+  two full coder passes. Nothing evicted anything. The harness ran as PID 1 with the command line
+  `node dist/server.js`, which is also where the Fastify service the coder was scaffolding built to;
+  the agent started that service in the background to smoke-test it over a real socket, then ran
+  `pkill -f 'node dist/server.js'` to stop it again. The image ships no `pkill`, so that failed with
+  `command not found` and the next turn used something that works without procps, which matched PID 1
+  and shut the harness down. The container exited 0, the engine could only see a backend that had
+  stopped answering, so it called it an eviction, spent its crash-recovery budget re-running the same
+  agent into the same wall, and blamed infrastructure churn.
+
+  **The harness no longer answers to a pattern kill aimed at anything else.** It runs from
+  `dist/harness-server.js` and sets `process.title = 'cat-factory-harness'`, which on Linux rewrites
+  both `/proc/<pid>/cmdline` and (truncated) `/proc/<pid>/comm`, so neither `pkill -f 'node dist/…'`
+  nor a bare `pkill node` nor a hand-rolled `/proc` sweep can name it. It is not a security boundary
+  and is not claimed as one: the agent shares the harness's uid, and separating them needs a PID 1
+  running as root, which this image deliberately does not have. What it removes is the accident.
+
+  **`procps` + `psmisc` are now in the image**, which reads backwards until you look at what the
+  absence caused: `pkill`/`pgrep`/`ps` are the narrow tools an agent reaches for first, and the
+  fallback it writes when they are missing is the unbounded one that took the harness down.
+
+  **A harness that exits cleanly mid-job is no longer an eviction.** Every transport that can read an
+  exit code (the local container and native-process legs, the Cloudflare per-run container, and a
+  Kubernetes runner pod's `state.terminated`) now distinguishes a workload that exited 0 with a job
+  still in flight from one that crashed or was reclaimed, and reports `harnessShutdown` instead of
+  `evicted`. The engine fails that run immediately with a new `harness_shutdown` failure kind
+  (additive to the public failure-kind vocabulary; OpenAPI surface 1.54.0) and a hint that names the
+  causes worth checking, rather than spending an automatic retry that walks back into whatever
+  stopped it. A backend that reports no exit code (Apple `container`, a manifest-driven runner pool
+  whose scheduler exposes only status words) keeps reporting an eviction, because an absent code is
+  not a zero.
+
+  The distinction is only ever drawn where NOTHING else explains the stop. Infrastructure churn is
+  named and recovers on its own budget, and it stays named even after its attribution window passes:
+  a rollout drain the harness answered by exiting 0, discovered minutes later by a re-driven poll, is
+  still that drain rather than a shutdown. The same rule orders the engine's own reading: a killed
+  job that some branch settles WITHOUT failing the run (a parked PR review's read-only Challenge
+  Investigator) keeps that settlement, since losing a human's in-flight curation is worse than the
+  retry this failure kind exists to prevent. `container.harness_shutdown` counts the class, kept out
+  of `container.evicted` so the eviction rate an operator sizes infrastructure by is not inflated by
+  deaths no infrastructure change prevents.
+
+  **An aborted agent run says who aborted it.** The Claude Code / Codex runner rejected with a
+  hard-coded "agent run aborted by watchdog" for every abort, including the shutdown handler's, so a
+  job killed by something else filed its failure against a watchdog that never fired. It now carries
+  the abort reason the caller supplied, the way the Pi runner already did, and an abort that supplied
+  none falls back to saying so rather than quoting the platform's own contentless "This operation was
+  aborted" (a reasonless `abort()` sets an `AbortError` that IS an `Error`, so the fallback was
+  unreachable).
+
+  The image moves to `cat-factory-executor:1.121.0` across the wrangler config, the publish script and
+  `RECOMMENDED_HARNESS_IMAGE`: the entrypoint rename and `procps` are only in effect once a deployment
+  runs a tag that contains them.
+
+  **The acceptance suite stops blaming the merge threshold for a failed run.** Its "the merge was
+  HELD" hint fired on "there is a pull request and the status is not done", which is also true of a
+  run that died three phases before any merge was considered; it is now offered only where nothing
+  else explains the stop.
+
+## 0.311.0
+
+### Minor Changes
+
+- c67e924: A bug hunt on a repo-backed tracker scopes to the service's repository, not a picked board
+
+  GitHub Issues and GitLab Issues put every issue in one repository, and the only repository a hunt
+  may read is the one its service frame is linked to. Both now offer NO board control: the hunt
+  carries the container an adopted bug will land in, and the board is that container's service repo,
+  resolved through the same `resolveRepoTarget` walk an issue search scopes with (now shared as
+  `server/src/modules/tasks/sourceRepoScope.ts`). A board picker there could scan, rate and adopt a
+  bug from a repository nothing on the board points at, whose run would then open its PR somewhere
+  else entirely.
+
+  Internal wire break (`POST /workspaces/:ws/bug-hunt/:source/hunts`): the body now takes
+  `containerId` plus a REQUIRED, NULLABLE `board`. `null` is the only legal value for a repo-backed
+  source, and naming one there is refused (`details.reason: 'board_from_service'`) rather than
+  ignored; a repo-less source with no board is refused too. Board LISTING is refused for a repo-backed
+  source with the same reason, so `GitHubIssuesProvider.listBoards` and
+  `GitLabIssuesProvider.listBoards` are gone along with the shared `repoRefsToBoards` projection.
+  `TaskSourceState` gains `repoBacked` (derived from the provider's declared `repoScope`) so the SPA
+  knows which surface to render before it asks.
+
+  Every refusal now lands as soon as it is decidable, cheapest first: an unhuntable source on the
+  registry, then the board shape from the request body alone, then the repository walk, then the
+  container. So an unregistered source is refused by name instead of being told to pick a board it
+  has no control for, a board named beside an unlinked service no longer costs two round trips to
+  learn it was never allowed, and a `containerId` naming no block on this workspace refuses before
+  the vendor read and the ranking call rather than at adoption.
+
+## 0.310.0
+
+### Minor Changes
+
+- 056e18d: Hold a run while a companion's MUST-FIX finding is open, whatever the rating said.
+
+  A companion returned one number for a whole deliverable, and that number alone decided whether the
+  run moved on. So a reviewer that found something genuinely unshippable — an unhandled failure mode,
+  a requirement not met, a claim the work does not support — could still rate the change 0.9 against a
+  0.8 bar and watch the pipeline advance past it. The urgency it meant was in the summary prose, in
+  the `**Must fix**` group the prompt asked for, which is a channel only a person reads.
+
+  Reviews are now GRADED. Each point a companion raises is its own `comments` entry carrying a
+  `severity` of `blocker`, `major` or `minor` (the same three levels the prose groups named), and the
+  verdict's two halves are read independently by kernel's new `disposeCompanionVerdict`: any open
+  `blocker` reworks the producer whatever the rating, and the rating decides everything else. The
+  `summary` becomes a short whole-verdict paragraph rather than a second copy of the list, matching
+  what the judge prompt already does, since both are rendered together and a review written twice is
+  two orderings that can disagree.
+
+  **Spending the rework budget on a blocker parks for a person, and an unattended risk policy does not
+  answer that park.** ADR 0053's rule is that a policy may take the "proceed anyway" a person would
+  have been offered when an automatic loop reports it GAVE UP; a reviewer naming a must-fix is not
+  that, so accepting the work anyway would be overruling a review nobody read. The distinction is a
+  closed vocabulary (`CompanionParkReason`, the sibling of `JudgeParkReason`) rather than prose, and
+  only `budget_spent` reaches the policy. The run panel's cap prompt states which of the two it is,
+  because the person answering an unanswerable-by-policy park should know what they are being asked to
+  overrule.
+
+  That vocabulary is also what a loop stopped EARLY as unproductive (`companionLoopStalled`) now
+  resolves against. Abandoning the rounds still on the budget takes the cap's park, so the reason is
+  re-decided for the abandoned budget instead of being assumed to be a spent one: a standstill is the
+  automation reporting that it gave up, an open `blocker` is not, and a stalled loop routinely carries
+  both (the run that motivated the stall rule had two must-fix items open the whole way). So an
+  unattended policy answers a stalled quality loop and still waits for a person on a blocked one.
+
+  An out-of-vocabulary severity from a model reads as `major`, the same "unreadable severity reads as
+  its safe default" rule the judge and PR-review findings use: the whole assessment is one parse, and
+  an unparseable companion verdict fails the run, which is far worse than one point landing a level
+  off. `major` and not either extreme, so a typo can neither manufacture a hard stop nor retire a real
+  one. A comment with no severity at all (a person's "request changes" note, or one recorded before
+  this existed) stays ungraded and never blocks.
+
+  The findings now render. Each verdict card in the run panel lists them worst first with a severity
+  badge beside each, which is new: `comments` were persisted and fed back into later rounds but shown
+  to nobody, so the point holding a run was invisible to the person being asked to resolve it. Both
+  sides of the rework loop read the grades too — the producer is told which comments are blocking and
+  works them first, and a re-grading companion sees its earlier rounds' points labelled.
+
+  **Every surface that a person or an integration answers this park from names the findings, because
+  the summary no longer can.** With the prose groups gone, three places were reading the review out of
+  a channel that stopped carrying it. The extra round a person grants at the cap loops the producer
+  back with the verdict's graded `comments` attached, as the automatic rework path already did, so the
+  round somebody just paid for names the points it is for. The `approval-gate` entry of
+  `GET /api/v1/runs/{runId}/decisions` gains a `blockingFindings` array (spec `1.53.0`, additive), so a
+  caller answering `resolve-exceeded` with `proceed` can read the must-fixes it would be overruling
+  rather than inferring them from a verdict paragraph. And a companion's findings anchor to a
+  structured item by id rather than by quoting prose, which the producer prompt was rendering against
+  an empty target: an anchored point now names its item, and a point that anchors neither way is
+  addressed to the proposal as a whole.
+
+  **A first batch of nothing but nits no longer costs a round.** The rule that spends one round on a
+  first review's findings asked only whether there were any, so a reviewer that followed its own
+  instruction (a `minor` is "never worth holding anything for"), rated work above the bar and attached
+  one polish note bought a full producer re-run plus a re-grading call. It now takes a point the
+  reviewer did NOT call a nit, and the prompt states what each level costs so the grade decides
+  something a reviewer can predict. An ungraded point still counts: its urgency is unknown rather than
+  known to be low.
+
+  The panel's verdict badge derives its `>=` / `<` glyph from the comparison rather than from
+  `passed`, which are no longer the same fact: a round held by an open blocker fails at a rating that
+  cleared its bar, and reading one off the other printed `95% < 80%` above the findings explaining it.
+  The cap prompt's stalled wording drops its claim about the rating for the same reason.
+
+  A severity read off a STORED row is narrowed through `isReviewCommentSeverity` rather than trusted:
+  the schema's `major` fallback runs on the model reply, which is the only thing it parses, so a level
+  retired from the vocabulary would reach an exhaustive `Record` and come back `undefined`. Such a
+  value now sorts with the ungraded, carries no mechanical force, and is NAMED as unrecognised on the
+  panel instead of being painted as a level nobody chose.
+
+  `REVIEW_SUMMARY_LAYOUT` is replaced by `REVIEW_FINDINGS_LAYOUT`; a deployment appending the old
+  constant to its own companion prompt should append the new one, and one relying on the shared
+  companion prompt needs no change. Website: kibertoad/cat-factory-website#60.
+
+## 0.309.0
+
+### Minor Changes
+
+- a81879b: Put the build ladder back in the pickers, and scope the bugfix preset to bug tasks.
+
+  Since the build presets adopted the conditional tester pair, each of them LISTS a `tester-ui` step
+  scoped to `serviceScope: 'frontend'`. The pickers' visual gate asked whether a pipeline lists a
+  visual step at all, so Standard / Simple / Adaptive / Complex build and Unattended delivery all read
+  as UI pipelines and vanished from every task picker on every non-frontend service, leaving a feature
+  task with the spike presets and Ralph. Run admission never agreed: it filters the chain through the
+  run conditions before its own frame gate, so the engine would have started any of them. The surface
+  now asks the same question through `pipelineRunsVisualStep`, and a pipeline whose visual step is
+  UNCONDITIONAL is still hidden where there is no UI.
+
+  `Pipeline.purpose` also gains a `bugfix` member, carried by `pl_bugfix` and `pl_bug_triage` (both
+  version-bumped, so an existing board is offered the reseed). It is `build` in everything the palette,
+  the save gate and the saved-pipeline library judge, and differs only in the task type it is offered
+  to: "Triage & fix bug" investigates a defect REPORT, triages it with a person and writes a failing
+  reproduction test, none of which a feature task can supply. A bug task keeps the whole build ladder
+  beside it. One helper (`classifierSuits`) states the "`build` satisfies `bugfix`" relation for every
+  surface that narrows by purpose, one way: without it a bugfix palette would open near-empty with the
+  Bug Investigator itself missing, and a bugfix draft's library would hold two rows.
+
+  Minor on contracts rather than patch: `PIPELINE_PURPOSES` gains a member, so a consumer's exhaustive
+  `Record<PipelinePurpose, …>` stops compiling on upgrade, and `pipelineRunsVisualStep` is new exported
+  surface.
+
 ## 0.308.1
 
 ### Patch Changes

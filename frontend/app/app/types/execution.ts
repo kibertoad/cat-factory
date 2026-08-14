@@ -115,6 +115,7 @@ export type {
   VisualConfirmDesignReferences,
   VisualConfirmRound,
   ExecutionInstance,
+  ExecutionStatus,
   // The historical frontend name for a per-block review comment is the contract's
   // StepReviewComment; the env-status union is the contract's EnvironmentStatus.
   StepReviewComment as ReviewComment,

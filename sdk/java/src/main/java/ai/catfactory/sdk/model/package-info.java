@@ -2,7 +2,7 @@
 // Regenerate after any change to the `/api/v1` contracts; `pnpm check:sdk` fails CI on drift.
 
 /**
- * Wire models for the cat-factory public API ({@code /api/v1}), surface version 1.52.0.
+ * Wire models for the cat-factory public API ({@code /api/v1}), surface version 1.55.0.
  *
  * <p>The package is {@link org.jspecify.annotations.NullMarked}: every reference type here is
  * non-null unless annotated {@link org.jspecify.annotations.Nullable}. That is what lets a Kotlin

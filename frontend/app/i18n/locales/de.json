@@ -1240,7 +1240,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "Vereinigte Staaten",
@@ -2033,6 +2034,13 @@
       "awaitingChoice": "Wartet auf eine menschliche Wahl",
       "approvalGate": "Freigabe-Gate",
       "companionReview": "Begleiter-Prüfung",
+      "findingSeverity": {
+        "blocker": "Muss behoben werden",
+        "major": "Sollte behoben werden",
+        "minor": "Geringfügig",
+        "ungraded": "Kommentar",
+        "unrecognized": "Unbekannte Stufe ({level})"
+      },
       "correctionIterations": "{count} Korrekturiteration. | {count} Korrekturiterationen.",
       "state": {
         "pending": "Ausstehend",
@@ -2069,7 +2077,9 @@
       "closeEsc": "Schließen (Esc)",
       "companionCapHeading": "{agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, noch unter der {threshold}-Schwelle.",
       "companionCapDetail": "Führe eine weitere automatische Überarbeitungsrunde durch, fahre mit dem nächsten Schritt fort und akzeptiere die aktuelle Ausgabe, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
-      "companionStalledHeading": "{agent} hat die Überarbeitungsschleife nach {attempts} von {maxAttempts} Runden gestoppt: Die letzte Überarbeitung kam unverändert zurück und die Bewertung blieb unter der {threshold}-Schwelle.",
+      "companionCapBlockedHeading": "{agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, {count} zwingender Befund ist weiterhin offen. | {agent} hat sein Überarbeitungslimit von {attempts} Versuchen erreicht, {count} zwingende Befunde sind weiterhin offen.",
+      "companionCapBlockedDetail": "Fortfahren akzeptiert die Arbeit mit diesen ungelösten Befunden, deshalb trifft die Risikorichtlinie dieses Laufs diese Wahl nie für dich. Führe eine weitere automatische Überarbeitungsrunde durch, fahre trotzdem mit der aktuellen Ausgabe fort, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
+      "companionStalledHeading": "{agent} hat die Überarbeitungsschleife nach {attempts} von {maxAttempts} Runden gestoppt: Die letzte Überarbeitung kam unverändert zurück und die Bewertung hat sich nicht verändert.",
       "companionStalledDetail": "Die restlichen Runden bleiben ungenutzt, weil sie nur ein bereits abgegebenes Urteil wiederholen würden. Führe trotzdem eine weitere Runde durch, fahre mit dem nächsten Schritt fort und akzeptiere die aktuelle Ausgabe, oder stoppe und setze die Aufgabe zurück, damit du die Eingaben bearbeiten und erneut einreichen kannst.",
       "infraAttempts": "Infrastruktur-Versuche",
       "hideInfraAttempts": "Infrastruktur-Versuche ausblenden",
@@ -2480,6 +2490,7 @@
         "pipeline_complete": "Bestätigen & mergen",
         "ci_failed": "Lauf wiederholen",
         "test_failed": "Lauf wiederholen",
+        "deploy_blocked": "Lauf wiederholen",
         "requirement_review": "Als gelesen markieren",
         "clarity_review": "Als gelesen markieren",
         "release_regression": "Bestätigen",
@@ -3387,6 +3398,11 @@
           "step1": "Öffnen Sie platform.moonshot.ai → API Keys und erstellen Sie einen Schlüssel.",
           "step2": "Kopieren Sie den Schlüssel; er authentifiziert den OpenAI-kompatiblen Moonshot-Endpunkt."
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "Öffnen Sie console.x.ai → API Keys und erstellen Sie einen Schlüssel.",
+          "step2": "Kopieren Sie den Schlüssel; er authentifiziert den OpenAI-kompatiblen xAI-Endpunkt."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "Öffnen Sie openrouter.ai → Keys und erstellen Sie einen API-Schlüssel.",
@@ -3841,6 +3857,7 @@
       "dispatch": "Zustellung",
       "environment": "Umgebung",
       "evicted": "Verdrängt",
+      "harness_shutdown": "Harness beendet",
       "timeout": "Zeitüberschreitung",
       "agent": "Agent",
       "job_failed": "Job fehlgeschlagen",
@@ -4289,7 +4306,9 @@
     "tracker": "Tracker",
     "board": "Board",
     "pickBoard": "Board auswählen",
-    "boardPlaceholder": "Projektschlüssel, Team-ID oder owner/repo",
+    "boardPlaceholder": "Projektschlüssel oder Team-ID",
+    "boardFromService": "Das mit diesem Service verknüpfte Repository",
+    "boardNeedsRepo": "Mit diesem Service ist kein Repository verknüpft, es gibt also keine Tickets zu durchsuchen. Verknüpfe eines im Service-Panel.",
     "boardsFailed": "Boards konnten nicht geladen werden: {reason}",
     "issueType": "Vorgangstyp",
     "issueTypeHelp": "Standard ist bug. Wird von Trackern ohne Vorgangstypen ignoriert.",
@@ -4298,6 +4317,8 @@
     "labelsHelp": "Durch Komma getrennt. Alle müssen vorhanden sein.",
     "adoptInto": "Ausgewählten Fehler hinzufügen zu",
     "adoptingInto": "Der ausgewählte Fehler landet in {container}",
+    "huntIn": "Zu durchsuchender Service",
+    "huntingIn": "Durchsucht wird das mit {container} verknüpfte Repository; dort landet auch der ausgewählte Fehler.",
     "run": "Jagen",
     "running": "Board wird gelesen und die Funde werden bewertet…",
     "huntFailed": "Die Jagd ist fehlgeschlagen",
@@ -4310,6 +4331,7 @@
     "noCandidates": "Auf diesem Board gab es keine offenen, nicht zugewiesenen Fehler.",
     "ratings": "Auswirkung {impact}/5, Aufwand {complexity}/5, Konfidenz {confidence}",
     "viaModel": "Bewertet von {model}.",
+    "scannedBoard": "{board} durchsucht.",
     "truncated": "Es wurden nur die ersten {count} passenden Fehler geprüft; dieses Board enthält mehr.",
     "comments": "{count} Kommentar | {count} Kommentare",
     "confidence": {
@@ -4323,6 +4345,10 @@
       "failed": "Die Bewertung konnte nicht abgeschlossen werden, daher sind diese unbewertet.",
       "over_budget": "Dieser Arbeitsbereich hat sein Ausgabenbudget überschritten, daher wurden diese nicht bewertet.",
       "empty": "Nichts zu bewerten."
+    },
+    "refusal": {
+      "boardFromService": "Dieser Tracker durchsucht das Repository, mit dem der gewählte Service verknüpft ist, und hat daher kein eigenes Board.",
+      "missingBoard": "Wähle das Board aus, auf dem gesucht werden soll."
     }
   },
   "pipeline": {
@@ -4393,6 +4419,7 @@
       "purposeUnrecognized": "Nicht erkannt ({purpose})",
       "purposeOption": {
         "build": "Entwicklung",
+        "bugfix": "Fehlerbehebung",
         "document": "Dokumentation",
         "review": "Review",
         "research": "Recherche",
@@ -4461,7 +4488,7 @@
       "skillNoneAvailable": "Keine Skills verfügbar. Verknüpfe eine Skill-Quelle in den Kontoeinstellungen.",
       "skillMissing": "Dieser Skill ist nicht mehr im Katalog; wähle einen anderen.",
       "skillNeedsPick": "Ein Skill-Schritt braucht einen ausgewählten Skill, bevor du speichern kannst.",
-      "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder setzen Sie den Zweck auf Entwicklung.",
+      "purposeStepsConflict": "Dieser Zweck schreibt keinen Code und führt keine Tests aus, doch die Pipeline enthält noch Implementierungs- oder Testschritte. Entfernen Sie diese oder wählen Sie einen Zweck, der Code liefert (Entwicklung oder Fehlerbehebung).",
       "promptEditTooltip": "Systemprompt dieses Agenten bearbeiten",
       "promptEditedTooltip": "Der Systemprompt dieses Agenten ist für diesen Arbeitsbereich bearbeitet",
       "consensusGroups": "Konsensgruppen",
@@ -5961,6 +5988,7 @@
       "pipeline_complete": "Pipeline abgeschlossen",
       "ci_failed": "CI fehlgeschlagen",
       "test_failed": "Tests fehlgeschlagen",
+      "deploy_blocked": "Deployment blockiert",
       "requirement_review": "Anforderungs-Review",
       "clarity_review": "Klarheits-Review",
       "release_regression": "Release-Regression",
@@ -6024,6 +6052,7 @@
       "pipeline_complete": "Pipeline abgeschlossen",
       "ci_failed": "CI fehlgeschlagen",
       "test_failed": "Tests fehlgeschlagen",
+      "deploy_blocked": "Deployment blockiert",
       "requirement_review": "Anforderungs-Review",
       "clarity_review": "Klarheits-Review",
       "release_regression": "Release-Regression",

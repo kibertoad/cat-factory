@@ -1,5 +1,218 @@
 # @cat-factory/worker
 
+## 0.190.1
+
+### Patch Changes
+
+- 409238f: Add GLM-5.3, Gemini 3.7 Flash and Grok 4.6 to the model catalog, and re-baseline the spend
+  price table against what the providers currently charge.
+
+  New catalog entries: `glm-5.3` (subscription-only, GLM Coding Plan), `gemini-3.7-flash`
+  (OpenRouter) and `grok` (Grok 4.6, direct via a new `xai` provider or OpenRouter). GLM-4.7
+  Flash gains a Bedrock flavour (`zai.glm-4.7-flash`).
+
+  `xai` is a new direct provider: `XAI_API_KEY` joins the poolable key providers and the
+  reserved-env-key list, `XAI_BASE_URL` overrides the endpoint, and `grok` joins the model
+  family vocabulary the account model policy allows or blocks. A policy in `allowlist` mode
+  does not admit the new family until an admin adds it, which is the intended default.
+
+  Price corrections, several of which were metering runs BELOW their real cost: DeepSeek's V4
+  pair moves to the peak rates its 2026-08-16 peak/off-peak switch introduces, the OpenRouter
+  `deepseek/deepseek-v4-pro` alias nearly triples, and Cloudflare's now-published cached-input
+  rates for GLM-5.2 and the Kimi pair replace a derived floor that was ~1.9x too low. GLM-5.2
+  and Gemini 3.6 Flash on OpenRouter were overpriced and come down. Z.ai subscription refs
+  (`zai:*`) were falling through to the generic default price and now carry Z.ai's list rate.
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+  - @cat-factory/agents@0.131.0
+  - @cat-factory/spend@0.15.95
+  - @cat-factory/caching@0.20.22
+  - @cat-factory/consensus@0.16.22
+  - @cat-factory/eks@0.1.326
+  - @cat-factory/gates@0.10.53
+  - @cat-factory/gitlab@0.20.23
+  - @cat-factory/integrations@0.162.1
+  - @cat-factory/observability-langfuse@0.10.97
+  - @cat-factory/observability-otel@0.21.1
+  - @cat-factory/orchestration@0.272.1
+  - @cat-factory/prompt-fragments@1.0.77
+  - @cat-factory/provider-cloudflare@0.7.475
+  - @cat-factory/server@0.287.1
+
+## 0.190.0
+
+### Minor Changes
+
+- 0ef48d1: Stop an agent's own cleanup command from killing the harness that supervises it, and report a
+  harness that WAS stopped as what it is.
+
+  A local acceptance run failed as "the container kept vanishing, treating as deterministic" after
+  two full coder passes. Nothing evicted anything. The harness ran as PID 1 with the command line
+  `node dist/server.js`, which is also where the Fastify service the coder was scaffolding built to;
+  the agent started that service in the background to smoke-test it over a real socket, then ran
+  `pkill -f 'node dist/server.js'` to stop it again. The image ships no `pkill`, so that failed with
+  `command not found` and the next turn used something that works without procps, which matched PID 1
+  and shut the harness down. The container exited 0, the engine could only see a backend that had
+  stopped answering, so it called it an eviction, spent its crash-recovery budget re-running the same
+  agent into the same wall, and blamed infrastructure churn.
+
+  **The harness no longer answers to a pattern kill aimed at anything else.** It runs from
+  `dist/harness-server.js` and sets `process.title = 'cat-factory-harness'`, which on Linux rewrites
+  both `/proc/<pid>/cmdline` and (truncated) `/proc/<pid>/comm`, so neither `pkill -f 'node dist/…'`
+  nor a bare `pkill node` nor a hand-rolled `/proc` sweep can name it. It is not a security boundary
+  and is not claimed as one: the agent shares the harness's uid, and separating them needs a PID 1
+  running as root, which this image deliberately does not have. What it removes is the accident.
+
+  **`procps` + `psmisc` are now in the image**, which reads backwards until you look at what the
+  absence caused: `pkill`/`pgrep`/`ps` are the narrow tools an agent reaches for first, and the
+  fallback it writes when they are missing is the unbounded one that took the harness down.
+
+  **A harness that exits cleanly mid-job is no longer an eviction.** Every transport that can read an
+  exit code (the local container and native-process legs, the Cloudflare per-run container, and a
+  Kubernetes runner pod's `state.terminated`) now distinguishes a workload that exited 0 with a job
+  still in flight from one that crashed or was reclaimed, and reports `harnessShutdown` instead of
+  `evicted`. The engine fails that run immediately with a new `harness_shutdown` failure kind
+  (additive to the public failure-kind vocabulary; OpenAPI surface 1.54.0) and a hint that names the
+  causes worth checking, rather than spending an automatic retry that walks back into whatever
+  stopped it. A backend that reports no exit code (Apple `container`, a manifest-driven runner pool
+  whose scheduler exposes only status words) keeps reporting an eviction, because an absent code is
+  not a zero.
+
+  The distinction is only ever drawn where NOTHING else explains the stop. Infrastructure churn is
+  named and recovers on its own budget, and it stays named even after its attribution window passes:
+  a rollout drain the harness answered by exiting 0, discovered minutes later by a re-driven poll, is
+  still that drain rather than a shutdown. The same rule orders the engine's own reading: a killed
+  job that some branch settles WITHOUT failing the run (a parked PR review's read-only Challenge
+  Investigator) keeps that settlement, since losing a human's in-flight curation is worse than the
+  retry this failure kind exists to prevent. `container.harness_shutdown` counts the class, kept out
+  of `container.evicted` so the eviction rate an operator sizes infrastructure by is not inflated by
+  deaths no infrastructure change prevents.
+
+  **An aborted agent run says who aborted it.** The Claude Code / Codex runner rejected with a
+  hard-coded "agent run aborted by watchdog" for every abort, including the shutdown handler's, so a
+  job killed by something else filed its failure against a watchdog that never fired. It now carries
+  the abort reason the caller supplied, the way the Pi runner already did, and an abort that supplied
+  none falls back to saying so rather than quoting the platform's own contentless "This operation was
+  aborted" (a reasonless `abort()` sets an `AbortError` that IS an `Error`, so the fallback was
+  unreachable).
+
+  The image moves to `cat-factory-executor:1.121.0` across the wrangler config, the publish script and
+  `RECOMMENDED_HARNESS_IMAGE`: the entrypoint rename and `procps` are only in effect once a deployment
+  runs a tag that contains them.
+
+  **The acceptance suite stops blaming the merge threshold for a failed run.** Its "the merge was
+  HELD" hint fired on "there is a pull request and the status is not done", which is also true of a
+  run that died three phases before any merge was considered; it is now offered only where nothing
+  else explains the stop.
+
+### Patch Changes
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+  - @cat-factory/orchestration@0.272.0
+  - @cat-factory/integrations@0.162.0
+  - @cat-factory/observability-otel@0.21.0
+  - @cat-factory/server@0.287.0
+  - @cat-factory/agents@0.130.2
+  - @cat-factory/caching@0.20.21
+  - @cat-factory/consensus@0.16.21
+  - @cat-factory/eks@0.1.325
+  - @cat-factory/gates@0.10.52
+  - @cat-factory/gitlab@0.20.22
+  - @cat-factory/observability-langfuse@0.10.96
+  - @cat-factory/prompt-fragments@1.0.76
+  - @cat-factory/provider-cloudflare@0.7.474
+  - @cat-factory/spend@0.15.94
+
+## 0.189.5
+
+### Patch Changes
+
+- d5c1f1c: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with (`ai@7.0.64`,
+  `@ai-sdk/openai@4.0.41`, `@ai-sdk/amazon-bedrock@5.0.55`). The Cloudflare toolchain moves
+  together again: `wrangler@4.122.0` and `@cloudflare/vitest-pool-workers@0.21.2`, whose bundled
+  wrangler tracks it. `@aws-sdk/client-s3` goes to 3.1109.0 and the SPA's store engine to
+  `pinia@4.0.3` / `@pinia/nuxt@1.0.2`.
+
+  `capnweb` moves 0.10.0 to 0.11.0 in the Gatekeeper Worker. The release is additive (stubs as
+  stream chunks, exact ArrayBuffer/DataView serialization, URL over RPC) and touches neither
+  `RpcTarget` nor `newWorkersRpcResponse`, the only two symbols we import. Its 0.11.1 patch, which
+  enforces an ASCII-only dist bundle so a consumer's `btoa()` cannot choke on the runtime, missed
+  the release-age window by two hours and is the first thing the next sweep should pick up.
+
+  Held back deliberately: `@changesets/cli` 3.0.0 and, in the frontend, `typescript` 7 (Nuxt 4.5.2
+  itself depends on `typescript@6.0.3`). No `minimumReleaseAgeExclude` entries were added: every
+  version above already satisfies the gate.
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/agents@0.130.1
+  - @cat-factory/consensus@0.16.20
+  - @cat-factory/integrations@0.161.0
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/orchestration@0.271.1
+  - @cat-factory/provider-cloudflare@0.7.473
+  - @cat-factory/contracts@0.311.0
+  - @cat-factory/server@0.286.0
+  - @cat-factory/eks@0.1.324
+  - @cat-factory/caching@0.20.20
+  - @cat-factory/gates@0.10.51
+  - @cat-factory/gitlab@0.20.21
+  - @cat-factory/observability-langfuse@0.10.95
+  - @cat-factory/observability-otel@0.20.4
+  - @cat-factory/prompt-fragments@1.0.75
+  - @cat-factory/spend@0.15.93
+
+## 0.189.4
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+  - @cat-factory/agents@0.130.0
+  - @cat-factory/orchestration@0.271.0
+  - @cat-factory/server@0.285.0
+  - @cat-factory/consensus@0.16.19
+  - @cat-factory/eks@0.1.323
+  - @cat-factory/gates@0.10.50
+  - @cat-factory/gitlab@0.20.20
+  - @cat-factory/integrations@0.160.17
+  - @cat-factory/observability-otel@0.20.3
+  - @cat-factory/prompt-fragments@1.0.74
+  - @cat-factory/spend@0.15.92
+  - @cat-factory/caching@0.20.19
+  - @cat-factory/observability-langfuse@0.10.94
+  - @cat-factory/provider-cloudflare@0.7.472
+
+## 0.189.3
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+  - @cat-factory/agents@0.129.2
+  - @cat-factory/consensus@0.16.18
+  - @cat-factory/eks@0.1.322
+  - @cat-factory/gates@0.10.49
+  - @cat-factory/gitlab@0.20.19
+  - @cat-factory/integrations@0.160.16
+  - @cat-factory/observability-otel@0.20.2
+  - @cat-factory/orchestration@0.270.2
+  - @cat-factory/prompt-fragments@1.0.73
+  - @cat-factory/server@0.284.2
+  - @cat-factory/spend@0.15.91
+  - @cat-factory/caching@0.20.18
+  - @cat-factory/observability-langfuse@0.10.93
+  - @cat-factory/provider-cloudflare@0.7.471
+
 ## 0.189.2
 
 ### Patch Changes

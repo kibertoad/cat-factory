@@ -1386,6 +1386,13 @@
       "awaitingChoice": "人による選択を待機中",
       "approvalGate": "承認ゲート",
       "companionReview": "コンパニオンレビュー",
+      "findingSeverity": {
+        "blocker": "要修正",
+        "major": "修正推奨",
+        "minor": "軽微",
+        "ungraded": "コメント",
+        "unrecognized": "未知のレベル ({level})"
+      },
       "correctionIterations": "{count} 回の修正イテレーション。 | {count} 回の修正イテレーション。",
       "state": {
         "pending": "保留中",
@@ -1422,7 +1429,9 @@
       "closeEsc": "閉じる (Esc)",
       "companionCapHeading": "{agent} は {attempts} 回の再作業上限に達しましたが、まだ {threshold} の基準を下回っています。",
       "companionCapDetail": "自動の再作業をもう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
-      "companionStalledHeading": "{agent} は {maxAttempts} 回のうち {attempts} 回で再作業ループを停止しました。直前の修正が変更されずに返され、評価も {threshold} の基準を下回ったままでした。",
+      "companionCapBlockedHeading": "{agent} は {attempts} 回の再作業上限に達しましたが、要修正の指摘が {count} 件残っています。 | {agent} は {attempts} 回の再作業上限に達しましたが、要修正の指摘が {count} 件残っています。",
+      "companionCapBlockedDetail": "このまま進めると、これらの指摘が未修正のまま作業を受け入れることになります。そのため、この実行のリスクポリシーがこの選択を代わりに行うことはありません。自動の再作業をもう1回実行するか、現在の出力のまま進めるか、タスクを停止してリセットし、入力を編集して再送信してください。",
+      "companionStalledHeading": "{agent} は {maxAttempts} 回のうち {attempts} 回で再作業ループを停止しました。直前の修正が変更されずに返され、評価も動きませんでした。",
       "companionStalledDetail": "残りの回数は、すでに出された判定を繰り返すだけなので使われていません。それでももう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
       "infraAttempts": "インフラの試行",
       "hideInfraAttempts": "インフラの試行を非表示",
@@ -1804,6 +1813,7 @@
       "dispatch": "ディスパッチ",
       "environment": "環境",
       "evicted": "退避",
+      "harness_shutdown": "Harness 停止",
       "timeout": "タイムアウト",
       "agent": "エージェント",
       "job_failed": "ジョブ失敗",
@@ -2213,6 +2223,7 @@
         "pipeline_complete": "確認してマージ",
         "ci_failed": "実行を再試行",
         "test_failed": "実行を再試行",
+        "deploy_blocked": "実行を再試行",
         "requirement_review": "既読にする",
         "clarity_review": "既読にする",
         "release_regression": "確認",
@@ -3872,7 +3883,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "アメリカ合衆国",
@@ -4148,6 +4160,11 @@
           "step1": "platform.moonshot.ai → API Keys を開き、キーを作成します。",
           "step2": "キーをコピーします。OpenAI 互換の Moonshot エンドポイントを認証します。"
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "console.x.ai → API Keys を開き、キーを作成します。",
+          "step2": "キーをコピーします。OpenAI 互換の xAI エンドポイントを認証します。"
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "openrouter.ai → Keys を開き、API キーを作成します。",
@@ -4394,6 +4411,7 @@
       "pipeline_complete": "パイプライン完了",
       "ci_failed": "CI失敗",
       "test_failed": "テスト失敗",
+      "deploy_blocked": "デプロイがブロックされました",
       "requirement_review": "要件レビュー",
       "clarity_review": "明確性レビュー",
       "release_regression": "リリースリグレッション",
@@ -4457,6 +4475,7 @@
       "pipeline_complete": "パイプライン完了",
       "ci_failed": "CI失敗",
       "test_failed": "テスト失敗",
+      "deploy_blocked": "デプロイがブロックされました",
       "requirement_review": "要件レビュー",
       "clarity_review": "明確性レビュー",
       "release_regression": "リリースリグレッション",
@@ -4751,7 +4770,9 @@
     "tracker": "トラッカー",
     "board": "ボード",
     "pickBoard": "ボードを選択",
-    "boardPlaceholder": "プロジェクトキー、チーム ID または owner/repo",
+    "boardPlaceholder": "プロジェクトキーまたはチーム ID",
+    "boardFromService": "このサービスにリンクされたリポジトリ",
+    "boardNeedsRepo": "このサービスにはリポジトリがリンクされていないため、探索できる課題がありません。サービスパネルからリンクしてください。",
     "boardsFailed": "ボードを読み込めませんでした: {reason}",
     "issueType": "課題タイプ",
     "issueTypeHelp": "既定は bug です。課題タイプを持たないトラッカーでは無視されます。",
@@ -4760,6 +4781,8 @@
     "labelsHelp": "カンマ区切り。すべて付いている必要があります。",
     "adoptInto": "選んだバグの追加先",
     "adoptingInto": "選んだバグは {container} に追加されます",
+    "huntIn": "探索するサービス",
+    "huntingIn": "{container} にリンクされたリポジトリを探索します。選んだバグもそこに追加されます。",
     "run": "ハント",
     "running": "ボードを読み取り、見つかったものを評価しています…",
     "huntFailed": "ハントに失敗しました",
@@ -4772,6 +4795,7 @@
     "noCandidates": "このボードには条件に合う未割り当ての未解決バグがありません。",
     "ratings": "影響度 {impact}/5、複雑さ {complexity}/5、確信度 {confidence}",
     "viaModel": "{model} による評価です。",
+    "scannedBoard": "{board} を走査しました。",
     "truncated": "一致したバグのうち最初の {count} 件のみを走査しました。このボードにはさらにあります。",
     "comments": "コメント {count} 件 | コメント {count} 件",
     "confidence": {
@@ -4785,6 +4809,10 @@
       "failed": "評価を完了できなかったため、未評価のまま表示しています。",
       "over_budget": "このワークスペースは利用予算を超えているため、評価は行われませんでした。",
       "empty": "評価する対象がありません。"
+    },
+    "refusal": {
+      "boardFromService": "このトラッカーは選択したサービスにリンクされたリポジトリを走査するため、独自のボードはありません。",
+      "missingBoard": "調査するボードを選択してください。"
     }
   },
   "pipeline": {
@@ -4855,6 +4883,7 @@
       "purposeUnrecognized": "認識できません ({purpose})",
       "purposeOption": {
         "build": "開発",
+        "bugfix": "バグ修正",
         "document": "ドキュメント",
         "review": "レビュー",
         "research": "調査",
@@ -4923,7 +4952,7 @@
       "skillNoneAvailable": "利用できるスキルがありません。アカウント設定でスキルソースをリンクしてください。",
       "skillMissing": "このスキルはカタログに存在しません。別のスキルを選んでください。",
       "skillNeedsPick": "Skill ステップを保存するにはスキルの選択が必要です。",
-      "purposeStepsConflict": "この目的はコードを書かず、テストも実行しませんが、パイプラインには実装またはテストのステップが残っています。それらを削除するか、目的を「開発」に切り替えてください。",
+      "purposeStepsConflict": "この目的はコードを書かず、テストも実行しませんが、パイプラインには実装またはテストのステップが残っています。それらを削除するか、コードを提供する目的（「開発」または「バグ修正」）に切り替えてください。",
       "promptEditTooltip": "このエージェントのシステムプロンプトを編集",
       "promptEditedTooltip": "このエージェントのシステムプロンプトは、このワークスペース用に編集されています",
       "consensusGroups": "コンセンサスグループ",

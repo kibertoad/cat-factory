@@ -31,11 +31,12 @@ diffing against the fully composed SHIPPED prompt. **A new engine-enforced fragm
 `OVERRIDE_PRESERVED_FRAGMENTS`**, or an override can delete it.
 
 The test for membership is whether the fragment describes how the platform RUNS the kind rather
-than what it should look for, and it catches more than the obvious two. `REVIEW_SUMMARY_LAYOUT` is
-there because a companion's `summary` is READ as JSON and RENDERED as markdown blocks: an override
-edited for an unrelated reason would otherwise take the escaping rule with it (a multi-line verdict
-then arrives as invalid JSON and costs a repair retry) and send every later verdict back to one
-unskimmable paragraph, with nothing in the editor saying why.
+than what it should look for, and it catches more than the obvious two. `REVIEW_FINDINGS_LAYOUT` is
+there because a companion's verdict is READ by the engine and RENDERED to a person: an override
+edited for an unrelated reason would otherwise take the severity grading with it (every finding
+then reaches the engine equally urgent, and nothing can hold a run on a must-fix) along with the
+escaping rule (a multi-line summary arrives as invalid JSON and costs a repair retry), with nothing
+in the editor saying why.
 
 ## The engine resolves the override ONCE per dispatch
 

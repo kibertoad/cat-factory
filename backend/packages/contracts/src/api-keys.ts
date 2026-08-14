@@ -23,6 +23,7 @@ export const apiKeyProviderSchema = v.picklist([
   'qwen',
   'deepseek',
   'moonshot',
+  'xai',
   // OpenAI-compatible aggregator/gateway providers: OpenRouter (a single hosted gateway
   // to 300+ models) and LiteLLM (an operator-hosted gateway; its base URL comes from the
   // deployment's LITELLM_BASE_URL). Both resolve via the shared OpenAI-compatible path.

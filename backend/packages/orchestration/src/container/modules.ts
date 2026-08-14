@@ -451,6 +451,7 @@ export function createTasksModule(
     taskSourceRegistry: registry,
     taskConnectionStore,
     taskRepository,
+    blockRepository: deps.blockRepository,
     importService,
     linkService,
     // The ranking is a billable model call that no run start gates, so it answers to the SAME

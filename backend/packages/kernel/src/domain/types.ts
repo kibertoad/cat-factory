@@ -75,6 +75,7 @@ export type {
   SpendStatus,
   StepApproval,
   StepReviewComment,
+  ReviewCommentSeverity,
   StepSubtasks,
   WebSearchAvailability,
   WebSearchProvider,
@@ -420,6 +421,10 @@ export type {
   CompanionAssessment,
   CompanionVerdict,
   // Gate (ci/conflicts) / merge-policy shapes.
+  // Deploy-remediation shapes (the deployer bounded fixer loop).
+  DeployFixConfig,
+  DeployFixState,
+  DeployFixAttempt,
   GateStepState,
   GateFailingCheck,
   GateAttempt,

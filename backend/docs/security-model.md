@@ -106,6 +106,18 @@ on `PATH` before the harness's own push. Treat this layer as least-privilege hyg
 casual and accidental exfiltration; the **container is the trust boundary**, and what a stolen token
 is worth is bounded by Layer 3, not by this one.
 
+The same shared user bounds AVAILABILITY, not just confidentiality: the agent may SIGNAL the harness,
+which is PID 1 of the job container, and stop the very process supervising it. That is not fixable by
+permissions here, because dropping the agent to a second uid needs a PID 1 running as root, which
+this image deliberately does not have and managed container runtimes forbid. Two things are done
+instead, and neither is a boundary. The harness does not answer to a pattern kill aimed at anything
+else: it runs from `dist/harness-server.js` and renames itself to `cat-factory-harness`, which
+rewrites both `/proc/<pid>/cmdline` and `comm`, so `pkill -f 'node dist/server.js'` and a bare
+`pkill node` find only what the agent itself started (an agent scaffolding a Node service really did
+match the old name and shut the harness down mid-job). And a harness that exits CLEANLY with a job
+still running is reported as `harness_shutdown` rather than an eviction, so the platform states what
+happened and does not spend an automatic retry reproducing it.
+
 This layer is at its weakest in **local native mode** (`LOCAL_NATIVE_AGENTS`): there is no container
 at all; the agent runs as your own user on your own machine, so the process boundary above is only
 whatever sandboxing the agent CLI itself applies. See item 5 of the operator hardening checklist.

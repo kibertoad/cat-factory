@@ -1367,6 +1367,13 @@
       "awaitingChoice": "Oczekiwanie na wybór człowieka",
       "approvalGate": "Bramka zatwierdzenia",
       "companionReview": "Recenzja towarzysza",
+      "findingSeverity": {
+        "blocker": "Blokujące",
+        "major": "Do poprawy",
+        "minor": "Drobne",
+        "ungraded": "Komentarz",
+        "unrecognized": "Nierozpoznany poziom ({level})"
+      },
       "correctionIterations": "{count} iteracja korekty. | {count} iteracje korekty. | {count} iteracji korekty.",
       "state": {
         "pending": "Oczekuje",
@@ -1422,7 +1429,9 @@
       "closeEsc": "Zamknij (Esc)",
       "companionCapHeading": "{agent} osiągnął limit {attempts} prób przeróbki, wciąż poniżej progu {threshold}.",
       "companionCapDetail": "Wykonaj jeszcze jedną automatyczną rundę przeróbki, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
-      "companionStalledHeading": "{agent} zatrzymał pętlę przeróbek po {attempts} z {maxAttempts} rund: ostatnia poprawka wróciła bez zmian, a ocena pozostała poniżej progu {threshold}.",
+      "companionCapBlockedHeading": "{agent} osiągnął limit {attempts} prób przeróbki, a {count} uwaga blokująca pozostaje otwarta. | {agent} osiągnął limit {attempts} prób przeróbki, a {count} uwagi blokujące pozostają otwarte. | {agent} osiągnął limit {attempts} prób przeróbki, a {count} uwag blokujących pozostaje otwartych.",
+      "companionCapBlockedDetail": "Kontynuacja oznacza przyjęcie pracy z tymi nienaprawionymi uwagami, dlatego polityka ryzyka tego przebiegu nigdy nie podejmie takiej decyzji za ciebie. Wykonaj jeszcze jedną automatyczną rundę przeróbki, kontynuuj mimo to z bieżącym wynikiem, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
+      "companionStalledHeading": "{agent} zatrzymał pętlę przeróbek po {attempts} z {maxAttempts} rund: ostatnia poprawka wróciła bez zmian, a ocena się nie zmieniła.",
       "companionStalledDetail": "Pozostałe rundy nie zostały wykorzystane, bo tylko powtórzyłyby już wydaną ocenę. Wykonaj mimo to jeszcze jedną rundę, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
       "infraAttempts": "Próby infrastrukturalne",
       "hideInfraAttempts": "Ukryj próby infrastrukturalne",
@@ -1804,6 +1813,7 @@
       "dispatch": "Wysłanie",
       "environment": "Środowisko",
       "evicted": "Usunięte",
+      "harness_shutdown": "Harness zatrzymany",
       "timeout": "Przekroczono czas",
       "agent": "Agent",
       "job_failed": "Zadanie nieudane",
@@ -2213,6 +2223,7 @@
         "pipeline_complete": "Potwierdź i scal",
         "ci_failed": "Ponów przebieg",
         "test_failed": "Ponów przebieg",
+        "deploy_blocked": "Ponów przebieg",
         "requirement_review": "Oznacz jako przeczytane",
         "clarity_review": "Oznacz jako przeczytane",
         "release_regression": "Potwierdź",
@@ -3872,7 +3883,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "Stany Zjednoczone",
@@ -4148,6 +4160,11 @@
           "step1": "Otwórz platform.moonshot.ai → API Keys i utwórz klucz.",
           "step2": "Skopiuj klucz; uwierzytelnia on zgodny z OpenAI endpoint Moonshot."
         },
+        "xai": {
+          "label": "xAI (API Grok)",
+          "step1": "Otwórz console.x.ai → API Keys i utwórz klucz.",
+          "step2": "Skopiuj klucz; uwierzytelnia on zgodny z OpenAI endpoint xAI."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "Otwórz openrouter.ai → Keys i utwórz klucz API.",
@@ -4394,6 +4411,7 @@
       "pipeline_complete": "Pipeline ukonczony",
       "ci_failed": "Niepowodzenie CI",
       "test_failed": "Niepowodzenie testow",
+      "deploy_blocked": "Wdrożenie zablokowane",
       "requirement_review": "Przeglad wymagan",
       "clarity_review": "Przeglad klarownosci",
       "release_regression": "Regresja wydania",
@@ -4457,6 +4475,7 @@
       "pipeline_complete": "Pipeline ukonczony",
       "ci_failed": "Niepowodzenie CI",
       "test_failed": "Niepowodzenie testow",
+      "deploy_blocked": "Wdrożenie zablokowane",
       "requirement_review": "Przeglad wymagan",
       "clarity_review": "Przeglad klarownosci",
       "release_regression": "Regresja wydania",
@@ -4751,7 +4770,9 @@
     "tracker": "System zgłoszeń",
     "board": "Tablica",
     "pickBoard": "Wybierz tablicę",
-    "boardPlaceholder": "Klucz projektu, identyfikator zespołu lub owner/repo",
+    "boardPlaceholder": "Klucz projektu lub identyfikator zespołu",
+    "boardFromService": "Repozytorium powiązane z tą usługą",
+    "boardNeedsRepo": "Ta usługa nie ma powiązanego repozytorium, więc nie ma w niej zgłoszeń do przeszukania. Powiąż je w panelu usługi.",
     "boardsFailed": "Nie udało się wczytać tablic: {reason}",
     "issueType": "Typ zgłoszenia",
     "issueTypeHelp": "Domyślnie bug. Ignorowane przez systemy bez typów zgłoszeń.",
@@ -4760,6 +4781,8 @@
     "labelsHelp": "Oddzielone przecinkami. Wszystkie muszą występować.",
     "adoptInto": "Dodaj wybrany błąd do",
     "adoptingInto": "Wybrany błąd trafi do {container}",
+    "huntIn": "Usługa do przeszukania",
+    "huntingIn": "Przeszukiwane jest repozytorium powiązane z {container}; tam też trafi wybrany błąd.",
     "run": "Poluj",
     "running": "Odczytywanie tablicy i ocenianie znalezionych zgłoszeń…",
     "huntFailed": "Polowanie nie powiodło się",
@@ -4772,6 +4795,7 @@
     "noCandidates": "Na tej tablicy nie ma pasujących otwartych, nieprzypisanych błędów.",
     "ratings": "Wpływ {impact}/5, złożoność {complexity}/5, pewność {confidence}",
     "viaModel": "Ocenione przez {model}.",
+    "scannedBoard": "Przeszukano {board}.",
     "truncated": "Przeszukano tylko pierwsze pasujące zgłoszenia w liczbie {count}; ta tablica zawiera ich więcej.",
     "comments": "{count} komentarz | {count} komentarze | {count} komentarzy",
     "confidence": {
@@ -4785,6 +4809,10 @@
       "failed": "Nie udało się dokończyć oceny, więc te zgłoszenia są nieocenione.",
       "over_budget": "Ta przestrzeń robocza przekroczyła budżet wydatków, więc nie zostały ocenione.",
       "empty": "Nie ma czego oceniać."
+    },
+    "refusal": {
+      "boardFromService": "Ten tracker przeszukuje repozytorium powiązane z wybraną usługą, więc nie ma własnej tablicy.",
+      "missingBoard": "Wybierz tablicę, na której chcesz szukać."
     }
   },
   "pipeline": {
@@ -4855,6 +4883,7 @@
       "purposeUnrecognized": "Nierozpoznany ({purpose})",
       "purposeOption": {
         "build": "Programowanie",
+        "bugfix": "Poprawka błędu",
         "document": "Dokumentacja",
         "review": "Przegląd",
         "research": "Badania",
@@ -4923,7 +4952,7 @@
       "skillNoneAvailable": "Brak dostępnych umiejętności. Połącz źródło umiejętności w ustawieniach konta.",
       "skillMissing": "Tej umiejętności nie ma już w katalogu; wybierz inną.",
       "skillNeedsPick": "Krok Skill wymaga wybranej umiejętności, zanim będzie można zapisać.",
-      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na Programowanie.",
+      "purposeStepsConflict": "To przeznaczenie nie tworzy kodu ani nie uruchamia testów, ale potok nadal zawiera kroki programowania lub testowania. Usuń je lub zmień przeznaczenie na takie, które dostarcza kod (Programowanie lub Poprawka błędu).",
       "promptEditTooltip": "Edytuj prompt systemowy tego agenta",
       "promptEditedTooltip": "Prompt systemowy tego agenta jest zmieniony dla tego obszaru roboczego",
       "consensusGroups": "Grupy konsensusu",

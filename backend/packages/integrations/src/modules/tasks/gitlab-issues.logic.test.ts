@@ -8,7 +8,6 @@ import {
   gitlabIssueInRepoScope,
   gitlabHitToBugCandidate,
   gitlabIssueUrl,
-  gitlabProjectsToBoards,
   gitlabWebBaseFromApiBase,
   parseGitLabIssueExternalId,
   parseGitLabIssueRef,
@@ -265,23 +264,5 @@ describe('gitlabHitToBugCandidate', () => {
     expect(bare.labels).toEqual([])
     expect(bare.priority).toBeNull()
     expect(bare.type).toBe('')
-  })
-})
-
-describe('gitlabProjectsToBoards', () => {
-  it('carries the namespace in the id AND the key, because a project name repeats across groups', () => {
-    expect(
-      gitlabProjectsToBoards([
-        { owner: 'group/sub', name: 'web' },
-        { owner: 'other', name: 'web' },
-      ]),
-    ).toEqual([
-      { id: 'group/sub/web', name: 'web', key: 'group/sub/web' },
-      { id: 'other/web', name: 'web', key: 'other/web' },
-    ])
-  })
-
-  it('drops a project the projection could not name', () => {
-    expect(gitlabProjectsToBoards([{ owner: '', name: 'web' }])).toEqual([])
   })
 })

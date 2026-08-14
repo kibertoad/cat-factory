@@ -42,25 +42,36 @@ function provider(board: BugCandidate[]) {
   return { impl, queries }
 }
 
+/** The container every scan below names; `null` makes the workspace hold no such block. */
+const CONTAINER = 'blk_auth'
+
 function service(options: {
   board: BugCandidate[]
   assessor?: BugHuntAssessor
   isOverBudget?: (workspaceId: string) => Promise<boolean>
+  container?: { id: string } | null
 }) {
   const { impl, queries } = provider(options.board)
   const registry = { get: () => impl } as unknown as TaskSourceRegistry
+  const container = options.container === undefined ? { id: CONTAINER } : options.container
   const hunt = new BugHuntService({
     taskSourceRegistry: registry,
     taskConnectionStore: {
       getByWorkspace: async () => ({ credentials: {} }),
     } as never,
     taskRepository: { listByWorkspace: async (): Promise<SourceTask[]> => [] } as never,
+    blockRepository: { get: async () => container } as never,
     importService: {} as never,
     linkService: {} as never,
     ...(options.assessor ? { assessor: options.assessor } : {}),
     ...(options.isOverBudget ? { isOverBudget: options.isOverBudget } : {}),
   })
   return { hunt, queries }
+}
+
+/** One scan, on the container the workspace holds unless a test says otherwise. */
+function scan(board: string) {
+  return { board, containerId: CONTAINER }
 }
 
 /** Rates everything it is given, so a ranked hunt is distinguishable from every degraded one. */
@@ -86,7 +97,7 @@ describe('BugHuntService.hunt truncation', () => {
     const board = Array.from({ length: BUG_HUNT_SCAN_LIMIT + 5 }, (_, i) => candidate(`PROJ-${i}`))
     const { hunt, queries } = service({ board })
 
-    const result = await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })
+    const result = await hunt.hunt('ws_1', 'jira', scan('PROJ'))
 
     // The probe: one PAST the cap is what makes "the board holds more" answerable at all.
     expect(queries[0]?.limit).toBe(BUG_HUNT_SCAN_LIMIT + 1)
@@ -99,7 +110,7 @@ describe('BugHuntService.hunt truncation', () => {
     const board = Array.from({ length: BUG_HUNT_SCAN_LIMIT }, (_, i) => candidate(`PROJ-${i}`))
     const { hunt } = service({ board })
 
-    const result = await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })
+    const result = await hunt.hunt('ws_1', 'jira', scan('PROJ'))
 
     expect(result.truncated).toBe(false)
     expect(result.candidates).toHaveLength(BUG_HUNT_SCAN_LIMIT)
@@ -108,10 +119,36 @@ describe('BugHuntService.hunt truncation', () => {
   it('leaves a board comfortably under the cap untruncated', async () => {
     const { hunt } = service({ board: [candidate('PROJ-1'), candidate('PROJ-2')] })
 
-    const result = await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })
+    const result = await hunt.hunt('ws_1', 'jira', scan('PROJ'))
 
     expect(result.truncated).toBe(false)
     expect(result.scanned).toBe(2)
+  })
+})
+
+describe('BugHuntService.hunt container', () => {
+  it('refuses a container this workspace does not hold, before reading or rating anything', async () => {
+    let assessed = false
+    const { hunt, queries } = service({
+      board: [candidate('PROJ-1')],
+      container: null,
+      assessor: {
+        enabled: true,
+        assess: async () => {
+          assessed = true
+          throw new Error('must not rate a scan nothing could be adopted out of')
+        },
+      },
+    })
+
+    // A hunt is the platform's first billable model call that is not behind a run start, so a
+    // request that was never adoptable must cost neither the vendor read nor the rating — the
+    // 404 the adoption would have raised, one step earlier.
+    await expect(hunt.hunt('ws_1', 'jira', scan('PROJ'))).rejects.toMatchObject({
+      code: 'not_found',
+    })
+    expect(queries).toEqual([])
+    expect(assessed).toBe(false)
   })
 })
 
@@ -123,7 +160,7 @@ describe('BugHuntService.hunt ranking degradation', () => {
       isOverBudget: async () => false,
     })
 
-    const result = await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })
+    const result = await hunt.hunt('ws_1', 'jira', scan('PROJ'))
 
     expect(result.analysisStatus).toBe('ranked')
     expect(result.candidates[0]?.analysis?.score).toBe(2)
@@ -143,7 +180,7 @@ describe('BugHuntService.hunt ranking degradation', () => {
       isOverBudget: async () => true,
     })
 
-    const result = await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })
+    const result = await hunt.hunt('ws_1', 'jira', scan('PROJ'))
 
     // Not spent, and reported as its own status: an exhausted budget is not a broken model,
     // and the scan the user asked for is still theirs.
@@ -165,7 +202,7 @@ describe('BugHuntService.hunt ranking degradation', () => {
       },
     })
 
-    const result = await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })
+    const result = await hunt.hunt('ws_1', 'jira', scan('PROJ'))
 
     expect(result.analysisStatus).toBe('empty')
     expect(checked).toBe(false)
@@ -183,7 +220,7 @@ describe('BugHuntService.hunt ranking degradation', () => {
       isOverBudget: async () => false,
     })
 
-    const result = await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })
+    const result = await hunt.hunt('ws_1', 'jira', scan('PROJ'))
 
     expect(result.analysisStatus).toBe('failed')
     expect(result.candidates).toHaveLength(1)
@@ -205,7 +242,7 @@ describe('BugHuntService.hunt ranking degradation', () => {
       },
     })
 
-    const result = await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })
+    const result = await hunt.hunt('ws_1', 'jira', scan('PROJ'))
 
     // Fail closed on the guard, but never at the cost of the vendor read already paid for.
     expect(assessed).toBe(false)
@@ -216,7 +253,65 @@ describe('BugHuntService.hunt ranking degradation', () => {
   it('ranks with no budget guard wired at all', async () => {
     const { hunt } = service({ board: [candidate('PROJ-1')], assessor: ratingAssessor })
 
-    expect((await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })).analysisStatus).toBe('ranked')
+    expect((await hunt.hunt('ws_1', 'jira', scan('PROJ'))).analysisStatus).toBe('ranked')
+  })
+})
+
+describe('BugHuntService.listBoards', () => {
+  /** A registry serving one provider, so the refusal is decided by what that provider DECLARES. */
+  function withProvider(impl: Partial<TaskSourceProvider>) {
+    return new BugHuntService({
+      taskSourceRegistry: {
+        get: () => impl as TaskSourceProvider,
+      } as unknown as TaskSourceRegistry,
+      taskConnectionStore: { getByWorkspace: async () => ({ credentials: {} }) } as never,
+      taskRepository: { listByWorkspace: async (): Promise<SourceTask[]> => [] } as never,
+      blockRepository: { get: async () => ({ id: CONTAINER }) } as never,
+      importService: {} as never,
+      linkService: {} as never,
+    })
+  }
+
+  it('refuses a REPO-BACKED source, whose board is its service repo rather than a choice', async () => {
+    // Declares BOTH: repo-backing is what decides, so a provider that could enumerate boards is
+    // still refused. Offering its reachable repositories would let a hunt scan (and adopt from) a
+    // repository nothing on this board is linked to.
+    let listed = false
+    const hunt = withProvider({
+      repoScope: { matches: () => true },
+      listBoards: async () => {
+        listed = true
+        return [{ id: 'acme/web', name: 'web', key: 'acme/web' }]
+      },
+    })
+
+    await expect(hunt.listBoards('ws_1', 'github')).rejects.toMatchObject({
+      details: { reason: 'board_from_service' },
+    })
+    expect(listed).toBe(false)
+  })
+
+  it('tells a source that simply cannot enumerate boards apart from that', async () => {
+    // The two refusals lead the SPA to opposite places ("type the board in yourself" versus
+    // "there is nothing to type"), so they must never collapse into one reason.
+    const hunt = withProvider({})
+
+    await expect(hunt.listBoards('ws_1', 'acme:servicenow')).rejects.toMatchObject({
+      details: { reason: 'boards_unsupported' },
+    })
+  })
+
+  it('lists a repo-less source through its provider, on the connection credentials', async () => {
+    const calls: Record<string, string>[] = []
+    const hunt = withProvider({
+      listBoards: async (credentials) => {
+        calls.push(credentials)
+        return [{ id: 'PROJ', name: 'Platform', key: 'PROJ' }]
+      },
+    })
+
+    expect((await hunt.listBoards('ws_1', 'jira')).map((b) => b.id)).toEqual(['PROJ'])
+    expect(calls).toHaveLength(1)
   })
 })
 
@@ -234,7 +329,7 @@ describe('BugHuntService board scope routing', () => {
   ] as const)('routes a %s board onto the leg its provider reads', async (source, board, leg) => {
     const { hunt, queries } = service({ board: [candidate('X-1')] })
 
-    await hunt.hunt('ws_1', source, { board })
+    await hunt.hunt('ws_1', source, { board, containerId: CONTAINER })
 
     expect(queries[0]!.board).toEqual(leg)
   })

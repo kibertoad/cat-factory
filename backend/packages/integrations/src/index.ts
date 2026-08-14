@@ -148,6 +148,7 @@ export {
 export {
   BugHuntService,
   BUG_HUNT_SCAN_LIMIT,
+  type BugHuntScan,
   type BugHuntServiceDependencies,
 } from './modules/tasks/BugHuntService.js'
 export {
@@ -288,6 +289,7 @@ export {
   type ProvisionArgs,
   type ProvisionDispatch,
   type ResolvedEnvironment,
+  type SettledProvision,
 } from './modules/environments/EnvironmentProvisioningService.js'
 export {
   EnvironmentTeardownService,

@@ -1,5 +1,216 @@
 # @cat-factory/acceptance
 
+## 0.4.12
+
+### Patch Changes
+
+- cfdc6a8: Stop the acceptance suite dying on a deployment restart, and refuse a pass whose manifests could
+  never name an image.
+
+  Two independent failures from one pass, found in that order. The reported one was a scaffold run 41
+  minutes in, coder and reviewer done and a pull request open, whose next `GET /tasks/:id/run` threw
+  `connect ECONNREFUSED 127.0.0.1:8787` and took the scenario with it. Nothing was wrong with the run:
+  the local deployment's `node --watch` had cycled the process between two polls, it was serving again
+  seconds later, and the run went on to reach its deployer step with nobody watching. That is not an
+  exceptional environment. The suite's own README points it at a stack run under `cat-factory
+supervise`, a supervisor whose entire job is to restart the backend when it stops serving, in front
+  of a watcher that cycles it on a file change, so over an afternoon a restart is ordinary and a wait
+  that cannot sit through one is a wait that reports the watcher's death as the run's.
+
+  So an unanswered poll is now an observation for two minutes rather than an immediate failure. The
+  policy is injected into `waitFor` rather than built into it (the clock knows nothing about
+  deployments) and classifies through the suite's existing `describeProbeFailure` rather than matching
+  messages, so there is still one reading of a thrown probe. What it tolerates is the ABSENCE of an
+  answer, for the four transport causes shaped like a restart (refused, reset, timeout, unreachable):
+  an answered refusal ends the wait and is rethrown untouched, because a refusal is evidence and
+  because callers read the SDK error's status and request id off it, and so does a DNS entry that
+  stopped resolving or a certificate that expired, each of which is its own diagnosis rather than
+  weather. The recovery is journalled as well as the outage, since an unexplained gap in a long
+  observation log is how a restart becomes invisible, and an outage never becomes the LAST
+  observation: "the deployment did not answer" says nothing about the run, so both expiry messages
+  still print the last thing the deployment actually said, with the silence beside it rather than in
+  its place.
+
+  Between the waits, the same restart is absorbed by the SDK client's retry budget, raised where the
+  client a SCENARIO drives is built. That covers every read a scenario makes one-shot, on the SDK's
+  own rule about what may be replayed: a `GET` is retried, a `POST` never, so answering a decision
+  stays exactly-once. Preflight keeps the SDK default, because the trade inverts before a pass has
+  spent anything: a dozen checks run in sequence and none bails early, so a raised budget there
+  multiplies across all of them and buries the report that a deployment is not running under minutes
+  of silence, which is the failure the suite's probe classification exists to prevent.
+
+  The second failure is why that pass would have failed anyway, and it had never been reached before:
+  every previous attempt stopped in preflight, so the deployer step ran for the first time. It failed
+  with `Deployment.apps "catalog-api" is invalid: spec.template.spec.containers[0].image: Required
+value`. The manifest was correct. The briefs make `{{image}}` mandatory and the agent emitted it
+  verbatim; the platform substitutes that hole from the workspace connection's `imageTemplate`, this
+  suite set none, and an unfilled hole renders as the empty string, so `image: ""` went to the
+  apiserver. The suite now configures the template (`ACCEPTANCE_K3S_IMAGE_TEMPLATE`, defaulting to
+  GHCR under the repository's own owner), threads it into the briefs exactly as it already threads the
+  ingress host, and grades it in a new required `image-template` prerequisite before anything is
+  spent.
+
+  The default tags by pull-request number rather than by commit sha, which is the interesting
+  constraint: a provision carries no sha (`ProvisionContext` has branch, number, url, owner, name),
+  and `{{branch}}` is `cat-factory/<taskId>`, which no image tag may contain. It also decides the
+  workflow's trigger, since a number that does not exist until the pull request does cannot be built
+  on `push`, and it makes the tag MUTABLE, which is why the manifests are now asked for
+  `imagePullPolicy: Always`.
+
+  The gate refuses the mistakes by name, `{{namespace}}` included: that hole is filled in the
+  manifests and in the ingress host but NOT in the image, which the platform renders one step before
+  the namespace exists, so a sample carrying it would have green-lit exactly the empty image this
+  check was built to prevent. And the PASS states what it did not check: whether anything published
+  that reference, whether the cluster may pull it (a GHCR package is private until someone says
+  otherwise, and there is no registry credential on the connection to fix that with, so the README now
+  names the one-time action), and whether the owner is spelled as the provider spells it, since the
+  platform re-derives `{{repoOwner}}` from the pull request URL rather than from the variable this
+  gate can read. Each of the three presents as an environment that provisions and never becomes ready.
+
+## 0.4.11
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/kernel@0.301.0
+  - @cat-factory/contracts@0.313.0
+  - @cat-factory/cli@0.12.0
+  - @cat-factory/sdk@0.42.0
+
+## 0.4.10
+
+### Patch Changes
+
+- 0ef48d1: Stop an agent's own cleanup command from killing the harness that supervises it, and report a
+  harness that WAS stopped as what it is.
+
+  A local acceptance run failed as "the container kept vanishing, treating as deterministic" after
+  two full coder passes. Nothing evicted anything. The harness ran as PID 1 with the command line
+  `node dist/server.js`, which is also where the Fastify service the coder was scaffolding built to;
+  the agent started that service in the background to smoke-test it over a real socket, then ran
+  `pkill -f 'node dist/server.js'` to stop it again. The image ships no `pkill`, so that failed with
+  `command not found` and the next turn used something that works without procps, which matched PID 1
+  and shut the harness down. The container exited 0, the engine could only see a backend that had
+  stopped answering, so it called it an eviction, spent its crash-recovery budget re-running the same
+  agent into the same wall, and blamed infrastructure churn.
+
+  **The harness no longer answers to a pattern kill aimed at anything else.** It runs from
+  `dist/harness-server.js` and sets `process.title = 'cat-factory-harness'`, which on Linux rewrites
+  both `/proc/<pid>/cmdline` and (truncated) `/proc/<pid>/comm`, so neither `pkill -f 'node dist/…'`
+  nor a bare `pkill node` nor a hand-rolled `/proc` sweep can name it. It is not a security boundary
+  and is not claimed as one: the agent shares the harness's uid, and separating them needs a PID 1
+  running as root, which this image deliberately does not have. What it removes is the accident.
+
+  **`procps` + `psmisc` are now in the image**, which reads backwards until you look at what the
+  absence caused: `pkill`/`pgrep`/`ps` are the narrow tools an agent reaches for first, and the
+  fallback it writes when they are missing is the unbounded one that took the harness down.
+
+  **A harness that exits cleanly mid-job is no longer an eviction.** Every transport that can read an
+  exit code (the local container and native-process legs, the Cloudflare per-run container, and a
+  Kubernetes runner pod's `state.terminated`) now distinguishes a workload that exited 0 with a job
+  still in flight from one that crashed or was reclaimed, and reports `harnessShutdown` instead of
+  `evicted`. The engine fails that run immediately with a new `harness_shutdown` failure kind
+  (additive to the public failure-kind vocabulary; OpenAPI surface 1.54.0) and a hint that names the
+  causes worth checking, rather than spending an automatic retry that walks back into whatever
+  stopped it. A backend that reports no exit code (Apple `container`, a manifest-driven runner pool
+  whose scheduler exposes only status words) keeps reporting an eviction, because an absent code is
+  not a zero.
+
+  The distinction is only ever drawn where NOTHING else explains the stop. Infrastructure churn is
+  named and recovers on its own budget, and it stays named even after its attribution window passes:
+  a rollout drain the harness answered by exiting 0, discovered minutes later by a re-driven poll, is
+  still that drain rather than a shutdown. The same rule orders the engine's own reading: a killed
+  job that some branch settles WITHOUT failing the run (a parked PR review's read-only Challenge
+  Investigator) keeps that settlement, since losing a human's in-flight curation is worse than the
+  retry this failure kind exists to prevent. `container.harness_shutdown` counts the class, kept out
+  of `container.evicted` so the eviction rate an operator sizes infrastructure by is not inflated by
+  deaths no infrastructure change prevents.
+
+  **An aborted agent run says who aborted it.** The Claude Code / Codex runner rejected with a
+  hard-coded "agent run aborted by watchdog" for every abort, including the shutdown handler's, so a
+  job killed by something else filed its failure against a watchdog that never fired. It now carries
+  the abort reason the caller supplied, the way the Pi runner already did, and an abort that supplied
+  none falls back to saying so rather than quoting the platform's own contentless "This operation was
+  aborted" (a reasonless `abort()` sets an `AbortError` that IS an `Error`, so the fallback was
+  unreachable).
+
+  The image moves to `cat-factory-executor:1.121.0` across the wrangler config, the publish script and
+  `RECOMMENDED_HARNESS_IMAGE`: the entrypoint rename and `procps` are only in effect once a deployment
+  runs a tag that contains them.
+
+  **The acceptance suite stops blaming the merge threshold for a failed run.** Its "the merge was
+  HELD" hint fired on "there is a pull request and the status is not done", which is also true of a
+  run that died three phases before any merge was considered; it is now offered only where nothing
+  else explains the stop.
+
+- Updated dependencies [0ef48d1]
+  - @cat-factory/kernel@0.300.0
+  - @cat-factory/contracts@0.312.0
+  - @cat-factory/sdk@0.42.0
+  - @cat-factory/cli@0.12.0
+
+## 0.4.9
+
+### Patch Changes
+
+- Updated dependencies [d5c1f1c]
+- Updated dependencies [c67e924]
+  - @cat-factory/kernel@0.299.1
+  - @cat-factory/contracts@0.311.0
+  - @cat-factory/cli@0.12.0
+  - @cat-factory/sdk@0.41.0
+
+## 0.4.8
+
+### Patch Changes
+
+- Updated dependencies [056e18d]
+  - @cat-factory/contracts@0.310.0
+  - @cat-factory/kernel@0.299.0
+  - @cat-factory/cli@0.12.0
+  - @cat-factory/sdk@0.41.0
+
+## 0.4.7
+
+### Patch Changes
+
+- Updated dependencies [a81879b]
+  - @cat-factory/contracts@0.309.0
+  - @cat-factory/kernel@0.298.2
+  - @cat-factory/cli@0.12.0
+  - @cat-factory/sdk@0.41.0
+
+## 0.4.6
+
+### Patch Changes
+
+- 7737735: Review findings on the standalone acceptance runner (#1983).
+
+  These are the pass's own reporting, plus one documented decision about the personal-password ask. Every command now prints to stdout, refusals included, because a
+  `tee`d afternoon-long pass captures one stream and the configuration refusal, the declined prompt and
+  the suite-failure report were on the other. A `ScenarioFailure` carries its message and its location
+  separately, so a suite bug's stack frames stop being folded into the one-line phase message `status`
+  renders. The three startup boundaries pick their describer off a new `OperatorRefusal` marker rather than
+  off which boundary they are, so a `TypeError` before the pass opens is no longer printed as a
+  one-sentence refusal with no file and no line. The suite-failure exit gates its `resume:` line on the
+  ledger the way the closing words already did. The preflight report scenario carries every red
+  prerequisite's remedy instead of the first one's, which is rule 4 and what the terser gate behind it
+  already did. And `status`'s no-argument default is back to "the pass that ran last": an
+  `ACCEPTANCE_RUN_ID` line in the `.env` names the pass to report on, but a `latest` in that file no longer
+  converts the bare form into the pointer question, which refuses where the bare form would have answered.
+
+  The personal-password ask keeps HOLDING what it collects, and that is now argued for rather than
+  incidental: the suite exists to be run headless, so an operator starts a pass and walks away, and once
+  the pinned preset has confirmed the pass will spend their subscription there is nothing to gain by
+  withholding the answer until a call is refused. Collecting-without-holding would narrow the exposure to
+  a few reads against the one deployment the pass is pinned to (which consults the header only on the
+  gated run calls) and would make "the pass has the credential" a rule each future call site remembers
+  through `withPersonalUnlock` rather than a property of the client seam.
+
+  Docs: the claim that a `.ts` entry point "does not load at all" below Node 24 was false (type stripping
+  is on by default from 22.18 and 23.6, as CONTRIBUTING.md already said), so a successful run was never
+  evidence of the floor.
+
 ## 0.4.5
 
 ### Patch Changes

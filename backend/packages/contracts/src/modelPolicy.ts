@@ -30,6 +30,7 @@ export const modelFamilySchema = v.picklist([
   'claude',
   'openai',
   'gemini',
+  'grok',
 ])
 export type ModelFamily = v.InferOutput<typeof modelFamilySchema>
 

@@ -1240,7 +1240,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "Stati Uniti",
@@ -2033,6 +2034,13 @@
       "awaitingChoice": "In attesa di una scelta umana",
       "approvalGate": "Gate di approvazione",
       "companionReview": "Revisione companion",
+      "findingSeverity": {
+        "blocker": "Da correggere",
+        "major": "Da sistemare",
+        "minor": "Minore",
+        "ungraded": "Commento",
+        "unrecognized": "Livello non riconosciuto ({level})"
+      },
       "correctionIterations": "{count} iterazione di correzione. | {count} iterazioni di correzione.",
       "state": {
         "pending": "In attesa",
@@ -2069,7 +2077,9 @@
       "closeEsc": "Chiudi (Esc)",
       "companionCapHeading": "{agent} ha raggiunto il suo limite di {attempts} tentativi di rielaborazione, ancora al di sotto della soglia {threshold}.",
       "companionCapDetail": "Esegui un altro ciclo di rielaborazione automatica, procedi al passaggio successivo accettando l'output attuale, oppure arresta e reimposta l'attivita' cosi' da poter modificare gli input e reinviare.",
-      "companionStalledHeading": "{agent} ha interrotto il ciclo di rielaborazione dopo {attempts} round su {maxAttempts}: l'ultima revisione e' tornata identica e il punteggio e' rimasto sotto la soglia {threshold}.",
+      "companionCapBlockedHeading": "{agent} ha raggiunto il suo limite di {attempts} tentativi di rielaborazione con {count} rilievo bloccante ancora aperto. | {agent} ha raggiunto il suo limite di {attempts} tentativi di rielaborazione con {count} rilievi bloccanti ancora aperti.",
+      "companionCapBlockedDetail": "Procedere significa accettare il lavoro con quei rilievi irrisolti, per questo la policy di rischio di questa esecuzione non prendera' mai quella decisione al posto tuo. Esegui un altro ciclo di rielaborazione automatica, procedi comunque con l'output attuale, oppure arresta e reimposta l'attivita' cosi' da poter modificare gli input e reinviare.",
+      "companionStalledHeading": "{agent} ha interrotto il ciclo di rielaborazione dopo {attempts} round su {maxAttempts}: l'ultima revisione e' tornata identica e il punteggio non e' cambiato.",
       "companionStalledDetail": "I round rimanenti non sono stati usati perche' avrebbero solo ripetuto un verdetto gia' espresso. Esegui comunque un altro round, procedi al passaggio successivo accettando l'output attuale, oppure arresta e reimposta l'attivita' cosi' da poter modificare gli input e reinviare.",
       "infraAttempts": "Tentativi di infrastruttura",
       "hideInfraAttempts": "Nascondi i tentativi di infrastruttura",
@@ -2480,6 +2490,7 @@
         "pipeline_complete": "Conferma e unisci",
         "ci_failed": "Riprova l'esecuzione",
         "test_failed": "Riprova l'esecuzione",
+        "deploy_blocked": "Riprova l'esecuzione",
         "requirement_review": "Segna come letto",
         "clarity_review": "Segna come letto",
         "release_regression": "Conferma presa visione",
@@ -3387,6 +3398,11 @@
           "step1": "Apri platform.moonshot.ai → API Keys e crea una chiave.",
           "step2": "Copia la chiave; autentica l'endpoint Moonshot compatibile con OpenAI."
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "Apri console.x.ai → API Keys e crea una chiave.",
+          "step2": "Copia la chiave; autentica l'endpoint xAI compatibile con OpenAI."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "Apri openrouter.ai → Keys e crea una chiave API.",
@@ -3841,6 +3857,7 @@
       "dispatch": "Invio",
       "environment": "Ambiente",
       "evicted": "Sfrattata",
+      "harness_shutdown": "Harness arrestato",
       "timeout": "Timeout",
       "agent": "Agente",
       "job_failed": "Job fallito",
@@ -4289,7 +4306,9 @@
     "tracker": "Tracker",
     "board": "Bacheca",
     "pickBoard": "Scegli una bacheca",
-    "boardPlaceholder": "Chiave progetto, id team oppure owner/repo",
+    "boardPlaceholder": "Chiave progetto o id team",
+    "boardFromService": "Il repository collegato a questo servizio",
+    "boardNeedsRepo": "A questo servizio non è collegato alcun repository, quindi non ci sono issue da cercare. Collegane uno dal pannello del servizio.",
     "boardsFailed": "Impossibile caricare le board: {reason}",
     "issueType": "Tipo di ticket",
     "issueTypeHelp": "Per impostazione predefinita bug. Ignorato dai tracker senza tipi di ticket.",
@@ -4298,6 +4317,8 @@
     "labelsHelp": "Separate da virgole. Devono essere tutte presenti.",
     "adoptInto": "Aggiungi il bug scelto a",
     "adoptingInto": "Il bug scelto viene aggiunto a {container}",
+    "huntIn": "Servizio da esaminare",
+    "huntingIn": "Viene esaminato il repository collegato a {container}; il bug scelto viene aggiunto lì.",
     "run": "Cerca",
     "running": "Lettura della bacheca e valutazione di quanto trovato…",
     "huntFailed": "La caccia non è riuscita",
@@ -4310,6 +4331,7 @@
     "noCandidates": "Nessun bug aperto e non assegnato corrisponde su questa bacheca.",
     "ratings": "Impatto {impact}/5, complessità {complexity}/5, confidenza {confidence}",
     "viaModel": "Valutato da {model}.",
+    "scannedBoard": "Esaminato {board}.",
     "truncated": "Sono stati esaminati solo i primi {count} bug corrispondenti; questa bacheca ne contiene altri.",
     "comments": "{count} commento | {count} commenti",
     "confidence": {
@@ -4323,6 +4345,10 @@
       "failed": "La valutazione non è stata completata, quindi non sono valutati.",
       "over_budget": "Questo spazio di lavoro ha superato il budget di spesa, quindi non sono stati valutati.",
       "empty": "Nulla da valutare."
+    },
+    "refusal": {
+      "boardFromService": "Questo tracker analizza il repository a cui è collegato il servizio scelto, quindi non ha una board propria.",
+      "missingBoard": "Scegli la board su cui cercare."
     }
   },
   "pipeline": {
@@ -4393,6 +4419,7 @@
       "purposeUnrecognized": "Non riconosciuto ({purpose})",
       "purposeOption": {
         "build": "Sviluppo",
+        "bugfix": "Correzione di bug",
         "document": "Documentazione",
         "review": "Revisione",
         "research": "Ricerca",
@@ -4461,7 +4488,7 @@
       "skillNoneAvailable": "Nessuna competenza disponibile. Collega una fonte di competenze nelle impostazioni dell'account.",
       "skillMissing": "Questa competenza non è più nel catalogo; scegline un'altra.",
       "skillNeedsPick": "Un passo Skill richiede una competenza selezionata prima di poter salvare.",
-      "purposeStepsConflict": "Questo scopo non scrive codice né esegue test, ma la pipeline contiene ancora passaggi di implementazione o di test. Rimuovili o imposta lo scopo su Sviluppo.",
+      "purposeStepsConflict": "Questo scopo non scrive codice né esegue test, ma la pipeline contiene ancora passaggi di implementazione o di test. Rimuovili oppure scegli uno scopo che rilascia codice (Sviluppo o Correzione di bug).",
       "promptEditTooltip": "Modifica il prompt di sistema di questo agente",
       "promptEditedTooltip": "Il prompt di sistema di questo agente è modificato per questo spazio di lavoro",
       "consensusGroups": "Gruppi di consenso",
@@ -5961,6 +5988,7 @@
       "pipeline_complete": "Pipeline completata",
       "ci_failed": "CI non riuscita",
       "test_failed": "Test non riusciti",
+      "deploy_blocked": "Deployment bloccato",
       "requirement_review": "Revisione dei requisiti",
       "clarity_review": "Revisione della chiarezza",
       "release_regression": "Regressione della release",
@@ -6024,6 +6052,7 @@
       "pipeline_complete": "Pipeline completata",
       "ci_failed": "CI non riuscita",
       "test_failed": "Test non riusciti",
+      "deploy_blocked": "Deployment bloccato",
       "requirement_review": "Revisione dei requisiti",
       "clarity_review": "Revisione della chiarezza",
       "release_regression": "Regressione della release",

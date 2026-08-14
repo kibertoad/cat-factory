@@ -188,6 +188,20 @@ describe('container seam correlation', () => {
     expect(cleanFailure.metrics.drain()).toEqual([])
   })
 
+  it('counts a harness SHUTDOWN, the container death that carries no eviction verdict', async () => {
+    // The other way a container dies under a run, and the one nothing else counts: it is
+    // mutually exclusive with `evicted` by construction, so a settle site that only reads that
+    // field records this whole class as nothing at all. An operator watching the eviction rate
+    // would then see it fall, as if containers had stopped dying under runs.
+    const shutdown = makeExecutor({
+      view: { state: 'failed', harnessShutdown: true, error: 'the harness shut down' },
+    })
+    await shutdown.executor.pollJob(handle)
+    expect(shutdown.metrics.drain()).toEqual([
+      { counter: 'container.harness_shutdown', dimensions: {}, value: 1 },
+    ])
+  })
+
   it('dimensions an eviction by its CAUSE even when the line also carries a `kind`', () => {
     // Driven through `containerJobLog` directly, because the point is what the SEAM does with
     // its log fields. The dimension used to be picked out of them as `kind ?? evicted`, which

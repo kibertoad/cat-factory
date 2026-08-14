@@ -1483,6 +1483,13 @@
       "awaitingChoice": "Awaiting a human choice",
       "approvalGate": "Approval gate",
       "companionReview": "Companion review",
+      "findingSeverity": {
+        "blocker": "Must fix",
+        "major": "Should fix",
+        "minor": "Minor",
+        "ungraded": "Comment",
+        "unrecognized": "Level not recognised ({level})"
+      },
       "correctionIterations": "{count} correction iteration. | {count} correction iterations.",
       "state": {
         "pending": "Pending",
@@ -1519,7 +1526,9 @@
       "closeEsc": "Close (Esc)",
       "companionCapHeading": "{agent} hit its {attempts}-attempt rework limit, still below the {threshold} bar.",
       "companionCapDetail": "Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
-      "companionStalledHeading": "{agent} stopped the rework loop after {attempts} of {maxAttempts} rounds: the last revision came back unchanged and the rating held below the {threshold} bar.",
+      "companionCapBlockedHeading": "{agent} hit its {attempts}-attempt rework limit with {count} must-fix finding still open. | {agent} hit its {attempts}-attempt rework limit with {count} must-fix findings still open.",
+      "companionCapBlockedDetail": "Proceeding accepts the work with those findings unfixed, which is why this run’s risk policy will never take that choice for you. Do one more automatic rework round, proceed anyway on the current output, or stop and reset the task so you can edit the inputs and resubmit.",
+      "companionStalledHeading": "{agent} stopped the rework loop after {attempts} of {maxAttempts} rounds: the last revision came back unchanged and its rating did not move.",
       "companionStalledDetail": "The remaining rounds were left unspent because they would only repeat a verdict already given. Do one more round anyway, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
       "infraAttempts": "Infrastructure attempts",
       "hideInfraAttempts": "Hide infrastructure attempts",
@@ -1908,6 +1917,7 @@
       "dispatch": "Dispatch",
       "environment": "Environment",
       "evicted": "Evicted",
+      "harness_shutdown": "Harness shut down",
       "timeout": "Timeout",
       "agent": "Agent",
       "job_failed": "Job failed",
@@ -2332,6 +2342,7 @@
         "pipeline_complete": "Confirm & merge",
         "ci_failed": "Retry run",
         "test_failed": "Retry run",
+        "deploy_blocked": "Retry run",
         "requirement_review": "Mark read",
         "clarity_review": "Mark read",
         "release_regression": "Acknowledge",
@@ -4018,7 +4029,8 @@
         "qwen": "Qwen (Alibaba)",
         "kimi": "Kimi (Moonshot)",
         "deepseek": "DeepSeek",
-        "glm": "GLM (Z.ai)"
+        "glm": "GLM (Z.ai)",
+        "grok": "Grok (xAI)"
       },
       "regions": {
         "usa": "United States",
@@ -4297,6 +4309,11 @@
           "step1": "Open platform.moonshot.ai → API Keys and create a key.",
           "step2": "Copy the key; it authenticates the OpenAI-compatible Moonshot endpoint."
         },
+        "xai": {
+          "label": "xAI (Grok API)",
+          "step1": "Open console.x.ai → API Keys and create a key.",
+          "step2": "Copy the key; it authenticates the OpenAI-compatible xAI endpoint."
+        },
         "openrouter": {
           "label": "OpenRouter",
           "step1": "Open openrouter.ai → Keys and create an API key.",
@@ -4555,6 +4572,7 @@
       "pipeline_complete": "Pipeline complete",
       "ci_failed": "CI failed",
       "test_failed": "Tests failed",
+      "deploy_blocked": "Deployment blocked",
       "requirement_review": "Requirement review",
       "clarity_review": "Clarity review",
       "release_regression": "Release regression",
@@ -4618,6 +4636,7 @@
       "pipeline_complete": "Pipeline complete",
       "ci_failed": "CI failed",
       "test_failed": "Tests failed",
+      "deploy_blocked": "Deployment blocked",
       "requirement_review": "Requirement review",
       "clarity_review": "Clarity review",
       "release_regression": "Release regression",
@@ -4915,7 +4934,9 @@
     "tracker": "Tracker",
     "board": "Board",
     "pickBoard": "Pick a board",
-    "boardPlaceholder": "Project key, team id or owner/repo",
+    "boardPlaceholder": "Project key or team id",
+    "boardFromService": "The repository this service is linked to",
+    "boardNeedsRepo": "This service has no repository linked, so it has no issues to hunt. Link one from the service panel.",
     "boardsFailed": "Boards could not be loaded: {reason}",
     "issueType": "Issue type",
     "issueTypeHelp": "Defaults to bug. Ignored by trackers with no issue types.",
@@ -4924,6 +4945,8 @@
     "labelsHelp": "Comma separated. All of them must be present.",
     "adoptInto": "Add the picked bug to",
     "adoptingInto": "The picked bug lands in {container}",
+    "huntIn": "Service to hunt",
+    "huntingIn": "Hunting the repository linked to {container}; the picked bug lands there too.",
     "run": "Hunt",
     "running": "Reading the board and rating what it finds…",
     "huntFailed": "The hunt failed",
@@ -4936,6 +4959,7 @@
     "noCandidates": "No open, unassigned bugs matched on this board.",
     "ratings": "Impact {impact}/5, complexity {complexity}/5, {confidence} confidence",
     "viaModel": "Rated by {model}.",
+    "scannedBoard": "Scanned {board}.",
     "truncated": "Only the first {count} matching bugs were scanned; this board holds more.",
     "comments": "{count} comment | {count} comments",
     "@comments": {
@@ -4952,6 +4976,10 @@
       "failed": "The rating could not be completed, so these are unrated.",
       "over_budget": "This workspace is over its spend budget, so these were not rated.",
       "empty": "Nothing to rate."
+    },
+    "refusal": {
+      "boardFromService": "This tracker scans the repository the chosen service is linked to, so it has no board of its own.",
+      "missingBoard": "Pick the board to hunt on."
     }
   },
   "pipeline": {
@@ -5025,6 +5053,7 @@
       },
       "purposeOption": {
         "build": "Build",
+        "bugfix": "Bug fix",
         "document": "Documentation",
         "review": "Review",
         "research": "Research",
@@ -5096,7 +5125,7 @@
       "skillNoneAvailable": "No skills available. Link a skill source in account settings.",
       "skillMissing": "This skill is no longer in the catalog; pick another.",
       "skillNeedsPick": "A Skill step needs a skill selected before you can save.",
-      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them or switch the purpose to Build.",
+      "purposeStepsConflict": "This purpose writes no code and runs no tests, but the pipeline still has implementation or testing steps. Remove them, or switch to a purpose that ships code (Build or Bug fix).",
       "promptEditTooltip": "Edit this agent's system prompt",
       "promptEditedTooltip": "This agent's system prompt is edited for this workspace",
       "consensusGroups": "Consensus groups",

@@ -1,5 +1,10 @@
 import type { AgentFailureKind, ContainerEvictionKind } from '@cat-factory/kernel'
-import { DispatchError, DomainError, getErrorMessage } from '@cat-factory/kernel'
+import {
+  DispatchError,
+  DomainError,
+  getErrorMessage,
+  HARNESS_SHUTDOWN_ERROR,
+} from '@cat-factory/kernel'
 
 /**
  * The fields of a FAILED job view that the shared container-eviction recovery reads. Grouped
@@ -13,11 +18,47 @@ export interface ContainerFailureView {
   /** The STRUCTURED eviction verdict. Absent ⇒ not an eviction; the caller handles it. */
   evicted?: ContainerEvictionKind
   /**
+   * The transport watched the harness exit CLEANLY with this job still in flight: it was shut
+   * down, not lost. Never set beside {@link evicted}, and handled BEFORE it. See
+   * {@link containerShutdownFailure}.
+   */
+  harnessShutdown?: true
+  /**
    * The transport's post-mortem of the dead container (its exit state + its own log tail),
    * recorded as the failure `detail` once the eviction budget is spent. The container is
    * reclaimed as the run settles, so this is the only account of WHY it died that outlives it.
    */
   detail?: string
+}
+
+/** A terminal run failure, as the poll paths report one. */
+export interface ContainerShutdownFailure {
+  error: string
+  failureKind: AgentFailureKind
+  detail: string
+}
+
+/**
+ * The terminal failure for a job whose harness was SHUT DOWN under it, or null when that is not
+ * what the transport reported (so the caller carries on with eviction recovery and its own
+ * genuine-failure handling).
+ *
+ * Kept apart from the eviction recovery rather than folded into it, because it is the one
+ * container-loss shape with no recovery: an eviction spends a budget on a fresh container, and
+ * this fails the run on the FIRST occurrence. Retrying would be worse than useless. Whatever
+ * stopped the harness is still there on the next attempt (a host restart, an operator, or the
+ * agent's own commands: the incident behind this spent the whole eviction budget re-running an
+ * agent that killed its container each time), and each attempt costs another full agent run.
+ */
+export function containerShutdownFailure(
+  failure: ContainerFailureView,
+): ContainerShutdownFailure | null {
+  if (!failure.harnessShutdown) return null
+  // Kernel's own wording for the fallback, not a second sentence saying the same thing: the
+  // transports all report this condition with that constant, and one condition worded two ways
+  // is a condition an operator cannot search for.
+  const error = failure.error ?? HARNESS_SHUTDOWN_ERROR
+  return { error, failureKind: 'harness_shutdown', detail: failure.detail ?? error }
 }
 
 /**

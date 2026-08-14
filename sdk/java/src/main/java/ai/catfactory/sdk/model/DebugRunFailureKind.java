@@ -18,6 +18,7 @@ public enum DebugRunFailureKind {
     DISPATCH("dispatch"),
     ENVIRONMENT("environment"),
     EVICTED("evicted"),
+    HARNESS_SHUTDOWN("harness_shutdown"),
     TIMEOUT("timeout"),
     AGENT("agent"),
     JOB_FAILED("job_failed"),
