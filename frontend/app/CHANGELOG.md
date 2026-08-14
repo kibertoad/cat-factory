@@ -1,5 +1,82 @@
 # @cat-factory/app
 
+## 0.275.0
+
+### Minor Changes
+
+- 2238aa9: Ask which job you do on a first launch, and give a designer a board with only the work on it.
+
+  The SPA already narrows twice (the basic/advanced interface tier, the agent tier), but both narrowings
+  assume one audience: someone who will eventually want the platform underneath. A designer handing work
+  to the factory does not. They mount no repos, wire no models, author no pipelines, and read no operator
+  rollups; what they do is look at the services already on the board, watch what is in flight, and start
+  new work from a design, a ticket, or nothing at all. Basic mode still puts eleven configuration
+  destinations in front of them.
+
+  So there is now a ROLE, picked once at first launch: `engineer`, `product-manager` or `designer`.
+  Engineer and product-manager resolve to the same `full` surface today (they do the same job in this
+  app) and are separate members so one can diverge without a migration; `designer` resolves to `intake`,
+  which keeps the board, the tasks, the three ways to bring work in, the walkthroughs, and the way back
+  out of the role. It caps the interface tier at basic, so no `isAdvanced` reader inside a surface can
+  disagree with the narrowed nav.
+
+  Two design decisions worth reviewing. The narrowing is **opt-in per nav destination** (`intake: true`,
+  three entries today, each with a stated reason a spec pins) rather than opt-out: a destination added
+  later then defaults to the roles that configure the platform, so the failure mode is one missing flag
+  rather than a persona that silently stopped being simple. And the role is **client-side only, with no
+  deployment env pin**, unlike `NUXT_PUBLIC_UI_MODE`: which tier a fleet shows is an operator's call,
+  but which job the person at the keyboard does is not something a build can know. It is not
+  authorization either, and never becomes one: workspace RBAC still gates everything the surface offers,
+  which is why the switcher out of a narrowed role is reachable from inside it.
+
+  The axes a destination answers to (`gate`, `advanced`, `intake`) now live on one
+  `NavGatedContribution` that a deployment's own external tools extend as well, and `navSlotFilter`
+  runs the single `navItemVisible` over both slots. A registered external tool therefore obeys the
+  role narrowing like every other destination, and can opt into the intake surface with `intake: true`
+  where it is somewhere work comes in from. Deployments that register external tools should expect
+  them to disappear for a narrowed role until they declare that flag.
+
+  Both browser-persisted view preferences (`uiRole`, `uiMode`) also coerce what they restore rather
+  than trusting it. A stored value is a JSON blob an older build wrote or somebody hand-edited, so an
+  unrecognised one falls back to the default and, for the role, leaves the first-run question
+  unanswered so it can be asked again.
+
+## 0.274.0
+
+### Minor Changes
+
+- 7f990ea: Classify environment provisioning failures by cause, and repair the one class a checkout edit can
+  actually fix. A provision whose `{{placeholder}}` cannot be filled by the environment CONNECTION is
+  now refused BEFORE the apply, naming the field that fills it, rather than rendering an empty string
+  and letting the platform reject the result and blame the file. A placeholder the RUN supplies keeps
+  the documented lenient substitution, so a template folding an optional value into its output is
+  unaffected. Adds a provider-neutral seam (`environmentFailure`, `unresolvedPlaceholders`,
+  `describeUnfilledConfigPlaceholders`, and `ProvisionedEnvironment.reason` for a provider that
+  reports a failure without throwing) so a deployment-registered environment backend participates in
+  the same classification as the built-ins.
+
+  On a `manifest_invalid` failure the `deployer` step now escalates to a new `deploy-fixer` agent,
+  which pushes a fix onto the pull-request branch, and re-provisions against it (twice by default,
+  configurable per step via `stepOptions.deployFix`). Every other cause takes the previous terminal
+  path unchanged. When the budget is spent the run fails and raises a new `deploy_blocked`
+  notification whose act retries the run, the `ci_failed` shape.
+
+  The public API gains one additive notification type (`deploy_blocked`), so the OpenAPI surface moves
+  to 1.55.0 and the four SDK clients regenerate. It is in the default webhook type set, and its act
+  takes the same individual-usage-credential refusal `ci_failed` and `test_failed` already take.
+
+### Patch Changes
+
+- Updated dependencies [7f990ea]
+  - @cat-factory/contracts@0.314.0
+
+## 0.273.2
+
+### Patch Changes
+
+- Updated dependencies [409238f]
+  - @cat-factory/contracts@0.313.0
+
 ## 0.273.1
 
 ### Patch Changes

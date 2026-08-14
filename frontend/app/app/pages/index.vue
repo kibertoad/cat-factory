@@ -155,6 +155,9 @@ const TutorialOverlay = defineAsyncComponent(
   () => import('~/components/tutorial/TutorialOverlay.vue'),
 )
 const TutorialNudge = defineAsyncComponent(() => import('~/components/tutorial/TutorialNudge.vue'))
+// The first-run role question (Engineer / Product manager / Designer). Same shape as the tutorial
+// launch prompt: mounted only while its store flag is set, so an answered question costs nothing.
+const RolePrompt = defineAsyncComponent(() => import('~/components/layout/RolePrompt.vue'))
 
 const workspace = useWorkspaceStore()
 const github = useGitHubStore()
@@ -312,11 +315,11 @@ const needsGitHubInstall = computed(() => github.available === true && !github.c
 const githubProbePending = computed(() => github.available === null)
 
 // Offer the tutorial on launch, once the board is up. Yields to every other startup
-// surface — the GitHub onboarding gate and the advisory/onboarding modals above — so a
-// first launch never stacks the tour prompt on top of a dialog that needs answering
-// first; when one of those is open, the flip of its flag re-fires this watcher and the
-// prompt appears then. The store guards the rest: only a user who never answered is
-// asked, at most once per session.
+// surface — the GitHub onboarding gate, the advisory/onboarding modals above, and the role
+// question below — so a first launch never stacks the tour prompt on top of a dialog that
+// needs answering first; when one of those is open, the flip of its flag re-fires this
+// watcher and the prompt appears then. The store guards the rest: only a user who never
+// answered is asked, at most once per session.
 //
 // Yielding runs in BOTH directions: an advisory that opens LATER (a health probe that
 // resolves a beat after the board) would otherwise land on top of an open tour prompt,
@@ -330,6 +333,7 @@ const githubProbePending = computed(() => github.available === null)
 // state pays nothing for the launch offer: no watcher, no mounted component (the v-ifs
 // below), no store reads.
 const tutorial = useTutorialStore()
+const uiRole = useUiRoleStore()
 const startupAdvisoryOpen = computed(
   () =>
     needsGitHubInstall.value ||
@@ -340,6 +344,30 @@ const startupAdvisoryOpen = computed(
     ui.aiProviderSetupOpen ||
     ui.aiPresetMismatchOpen,
 )
+
+// The ROLE question comes before the tour offer, and the ordering is the point: the role decides
+// which surfaces exist, so a tour picked ahead of it could be about half a product the next answer
+// removes. It runs the same launch machine as the tutorial offer (yield to anything the user must
+// actually answer, re-arm when that surface goes, at most one offer per session) and stops itself
+// once it can no longer do anything.
+const roleOfferSettled = () => uiRole.chosen || (uiRole.promptAutoOpened && !uiRole.promptOpen)
+if (!roleOfferSettled()) {
+  let stopRoleOffer: (() => void) | undefined
+  stopRoleOffer = watch(
+    () => [workspace.ready, startupAdvisoryOpen.value, uiRole.promptOpen],
+    () => {
+      if (startupAdvisoryOpen.value) uiRole.deferPrompt()
+      else if (workspace.ready) uiRole.maybeOfferOnLaunch()
+      if (roleOfferSettled()) stopRoleOffer?.()
+    },
+    { immediate: true },
+  )
+  if (roleOfferSettled()) stopRoleOffer()
+}
+// What the TOUR offer yields to: every startup advisory, plus the role question above it. The
+// role prompt is not in `startupAdvisoryOpen` itself, or the role offer would defer to its own
+// standing offer and withdraw it a tick after making it.
+const tutorialYieldsTo = computed(() => startupAdvisoryOpen.value || uiRole.promptOpen)
 // Settled = the offer can never need to act again: a decision exists, or the prompt was
 // auto-opened and is still standing (a deferral clears `promptAutoOpened`, which is
 // exactly what keeps the watcher alive to re-offer).
@@ -350,9 +378,9 @@ if (!tutorialOfferSettled()) {
   // inside `watch(...)`, before the handle is assigned — the trailing check covers it.
   let stopTutorialOffer: (() => void) | undefined
   stopTutorialOffer = watch(
-    () => [workspace.ready, startupAdvisoryOpen.value, tutorial.promptOpen],
+    () => [workspace.ready, tutorialYieldsTo.value, tutorial.promptOpen],
     () => {
-      if (startupAdvisoryOpen.value) tutorial.deferPrompt()
+      if (tutorialYieldsTo.value) tutorial.deferPrompt()
       else if (workspace.ready) tutorial.maybeOfferOnLaunch()
       if (tutorialOfferSettled()) stopTutorialOffer?.()
     },
@@ -506,6 +534,7 @@ watch(
         <VendorCredentialsModal v-if="ui.vendorCredentialsOpen" />
         <AiProviderOnboardingModal v-if="ui.aiProviderSetupOpen" />
         <AiPresetMismatchDialog v-if="ui.aiPresetMismatchOpen" />
+        <RolePrompt v-if="uiRole.promptOpen" />
         <TutorialPrompt v-if="tutorial.promptOpen" />
         <TutorialCatalogue v-if="tutorial.catalogueOpen" />
         <TutorialOverlay v-if="tutorial.touring" />

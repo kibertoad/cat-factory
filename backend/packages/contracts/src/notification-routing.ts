@@ -58,9 +58,11 @@ export const HIGH_IMPACT_NOTIFICATION_TYPES = [
   // An iterative gate spent its budget and parked on a human decision — the run waits
   // indefinitely, so nobody learns it stopped unless they are watching the board.
   'decision_required',
-  // The machine gave up: CI is still red / the tester still withholds its greenlight.
+  // The machine gave up: CI is still red / the tester still withholds its greenlight / the
+  // environment never came up and the deploy-fixer could not get it there.
   'ci_failed',
   'test_failed',
+  'deploy_blocked',
   // Production regressed after a deploy.
   'release_regression',
   // Deployment-level: aggregate run health, a dead infrastructure connection, runs paused

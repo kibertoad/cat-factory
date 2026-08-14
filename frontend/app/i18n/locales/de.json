@@ -2490,6 +2490,7 @@
         "pipeline_complete": "Bestätigen & mergen",
         "ci_failed": "Lauf wiederholen",
         "test_failed": "Lauf wiederholen",
+        "deploy_blocked": "Lauf wiederholen",
         "requirement_review": "Als gelesen markieren",
         "clarity_review": "Als gelesen markieren",
         "release_regression": "Bestätigen",
@@ -2666,6 +2667,7 @@
         "shortcuts": "Tastenkürzel",
         "bugHunt": "Fehlerjagd",
         "toggleUiMode": "Oberflächenmodus wechseln",
+        "chooseRole": "Rolle wechseln",
         "foundationalServices": "Basisdienste",
         "notificationSettings": "Benachrichtigungs-Routing verwalten"
       },
@@ -2690,6 +2692,7 @@
         "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help",
         "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen",
         "toggleUiMode": "oberfläche modus einfach erweitert anzeigen ausblenden",
+        "chooseRole": "rolle entwickler produktmanager designer persona einfachere ansicht",
         "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen",
         "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog",
         "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang"
@@ -5664,6 +5667,25 @@
     "switchTo": "Zu „{mode}“ wechseln",
     "pinned": "Von dieser Installation festgelegt"
   },
+  "uiRole": {
+    "switcher": "Deine Rolle",
+    "roles": {
+      "engineer": "Entwickler",
+      "productManager": "Produktmanager",
+      "designer": "Designer"
+    },
+    "hints": {
+      "engineer": "Alles: Arbeit planen, ausführen, prüfen und mergen sowie die Plattform dahinter einrichten.",
+      "productManager": "Dieselben Flächen wie beim Entwickler: Arbeit planen, ausführen und bis zum Merge begleiten.",
+      "designer": "Ein einfacheres Board: die Services, die schon darauf sind, die laufende Arbeit und neue Aufgaben aus einem Design oder Issue."
+    },
+    "prompt": {
+      "title": "Woran arbeitest du?",
+      "intro": "Wähle das Passendste, dann startet die App mit den Flächen, die diese Aufgabe braucht. Das ändert nur, was du SIEHST, nie was du darfst.",
+      "change": "Du kannst das jederzeit oben in der Seitenleiste ändern.",
+      "later": "Jetzt nicht"
+    }
+  },
   "common": {
     "loading": "Wird geladen…",
     "save": "Speichern",
@@ -5966,6 +5988,7 @@
       "pipeline_complete": "Pipeline abgeschlossen",
       "ci_failed": "CI fehlgeschlagen",
       "test_failed": "Tests fehlgeschlagen",
+      "deploy_blocked": "Deployment blockiert",
       "requirement_review": "Anforderungs-Review",
       "clarity_review": "Klarheits-Review",
       "release_regression": "Release-Regression",
@@ -6029,6 +6052,7 @@
       "pipeline_complete": "Pipeline abgeschlossen",
       "ci_failed": "CI fehlgeschlagen",
       "test_failed": "Tests fehlgeschlagen",
+      "deploy_blocked": "Deployment blockiert",
       "requirement_review": "Anforderungs-Review",
       "clarity_review": "Klarheits-Review",
       "release_regression": "Release-Regression",
@@ -7450,6 +7474,7 @@
       "failedRun": "Ein fehlgeschlagener Lauf",
       "infrastructure": "Ein mit diesem Workspace verbundenes Ausführungs-Backend",
       "advancedTier": "Der erweiterte Oberflächenmodus",
+      "fullSurface": "Die Rolle „Entwickler“ oder „Produktmanager“",
       "designSource": "Eine verbundene Design-Quelle"
     },
     "overlay": {
@@ -7490,6 +7515,10 @@
           "toolbar": {
             "title": "Board-Steuerung",
             "body": "Mit diesen Steuerelementen zoomst du hinein und heraus oder bringst das ganze Board ins Bild."
+          },
+          "role": {
+            "title": "Deine Rolle",
+            "body": "Das Board richtet sich nach deiner Aufgabe: Entwickler und Produktmanager sehen alle Flächen, Designer eine einfachere, die Arbeit hereinholt und verfolgt. Du kannst das hier jederzeit ändern."
           },
           "interfaceTier": {
             "title": "Einfach und erweitert",

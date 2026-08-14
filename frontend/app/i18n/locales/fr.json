@@ -32,6 +32,25 @@
     "switchTo": "Passer en {mode}",
     "pinned": "Défini par ce déploiement"
   },
+  "uiRole": {
+    "switcher": "Votre rôle",
+    "roles": {
+      "engineer": "Ingénieur",
+      "productManager": "Chef de produit",
+      "designer": "Designer"
+    },
+    "hints": {
+      "engineer": "Tout : planifier le travail, l'exécuter, le relire et le fusionner, et configurer la plateforme qui l'exécute.",
+      "productManager": "Les mêmes surfaces qu'un ingénieur : planifier le travail, l'exécuter et le suivre jusqu'à la fusion.",
+      "designer": "Un tableau plus simple : les services déjà présents, le travail en cours et de nouvelles tâches à partir d'une maquette ou d'un ticket."
+    },
+    "prompt": {
+      "title": "Sur quoi travaillez-vous ?",
+      "intro": "Choisissez ce qui correspond le mieux : l'application s'ouvrira sur les surfaces dont ce métier a besoin. Cela change ce que vous VOYEZ, jamais ce que vous avez le droit de faire.",
+      "change": "Vous pouvez changer ce choix à tout moment en haut de la barre latérale.",
+      "later": "Pas maintenant"
+    }
+  },
   "common": {
     "loading": "Chargement…",
     "save": "Enregistrer",
@@ -2204,6 +2223,7 @@
         "pipeline_complete": "Confirmer et fusionner",
         "ci_failed": "Relancer l'exécution",
         "test_failed": "Relancer l'exécution",
+        "deploy_blocked": "Relancer l'exécution",
         "requirement_review": "Marquer comme lu",
         "clarity_review": "Marquer comme lu",
         "release_regression": "Accuser réception",
@@ -2386,6 +2406,7 @@
         "shortcuts": "Raccourcis clavier",
         "bugHunt": "Chasse aux bugs",
         "toggleUiMode": "Changer le mode d'interface",
+        "chooseRole": "Changer de rôle",
         "foundationalServices": "Services fondamentaux",
         "notificationSettings": "Gérer le routage des notifications"
       },
@@ -2410,6 +2431,7 @@
         "shortcuts": "raccourcis clavier touches aide",
         "bugHunt": "bug chasse tri backlog tickets non assignés",
         "toggleUiMode": "interface mode simple avancé afficher masquer",
+        "chooseRole": "rôle ingénieur chef de produit designer profil vue simplifiée",
         "tutorial": "tutoriel visite guide aide apprendre découverte",
         "foundationalServices": "capacité partagée plateforme service api contrat openapi catalogue",
         "notificationSettings": "notifications e-mail routage canaux boîte"
@@ -4389,6 +4411,7 @@
       "pipeline_complete": "Pipeline termine",
       "ci_failed": "Echec de CI",
       "test_failed": "Echec des tests",
+      "deploy_blocked": "Déploiement bloqué",
       "requirement_review": "Revue des exigences",
       "clarity_review": "Revue de clarte",
       "release_regression": "Regression de version",
@@ -4452,6 +4475,7 @@
       "pipeline_complete": "Pipeline termine",
       "ci_failed": "Echec de CI",
       "test_failed": "Echec des tests",
+      "deploy_blocked": "Déploiement bloqué",
       "requirement_review": "Revue des exigences",
       "clarity_review": "Revue de clarte",
       "release_regression": "Regression de version",
@@ -7450,6 +7474,7 @@
       "failedRun": "Une exécution en échec",
       "infrastructure": "Un backend d’exécution connecté à cet espace de travail",
       "advancedTier": "Le mode d’interface avancé",
+      "fullSurface": "Le rôle Ingénieur ou Chef de produit",
       "designSource": "Une source de design connectée"
     },
     "overlay": {
@@ -7490,6 +7515,10 @@
           "toolbar": {
             "title": "Contrôles du tableau",
             "body": "Ces contrôles permettent de zoomer ou d'ajuster tout le tableau à la vue."
+          },
+          "role": {
+            "title": "Votre rôle",
+            "body": "Le tableau s'adapte au métier que vous exercez : les ingénieurs et les chefs de produit voient toutes les surfaces, les designers une version plus simple qui fait entrer le travail et le suit. Vous pouvez en changer ici à tout moment."
           },
           "interfaceTier": {
             "title": "Simple et avancé",

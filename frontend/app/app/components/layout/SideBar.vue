@@ -6,15 +6,16 @@
 // context-fragment library, and workspace configuration (merge thresholds +
 // default models).
 //
-// Two orthogonal ways this panel shrinks. WHICH destinations exist is the interface
-// TIER (basic hides the `advanced` contributions, filtered upstream in `navSlotFilter`);
-// how much room they take is the COLLAPSE state (the icon-only rail). Basic mode starts
-// railed, but either can be changed independently from the tier switcher at the top /
-// the rail toggle.
+// Three orthogonal ways this panel shrinks. WHICH destinations exist is the person's ROLE (a
+// narrowed one keeps only the `intake` contributions) and then the interface TIER (basic hides the
+// `advanced` ones), both filtered upstream in `navSlotFilter`; how much room they take is the
+// COLLAPSE state (the icon-only rail). Basic mode starts railed, but each can be changed
+// independently from the role / tier switchers at the top and the rail toggle.
 import { useEventListener, useScrollLock } from '@vueuse/core'
 import BoardSwitcher from '~/components/layout/BoardSwitcher.vue'
 import LanguageSwitcher from '~/components/layout/LanguageSwitcher.vue'
 import UiModeSwitcher from '~/components/layout/UiModeSwitcher.vue'
+import UiRoleSwitcher from '~/components/layout/UiRoleSwitcher.vue'
 import UserMenu from '~/components/auth/UserMenu.vue'
 import { useViewport } from '~/composables/useViewport'
 import type { NavContribution } from '~/modular/nav-contributions'
@@ -67,6 +68,7 @@ const { isCompact } = useViewport()
 // it only to find a rail would be two taps for one destination. The tier decides the default
 // (basic starts collapsed), the user's toggle wins from there — see `stores/uiMode.ts`.
 const uiMode = useUiModeStore()
+const uiRole = useUiRoleStore()
 const railed = computed(() => !isCompact.value && uiMode.navCollapsed)
 
 // The off-canvas drawer is a modal surface on compact viewports, so give it the
@@ -201,15 +203,22 @@ watch(
 
     <BoardSwitcher :collapsed="railed" />
 
-    <!-- The interface tier sits ABOVE the destinations it gates, not in the footer: basic is the
-         shipped default, so this row is most users' only sight of the tier, and below the fold in
-         a scrolled navbar it is a thin thread to hang the advanced half of the product on. The
-         wrapper is what keeps the control and its hint together — the aside's own `gap-4` would
-         otherwise push them apart. Kept OUT of the `onNavAction` group deliberately: switching
-         tiers opens nothing, and closing the compact drawer would hide the destinations the
-         switch just revealed. -->
+    <!-- The two "how much of the app do I see" controls sit ABOVE the destinations they gate, not
+         in the footer: basic is the shipped default, so this row is most users' only sight of the
+         tier, and below the fold in a scrolled navbar it is a thin thread to hang the advanced
+         half of the product on. The wrapper is what keeps each control with its hint, since the aside's
+         own `gap-4` would otherwise push them apart. Kept OUT of the `onNavAction` group
+         deliberately: switching tier or role opens nothing, and closing the compact drawer would
+         hide the destinations the switch just revealed.
+
+         The ROLE comes first because it is the outer of the two: it caps the tier (see
+         `resolveUiMode`), which is also why the tier switcher is dropped on a narrowed role:
+         with the tier fixed at basic, a control that flipped it would be advertising a choice the
+         resolver ignores, exactly as it refuses to be under an env pin. The role switcher itself
+         is rendered in EVERY role: it is the way back. -->
     <div class="space-y-1">
-      <UiModeSwitcher :collapsed="railed" />
+      <UiRoleSwitcher :collapsed="railed" />
+      <UiModeSwitcher v-if="uiRole.fullSurface" :collapsed="railed" />
     </div>
 
     <div class="contents" @click="onNavAction">

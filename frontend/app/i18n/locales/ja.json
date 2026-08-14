@@ -32,6 +32,25 @@
     "switchTo": "{mode}に切り替える",
     "pinned": "このデプロイで設定されています"
   },
+  "uiRole": {
+    "switcher": "あなたの役割",
+    "roles": {
+      "engineer": "エンジニア",
+      "productManager": "プロダクトマネージャー",
+      "designer": "デザイナー"
+    },
+    "hints": {
+      "engineer": "すべて。作業の計画、実行、レビューとマージ、そして実行基盤の設定まで。",
+      "productManager": "エンジニアと同じ画面です。作業を計画し、実行し、マージまで見届けます。",
+      "designer": "よりシンプルなボード。すでにあるサービス、進行中の作業、そしてデザインや課題から作る新しいタスクだけ。"
+    },
+    "prompt": {
+      "title": "どのような仕事をしていますか？",
+      "intro": "最も近いものを選ぶと、その仕事に必要な画面でアプリが開きます。変わるのは表示される内容だけで、権限は変わりません。",
+      "change": "サイドバー上部からいつでも変更できます。",
+      "later": "後にする"
+    }
+  },
   "common": {
     "loading": "読み込み中…",
     "save": "保存",
@@ -2204,6 +2223,7 @@
         "pipeline_complete": "確認してマージ",
         "ci_failed": "実行を再試行",
         "test_failed": "実行を再試行",
+        "deploy_blocked": "実行を再試行",
         "requirement_review": "既読にする",
         "clarity_review": "既読にする",
         "release_regression": "確認",
@@ -2386,6 +2406,7 @@
         "shortcuts": "キーボードショートカット",
         "bugHunt": "バグハント",
         "toggleUiMode": "インターフェースモードを切り替え",
+        "chooseRole": "役割を変更",
         "foundationalServices": "基盤サービス",
         "notificationSettings": "通知ルーティングを管理"
       },
@@ -2410,6 +2431,7 @@
         "shortcuts": "キーボード ショートカット キー ヘルプ",
         "bugHunt": "bug バグ ハント トリアージ バックログ 課題 未割り当て",
         "toggleUiMode": "インターフェース モード 基本 詳細 表示 非表示",
+        "chooseRole": "役割 ロール エンジニア プロダクトマネージャー デザイナー 簡易表示",
         "tutorial": "チュートリアル ツアー ガイド ヘルプ 使い方 オンボーディング",
         "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ",
         "notificationSettings": "通知 メール ルーティング チャネル 受信箱"
@@ -4389,6 +4411,7 @@
       "pipeline_complete": "パイプライン完了",
       "ci_failed": "CI失敗",
       "test_failed": "テスト失敗",
+      "deploy_blocked": "デプロイがブロックされました",
       "requirement_review": "要件レビュー",
       "clarity_review": "明確性レビュー",
       "release_regression": "リリースリグレッション",
@@ -4452,6 +4475,7 @@
       "pipeline_complete": "パイプライン完了",
       "ci_failed": "CI失敗",
       "test_failed": "テスト失敗",
+      "deploy_blocked": "デプロイがブロックされました",
       "requirement_review": "要件レビュー",
       "clarity_review": "明確性レビュー",
       "release_regression": "リリースリグレッション",
@@ -7450,6 +7474,7 @@
       "failedRun": "失敗した実行",
       "infrastructure": "このワークスペースに接続された実行バックエンド",
       "advancedTier": "詳細インターフェースモード",
+      "fullSurface": "エンジニアまたはプロダクトマネージャーの役割",
       "designSource": "接続済みのデザインソース"
     },
     "overlay": {
@@ -7490,6 +7515,10 @@
           "toolbar": {
             "title": "ボードの操作",
             "body": "これらのコントロールでズームイン・ズームアウトしたり、ボード全体を表示に収めたりできます。"
+          },
+          "role": {
+            "title": "あなたの役割",
+            "body": "ボードは仕事に合わせて調整されます。エンジニアとプロダクトマネージャーはすべての画面を、デザイナーは作業を取り込んで追いかけるためのシンプルな画面を使います。ここでいつでも変更できます。"
           },
           "interfaceTier": {
             "title": "ベーシックとアドバンスト",

@@ -130,6 +130,17 @@ export const TUTORIAL_REQUIREMENTS = {
     labelKey: 'tutorial.requirements.advancedTier',
     met: (gates) => gates.advancedMode,
   },
+  // The other SPA-narrowing axis, and it is a requirement for exactly the same reason the tier is:
+  // a narrowed ROLE (`utils/uiRole.ts`) keeps only the `intake` nav entries, so every tour whose
+  // step CLICKS one of the others would be offered to a designer and then hunt for a sidebar entry
+  // their screen does not render. Which tours those are is not a judgement call: it is the pairing
+  // `tutorial-tours.spec.ts` derives from `navItemVisible`, so a tour that gains a nav-anchored
+  // step fails there until this is declared.
+  fullSurface: {
+    id: 'full-surface',
+    labelKey: 'tutorial.requirements.fullSurface',
+    met: (gates) => gates.fullSurface,
+  },
   // The platform half's requirements. Each mirrors, exactly, the `gate` of the sidebar entry the
   // tour clicks (`nav-model-providers` / `nav-integrations`, `nav-fragments`). A requirement
   // WEAKER than the gate of the control a step points at offers the tour to a user who has no
@@ -205,14 +216,32 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         bodyKey: 'tutorial.tours.boardBasics.steps.toolbar.body',
       },
       {
+        // The role decides which surfaces exist at all, so the orientation tour names it before
+        // the tier it caps. No `when`: the switcher is rendered in EVERY role (it is the way back
+        // out of the narrowed one), which is exactly why the tour can always point at it.
+        id: 'role',
+        target: 'ui-role-switcher',
+        altTargets: ['ui-role-toggle'],
+        placement: 'right',
+        titleKey: 'tutorial.tours.boardBasics.steps.role.title',
+        bodyKey: 'tutorial.tours.boardBasics.steps.role.body',
+      },
+      {
         // Basic mode is the shipped default, and it HIDES a whole half of the product
         // (sandbox, Kaizen, bootstrap, the operator surfaces). A user who never finds the
         // switcher never learns that half exists, so the orientation tour is the one place
         // that has to name it — the switcher is deliberately visible in both tiers for the
         // same reason (see `nav-contributions.ts`).
+        //
+        // `when` rather than a tour-level requirement, and rather than nothing: a narrowed role's
+        // tier is CAPPED at basic, so the sidebar drops this switcher, and a step that merely
+        // missed its anchor would be reported as an abridged tour, which is the wrong thing to say
+        // about a control that is absent because of a choice the user made. Gating the whole tour
+        // would be worse still: orientation is the one walkthrough every role should get.
         id: 'interfaceTier',
         target: 'ui-mode-switcher',
         altTargets: ['ui-mode-toggle'],
+        when: (gates) => gates.fullSurface,
         placement: 'right',
         titleKey: 'tutorial.tours.boardBasics.steps.interfaceTier.title',
         bodyKey: 'tutorial.tours.boardBasics.steps.interfaceTier.body',
@@ -236,7 +265,11 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // repo is a board write against a connected source, and in basic interface mode
     // add-from-repo is the ONLY route (bootstrap is advanced), which is what makes this
     // worth a tour rather than a hint.
-    requires: [TUTORIAL_REQUIREMENTS.boardWrite, TUTORIAL_REQUIREMENTS.sourceControl],
+    requires: [
+      TUTORIAL_REQUIREMENTS.boardWrite,
+      TUTORIAL_REQUIREMENTS.sourceControl,
+      TUTORIAL_REQUIREMENTS.fullSurface,
+    ],
     steps: [
       {
         id: 'intro',
@@ -668,7 +701,7 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // onboarding advisory, which the launch prompt stands down for) — this is for the person who
     // meets the question later, or who wants to know where the answer lives.
     offeredAtLaunch: false,
-    requires: [TUTORIAL_REQUIREMENTS.integrationsManage],
+    requires: [TUTORIAL_REQUIREMENTS.integrationsManage, TUTORIAL_REQUIREMENTS.fullSurface],
     steps: [
       {
         id: 'intro',
@@ -712,7 +745,7 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // change. A user who never finds the builder treats the built-in catalog as the product's
     // fixed shape and works around it in task descriptions instead.
     offeredAtLaunch: false,
-    requires: [TUTORIAL_REQUIREMENTS.boardWrite],
+    requires: [TUTORIAL_REQUIREMENTS.boardWrite, TUTORIAL_REQUIREMENTS.fullSurface],
     steps: [
       {
         id: 'intro',
@@ -774,7 +807,11 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // How you steer output without restating your conventions in every task description, which
     // is what people do instead when they never find this.
     offeredAtLaunch: false,
-    requires: [TUTORIAL_REQUIREMENTS.library, TUTORIAL_REQUIREMENTS.settingsManage],
+    requires: [
+      TUTORIAL_REQUIREMENTS.library,
+      TUTORIAL_REQUIREMENTS.settingsManage,
+      TUTORIAL_REQUIREMENTS.fullSurface,
+    ],
     steps: [
       {
         id: 'intro',
@@ -813,7 +850,7 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // Each integration changes what a run can SEE or SAY, and none of them announces itself:
     // a board with no tracker linked simply never mentions that issues could arrive on their own.
     offeredAtLaunch: false,
-    requires: [TUTORIAL_REQUIREMENTS.integrationsManage],
+    requires: [TUTORIAL_REQUIREMENTS.integrationsManage, TUTORIAL_REQUIREMENTS.fullSurface],
     steps: [
       {
         id: 'intro',
@@ -854,7 +891,7 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // itself, and the cost of not finding it is a run that fails on provisioning with a banner
     // pointing at a window the user has never opened.
     offeredAtLaunch: false,
-    requires: [TUTORIAL_REQUIREMENTS.infrastructure],
+    requires: [TUTORIAL_REQUIREMENTS.infrastructure, TUTORIAL_REQUIREMENTS.fullSurface],
     steps: [
       {
         id: 'intro',
@@ -906,7 +943,11 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // workspace that has never made a group renders nothing for the anchored step to find. The
     // guard only pairs a tour against the visibility of a NAV entry, so a section hiding itself
     // one level in is exactly the case that has to be declared by hand.
-    requires: [TUTORIAL_REQUIREMENTS.settingsManage, TUTORIAL_REQUIREMENTS.advancedTier],
+    requires: [
+      TUTORIAL_REQUIREMENTS.settingsManage,
+      TUTORIAL_REQUIREMENTS.advancedTier,
+      TUTORIAL_REQUIREMENTS.fullSurface,
+    ],
     steps: [
       {
         id: 'intro',
@@ -950,7 +991,11 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
     // renders the entry this tour clicks. Declared rather than assumed: `navRequirementDrift`
     // enumerates the whole gate matrix against that entry's own visibility rule and fails
     // without it.
-    requires: [TUTORIAL_REQUIREMENTS.settingsManage, TUTORIAL_REQUIREMENTS.advancedTier],
+    requires: [
+      TUTORIAL_REQUIREMENTS.settingsManage,
+      TUTORIAL_REQUIREMENTS.advancedTier,
+      TUTORIAL_REQUIREMENTS.fullSurface,
+    ],
     steps: [
       {
         id: 'intro',

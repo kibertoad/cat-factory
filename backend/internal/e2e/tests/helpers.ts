@@ -774,13 +774,23 @@ export async function startBootstrap(
  * key is `local`. Seeding it here (before `goto`, the single choke point every board spec routes
  * through) keeps the suite deterministic without a test-only branch in product code. The key + area
  * list come from `@cat-factory/contracts`, the same source the banner reads, so they can't drift.
+ *
+ * The two FIRST-RUN questions (the tutorial offer and the role question) are pre-answered here for
+ * the same reason: each is a real modal on a first-ever launch, and a fresh Playwright context is
+ * always a first-ever launch. `role` defaults to `engineer`, the full surface, so a spec asserting
+ * anything else drives the product every other spec drives; `'unanswered'` opts back into the
+ * first-run behaviour for the specs whose subject IS one of those questions.
  */
 export async function pinWorkspace(
   page: Page,
   workspaceId: string,
-  opts: { tutorial?: 'accepted' | 'declined' | 'unanswered' } = {},
+  opts: {
+    tutorial?: 'accepted' | 'declined' | 'unanswered'
+    role?: 'engineer' | 'product-manager' | 'designer' | 'unanswered'
+  } = {},
 ): Promise<void> {
   await answerTutorialPrompt(page, tutorialAnswer(opts.tutorial))
+  await answerRolePrompt(page, opts.role === 'unanswered' ? null : (opts.role ?? 'engineer'))
   await page.addInitScript(
     ({ id, dismissKey, areas }) => {
       window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
@@ -838,6 +848,34 @@ export async function answerTutorialPrompt(
 }
 
 /**
+ * Pre-answer the first-run ROLE question, so the board opens for someone who has already said what
+ * they do (see `frontend/app/app/stores/uiRole.ts`).
+ *
+ * Same class of problem, and the same fix, as {@link answerTutorialPrompt}: unanswered, the question
+ * is a `UModal`, and a dismissable layer sets `body { pointer-events: none }`, which makes every
+ * other spec's clicks unactionable. `null` leaves it unanswered for `ui-role.spec.ts`, whose subject
+ * is that first launch.
+ *
+ * Seeding a ROLE also pins the surface, which is why the narrowed cases pass `designer` rather than
+ * clicking through the picker: what a spec is asserting then is the surface, not the act of choosing.
+ * Persisted stores are COOKIE-backed here (see {@link pinAuthedWorkspace}). Must run BEFORE
+ * `page.goto`.
+ */
+export async function answerRolePrompt(
+  page: Page,
+  role: 'engineer' | 'product-manager' | 'designer' | null,
+): Promise<void> {
+  if (role === null) return
+  await page.context().addCookies([
+    {
+      name: 'uiRole',
+      value: encodeURIComponent(JSON.stringify({ storedRole: role })),
+      url: `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+    },
+  ])
+}
+
+/**
  * Like {@link pinWorkspace}, but ALSO seed a signed session so the SPA boots authenticated as a
  * specific user, pinned to a specific board (the workspace-RBAC spec).
  *
@@ -879,6 +917,7 @@ export async function pinBoardForUser(
   seed: { workspaceId: string; accountId: string; userId: string; token?: string },
 ): Promise<void> {
   await answerTutorialPrompt(page, 'declined')
+  await answerRolePrompt(page, 'engineer')
   const frontendUrl = `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`
   const cookie = (name: string, value: unknown) => ({
     name,

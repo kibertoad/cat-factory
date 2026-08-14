@@ -24,6 +24,7 @@ const ALL_GATES: NavGates = {
   accountsEnabled: true,
   isAccountAdmin: true,
   advancedMode: true,
+  fullSurface: true,
   boardHasService: true,
   boardHasTask: true,
   boardHasRun: true,
@@ -140,9 +141,10 @@ function navAnchoredSteps(): {
  * Enumerating rather than reasoning is deliberate. The pairing below is an IMPLICATION over
  * gate sets — anything that satisfies a tour must also render its entry — between two
  * predicates written independently in two files, and nothing about their shape is guaranteed
- * (either may be a conjunction, a disjunction, or read a field the other doesn't). At fifteen
- * fields the whole matrix costs milliseconds, which is a fair price for a guard that needs no
- * assumption about how either side is spelled.
+ * (either may be a conjunction, a disjunction, or read a field the other doesn't). The matrix
+ * doubles with every field {@link NavGates} gains, so the cost is worth re-measuring rather than
+ * quoting from here: at the field count this spec runs against today it is a fraction of a
+ * second, a fair price for a guard that needs no assumption about how either side is spelled.
  */
 function* everyGateSet(): Generator<NavGates> {
   const keys = Object.keys(ALL_GATES) as (keyof NavGates)[]

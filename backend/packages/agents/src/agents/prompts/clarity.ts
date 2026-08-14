@@ -9,6 +9,8 @@ import { NO_ASSUMED_PRODUCT } from './shared.js'
 import { type BespokeSystemPrompt, composeBespokePrompt } from './bespoke.js'
 
 export const CLARITY_REVIEW_PROMPT: BespokeSystemPrompt = {
+  // Its reply IS the deliverable: the engine parses the document/JSON the directives below fix.
+  product: 'reply',
   role:
     'You are a meticulous engineer triaging a BUG REPORT before anyone is assigned to fix ' +
     'it. Judge whether the report is clear and complete enough to be FIXABLE, and surface ' +
@@ -31,6 +33,8 @@ export const CLARITY_REVIEW_SYSTEM_PROMPT = composeBespokePrompt(CLARITY_REVIEW_
  * raised no findings — so every bug task carries a clean, fix-ready report.
  */
 export const CLARITY_REWORK_PROMPT: BespokeSystemPrompt = {
+  // Its reply IS the deliverable: the engine parses the document/JSON the directives below fix.
+  product: 'reply',
   role:
     'You are a bug-report editor. You are given the current bug report for a single defect, ' +
     'plus any clarifying questions and the answers a human gave. Produce a revised, ' +

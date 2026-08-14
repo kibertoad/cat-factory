@@ -773,7 +773,10 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
       state: 'done',
       result: { custom: { namespace: 'pr-blk1', url: 'https://pr-blk1.example' } },
     }
-    const handle = await service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view)
+    const { handle } = await service.finalizeProvision(
+      { workspaceId: 'ws1', blockId: 'blk1' },
+      view,
+    )
 
     expect(handle.status).toBe('ready')
     expect(handle.url).toBe('https://pr-blk1.example')
@@ -791,10 +794,19 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     })
 
     const view: RunnerJobView = { state: 'failed', error: 'helm release failed' }
-    const handle = await service.finalizeProvision({ workspaceId: 'ws1', blockId: 'blk1' }, view)
+    const { handle, reason } = await service.finalizeProvision(
+      { workspaceId: 'ws1', blockId: 'blk1' },
+      view,
+    )
 
     expect(handle.status).toBe('failed')
     expect(handle.lastError).toBe('helm release failed')
+    // A deploy container reports free-form CLI output, so this failure is UNCLASSIFIED, and
+    // unclassified is what keeps a `deploy-fixer` away from it. Pinned because the alternative
+    // (reading `manifest_invalid` out of the text) would re-create the exact failure the
+    // classification exists to prevent: a run whose `{{image}}` was never substituted looks
+    // identical here to one whose manifests are genuinely wrong.
+    expect(reason).toBeNull()
   })
 
   it('pollProvisionJob returns the transport view', async () => {

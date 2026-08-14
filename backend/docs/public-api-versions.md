@@ -794,3 +794,21 @@ an eviction and re-dispatched on the crash budget. Those two need opposite handl
 worth one fresh container, and a shutdown is caused by something that is still there on the next
 attempt (a host restart, an operator, or, in the run that named this, the agent's own cleanup
 command killing the harness process). A dashboard that counts `evicted` will see that count fall.
+
+## 1.55.0
+
+One additive enum member, `deploy_blocked`, in the notification-type vocabulary
+(`GET /api/v1/notifications`, `POST /api/v1/notifications/{id}/act`, and the outbound
+notification-webhook delivery contract). Nothing existing changes shape or meaning, and the SDKs
+tolerate unknown enum values by design, so a consumer built against 1.54.0 keeps parsing.
+
+**What a consumer NOTICES is a new card in an existing population, with an existing action.** It is
+the `ci_failed` shape one step earlier in the pipeline: the machine gave up, the run failed, and
+`act` retries it. A caller that branches exhaustively on notification type will meet a value it does
+not know; one that treats unknown types as informational will simply leave the card open, which is
+the safe reading. It is also in `DEFAULT_NOTIFICATION_WEBHOOK_TYPES`, so an endpoint registered
+without an explicit type filter starts receiving it.
+
+Its `act` retries the run, which puts it in the class the individual-usage credential guard refuses
+headlessly: a workspace whose runs resolve to an individual-usage model gets a 409
+(`individual_model_unsupported`) here, exactly as it already does for `ci_failed` and `test_failed`.

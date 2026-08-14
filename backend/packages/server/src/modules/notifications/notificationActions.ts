@@ -20,6 +20,25 @@ export const HEADLESS_ACTIONABLE_NOTIFICATION_TYPES: ReadonlySet<NotificationTyp
   'pipeline_complete',
   'ci_failed',
   'test_failed',
+  'deploy_blocked',
+])
+
+/**
+ * The subset of {@link HEADLESS_ACTIONABLE_NOTIFICATION_TYPES} whose side-effect RETRIES THE RUN.
+ * Each is a "the machine gave up" card whose act resumes the pipeline, which means resuming LLM
+ * work: the same three the `switch` in {@link notificationActEffect} shares one `case` block for.
+ *
+ * Declared rather than re-listed at each reader, because the readers are in different packages and
+ * ask different questions of it. `notificationActEffect` asks what the act DOES; the public API's
+ * `act` route asks whether the run's model needs an interactive personal-credential unlock the API
+ * cannot perform, and must refuse with a 409 rather than start a run with nothing to lease. Written
+ * out twice, the second copy is what goes stale: `deploy_blocked` joined the retry `case` and not
+ * the guard, which is a headless retry admitted for a run that cannot dispatch.
+ */
+export const RUN_RETRYING_NOTIFICATION_TYPES: ReadonlySet<NotificationType> = new Set([
+  'ci_failed',
+  'test_failed',
+  'deploy_blocked',
 ])
 
 /** Why a headless `act` on this card is refused, or null when it is admissible. */
@@ -69,7 +88,8 @@ export function headlessActRefusal(
  *
  *   - `merge_review` / `pipeline_complete` → confirm + merge the PR for real (the block
  *     flips `pr_ready` → `done`).
- *   - `ci_failed` / `test_failed` → retry the failed run once CI / the tests are fixed.
+ *   - `ci_failed` / `test_failed` / `deploy_blocked` → retry the failed run once CI, the tests
+ *     or the deployment files are fixed.
  *   - every other (informational) type → no side-effect; `act` just marks it read.
  *
  * The merge runs under the acting user's ambient initiator context so their per-user PAT
@@ -89,6 +109,15 @@ export function notificationActEffect(
   reviewEffort?: ReviewEffort | null,
 ): (notification: Notification) => Promise<void> {
   return async (notification) => {
+    // The retry class branches off the DECLARED set rather than its own `case` labels, so the set
+    // the public API guards on and the behaviour it is guarding cannot disagree about which cards
+    // resume a run.
+    if (RUN_RETRYING_NOTIFICATION_TYPES.has(notification.type)) {
+      if (notification.executionId) {
+        await container.executionService.retry(workspaceId, notification.executionId)
+      }
+      return
+    }
     switch (notification.type) {
       case 'merge_review':
       case 'pipeline_complete':
@@ -108,12 +137,6 @@ export function notificationActEffect(
             notification.payload.mergeTrackRecordId,
             reviewEffort,
           )
-        }
-        break
-      case 'ci_failed':
-      case 'test_failed':
-        if (notification.executionId) {
-          await container.executionService.retry(workspaceId, notification.executionId)
         }
         break
       case 'key_drift':

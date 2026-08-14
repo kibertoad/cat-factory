@@ -1,11 +1,13 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { useUiRoleStore } from '~/stores/uiRole'
 import { DEFAULT_RAIL_COLLAPSED, parseUiMode, resolveUiMode, type UiMode } from '~/utils/uiMode'
 
 /**
  * The interface tier (`basic` / `advanced`) and the side-navbar collapse state.
  *
- * Mode resolution is `env → browser-stored → basic` (see `utils/uiMode.ts`). The env value
+ * Mode resolution is `role surface → env → browser-stored → basic` (see `utils/uiMode.ts`); the
+ * role is the ceiling, so an `intake` role renders basic whatever the other two say. The env value
  * is `runtimeConfig.public.uiMode`, i.e. `NUXT_PUBLIC_UI_MODE`: the SPA is `ssr: false`, so
  * — exactly like `apiBase` — it is baked in at build time and cannot change while the app
  * is loaded. It is therefore read ONCE here rather than tracked reactively. Only the user's
@@ -31,7 +33,17 @@ export const useUiModeStore = defineStore(
     /** The rail state each tier was last left in, persisted. Seeded from the per-tier defaults. */
     const railCollapsed = ref<Record<UiMode, boolean>>({ ...DEFAULT_RAIL_COLLAPSED })
 
-    const mode = computed<UiMode>(() => resolveUiMode(envMode, storedMode.value))
+    // The role's surface caps the tier (see `resolveUiMode`): an `intake` role renders basic
+    // whatever the env pin or the stored choice says, so every `isAdvanced` reader in the app
+    // agrees with the narrowed nav without restating the role.
+    const uiRole = useUiRoleStore()
+    // The restored value goes through `parseUiMode` for the same reason the env string does, and
+    // for the reason `railCollapsed` is read defensively just below: `storedMode`'s type says
+    // what `setMode` writes, not what the persistence plugin rehydrated. An unrecognised tier
+    // would otherwise pass straight through `resolveUiMode` and render as neither tier.
+    const mode = computed<UiMode>(() =>
+      resolveUiMode(envMode, parseUiMode(storedMode.value), uiRole.surface),
+    )
     const isAdvanced = computed(() => mode.value === 'advanced')
     /** Pinned by the deployment: the switcher is read-only, since a write would be ignored. */
     const envPinned = computed(() => envMode !== null)
