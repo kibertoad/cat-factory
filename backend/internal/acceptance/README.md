@@ -223,22 +223,23 @@ diagnosis, `deployment-health` relays it verbatim, doc link included: the backen
 remedy already names the exact `openssl`/`npx` line, and a paraphrase here would be a second copy
 of it, one release behind.
 
-| Prerequisite         | Checked | What it means                                                                                                                                                                                                                   |
-| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.                                                                                                                            |
-| `api-key`            | yes     | `CAT_FACTORY_API_KEY` names `ACCEPTANCE_WORKSPACE_ID` and is scoped `admin`.                                                                                                                                                    |
-| `spend-budget`       | yes     | The workspace is not over budget, which pauses every run.                                                                                                                                                                       |
-| `agent-model`        | yes     | At least one catalog model is selectable. Distinguishes "unconfigured" from "blocked by account policy".                                                                                                                        |
-| `model-preset`       | yes     | `ACCEPTANCE_MODEL_PRESET` exists here AND its base model can be dispatched to (see below).                                                                                                                                      |
-| `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                                                                                                                                              |
-| `target-repos`       | yes     | Both named repositories are REACHABLE (linked already, or point-read through `/repos/available`) AND adoptable: no monorepo, nothing homed on another board, and any existing service link is one this pass's own ledger names. |
-| `issue-credential`   | yes     | `ACCEPTANCE_VCS_TOKEN` can reach the backend repository and open an issue on it (which needs its Issues feature switched on).                                                                                                   |
-| `tracker-writeback`  | yes     | The workspace comments on a linked tracker issue when a pull request opens AND closes it when the pull request merges: scenario 04's whole claim.                                                                               |
-| `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                                                                                                                                             |
-| `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                                                                                        |
-| `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                                                                             |
-| `ingress-template`   | yes     | An environment URL renders from the configured host template.                                                                                                                                                                   |
-| `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal.                                                                                                                       |
+| Prerequisite         | Checked | What it means                                                                                                                                                                                                                                           |
+| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.                                                                                                                                                    |
+| `api-key`            | yes     | `CAT_FACTORY_API_KEY` names `ACCEPTANCE_WORKSPACE_ID` and is scoped `admin`.                                                                                                                                                                            |
+| `spend-budget`       | yes     | The workspace is not over budget, which pauses every run.                                                                                                                                                                                               |
+| `agent-model`        | yes     | At least one catalog model is selectable. Distinguishes "unconfigured" from "blocked by account policy".                                                                                                                                                |
+| `model-preset`       | yes     | `ACCEPTANCE_MODEL_PRESET` exists here AND its base model can be dispatched to (see below).                                                                                                                                                              |
+| `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER` and may write workflow files.                                                                                                                                                                                      |
+| `target-repos`       | yes     | Both named repositories are REACHABLE (linked already, or point-read through `/repos/available`) AND adoptable: no monorepo, nothing homed on another board, and any existing service link is one this pass's own ledger names.                         |
+| `issue-credential`   | yes     | `ACCEPTANCE_VCS_TOKEN` can reach the backend repository and open an issue on it (which needs its Issues feature switched on).                                                                                                                           |
+| `tracker-writeback`  | yes     | The workspace comments on a linked tracker issue when a pull request opens AND closes it when the pull request merges: scenario 04's whole claim.                                                                                                       |
+| `auto-merge-policy`  | yes     | The workspace's default risk policy permits auto-merge (see below).                                                                                                                                                                                     |
+| `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                                                                                                                                                                |
+| `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                                                                                                                                                                     |
+| `ingress-template`   | yes     | An environment URL renders from the configured host template.                                                                                                                                                                                           |
+| `image-template`     | yes     | The manifests' `{{image}}` renders to a reference a cluster could pull. It says outright what it did NOT check: whether anything publishes that reference, whether the cluster may pull it, and whether the owner is spelled as the provider spells it. |
+| `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal.                                                                                                                                               |
 
 Three things it deliberately does NOT check, because none is knowable from where it stands:
 
@@ -412,12 +413,28 @@ No deploy runner is needed. The suite uses a `raw` manifest source, which the ba
 directly over the apiserver; a `kustomize` overlay would need `LOCAL_DEPLOY_RUNTIME=container` and
 a deploy image on top. That is real product surface and is covered by the doc above, not here.
 
-**One thing to know about images.** The bootstrapped repositories ship a workflow that builds and
-pushes their image on every push, and their manifests reference the platform's `{{image}}`
-placeholder. The `deployer` step runs after `coder` and `reviewer`, so the image is normally
-already pushed by then; where it is not, the pods sit in `ImagePullBackOff` and Kubernetes retries
-until it lands, which the environment status poll absorbs. The registry must be readable by the
-cluster (a public package, or an `imagePullSecret` you have already installed).
+**Two things to know about images**, and the second one is a setup step nobody can do for you.
+
+The bootstrapped repositories ship a workflow that builds and pushes their image, and their
+manifests reference the platform's `{{image}}` placeholder, which the connection resolves from
+`ACCEPTANCE_K3S_IMAGE_TEMPLATE` (default `ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}`).
+Tagging by pull-request number is what forces the workflow's `pull_request` trigger: a provision
+carries no commit sha, so the tag is built from the number, and the number does not exist until the
+pull request does. `pl_build` puts a whole `reviewer` pass between the pull request opening and the
+`deployer` step, so the image is normally already pushed by then; where it is not, the pods sit in
+`ImagePullBackOff` and the kubelet retries until it lands, which the environment status poll
+absorbs as an environment that took longer to become ready.
+
+**The cluster must be able to pull that reference with NO credential.** A GHCR package published by
+Actions is private until somebody makes it public, and the kubelet then answers 403 for the whole
+life of the environment. There is no configuration path out of that here: the Kubernetes
+environment connection carries no registry credential, and the per-PR namespace is created by the
+platform seconds before the manifests are applied, so an `imagePullSecret` cannot be waiting in it.
+So make each repository's package public once (its **Package settings → Change visibility**, after
+the first publish), or point `ACCEPTANCE_K3S_IMAGE_TEMPLATE` at a registry the cluster reads
+anonymously. The `image-template` prerequisite states this omission in its PASS text, because it
+cannot check it: a private package presents as an environment that provisions and never becomes
+ready, which reads like a broken cluster.
 
 ## Configuration
 
@@ -462,6 +479,7 @@ summary names every key it replaced, and anything in the file it does not manage
 | `ACCEPTANCE_K3S_INSECURE`              | one of   | `true` to skip apiserver TLS verification. Throwaway clusters only.                                                                                                                                                                                                                                                                                |
 | `ACCEPTANCE_MODEL_PRESET`              | no       | Preset id pinned on every task, default `mdp_claude` (the built-in Claude preset). `configure` offers the library as a menu, so the id never has to be typed.                                                                                                                                                                                      |
 | `ACCEPTANCE_K3S_INGRESS_HOST_TEMPLATE` | no       | Default `{{namespace}}.127.0.0.1.nip.io`, which needs no DNS. Also the host the scaffold briefs ask each service's Ingress to serve, so overriding it moves both halves together.                                                                                                                                                                  |
+| `ACCEPTANCE_K3S_IMAGE_TEMPLATE`        | no       | Default `ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}`. What the manifests' `{{image}}` resolves to, and what the workflow the briefs ask for is told to publish, so overriding it moves both halves together. A provision knows no commit sha, and `{{branch}}` is `cat-factory/<taskId>`, which no tag may contain.                      |
 | `ACCEPTANCE_K3S_NAMESPACE_TEMPLATE`    | no       | Default `cf-acc-{{pullNumber}}`.                                                                                                                                                                                                                                                                                                                   |
 | `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Prefixes the board frames and tasks, not the repositories. Set it per-person when a board is shared.                                                                                                                                                                                                                             |
 | `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a whole-scenario timeout; see below.                                                                                                                                                                                                                                                                          |
@@ -806,6 +824,42 @@ is more than the single line an expiry message carries. What is banned is ending
 neither, and a wait must poll for everything its grade asserts or it hands the grader a half-written
 observation and fails what was working.
 
+**A THROWN poll is covered by that rule too**, and it used to escape it. The deployment this suite
+polls is by design a local one, run under `cat-factory supervise` (whose job is to restart the
+backend when it stops serving) in front of a `node --watch` that cycles the process on a file
+change, so a restart is an ordinary event over an afternoon. One of them killed a pass 41 minutes
+in: a `pl_build` scaffold with its coder and reviewer done and a pull request open, whose next
+`GET /tasks/:id/run` threw `connect ECONNREFUSED` and took the scenario with it, while the run
+itself carried on to its deployer step unobserved. So `src/deploymentOutage.ts` makes an
+unanswered poll an OBSERVATION for two minutes (journalled, and the recovery is journalled too,
+because an unexplained gap in the observations is how a restart becomes invisible), and an outage
+that outlasts that says the deployment stopped answering rather than blaming the run. An ANSWER is
+never waited through: a refusal is evidence, and the typed SDK error is rethrown untouched so its
+status and request id survive. What is waited through is an allow-list of four transport causes
+that have the shape of a restart (refused, reset, timeout, unreachable); a DNS entry that stopped
+resolving, an expired certificate and a credential pasted with a newline in it are each their own
+diagnosis, and sitting on one for two minutes only delays it and then blames a restart that never
+happened.
+
+**And an outage never becomes the LAST OBSERVATION.** "The deployment did not answer" says nothing
+about the run, so it is journalled but never overwrites the last thing the deployment actually
+said; a wait that expires mid-outage prints the last real observation plus the silence as a
+separate clause. Otherwise both expiry messages report the silence, while the outage message is
+still telling its reader the run may well be fine, having discarded the only evidence about it.
+
+Between the waits, a restart is absorbed by the SDK client's raised retry budget
+(`createPassClient`), which covers every READ a scenario makes one-shot. A write is deliberately
+not retried: replaying an answered decision is not a call this suite may make on the deployment's
+behalf.
+
+**Preflight runs on the SDK's default budget instead (`createClient`), and the asymmetry is the
+point.** The dozen prerequisite checks each reach the deployment, run in sequence and never bail
+early, so a budget raised there multiplies across all of them: against a deployment that is simply
+not running, the commonest setup mistake of all, that buries the clearest refusal this suite can
+produce under minutes of silence. Nothing has been created yet at that stage and a re-run costs
+nothing, so preflight refuses fast. Once a scenario is an hour deep, the same tens of seconds buy
+back the whole pass.
+
 **4. Every failing claim is reported, not just the first.** A run that both skipped its environment
 and failed CI is one story, and learning the second half on tomorrow's re-run wastes a day per bug.
 
@@ -840,6 +894,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/config.ts`              | Environment → config in two halves (a BOARD, and what it takes to RUN a pass on one), reporting every problem at once. Pure; unit-tested.                                                                                        |
 | `src/envFile.ts`             | The `.env` at the package root, read the same way by all four commands. Pure.                                                                                                                                                    |
 | `src/preflight.ts`           | The prerequisite vocabulary, runner, refusal, and the pass's GATE, which is where the report scenario's evaluation is handed to the gate seconds behind it rather than made twice. Pure; unit-tested.                            |
+| `src/manifestTemplates.ts`   | The two checks that render the templates the briefs embed (ingress host, image reference). Config-only, so they carry the narrower context. Unit-tested.                                                                         |
 | `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.                                                                                                                                                           |
 | `src/probeFailure.ts`        | What a THROWN probe was (never answered / refused / answered by something else) and the remedy for each. Pure; unit-tested.                                                                                                      |
 | `src/operatorText.ts`        | How a value is rendered for an operator: a thrown chain, a scrubbed address, and every pasteable command, whose shell dialect is decided here and nowhere else. Unit-tested; reads the ambient shell unless a dialect is passed. |
@@ -869,6 +924,7 @@ workspace. A caller acting on one holds a key, so that is a public endpoint.
 | `src/issueIntake.ts`         | Filing that issue exactly once across attempts, waiting for the platform to settle it, and the pair of claims that grades what it did.                                                                                           |
 | `src/k3s.ts`                 | The engine connection and the per-service manifest source.                                                                                                                                                                       |
 | `src/deploymentApi.ts`       | The two unauthenticated deployment root reads (`/health`, `/auth/config`), and the typed answer a non-2xx or non-JSON reply becomes. Unit-tested.                                                                                |
+| `src/deploymentOutage.ts`    | Which thrown poll is an outage to wait through, and for how long. Pure; unit-tested.                                                                                                                                             |
 | `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                                                                                                                                                                  |
 
 **See also:** [`backend/internal/e2e`](../e2e) (the faked-externals product suite),

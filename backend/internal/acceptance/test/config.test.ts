@@ -115,6 +115,12 @@ describe('resolveConfig', () => {
     expect(config.runBudgetMs).toBe(90 * 60 * 1000)
     // nip.io resolves `<anything>.127.0.0.1` to loopback, so the default template needs no DNS.
     expect(config.cluster.ingressHostTemplate).toContain('127.0.0.1.nip.io')
+    // Defaulted rather than left unset, because "unset" is not a neutral state here: the platform
+    // renders an absent `{{image}}` as the empty string, which the apiserver then refuses as a
+    // Deployment with no image, an hour into a pass. The `image-template` gate grades this value.
+    expect(config.cluster.imageTemplate).toBe(
+      'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}',
+    )
     // The built-in Claude preset every deployment seeds, so an operator who configured no preset
     // still pins one that exists rather than an empty id the gate reports as "no such preset".
     expect(config.modelPresetId).toBe('mdp_claude')

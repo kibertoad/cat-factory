@@ -38,6 +38,7 @@ function config(overrides: Partial<AcceptanceConfig> = {}): AcceptanceConfig {
       insecureSkipTlsVerify: true,
       ingressHostTemplate: '{{namespace}}.127.0.0.1.nip.io',
       namespaceTemplate: 'cf-acc-{{pullNumber}}',
+      imageTemplate: 'ghcr.io/{{repoOwner}}/{{repoName}}:pr-{{pullNumber}}',
     },
     vcs: { token: 'reporter-token', apiBaseUrl: 'https://api.github.com' },
     stateDir: '.acceptance',
@@ -958,5 +959,59 @@ describe('ingress-template', () => {
       }),
     })
     expect(commandsOf(verdict.remedy)[0]).toContain("'{{namespace}}.127.0.0.1.nip.io'")
+  })
+})
+
+describe('image-template', () => {
+  // The gate that would have refused the pass this whole check came out of: a deployer step that
+  // applied `image: ""` because nothing filled `{{image}}`, three agents and a pull request in.
+  it('refuses a template naming a hole a provision does not fill, and names the hole', async () => {
+    const verdict = await refusal('image-template', {
+      config: config({
+        cluster: {
+          ...config().cluster,
+          imageTemplate: 'ghcr.io/{{repoOwner}}/{{repoName}}:{{commitSha}}',
+        },
+      }),
+    })
+    // Naming the placeholder is the point: the platform substitutes an unknown one with nothing
+    // and says so nowhere, so the operator otherwise reads an apiserver complaint about a field
+    // their manifest sets.
+    expect(verdict.problem).toContain('{{commitSha}}')
+    expect(commandsOf(verdict.remedy)[0]).toContain('pr-{{pullNumber}}')
+  })
+
+  it('refuses a tag built from the branch, which the platform renders with a slash in it', async () => {
+    const verdict = await refusal('image-template', {
+      config: config({
+        cluster: { ...config().cluster, imageTemplate: 'ghcr.io/acme/api:{{branch}}' },
+      }),
+    })
+    expect(verdict.problem).toContain("may not contain '/'")
+  })
+
+  it('refuses {{namespace}}, and never offers it as a key to build the reference from', async () => {
+    // The hole that looks most like a per-PR discriminator and is the one the platform cannot
+    // fill here: the image is rendered a step BEFORE the namespace joins the vars, so a gate that
+    // sampled one would green-light exactly the `image: ""` refusal it exists to prevent, and its
+    // own remedy would be recommending the key that caused it.
+    const verdict = await refusal('image-template', {
+      config: config({
+        cluster: { ...config().cluster, imageTemplate: 'ghcr.io/acme/api:{{namespace}}' },
+      }),
+    })
+    expect(verdict.problem).toContain('{{namespace}}')
+    expect(verdict.remedy.steps.join('\n')).toContain('{{namespace}} is')
+  })
+
+  it('passes on the default, and says what it did NOT check', async () => {
+    // All three unchecked facts are reachable states of a correctly configured suite, and each
+    // presents as an environment that provisions and never becomes ready, so a pass that implied
+    // otherwise would send the next reader to the cluster.
+    const detail = await satisfied('image-template', { config: config() })
+    expect(detail).toContain('ghcr.io/intended-org/cf-acc-catalog-api:pr-1')
+    expect(detail).toContain('PUBLISHES')
+    expect(detail).toContain('403')
+    expect(detail).toContain('pull request URL')
   })
 })
