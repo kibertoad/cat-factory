@@ -92,12 +92,19 @@ export interface RuntimeCapabilities {
 /** A container to start — per-run, or a reusable POOL member when `pool` is set. */
 export interface RunContainerSpec {
   /**
-   * For a per-run container this is the run id (the container key + label). For a POOL
-   * member it is a synthetic member id used only for the container name — the member is
-   * NOT labelled with it (lease state lives in the transport), so a label lookup never
-   * finds it; the transport tracks `containerId → {repo, leasedTo}` in-process instead.
+   * The container's IDENTITY within this install (its name and/or label). For an ordinary
+   * per-run container this is the run id; for a step on a non-default executor image it is
+   * kernel's variant-qualified `containerKeyForRef` key, since such a step gets its OWN
+   * container beside the run's. For a POOL member it is a synthetic member id used only for
+   * the container name — the member is NOT labelled with it (lease state lives in the
+   * transport), so a label lookup never finds it; the transport tracks
+   * `containerId → {repo, leasedTo}` in-process instead.
+   *
+   * Named for what it IS rather than `runId`, because an adapter that reads it as a run id
+   * writes an encoding it cannot reverse: that is how the Apple adapter's name sanitiser came
+   * to fold `ui:<runId>` onto a name the orphan sweep then read as a dead run.
    */
-  runId: string
+  containerKey: string
   image: string
   sharedSecret: string
   /** Run privileged (only the Tester `test` kind, only when the runtime supports DinD). */
@@ -153,8 +160,8 @@ export interface ContainerRuntimeAdapter {
 
   /** Start a per-run container detached; resolves to its container id/name. */
   run(exec: ContainerExec, spec: RunContainerSpec): Promise<string>
-  /** The (running-or-exited) container for a run, if any. */
-  find(exec: ContainerExec, runId: string): Promise<string | undefined>
+  /** The (running-or-exited) container for a {@link RunContainerSpec.containerKey}, if any. */
+  find(exec: ContainerExec, containerKey: string): Promise<string | undefined>
   /**
    * The host+port the orchestrator should connect to reach the container's `inContainerPort`
    * (default {@link HARNESS_PORT}), or undefined if not ready. The preview transport passes the
@@ -204,8 +211,8 @@ export interface ContainerRuntimeAdapter {
   logs(exec: ContainerExec, containerId: string): Promise<string>
   /** Force-remove a single container (idempotent). */
   remove(exec: ContainerExec, containerId: string): Promise<void>
-  /** Force-remove every container for a run (idempotent). */
-  removeRun(exec: ContainerExec, runId: string): Promise<void>
+  /** Force-remove every container under a container key (idempotent). */
+  removeRun(exec: ContainerExec, containerKey: string): Promise<void>
   /** Reap exited managed containers left by crashes; resolves to the count removed. */
   reapExited(exec: ContainerExec): Promise<number>
   /**
@@ -215,12 +222,19 @@ export interface ContainerRuntimeAdapter {
    */
   listPoolMembers(exec: ContainerExec): Promise<string[]>
   /**
-   * Every managed, still-RUNNING per-run container this runtime holds, tagged by its run
-   * id. Used at boot to reap containers whose run has since gone terminal/away (their
-   * `release()` never ran because the previous process crashed). Exited ones are handled
-   * by {@link reapExited}; this covers the ones still up.
+   * Every managed, still-RUNNING per-run container this runtime holds, tagged by the
+   * {@link RunContainerSpec.containerKey} it was started under. Used at boot to reap containers
+   * whose run has since gone terminal/away (their `release()` never ran because the previous
+   * process crashed). Exited ones are handled by {@link reapExited}; this covers the ones still
+   * up.
+   *
+   * The key must round-trip EXACTLY: the caller maps it back to a run to ask whether that run is
+   * still live, so an adapter that cannot recover what it was given reports a live container's
+   * run as unknown and the sweep deletes it mid-step.
    */
-  listRunContainers(exec: ContainerExec): Promise<Array<{ runId: string; containerId: string }>>
+  listRunContainers(
+    exec: ContainerExec,
+  ): Promise<Array<{ containerKey: string; containerId: string }>>
 }
 
 export type RuntimeId = 'docker' | 'podman' | 'orbstack' | 'colima' | 'apple'

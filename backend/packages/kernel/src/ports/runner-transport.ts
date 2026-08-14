@@ -1,4 +1,5 @@
 import type { CloudProvider, InstanceSize, StepSubtasks } from '../domain/types.js'
+import { UnavailableError } from '../domain/errors.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type { LlmToolSpan } from './llm-trace-sink.js'
 import type { AgentEffortReport } from '@cat-factory/contracts'
@@ -287,6 +288,45 @@ export type RunnerDispatchKind = 'agent' | 'deploy'
  * costs nothing and says which knob to set.
  */
 export type RunnerImageVariant = 'default' | 'ui' | 'deploy'
+
+/**
+ * The {@link RunnerImageVariant} vocabulary as DATA, so a reader can narrow a string against it
+ * rather than cast. Kept beside the type it enumerates and typed as the member list, so adding a
+ * variant to the union without adding it here fails to compile.
+ */
+export const RUNNER_IMAGE_VARIANTS: readonly RunnerImageVariant[] = ['default', 'ui', 'deploy']
+
+/** Whether a string names a variant THIS build can serve. */
+export function isRunnerImageVariant(
+  value: string | null | undefined,
+): value is RunnerImageVariant {
+  return value != null && (RUNNER_IMAGE_VARIANTS as readonly string[]).includes(value)
+}
+
+/**
+ * The `details.reason` every backend carries on the `UnavailableError` it raises for a
+ * declared image variant it cannot serve. ONE constant because it is a machine-readable wire
+ * vocabulary the SPA and the run record branch on, and each backend refuses in its own file: as
+ * a per-file string literal a typo in one produces a reason nothing recognises and no typecheck
+ * fails.
+ */
+export const RUNNER_IMAGE_UNWIRED_REASON = 'runner_image_unwired'
+
+/**
+ * The `default:` arm of a backend's exhaustive switch over {@link RunnerImageVariant}: it takes
+ * `never`, so adding a member to the union fails the BUILD until that backend decides what to do
+ * with it, and it still refuses honestly at RUN time for the case the type cannot see — a value
+ * this build retired that an older row or an older job body still carries.
+ */
+export function unservableImageVariant(variant: never): never {
+  throw new UnavailableError(
+    `This step declared the '${String(variant)}' executor image, which this backend does not ` +
+      'serve. It is not a variant this build knows: re-pick the executor image on the agent ' +
+      "kind's registration.",
+    RUNNER_IMAGE_UNWIRED_REASON,
+    { image: String(variant) },
+  )
+}
 
 /**
  * Optional, transport-level provisioning hints resolved per-service at dispatch.
@@ -627,7 +667,31 @@ export function containerKeyForRef(ref: RunnerJobRef): string {
 }
 
 /**
- * The run a container key belongs to, the inverse of {@link containerKeyForRef}.
+ * The parts a container key encodes, the exact inverse of {@link containerKeyForRef}.
+ *
+ * The prefix is stripped ONLY when it names a variant this build knows. A bare
+ * "everything before the first colon is a variant" split is lossy in the direction that
+ * destroys data: a key carrying a colon for any OTHER reason (a job-id scheme, an
+ * operator-created label) would be truncated to a run id that matches no run, and the orphan
+ * sweep below then kills a live container for being unrecognised — the very misread this
+ * inverse exists to prevent. An unrecognised prefix therefore answers "the whole key is the
+ * run id", which at worst leaves a container for the next sweep.
+ */
+export function parseContainerKey(containerKey: string): {
+  runId: string
+  image?: RunnerImageVariant
+} {
+  const separator = containerKey.indexOf(':')
+  if (separator <= 0) return { runId: containerKey }
+  const prefix = containerKey.slice(0, separator)
+  // `default` is never a prefix (`containerKeyForRef` emits the bare run id for it), so a key
+  // spelling it out is not one this function produced and is left whole.
+  if (prefix === 'default' || !isRunnerImageVariant(prefix)) return { runId: containerKey }
+  return { runId: containerKey.slice(separator + 1), image: prefix }
+}
+
+/**
+ * The run a container key belongs to (see {@link parseContainerKey}).
  *
  * A backend that reaps by asking "is this run still live?" has to ask about the RUN, not the
  * key: a `tester-ui` container is keyed `ui:<runId>`, which matches no run, so an orphan sweep
@@ -635,8 +699,7 @@ export function containerKeyForRef(ref: RunnerJobRef): string {
  * kills the browser out from under it.
  */
 export function runIdFromContainerKey(containerKey: string): string {
-  const separator = containerKey.indexOf(':')
-  return separator > 0 ? containerKey.slice(separator + 1) : containerKey
+  return parseContainerKey(containerKey).runId
 }
 
 /**

@@ -846,9 +846,16 @@ function reapStaleContainers(env: Env, tick: SweepTick, clock: SystemClock): voi
     const maxAgeMs = loadConfig(env).execution.containerMaxAgeMs
     tick.run(
       { name: 'container-reaper', failureMessage: 'container reap failed' },
-      reaper.reapStaleBefore(clock.now() - maxAgeMs).then(({ reaped }) => {
-        if (reaped > 0)
-          logger.warn('reaped leaked containers', { cron: 'container-reaper', reaped })
+      reaper.reapStaleBefore(clock.now() - maxAgeMs).then(({ reaped, unreachable }) => {
+        if (reaped > 0 || unreachable > 0)
+          logger.warn('reaped leaked containers', {
+            cron: 'container-reaper',
+            reaped,
+            // Rows the sweep dropped WITHOUT killing anything, because the container class their
+            // variant lives in is no longer bound. Reported beside the kills rather than folded
+            // into them: an unreachable row is a container still burning, not a reclaimed one.
+            unreachable,
+          })
       }),
     )
   }

@@ -1,3 +1,4 @@
+import { isRunnerImageVariant, parseContainerKey } from '@cat-factory/kernel'
 import {
   type ContainerEndpoint,
   type ContainerExec,
@@ -12,8 +13,8 @@ import {
 // Docker CLI in three ways that the seam absorbs:
 //   1. Verbs: `container run | list | inspect | delete` (no `ps`/`rm`, no `--filter`,
 //      no `inspect -f` template) — so we list-all + filter client-side and parse JSON.
-//   2. Identity: `--name` IS the container id, so a run is addressed by a deterministic
-//      name (`cf-<runId>`); a managed label marks ours for reaping.
+//   2. Identity: `--name` IS the container id, so a container is addressed by a deterministic
+//      name (`cf-<installId>-<containerKey>`); a managed label marks ours for reaping.
 //   3. Networking: each container runs in its own VM with its own IP — there is no
 //      published-port-on-loopback, so the orchestrator connects to `<containerIP>:8080`
 //      directly (read from `container inspect`). There is no Docker-in-Docker, so
@@ -147,11 +148,39 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     this.namePrefix = `${NAME_PREFIX}${options.installId}-`
   }
 
-  /** The deterministic container name (== id) for a run, scoped to this installation. */
-  private runName(runId: string): string {
+  /**
+   * The deterministic container name (== id) for a CONTAINER KEY, scoped to this installation.
+   *
+   * The key is `<variant>:<runId>` for a non-default executor image, and `:` is not a legal
+   * container-name character — so the variant is re-encoded with a `.` rather than left to the
+   * sanitiser below. Sanitising it would map `ui:run-1` onto `ui-run-1`, which
+   * {@link listRunContainers} cannot tell from a run genuinely called `ui-run-1`: the orphan
+   * sweep then asks about a run that does not exist, finds nothing, and deletes a live UI-tester
+   * container mid-step. `.` round-trips because a run id uses `[a-zA-Z0-9_]` only.
+   */
+  private runName(containerKey: string): string {
+    const { runId, image } = parseContainerKey(containerKey)
     // Container names allow [a-zA-Z0-9][a-zA-Z0-9_.-]*; run ids are already in that set,
     // but sanitise defensively so an unusual id can't produce an invalid name.
-    return `${this.namePrefix}${runId.replace(/[^a-zA-Z0-9_.-]/g, '-')}`
+    const sanitised = runId.replace(/[^a-zA-Z0-9_.-]/g, '-')
+    return `${this.namePrefix}${image ? `${image}.${sanitised}` : sanitised}`
+  }
+
+  /**
+   * The inverse of {@link runName}: the container key a managed container's name encodes.
+   *
+   * A leading `<variant>.` segment is decoded back to the `<variant>:` prefix
+   * `containerKeyForRef` produced, and ONLY when it names a variant this build knows — a run id
+   * that happened to contain a dot is left whole rather than split at it.
+   */
+  private containerKeyFromName(name: string): string {
+    const rest = name.slice(this.namePrefix.length)
+    const dot = rest.indexOf('.')
+    if (dot <= 0) return rest
+    const prefix = rest.slice(0, dot)
+    return isRunnerImageVariant(prefix) && prefix !== 'default'
+      ? `${prefix}:${rest.slice(dot + 1)}`
+      : rest
   }
 
   /** Whether a listed container is one THIS install manages (matched on either the id or the name). */
@@ -160,7 +189,7 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   }
 
   async run(exec: ContainerExec, spec: RunContainerSpec): Promise<string> {
-    const name = this.runName(spec.runId)
+    const name = this.runName(spec.containerKey)
     const args = [
       'run',
       '-d',
@@ -184,8 +213,8 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     return name
   }
 
-  async find(exec: ContainerExec, runId: string): Promise<string | undefined> {
-    const name = this.runName(runId)
+  async find(exec: ContainerExec, containerKey: string): Promise<string | undefined> {
+    const name = this.runName(containerKey)
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout)
     // The deterministic name is the addressable handle (inspect/delete accept it). Match it
     // against either the `id` or the `name` field, since `container list`'s `id` may be a
@@ -249,8 +278,8 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     await exec(['delete', '--force', containerId]).catch(() => undefined)
   }
 
-  async removeRun(exec: ContainerExec, runId: string): Promise<void> {
-    await this.remove(exec, this.runName(runId))
+  async removeRun(exec: ContainerExec, containerKey: string): Promise<void> {
+    await this.remove(exec, this.runName(containerKey))
   }
 
   async reapExited(exec: ContainerExec): Promise<number> {
@@ -274,11 +303,13 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
 
   async listRunContainers(
     exec: ContainerExec,
-  ): Promise<Array<{ runId: string; containerId: string }>> {
+  ): Promise<Array<{ containerKey: string; containerId: string }>> {
     // Running (non-terminal) managed VMs for THIS install. The deterministic name IS
-    // `cf-<installId>-<runId>`, so the run id is recovered by stripping the per-install prefix (run
-    // ids only ever use `[a-zA-Z0-9_]`, which the name sanitizer leaves untouched, so this
-    // round-trips). Pooling is unsupported here, so every managed container is a per-run one.
+    // `cf-<installId>-<containerKey>` with the key's variant separator re-encoded, so
+    // `containerKeyFromName` recovers exactly what `runName` was given. Pooling is unsupported
+    // here, so every managed container is a per-run one. The port's `runId` field carries the
+    // CONTAINER KEY (the transport maps it back to a run); a lossy recovery here is what makes
+    // the orphan sweep delete a live container, so the two functions are exact inverses.
     const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout).filter(
       (r) => this.isManaged(r) && !TERMINAL_STATUSES.has(r.status),
     )
@@ -286,8 +317,8 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
       .map((r) => {
         const handle = r.name ?? r.id
         const named = handle.startsWith(this.namePrefix) ? handle : (r.id ?? handle)
-        return { runId: named.slice(this.namePrefix.length), containerId: handle }
+        return { containerKey: this.containerKeyFromName(named), containerId: handle }
       })
-      .filter((c) => c.runId && c.containerId)
+      .filter((c) => c.containerKey && c.containerId)
   }
 }

@@ -218,6 +218,7 @@ export type {
   AgentTokenUsage,
   AsyncAgentExecutor,
   ReviewedPoint,
+  RunReclaimTarget,
 } from './agent-executor.js'
 export { isAsyncAgentExecutor } from './agent-executor.js'
 export type {
@@ -611,7 +612,12 @@ export {
   CONTAINER_EVICTION_ERROR,
   containerKeyForRef,
   HARNESS_SHUTDOWN_ERROR,
+  isRunnerImageVariant,
+  parseContainerKey,
+  RUNNER_IMAGE_UNWIRED_REASON,
+  RUNNER_IMAGE_VARIANTS,
   runIdFromContainerKey,
+  unservableImageVariant,
 } from './runner-transport.js'
 export type { PreviewRef, PreviewTransport, PreviewView } from './preview-transport.js'
 export { PREVIEW_HARNESS_JOB_ID, PREVIEW_PROVISION_TYPE } from './preview-transport.js'

@@ -155,7 +155,10 @@ const LEGACY_ALLOWANCES = new Map([
   // `github-deps.ts` already had (a per-integration selector reading `buildAppRegistry` back out
   // of this root). It moved because a fourth built-in source pushed the file over budget, and the
   // selector is where every future one lands too.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1014],
+  // 1014 -> 995 by extracting `dispatchTokenMint.ts`: the one mint three modules the root itself
+  // pulls in were reading back out of it, which for `containers/deployJobDeps.ts` closed a real
+  // import cycle.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 995],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
@@ -203,7 +206,11 @@ const LEGACY_ALLOWANCES = new Map([
   // the three resolvers it composes already live, when job-token scoping made the auxiliary
   // resolution a dispatch INPUT (the token is narrowed to the repos it produces) rather than a
   // tail step.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1289],
+  // Ratcheted 1289 -> 1120 by extracting `containerJobAccounting.ts`: where a settled
+  // SUBSCRIPTION job's tokens are recorded (per-call telemetry, the leased pool token's rotation
+  // counters, the modeled quota cycle) plus the four at-most-once guards those three need, which
+  // were the executor's only long-lived mutable state and nobody else's business.
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1120],
   // The two `/search/*` endpoints (issue + code search) and their response shapes moved to
   // `github/searchApi.ts` when the bug hunt needed the issue search to surface the extra
   // fields its response already carries — so the client ratchets DOWN.

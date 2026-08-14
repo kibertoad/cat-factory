@@ -66,21 +66,16 @@ import {
   FanOutEventPublisher,
   PatPreferringAppRegistry,
   buildToolSecretChain,
-  buildDispatchTokenMint,
-  type GitHubAppRegistry,
-  type MintInstallationToken,
   logger,
   buildInfrastructureCapabilities,
   GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
   type JobPackageRegistrySpec,
   type ServerContainer,
-  operationalMetrics,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { envBag, requireDb, requireTelemetryDb } from './env'
-export { selectDeployDeps } from './containers/deployJobDeps'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
@@ -686,22 +681,6 @@ export function selectRunnersDeps(
     runnerCustomTlsSupported: false,
     ...(urlPolicy ? { runnerUrlSafetyPolicy: urlPolicy } : {}),
   }
-}
-
-/**
- * The clone/push credential for a Worker container dispatch: the App registry's mint, narrowed by
- * the shared builder to the repos that dispatch resolved. Every Worker site that hands a container
- * a GitHub token goes through this, so none of them can quietly fall back to an installation-wide
- * one. No `resolveRunInitiatorToken`: the step executor composes its own mint with that chain (see
- * `container-executor-deps.ts`), while bootstrap, repair and the deploy clone have no initiator to
- * act as, and saying so once here beats three call sites each omitting it by accident.
- */
-export function workerDispatchTokenMint(registry: GitHubAppRegistry): MintInstallationToken {
-  return buildDispatchTokenMint({
-    mint: (id, opts) => registry.installationToken(id, opts),
-    logger,
-    operationalMetrics,
-  })
 }
 
 /**

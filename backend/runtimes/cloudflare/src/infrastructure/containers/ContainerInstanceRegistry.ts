@@ -1,4 +1,4 @@
-import { getErrorMessage } from '@cat-factory/kernel'
+import { getErrorMessage, getErrorReason, RUNNER_IMAGE_UNWIRED_REASON } from '@cat-factory/kernel'
 import type { Clock, RunnerImageVariant } from '@cat-factory/kernel'
 import type { ResolveRunContainerNamespace } from './runContainerNamespace'
 import { logger } from '../observability/logger'
@@ -98,11 +98,13 @@ export class ContainerInstanceRegistry {
    * than `epochMs` (its legitimate maximum lifetime has elapsed). With normal runs
    * self-reclaiming on their terminal path, a reaped container is a genuine LEAK, so
    * each kill is logged loudly. One wedged container never aborts the sweep — each
-   * release is isolated. Returns how many were actually reaped.
+   * release is isolated. Returns how many were actually reaped, and how many the sweep
+   * could not even address (see below).
    */
-  async reapStaleBefore(epochMs: number): Promise<{ reaped: number }> {
+  async reapStaleBefore(epochMs: number): Promise<{ reaped: number; unreachable: number }> {
     const stale = await this.store.listStartedBefore(epochMs)
     let reaped = 0
+    let unreachable = 0
     for (const record of stale) {
       logger.warn('container-reaper: killing leaked container past its max lifetime', {
         containerKey: record.containerKey,
@@ -115,6 +117,26 @@ export class ContainerInstanceRegistry {
         await this.release(record.containerKey, record.image)
         reaped++
       } catch (error) {
+        if (getErrorReason(error) === RUNNER_IMAGE_UNWIRED_REASON) {
+          // The class this row's variant lives in is no longer BOUND (the binding was removed, or
+          // the Worker rolled back past it), so there is no namespace to get a stub from and no
+          // retry can produce one. Left in place the row re-throws on every pass for ever, which
+          // is a permanent error rate that names nothing new and still never kills the container.
+          // So it is dropped, and the fact the reaper cannot act on it is stated ONCE, loudly,
+          // with the binding to restore.
+          unreachable++
+          logger.error(
+            'container-reaper: cannot address a leaked container, its class is not bound',
+            {
+              containerKey: record.containerKey,
+              image: record.image,
+              workspaceId: record.workspaceId,
+              err: getErrorMessage(error),
+            },
+          )
+          await this.store.remove(record.containerKey)
+          continue
+        }
         // Leave the row in place so the next pass retries this one.
         logger.error('container-reaper: failed to kill leaked container (will retry next pass)', {
           containerKey: record.containerKey,
@@ -122,6 +144,6 @@ export class ContainerInstanceRegistry {
         })
       }
     }
-    return { reaped }
+    return { reaped, unreachable }
   }
 }

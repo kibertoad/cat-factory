@@ -1,16 +1,9 @@
 import type { D1Database } from '@cloudflare/workers-types'
-import type { RunnerImageVariant } from '@cat-factory/kernel'
+import { isRunnerImageVariant } from '@cat-factory/kernel'
 import type {
   LiveContainerRecord,
   LiveContainerStore,
 } from '../containers/ContainerInstanceRegistry'
-
-/** The variants this build can resolve a container class for. */
-const IMAGE_VARIANTS: readonly RunnerImageVariant[] = ['default', 'ui', 'deploy']
-
-function isRunnerImageVariant(value: string | null): value is RunnerImageVariant {
-  return value != null && (IMAGE_VARIANTS as readonly string[]).includes(value)
-}
 
 /**
  * The live-container inventory over D1 (`live_containers`, migration 0022; `image` added in

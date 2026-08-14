@@ -1,4 +1,4 @@
-import { UnavailableError } from '@cat-factory/kernel'
+import { RUNNER_IMAGE_UNWIRED_REASON, UnavailableError } from '@cat-factory/kernel'
 import type { RunnerImageVariant } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { DeployContainer } from './DeployContainer'
@@ -27,9 +27,6 @@ export type RunContainerNamespace =
  * an app that would not boot. Refusing costs one dispatch and names the binding to add.
  */
 export type ResolveRunContainerNamespace = (variant: RunnerImageVariant) => RunContainerNamespace
-
-/** The `details.reason` a refused image variant carries, for the SPA and the run record alike. */
-export const RUNNER_IMAGE_UNWIRED_REASON = 'runner_image_unwired'
 
 /**
  * The agent path's resolver: the plain executor class for everything, the UI class for the `ui`

@@ -139,9 +139,9 @@ export class LocalPreviewTransport implements PreviewTransport {
   }
 
   async start(ref: PreviewRef, spec: Record<string, unknown>, servePort: number): Promise<void> {
-    const runId = previewRunId(ref.frameId)
+    const containerKey = previewRunId(ref.frameId)
     // Fresh container each start (a re-start replaces any prior preview for the frame).
-    await this.adapter.removeRun(this.exec, runId)
+    await this.adapter.removeRun(this.exec, containerKey)
     // On a localhost-publishing runtime (Docker family) PIN the host port to the serve port so
     // the browsable origin is `http://localhost:<servePort>` — deterministic and knowable ahead
     // of provision, matching the CORS origin a deployer injects (`frontendOriginsForService`).
@@ -150,7 +150,7 @@ export class LocalPreviewTransport implements PreviewTransport {
     let containerId: string
     try {
       containerId = await this.adapter.run(this.exec, {
-        runId,
+        containerKey,
         image: this.image,
         sharedSecret: this.sharedSecret,
         // A preview only builds + serves a static app (no Docker-in-Docker), so never privileged.

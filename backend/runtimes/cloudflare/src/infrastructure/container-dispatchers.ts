@@ -4,8 +4,9 @@
 // They sit together because they are one concern rather than two. Each hands a container a real
 // clone/push credential, which is what `backend/docs/security-model.md` Layer 3 bounds, and each
 // mints it through `workerDispatchTokenMint` so the token names only the repo that dispatch
-// touches. The mint itself stays in the composition root because the deploy clone target uses it
-// too; this module is the pair that would otherwise keep the root over its size budget.
+// touches. The mint itself lives in its own leaf (`dispatchTokenMint.ts`) because the deploy
+// clone target uses it too; this module is the pair that would otherwise keep the composition
+// root over its size budget.
 //
 // NOT here: the step executor's own mint, which lives in `container-executor-deps.ts` beside the
 // run-initiator PAT chain it composes in front of the App token.
@@ -25,11 +26,8 @@ import type { CoreDependencies } from '@cat-factory/orchestration'
 import type { EnvironmentBackendRegistry } from '@cat-factory/integrations'
 import { isProxyableProvider, resolveAgentConfig } from '@cat-factory/agents'
 import type { Env } from './env'
-import {
-  buildAppRegistry,
-  buildResolvePackageRegistries,
-  workerDispatchTokenMint,
-} from './container'
+import { buildAppRegistry, buildResolvePackageRegistries } from './container'
+import { workerDispatchTokenMint } from './dispatchTokenMint'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'

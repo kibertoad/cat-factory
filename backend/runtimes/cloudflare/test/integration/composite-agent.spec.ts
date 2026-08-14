@@ -4,6 +4,7 @@ import type {
   AgentExecutor,
   AgentRunContext,
   AgentRunResult,
+  RunReclaimTarget,
 } from '@cat-factory/kernel'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { CompositeAgentExecutor } from '../../src/infrastructure/ai/CompositeAgentExecutor'
@@ -23,10 +24,10 @@ class Tagged implements AgentExecutor {
   }
 }
 
-// A container executor that records stopJob calls, to assert the composite
+// A container executor that records run reclaims, to assert the composite
 // forwards reclaim to it (the engine narrows the composite, not the inner one).
-class StoppableContainer implements AgentExecutor {
-  readonly stopped: string[] = []
+class ReclaimableContainer implements AgentExecutor {
+  readonly reclaimed: string[] = []
   run(_context: AgentRunContext): Promise<AgentRunResult> {
     return Promise.resolve({ output: 'container' })
   }
@@ -39,8 +40,8 @@ class StoppableContainer implements AgentExecutor {
   pollJob(): Promise<never> {
     throw new Error('not used')
   }
-  stopJob(handle: AgentJobHandle): Promise<void> {
-    this.stopped.push(handle.jobId)
+  reclaimRun(target: RunReclaimTarget): Promise<void> {
+    this.reclaimed.push(target.runId)
     return Promise.resolve()
   }
 }
@@ -139,15 +140,17 @@ describe('CompositeAgentExecutor', () => {
     expect(() => noSandbox.run(ctx('org-security-auditor'))).toThrow(/needs a real checkout/)
   })
 
-  it('forwards stopJob to the container executor', async () => {
-    const container = new StoppableContainer()
+  it('forwards the run reclaim to the container executor', async () => {
+    const container = new ReclaimableContainer()
     const c = new CompositeAgentExecutor(new Tagged('inline'), container)
-    await c.stopJob({ jobId: 'exec-1' })
-    expect(container.stopped).toEqual(['exec-1'])
+    await c.reclaimRun({ runId: 'exec-1', jobId: 'exec-1-coder', agentKinds: ['coder'] })
+    expect(container.reclaimed).toEqual(['exec-1'])
   })
 
-  it('stopJob is a no-op when no container is wired', async () => {
+  it('the run reclaim is a no-op when no container is wired', async () => {
     const c = new CompositeAgentExecutor(new Tagged('inline'), null)
-    await expect(c.stopJob({ jobId: 'exec-1' })).resolves.toBeUndefined()
+    await expect(
+      c.reclaimRun({ runId: 'exec-1', jobId: 'exec-1-coder', agentKinds: [] }),
+    ).resolves.toBeUndefined()
   })
 })
