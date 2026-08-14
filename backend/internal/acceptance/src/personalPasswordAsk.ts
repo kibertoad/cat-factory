@@ -13,7 +13,7 @@
 // on screen. The third is not a degradation at all: an operator pressing Ctrl-C is a person saying
 // "not this pass", and a pass that started anyway would spend an afternoon on a refusal.
 
-import { describeThrown, scrubbed } from './operatorText.ts'
+import { describeThrown, scrubbed } from '@cat-factory/acceptance-kit'
 import { needsPersonalPassword, type PinnedPreset } from './presets.ts'
 import { PersonalPasswordDeclined } from './personalUnlock.ts'
 

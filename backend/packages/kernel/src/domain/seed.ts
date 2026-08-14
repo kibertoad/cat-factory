@@ -1,4 +1,8 @@
-import { hasApproverPolicy } from '@cat-factory/contracts'
+import {
+  NANO_BANANA_GENERATOR_ID,
+  PLATFORM_ASSET_STORAGE_SERVICE_ID,
+  hasApproverPolicy,
+} from '@cat-factory/contracts'
 import type { PipelineRegistry } from './pipeline-registry.js'
 import type { TaskTypeRegistry } from './task-type-registry.js'
 import type { Block, Pipeline, StepGateConfig, StepGating, StepOptions } from './types.js'
@@ -1003,6 +1007,77 @@ function buildSpecialtyPipelines(): Pipeline[] {
 }
 
 /**
+ * The MEDIA preset, in its own builder rather than among the specialty pipelines.
+ *
+ * Not only for the size ratchet, though that is what forced the split: it is the ONE built-in
+ * whose step ships a `stepOptions` selection, so it is the one entry a reader looking for "how
+ * does a preset configure a step" should find on its own rather than by scrolling a builder full
+ * of step LISTS.
+ */
+function buildMediaPipelines(): Pipeline[] {
+  return [
+    // The Media pipeline (the DEFAULT for a `media` task): ONE `media-generator` step whose
+    // deliverable is generated binary assets stored through an asset-storage service. No merge
+    // tail, because nothing here writes to the repository: the run terminates through the
+    // no-PR terminal path, exactly as `pl_review` does.
+    //
+    // The step SHIPS a selection rather than leaving it blank, and that is what makes the task
+    // type usable on a fresh board: `assertValidBinaryOutputSteps` refuses a binary-output step
+    // with no storage service at pipeline SAVE and at run start, so an unconfigured preset would
+    // be one nobody could start until they had opened the builder. It points at the platform's
+    // own asset storage, which every deployment has once content storage is configured (the
+    // local one defaults it to the filesystem).
+    //
+    // BOTH HALVES are shipped now: the storage the artifacts go to, and `nano-banana`, the one
+    // generative integration the platform registers (`@cat-factory/binary-generators`, installed
+    // by every facade's default registry). Without it the step had a place to put pictures and no
+    // API to make them with, so the agent fell back to whatever its own model could draw. The
+    // selection is what makes the preset name an id, which is also its one sharp edge: a
+    // deployment that INJECTS a `binaryGeneratorRegistry` of its own replaces the shipped set
+    // rather than adding to it, and this preset's runs are then refused at admission
+    // (`binary_output_generator_invalid`) until it starts from `binaryGeneratorRegistryWithBuiltins()`
+    // or edits the step. A loud refusal naming the id beats a run that dispatches and generates
+    // nothing.
+    //
+    // `comparison` is on by default with two candidates from each producer, because generating
+    // one picture and keeping it is the case that did not need a pipeline: the reason to run
+    // several image APIs at once is to look at what came back and keep what is good.
+    // `multiSelect` is what lets a person keep more than one of them, each stored under its own
+    // id. `perGenerator: 2` is also what keeps the preset SAVEABLE with no generative
+    // integration selected at all (`assertComparableCandidates` needs either two producers or
+    // more than one candidate each), so the comparison still happens on a deployment whose
+    // agent generates through its own model.
+    //
+    // `modalities` is deliberately UNSET. It is a statement about the WORK, and this preset
+    // covers every media task a board has; a step that must deliver a 3D model or a sound says
+    // so in the builder, and admission then holds the selected integrations to it.
+    definePipeline({
+      id: 'pl_media',
+      name: 'Generate media',
+      purpose: 'media',
+      // `version: 1` against the copies seeded before this preset selected an integration, which
+      // carry no version at all and read as 0: those workspaces are offered the reseed that adds
+      // the selection, rather than keeping a step that generates through nothing.
+      version: 1,
+      description:
+        'Generate images, 3D models or other binary assets through the generative integrations you select, compare what each one produced, and keep the ones you want.',
+      steps: [
+        {
+          kind: 'media-generator',
+          options: {
+            binaryOutput: {
+              storageServiceId: PLATFORM_ASSET_STORAGE_SERVICE_ID,
+              generatorIds: [NANO_BANANA_GENERATOR_ID],
+              comparison: { perGenerator: 2, multiSelect: true },
+            },
+          },
+        },
+      ],
+    }),
+  ]
+}
+
+/**
  * Built-in pipelines WITHDRAWN from the catalog: a pipeline that is no longer relevant (superseded
  * by a better preset, or built on a flow that no longer exists) is deleted from the builders above
  * and named HERE instead. The tombstone is what makes the removal reach a workspace that was
@@ -1132,6 +1207,7 @@ export function seedPipelines(registry?: PipelineRegistry): Pipeline[] {
     ...buildOtherDeliveryPipelines(),
     ...buildBuildVariantPipelines(),
     ...buildSpecialtyPipelines(),
+    ...buildMediaPipelines(),
   ]
   // Every curated catalog pipeline is a read-only template: it can be cloned into an
   // editable copy but not edited in place (see PipelineService.update / clone). Each carries
@@ -1256,10 +1332,17 @@ export const REVIEW_PIPELINE_ID = 'pl_review'
 export const RALPH_PIPELINE_ID = 'pl_ralph'
 
 /**
+ * Pipeline id of the media preset: generate binary assets, compare the candidates, keep what a
+ * human picked. See docs/initiatives/binary-output-foundational-storage.md.
+ */
+export const MEDIA_PIPELINE_ID = 'pl_media'
+
+/**
  * The pipeline a task of the given task type should default to when the creator pins none.
- * `document` → `pl_document`, `spike` → `pl_spike`, and `review` → `pl_review` (the full-build
- * `pl_full` is wrong for all three — a document has no code, a spike has no code, a review opens
- * no PR); every other BUILT-IN task type falls through to the workspace's positional default.
+ * `document` → `pl_document`, `spike` → `pl_spike`, `review` → `pl_review` and `media` →
+ * `pl_media` (the full-build `pl_full` is wrong for all four: a document has no code, a spike
+ * has no code, a review opens no PR, and a media task's deliverable is a stored binary); every
+ * other BUILT-IN task type falls through to the workspace's positional default.
  * A CUSTOM (namespaced) task type consults the injected {@link TaskTypeRegistry} AFTER the
  * built-in map, so a deployment-registered type can pin its own default pipeline. Returns
  * `undefined` when there is no type-specific default, so the caller leaves `pipelineId` unset.
@@ -1272,6 +1355,7 @@ export function defaultPipelineIdForTaskType(
   if (taskType === 'spike') return SPIKE_PIPELINE_ID
   if (taskType === 'review') return REVIEW_PIPELINE_ID
   if (taskType === 'ralph') return RALPH_PIPELINE_ID
+  if (taskType === 'media') return MEDIA_PIPELINE_ID
   if (taskType && taskTypeRegistry) return taskTypeRegistry.defaultPipelineId(taskType)
   return undefined
 }

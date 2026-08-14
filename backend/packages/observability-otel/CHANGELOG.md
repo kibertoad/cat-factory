@@ -1,5 +1,22 @@
 # @cat-factory/observability-otel
 
+## 0.21.5
+
+### Patch Changes
+
+- Updated dependencies [053aac8]
+  - @cat-factory/contracts@0.317.0
+  - @cat-factory/kernel@0.305.0
+
+## 0.21.4
+
+### Patch Changes
+
+- Updated dependencies [eb5fa75]
+- Updated dependencies [9d8fdf6]
+  - @cat-factory/contracts@0.316.0
+  - @cat-factory/kernel@0.304.0
+
 ## 0.21.3
 
 ### Patch Changes

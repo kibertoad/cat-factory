@@ -10,8 +10,8 @@ import type {
 import type { ResolvedFoundationalService } from '@cat-factory/contracts'
 import {
   ConflictError,
+  FoundationalServiceRegistry,
   ValidationError,
-  defaultFoundationalServiceRegistry,
   registryBuiltinSource,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -145,6 +145,13 @@ function contract(
 
 const clock = { now: () => 42 }
 
+// The `builtin` tier, EMPTIED. `defaultFoundationalServiceRegistry()` ships the platform's own
+// asset storage, so a test about the STORED tiers' merge that left this implicit would be
+// asserting over a catalog with one row it never seeded. The tier's own behaviour (a definition
+// resolving with no rows anywhere, an override, a tombstone) has its own describe below, which
+// registers what it means to see.
+const NO_BUILTINS = registryBuiltinSource(new FoundationalServiceRegistry())
+
 describe('FoundationalServiceCatalogService.resolve', () => {
   it('merges the tiers with the workspace winning by id', async () => {
     const service = new FoundationalServiceCatalogService({
@@ -156,6 +163,7 @@ describe('FoundationalServiceCatalogService.resolve', () => {
       apiContractRepository: contractRepo(),
       workspaceRepository: workspaces('acct'),
       clock,
+      builtins: NO_BUILTINS,
     })
     const resolved = await service.resolve('ws')
     expect(resolved.map((s) => [s.id, s.name, s.tier])).toEqual([
@@ -173,6 +181,7 @@ describe('FoundationalServiceCatalogService.resolve', () => {
       apiContractRepository: contractRepo(),
       workspaceRepository: workspaces('acct'),
       clock,
+      builtins: NO_BUILTINS,
     })
     expect(await service.resolve('ws')).toEqual([])
   })
@@ -183,6 +192,7 @@ describe('FoundationalServiceCatalogService.resolve', () => {
       apiContractRepository: contractRepo([contract('account', 'acct', 'file-storage')]),
       workspaceRepository: workspaces('acct'),
       clock,
+      builtins: NO_BUILTINS,
     })
     const [entry] = await service.resolve('ws')
     expect(entry?.contracts[0]?.operations).toEqual(['GET /files', 'POST /files'])
@@ -196,6 +206,7 @@ describe('FoundationalServiceCatalogService.resolve', () => {
       apiContractRepository: contractRepo(),
       workspaceRepository: workspaces(null),
       clock,
+      builtins: NO_BUILTINS,
     })
     expect((await service.resolve('ws')).map((s) => s.id)).toEqual(['audit'])
   })
@@ -214,6 +225,7 @@ describe('FoundationalServiceCatalogService.contractsFor', () => {
       ]),
       workspaceRepository: workspaces('acct'),
       clock,
+      builtins: NO_BUILTINS,
     })
     const docs = await service.contractsFor('ws', ['file-storage'])
     expect(docs.get('file-storage')?.map((d) => d.title)).toEqual(['workspace contract'])
@@ -230,6 +242,7 @@ describe('FoundationalServiceCatalogService.contractsFor', () => {
       apiContractRepository: contractRepo([contract('account', 'acct', 'file-storage')]),
       workspaceRepository: workspaces('acct'),
       clock,
+      builtins: NO_BUILTINS,
     })
     expect((await service.contractsFor('ws', ['file-storage'])).get('file-storage')).toEqual([])
   })
@@ -240,6 +253,7 @@ describe('FoundationalServiceCatalogService.contractsFor', () => {
       apiContractRepository: contractRepo([contract('account', 'acct', 'file-storage')]),
       workspaceRepository: workspaces('acct'),
       clock,
+      builtins: NO_BUILTINS,
     })
     const docs = await service.contractsFor('ws', ['file-storage', 'imaginary-bus'])
     expect([...docs.keys()]).toEqual(['file-storage'])
@@ -254,6 +268,7 @@ describe('FoundationalServiceCatalogService writes', () => {
       apiContractRepository: contractRepo(),
       workspaceRepository: workspaces('acct'),
       clock,
+      builtins: NO_BUILTINS,
     })
 
   it('indexes an uploaded OpenAPI document’s operations at write time', async () => {
@@ -322,6 +337,7 @@ describe('FoundationalServiceCatalogService suppression', () => {
       apiContractRepository: contractRepo(),
       workspaceRepository: workspaces('acct'),
       clock,
+      builtins: NO_BUILTINS,
     })
 
   it('drops an inherited account service out of the board’s catalog', async () => {
@@ -434,7 +450,10 @@ describe('FoundationalServiceCatalogService builtin tier', () => {
   }
 
   const build = (seed: FoundationalServiceRecord[] = [], contracts: ApiContractRecord[] = []) => {
-    const registry = defaultFoundationalServiceRegistry()
+    // A BARE registry holding exactly this definition: these assert the tier's merge behaviour by
+    // position and count, and the platform's own service would be a second row none of them put
+    // there. That the default ships it is `platform-asset-service.test.ts`.
+    const registry = new FoundationalServiceRegistry()
     registry.register(definition)
     return new FoundationalServiceCatalogService({
       foundationalServiceRepository: serviceRepo(seed),

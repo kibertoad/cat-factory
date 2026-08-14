@@ -148,7 +148,7 @@ const tabsUi = {
 // so the config surface pins the built-in set it renders inputs for — a custom type buckets on its
 // own id server-side (`RunAdmission`) and is not configured here. Keying the records below off this
 // finite union (not the open `CreateTaskType`) keeps them exhaustive + undefined-free.
-type LimitTaskType = 'feature' | 'bug' | 'document' | 'spike' | 'review' | 'ralph'
+type LimitTaskType = 'feature' | 'bug' | 'document' | 'spike' | 'review' | 'ralph' | 'media'
 const TASK_TYPES: LimitTaskType[] = ['feature', 'bug', 'document', 'spike']
 
 // Per-task-type label for the "Max {type} tasks" inputs. An exhaustive Record keyed off
@@ -161,6 +161,7 @@ const TASK_TYPE_KEYS: Record<LimitTaskType, string> = {
   spike: 'settings.workspaceSettings.taskTypes.spike',
   review: 'settings.workspaceSettings.taskTypes.review',
   ralph: 'settings.workspaceSettings.taskTypes.ralph',
+  media: 'settings.workspaceSettings.taskTypes.media',
 }
 
 const MODES = computed<{ value: TaskLimitMode; label: string }[]>(() => [

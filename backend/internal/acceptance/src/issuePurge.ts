@@ -19,7 +19,7 @@
 // test is REPORTED as skipped rather than passed over silently, because "we saw it and left it" and
 // "we never looked" are different facts about a board an operator is about to re-run against.
 
-import { describeThrown } from './operatorText.ts'
+import { describeThrown } from '@cat-factory/acceptance-kit'
 import { type IssueApi, type IssueTarget, slug } from './vcsIssues.ts'
 
 /** One issue this purge would close, with what made it a candidate. */

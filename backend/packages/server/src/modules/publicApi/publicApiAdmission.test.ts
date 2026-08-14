@@ -5,6 +5,7 @@ import { defaultGateRegistry, seedPipelines } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   type AdmissionRegistries,
+  BINARY_CANDIDATE_PARK_SURFACE,
   canParkOnHuman,
   INPUT_GATE_PARK_SURFACE,
   isHeadlessInlinePipeline,
@@ -26,10 +27,11 @@ import {
 //  - parking is a SCOPE question — a pipeline that can park needs a caller able to answer, which
 //    is exactly what a `decide` key asserts.
 //
-// The parking half enumerates FOUR mechanisms (approval-gate flag, inline review/brainstorm kind,
-// unbounded human-wait gate, interview-gate trait). The third was missed on the first pass and is
-// asserted against the real seed catalog below, because a synthetic step chain cannot show that the
-// gap was reachable through a pipeline the product actually ships.
+// The parking half enumerates FIVE mechanisms (approval-gate flag, inline review/brainstorm kind,
+// unbounded human-wait gate, interview-gate trait, binary-candidate comparison). The third and the
+// fifth were both missed on a first pass and are asserted against the real seed catalog below,
+// because a synthetic step chain cannot show that the gap was reachable through a pipeline the
+// product actually ships.
 //
 // These live here rather than in the cross-runtime conformance suite because the built-in public
 // pipeline is read-only: there is no way to construct a public-and-parking pipeline over HTTP, so
@@ -73,7 +75,7 @@ const withAgentKinds = (agentKinds: AgentKindRegistry): AdmissionRegistries => (
   agentKinds,
 })
 
-describe('public-API admission', () => {
+describe('public-API admission: the ABSOLUTE half', () => {
   describe('isInlineOnlyPipeline', () => {
     it('accepts a chain of inline engine kinds', () => {
       expect(
@@ -113,7 +115,13 @@ describe('public-API admission', () => {
       expect(isInlineOnlyPipeline({ agentKinds: ['not-a-real-kind'] }, registry)).toBe(false)
     })
   })
+})
 
+// The SECOND half, split out because the first one grew past the function-lines budget and these
+// two were never one subject: inline-only is absolute and reads the step kinds, while everything
+// below is the SCOPE question and reads the park mechanisms. The file header states that seam;
+// this is it, drawn where the header already drew it.
+describe('public-API admission: the SCOPE half (parking)', () => {
   describe('canParkOnHuman', () => {
     it('detects each inline-and-parking kind', () => {
       // All four set the run `blocked` awaiting a human. Missing any one of them would silently
@@ -154,6 +162,55 @@ describe('public-API admission', () => {
             agentKinds: ['initiative-breakdown', 'task-estimator'],
             enabled: [false, true],
             gates: [true, false],
+          },
+          registries,
+        ),
+      ).toBe(false)
+    })
+
+    it('detects a binary-candidate comparison, which lives in the step OPTIONS', () => {
+      // The fifth mechanism, and the first that is invisible from the step chain: the same kind
+      // with and without `comparison` is the same entry in `agentKinds`, and only one of them
+      // stops. `pl_media` is the first shipped preset to set it, so until it did, a plain `write`
+      // key could start a run that parked on a surface `/api/v1` cannot answer.
+      expect(
+        canParkOnHuman(
+          {
+            agentKinds: ['media-generator'],
+            stepOptions: [{ binaryOutput: { comparison: { perGenerator: 2 } } }],
+          },
+          registries,
+        ),
+      ).toBe(true)
+    })
+
+    it('does not park on a binary-output step that was never asked to compare', () => {
+      // Storing what it generated is not a decision anyone has to make. Treating the whole
+      // `binaryOutput` selection as a park would refuse every generating pipeline to a `write`
+      // key, including the ones that never stop.
+      //
+      // The literal carries only `binaryOutput` and nothing inside it, because that is the whole
+      // of what `AdmissiblePipelineShape` declares: the narrowing is the point, and a real
+      // `StepOptions[]` (which carries a storage id, generator ids, modalities and the rest)
+      // still assigns to it. `pl_media` read straight from the seed catalog is the case that
+      // proves that half.
+      expect(
+        canParkOnHuman(
+          { agentKinds: ['media-generator'], stepOptions: [{ binaryOutput: {} }] },
+          registries,
+        ),
+      ).toBe(false)
+    })
+
+    it('ignores a comparison on a DISABLED step (options are index-aligned too)', () => {
+      // Same alignment rule the gate array follows: `stepOptions` is parallel to the ORIGINAL
+      // chain, so reading it by the filtered index would look at another step's configuration.
+      expect(
+        canParkOnHuman(
+          {
+            agentKinds: ['initiative-breakdown', 'media-generator'],
+            enabled: [true, false],
+            stepOptions: [null, { binaryOutput: { comparison: { perGenerator: 2 } } }],
           },
           registries,
         ),
@@ -283,6 +340,21 @@ describe('public-API admission', () => {
       expect(parkSurfacesOf({ agentKinds: ['coder'] }, registries)).toEqual([])
     })
 
+    it('treats the shipped Media preset as parking, on its step OPTIONS alone', () => {
+      // The fifth mechanism against the real catalog. `pl_media` is one `media-generator` step:
+      // no gate flag, no parking kind, no wait gate, no interview trait, so every check that
+      // reads the step CHAIN says it never stops. It ships `comparison` on, which is exactly the
+      // park a human answers, and it is the first built-in to set it. Read from the seed so
+      // turning the preset's comparison off re-runs this question rather than leaving the
+      // assertion true about a pipeline the product no longer ships.
+      const media = seedPipelines().find((p) => p.id === 'pl_media')
+      expect(media, 'pl_media must exist in the built-in catalog').toBeTruthy()
+      expect(media!.agentKinds).toEqual(['media-generator'])
+      expect(media!.gates ?? []).not.toContain(true)
+      expect(canParkOnHuman(media!, registries)).toBe(true)
+      expect(parkSurfacesOf(media!, registries)).toEqual([BINARY_CANDIDATE_PARK_SURFACE])
+    })
+
     it('leaves the unconditional build presets startable by a plain write key', () => {
       // The other side of the same change: widening the enumeration must not sweep up the presets
       // whose whole selling point is that they never pause. If this flips, every `write`-key
@@ -319,7 +391,12 @@ describe('public-API admission', () => {
       expect(parkSurfacesOf({ agentKinds: ['initiative-breakdown'] }, registries)).toEqual([])
     })
   })
+})
 
+// What a refusal SAYS, split from what detects a park above: the two answer different questions
+// (which surfaces does this pipeline have, versus which of them can this API actually answer),
+// and holding them apart is what keeps the drift guard below honest about the second.
+describe('public-API admission: what the refusal promises', () => {
   describe('parkingRefusalMessage', () => {
     it('promises an answer path ONLY for surfaces the decision surface really serves', () => {
       // The defect this replaced: the old fixed sentence named all four park types and told the
@@ -410,6 +487,26 @@ describe('public-API admission', () => {
           PUBLICLY_ANSWERABLE_PARK_SURFACES.has(kind),
         )
       }
+    })
+
+    it('names the candidate park as unanswerable, and points at the cancel route instead', () => {
+      // The keep-decision HAS a route; it is simply not projected onto `/api/v1` yet, so a refusal
+      // that advertised the decisions endpoint would steer an operator into minting a wider key
+      // that still cannot answer. Same disposition as `human-review`, different reason.
+      const message = parkingRefusalMessage(
+        publicRunParkSurfaces(
+          {
+            agentKinds: ['media-generator'],
+            stepOptions: [{ binaryOutput: { comparison: { perGenerator: 2 } } }],
+          },
+          registries,
+          { inputGateBlocks: false },
+        ),
+        { cancelPath: PUBLIC_TASK_STOP_PATH },
+      )
+      expect(message).toContain(BINARY_CANDIDATE_PARK_SURFACE)
+      expect(message).not.toContain('/api/v1/runs/:runId/decisions')
+      expect(message).toContain(PUBLIC_TASK_STOP_PATH)
     })
   })
 

@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
 public enum PublicRunArtifactKind {
     SCREENSHOT("screenshot"),
     REFERENCE("reference"),
+    ASSET("asset"),
 
     /**
      * A value this SDK release does not know.

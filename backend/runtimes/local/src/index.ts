@@ -83,18 +83,34 @@ export {
   defaultFoundationalServiceRegistry,
 } from '@cat-factory/kernel'
 // Installation-level extension point for GENERATIVE BINARY INTEGRATIONS (the same DI seam once
-// more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
+// more): a deployment news a `binaryGeneratorRegistryWithBuiltins()`, registers the image / music /
 // video generation APIs it pays for on it, and passes it via the `binaryGeneratorRegistry`
 // option. A pipeline step whose kind carries the `binary-output` trait then SELECTS from them
 // (`stepOptions.binaryOutput.generatorIds`), and the engine briefs the agent on each one's
 // content types, contract and credential variable. In MOTHERSHIP mode register them on the
 // MOTHERSHIP's entry point rather than here: a run resolves the set from there (it is what the
 // builder's picker offered), and this node's copy would only ever be the stale one.
+//
+// A bare `defaultBinaryGeneratorRegistry()` is EMPTY, and the shipped `pl_media` preset SELECTS
+// `nano-banana`, so injecting one refuses that pipeline's runs at admission rather than degrading.
+// Start from the built-ins and register onto the same instance unless dropping the shipped
+// integration is the intent.
 export {
   BinaryGeneratorRegistry,
   type BinaryGeneratorDefinition,
   defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
+export {
+  BUILTIN_BINARY_GENERATORS,
+  type BinaryGeneratorEntry,
+  type BinaryGeneratorInput,
+  NANO_BANANA_CREDENTIAL_KEY,
+  NANO_BANANA_GENERATOR_ID,
+  binaryGeneratorRegistryWithBuiltins,
+  defineBinaryGenerator,
+  openApiContract,
+  registerBuiltinBinaryGenerators,
+} from '@cat-factory/binary-generators'
 // Installation-level extension point for the deployment's OWN BINARY ARTIFACT STORES (parity with
 // the Node facade): a deployment news a `defaultBinaryStoreRegistry()`, registers stores
 // implementing the `BinaryBlobBackend` port on it, and passes it via the `binaryStoreRegistry`
@@ -228,6 +244,7 @@ export {
   REVIEW_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
+  MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct

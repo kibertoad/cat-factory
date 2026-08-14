@@ -30,7 +30,7 @@ import { closeSync, openSync, writeSync } from 'node:fs'
 import { ReadStream } from 'node:tty'
 import { personalPasswordProblem } from '@cat-factory/contracts'
 import { CatFactoryCredentialRequiredError } from '@cat-factory/sdk'
-import { OperatorRefusal } from './operatorText.ts'
+import { OperatorRefusal } from '@cat-factory/acceptance-kit'
 
 /** The header the platform reads the personal password from (`PERSONAL_PASSWORD_HEADER`). */
 const PERSONAL_PASSWORD_HEADER = 'X-Personal-Password'
@@ -385,7 +385,7 @@ function noTerminal(): Error {
  *
  * `cmd.exe` is deliberately NOT one of the terminals offered, though it implements console modes
  * perfectly well: this suite prints its Windows commands in PowerShell's dialect (see
- * `operatorText.ts`), so sending an operator there would fix the prompt and break every remedy
+ * the kit's `operatorText.ts`), so sending an operator there would fix the prompt and break every remedy
  * printed afterwards.
  */
 function noHiddenInput(cause: unknown, platform: NodeJS.Platform = process.platform): Error {

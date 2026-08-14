@@ -39,6 +39,7 @@ const BUILTIN_LABELS: Readonly<Record<string, string>> = {
   spike: 'Spike',
   review: 'Pull request review',
   ralph: 'Ralph',
+  media: 'Media',
 }
 
 /**

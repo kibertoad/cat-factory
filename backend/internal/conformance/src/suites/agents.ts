@@ -1,4 +1,5 @@
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { NANO_BANANA_GENERATOR_ID } from '@cat-factory/contracts'
 import { ConflictError } from '@cat-factory/kernel'
 import type {
   AgentRunContext,
@@ -545,6 +546,27 @@ function registerKindCapabilityTests(harness: ConformanceHarness): void {
       // A kind WITHOUT the trait carries no flag at all — the stock product's shape, so the
       // builder's gate reads false rather than "the field is missing, better show it anyway".
       expect(byKind.get('conformance-auditor')?.binaryOutput).toBeUndefined()
+    })
+
+    // The other half of the picker's input, and the one that is a FACADE fact rather than an
+    // engine one: which generative integrations a deployment that configured nothing has.
+    // `defaultBinaryGeneratorRegistry()` is empty by design, so the shipped set arrives only
+    // because each facade defaults its own registry to `binaryGeneratorRegistryWithBuiltins()`.
+    // A facade that forgot would still pass every unit test in the definitions package, offer an
+    // empty picker, and refuse the shipped `pl_media` preset at admission for selecting an id
+    // nothing answers to — on that runtime only. Asserted as a SUBSET rather than an equality:
+    // the shipped catalog grows, and a deployment's own integrations are legitimately here too.
+    it('offers the platform’s shipped generative integration with nothing configured', async () => {
+      const app = harness.makeApp({})
+      const { workspace } = await app.createWorkspace()
+      const snap = await app.call<{ binaryGenerators?: { id: string; modalities: string[] }[] }>(
+        'GET',
+        `/workspaces/${workspace.id}`,
+      )
+      const shipped = (snap.body.binaryGenerators ?? []).find(
+        (generator) => generator.id === NANO_BANANA_GENERATOR_ID,
+      )
+      expect(shipped?.modalities).toEqual(['image'])
     })
   })
 

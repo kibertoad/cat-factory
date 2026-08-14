@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // The kit reads and writes a state directory and prompts nothing, so it is a NODE library:
+    // `node:fs`, `node:path` and `process.platform` are part of what it does, unlike the SDK it
+    // drives (which compiles against web platform types alone so it can run in a worker isolate).
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

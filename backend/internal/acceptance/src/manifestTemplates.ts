@@ -17,11 +17,15 @@
 // is unreadable until you see what it produced, and offer the default as the fix, because for both
 // of these the default is a working answer.
 
+import {
+  envAssignment,
+  type Prerequisite,
+  satisfied,
+  unsatisfied,
+} from '@cat-factory/acceptance-kit'
 import type { AcceptanceConfig } from './config.ts'
 import { DEFAULT_IMAGE_TEMPLATE, DEFAULT_INGRESS_HOST_TEMPLATE, K3S_DOC } from './config.ts'
 import { imageTemplateSample, renderEnvironmentHost, renderEnvironmentImage } from './k3s.ts'
-import { envAssignment } from './operatorText.ts'
-import { type Prerequisite, satisfied, unsatisfied } from './preflight.ts'
 
 /**
  * All these two checks need. Narrower than `PreflightContext` on purpose, and assignable from it,

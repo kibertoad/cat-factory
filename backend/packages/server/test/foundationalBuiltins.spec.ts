@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import {
   type FoundationalServiceDefinition,
-  defaultFoundationalServiceRegistry,
+  FoundationalServiceRegistry,
 } from '@cat-factory/kernel'
 import { TOKEN_AUDIENCE, signerFor } from '../src/auth/signing.js'
 import type { AppEnv } from '../src/http/env.js'
@@ -39,7 +39,10 @@ const DEFINITION: FoundationalServiceDefinition = {
 
 /** The mothership: the real controller over a container carrying a real, populated registry. */
 function mothership(definitions: FoundationalServiceDefinition[] = [DEFINITION]) {
-  const registry = defaultFoundationalServiceRegistry()
+  // A BARE registry, not `defaultFoundationalServiceRegistry()`: these assert what the ROUTE
+  // serves, by position and count, and the platform's own asset-storage service would be a row
+  // no case here registered. What the default holds is `platform-asset-service.test.ts`.
+  const registry = new FoundationalServiceRegistry()
   registry.registerAll(definitions)
   const app = new Hono<AppEnv>()
   app.use('*', async (c, next) => {
@@ -122,6 +125,9 @@ describe('mothership-mode foundational `builtin` tier', () => {
   })
 
   it('reports an EMPTY estate as empty — a deployment that registers none is not an error', async () => {
+    // Reachable in practice by suppressing the one service the default ships, and it must stay
+    // an empty LIST rather than an outage: the two are the same value to a caller that merges
+    // them and opposite facts to one that reports them.
     const source = await node(mothership([]))
     await expect(source.entries()).resolves.toEqual([])
   })

@@ -127,6 +127,7 @@ export const BUILTIN_TASK_TYPES = [
   'spike',
   'review',
   'ralph',
+  'media',
   'recurring',
 ] as const
 /** The built-in task types a human can pick in the create-task form (`recurring` is schedule-only). */
@@ -137,13 +138,16 @@ export const BUILTIN_CREATE_TASK_TYPES = [
   'spike',
   'review',
   'ralph',
+  'media',
 ] as const
 
 /**
  * The kind of work a task represents, chosen by the human at creation. Drives the
  * task card's icon/badge, per-type creation fields, and (optionally) the per-service
  * running-task limit's bucketing. `review` is a deep-review of an EXISTING open pull
- * request (see {@link taskTypeFieldsSchema}'s `prNumber`/`prUrl`); `recurring` is
+ * request (see {@link taskTypeFieldsSchema}'s `prNumber`/`prUrl`); `media` produces BINARY
+ * deliverables (images, 3D models, audio) rather than code or prose, through the generative
+ * integrations its step selects; `recurring` is
  * special: such tasks are NOT created through `addTask` — they are the reused on-board
  * block of a recurring-pipeline schedule, stamped with this type so the board renders
  * them consistently.

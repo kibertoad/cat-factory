@@ -89,6 +89,31 @@ export const INPUT_GATE_PARK_SURFACE = 'input-gate'
 export const INTERVIEW_PARK_SURFACE = 'interview'
 
 /**
+ * The park surface a BINARY-CANDIDATE COMPARISON presents: a generating step renders several
+ * candidates per subject, parks, and waits for a person to keep the ones worth keeping.
+ *
+ * A FIFTH mechanism, and the first one that is a property of a step's OPTIONS rather than of its
+ * kind, its gate flag or a registered trait. That is why {@link AdmissiblePipelineShape} had to
+ * grow a `stepOptions` leg: the four checks above read the step chain, and this one is invisible
+ * from it. A `media-generator` step with `comparison` set and one without are the same kind on
+ * the same pipeline, and only one of them stops.
+ *
+ * It is NOT in {@link PUBLICLY_ANSWERABLE_PARK_SURFACES}, and unlike `human-review` that is a
+ * slice waiting to be built rather than a permanent absence: the keep-decision has a real route
+ * (`POST /executions/:executionId/binary-candidates/keep`), it is simply not projected onto
+ * `/api/v1` yet, because `publicDecisionKindSchema`'s own rule is that a member ships with its
+ * routes across four SDKs and the MCP facade. Until it does, a run parked here is honestly
+ * reported as parked with nothing this API can answer.
+ *
+ * PRESENCE of `comparison` is the whole test, not the number of candidates it asks for. Authoring
+ * already refuses a comparison that cannot produce two (`assertComparableCandidates` needs either
+ * two producers or `perGenerator > 1`), so a saved one parks; the one case it does not is an agent
+ * returning a single candidate at run time, which is a fact about a run and not about a pipeline.
+ * Over-counting is the safe direction here, the same way the interview gate's is.
+ */
+export const BINARY_CANDIDATE_PARK_SURFACE = 'binary-candidates'
+
+/**
  * Whether a polling-GATE kind parks the run on a human, read off the gate's OWN registration.
  *
  * A third mechanism beside {@link PARKING_INLINE_KINDS} and {@link APPROVAL_GATE_PARK_SURFACE},
@@ -137,10 +162,11 @@ export const PUBLIC_TASK_STOP_PATH = 'POST /api/v1/tasks/:taskId/stop'
  * builds updates itself, where a hand-written sentence would keep promising an answer path that
  * does not exist — which is exactly the defect this replaced.
  *
- * The gap is now down to ONE member of {@link parkSurfacesOf}: `human-review`, and it is not a
- * slice waiting to be built. Its answer is a person approving the pull request on the VCS host,
- * not an API call this surface could offer, so a run parked there is honestly reported as
- * `parked: true` with nothing to answer and the refusal says as much. See
+ * TWO members of {@link parkSurfacesOf} are absent, for opposite reasons. `human-review` is not a
+ * slice waiting to be built: its answer is a person approving the pull request on the VCS host,
+ * not an API call this surface could offer. {@link BINARY_CANDIDATE_PARK_SURFACE} is the other
+ * way round, a real route not yet projected onto `/api/v1`. Either way a run parked there is
+ * honestly reported as `parked: true` with nothing to answer and the refusal says as much. See
  * `backend/docs/adr/0043-public-decision-surface.md`.
  */
 export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Set<string>([
@@ -153,13 +179,23 @@ export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Set<string>([
   INTERVIEW_PARK_SURFACE,
 ])
 
-/** The pipeline shape admission reasons about — the step chain plus its parallel flag arrays. */
+/** The pipeline shape admission reasons about: the step chain plus its parallel flag arrays. */
 export interface AdmissiblePipelineShape {
   agentKinds: string[]
   /** Per-step enable flags, parallel to `agentKinds`; a missing/`true` entry means enabled. */
   enabled?: boolean[]
   /** Per-step human approval gates, parallel to `agentKinds`. */
   gates?: boolean[]
+  /**
+   * Per-step options, parallel to `agentKinds`, narrowed to the ONE thing admission reads off
+   * them: whether a binary-output step was configured to park on a candidate comparison.
+   *
+   * Structural and minimal on purpose. A real `StepOptions[]` is assignable to it, so every call
+   * site passes the pipeline it already holds, while this module keeps depending on no schema and
+   * stays the pure two-registry policy its header claims. Widening it to the whole `StepOptions`
+   * would make every future field look like something admission might read.
+   */
+  stepOptions?: readonly ({ binaryOutput?: { comparison?: unknown } | null } | null | undefined)[]
 }
 
 /** The enabled steps of a pipeline, paired with their ORIGINAL index (gates are index-aligned). */
@@ -225,23 +261,27 @@ export function canParkOnHuman(
 
 /**
  * Every park surface an ENABLED step of `pipeline` can put the run on, in step order and deduped.
- * Four mechanisms, each a separate check because each parks for a different reason:
+ * Five mechanisms, each a separate check because each parks for a different reason:
  *
  *  1. an approval gate flag on the step ({@link APPROVAL_GATE_PARK_SURFACE});
  *  2. the step's own kind being an inline review/brainstorm ({@link PARKING_INLINE_KINDS});
  *  3. the step's own kind being a polling gate that waits on a human with no deadline
  *     ({@link isHumanWaitGate});
- *  4. the step's own kind carrying the `interview-gate` TRAIT ({@link INTERVIEW_PARK_SURFACE}).
+ *  4. the step's own kind carrying the `interview-gate` TRAIT ({@link INTERVIEW_PARK_SURFACE});
+ *  5. the step's OPTIONS configuring a binary-candidate comparison
+ *     ({@link BINARY_CANDIDATE_PARK_SURFACE}).
  *
  * This is the single enumeration {@link canParkOnHuman} derives its boolean from, so the predicate
  * and the explanation a caller is given can never disagree about what parks.
  *
- * Case 4 arrived after the first three had shipped, which is the lesson the human-wait gates
- * already taught repeating itself: an enumeration written against the park mechanisms somebody
- * thought of misses the ones they did not, so ask what each entry is DERIVED from. Cases 2, 3 and 4
- * each derive from a declaration a deployment's own registrations flow through (a kind list, a
- * gate's registered `pollExhaustion`, a registered trait) rather than from a hand-kept list of
- * pipelines. Whatever is added next should be derivable too.
+ * Cases 4 and 5 each arrived after the earlier ones had shipped, which is the lesson the human-wait
+ * gates already taught repeating itself: an enumeration written against the park mechanisms
+ * somebody thought of misses the ones they did not, so ask what each entry is DERIVED from. Cases
+ * 2, 3 and 4 derive from a declaration a deployment's own registrations flow through (a kind list,
+ * a gate's registered `pollExhaustion`, a registered trait). Case 5 derives from the step's stored
+ * configuration, which is the same property one level down: it is what a deployment AUTHORS rather
+ * than what it registers, and it was invisible here until a shipped preset finally set it.
+ * Whatever is added next should be derivable too.
  *
  * TWO THINGS ARE DELIBERATELY NOT HERE, and they are absent for two different reasons:
  *
@@ -272,6 +312,9 @@ export function parkSurfacesOf(
     }
     if (hasTrait(kind, INTERVIEW_GATE_TRAIT, registries.agentKinds)) {
       surfaces.add(INTERVIEW_PARK_SURFACE)
+    }
+    if (pipeline.stepOptions?.[i]?.binaryOutput?.comparison) {
+      surfaces.add(BINARY_CANDIDATE_PARK_SURFACE)
     }
   }
   return [...surfaces]

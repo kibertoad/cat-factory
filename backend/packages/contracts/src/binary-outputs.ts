@@ -5,11 +5,15 @@ import { binaryModalitySchema, mediaTypeSchema } from './binary-modalities.js'
 
 // Wire vocabulary for BINARY-OUTPUT agent steps (docs/initiatives/binary-output-foundational-storage.md):
 // a step whose kind GENERATES binary artifacts (image generation is the canonical example) and
-// stores them through a FOUNDATIONAL SERVICE the step selected from the workspace's catalog —
-// never through the platform's own artifact store, which holds run evidence (screenshots), not
-// product deliverables. The step may also select further catalog services as generation CONTEXT
-// (an inventory service that can say which entities exist, which lack an asset, and how each is
-// described), whose API contracts are injected beside the storage service's.
+// stores them through a FOUNDATIONAL SERVICE the step selected from the workspace's catalog. An
+// org that runs an asset store selects that one; a deployment that runs none selects
+// `platform-assets` (see `platform-assets.ts`), the one service the platform registers for
+// itself, whose bytes land in the same account-configured store screenshots do under a kind the
+// retention sweep never reclaims. Either way the step's storage target is a catalog SELECTION,
+// and nothing here branches on which one it names. The step may also select further catalog
+// services as generation CONTEXT (an inventory service that can say which entities exist, which
+// lack an asset, and how each is described), whose API contracts are injected beside the storage
+// service's.
 
 const serviceId = v.pipe(
   v.string(),

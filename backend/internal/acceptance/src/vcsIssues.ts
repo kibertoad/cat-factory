@@ -22,8 +22,8 @@
 
 import { describeConnectionFailure } from '@cat-factory/kernel'
 import type { PrReportRunProvider } from '@cat-factory/sdk'
+import { describeThrown } from '@cat-factory/acceptance-kit'
 import type { AcceptanceConfig } from './config.ts'
-import { describeThrown } from './operatorText.ts'
 
 /** One repository, as both the provider's API and `GET /api/v1/repos` name it. */
 export type IssueTarget = { owner: string; repo: string }
@@ -71,7 +71,7 @@ export type IssueCredentialVerdict =
       detail: string
       /**
        * What to do about it, when the cause is one kernel recognises: relayed rather than
-       * paraphrased, for the reason `probeFailure.ts` relays the same sentences. Absent for an
+       * paraphrased, for the reason the kit's `probeFailure.ts` relays the same sentences. Absent for an
        * unrecognised failure, because a guessed remedy sends the reader somewhere wrong.
        */
       hint?: string
@@ -205,7 +205,7 @@ function createGitHubIssueApi(options: IssueApiOptions): IssueApi {
         //
         // Described HERE rather than left to escape, and that placement is the point: this is the
         // one prerequisite whose calls leave the deployment, so the gate's own probe context (the
-        // backend) cannot name this address. Through kernel, for the reason `probeFailure.ts` uses
+        // backend) cannot name this address. Through kernel, for the reason the kit's `probeFailure.ts` uses
         // it: `error.message` on this is undici's contentless `fetch failed`, identical for a DNS
         // typo, a refused connection, an untrusted certificate and an Enterprise Server that is down.
         const { detail, hint } = describeConnectionFailure(error, {

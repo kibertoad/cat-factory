@@ -49,12 +49,21 @@ export function visualConfirmApi({ send, ws, http }: ApiContext) {
     },
 
     // Fetch a stored artifact's bytes and turn them into an object URL for an <img>.
-    fetchArtifactBlobUrl: async (workspaceId: string, artifactId: string): Promise<string> => {
+    //
+    // The blob's own `type` comes back beside the URL because it is the media type the SERVER
+    // decided to serve these bytes as, which is the only one a caller may render from. What the
+    // producing agent declared is a claim about a file; this is what the response actually is,
+    // after `blobResponseHeaders` has clamped anything outside the inline-image list down to
+    // `application/octet-stream`.
+    fetchArtifactBlob: async (
+      workspaceId: string,
+      artifactId: string,
+    ): Promise<{ url: string; contentType: string }> => {
       const blob: Blob = await http(
         `${ws(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/blob`,
         { method: 'GET', responseType: 'blob' },
       )
-      return URL.createObjectURL(blob)
+      return { url: URL.createObjectURL(blob), contentType: blob.type }
     },
   }
 }

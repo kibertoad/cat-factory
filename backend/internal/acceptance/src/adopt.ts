@@ -24,7 +24,7 @@
 import { CatFactoryNotFoundError } from '@cat-factory/sdk'
 
 import type { CatFactoryClient, ListPublicReposResponseRepo, PublicService } from '@cat-factory/sdk'
-import type { Journal } from './journal.ts'
+import { type Journal } from '@cat-factory/acceptance-kit'
 import type { ServiceRecord } from './world.ts'
 
 /** The two service shapes this suite adopts, as `POST /api/v1/services` names them. */

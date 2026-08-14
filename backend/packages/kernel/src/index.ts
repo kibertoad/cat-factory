@@ -208,6 +208,7 @@ export {
   REVIEW_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
+  MEDIA_PIPELINE_ID,
   defaultPipelineIdForTaskType,
 } from './domain/seed.js'
 
@@ -304,8 +305,17 @@ export {
   type FoundationalServiceDefinition,
   type FoundationalServiceRegistryEntry,
   FoundationalServiceRegistry,
+  PLATFORM_FOUNDATIONAL_SERVICES,
   defaultFoundationalServiceRegistry,
 } from './domain/foundational-service-registry.js'
+
+// The ONE service that registry ships with: the platform's own asset storage, which is what a
+// binary-output step selects when the deployment runs no object store of its own.
+export {
+  ASSET_UPLOAD_TOKEN_ENV,
+  ASSET_UPLOAD_URL_ENV,
+  platformAssetStorageService,
+} from './domain/platform-asset-service.js'
 
 // Where that `builtin` tier is READ from: the in-process registry by default, the MOTHERSHIP's
 // over `/internal/foundational-services` on a mothership-mode node (which has no estate of its
@@ -410,6 +420,18 @@ export {
   dispatchNeedsHarnessGeneration,
   resolveBinaryGeneratorSelection,
 } from './domain/binary-generators.js'
+
+// What a REGISTERED integration must satisfy beyond its parse, as pure rules with two callers:
+// the boot validator (`collectRegistrationProblems`, which maps each issue onto a registration
+// problem) and a definitions package's authoring seam, which runs them at import so a bad
+// definition is a failing test rather than a deploy that rolls back. See
+// `domain/binary-generator-registration.ts`.
+export {
+  type BinaryGeneratorRegistrationIssue,
+  type BinaryGeneratorRegistrationIssueCode,
+  binaryGeneratorDetailIssues,
+  binaryGeneratorInjectionCollisions,
+} from './domain/binary-generator-registration.js'
 
 // SIDE-BY-SIDE CANDIDATE COMPARISON on a binary-output step: the two-phase brief (generate
 // comparable candidates → deliver what a human kept, under the alternate ids they assigned) and

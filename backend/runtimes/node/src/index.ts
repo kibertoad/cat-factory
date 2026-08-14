@@ -115,23 +115,42 @@ export { TaskTypeRegistry, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 // deployment news a `defaultFoundationalServiceRegistry()`, registers the shared capabilities its
 // org already runs on it, and passes it via the `foundationalServiceRegistry` option. They resolve
 // as the `builtin` tier of every workspace's catalog, so a board designs against the estate from
-// its first request. See backend/docs/adr/0031-foundational-services.md.
+// its first request. The default holds the platform's own asset storage; a deployment that stores
+// assets elsewhere registers its own service and suppresses that id at either stored tier.
+// See backend/docs/adr/0031-foundational-services.md.
 export {
   FoundationalServiceRegistry,
   type FoundationalServiceDefinition,
   defaultFoundationalServiceRegistry,
 } from '@cat-factory/kernel'
 // Installation-level extension point for GENERATIVE BINARY INTEGRATIONS (the same DI seam once
-// more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
+// more): a deployment news a `binaryGeneratorRegistryWithBuiltins()`, registers the image / music /
 // video generation APIs it pays for on it, and passes it via the `binaryGeneratorRegistry`
 // option. A pipeline step whose kind carries the `binary-output` trait then SELECTS from them
 // (`stepOptions.binaryOutput.generatorIds`), and the engine briefs the agent on each one's
 // content types, contract and credential variable.
+//
+// `binaryGeneratorRegistryWithBuiltins()` is the one a deployment almost always wants, for the
+// reason the gate registry's twin says below and one more: a bare `defaultBinaryGeneratorRegistry()`
+// is EMPTY, and the shipped `pl_media` preset SELECTS `nano-banana`, so injecting one refuses that
+// pipeline's runs at admission rather than degrading. Start from the built-ins and register onto
+// the same instance unless dropping the shipped integration is the intent.
 export {
   BinaryGeneratorRegistry,
   type BinaryGeneratorDefinition,
   defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
+export {
+  BUILTIN_BINARY_GENERATORS,
+  type BinaryGeneratorEntry,
+  type BinaryGeneratorInput,
+  NANO_BANANA_CREDENTIAL_KEY,
+  NANO_BANANA_GENERATOR_ID,
+  binaryGeneratorRegistryWithBuiltins,
+  defineBinaryGenerator,
+  openApiContract,
+  registerBuiltinBinaryGenerators,
+} from '@cat-factory/binary-generators'
 // Installation-level extension point for the deployment's OWN BINARY ARTIFACT STORES: a
 // deployment news a `defaultBinaryStoreRegistry()`, registers stores implementing the
 // `BinaryBlobBackend` port (GCS, Azure Blob, an internal object service) on it, and passes it via
@@ -256,6 +275,7 @@ export {
   REVIEW_PIPELINE_ID,
   SPIKE_PIPELINE_ID,
   RALPH_PIPELINE_ID,
+  MEDIA_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a deploy-app
 // wrapper can name a preset when passing `start({ defaultModelPresetId })` without a direct

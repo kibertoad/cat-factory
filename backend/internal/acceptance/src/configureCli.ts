@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createConsoleIo, createNodeShell } from '@cat-factory/cli'
 import { configure, connectDeployment } from './configure.ts'
-import { packageRoot } from './passFiles.ts'
+import { packageRoot } from './packageRoot.ts'
 
 const outcome = await configure({
   io: createConsoleIo(),
