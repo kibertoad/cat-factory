@@ -52,7 +52,15 @@ it only reaches the logger the Worker writes through while both imports resolve 
   container agent-executor **wiring** (same class names as `@cat-factory/server`'s `agents/`;
   those are the shared abstraction, these are the runtime wiring; see `docs/glossary.md`).
 - `durable-objects/`, `workflows/`, `containers/`, `runners/`: durable execution + real-time
-  - per-run-container machinery. `containers/stopCause.ts` is what a per-run container records
+  - per-run-container machinery. There are THREE container classes because a Cloudflare
+    Container's image is pinned per CLASS: `ExecutionContainer` (the executor harness),
+    `UiTesterContainer` (that harness plus Playwright + a browser, for `image: 'ui'`) and
+    `DeployContainer`. `containers/runContainerNamespace.ts` is the one place a variant maps to a
+    class, shared by the transport that starts a container and the registry the reaper kills one
+    through, and it REFUSES a variant this deployment binds no class for rather than serving the
+    default image. Both halves reading one resolver is load-bearing: `idFromName` returns a usable
+    stub in any namespace, so a reap through the wrong class kills nothing and reports success.
+  - `containers/stopCause.ts` is what a per-run container records
     about its OWN stop for the transport to read after that job's poll 404s, and it carries two
     independent halves: the churn `cause` (rollout / idle) decides the recovery BUDGET, while the
     `exit` state decides the failure DETAIL and is recorded for every stop, cause or not. The

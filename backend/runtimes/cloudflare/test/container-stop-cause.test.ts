@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
+import { fixedContainerNamespace } from '../src/infrastructure/containers/CloudflareContainerTransport'
 import { CloudflareContainerTransport } from '../src/infrastructure/containers/CloudflareContainerTransport'
 import type { ExecutionContainer } from '../src/infrastructure/containers/ExecutionContainer'
 import {
@@ -277,7 +278,9 @@ describe('CloudflareContainerTransport 404 classification', () => {
   const ref = { runId: 'run-1', jobId: 'job-1' }
 
   it('reports an unexplained 404 as a crash', async () => {
-    const view = await new CloudflareContainerTransport(namespace404({})).poll(ref)
+    const view = await new CloudflareContainerTransport(
+      fixedContainerNamespace(namespace404({})),
+    ).poll(ref)
 
     expect(view.evicted).toBe('crash')
     expect(view.error).toBe('Job not found (container evicted or crashed)')
@@ -289,7 +292,7 @@ describe('CloudflareContainerTransport 404 classification', () => {
     // where NOTHING else explains the stop: a reclaim we asked for records no observation at all,
     // and a named cause is churn, which recovers on the transient budget.
     const view = await new CloudflareContainerTransport(
-      namespace404({ exit: { code: 0, reason: 'exit' } }),
+      fixedContainerNamespace(namespace404({ exit: { code: 0, reason: 'exit' } })),
     ).poll(ref)
 
     expect(view.harnessShutdown).toBe(true)
@@ -301,7 +304,9 @@ describe('CloudflareContainerTransport 404 classification', () => {
     // The precedence that makes the rule above safe: infrastructure churn is named, recovers on
     // the larger budget, and must not be re-read as somebody shutting the harness down.
     const view = await new CloudflareContainerTransport(
-      namespace404({ cause: 'rollout', exit: { code: 0, reason: 'exit' } }),
+      fixedContainerNamespace(
+        namespace404({ cause: 'rollout', exit: { code: 0, reason: 'exit' } }),
+      ),
     ).poll(ref)
 
     expect(view.evicted).toBe('transient')
@@ -315,7 +320,9 @@ describe('CloudflareContainerTransport 404 classification', () => {
     // the harness was killed. Read as a shutdown it would fail the run with no retry at all,
     // which is strictly worse than the crash budget expiry is supposed to fall back to.
     const view = await new CloudflareContainerTransport(
-      namespace404({ expiredCause: 'rollout', exit: { code: 0, reason: 'exit' } }),
+      fixedContainerNamespace(
+        namespace404({ expiredCause: 'rollout', exit: { code: 0, reason: 'exit' } }),
+      ),
     ).poll(ref)
 
     expect(view.harnessShutdown).toBeUndefined()
@@ -327,7 +334,7 @@ describe('CloudflareContainerTransport 404 classification', () => {
     // bare sentinel string. The verdict is unchanged (a crash still spends the crash budget);
     // what is new is that the failure now says how the container died.
     const view = await new CloudflareContainerTransport(
-      namespace404({ exit: { code: 137, reason: 'exit' } }),
+      fixedContainerNamespace(namespace404({ exit: { code: 137, reason: 'exit' } })),
     ).poll(ref)
 
     expect(view.evicted).toBe('crash')
@@ -338,13 +345,17 @@ describe('CloudflareContainerTransport 404 classification', () => {
   it('omits the detail entirely when the container observed nothing', async () => {
     // An absent detail and an empty one are different facts, and only the absence says "nothing
     // could be read" rather than "the container had nothing to say".
-    const view = await new CloudflareContainerTransport(namespace404({})).poll(ref)
+    const view = await new CloudflareContainerTransport(
+      fixedContainerNamespace(namespace404({})),
+    ).poll(ref)
 
     expect(view.detail).toBeUndefined()
   })
 
   it('recovers an idle reclaim on the transient budget, and says which churn it was', async () => {
-    const view = await new CloudflareContainerTransport(namespace404({ cause: 'idle' })).poll(ref)
+    const view = await new CloudflareContainerTransport(
+      fixedContainerNamespace(namespace404({ cause: 'idle' })),
+    ).poll(ref)
 
     // `transient` is what buys the larger recovery budget; the wording is what tells an
     // operator to look at poll scheduling rather than at the last deploy.
@@ -360,7 +371,7 @@ describe('CloudflareContainerTransport 404 classification', () => {
     // code says "most often an out-of-memory kill". The operator is then holding a verdict and
     // a detail that cannot both be true, with nothing to say which one to act on.
     const view = await new CloudflareContainerTransport(
-      namespace404({ cause: 'idle', exit: { code: 137, reason: 'exit' } }),
+      fixedContainerNamespace(namespace404({ cause: 'idle', exit: { code: 137, reason: 'exit' } })),
     ).poll(ref)
 
     expect(view.error).toContain('idle container reclaimed between polls')
@@ -372,9 +383,9 @@ describe('CloudflareContainerTransport 404 classification', () => {
   })
 
   it('keeps the rollout wording distinct from the idle one', async () => {
-    const view = await new CloudflareContainerTransport(namespace404({ cause: 'rollout' })).poll(
-      ref,
-    )
+    const view = await new CloudflareContainerTransport(
+      fixedContainerNamespace(namespace404({ cause: 'rollout' })),
+    ).poll(ref)
 
     expect(view.evicted).toBe('transient')
     expect(view.error).toContain('transient infrastructure eviction')
@@ -384,7 +395,7 @@ describe('CloudflareContainerTransport 404 classification', () => {
     // A run's container serves every step, so a record claimed by the run would be spent by the
     // first eviction and unreadable on a replay of that same step's poll.
     const namespace = namespace404({ cause: 'idle' })
-    await new CloudflareContainerTransport(namespace).poll(ref)
+    await new CloudflareContainerTransport(fixedContainerNamespace(namespace)).poll(ref)
 
     expect(namespace.claims).toEqual([ref.jobId])
   })
@@ -408,7 +419,9 @@ describe('CloudflareContainerTransport 404 classification', () => {
       }),
     } as unknown as DurableObjectNamespace<ExecutionContainer>
 
-    const view = await new CloudflareContainerTransport(namespace).poll(ref)
+    const view = await new CloudflareContainerTransport(fixedContainerNamespace(namespace)).poll(
+      ref,
+    )
 
     // The cause the transport OBSERVED wins over the stored one: the container is mid-drain, and
     // what it recorded earlier is not what this poll just watched happen.

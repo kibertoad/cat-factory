@@ -32,7 +32,9 @@
     "test": "vitest run",
     "test:run": "vitest run",
     "test:acceptance": "vitest run --config vitest.acceptance.config.ts",
-    "image:publish": "bash scripts/publish-image.sh"
+    "image:publish": "bash scripts/publish-image.sh",
+    "image:publish:ui": "IMAGE_NAME=cat-factory-executor-ui DOCKERFILE=Dockerfile.ui bash scripts/publish-image.sh",
+    "image:smoketest:ui": "bash scripts/smoketest-ui-image.sh"
   },
   "devDependencies": {
     "@cat-factory/kernel": "workspace:*",

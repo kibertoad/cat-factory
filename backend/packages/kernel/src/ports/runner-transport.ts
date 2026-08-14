@@ -274,6 +274,21 @@ interface RunnerInfraSetup {
 export type RunnerDispatchKind = 'agent' | 'deploy'
 
 /**
+ * Which executor image a job runs on. `default` is the standard harness image; `ui` is the
+ * heavier UI-tester image that bundles Playwright + a browser (the `tester-ui` kind needs it,
+ * and only it, so the browser never bloats every other kind's cold-start); `deploy` is the
+ * separate deploy-harness image (slim base + `kubectl`/`kustomize`/`helm`).
+ *
+ * A backend that cannot serve a declared variant REFUSES the dispatch rather than running the
+ * job on its default image. The two are not interchangeable in the direction that matters: a
+ * browser-driven tester on the plain image has no browser, and it discovers that only after a
+ * checkout, an install and a model's first turns have been paid for, then reports an `abort`
+ * indistinguishable from an app that would not boot. Naming the missing wiring at dispatch
+ * costs nothing and says which knob to set.
+ */
+export type RunnerImageVariant = 'default' | 'ui' | 'deploy'
+
+/**
  * Optional, transport-level provisioning hints resolved per-service at dispatch.
  * A self-hosted pool forwards `instanceTypeId` (and `provider`) so it can provision
  * the right size on its own cloud; the local Docker backend maps `instanceSize` to
@@ -293,15 +308,14 @@ export interface RunnerDispatchOptions {
    */
   instanceSize?: InstanceSize
   /**
-   * Which executor image variant this job needs. `default` is the standard harness
-   * image; `ui` is the heavier UI-tester image that bundles Playwright + a browser
-   * (the `tester-ui` kind needs it, and only it — every other kind uses `default`, so
-   * the browser never bloats their cold-start). `deploy` is the separate deploy-harness
-   * image (slim base + `kubectl`/`kustomize`/`helm`) the `deploy` dispatch kind uses, so
-   * the k8s CLIs never bloat an agent run's cold-start. A transport maps this to a
-   * distinct container class (Cloudflare) or image tag (a self-hosted pool / local Docker).
+   * Which executor image variant this job needs ({@link RunnerImageVariant}). A transport
+   * maps it to a distinct container class (Cloudflare) or image tag (a self-hosted pool,
+   * local Docker), and refuses when it has none wired for the variant.
+   *
+   * The dispatch site sets it from the agent kind's DECLARED image, and the same value rides
+   * {@link RunnerJobRef.image} so the poll/release site addresses the container it started.
    */
-  image?: 'default' | 'ui' | 'deploy'
+  image?: RunnerImageVariant
 }
 
 /**
@@ -585,6 +599,44 @@ export interface RunnerJobRef {
   runId: string
   /** The job's own id, unique within the run (one per pipeline step). */
   jobId: string
+  /**
+   * The executor image this job runs on, when it is not the default one. A per-run container
+   * backend hosts a whole run's steps in ONE container, so a step declaring a different image
+   * needs a container of its own: the variant is part of the container's identity, not just a
+   * dispatch-time hint (see {@link containerKeyForRef}).
+   *
+   * It is DERIVED from the step's agent kind at the dispatch site AND at the poll site, never
+   * remembered in memory between them. The poll site rebuilds the ref from the persisted step
+   * alone, on another isolate and possibly another process, so an in-memory routing map would
+   * send the first poll after a replay at the wrong container and read the run as evicted.
+   */
+  image?: RunnerImageVariant
+}
+
+/**
+ * The container identity a ref addresses on a per-run container backend: the run id for the
+ * default image, qualified by the variant for anything else.
+ *
+ * ONE function, because two callers have to agree on it exactly: the transport, which starts
+ * and addresses the container, and the live-container inventory the reaper kills leaked ones
+ * through. Derived rather than stored so a replayed dispatch, a poll from a fresh process and
+ * a reap from a cron all land on the same container with nothing passed between them.
+ */
+export function containerKeyForRef(ref: RunnerJobRef): string {
+  return ref.image && ref.image !== 'default' ? `${ref.image}:${ref.runId}` : ref.runId
+}
+
+/**
+ * The run a container key belongs to, the inverse of {@link containerKeyForRef}.
+ *
+ * A backend that reaps by asking "is this run still live?" has to ask about the RUN, not the
+ * key: a `tester-ui` container is keyed `ui:<runId>`, which matches no run, so an orphan sweep
+ * reading the key directly answers "no such run" for a container whose run is mid-step and
+ * kills the browser out from under it.
+ */
+export function runIdFromContainerKey(containerKey: string): string {
+  const separator = containerKey.indexOf(':')
+  return separator > 0 ? containerKey.slice(separator + 1) : containerKey
 }
 
 /**

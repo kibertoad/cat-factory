@@ -3,7 +3,7 @@ import type {
   ProviderConfigField,
   RunnerDispatchOptions,
 } from '@cat-factory/kernel'
-import { isCloudMetadataHost, ValidationError } from '@cat-factory/kernel'
+import { isCloudMetadataHost, UnavailableError, ValidationError } from '@cat-factory/kernel'
 import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 
 // Pure helpers for the native Kubernetes runner backend. No I/O here — URL
@@ -198,16 +198,31 @@ export function proxyUrl(config: KubernetesRunnerConfig, name: string, path: str
 /**
  * Resolve the image variant a dispatch needs: the heavier UI image for `image:'ui'`, the
  * separate deploy-harness image for `image:'deploy'` (the container-backed Kubernetes render
- * path), else the default executor image. Each variant falls back to the default when its image
- * isn't configured, so an unconfigured `imageDeploy` keeps the pod on the executor image (which
- * lacks the k8s CLIs — the deploy harness's own preflight then fails loudly rather than the pool
- * silently mis-running an agent image).
+ * path), else the default executor image.
+ *
+ * The two unconfigured variants are NOT symmetric, because what happens next differs. An
+ * unconfigured `imageDeploy` keeps the pod on the executor image, which lacks the k8s CLIs, and
+ * the deploy harness's own preflight then fails loudly naming them. An unconfigured `imageUi`
+ * has no such backstop: the executor image runs the browser-driven tester perfectly happily
+ * right up to the point it needs a browser, which is after the checkout, the install and the
+ * model's first turns, and the report that comes back is an `abort` indistinguishable from an
+ * app that would not boot. So `ui` is REFUSED here, naming the pool setting to fill in.
  */
 export function resolveImage(
   config: KubernetesRunnerConfig,
   options?: RunnerDispatchOptions,
 ): string {
-  if (options?.image === 'ui' && config.imageUi) return config.imageUi
+  if (options?.image === 'ui') {
+    if (config.imageUi) return config.imageUi
+    throw new UnavailableError(
+      'This step runs on the UI-tester executor image (Playwright + a browser), but this ' +
+        "runner pool configures no UI-tester image. Set the pool's `imageUi` to a published " +
+        'cat-factory-executor-ui tag. Until then, drop the `tester-ui` step from the pipeline: ' +
+        'the visual-confirmation gate still runs on screenshots a person uploads.',
+      'runner_image_unwired',
+      { image: options.image, setting: 'imageUi' },
+    )
+  }
   if (options?.image === 'deploy' && config.imageDeploy) return config.imageDeploy
   return config.image
 }

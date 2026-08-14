@@ -27,11 +27,33 @@ import { isOffValue } from './envFlags.js'
 export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.123.0'
 
 /**
+ * The UI-TESTER image this backend release is matched to: the same harness plus Playwright +
+ * Chromium, pnpm/yarn, `serve` and a headless JRE + WireMock. It carries the executor harness's
+ * version, because it IS that harness with more tooling, so the two tags bump together.
+ *
+ * A step declaring `image: 'ui'` (the browser-driven `tester-ui` kind) dispatches to its own
+ * container on this image, alongside the run's ordinary one.
+ */
+export const RECOMMENDED_UI_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor-ui:1.123.0'
+
+/**
  * The effective harness image ref: an explicit `LOCAL_HARNESS_IMAGE` wins (a custom build, a
  * different pin, or a mutable tag), else the backend-matched {@link RECOMMENDED_HARNESS_IMAGE}.
  */
 export function resolveHarnessImage(env: NodeJS.ProcessEnv): string {
   return env.LOCAL_HARNESS_IMAGE?.trim() || RECOMMENDED_HARNESS_IMAGE
+}
+
+/**
+ * The effective UI-tester image ref, the `image: 'ui'` sibling of {@link resolveHarnessImage}:
+ * an explicit `LOCAL_HARNESS_IMAGE_UI` wins, else {@link RECOMMENDED_UI_HARNESS_IMAGE}.
+ *
+ * It has its OWN override rather than deriving a `-ui` suffix from `LOCAL_HARNESS_IMAGE`,
+ * because a developer pointing the base at a locally built tag has not thereby built a UI image
+ * too, and a derived ref would send them to a tag that does not exist with nothing saying why.
+ */
+export function resolveUiHarnessImage(env: NodeJS.ProcessEnv): string {
+  return env.LOCAL_HARNESS_IMAGE_UI?.trim() || RECOMMENDED_UI_HARNESS_IMAGE
 }
 
 /**

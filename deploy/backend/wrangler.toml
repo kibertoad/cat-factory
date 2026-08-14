@@ -203,6 +203,34 @@ instance_type = "standard-1"
 name = "DEPLOY_CONTAINER"
 class_name = "DeployContainer"
 
+# Per-run UI-TESTER containers (the @cat-factory/executor-harness image built from
+# `Dockerfile.ui`: the executor harness plus Playwright + Chromium, pnpm/yarn, `serve`, and a
+# headless JRE + WireMock). The `image: 'ui'` dispatch variant routes here, which today means the
+# browser-driven `tester-ui` step feeding the visual-confirmation gate. A run holds one of these
+# ALONGSIDE its ExecutionContainer, because a per-run container cannot change image mid-run, and
+# ordinary agent steps stay on the slim image so the browser never bloats their cold start.
+#
+# Like the other two, it must live in a registry Cloudflare Containers can PULL from
+# (registry.cloudflare.com / Docker Hub / ECR, NOT GHCR). Publish/refresh it before deploying:
+#   pnpm image:publish:ui
+# Then pin that managed-registry tag here, with your own account id.
+#
+# Omit this binding to leave browser-driven testing off. A pipeline carrying a `tester-ui` step
+# then FAILS that step at dispatch, naming this binding, rather than running it on the slim image
+# with no browser; the visual-confirmation gate itself still works on screenshots a person
+# uploads by hand.
+[[containers]]
+class_name = "UiTesterContainer"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-executor-ui:1.123.0"
+max_instances = 10
+# A browser, a JRE and a frontend build in one box: the same tier the coding runs get, for the
+# same reason (the `dev` tier thrashes under an install + build + Chromium).
+instance_type = "standard-1"
+
+[[durable_objects.bindings]]
+name = "UI_CONTAINER"
+class_name = "UiTesterContainer"
+
 # Per-workspace WebSocket fan-out hub (WorkspaceEventsHub). One instance per
 # workspace, addressed by idFromName(workspaceId); it holds subscribers' sockets
 # (hibernatable) and broadcasts execution/board events pushed by the engine.
@@ -237,6 +265,10 @@ new_sqlite_classes = ["DeployContainer"]
 [[migrations]]
 tag = "v5"
 new_sqlite_classes = ["CacheGenerationDirectory"]
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["UiTesterContainer"]
 
 # Dead-letter queues (docs/initiatives/observability-logging-gaps.md, B5). Every consumer
 # below names one, so a delivery that exhausts `max_retries` is COPIED there instead of

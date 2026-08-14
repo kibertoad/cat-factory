@@ -7,6 +7,7 @@ import {
   type RepoTarget,
   type ResolveRunnerTransport,
 } from '../../src/infrastructure/ai/ContainerAgentExecutor'
+import { fixedContainerNamespace } from '../../src/infrastructure/containers/CloudflareContainerTransport'
 import { CloudflareContainerTransport } from '../../src/infrastructure/containers/CloudflareContainerTransport'
 import { ContainerSessionService } from '../../src/infrastructure/containers/ContainerSessionService'
 import type { ExecutionContainer } from '../../src/infrastructure/containers/ExecutionContainer'
@@ -22,7 +23,7 @@ interface Dispatched {
 
 /** Wrap a fake Durable Object namespace as the executor's transport resolver. */
 function resolveTo(ns: DurableObjectNamespace<ExecutionContainer>): ResolveRunnerTransport {
-  const transport = new CloudflareContainerTransport(ns)
+  const transport = new CloudflareContainerTransport(fixedContainerNamespace(ns))
   return () => Promise.resolve(transport)
 }
 

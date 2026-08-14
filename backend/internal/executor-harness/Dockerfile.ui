@@ -14,18 +14,30 @@
 # against the running app, captures one screenshot per distinct view, and uploads each to the
 # binary-artifact store via the run's ARTIFACT_UPLOAD_URL / ARTIFACT_UPLOAD_TOKEN.
 #
-# Build (the version tag must match the base image you publish):
-#   docker build -f Dockerfile.ui --build-arg BASE_TAG=<version> -t cat-factory-executor-ui:<version> .
+# Build (the base ref must be the executor image of the SAME version you are publishing):
+#   docker build -f Dockerfile.ui \
+#     --build-arg BASE_IMAGE=ghcr.io/kibertoad/cat-factory-executor:<version> \
+#     -t cat-factory-executor-ui:<version> .
 #
-# DEPLOY NOTE: routing a job to this image is still wired per-runtime — on Cloudflare a second
-# `[[containers]]` class pinned to this image (the per-run container model means the UI-tester
-# step runs its own container); on a self-hosted pool / local Docker, the transport selects this
-# image tag for `image: 'ui'`. That wiring is the remaining deploy-time step.
+# CI does this on every image-affecting push (.github/workflows/docker-publish.yml, the
+# `executor-ui` job, which builds after the base image it layers on), and
+# .github/workflows/ui-image-smoketest.yml builds and BOOTS it on any change to this file.
+#
+# The base is a full ref rather than a bare tag so a fork can layer onto its own published
+# executor image, and so `scripts/sync-runner-image-tags.mjs` can keep the pinned version in the
+# publish scripts in step with the harness package (it rewrites `<image>:<semver>` refs and
+# leaves the `:latest` default here alone).
 
-ARG BASE_TAG=latest
-FROM ghcr.io/kibertoad/cat-factory-executor:${BASE_TAG}
+ARG BASE_IMAGE=ghcr.io/kibertoad/cat-factory-executor:latest
+FROM ${BASE_IMAGE}
 
+# The root layers below run with HOME still pointing at /home/harness (the base image sets it
+# at its end), which is the same trap the base Dockerfile documents at its own install: a root
+# `npm install -g` seeds a ROOT-OWNED cache in /home/harness/.npm, and the harness user then
+# cannot write it (EACCES) when a frontend's install runs as that user at job time. So HOME is
+# moved to root's own for the whole root section and restored before dropping privileges.
 USER root
+ENV HOME=/root
 
 # Playwright + Chromium and the OS libraries it needs. Pinned so the image is reproducible;
 # bump alongside the harness version when upgrading. `--with-deps` installs the apt packages
@@ -65,4 +77,7 @@ RUN apt-get update \
      -o "${WIREMOCK_JAR}" \
   && chown -R harness:harness /opt/wiremock
 
+# Back to the base image's own HOME + user for the runtime. Everything above wrote to /root,
+# so /home/harness is exactly as the base left it.
+ENV HOME=/home/harness
 USER harness
