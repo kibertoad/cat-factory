@@ -5,7 +5,10 @@ import {
   foundationalServiceDefinitionIssues,
   operationsAreIndexable,
 } from '@cat-factory/contracts'
-import { defaultFoundationalServiceRegistry } from './foundational-service-registry.js'
+import {
+  PLATFORM_FOUNDATIONAL_SERVICES,
+  defaultFoundationalServiceRegistry,
+} from './foundational-service-registry.js'
 import {
   ASSET_UPLOAD_TOKEN_ENV,
   ASSET_UPLOAD_URL_ENV,
@@ -69,9 +72,28 @@ describe('the platform asset-storage service', () => {
     expect(document.paths['/{location}'].delete.operationId).toBe('discardAsset')
   })
 
-  it('hands each registry its own definition object', () => {
-    // Definitions are held BY REFERENCE, so a shared module-level literal would let one
-    // deployment's mutation reach another's catalog in a process running several.
+  it('seeds every default registry from ONE frozen object, so identity says who registered it', () => {
+    // Definitions are held BY REFERENCE, and the isolation that used to buy (a fresh copy per
+    // registry) cost the property a caller actually needs: with every copy distinct, a shipped
+    // service and a deployment's REPLACEMENT of the same id are indistinguishable, which is what
+    // left the local facade's mothership warning firing on a registration nobody made. Sharing one
+    // deep-frozen object restores the isolation structurally and makes identity the answer.
+    const [first] = defaultFoundationalServiceRegistry().all()
+    const [second] = defaultFoundationalServiceRegistry().all()
+    expect(first).toBe(second)
+    expect(first).toBe(PLATFORM_FOUNDATIONAL_SERVICES[0])
+    expect(Object.isFrozen(first)).toBe(true)
+    // Deep, because the arrays are the half a reader gets a live reference to: the catalog
+    // projection hands `capabilities` straight out.
+    expect(Object.isFrozen(first!.capabilities)).toBe(true)
+    expect(Object.isFrozen(first!.contracts)).toBe(true)
+  })
+
+  it('still hands a MUTABLE copy to anyone who asks the factory for one', () => {
+    // A test editing a contract body, or a deployment deriving its own variant, needs an object it
+    // can change. That is what the factory is for now that the platform's own registration takes
+    // the shared instance.
     expect(platformAssetStorageService()).not.toBe(platformAssetStorageService())
+    expect(Object.isFrozen(platformAssetStorageService())).toBe(false)
   })
 })

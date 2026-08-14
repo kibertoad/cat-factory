@@ -50,6 +50,15 @@ the mothership: a node resolves integrations over `/internal/binary-generators` 
 registry of its own, so the set the pipeline builder offers and the set admission resolves are one
 set however far behind the node's build has drifted.
 
+On the **Worker** the registry is also held process-wide
+(`infrastructure/binaryGenerators.ts`), the same way the deployment's binary artifact stores are
+and for the same reason: that runtime builds a container per entry point, and a binary-output
+step's dispatch brief is composed on the durable path, which takes no options at all.
+`createWorker({ overrides: { binaryGeneratorRegistry } })` registers on your behalf, so a
+deployment using the documented seam needs to know none of that. What made this one easy to miss
+is that an override-less build resolves the SHIPPED set rather than nothing, so an unregistered
+integration is absent from a brief that otherwise looks populated.
+
 ## The credential
 
 `nano-banana` authenticates with `GEMINI_API_KEY`, an API key from

@@ -25,3 +25,15 @@ the shipped `pl_media` preset selects `nano-banana`, so a Media task generates i
 the shipped set rather than merging with it, so `pl_media` would then select an id nothing answers
 to and its runs are refused at admission (`binary_output_generator_invalid`). Start from
 `binaryGeneratorRegistryWithBuiltins()` and register onto that instance, or edit the preset's step.
+
+On the **Worker**, an injected registry is now registered process-wide by `createApp`, which is what
+carries it to the entry points that take no options. A binary-output step's dispatch brief is
+composed by the durable driver, so before this a deployment's own integrations were absent from
+every brief it built while the platform's shipped one was present.
+
+`PLATFORM_FOUNDATIONAL_SERVICES` is a new kernel export: the frozen definitions
+`defaultFoundationalServiceRegistry()` seeds from, shared across registries rather than copied per
+one. A caller can now tell the platform's own service from a deployment's replacement of the same
+id, which is what the local facade's mothership boot warnings need. Both of them (the estate and the
+generative integrations) report only what the deployment registered, and report a shipped id a
+deployment REPLACED, which subtracting by id could not see.

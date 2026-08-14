@@ -305,6 +305,7 @@ export {
   type FoundationalServiceDefinition,
   type FoundationalServiceRegistryEntry,
   FoundationalServiceRegistry,
+  PLATFORM_FOUNDATIONAL_SERVICES,
   defaultFoundationalServiceRegistry,
 } from './domain/foundational-service-registry.js'
 

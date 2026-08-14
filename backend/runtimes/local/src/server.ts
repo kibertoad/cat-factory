@@ -33,6 +33,7 @@ import {
   getErrorMessage,
   type JudgeRegistry,
   type PipelineRegistry,
+  PLATFORM_FOUNDATIONAL_SERVICES,
   type PromptFragmentRegistry,
   runBestEffort,
   type StepResolverRegistry,
@@ -41,6 +42,7 @@ import {
 } from '@cat-factory/kernel'
 import { type RegistrationProblem, validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { BUILTIN_BINARY_GENERATORS } from '@cat-factory/binary-generators'
+import { deploymentRegisteredIds } from './mothershipRegistrations.js'
 import { FRAGMENTS_BY_ID } from '@cat-factory/prompt-fragments'
 import type { BackendRegistries, RegisterHandlerInput } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
@@ -444,19 +446,6 @@ async function bootLocal(
 }
 
 /**
- * The generative integrations THIS deployment registered, which in mothership mode is the set the
- * mothership will not read.
- *
- * The shipped ones are subtracted rather than reported, because they are not something the
- * deployment wired: every facade defaults its registry to `binaryGeneratorRegistryWithBuiltins()`,
- * so naming them would fire the warning below on every mothership-mode boot and tell an operator to
- * undo a registration they never made.
- */
-function deploymentRegisteredGeneratorIds(ids: readonly string[]): string[] {
-  const builtin = new Set(BUILTIN_BINARY_GENERATORS.map((generator) => generator.id))
-  return ids.filter((id) => !builtin.has(id))
-}
-/**
  * Boot the local-mode service in MOTHERSHIP mode: no Postgres, no pg-boss. The container
  * (built by {@link buildLocalContainer}) composes the remote (RPC-backed) org repositories +
  * the local `node:sqlite` credential store, and carries the in-process work runner that drives
@@ -570,13 +559,16 @@ async function startLocalMothership(
   // register on both entry points), and silently ignoring it would swap one invisible failure for
   // another. The registrations are harmless — the same build registers them on the mothership,
   // which is where they take effect.
-  const localEstate = container.foundationalServiceRegistry.entries()
+  const localEstate = deploymentRegisteredIds(
+    container.foundationalServiceRegistry.all(),
+    PLATFORM_FOUNDATIONAL_SERVICES,
+  )
   if (localEstate.length > 0) {
     logger.warn(
       'local mode: foundational services registered on this node are NOT used in mothership ' +
-        'mode — the catalog’s builtin tier is read from the mothership, which is authoritative ' +
+        'mode. The catalog’s builtin tier is read from the mothership, which is authoritative ' +
         'for the deployment’s estate. Register them on the mothership’s own entry point.',
-      { serviceIds: localEstate.map((entry) => entry.id) },
+      { serviceIds: localEstate },
     )
   }
 
@@ -585,11 +577,14 @@ async function startLocalMothership(
   // registering on BOTH entry points was the only shape that worked, so the line reads like
   // deliberate wiring rather than the workaround it was. Naming the ids is what makes it
   // actionable: silently ignoring them would swap one invisible failure for another.
-  const localGenerators = deploymentRegisteredGeneratorIds(container.binaryGeneratorRegistry.ids())
+  const localGenerators = deploymentRegisteredIds(
+    container.binaryGeneratorRegistry.all(),
+    BUILTIN_BINARY_GENERATORS,
+  )
   if (localGenerators.length > 0) {
     logger.warn(
       'local mode: generative binary integrations registered on this node are NOT used in ' +
-        'mothership mode — a run resolves a step’s generatorIds against the mothership, which ' +
+        'mothership mode. A run resolves a step’s generatorIds against the mothership, which ' +
         'is what the pipeline builder offered them from. Register them on the mothership’s own ' +
         'entry point.',
       { binaryGeneratorIds: localGenerators },

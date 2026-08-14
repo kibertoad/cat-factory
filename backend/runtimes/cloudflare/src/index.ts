@@ -393,7 +393,11 @@ function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     // container built with no overrides, in `resolveWorkerRegistries`) rather than by
     // `createCore`, whose default is deliberately empty. Registered ones are what a
     // binary-generating step may produce with, and a malformed definition or a cleartext endpoint
-    // fails boot rather than a dispatch.
+    // fails boot rather than a dispatch. Resolved here so registration validation sees the same
+    // instance the engine does; `createApp` then registers it PROCESS-WIDE, which is how a
+    // deployment's own integrations reach the builders that take no overrides at all (the durable
+    // driver, which is where a binary-output step's brief is composed). See
+    // `infrastructure/binaryGenerators.ts`.
     binaryGeneratorRegistry:
       overrides.binaryGeneratorRegistry ?? binaryGeneratorRegistryWithBuiltins(),
     // The deployment's own binary artifact stores. Resolved here so registration validation sees

@@ -166,11 +166,13 @@ const PLATFORM_ASSET_OPENAPI = JSON.stringify(
 )
 
 /**
- * The platform's own asset-storage service, for `defaultFoundationalServiceRegistry()`.
+ * The platform's own asset-storage service: what `PLATFORM_FOUNDATIONAL_SERVICES` holds, and so
+ * what every `defaultFoundationalServiceRegistry()` is seeded with.
  *
- * A function rather than a constant so every registry gets its own object: the registry holds
- * definitions by reference and a shared literal would let one deployment's mutation reach
- * another's catalog in a test process running several.
+ * A function rather than a constant so a caller wanting a MUTABLE copy (a test that edits a
+ * contract body, a deployment deriving its own variant) can have one. The platform's own
+ * registration takes the shared frozen instance instead, because a per-registry copy would leave
+ * the shipped definitions indistinguishable from a deployment's replacement of the same id.
  */
 export function platformAssetStorageService(): FoundationalServiceDefinition {
   return {

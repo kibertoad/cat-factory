@@ -188,11 +188,20 @@ export class BinaryGeneratorRegistry {
 }
 
 /**
- * A fresh, EMPTY generator registry. Each facade news one and a deployment registers its
- * integrations on it; the platform ships none (there is no image generator every organisation
- * runs, and every one of them is metered), so the default selection set stays empty and a step
- * that selects an id on such a deployment is refused at admission rather than dispatching an
- * agent that cannot generate.
+ * A fresh, EMPTY generator registry: the engine's own default, and the instance a facade installs
+ * the shipped integrations onto.
+ *
+ * Empty is what the ENGINE can honestly default to, not what a deployment runs. The platform does
+ * ship integrations (`@cat-factory/binary-generators`, today `nano-banana`), and every facade
+ * defaults to `binaryGeneratorRegistryWithBuiltins()` for a container built with no overrides;
+ * kernel cannot, because it is the layer those definitions are authored against. Exactly the
+ * split `defaultGateRegistry()` and the `@cat-factory/gates` suite have.
+ *
+ * So this returning nothing is not a claim that a deployment resolves nothing. What it does mean
+ * is that a registry a facade never seeds (or one a deployment injects without starting from the
+ * built-ins) selects nothing, and a step naming an id on such a deployment is refused at admission
+ * rather than dispatching an agent that cannot generate. The shipped `pl_media` preset names
+ * `nano-banana`, so that refusal is the upgrade edge an injected registry meets.
  */
 export function defaultBinaryGeneratorRegistry(): BinaryGeneratorRegistry {
   return new BinaryGeneratorRegistry()

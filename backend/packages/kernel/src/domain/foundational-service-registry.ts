@@ -3,6 +3,7 @@ import type {
   ApiContractSummary,
   CreateFoundationalServiceInput,
 } from '@cat-factory/contracts'
+import { deepFreeze } from '../shared/deep-freeze.logic.js'
 import { summarizeContract } from './foundational-services.js'
 import { platformAssetStorageService } from './platform-asset-service.js'
 
@@ -136,19 +137,36 @@ export class FoundationalServiceRegistry {
 }
 
 /**
- * A fresh foundational-service registry holding the ONE service the platform ships: its own
- * asset storage ({@link platformAssetStorageService}). Each facade news one and a deployment
- * registers its estate on top.
+ * The foundational services the platform ships, in registration order: today the ONE service its
+ * own asset storage ({@link platformAssetStorageService}) is.
  *
- * There is no shared BUSINESS capability every organisation runs, which is why the default
- * catalog held nothing for as long as the tier existed. The platform's own asset store is a
- * different claim: it is a capability every deployment of THIS platform runs, it is the target a
- * binary-output step must select before it can be configured at all, and a deployment that
- * prefers its own store registers that one and suppresses this id at either stored tier, exactly
- * as it can any other `builtin`.
+ * There is no shared BUSINESS capability every organisation runs, which is why the default catalog
+ * held nothing for as long as the tier existed. The platform's own asset store is a different
+ * claim: it is a capability every deployment of THIS platform runs, it is the target a
+ * binary-output step must select before it can be configured at all, and a deployment that prefers
+ * its own store registers that one and suppresses this id at either stored tier, exactly as it can
+ * any other `builtin`.
+ *
+ * Exported as data, and shared by reference across every registry rather than rebuilt per one, so
+ * a caller can ask whether a registration IS the platform's own instead of merely carrying its id.
+ * Those are different questions with opposite answers, and the local facade's mothership warning
+ * is the caller that needs the distinction: a deployment that registered this service should hear
+ * nothing, one that REPLACED it under the same id should hear that the replacement is inert on a
+ * node. {@link deepFreeze} is what makes sharing safe, taking over from the per-registry copies
+ * that used to buy the same isolation at the cost of the identity.
+ *
+ * The sibling shape is `@cat-factory/binary-generators`' `BUILTIN_BINARY_GENERATORS`.
+ */
+export const PLATFORM_FOUNDATIONAL_SERVICES: readonly FoundationalServiceDefinition[] = deepFreeze([
+  platformAssetStorageService(),
+])
+
+/**
+ * A fresh foundational-service registry holding {@link PLATFORM_FOUNDATIONAL_SERVICES}. Each
+ * facade news one and a deployment registers its estate on top.
  */
 export function defaultFoundationalServiceRegistry(): FoundationalServiceRegistry {
   const registry = new FoundationalServiceRegistry()
-  registry.register(platformAssetStorageService())
+  for (const service of PLATFORM_FOUNDATIONAL_SERVICES) registry.register(service)
   return registry
 }

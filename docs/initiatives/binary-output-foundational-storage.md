@@ -1138,6 +1138,15 @@ Every facade defaults its registry to `binaryGeneratorRegistryWithBuiltins()` (b
 and, on the Worker, the override-less `resolveWorkerRegistries` a cron re-drive builds through),
 and `pl_media`'s step selects it.
 
+That default is what a container built with NO overrides needs, and it is only half of what the
+Worker needs. It carries the PLATFORM's integrations onto the override-less builders and leaves a
+DEPLOYMENT's own absent there, which is worse than the empty registry it replaced: the durable
+path is where a binary-output step's dispatch brief is composed, so the brief looked populated
+while carrying none of them, and a step selecting one met `binary_output_generator_invalid` on the
+path nobody watches. `createApp` therefore registers an injected registry PROCESS-WIDE
+(`infrastructure/binaryGenerators.ts`), the seam the binary artifact stores already used for the
+identical reason, and `resolveWorkerRegistries` reads it ahead of the shipped default.
+
 - **Metered is answered by the CREDENTIAL, not by the registry.** `GEMINI_API_KEY` resolves through
   the ordinary capability-credential path; unresolved, the agent is told the integration is
   unavailable and reports it as the reason an artifact is missing. A deployment that ignores the
