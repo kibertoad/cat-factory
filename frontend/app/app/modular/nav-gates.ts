@@ -15,8 +15,9 @@ import type { NavGates } from '~/modular/nav-contributions'
  *
  * This mirrors the exact gating the pre-slice-1 `SideBar` computeds encoded (see
  * `useWorkspaceAccess` for the dev-open "absent access ⇒ allow all" parity), plus
- * the interface tier (`advancedMode`), which rides the same service so a mode flip
- * re-gates all three shells through the same reactive path as a permission flip.
+ * the interface tier (`advancedMode`) and the person's role (`fullSurface`), which ride
+ * the same service so a mode or role flip re-gates all three shells through the same
+ * reactive path as a permission flip.
  */
 export function createNavGates(): NavGates {
   const access = useWorkspaceAccess()
@@ -27,6 +28,7 @@ export function createNavGates(): NavGates {
   const auth = useAuthStore()
   const providerConnections = useProviderConnectionsStore()
   const uiMode = useUiModeStore()
+  const uiRole = useUiRoleStore()
   const board = useBoardStore()
   const execution = useExecutionStore()
   const reviews = useReviewStage()
@@ -107,6 +109,13 @@ export function createNavGates(): NavGates {
     },
     get advancedMode() {
       return uiMode.isAdvanced
+    },
+    // The role axis rides the same reactive service as the tier, so picking a role re-gates all
+    // three shells through one path. It is not a permission: every item it keeps is still gated
+    // by its own `gate`, and every item it drops is one the caller may well be allowed to open,
+    // which is why the switcher out of a narrowed role is itself `intake`.
+    get fullSurface() {
+      return uiRole.fullSurface
     },
     get boardHasService() {
       return hasService.value

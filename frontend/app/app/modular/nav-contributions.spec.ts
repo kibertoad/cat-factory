@@ -10,7 +10,8 @@ import {
   SIDEBAR_GROUP_ORDER,
   sortToolbar,
 } from './nav-contributions'
-import type { AppSlots, NavGates } from './nav-contributions'
+import type { AppSlots, NavGatedContribution, NavGates } from './nav-contributions'
+import type { ExternalToolContribution } from './external-tools'
 
 /** Prove every referenced key resolves in the layer's base catalog (see `test/i18nKeys`). */
 const hasKey = hasI18nKey
@@ -25,9 +26,11 @@ const NO_GATES: NavGates = {
   infrastructureAvailable: false,
   accountsEnabled: false,
   isAccountAdmin: false,
-  // The permission axis is what these cases vary; keep the interface tier at `advanced`
-  // so a dropped item is unambiguously an RBAC/availability drop, not a tier drop.
+  // The permission axis is what these cases vary; keep the interface tier at `advanced` and the
+  // role at the full surface, so a dropped item is unambiguously an RBAC/availability drop rather
+  // than a tier or role drop.
   advancedMode: true,
+  fullSurface: true,
   boardHasService: false,
   boardHasTask: false,
   boardHasRun: false,
@@ -48,6 +51,7 @@ const ALL_GATES: NavGates = {
   accountsEnabled: true,
   isAccountAdmin: true,
   advancedMode: true,
+  fullSurface: true,
   boardHasService: true,
   boardHasTask: true,
   boardHasRun: true,
@@ -185,6 +189,76 @@ describe('navSlotFilter', () => {
     }
   })
 
+  it('drops every non-intake destination for a narrowed role', () => {
+    const gates: NavGates = { ...ALL_GATES, fullSurface: false }
+    const kept = ids(navSlotFilter(slots(), { gates }))
+    const intakeOnly = NAV_CONTRIBUTIONS.filter((i) => i.intake).map((i) => i.id)
+    expect(kept.sort()).toEqual(intakeOnly.sort())
+    // Fully permitted and on the advanced tier, so every drop here is the ROLE and nothing else:
+    // the platform configuration goes, and what teaches the product plus the way out stays.
+    expect(kept).toContain('tutorial')
+    expect(kept).toContain('ui-role')
+    expect(kept).not.toContain('build-pipeline')
+    expect(kept).not.toContain('add-from-repo')
+    expect(kept).not.toContain('integrations-hub')
+    expect(kept).not.toContain('workspace-settings')
+    expect(kept).not.toContain('model-providers')
+    expect(kept).not.toContain('account-settings')
+    // A narrowed sidebar is short by design, but never a shell with nothing in it: the sidebar
+    // is where the tutorials live, and `groupSidebar` drops an empty section upstream, so a
+    // surface whose every item was palette-only would render as a broken navbar.
+    const groups = groupSidebar((navSlotFilter(slots(), { gates }) as AppSlots).nav)
+    expect(groups.length).toBeGreaterThan(0)
+    for (const group of groups) expect(group.items.length).toBeGreaterThan(0)
+  })
+
+  it('states, per intake item, why the narrowed role keeps it', () => {
+    // The mirror of the advanced-item table above, and it earns its place for the opposite
+    // reason: `intake` is opt-IN, so the risk is not a silent capability loss but a silent
+    // WIDENING: one flag on a destination that configures the platform and the simplified
+    // surface has quietly stopped being simple. The table is the claim; adding `intake: true`
+    // fails here until the reason is written down.
+    const REASON: Record<string, string> = {
+      tutorial: 'the walkthroughs - the surface with the fewest destinations needs them most',
+      'keyboard-shortcuts': 'the cheatsheet covers the board and the palette, which every role has',
+      'ui-role': 'the way BACK out of the narrowed role',
+    }
+    const intake = NAV_CONTRIBUTIONS.filter((i) => i.intake).map((i) => i.id)
+    expect(intake.sort()).toEqual(Object.keys(REASON).sort())
+    for (const [id, why] of Object.entries(REASON)) {
+      expect(why.length, `${id} has no stated reason`).toBeGreaterThan(0)
+    }
+  })
+
+  it('keeps the role switch reachable from inside the narrowed role, and the tier switch out', () => {
+    // The role decides which surfaces exist at all, so its own entry must survive the narrowing
+    // it causes, or a designer who needs a pipeline has no route to say so.
+    const roleItem = NAV_CONTRIBUTIONS.find((i) => i.id === 'ui-role')
+    expect(roleItem?.intake).toBe(true)
+    expect(roleItem?.gate).toBeUndefined()
+    // The TIER toggle is deliberately the other way: a narrowed role's tier is capped at basic
+    // (`resolveUiMode`), so an entry that flipped it would write a preference nothing honours.
+    expect(NAV_CONTRIBUTIONS.find((i) => i.id === 'ui-mode')?.intake).toBeUndefined()
+
+    const gates: NavGates = { ...NO_GATES, fullSurface: false }
+    const kept = ids(navSlotFilter(slots(), { gates }))
+    expect(kept).toContain('ui-role')
+    expect(kept).not.toContain('ui-mode')
+  })
+
+  it('keeps the tier, role and permission axes independent, and all three must pass', () => {
+    // `tutorial` is `intake` and ungated, `sandbox` is advanced + permissioned + not intake:
+    // no single axis reveals the second, and narrowing the role cannot reveal anything.
+    const narrowedButPermitted: NavGates = { ...ALL_GATES, fullSurface: false }
+    expect(ids(navSlotFilter(slots(), { gates: narrowedButPermitted }))).not.toContain('sandbox')
+
+    const fullButBasic: NavGates = { ...ALL_GATES, advancedMode: false }
+    expect(ids(navSlotFilter(slots(), { gates: fullButBasic }))).not.toContain('sandbox')
+
+    const fullButUnpermitted: NavGates = { ...NO_GATES, canManageIntegrations: false }
+    expect(ids(navSlotFilter(slots(), { gates: fullButUnpermitted }))).not.toContain('sandbox')
+  })
+
   it('keeps the tier switch itself reachable in basic mode', () => {
     // Basic is the shipped default, so this palette entry is how a user who never finds the
     // (icon-only, in the basic rail) sidebar switcher gets to the advanced half at all. Marking
@@ -226,26 +300,107 @@ describe('navSlotFilter', () => {
 })
 
 describe('navSlotFilter external tools', () => {
-  const tools = [
-    { id: 'acme:a', title: 'A', icon: 'i-lucide-link', url: 'https://a.dev' },
-    {
-      id: 'acme:b',
-      title: 'B',
-      icon: 'i-lucide-link',
-      url: 'https://b.dev',
-      gate: (g: NavGates) => g.canManageIntegrations,
-    },
+  const tool = (id: string, axes: NavGatedContribution = {}): ExternalToolContribution => ({
+    id,
+    title: id,
+    icon: 'i-lucide-link',
+    url: `https://${id}.dev`,
+    ...axes,
+  })
+  const tools: ExternalToolContribution[] = [
+    tool('acme:open'),
+    tool('acme:permissioned', { gate: (g: NavGates) => g.canManageIntegrations }),
+    tool('acme:power-user', { advanced: true }),
+    tool('acme:intake', { intake: true }),
   ]
+  const withTools = (): AppSlots => ({ ...slots(), externalTools: [...tools] })
   const toolIds = (s: unknown) => (s as AppSlots).externalTools.map((t) => t.id)
 
   it('gates registered tools in the SAME filter as the nav catalog', () => {
     // They become nav items downstream (`useNavContributions` projects them), so gating them
     // anywhere else would let a tool the caller can't use reach the palette while its sidebar
     // twin was correctly hidden.
-    const withTools = (): AppSlots => ({ ...slots(), externalTools: [...tools] })
-    expect(toolIds(navSlotFilter(withTools(), { gates: ALL_GATES }))).toEqual(['acme:a', 'acme:b'])
-    expect(toolIds(navSlotFilter(withTools(), { gates: NO_GATES }))).toEqual(['acme:a'])
-    expect(toolIds(navSlotFilter(withTools(), {}))).toEqual(['acme:a', 'acme:b'])
+    expect(toolIds(navSlotFilter(withTools(), { gates: ALL_GATES }))).toEqual(
+      tools.map((t) => t.id),
+    )
+    expect(toolIds(navSlotFilter(withTools(), { gates: NO_GATES }))).toEqual([
+      'acme:open',
+      'acme:power-user',
+      'acme:intake',
+    ])
+    // No gates service wired (tests, a bare install): everything passes, matching the dev-open
+    // "absent access allows all" parity the nav half keeps.
+    expect(toolIds(navSlotFilter(withTools(), {}))).toEqual(tools.map((t) => t.id))
+  })
+
+  it('drops a tool that has not opted into the intake surface', () => {
+    // The axis a separate external-tools filter used to miss entirely: a `designer` kept the
+    // deployment's whole External tools section while every first-party destination around it
+    // was hidden, which inverts the opt-in default rather than merely leaking one entry.
+    const narrowed: NavGates = { ...ALL_GATES, fullSurface: false }
+    expect(toolIds(navSlotFilter(withTools(), { gates: narrowed }))).toEqual(['acme:intake'])
+  })
+
+  it('keeps a tool and a nav entry declaring the same axes in lockstep', () => {
+    // The structural half, and the one a per-slot case cannot make: both slots run the same
+    // predicate today, so assert the PROPERTY that makes that worth keeping. A future axis
+    // wired into one slot and not the other fails here, whatever the axis turns out to be.
+    const AXES: NavGatedContribution[] = [
+      {},
+      { advanced: true },
+      { intake: true },
+      { gate: (g: NavGates) => g.canManageIntegrations },
+      { advanced: true, intake: true },
+      { advanced: true, gate: (g: NavGates) => g.canManageIntegrations },
+      { intake: true, gate: (g: NavGates) => g.canManageIntegrations },
+      { advanced: true, intake: true, gate: (g: NavGates) => g.canManageIntegrations },
+    ]
+
+    for (const [index, axes] of AXES.entries()) {
+      const id = `twin-${index}`
+      const paired = (gates: NavGates) => {
+        const filtered = navSlotFilter(
+          {
+            ...slots(),
+            nav: [
+              {
+                id,
+                labelKey: 'nav.kaizen',
+                icon: 'i-lucide-link',
+                surfaces: ['command'] as const,
+                ...axes,
+              },
+            ],
+            externalTools: [tool(id, axes)],
+          },
+          { gates },
+        ) as AppSlots
+        return {
+          nav: filtered.nav.some((i) => i.id === id),
+          tool: filtered.externalTools.some((t) => t.id === id),
+        }
+      }
+
+      // Every setting of the three gate fields these axes read; the rest of `NavGates` is
+      // invariant here, so varying it would only restate the same eight verdicts.
+      for (const advancedMode of [true, false]) {
+        for (const fullSurface of [true, false]) {
+          for (const canManageIntegrations of [true, false]) {
+            const gates: NavGates = {
+              ...ALL_GATES,
+              advancedMode,
+              fullSurface,
+              canManageIntegrations,
+            }
+            const verdict = paired(gates)
+            expect(
+              verdict.tool,
+              `${JSON.stringify(axes)} under ${JSON.stringify({ advancedMode, fullSurface, canManageIntegrations })}`,
+            ).toBe(verdict.nav)
+          }
+        }
+      }
+    }
   })
 })
 
@@ -348,7 +503,10 @@ describe('nav grouping helpers', () => {
   it('groupCommands preserves the pre-slice-1 workspace-group order', () => {
     const workspace = groupCommands(NAV_CONTRIBUTIONS).find((g) => g.group === 'workspace')
     // Same order the old CommandBar pushed them in (parity, not a reorder), with genuinely
-    // new entries appended after it rather than interleaved.
+    // new entries appended after it rather than interleaved. `ui-role` is the one deliberate
+    // exception, and it changes no existing entry's RELATIVE position: it sits beside `ui-mode`
+    // because the two answer one question ("how much of the app do I see"), and a user who finds
+    // one has found the other.
     expect(workspace?.items.map((ci) => ci.item.id)).toEqual([
       'fragments',
       'merge-thresholds',
@@ -359,6 +517,7 @@ describe('nav grouping helpers', () => {
       'sandbox',
       'keyboard-shortcuts',
       'ui-mode',
+      'ui-role',
       'tutorial',
       'foundational-services',
     ])

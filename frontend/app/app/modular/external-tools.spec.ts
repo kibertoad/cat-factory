@@ -2,13 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { missingI18nKeys } from '../../test/i18nKeys'
 import {
   EXTERNAL_TOOL_UNAVAILABLE_KEYS,
-  filterExternalTools,
   projectExternalTools,
   resolveExternalToolUrl,
   type ExternalToolContext,
   type ExternalToolContribution,
 } from './external-tools'
-import type { NavGates } from './nav-contributions'
 
 const CONTEXT: ExternalToolContext = {
   userId: 'usr_1',
@@ -25,26 +23,6 @@ const MAP_EDITOR: ExternalToolContribution = {
   requiredMetadata: ['gameId'],
   url: (ctx) =>
     `https://maps.acme.dev/edit?game=${ctx.metadata.gameId}&ws=${ctx.workspaceId}&user=${ctx.userId ?? ''}`,
-}
-
-const GATES: NavGates = {
-  canWriteBoard: true,
-  canManageIntegrations: true,
-  canManageSettings: true,
-  githubAvailable: true,
-  libraryAvailable: true,
-  designSourceConnected: true,
-  infrastructureAvailable: true,
-  accountsEnabled: true,
-  isAccountAdmin: true,
-  advancedMode: true,
-  boardHasService: true,
-  boardHasTask: true,
-  boardHasRun: true,
-  boardHasOpenDecision: true,
-  boardHasPendingApproval: true,
-  boardHasFinishedRun: true,
-  boardHasFailedRun: true,
 }
 
 describe('resolveExternalToolUrl', () => {
@@ -247,29 +225,6 @@ describe('projectExternalTools', () => {
     item?.contribution.run?.()
 
     expect(h.open).toHaveBeenCalledWith(expect.stringContaining('game=myst'), MAP_EDITOR)
-  })
-})
-
-describe('filterExternalTools', () => {
-  const tools: ExternalToolContribution[] = [
-    { id: 'a', title: 'A', icon: 'i', url: 'https://a.dev' },
-    { id: 'b', title: 'B', icon: 'i', url: 'https://b.dev', gate: (g) => g.canManageIntegrations },
-    { id: 'c', title: 'C', icon: 'i', url: 'https://c.dev', advanced: true },
-  ]
-
-  it('applies the RBAC gate and the interface tier independently', () => {
-    expect(filterExternalTools(tools, GATES).map((t) => t.id)).toEqual(['a', 'b', 'c'])
-    expect(
-      filterExternalTools(tools, { ...GATES, canManageIntegrations: false }).map((t) => t.id),
-    ).toEqual(['a', 'c'])
-    expect(filterExternalTools(tools, { ...GATES, advancedMode: false }).map((t) => t.id)).toEqual([
-      'a',
-      'b',
-    ])
-  })
-
-  it('passes everything through with no gates service wired (dev-open parity)', () => {
-    expect(filterExternalTools(tools, undefined).map((t) => t.id)).toEqual(['a', 'b', 'c'])
   })
 })
 

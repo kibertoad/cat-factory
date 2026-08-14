@@ -26,6 +26,7 @@ const services = useServicesStore()
 const reviews = useReviewStage()
 const access = useWorkspaceAccess()
 const uiMode = useUiModeStore()
+const uiRole = useUiRoleStore()
 const { t } = useI18n()
 const { lod } = useSemanticZoom()
 // Coarse-pointer (touch) bumps the frame-header actions from `xs` to `sm` so
@@ -460,8 +461,13 @@ const ITEM_ICON: Record<string, string> = {
                   :title="t('board.frame.createInitiativeTitle')"
                   @click.stop="createInitiative"
                 />
+                <!-- Hunting a tracker board for a bug worth adopting is TRIAGE, not intake: it
+                     rates open bugs against each other and picks one to take on, which is the
+                     engineer/PM judgement call. So it is dropped for a narrowed role, whose three
+                     routes in (a new task, a task from a named ticket, a task from a design) all
+                     start from work somebody has already decided to do. -->
                 <UButton
-                  v-if="tasks.anyOffered"
+                  v-if="tasks.anyOffered && uiRole.fullSurface"
                   class="nodrag"
                   data-testid="frame-hunt-bugs"
                   :size="isTouch ? 'sm' : 'xs'"
