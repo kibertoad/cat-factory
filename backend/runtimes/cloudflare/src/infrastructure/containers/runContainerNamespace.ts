@@ -1,4 +1,8 @@
-import { RUNNER_IMAGE_UNWIRED_REASON, UnavailableError } from '@cat-factory/kernel'
+import {
+  RUNNER_IMAGE_UNWIRED_REASON,
+  UnavailableError,
+  unservableImageVariant,
+} from '@cat-factory/kernel'
 import type { RunnerImageVariant } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { DeployContainer } from './DeployContainer'
@@ -65,6 +69,10 @@ export function agentContainerNamespace(bindings: {
         { image: variant, binding: 'DEPLOY_CONTAINER' },
       )
     }
-    return bindings.exec
+    if (variant === 'default') return bindings.exec
+    // Exhaustive, so a variant added to the union fails the BUILD here rather than routing
+    // silently to the executor class — the same fall-through the local transport's `imageFor`
+    // had, and the one this whole seam exists to refuse.
+    return unservableImageVariant(variant)
   }
 }
