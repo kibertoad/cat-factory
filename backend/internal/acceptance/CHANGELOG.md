@@ -1,5 +1,15 @@
 # @cat-factory/acceptance
 
+## 0.4.14
+
+### Patch Changes
+
+- Updated dependencies [eb740be]
+  - @cat-factory/contracts@0.315.0
+  - @cat-factory/kernel@0.303.0
+  - @cat-factory/cli@0.12.0
+  - @cat-factory/sdk@0.43.0
+
 ## 0.4.13
 
 ### Patch Changes

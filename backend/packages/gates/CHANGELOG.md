@@ -1,5 +1,13 @@
 # @cat-factory/gates
 
+## 0.10.55
+
+### Patch Changes
+
+- Updated dependencies [eb740be]
+  - @cat-factory/contracts@0.315.0
+  - @cat-factory/kernel@0.303.0
+
 ## 0.10.54
 
 ### Patch Changes

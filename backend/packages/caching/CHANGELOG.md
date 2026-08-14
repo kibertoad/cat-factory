@@ -1,5 +1,12 @@
 # @cat-factory/caching
 
+## 0.20.24
+
+### Patch Changes
+
+- Updated dependencies [eb740be]
+  - @cat-factory/kernel@0.303.0
+
 ## 0.20.23
 
 ### Patch Changes

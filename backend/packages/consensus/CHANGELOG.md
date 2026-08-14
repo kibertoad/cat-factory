@@ -1,5 +1,14 @@
 # @cat-factory/consensus
 
+## 0.16.24
+
+### Patch Changes
+
+- Updated dependencies [eb740be]
+  - @cat-factory/contracts@0.315.0
+  - @cat-factory/kernel@0.303.0
+  - @cat-factory/agents@0.132.1
+
 ## 0.16.23
 
 ### Patch Changes
