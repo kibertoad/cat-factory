@@ -34,8 +34,8 @@ import * as v from 'valibot'
  * `asset` is a third thing and not a third kind of evidence: it is a DELIVERABLE a binary-output
  * step generated and stored through the platform's own asset storage, so it is what the run
  * produced rather than proof of what it did. It is listed here because a caller enumerating a
- * run's artifacts is entitled to the bytes the run made, and because the alternative — projecting
- * it as a `screenshot` — would put a generated sprite into the set a visual-confirmation consumer
+ * run's artifacts is entitled to the bytes the run made, and because the alternative (projecting
+ * it as a `screenshot`) would put a generated sprite into the set a visual-confirmation consumer
  * pairs against reference designs. An added enum member is the additive change the public API
  * makes freely; a consumer that branches on the two it knows treats this one as unrecognised,
  * which is the correct reading for it.

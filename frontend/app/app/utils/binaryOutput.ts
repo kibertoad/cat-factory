@@ -111,7 +111,7 @@ export interface BinaryOutputRow extends BinaryOutputArtifact {
    * It is what turns a location string into a picture the reader can look at and a file they can
    * save, which is the whole difference between an asset in our storage and one in an org's
    * private bucket. Null covers BOTH "stored elsewhere" and "stored here, but the location is not
-   * an id" — a model's location is prose, and a paraphrased one costs the row its preview and
+   * an id". A model's location is prose, and a paraphrased one costs the row its preview and
    * never its record.
    */
   assetId: string | null

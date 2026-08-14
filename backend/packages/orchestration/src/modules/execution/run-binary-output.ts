@@ -133,7 +133,7 @@ export async function dispatchBinaryGeneratorsFor(input: {
  * deployment's generator kind may store anywhere), so the id travels beside the resolved
  * integrations as the other non-secret fact about the selection.
  *
- * Gated on the SAME condition as both halves above — the EFFECTIVE kind carries the trait —
+ * Gated on the SAME condition as both halves above (the EFFECTIVE kind carries the trait)
  * because a step whose brief was never injected was never told to store anything, and handing it
  * an upload endpoint would be a capability with no instructions attached.
  */

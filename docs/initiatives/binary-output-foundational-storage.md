@@ -1154,7 +1154,29 @@ Three things are worth stating because each was a decision:
   gained `binaryStorageServiceId` for exactly this: only a step storing through `platform-assets`
   is handed a credential for our ingest route, so a deployment's own generator delivering into its
   own object store never sees one. Gating on the kind or the trait would hand every generating
-  step an endpoint its brief never mentioned.
+  step an endpoint its brief never mentioned. ONE variable carries the endpoint, and the screenshot
+  seam keys off the kind's declared `ui` image, so a kind answering to both descriptions has to
+  pick one: the STEP'S SELECTION wins, because the image is an inference and the selection is the
+  contract the agent was actually briefed on. The other order is silent both ways, storing the
+  deliverables as `kind: 'screenshot'` (which the sweep then reclaims, the exemption being per
+  kind) and answering in a shape the declaration block cannot use.
+- **The contract has TWO operations, and the second is what the exemption makes necessary.** A
+  candidate pass STAGES several files per subject and a person keeps one; the rest are ordinary
+  stored assets, and nothing reclaims an asset on a clock. Without a discard the shipped preset
+  would accumulate every rejected render for the life of the workspace, and the second-phase
+  brief's "remove the staged files where the storage service allows it" would resolve, on the one
+  service every deployment has, to "it does not". So `DELETE /{location}` reclaims what THIS RUN
+  stored: idempotent, because the brief hands the agent a list that is replayed across passes, and
+  a 404 for anything else, because telling an agent it cleaned up something it did not is the one
+  outcome worse than a refusal it can report.
+- **A per-file ceiling is sized by the tightest runtime, not by what a generator would like to
+  send.** The `BinaryArtifactStore` port takes bytes, so an ingest materialises the whole file and
+  holds TWO copies at peak (the multipart body the parser keeps, and the `arrayBuffer()` read off
+  the part). The Worker facade runs that inside a workerd isolate with a fixed 128 MB ceiling
+  shared with everything else the invocation holds, so a limit near it does not answer 413, it
+  kills the isolate mid-upload, and a Node-only test cannot tell the difference. `MAX_ASSET_BYTES`
+  is 24 MiB for that reason and the budget is asserted rather than commented; raising it means
+  giving the port a STREAM and every blob backend behind it one.
 
 `asset` is its own `BinaryArtifactKind`, and the reason is RETENTION rather than taxonomy: the
 age sweep is sized for run DEBRIS, and an asset is the thing the run was started to produce. A
@@ -1174,7 +1196,7 @@ so when there was none.
 Ours issues none either, deliberately (the bytes sit behind the workspace's own authenticated
 blob route), and it does not need to: the platform can SERVE them. `platformAssetIdOf` makes the
 join in the read model, from the row's own two fields, and answers null for both "stored
-elsewhere" and "stored here, with a location that is not an artifact id" — a location is
+elsewhere" and "stored here, with a location that is not an artifact id". A location is
 model-authored prose, and a paraphrased one costs the row its preview, never its record. On that
 id, `StoredAssetView` renders the artifact, opens it, and hands it over to be saved elsewhere, in
 the comparison window BEFORE the choice and in the step's report AFTER it.
@@ -1184,6 +1206,15 @@ in either half: the server clamps its own blob responses to that list (everythin
 `application/octet-stream` + `attachment` + `nosniff`, which is what makes the wide upload gate
 safe), and the SPA decides from it what to point an `<img>` at. Two copies disagree in both
 directions, and each direction is invisible from the other end.
+
+What it is applied TO is the media type the server SERVED, carried back beside the object URL by
+`useArtifactBlobs`, never the one the producing agent declared. A stored asset has both, and only
+one of them is a fact: the declaration is optional model-authored text about a file, where the
+served type is the judgement the server already made about these bytes. Deciding from the
+declaration is wrong in both directions, and neither shows up as an error: an undeclared PNG
+renders as a generic file, and a mis-declared bundle renders a broken `<img>` reporting itself as
+loaded, because the fetch genuinely succeeded. The declaration keeps the job it is good for,
+labelling a non-image row with the agent's own account of what the file is.
 
 ## Remaining work
 

@@ -32,7 +32,7 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
   // Resolved ONCE and shared by the two entries below: the registry itself (which the boot
   // validation and the snapshot read) and the default `builtin`-tier source that wraps it. A
   // second `defaultFoundationalServiceRegistry()` call would hand the catalog a different
-  // instance from the one a deployment registered on — silently, since the two are identical
+  // instance from the one a deployment registered on, silently, since the two are identical
   // until someone registers.
   const foundationalServiceRegistry =
     dependencies.foundationalServiceRegistry ?? defaultFoundationalServiceRegistry()

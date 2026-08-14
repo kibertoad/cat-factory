@@ -14,7 +14,7 @@ import { INLINE_IMAGE_MEDIA_TYPES } from '@cat-factory/contracts'
  * The MEMBERS come from `@cat-factory/contracts`, because the SPA has to make the same
  * judgement about the same bytes (does this row render as a picture, or as a download?) and two
  * copies of it disagree silently in both directions. What stays here is the second USE of that
- * list — the upload gate — which is this package's alone.
+ * list (the upload gate), which is this package's alone.
  */
 export const ALLOWED_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set(INLINE_IMAGE_MEDIA_TYPES)
 

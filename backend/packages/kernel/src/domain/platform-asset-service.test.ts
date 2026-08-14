@@ -24,7 +24,7 @@ describe('the platform asset-storage service', () => {
 
   it('carries the capability tag admission requires of a storage target', () => {
     // Without it, `binaryOutputConfigIssues` refuses every step selecting it with
-    // `not_storage_capable` — the shipped Media pipeline would be unrunnable out of the box.
+    // `not_storage_capable`: the shipped Media pipeline would be unrunnable out of the box.
     expect(definition.capabilities).toContain(ASSET_STORAGE_CAPABILITY)
   })
 
@@ -41,7 +41,7 @@ describe('the platform asset-storage service', () => {
 
   it('declares an OpenAPI contract whose operations the catalog can index', () => {
     // An unindexable format renders an EMPTY operation list, which reads to an agent as a service
-    // that offers nothing — the one state `operationsAreIndexable` exists to keep apart.
+    // that offers nothing, the one state `operationsAreIndexable` exists to keep apart.
     const contract = definition.contracts![0]!
     expect(operationsAreIndexable(contract.format)).toBe(true)
     expect(() => JSON.parse(contract.body)).not.toThrow()
@@ -53,7 +53,20 @@ describe('the platform asset-storage service', () => {
     // second on that reasoning is the drift worth failing on.
     const entries = defaultFoundationalServiceRegistry().entries()
     expect(entries.map((entry) => entry.id)).toEqual([PLATFORM_ASSET_STORAGE_SERVICE_ID])
-    expect(entries[0]!.contracts.map((contract) => contract.operations)).toEqual([['POST /']])
+    expect(entries[0]!.contracts.map((contract) => contract.operations)).toEqual([
+      ['DELETE /{location}', 'POST /'],
+    ])
+  })
+
+  it('offers a way to take an asset back, since nothing else ever reclaims one', () => {
+    // The exemption from the retention sweep is what makes this load-bearing rather than a
+    // convenience. A candidate pass stages several files per subject and a person keeps one; the
+    // rest are ordinary stored assets on no clock at all. With no discard operation the
+    // second-phase brief's "remove the staged files where the storage service allows it" resolves,
+    // on the one service every deployment has, to "it does not", and the shipped Media preset
+    // accumulates every rejected render for the life of the workspace.
+    const document = JSON.parse(definition.contracts![0]!.body)
+    expect(document.paths['/{location}'].delete.operationId).toBe('discardAsset')
   })
 
   it('hands each registry its own definition object', () => {

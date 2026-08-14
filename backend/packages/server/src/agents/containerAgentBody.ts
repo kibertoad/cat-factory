@@ -152,22 +152,32 @@ function buildImageManifests(
  *
  * TWO producers reach it, over the same credential and two different endpoints:
  *
- *  - A BROWSER-DRIVEN kind uploads its captured screenshots (`/artifacts/ingest`). Keyed off the
- *    kind's DECLARED `ui` image, since only a browser image captures anything. The registry read
- *    is the executor's NORMALIZED one (passed in), never `deps.agentKindRegistry`, which is
- *    undefined whenever the facade leaves the default registry implicit: the image the transport
- *    dispatches to is chosen from the normalized one, so reading the optional dep would route a
- *    `tester-ui` job to the browser image with no upload seam and lose every screenshot it
- *    captured — silently, since a missing seam is not an error anywhere.
  *  - A BINARY-OUTPUT step stores its generated assets (`/assets/ingest`, whose content types,
  *    size ceiling and retention rule all differ). What qualifies it is neither its image nor its
  *    kind but WHERE ITS STEP POINTS IT: only a step storing through the platform's own asset
  *    service has any use for our endpoint, and a deployment's generator storing through its own
  *    object service must never be handed a credential for ours. That is why the engine resolves
  *    `binaryStorageServiceId` onto the context rather than the executor guessing from the kind.
+ *  - A BROWSER-DRIVEN kind uploads its captured screenshots (`/artifacts/ingest`). Keyed off the
+ *    kind's DECLARED `ui` image, since only a browser image captures anything. The registry read
+ *    is the executor's NORMALIZED one (passed in), never `deps.agentKindRegistry`, which is
+ *    undefined whenever the facade leaves the default registry implicit: the image the transport
+ *    dispatches to is chosen from the normalized one, so reading the optional dep would route a
+ *    `tester-ui` job to the browser image with no upload seam and lose every screenshot it
+ *    captured, silently, since a missing seam is not an error anywhere.
+ *
+ * ONE variable carries the endpoint, so a job that answers to both descriptions has to pick one,
+ * and the STEP'S SELECTION wins. The image is an inference about what a kind probably does; the
+ * selection is a decision somebody made about this step, and it is the one the agent was BRIEFED
+ * on: a binary-output kind reads the storage service's contract, declares its artifacts against
+ * it, and expects the ingest response shape that contract publishes. Order this the other way and
+ * a binary-output kind that happens to run on the browser image gets the screenshot ingest
+ * instead, storing every deliverable as `kind: 'screenshot'` (which the retention sweep then
+ * reclaims, since the exemption is per kind) and answering in a shape its declaration block
+ * cannot use. Nothing about that reads as an error at either end.
  *
  * Either way the credential is the run's EXISTING container session token, already carried for
- * the LLM proxy, at a path that shares the proxy base URL — so no extra credential and no extra
+ * the LLM proxy, at a path that shares the proxy base URL, so no extra credential and no extra
  * public-URL dependency. Both halves collapse to `undefined` when the transport gave this job no
  * proxy: the harness reads an absent seam as an absent capability, which is what the producing
  * prompts already branch on.
@@ -179,11 +189,11 @@ function artifactUploadFor(
 ): { url: string; token: string } | undefined {
   const { proxyBaseUrl, sessionToken } = auth
   if (typeof proxyBaseUrl !== 'string' || typeof sessionToken !== 'string') return undefined
-  if (agentKindRegistry.agentStep(context.agentKind)?.image === 'ui') {
-    return { url: `${proxyBaseUrl}/artifacts/ingest`, token: sessionToken }
-  }
   if (context.binaryStorageServiceId === PLATFORM_ASSET_STORAGE_SERVICE_ID) {
     return { url: `${proxyBaseUrl}/assets/ingest`, token: sessionToken }
+  }
+  if (agentKindRegistry.agentStep(context.agentKind)?.image === 'ui') {
+    return { url: `${proxyBaseUrl}/artifacts/ingest`, token: sessionToken }
   }
   return undefined
 }

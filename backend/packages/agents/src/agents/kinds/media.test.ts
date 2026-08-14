@@ -16,7 +16,7 @@ describe('the built-in media-generator kind', () => {
 
   it('carries the binary-output trait, which is what earns it a brief at all', () => {
     // Without it the dispatch injects no `.cat-context/binary-output/brief.md`, run admission
-    // validates no selection, and the fenced declaration in the reply is read back by nobody —
+    // validates no selection, and the fenced declaration in the reply is read back by nobody,
     // so the step runs, appears to succeed, and records nothing about what it stored.
     expect(hasTrait(MEDIA_GENERATOR_AGENT_KIND, BINARY_OUTPUT_TRAIT, registry)).toBe(true)
   })

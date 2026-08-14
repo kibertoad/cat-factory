@@ -323,7 +323,7 @@ export function defineBinaryArtifactsSuite(
     it('pruneOlderThan EXEMPTS a generated ASSET, however old it is', async () => {
       // The same argument as the document renders above, one axis over: the retention window is
       // sized for run DEBRIS, and an asset is the thing the run was started to produce. A swept
-      // one takes its step's report with it, in the worst possible form — the report goes on
+      // one takes its step's report with it, in the worst possible form: the report goes on
       // naming a location, so the loss reads as a broken link rather than as a reclaim.
       //
       // Asserted at the STORE, not at either facade's SQL, because that is where the two

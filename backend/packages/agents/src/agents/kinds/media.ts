@@ -2,7 +2,7 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { BINARY_OUTPUT_TRAIT, BINARY_STORAGE_TRAIT } from './traits.js'
 
 // ---------------------------------------------------------------------------
-// The built-in `media-generator` agent kind — the FIRST built-in to carry the `binary-output`
+// The built-in `media-generator` agent kind, the FIRST built-in to carry the `binary-output`
 // trait, and the one that makes the Media task type work with nothing configured.
 //
 // Everything it needs already existed and was reachable only by a deployment writing its own
@@ -27,7 +27,7 @@ import { BINARY_OUTPUT_TRAIT, BINARY_STORAGE_TRAIT } from './traits.js'
 //
 // It is read-only over the checkout (`container-explore`) and opens no pull request: its
 // deliverable is stored through an API, and the trait guidance is explicit that binaries are
-// never committed to the repository. The checkout is still worth having — a step scoped to "the
+// never committed to the repository. The checkout is still worth having: a step scoped to "the
 // icons this app is missing" is answered from the repo as often as from a context service.
 // ---------------------------------------------------------------------------
 
@@ -50,7 +50,7 @@ const MEDIA_GENERATOR_SYSTEM_PROMPT =
   'Two things decide whether this run is usable afterwards. Every artifact must be DECLARED in ' +
   'the machine-read block at the end of your reply, with the location the storage service gave ' +
   'you: that block is the only record anyone has of where the work went. And everything you ' +
-  'could NOT do belongs in your report by name — a subject you skipped, an integration whose ' +
+  'could NOT do belongs in your report by name: a subject you skipped, an integration whose ' +
   'credential was unset, a format nothing available could emit, an upload that failed. A partial ' +
   'delivery that says what is missing is useful; one that reads as complete is not.\n\n' +
   'Do not describe pictures you did not generate, and do not substitute a written description ' +

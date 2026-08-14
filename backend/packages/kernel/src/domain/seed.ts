@@ -990,7 +990,7 @@ function buildMediaPipelines(): Pipeline[] {
   return [
     // The Media pipeline (the DEFAULT for a `media` task): ONE `media-generator` step whose
     // deliverable is generated binary assets stored through an asset-storage service. No merge
-    // tail, because nothing here writes to the repository — the run terminates through the
+    // tail, because nothing here writes to the repository: the run terminates through the
     // no-PR terminal path, exactly as `pl_review` does.
     //
     // The step SHIPS a selection rather than leaving it blank, and that is what makes the task
@@ -1296,7 +1296,7 @@ export const MEDIA_PIPELINE_ID = 'pl_media'
 /**
  * The pipeline a task of the given task type should default to when the creator pins none.
  * `document` → `pl_document`, `spike` → `pl_spike`, `review` → `pl_review` and `media` →
- * `pl_media` (the full-build `pl_full` is wrong for all four — a document has no code, a spike
+ * `pl_media` (the full-build `pl_full` is wrong for all four: a document has no code, a spike
  * has no code, a review opens no PR, and a media task's deliverable is a stored binary); every
  * other BUILT-IN task type falls through to the workspace's positional default.
  * A CUSTOM (namespaced) task type consults the injected {@link TaskTypeRegistry} AFTER the

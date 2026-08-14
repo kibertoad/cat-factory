@@ -320,7 +320,7 @@ const FEATURE_PURPOSES: readonly PipelinePurpose[] = BUG_PURPOSES.filter((p) => 
  * two to disagree about now that every pipeline carries one:
  *
  *  - `document` / `review` / `media` require the explicit member, because a build pipeline on a
- *    document task is actively wrong — running it would author no document and open a code PR
+ *    document task is actively wrong: running it would author no document and open a code PR
  *    nobody asked for. A purpose this build cannot name is hidden there: guessing costs more than
  *    an absence the user resolves by picking a preset the build does know.
  *  - `feature` / `bug` merely EXCLUDE the known purposes that do not fit, so an unnameable one

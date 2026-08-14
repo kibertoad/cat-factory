@@ -13,10 +13,19 @@
 // over the object URL rather than a link to the API: a plain link would open an authenticated
 // request the browser has no session header for.
 //
-// Whether the artifact renders as a picture is `rendersInlineAsImage`, the contracts rule the
-// server clamps its own blob responses to. Everything else (a 3D model, an audio file, a PDF) is
-// a legitimate outcome and NOT a failure: it renders as a named file with the same two actions,
-// because the point of the surface is the file, not the thumbnail.
+// Whether the artifact renders as a picture is `rendersInlineAsImage` over the media type the
+// SERVER SERVED, not the one the producing agent declared. The declaration is optional and
+// model-authored: a step that stores a PNG and says nothing about it would render as a generic
+// file, and one that mislabels a bundle as an image would render a broken `<img>` reporting
+// itself as loaded, with no error affordance because the fetch genuinely succeeded. The served
+// type is the same judgement the server already made when it decided whether to answer inline or
+// as an attachment, so a row and the response behind it can no longer disagree. The declared type
+// stays as the LABEL on a non-image row, which is what it is good for: it is the agent's own
+// account of the file, where the served type only ever says image-or-not.
+//
+// Everything that is not a picture (a 3D model, an audio file, a PDF) is a legitimate outcome and
+// NOT a failure: it renders as a named file with the same two actions, because the point of the
+// surface is the file, not the thumbnail.
 import { computed, onUnmounted, watch } from 'vue'
 import { rendersInlineAsImage } from '@cat-factory/contracts'
 import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
@@ -25,7 +34,7 @@ const props = withDefaults(
   defineProps<{
     /** The platform artifact id (`art_…`) resolved off the row's service + location. */
     assetId: string
-    /** The media type the agent reported, which decides picture-versus-file. */
+    /** The media type the agent reported. Shown as the label on a non-image row; see above. */
     contentType?: string | undefined
     /** What to call the file a person saves, and the image's alt text. */
     label?: string | undefined
@@ -49,7 +58,7 @@ watch(
 
 const url = computed(() => blobs.urlFor(props.assetId))
 const status = computed(() => blobs.statusFor(props.assetId))
-const isImage = computed(() => rendersInlineAsImage(props.contentType))
+const isImage = computed(() => rendersInlineAsImage(blobs.typeFor(props.assetId)))
 
 /**
  * The name the saved file takes. Derived from the agent's own label where there is one, because

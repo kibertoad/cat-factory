@@ -176,4 +176,21 @@ describe('ContainerAgentExecutor artifact-upload seam', () => {
     await executor.startJob(context('media-generator'))
     expect(bodies[0]!.artifactUpload).toBeUndefined()
   })
+
+  it('lets the STEP’s storage selection beat the kind’s browser image', async () => {
+    // One variable carries the endpoint, so a kind that answers to both descriptions has to pick
+    // one. The image is an inference about what the kind probably does; the selection is a
+    // decision about THIS step, and it is the one the agent read a contract for. The other order
+    // is silent in both directions: the deliverables land as `kind: 'screenshot'` (which the
+    // retention sweep reclaims, since the exemption is per kind) and the ingest answers in a
+    // shape the binary-output declaration block cannot use.
+    const { executor, bodies } = makeExecutor()
+    await executor.startJob(
+      context('tester-ui', { binaryStorageServiceId: PLATFORM_ASSET_STORAGE_SERVICE_ID }),
+    )
+    expect(bodies[0]!.artifactUpload).toEqual({
+      url: 'https://proxy.test/v1/assets/ingest',
+      token: 'SESSION-TOKEN',
+    })
+  })
 })

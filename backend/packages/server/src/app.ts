@@ -242,7 +242,7 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // In-container ASSET ingest for a binary-output step storing through the platform's own asset
   // storage (`${proxyBaseUrl}/assets/ingest`, same container session token). Its own controller
   // rather than a mode on the one above: different content types, different size and per-run
-  // ceilings, and — the load-bearing one — a row the retention sweep never reclaims.
+  // ceilings, and, the load-bearing one, a row the retention sweep never reclaims.
   app.route('/', harnessAssetController())
   // SearXNG-compatible web-search proxy for implementation containers (same
   // model-locked container token; the search runs server-side under the deployment's

@@ -47,9 +47,14 @@ const PLATFORM_ASSET_CONTRACT_ID = 'ingest'
  *
  * Written out rather than generated from the route: the two are different artifacts with
  * different audiences (this one is read by a model, the route is served by Hono), and the
- * platform has no OpenAPI emitter for the harness surface to generate it from. What keeps them
- * honest is `platformAssetContract.test.ts`, which pins the operation set the controller mounts
- * against the operations this document declares.
+ * platform has no OpenAPI emitter for the harness surface to generate it from.
+ *
+ * The base URL is the WHOLE endpoint rather than a prefix, because it arrives as a per-run
+ * environment variable (see {@link ASSET_UPLOAD_URL_ENV}) and this package cannot know it. An
+ * OpenAPI operation still needs a path, so the store operation is declared at `/`, and a client
+ * composing base + path emits a trailing slash. `harnessAssetController` serves both spellings
+ * of each operation for exactly that reason; changing a path here without changing it there is a
+ * 404 nothing in the container can work around.
  */
 const PLATFORM_ASSET_OPENAPI = JSON.stringify(
   {
@@ -58,8 +63,9 @@ const PLATFORM_ASSET_OPENAPI = JSON.stringify(
       title: 'Platform asset storage',
       version: '1.0.0',
       description:
-        'Stores a generated binary asset and returns the location to record for it. The base ' +
-        `URL is the value of the \`${ASSET_UPLOAD_URL_ENV}\` environment variable; authenticate ` +
+        'Stores a generated binary asset and returns the location to record for it, and takes ' +
+        'one back when it is discarded. The base URL is the value of the ' +
+        `\`${ASSET_UPLOAD_URL_ENV}\` environment variable; authenticate ` +
         `every request with \`Authorization: Bearer $${ASSET_UPLOAD_TOKEN_ENV}\`. Both are set ` +
         'for you inside this run. If either is unset, the platform could not provide storage: ' +
         'do not attempt an upload, and report it.',
@@ -126,6 +132,33 @@ const PLATFORM_ASSET_OPENAPI = JSON.stringify(
           },
         },
       },
+      '/{location}': {
+        delete: {
+          operationId: 'discardAsset',
+          summary: 'Discard one asset this run stored',
+          description:
+            'Reclaims an asset you stored earlier in this run: the staged candidates a person ' +
+            'did not keep, and anything else you uploaded and then superseded. Assets stored ' +
+            'here are kept indefinitely and nothing else ever reclaims them, so a candidate you ' +
+            'leave behind stays in this workspace’s storage for good. Discarding one you already ' +
+            'discarded succeeds. You can only discard what this run stored; anything else is a ' +
+            '404, which is a real error and worth reporting rather than retrying.',
+          parameters: [
+            {
+              name: 'location',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'The `location` this API returned when the asset was stored.',
+            },
+          ],
+          responses: {
+            '204': { description: 'Discarded, or already gone.' },
+            '404': { description: 'Not a location this run stored.' },
+            '503': { description: 'This deployment has no content storage configured.' },
+          },
+        },
+      },
     },
   },
   null,
@@ -150,7 +183,9 @@ export function platformAssetStorageService(): FoundationalServiceDefinition {
       'physically land is an account-level setting (an object store, a database table, or the ' +
       'local filesystem on a local deployment); assets stored here are readable back from the ' +
       'run that produced them, and are exempt from the retention sweep that reclaims a run’s ' +
-      'debris. Upload one file per request; record the `location` the response returns.',
+      'debris. Upload one file per request and record the `location` the response returns; ' +
+      'discard one through the same API when it is superseded or was not kept, since nothing ' +
+      'else reclaims it.',
     capabilities: [ASSET_STORAGE_CAPABILITY],
     contracts: [
       {
