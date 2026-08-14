@@ -25,7 +25,7 @@ import {
   NotFoundError,
   requireWorkspace,
 } from '@cat-factory/kernel'
-import type { ProvisionArgs, ProvisionDispatch } from '@cat-factory/integrations'
+import type { ProvisionArgs, ProvisionDispatch, SettledProvision } from '@cat-factory/integrations'
 
 /** The poll's terminal-ness, returned to the durable driver so it knows when to stop. */
 export interface EnvironmentTestPollResult {
@@ -54,7 +54,7 @@ export interface EnvironmentTestProvisioning {
   ): Promise<ConnectionTestResult | null>
   startProvision(args: ProvisionArgs, ref: RunnerJobRef): Promise<ProvisionDispatch>
   pollProvisionJob(workspaceId: string, ref: RunnerJobRef): Promise<RunnerJobView>
-  finalizeProvision(args: ProvisionArgs, view: RunnerJobView): Promise<EnvironmentHandle>
+  finalizeProvision(args: ProvisionArgs, view: RunnerJobView): Promise<SettledProvision>
   releaseProvisionJob(workspaceId: string, ref: RunnerJobRef): Promise<void>
   /**
    * Re-poll a recorded environment's status via its provider (`provider.status`) and persist any
@@ -417,7 +417,7 @@ export class EnvironmentTestService {
       // the finalized record (externalId et al.) is what cleanup tears it down through.
       await this.deps.provisioning.releaseProvisionJob(record.workspaceId, this.ref(record.id))
       try {
-        const handle = await this.deps.provisioning.finalizeProvision(
+        const { handle } = await this.deps.provisioning.finalizeProvision(
           this.provisionArgs(record, record.branch),
           view,
         )
@@ -430,7 +430,7 @@ export class EnvironmentTestService {
     }
     // Done: reclaim the deploy runner, finalize the env record, move to teardown.
     await this.deps.provisioning.releaseProvisionJob(record.workspaceId, this.ref(record.id))
-    const handle = await this.deps.provisioning.finalizeProvision(
+    const { handle } = await this.deps.provisioning.finalizeProvision(
       this.provisionArgs(record, record.branch),
       view,
     )

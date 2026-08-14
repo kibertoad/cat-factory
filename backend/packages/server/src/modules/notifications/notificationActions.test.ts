@@ -1,9 +1,11 @@
 import type { Notification } from '@cat-factory/contracts'
+import { notificationTypeSchema } from '@cat-factory/contracts'
 import { describe, expect, it, vi } from 'vitest'
 import type { ServerContainer } from '../../http/env.js'
 import {
   HEADLESS_ACTIONABLE_NOTIFICATION_TYPES,
   notificationActEffect,
+  RUN_RETRYING_NOTIFICATION_TYPES,
 } from './notificationActions.js'
 
 /** A notification with the fields the effect reads, defaulting the rest of the shape. */
@@ -146,5 +148,22 @@ describe('notificationActEffect', () => {
     expect(new Set(HEADLESS_ACTIONABLE_NOTIFICATION_TYPES)).toEqual(
       new Set(['merge_review', 'pipeline_complete', 'ci_failed', 'test_failed', 'deploy_blocked']),
     )
+  })
+
+  it('retries the run for exactly the declared retry set, over the whole vocabulary', async () => {
+    // The public API's individual-usage credential guard branches on
+    // `RUN_RETRYING_NOTIFICATION_TYPES` and this effect is what it is guarding, so the two are only
+    // safe while the set states what the effect actually does. Driven over EVERY member of the
+    // picklist rather than the handful named above: a new card type that retries is admitted to
+    // this route ungated, and the only assertion that catches that is one nobody has to remember to
+    // extend.
+    for (const type of notificationTypeSchema.options) {
+      const { container, retry } = containerWith()
+      await notificationActEffect(container, 'ws_1', null)(notification({ type }))
+      expect(
+        { type, retried: retry.mock.calls.length > 0 },
+        `${type} must retry iff it is in RUN_RETRYING_NOTIFICATION_TYPES`,
+      ).toEqual({ type, retried: RUN_RETRYING_NOTIFICATION_TYPES.has(type) })
+    }
   })
 })

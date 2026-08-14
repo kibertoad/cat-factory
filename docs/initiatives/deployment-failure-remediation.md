@@ -83,7 +83,7 @@ channel and no `FINAL_ANSWER_IN_REPLY`: its product is a pushed commit, exactly 
   somebody decides about it. (`contracts/src/environments.ts`)
 - Provider-neutral seam in kernel so a backend registered into `EnvironmentBackendRegistry`
   participates identically, not just the built-ins: `environmentFailure()`,
-  `unresolvedPlaceholders()`, `describeUnresolvedPlaceholders()`.
+  `unresolvedPlaceholders()`, `describeUnfilledConfigPlaceholders()`.
   (`kernel/src/domain/environment-failure.ts`)
 - Kubernetes-specific classifiers: `classifyApplyFailure`, `classifyWorkloadFailure`,
   `KUBERNETES_CONFIG_PLACEHOLDERS`.
@@ -91,8 +91,19 @@ channel and no `FINAL_ANSWER_IN_REPLY`: its product is a pushed commit, exactly 
 - Pre-apply refusal: a provision whose placeholder cannot be filled is refused BEFORE the apply,
   naming the placeholder, the connection field that fills it, and that the repository is not at
   fault. Applying anyway is what produced a rejection describing the rendered result and blaming
-  the file.
+  the file. **Scoped to placeholders a CONNECTION FIELD fills.** The first cut refused on any
+  unresolved key, which fails an ordinary provision: `frontendOrigins` is absent for a service no
+  frontend binds, `peerEnvUrls` for the first frame of a fan-out, `branch` and `pullNumber` for a
+  peer frame with no PR context. Each renders empty on purpose, so a template folding one into a
+  CORS list is correct, and refusing it produced a `config_incomplete` naming no setting anyone
+  could change. The refusal is worth having exactly where an operator can act on it.
 - Apply failures throw a classified `DomainError` instead of a bare `Error`.
+- **The rejection allow-list decides in BOTH directions.** 400/415/422 carry more than document
+  rejections (a 400 can be `Timeout`, `Conflict` or `Forbidden`, and an unparseable body is as
+  likely a proxy error page), so a reason outside `MANIFEST_REJECTION_REASONS` degrades to
+  unclassified rather than falling through to `manifest_invalid`. The first cut returned
+  `manifest_invalid` from both arms, which made the allow-list dead code and would have spent a
+  fixer on manifests that were never at fault.
 - Fixtures are the real `exec_194b231198454c7785f29589` payload, not invented examples.
 
 ## Slice 2 — the remediation loop (landed)
@@ -119,8 +130,24 @@ channel and no `FINAL_ANSWER_IN_REPLY`: its product is a pushed commit, exactly 
       `notification-webhooks`, the exhaustive email/Slack `Record`s, `notificationActions` (the
       `ci_failed` retry), the SPA inbox maps and all ten i18n locales with real translations.
 
+- [x] The classification reaches the loop from BOTH routes a failure arrives by. A provider that
+      THROWS states its cause on `details.reason`; one that settles a `failed` environment instead
+      states it on `ProvisionedEnvironment.reason`, which the provisioning service carries beside
+      the handle as `SettledProvision`. Returning the handle alone dropped it one call before the
+      decision that needed it, so every non-throwing failure read as unclassified. Deliberately not
+      a column on the environment row: the reason is consumed in the same call that produces it.
+
 Still open in this slice:
 
+- [ ] **A structured cause from the deploy harness**, which is what the container-backed path needs
+      before it can remediate at all. `mapDeployOutcome` has only the free-form output of
+      `kubectl`/`kustomize`/`helm`, never an apiserver `Status`, so a kustomize or helm render
+      settles UNCLASSIFIED and the loop declines it. That is deliberate rather than pending: a
+      manifest whose `{{image}}` was never substituted fails that path with a validation error
+      indistinguishable from genuinely wrong manifests, so phrase-matching the text would dispatch
+      a fixer at the exact failure this feature exists to keep it away from. The fix is the deploy
+      harness reporting a cause on its own outcome channel (an image bump), after which the pipe
+      above already carries it.
 - [ ] Every attempt on the record in the PR verification report and the run outcome summary, so a
       human reviewing the PR sees that deployment files were machine-edited and why. The evidence
       exists (`step.deployFix.attemptLog`); nothing reduces it into either surface yet.

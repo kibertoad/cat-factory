@@ -100,9 +100,9 @@ export const ON_CALL_SYSTEM_PROMPT = ON_CALL_ROLE_PROMPT + ON_CALL_DIRECTIVES
  * `roles.ts` line — as the baseline while something else entirely ran: "restore the built-in"
  * restored a prompt that was never running, and a diff against the baseline was noise.
  *
- * Adding another such kind means adding it here, SPLIT — a kind added with its directives inside
- * `role` compiles and runs fine, and fails only later, as a workspace that edited it loses its
- * guardrail or its JSON contract.
+ * Adding another such kind means adding it here, SPLIT and with its `product` declared. A kind
+ * added with its directives inside `role` compiles and runs fine, and fails only later, as a
+ * workspace that edited it loses its guardrail or its JSON contract.
  *
  * The two container kind ids are bare literals: their canonical constants live in kernel
  * (`ON_CALL_AGENT_KIND`) and orchestration (`MERGER_AGENT_KIND`), and this package sits below
@@ -110,13 +110,21 @@ export const ON_CALL_SYSTEM_PROMPT = ON_CALL_ROLE_PROMPT + ON_CALL_DIRECTIVES
  */
 export const BESPOKE_SYSTEM_PROMPTS: Partial<Record<AgentKind, BespokeSystemPrompt>> = {
   ...INLINE_ENGINE_SYSTEM_PROMPTS,
-  merger: { role: MERGER_ROLE_PROMPT, directives: MERGER_DIRECTIVES },
-  'on-call': { role: ON_CALL_ROLE_PROMPT, directives: ON_CALL_DIRECTIVES },
+  merger: { product: 'reply', role: MERGER_ROLE_PROMPT, directives: MERGER_DIRECTIVES },
+  'on-call': { product: 'reply', role: ON_CALL_ROLE_PROMPT, directives: ON_CALL_DIRECTIVES },
   // The deploy-fixer's directives are its WRITE SCOPE (deployment description only, never CI
   // configuration) and the two repairs that look like progress and are not. Those are guardrails
   // on a machine-authored commit that a pipeline may then merge, not editorial content, so they
   // sit on the half a workspace override cannot delete.
-  'deploy-fixer': { role: DEPLOY_FIXER_ROLE_PROMPT, directives: DEPLOY_FIXER_DIRECTIVES },
+  //
+  // The FIRST bespoke kind whose product is a side effect: it has no verdict channel, so it owes
+  // no output contract and must not carry the answer-in-your-reply rule. Its proof is the
+  // re-provision, not anything it says (see `deploy-fixer.ts`).
+  'deploy-fixer': {
+    product: 'side-effect',
+    role: DEPLOY_FIXER_ROLE_PROMPT,
+    directives: DEPLOY_FIXER_DIRECTIVES,
+  },
 }
 
 /**

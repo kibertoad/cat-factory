@@ -289,6 +289,7 @@ export {
   type ProvisionArgs,
   type ProvisionDispatch,
   type ResolvedEnvironment,
+  type SettledProvision,
 } from './modules/environments/EnvironmentProvisioningService.js'
 export {
   EnvironmentTeardownService,

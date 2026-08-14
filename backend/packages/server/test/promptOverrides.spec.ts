@@ -91,9 +91,21 @@ describe('dispatchSystemPromptFor', () => {
       expect(overridden.startsWith('Do it my way.')).toBe(true)
       expect(overridden).toContain(prompt.directives)
       expect(overridden).not.toContain(prompt.role)
-      // Whatever else each family enforces, the output contract the platform PARSES has to survive
-      // — every one of these kinds returns either strict JSON or a fixed-section document.
-      expect(overridden).toContain('code fences')
+      // Whatever else each family enforces, the invariant that has to survive is the one its
+      // DELIVERABLE depends on, and the prompt declares which that is. A `reply` kind is parsed,
+      // so its output contract must outlive the edit; a `side-effect` kind's product is a pushed
+      // commit nothing is read back from, so it must NOT be carrying the answer-in-your-reply
+      // rule (a kind that ends with no final text is not a failed run, and telling it otherwise
+      // is how a legitimate empty reply becomes one).
+      //
+      // Read off `product` rather than asserted of every kind alike: the alternative to a
+      // declared half is exempting the odd one out by name, which is the same test with the next
+      // kind's mistake already excused.
+      if (prompt.product === 'reply') {
+        expect(overridden).toContain('code fences')
+      } else {
+        expect(overridden).not.toContain(FINAL_ANSWER_IN_REPLY)
+      }
     },
   )
 

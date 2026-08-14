@@ -3,7 +3,6 @@ import type {
   AgentRunResult,
   Block,
   BlockRepository,
-  EnvironmentHandle,
   ExecutionInstance,
   Logger,
   PipelineStep,
@@ -18,6 +17,7 @@ import type {
   EnvironmentProvisioningService,
   ProvisionArgs,
   ProvisionDispatch,
+  SettledProvision,
 } from '@cat-factory/integrations'
 import { deployDispatchEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
 import { type ContainerFailureView, containerShutdownFailure } from './job.logic.js'
@@ -380,7 +380,7 @@ export class DeployerStepController {
     }
     if (dispatch.kind === 'completed') {
       // Synchronous provision: record this frame's outcome, then continue to the next frame.
-      return this.settleDeployerFrame(ctx, next, dispatch.handle)
+      return this.settleDeployerFrame(ctx, next, dispatch)
     }
     // An async deploy job was dispatched: park on this frame. `dispatch` blocked until the job was
     // accepted, so the container is up; the live phase + the provisioned outcome arrive on the
@@ -476,14 +476,21 @@ export class DeployerStepController {
   private async settleDeployerFrame(
     ctx: DeployerFanOut,
     target: DeployTarget,
-    handle: EnvironmentHandle,
+    settled: SettledProvision,
   ): Promise<AdvanceResult> {
     const { workspaceId, instance, step } = ctx
+    const { handle, reason } = settled
     if (handle.status === 'failed') {
       return this.settleDeployerFailure(ctx, target, {
         url: handle.url,
         environmentId: handle.id,
         error: handle.lastError ?? 'Provisioning failed.',
+        // The classification the provider stated on a failure it did NOT throw. Carried here for
+        // the same reason the thrown path carries `getErrorReason(error)`: it is what decides
+        // whether the remediation loop may run, and a handle-borne failure that dropped it read as
+        // unclassified no matter what the provider had determined. Absent stays absent, which is
+        // never repo-fixable.
+        ...(reason ? { reason } : {}),
       })
     }
     if (handle.status !== 'ready' && !target.isPrimary) {
@@ -739,9 +746,9 @@ export class DeployerStepController {
         failureKind: shutdown.failureKind,
       })
     }
-    let handle
+    let settled: SettledProvision
     try {
-      handle = await this.environmentProvisioning!.finalizeProvision(
+      settled = await this.environmentProvisioning!.finalizeProvision(
         await this.deployerProvisionArgs(workspaceId, instance, block, target, ''),
         view,
       )
@@ -757,10 +764,10 @@ export class DeployerStepController {
     // Reflect the container's terminal state from the RESOLVED outcome, not the raw view: a `done`
     // view the provider maps to a FAILED env (e.g. the harness exited 0 but the namespace is
     // missing) must still show the container errored — keying off `view.state` alone missed that.
-    if (handle.status === 'failed' && step.container) {
+    if (settled.handle.status === 'failed' && step.container) {
       step.container = { ...step.container, status: 'errored' }
     }
-    return this.settleDeployerFrame(ctx, target, handle)
+    return this.settleDeployerFrame(ctx, target, settled)
   }
 
   /**

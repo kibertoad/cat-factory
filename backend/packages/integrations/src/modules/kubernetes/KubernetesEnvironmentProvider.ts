@@ -23,7 +23,7 @@ import type {
 import {
   connectionFailureResult,
   describeConnectionFailure,
-  describeUnresolvedPlaceholders,
+  describeUnfilledConfigPlaceholders,
   environmentFailure,
   getErrorMessage,
   unresolvedPlaceholders,
@@ -162,12 +162,14 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     await this.ensureNamespace(client, config, namespace)
 
     const texts = await this.readManifests(req, config)
-    // Refuse BEFORE applying when a placeholder the manifests reference has no value: rendering
-    // it to the empty string and applying anyway produces an apiserver rejection that describes
-    // the RESULT and blames the file, which is how a correct `image: "{{image}}"` was reported as
-    // a Deployment missing a required image. See `describeUnresolvedPlaceholders`.
+    // Refuse BEFORE applying when a placeholder this CONNECTION was meant to fill has no value:
+    // rendering it to the empty string and applying anyway produces an apiserver rejection that
+    // describes the RESULT and blames the file, which is how a correct `image: "{{image}}"` was
+    // reported as a Deployment missing a required image. A run-supplied key that renders empty is
+    // NOT a refusal: it is the documented lenient substitution, and which keys those are is the
+    // scope rule `describeUnfilledConfigPlaceholders` owns.
     const missing = unresolvedPlaceholders(texts.join('\n'), vars, KUBERNETES_CONFIG_PLACEHOLDERS)
-    const refusal = describeUnresolvedPlaceholders(missing)
+    const refusal = describeUnfilledConfigPlaceholders(missing)
     if (refusal) throw environmentFailure(refusal, 'config_incomplete')
     const resources: KubernetesResource[] = []
     for (const text of texts) {

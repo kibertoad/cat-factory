@@ -56,11 +56,16 @@ export function classifyApplyFailure(
   // which no edit to those manifests is the agreed fix for.
   if (status === 404) return 'config_incomplete'
   if (status === 422 || status === 400 || status === 415) {
+    // The allow-list decides, in BOTH directions. These statuses carry more than document
+    // rejections: a 400 can come back as `Timeout`, `Conflict` or `Forbidden`, none of which the
+    // manifests are at fault for, and a body that does not parse as a `Status` is as likely to be
+    // an ingress or proxy error page as anything the apiserver said. Answering `manifest_invalid`
+    // for those spends a `deploy-fixer` on files that were never wrong, the one outcome this
+    // classification exists to prevent, so anything unrecognised degrades to unclassified, which
+    // is not repo-fixable. A miss costs a remediation that was possible; a false positive costs a
+    // plausible edit to something that was already correct.
     const reason = readStatusReason(body)
-    if (reason && MANIFEST_REJECTION_REASONS.has(reason)) return 'manifest_invalid'
-    // A 4xx in this range with no readable `Status` is still the apiserver refusing the document
-    // rather than failing to process it, so it stays in the manifest class.
-    return 'manifest_invalid'
+    return reason && MANIFEST_REJECTION_REASONS.has(reason) ? 'manifest_invalid' : null
   }
   if (status >= 500) return 'cluster_unreachable'
   return null

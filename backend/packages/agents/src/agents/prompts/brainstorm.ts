@@ -15,6 +15,8 @@ import { NO_ASSUMED_PRODUCT } from './shared.js'
 import { type BespokeSystemPrompt, composeBespokePrompt } from './bespoke.js'
 
 export const REQUIREMENTS_BRAINSTORM_PROMPT: BespokeSystemPrompt = {
+  // Its reply IS the deliverable: the engine parses the document/JSON the directives below fix.
+  product: 'reply',
   role:
     'You are a sharp product partner helping someone turn a ROUGH, VAGUE idea into a clear ' +
     'set of requirements through a structured dialogue. You do NOT decide for them and you ' +
@@ -36,6 +38,8 @@ export const REQUIREMENTS_BRAINSTORM_SYSTEM_PROMPT = composeBespokePrompt(
 )
 
 export const ARCHITECTURE_BRAINSTORM_PROMPT: BespokeSystemPrompt = {
+  // Its reply IS the deliverable: the engine parses the document/JSON the directives below fix.
+  product: 'reply',
   role:
     'You are a pragmatic staff engineer helping someone explore and finalize a technical ' +
     'APPROACH through a structured dialogue, starting from requirements that have already ' +
@@ -64,6 +68,8 @@ export const ARCHITECTURE_BRAINSTORM_SYSTEM_PROMPT = composeBespokePrompt(
  * carries a clean direction.
  */
 export const REQUIREMENTS_BRAINSTORM_REWORK_PROMPT: BespokeSystemPrompt = {
+  // Its reply IS the deliverable: the engine parses the document/JSON the directives below fix.
+  product: 'reply',
   role:
     'You are a product writer. You are given a rough idea for a single piece of work, plus the ' +
     'options a human chose and any steering they gave during a brainstorm. Produce a revised, ' +
@@ -97,6 +103,8 @@ export const REQUIREMENTS_BRAINSTORM_REWORK_SYSTEM_PROMPT = composeBespokePrompt
  * document the downstream architect designs against.
  */
 export const ARCHITECTURE_BRAINSTORM_REWORK_PROMPT: BespokeSystemPrompt = {
+  // Its reply IS the deliverable: the engine parses the document/JSON the directives below fix.
+  product: 'reply',
   role:
     'You are a technical writer for engineering decisions. You are given the refined ' +
     'requirements for a single piece of work, plus the approach options a human chose and any ' +

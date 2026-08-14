@@ -602,7 +602,7 @@ export {
 export {
   environmentFailure,
   unresolvedPlaceholders,
-  describeUnresolvedPlaceholders,
+  describeUnfilledConfigPlaceholders,
   type UnresolvedPlaceholder,
 } from './domain/environment-failure.js'
 

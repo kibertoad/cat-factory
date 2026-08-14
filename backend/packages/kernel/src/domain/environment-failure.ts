@@ -14,13 +14,17 @@ import { UnavailableError } from './errors.js'
 // mechanism. Giving it the same helpers the built-ins use is what makes the classification an
 // extension point instead of a Kubernetes-only feature.
 //
-// A custom provider participates by doing two things, both optional and both degrading safely:
-//   1. throw {@link environmentFailure} (or any `DomainError` carrying `details.reason`) instead
-//      of a bare `Error`, so the engine reads the class off the error rather than the prose;
-//   2. record that reason on the environment it returns (`EnvironmentHandle.lastErrorReason`), so
-//      a later reader — which is a different process from the one that failed — can still tell
-//      what happened.
-// A provider that does neither behaves exactly as every provider did before this existed.
+// A custom provider participates by doing one of two things, both optional and both degrading
+// safely, and WHICH one is decided by how it reports the failure rather than by preference:
+//   1. a provider that THROWS raises {@link environmentFailure} (or any `DomainError` carrying
+//      `details.reason`) instead of a bare `Error`, so the engine reads the class off the error
+//      rather than out of the prose;
+//   2. a provider that instead returns `status: 'failed'` (a deterministic rejection it did not
+//      consider exceptional, and the shape every container-backed provision settles into) has no
+//      error to carry a reason, so it states one on `ProvisionedEnvironment.reason`. The engine
+//      threads that alongside the handle to the same decision the thrown reason reaches.
+// A provider that does neither behaves exactly as every provider did before this existed: its
+// failures are unclassified, and unclassified is never repo-fixable.
 // ---------------------------------------------------------------------------
 
 /**
@@ -99,8 +103,8 @@ export function unresolvedPlaceholders(
 }
 
 /**
- * The operator-facing refusal for a template whose placeholders cannot be filled, or `null` when
- * every one resolves.
+ * The operator-facing refusal for a template the deployment's own CONFIGURATION cannot fill, or
+ * `null` when there is nothing an operator could set.
  *
  * Refusing BEFORE submitting is the whole point, and providers should call this rather than
  * rendering empties and letting the platform reject them. The rejection that comes back describes
@@ -108,13 +112,26 @@ export function unresolvedPlaceholders(
  * Deployment missing a required image. This names the placeholder, names the field that fills it,
  * and says the repository is not at fault, none of which the platform being deployed to could
  * ever have told anyone.
+ *
+ * SCOPED to the keys carrying a `configField`, and that scope is the refusal's whole justification
+ * rather than a detail of it. A config-backed key is unambiguous: the platform undertook to supply
+ * the value, the deployment has not been told how, and the message can name the setting to change.
+ * Everything else unresolved is a key the RUN supplies, where absent and empty are the same value
+ * and opposite facts: `frontendOrigins` is absent for a service no frontend binds, `peerEnvUrls`
+ * for the first frame of a fan-out, `branch` and `pullNumber` for a peer frame that carries no PR
+ * context. Each renders empty on purpose, so a template that folds one into a CORS list or a label
+ * is CORRECT and refusing it would fail a provision naming no setting anyone could fix. The
+ * lenient substitution stays the documented behaviour there; only the class an operator can act on
+ * is worth stopping a deployment for.
  */
-export function describeUnresolvedPlaceholders(missing: UnresolvedPlaceholder[]): string | null {
-  if (missing.length === 0) return null
-  const items = missing.map((m) =>
-    m.configField
-      ? `'{{${m.key}}}' (supplied by this environment connection's '${m.configField}' setting, which is not set)`
-      : `'{{${m.key}}}' (nothing in this deployment supplies this placeholder)`,
+export function describeUnfilledConfigPlaceholders(
+  missing: UnresolvedPlaceholder[],
+): string | null {
+  const blocking = missing.filter((m) => m.configField)
+  if (blocking.length === 0) return null
+  const items = blocking.map(
+    (m) =>
+      `'{{${m.key}}}' (supplied by this environment connection's '${m.configField}' setting, which is not set)`,
   )
   return (
     `The deployment files could not be rendered: ${items.join('; ')}. ` +
