@@ -1,5 +1,13 @@
 # @cat-factory/sandbox
 
+## 0.11.160
+
+### Patch Changes
+
+- Updated dependencies [2a2b6ef]
+  - @cat-factory/kernel@0.307.0
+  - @cat-factory/agents@0.133.3
+
 ## 0.11.159
 
 ### Patch Changes
