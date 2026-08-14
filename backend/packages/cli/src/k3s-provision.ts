@@ -1,4 +1,3 @@
-import { isLocalMachineHost } from '@cat-factory/kernel'
 import { type CliOptions, OPTION_DEFAULTS } from './args.js'
 import { type Command, type HostShell, runCommand, type ShellResult } from './host-shell.js'
 import {
@@ -11,6 +10,7 @@ import {
   type TcpProbe,
 } from './k3s-ingress.js'
 import { type Io } from './io.js'
+import { isLocalMachineHost } from './localHost.js'
 import {
   type HostState,
   isRecreateOffer,
@@ -362,11 +362,13 @@ export function normalizeApiServerUrl(url: string): string {
  * reachable kubeconfig, which may point at a shared cluster. A local-looking context name OR a
  * loopback/Docker-host apiserver is treated as local.
  *
- * The apiserver half is kernel's `isLocalMachineHost`, shared with the environment provider's
- * registry-credential gate rather than restated: two hand-kept copies of "which hostnames mean
- * this machine" drifted, and the copy that was missing k3d's `0.0.0.0` silently withheld the
- * behaviour from the default local setup. The mDNS and wildcard-DNS suffixes stay here because
- * they are heuristics about a DEVELOPER'S kubeconfig, not facts about the host.
+ * The apiserver half is `localHost.ts`'s `isLocalMachineHost`, a pinned copy of kernel's helper
+ * of the same name (this package ships with no runtime dependencies, so it cannot import kernel;
+ * `localHost.conformity.test.ts` is what stops the two drifting). It replaced a hand-kept host
+ * list here: that list and the environment provider's had already separated, and the one missing
+ * k3d's `0.0.0.0` silently withheld a behaviour from the default local setup. The mDNS and
+ * wildcard-DNS suffixes stay here because they are heuristics about a DEVELOPER'S kubeconfig,
+ * not facts about the host.
  */
 export function looksLocalCluster(context: string | undefined, apiServerUrl: string): boolean {
   const ctx = (context ?? '').toLowerCase()

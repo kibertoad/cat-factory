@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isLocalMachineHost } from '@cat-factory/kernel'
 import { type CliOptions } from './args.js'
 import {
   COMMAND_NOT_FOUND,
@@ -8,6 +7,7 @@ import {
   type ShellResult,
 } from './host-shell.js'
 import { type Io } from './io.js'
+import { isLocalMachineHost } from './localHost.js'
 import { type PortState, type TcpProbe } from './k3s-ingress.js'
 import { classifyHost, type HostDetections } from './k3s-probe.js'
 import {
@@ -257,14 +257,18 @@ describe('pure planners', () => {
     expect(looksLocalCluster('prod', 'https://api.k8s.example.com:6443')).toBe(false)
   })
 
-  it('reads its apiserver hosts from the shared predicate, not a second list', () => {
-    // These were a hand-kept copy beside the environment provider's own copy, and the two
-    // drifted: the copy missing k3d's wildcard bind address silently withheld a behaviour from
-    // the default local setup. Both now compose kernel's `isLocalMachineHost`, so a host added
-    // there is local to both, and this pins the ones a local kubeconfig actually contains.
+  it('treats every apiserver host the shared predicate calls local as local', () => {
+    // The host set was a hand-kept list here, beside another in the Kubernetes environment
+    // provider, and the two drifted: this one was missing the wildcard address k3d writes into
+    // every kubeconfig it generates, so a cluster the provider considered local was remote here.
+    // Both now read one predicate (`localHost.ts`, pinned to kernel's by its own conformity
+    // suite), and this pins that `looksLocalCluster` passes its verdict through rather than
+    // re-deciding. The context is deliberately a remote-looking one, so only the host can answer.
     for (const host of ['0.0.0.0', '127.0.0.1', 'localhost', 'kubernetes.docker.internal']) {
-      expect([host, looksLocalCluster('prod', `https://${host}:6443`)]).toEqual([host, true])
-      expect([host, isLocalMachineHost(host)]).toEqual([host, true])
+      expect([host, looksLocalCluster('prod', `https://${host}:6443`)]).toEqual([
+        host,
+        isLocalMachineHost(host),
+      ])
     }
     // And a shared cluster on a private address stays remote through both.
     expect(looksLocalCluster('prod', 'https://10.4.1.9:6443')).toBe(false)
