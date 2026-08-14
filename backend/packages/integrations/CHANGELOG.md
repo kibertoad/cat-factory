@@ -1,5 +1,13 @@
 # @cat-factory/integrations
 
+## 0.163.1
+
+### Patch Changes
+
+- Updated dependencies [eb740be]
+  - @cat-factory/contracts@0.315.0
+  - @cat-factory/kernel@0.303.0
+
 ## 0.163.0
 
 ### Minor Changes

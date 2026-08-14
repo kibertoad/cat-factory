@@ -1,5 +1,13 @@
 # @cat-factory/spend
 
+## 0.15.97
+
+### Patch Changes
+
+- Updated dependencies [eb740be]
+  - @cat-factory/contracts@0.315.0
+  - @cat-factory/kernel@0.303.0
+
 ## 0.15.96
 
 ### Patch Changes

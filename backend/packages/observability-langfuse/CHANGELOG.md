@@ -1,5 +1,12 @@
 # @cat-factory/observability-langfuse
 
+## 0.10.99
+
+### Patch Changes
+
+- Updated dependencies [eb740be]
+  - @cat-factory/kernel@0.303.0
+
 ## 0.10.98
 
 ### Patch Changes

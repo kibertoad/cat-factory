@@ -1,5 +1,13 @@
 # @cat-factory/workspaces
 
+## 0.28.12
+
+### Patch Changes
+
+- Updated dependencies [eb740be]
+  - @cat-factory/contracts@0.315.0
+  - @cat-factory/kernel@0.303.0
+
 ## 0.28.11
 
 ### Patch Changes
